@@ -480,10 +480,13 @@ export function mockServers(instanceId: string): SavedServer[] {
     .map((s) => ({ name: s.name, address: s.ip, iconUrl: s.icon ?? undefined }));
 }
 
-/** What the mock servers answer: Projects and Hypixel are up, the rest unreachable. */
+/**
+ * What the mock servers answer: Projects and Hypixel are up, the rest unreachable. Hypixel answers
+ * from America as it does from Turkey (amber bars; SMALL10b), Projects from next door (green).
+ */
 const mockStatuses: Record<string, Omit<ServerStatus, "name" | "address">> = {
   "play.projects.gg": { online: true, players: 214, maxPlayers: 500, latencyMs: 31 },
-  "mc.hypixel.net": { online: true, players: 31_402, maxPlayers: 100_000, latencyMs: 88 },
+  "mc.hypixel.net": { online: true, players: 31_402, maxPlayers: 100_000, latencyMs: 176 },
 };
 
 function editMockServers(instanceId: string, edit: ServerEdit): SavedServerEntry | undefined {

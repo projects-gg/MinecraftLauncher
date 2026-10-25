@@ -284,6 +284,28 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
   ]);
 }
 
+/**
+ * A line that stands for people (Home's lines, an invite, a call): with one person their own rows
+ * sit straight in the line's menu, after the line's actions (SMALL10: "Mert ›" was a step too
+ * many, and the bare name lined up with no other row); with several, each person with rows gets a
+ * submenu. `named` keeps the submenu for one person too (an answer box lists who is in it). People
+ * without rows (the player) get no submenu, but still count: a line showing the player and Ayşe
+ * names Ayşe in hers.
+ */
+export function peopleMenu<P, T>(
+  people: readonly P[],
+  rowsFor: (person: P) => Array<T | null>,
+  submenu: (person: P, rows: Array<T | null>) => T,
+  named = false,
+): Array<T | null> {
+  const withRows = people
+    .map((person) => ({ person, rows: rowsFor(person) }))
+    .filter(({ rows }) => rows.length > 0);
+  const [only] = withRows;
+  if (people.length === 1 && only && !named) return only.rows;
+  return withRows.map(({ person, rows }) => submenu(person, rows));
+}
+
 // --- a category's header ---------------------------------------------------------------------------
 
 export type CategoryAction = "toggle" | "rename" | "moveUp" | "moveDown" | "newCategory" | "remove";

@@ -60,12 +60,13 @@ export function TypingPill({
         <motion.div
           key="typing"
           aria-hidden
-          className="pointer-events-none absolute -top-7 left-2 z-10 flex h-6 max-w-[calc(100%-16px)] items-center gap-1.5 rounded-full bg-obsidian-800/95 py-1 pr-3 pl-1.5 text-[12px] text-ash-300 shadow-[0_8px_24px_rgb(34_6_6/0.45)] ring-1 ring-white/8"
+          className="pointer-events-none absolute -top-7 left-2 z-10 flex h-6 max-w-[calc(100%-16px)] items-center gap-1.5 rounded-full bg-obsidian-800/95 py-1 pr-3 pl-[3px] text-[12px] text-ash-300 shadow-[0_8px_24px_rgb(34_6_6/0.45)] ring-1 ring-white/8"
           initial={{ opacity: 0, transform: reduce ? "none" : "translateY(4px)" }}
           animate={{ opacity: 1, transform: "translateY(0px)", transition: enter(0.2) }}
           exit={{ opacity: 0, transition: leave(0.16) }}
         >
-          <SocialFace source={people(first)} size={16} />
+          {/* Round in the round pill, as close to its end as to its top (SMALL10b). */}
+          <SocialFace source={people(first)} size={16} className="overflow-hidden rounded-full" />
           <span className="truncate">{words}</span>
           <Dots />
         </motion.div>

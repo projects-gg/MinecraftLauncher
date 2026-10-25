@@ -31,10 +31,16 @@ const ORDER: AfkAction[] = ["connect", "stop", "cancel", "retry"];
 export function AfkPrimaryAction({
   account,
   size = "sm",
+  quiet = false,
   className,
 }: {
   account: AfkAccount;
   size?: "sm" | "md";
+  /**
+   * The account runs in 7/24 Bulut: "Bağla" here is not the next step (it asks first), so it is
+   * secondary rather than gold (SMALL10).
+   */
+  quiet?: boolean;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -47,7 +53,8 @@ export function AfkPrimaryAction({
   // Asks first when the same account runs in 7/24 Bulut.
   const connect = useGuardedConnect();
   const labels: Record<AfkAction, string> = {
-    connect: t("afk.connect"),
+    // Running in the cloud, "Bağla" would read as the cloud's own state: here it says where.
+    connect: quiet ? t("small10.afk.connectHere") : t("afk.connect"),
     stop: t("afk.stop"),
     cancel: t("afkConnect.cancel"),
     retry: t("common.retry"),
@@ -63,7 +70,7 @@ export function AfkPrimaryAction({
   return (
     <Button
       size={size}
-      variant={action === "connect" || action === "retry" ? "primary" : "secondary"}
+      variant={(action === "connect" || action === "retry") && !quiet ? "primary" : "secondary"}
       icon={ICONS[action](size === "sm" ? 14 : 15)}
       // Already on its way out: it can be connected again once it has stopped.
       disabled={account.state.kind === "stopping"}

@@ -36,7 +36,7 @@ import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { announce } from "@/features/accounts/use-accounts";
 import { inviteFriends, pressJoin } from "@/features/host/actions";
-import { hostMenuKey, inviteFrom, personWorld } from "@/features/host/rules";
+import { hostMenuKey, inviteFrom, personWorld, retryWithCopy } from "@/features/host/rules";
 import { useHostUi } from "@/features/host/store";
 import { api } from "@/lib/api";
 import type { HostView } from "@/lib/api/host-types";
@@ -47,9 +47,10 @@ import { type InviteState, inviteTargets } from "./crews";
 import { openInDiscord } from "./discord-link";
 import { REST } from "./groups";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
-import { personMenu, rowsOf } from "./menus";
+import { type PersonAction, peopleMenu, personMenu, rowsOf, without } from "./menus";
 import { isJoinable, notifiesOnline } from "./model";
 import { canInvite } from "./play-together";
+import { SocialFace } from "./social-face";
 import { type SocialPage, useSocialPrefs, useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
 import { afterHandingOn, canRemove, MAX_MODERATORS } from "./teams";
@@ -90,6 +91,11 @@ export interface PersonPlace {
   ask?: (question: PersonQuestion) => void;
   /** A reaction's list (CHAT2): "Rapor et" carries the reaction as the evidence. */
   reaction?: { conv: string; id: number; e: string };
+  /**
+   * What the row offers already, left out of the person's rows after it (SMALL10): a world invite's
+   * "Katıl" is the friend's "Katıl" too, so the menu says it once.
+   */
+  skip?: readonly PersonAction[];
 }
 
 // --- the questions ---------------------------------------------------------------------------------
@@ -314,7 +320,7 @@ export function personItems(
   const crewMember = crew?.members.find((m) => m.id === person.id);
   const roles = view.crew.roles;
   const world = personWorld(env.host, person.id, Boolean(friend));
-  const plan = personMenu({
+  const full = personMenu({
     me: person.id === me,
     friend: Boolean(friend),
     blocked,
@@ -352,6 +358,7 @@ export function personItems(
     worldJoin: world.join,
     world: world.host,
   });
+  const plan = place.skip?.length ? without(full, place.skip) : full;
 
   const ask = (question: PersonQuestion) => {
     if (place.ask) place.ask(question);
@@ -405,7 +412,11 @@ export function personItems(
       case "joinWorld": {
         const invite = inviteFrom(env.host.invites, person.id);
         return {
-          label: t("social.actions.join"),
+          // After missing mods the invite's button says "Kur ve katıl": the menu names it the same.
+          label:
+            invite && retryWithCopy(invite.join)
+              ? t("host.join.copyAction")
+              : t("social.actions.join"),
           icon: <Play size={16} />,
           disabled: row.disabled,
           onSelect: () => {
@@ -627,19 +638,27 @@ export function usePersonItems(person: PersonRef, place: PersonPlace = {}): Arra
 }
 
 /**
- * Lines that stand for several people (Home's lines, a "Birlikte oyna" invite): one submenu per
- * person, each with their whole menu (the line puts its own actions first).
+ * Lines that stand for people (Home's lines, an invite, a call), after the line's own actions:
+ * one person's rows straight in the menu, several people a submenu each, named and with their
+ * face (menus.ts → `peopleMenu`). `named` keeps the submenu for a single person (an answer box).
  */
-export function usePeopleItems(people: readonly PersonRef[], place: PersonPlace = {}): MenuItem[] {
+export function usePeopleItems(
+  people: readonly PersonRef[],
+  place: PersonPlace = {},
+  named = false,
+): Array<MenuItem | null> {
   const env = usePersonEnv();
-  return people
-    .map((person) => ({ person, items: personItems(person, place, env) }))
-    .filter(({ items }) => items.length > 0)
-    .map(({ person, items }) => ({
+  return peopleMenu(
+    people,
+    (person) => personItems(person, place, env),
+    (person, items): MenuItem => ({
       label: person.name,
+      icon: <SocialFace source={person} size={16} />,
       onSelect: () => {},
       items,
-    }));
+    }),
+    named,
+  );
 }
 
 /** Someone's right-click menu (Shift+F10 and the menu key from a focused row, too). */
