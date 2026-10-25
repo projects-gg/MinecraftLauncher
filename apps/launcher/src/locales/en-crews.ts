@@ -22,7 +22,7 @@ export const enCrews = {
     theirsMany_one: "{{name}} is calling {{count}} crew",
     theirsMany_other: "{{name}} is calling {{count}} crews",
     needsServer: "Join a multiplayer server to call your crew.",
-    serverHidden: "“Show the address when I'm on other servers” is off.",
+    serverHidden: '"Show the address when I\'m on other servers" is off.',
     showAndCall: "Turn on and call",
     several: "Call several crews",
     pickTitle: "Call your crews",

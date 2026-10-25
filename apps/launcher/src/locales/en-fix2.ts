@@ -33,7 +33,7 @@ export const enFix2: typeof trFix2 = {
     saved: "Note saved",
     cleared: "Note removed",
     gone: "This plan is gone.",
-    with: "{{text}}: “{{note}}”",
+    with: '{{text}}: "{{note}}"',
   },
   answers: {
     toggle: "Who's coming",

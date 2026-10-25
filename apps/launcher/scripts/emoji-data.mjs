@@ -181,6 +181,12 @@ function fold(text) {
 }
 
 /** Search words of a text: folded, split at anything but letters, digits and + # *. */
+/** CLDR quotes a few names ("Japanese \u201Chere\u201D button"); player-visible text uses straight double
+ * quotes (the owner, 25 Oct 2026). */
+function straightQuotes(text) {
+  return text.replace(/[\u201C\u201D]/g, '"');
+}
+
 function words(text) {
   return fold(text)
     .split(/[^\p{L}\p{N}+#*]+/u)
@@ -339,7 +345,7 @@ async function main() {
     const lines = [header(lang)];
     for (const item of items) {
       const own = item[lang] ?? item.en;
-      const name = own?.tts?.[0] ?? item.en?.tts?.[0] ?? "";
+      const name = straightQuotes(own?.tts?.[0] ?? item.en?.tts?.[0] ?? "");
       const nameWords = words(name);
       const aliases = ALIASES[item.emoji] ?? {};
       const keywordWords = [...(own?.default ?? []), ...(aliases[lang] ?? [])].flatMap(words);
@@ -348,7 +354,7 @@ async function main() {
       if (lang === "tr") {
         // The English name (it ranks an English search: "fire" puts 🔥 first) and the English
         // words the Turkish ones do not already find ("skull", "lol").
-        const englishName = item.en?.tts?.[0] ?? "";
+        const englishName = straightQuotes(item.en?.tts?.[0] ?? "");
         const english = [...(item.en?.default ?? []), ...(aliases.en ?? [])].flatMap(words);
         fields.push(
           englishName,
