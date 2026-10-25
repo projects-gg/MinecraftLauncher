@@ -1,5 +1,5 @@
 // The help line under Settings → Genel "Oyun içi katman" (OVL2, OVL-SEL1): which of its lines
-// shows, and the install its switch ("Projects kurulumuna geç") picks. Kept free of UI imports so
+// shows, and the install its switch ("Resmî pakete geç") picks. Kept free of UI imports so
 // the rules are tested on their own.
 import { hasOfficial } from "@/features/library/official";
 import type { InstanceSummary, OfficialStatus } from "@/lib/api";
@@ -15,8 +15,9 @@ import type { InstanceSummary, OfficialStatus } from "@/lib/api";
  * - `notFabric`: the install Play opens is not Fabric (the backend's `NotFabric`);
  * - `version`: it is Fabric on a version the mod does not ship for (`NoJar`);
  * - `waits`: one of those two while its game is prepared or open: the command bar's picker is
- *   locked, so the line says where it can switch once the game closes.
- * `notFabric` and `version` switch Play to an install that carries it, named in the action.
+ *   locked, so the line says where it can switch after the game.
+ * `notFabric` and `version` say the same need ("Fabric 26.1.2–26.3", `versionRange`) and switch
+ * Play to an install that carries it, named in the action.
  * A later state (OVL-AUTO: "not out for this Minecraft version yet", for a newer version whose
  * tested jar is still to come) is one more name here, one more sentence in `tr/en-overlay.ts` and
  * one more rule in `overlayLine`, before `version`.
@@ -38,11 +39,6 @@ export interface OverlayLine {
    * install can carry the overlay.
    */
   switchTo?: InstanceSummary;
-  /**
-   * `notFabric`: a Fabric install of the same Minecraft version would carry it, so "Fabric
-   * gerekir" is the whole reason (a Forge 1.20.1 install also misses the version).
-   */
-  fabricFixes?: boolean;
 }
 
 export interface OverlayLineInput {
@@ -76,9 +72,7 @@ export function overlayLine(input: OverlayLineInput): OverlayLine {
   const switchTo = overlayHome(instances, official, versions);
   // The switch waits for the game; with nothing to switch to, the reason stays as it is.
   if (locked && switchTo) return { kind: "waits", switchTo };
-  if (play.loader === "fabric") return { kind: "version", switchTo };
-  const fabricFixes = versions.some((shipped) => shipsFor(shipped, play.mcVersion));
-  return { kind: "notFabric", switchTo, fabricFixes };
+  return { kind: play.loader === "fabric" ? "version" : "notFabric", switchTo };
 }
 
 /**

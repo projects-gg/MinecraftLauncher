@@ -3,7 +3,7 @@ import { ARM_MS, cn, focusPanel, Kbd, SwapLabel, Switch, toast, usePressGuard } 
 import { useQuery } from "@tanstack/react-query";
 import { type MouseEvent, type ReactNode, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { officialStatusQuery } from "@/features/library/official";
+import { hasOfficial, officialStatusQuery } from "@/features/library/official";
 import { useInstallOfficial } from "@/features/library/official-ui";
 import { usePlayInstance } from "@/features/settings/graphics-section";
 import { Row } from "@/features/settings/row";
@@ -57,10 +57,10 @@ function markRow(from: Element | null, on: boolean) {
  * (LIB1: the player deleted the official pack and has no Fabric install of a supported version),
  * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın", with "Kapanmak yerine küçülsün" (its
  * default); or the install Play opens is not Fabric, or not a version the mod is made for
- * (OVL-SEL1), with "Projects kurulumuna geç", which selects the official pack or another install it
- * works in for Play (while that install's game is prepared or open, the line says it can switch
- * once the game closes). A line with an action is not the switch's label: a click beside the
- * action does nothing. The shortcut itself is set in the game's Controls.
+ * (OVL-SEL1), with "Resmî pakete geç" (or the player's own install it works in, by name), which
+ * selects it for Play (while that install's game is prepared or open, the line says it can switch
+ * after the game). A line with an action is not the switch's label: a click beside the action
+ * does nothing. The shortcut itself is set in the game's Controls.
  */
 export function OverlayRow() {
   const { t } = useTranslation();
@@ -97,16 +97,16 @@ export function OverlayRow() {
   // that came with its line under a resting pointer must not take that pointer's double click).
   const home =
     instances && overlay ? overlayHome(instances, official, overlay.versions) : undefined;
+  // The official pack is called that ("Resmî pakete geç"), the player's own install by its name.
+  const homeIsPack = home !== undefined && hasOfficial([home], official);
+  const homeName = shortName(home?.name ?? "");
   // The install the install lines named last: fading out after a switch, they keep their words.
   // Before they ever showed, Play's own.
-  const named = useRef({ name: "", fabricFixes: true });
-  if ((line.kind === "notFabric" || line.kind === "version") && play) {
-    named.current = {
-      name: play.name,
-      fabricFixes: line.fabricFixes ?? named.current.fabricFixes,
-    };
+  const named = useRef("");
+  if ((line.kind === "notFabric" || line.kind === "version" || line.kind === "waits") && play) {
+    named.current = play.name;
   }
-  const shownName = shortName(named.current.name || (play?.name ?? ""));
+  const shownName = shortName(named.current || (play?.name ?? ""));
   const hasAction = (kind: OverlayLineKind) =>
     kind === "noHome" ||
     kind === "closes" ||
@@ -121,19 +121,18 @@ export function OverlayRow() {
     markRow(grid.current, false);
   }, [line.kind]);
 
+  const range = versionRange(overlay?.versions ?? []);
   const sentence: Record<OverlayLineKind, string> = {
     opens: t("overlay.settingHelp", { key: OVERLAY_KEY }),
     noHome: t("overlay.packMissing"),
     closes: t("overlay.closeHelp"),
-    // "Fabric gerekir" only when Fabric alone would do (not for a Forge 1.20.1 install).
-    notFabric: t(named.current.fabricFixes ? "overlay.fabricOnly" : "overlay.fabricAndVersion", {
-      name: shownName,
-    }),
-    version: t("overlay.versionMissing", {
-      name: shownName,
-      range: versionRange(overlay?.versions ?? []),
-    }),
-    waits: t("overlay.waitsForGame", { name: shortName(home?.name ?? "") }),
+    // One need for both: a Fabric install on a version the overlay is made for.
+    notFabric: t("overlay.needs", { name: shownName, range }),
+    version: t("overlay.needs", { name: shownName, range }),
+    // The reason gives way to where it can switch after the game: both would not fit one line.
+    waits: homeIsPack
+      ? t("overlay.waitsOfficial", { name: shownName })
+      : t("overlay.waitsInstall", { name: shownName, target: homeName }),
   };
   /** The sentence as shown: the shortcut as a key cap. */
   const shownSentence = (kind: OverlayLineKind): ReactNode => {
@@ -191,18 +190,21 @@ export function OverlayRow() {
     }
     // Nothing else carries the overlay: the line says why, with no action.
     if (!hasAction(kind) || !home) return null;
-    const short = shortName(home.name);
     return (
       <LineAction
         shown={active}
         // The whole name when the words cut it.
-        name={short === home.name ? undefined : t("overlay.switchTo", { name: home.name })}
+        name={
+          homeIsPack || homeName === home.name
+            ? undefined
+            : t("overlay.toInstall", { name: home.name })
+        }
         onPress={(refocus) => {
           refocus();
           selectInstance(home.id);
         }}
       >
-        {t("overlay.switchTo", { name: short })}
+        {homeIsPack ? t("overlay.toOfficial") : t("overlay.toInstall", { name: homeName })}
       </LineAction>
     );
   };
@@ -323,7 +325,7 @@ function focusRowSwitch(from: HTMLElement, keyHeld: boolean) {
 }
 
 /**
- * A line's action: gold words right after its sentence ("Resmî paketi kur", "Projects kurulumuna
+ * A line's action: gold words right after its sentence ("Resmî paketi kur", "Resmî pakete
  * geç"), reaching a little past them (`hit-area`). It comes with its line, maybe under a pointer
  * that was pressing the row's words: it ignores the rest of that double click and presses while
  * the pointer rests there for a moment (`usePressGuard`).
