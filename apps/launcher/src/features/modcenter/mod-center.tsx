@@ -259,6 +259,8 @@ export function ModCenter({
               label={t("modCenter.sectionsLabel")}
               options={sections}
             />
+            {/* One quiet slot on the right: which pack the recommended mods are, or "Set ekle"
+                beside the added sets (with none, the section's own empty state offers it). */}
             <div className="ml-auto flex items-center gap-3">
               <AnimatePresence initial={false}>
                 {pack ? (
@@ -274,15 +276,19 @@ export function ModCenter({
                     })}
                   </motion.span>
                 ) : null}
+                {section === "sets" && addedSets.size > 0 ? (
+                  <motion.span key="add-set" {...fade(0.16)} className="flex">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Plus size={14} weight="bold" />}
+                      onClick={() => setAddingSet(true)}
+                    >
+                      {t("modSets.center.add")}
+                    </Button>
+                  </motion.span>
+                ) : null}
               </AnimatePresence>
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Plus size={14} weight="bold" />}
-                onClick={() => setAddingSet(true)}
-              >
-                {t("modSets.center.add")}
-              </Button>
             </div>
           </motion.div>
 

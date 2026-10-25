@@ -349,7 +349,7 @@ export function ModsTab({
             {t("modCenter.own.migrate")}
           </Button>
         ) : null}
-        {browseButton}
+        {/* Finding mods is the tab's "Keşfet", right above; the empty list offers it too. */}
       </div>
 
       {updates.length > 0 || bulkJob ? (

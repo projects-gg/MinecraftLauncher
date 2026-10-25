@@ -1073,7 +1073,7 @@ export const mockSetCatalog: MockSetCard[] = [
     id: "gorsel",
     name: "Görsel",
     nameEn: "Visual",
-    summary: "Shader ile ışık, gölge ve su; güçlü bir ekran kartı ister.",
+    summary: "Shader ile ışık, gölge ve su; iyi bir ekran kartı ister.",
     summaryEn: "Light, shadows and water with shaders; needs a strong graphics card.",
     purpose: "visual",
     variants: [
@@ -1101,7 +1101,7 @@ export const mockSetCatalog: MockSetCard[] = [
           {
             id: "HVnmMxH1",
             title: "Complementary Shaders - Reimagined",
-            summary: "Gerçekçi ışık ve su; güçlü ekran kartı ister.",
+            summary: "Gerçekçi ışık ve su; iyi bir ekran kartı ister.",
             kind: "shaderPack",
             iconUrl:
               "https://cdn.modrinth.com/data/HVnmMxH1/79cb7c8123bbc54945305b2ebad6b8881efdf5f8_96.webp",
@@ -1176,7 +1176,7 @@ export const mockSetCatalog: MockSetCard[] = [
           {
             id: "HVnmMxH1",
             title: "Complementary Shaders - Reimagined",
-            summary: "Gerçekçi ışık ve su; güçlü ekran kartı ister.",
+            summary: "Gerçekçi ışık ve su; iyi bir ekran kartı ister.",
             kind: "shaderPack",
             iconUrl:
               "https://cdn.modrinth.com/data/HVnmMxH1/79cb7c8123bbc54945305b2ebad6b8881efdf5f8_96.webp",
