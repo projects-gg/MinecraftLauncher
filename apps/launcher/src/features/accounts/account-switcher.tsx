@@ -71,9 +71,11 @@ export function AccountSwitcher() {
             }
             className={triggerClass}
           >
+            {/* The face is round and sits 2 px inside the pill all round, so it follows the pill's
+                round end (SMALL10b: a square face did not fit it). */}
             <span
               className={cn(
-                "flex h-8 items-center gap-2 rounded-full bg-obsidian-950/45 pr-3 pl-1 ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform,scale] duration-150",
+                "flex h-8 items-center gap-2 rounded-full bg-obsidian-950/45 pr-3 pl-[2px] ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform,scale] duration-150",
                 "group-hover:bg-obsidian-950/60 group-hover:ring-white/16 group-active:scale-[0.97]",
                 "group-data-[state=open]:ring-gold-400/45 group-focus-visible:ring-2 group-focus-visible:ring-gold-300",
                 !active && "pl-2.5",
@@ -89,7 +91,7 @@ export function AccountSwitcher() {
                   transition={springSnappy}
                 >
                   {active ? (
-                    <AccountFace account={active} size={24} />
+                    <AccountFace account={active} size={24} className="rounded-full" />
                   ) : (
                     <UserPlus size={16} className="text-gold-300" aria-hidden />
                   )}

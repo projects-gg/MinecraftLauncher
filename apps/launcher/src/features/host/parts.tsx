@@ -1,6 +1,7 @@
 // Small pieces world sharing shows in several places (HOST1): the world's mark, "2/8", a row of
 // faces, a guest's state, and "Katıl" on a world invite, which says where the join is in place
 // ("Hazırlanıyor" → "Oyun açılıyor" → "Bağlanıyor"; host1.md §1.4) without changing its width.
+import { Play } from "@phosphor-icons/react";
 import { Button, ContentIcon, cn, SwapLabel } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -88,11 +89,14 @@ export function Faces({
   sources,
   size = 24,
   surface = "var(--color-obsidian-900)",
+  round = false,
 }: {
   sources: Array<FaceSource & { id: string }>;
   size?: number;
   /** The ring between overlapping faces: the colour behind them. */
   surface?: string;
+  /** Inside a round pill (Home's lines) the faces are round too (SMALL10b). */
+  round?: boolean;
 }) {
   const { reduce, layout } = useSocialMotion();
   const shown = sources.slice(0, 4);
@@ -105,7 +109,7 @@ export function Faces({
             key={source.id}
             layout={layout ? "position" : false}
             transition={{ layout: { type: "spring", stiffness: 420, damping: 36 } }}
-            className="relative flex rounded-[5px]"
+            className={cn("relative flex", round ? "rounded-full" : "rounded-[5px]")}
             style={{
               marginLeft: index ? -Math.round(size / 3.5) : 0,
               zIndex: 10 - index,
@@ -113,7 +117,11 @@ export function Faces({
             }}
             {...pop(reduce, 0.22)}
           >
-            <SocialFace source={source} size={size} />
+            <SocialFace
+              source={source}
+              size={size}
+              className={round ? "overflow-hidden rounded-full" : undefined}
+            />
           </motion.span>
         ))}
       </AnimatePresence>
@@ -190,35 +198,50 @@ export function useJoinButton(invite: WorldInvite): JoinButton {
   return joinButton(invite.join, { phase, instanceId });
 }
 
+/** A wording with Home's gold play glyph before it (the event card's "Katıl"). */
+function Glyphed({ children }: { children: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Play size={13} weight="fill" className="shrink-0 text-gold-300" aria-hidden />
+      {children}
+    </span>
+  );
+}
+
 /**
  * "Katıl" on a world invite. Its words change in place and keep its width (every wording shares
  * one cell); while the join is under way it waits without dimming (it says where it is) and a
- * thin gold edge fills with the download when there is one (transform only).
+ * thin gold edge fills with the download when there is one (transform only). On Home (`glyph`)
+ * the wordings that act carry the event card's gold play glyph; the ones that only say where the
+ * join is ("Hazırlanıyor", "Açılıyor") go without it, in the same width (SMALL10).
  */
 export function WorldJoinButton({
   invite,
   size = "sm",
   variant = "secondary",
+  glyph = false,
   className,
 }: {
   invite: WorldInvite;
   size?: "sm" | "md";
   variant?: "primary" | "secondary";
+  glyph?: boolean;
   className?: string;
 }) {
   const { t } = useTranslation();
   const state = useJoinButton(invite);
   const waiting = state.kind === "busy" || state.kind === "in";
   const percent = state.kind === "busy" ? state.percent : undefined;
+  const act = (words: string) => (glyph ? <Glyphed>{words}</Glyphed> : words);
   const labels = [
-    t("social.actions.join"),
+    act(t("social.actions.join")),
     t("host.join.preparing"),
     t("host.join.opening"),
     t("host.join.connecting"),
     t("host.join.in"),
-    t("host.join.retry"),
-    t("host.join.rejoin"),
-    t("host.join.copyAction"),
+    act(t("host.join.retry")),
+    act(t("host.join.rejoin")),
+    act(t("host.join.copyAction")),
   ];
   return (
     <Button

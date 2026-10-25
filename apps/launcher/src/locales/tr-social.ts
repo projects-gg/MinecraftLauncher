@@ -183,9 +183,9 @@ export const trSocial = {
   },
   home: {
     projectsAlone: "{{name}} Projects'te",
-    projectsWith: "{{name}} ve {{count}} arkadaşın Projects'te",
+    projectsWith: "{{name}} ve {{count}} arkadaşın daha Projects'te",
     playingAlone: "{{name}} oyunda",
-    playingWith: "{{name}} ve {{count}} arkadaşın oyunda",
+    playingWith: "{{name}} ve {{count}} arkadaşın daha oyunda",
     open: "Arkadaşlarını aç",
   },
   account: {

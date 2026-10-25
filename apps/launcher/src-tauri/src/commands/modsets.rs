@@ -712,6 +712,7 @@ async fn install_set(
     .await
     .map_err(apply_error)?;
     settle_packs(&game_dir, &report).await;
+    seed_mod_settings(&game_dir, &report).await;
     tracing::info!(
         instance = %instance.id,
         set = %set_id,
@@ -796,6 +797,22 @@ async fn settle_packs(game_dir: &Path, report: &SetApplyReport) {
             Ok(false) => {}
             Err(error) => tracing::warn!(%error, "could not choose a set's shader pack"),
         }
+    }
+}
+
+/// After a set put mods in place: their first settings files where none exist yet (MODHUB2,
+/// `pl_mc::instance::mod_configs`: Litematica's easy placement stays off and its keys leave the
+/// voice chat's mute alone). A file already there is never touched; a failure never fails the set.
+async fn seed_mod_settings(game_dir: &Path, report: &SetApplyReport) {
+    if report.new_mods.is_empty() {
+        return;
+    }
+    match pl_mc::instance::seed_mod_configs(game_dir, &report.new_mods).await {
+        Ok(written) if !written.is_empty() => {
+            tracing::info!(?written, "wrote the first settings of a set's mods");
+        }
+        Ok(_) => {}
+        Err(error) => tracing::warn!(%error, "could not write a set mod's first settings"),
     }
 }
 

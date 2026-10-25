@@ -456,7 +456,7 @@ export function ModFlowDialog() {
                   void navigate({
                     to: "/library/$instanceId",
                     params: { instanceId: id },
-                    search: { tab: "modcenter", focus: "sets" },
+                    search: { tab: "mods", focus: "sets" },
                   });
                 }}
               >

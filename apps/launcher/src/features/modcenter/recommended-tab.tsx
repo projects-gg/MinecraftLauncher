@@ -627,6 +627,21 @@ export function RecommendedTab({
             </ul>
           </motion.section>
         ) : null}
+        {/* Which pack these are, quietly at the end of the list (MODHUB2: the row of sections
+            above stays calm). */}
+        {view.pack && grouped ? (
+          <motion.p
+            layout={position}
+            transition={{ layout: glide }}
+            className="mt-6 px-3 text-[12.5px] text-ash-400 tabular-nums"
+          >
+            {t("modCenter.packCaption", {
+              name: view.pack.name,
+              version: view.pack.version,
+              minecraft: view.pack.minecraft,
+            })}
+          </motion.p>
+        ) : null}
       </div>
 
       <ChangeBar open={Boolean(selection || applying)} label={t("modCenter.bar.label")}>

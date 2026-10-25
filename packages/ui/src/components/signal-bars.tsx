@@ -8,6 +8,12 @@ import { useLiveMotion } from "../perf";
  */
 export type SignalState = "pending" | "online" | "offline" | "idle";
 
+/**
+ * How good the connection is, from the lit bars (SMALL10b; a tester read the gold bars as a high
+ * ping): every bar lit is `good` (green), one missing `fair` (amber), two or more `poor` (red).
+ */
+export type SignalTone = "good" | "fair" | "poor";
+
 const BARS = [0, 1, 2, 3, 4] as const;
 
 /** The cross over the short bars: 1 px squares, flat (a shadow smudged it at 1x). */
@@ -35,14 +41,24 @@ export function signalLevel(latencyMs: number | null | undefined): number {
 }
 
 /**
- * Server reachability as the game's server-list connection bars, in gold: five pixel bars with a
- * one-pixel drop shadow, drawn on whole pixels (15 × 8). While the ping is out a highlight sweeps
- * back and forth (the game's "pinging" frames, 100 ms each, stopped after 12 s); an answer that
- * arrives on screen fills the bars from the left once. Both run only while live motion may (not
- * hidden, in the tray, in game, in Performance mode or under reduced motion); otherwise the final
- * picture shows at once. They show what happens, so they do not wait for the player as the
- * ambient motion does, and both end by themselves. Decorative: the words beside it carry the
- * state.
+ * The colour of a latency, read from its bars so the two never disagree: under 150 ms (and when
+ * it is not known) green, 150–299 ms amber, from 300 ms red (the game drops to three bars there,
+ * and every action visibly trails).
+ */
+export function signalTone(latencyMs: number | null | undefined): SignalTone {
+  const level = signalLevel(latencyMs);
+  return level >= 5 ? "good" : level === 4 ? "fair" : "poor";
+}
+
+/**
+ * Server reachability as the game's server-list connection bars: five pixel bars with a one-pixel
+ * drop shadow, drawn on whole pixels (15 × 8), lit by latency in the colour of how good it is
+ * (`signalTone`). While the ping is out a gold highlight sweeps back and forth (the game's
+ * "pinging" frames, 100 ms each, stopped after 12 s); an answer that arrives on screen fills the
+ * bars from the left once. Both run only while live motion may (not hidden, in the tray, in game,
+ * in Performance mode or under reduced motion); otherwise the final picture shows at once. They
+ * show what happens, so they do not wait for the player as the ambient motion does, and both end
+ * by themselves. Decorative: the words beside it carry the state.
  */
 export function SignalBars({
   state,
@@ -71,6 +87,7 @@ export function SignalBars({
       viewBox="0 0 15 8"
       shapeRendering="crispEdges"
       data-state={state}
+      data-tone={state === "online" ? signalTone(latencyMs) : undefined}
       data-sweep={state === "pending" && motion ? "" : undefined}
       data-fill={fill ? "" : undefined}
       className={cn("signal-bars shrink-0", className)}

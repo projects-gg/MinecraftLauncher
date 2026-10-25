@@ -13,6 +13,7 @@ import {
   DotsThree,
   Flag,
   PaperPlaneTilt,
+  Play,
   Prohibit,
   Star,
   UserMinus,
@@ -155,10 +156,16 @@ function useCanInvite(): boolean {
 export function JoinButton({
   size = "sm",
   variant = "secondary",
+  glyph = false,
   className,
 }: {
   size?: "sm" | "md";
   variant?: "primary" | "secondary";
+  /**
+   * Home's "Katıl", in the event card's form: the gold play glyph before the word (SMALL10). The
+   * panel's rows go without: a gold mark on every row of a list is noise.
+   */
+  glyph?: boolean;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -169,6 +176,7 @@ export function JoinButton({
         <Button
           size={size}
           variant={variant}
+          icon={glyph ? <Play size={13} weight="fill" className="text-gold-300" /> : undefined}
           disabled={here}
           className="w-full"
           onClick={(event) => {

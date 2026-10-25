@@ -64,13 +64,15 @@ interface Sheet {
 const FILL: CSSProperties = { position: "absolute", inset: 0 };
 
 /**
- * The edge of icons whose outline is near-black on our dark slots: one texel wide, hard and on the
- * game's pixel grid (four unblurred shadows a texel out), in a tone only a few steps above the
- * darkest card (L* 16 on 9), so it separates without reading as a frame or a selection. Opaque, so
- * the corners match the sides; a light surface turns it off with `transparent`.
+ * The edge of icons whose outline is near-black on our dark slots: hard and on the icon's pixel grid
+ * (four unblurred shadows), in a tone only a few steps above the darkest card (L* 16 on 9), so it
+ * separates without reading as a frame or a selection. A flat item's is one texel; a 3D icon's one
+ * pixel of its drawing (the texels of a block's faces are smaller than a flat item's, and a texel
+ * wide ring sat around heads and blocks like a plate). Opaque, so the corners match the sides; a
+ * light surface turns it off with `transparent`.
  */
-function rim(size: number): string {
-  const t = size / 16;
+function rim(size: number, flat: boolean): string {
+  const t = flat ? size / 16 : Math.max(1, Math.floor(size / 32));
   const color = "var(--pl-item-rim, #2c2733)";
   return [`${t}px 0`, `${-t}px 0`, `0 ${t}px`, `0 ${-t}px`]
     .map((offset) => `drop-shadow(${offset} 0 ${color})`)
@@ -165,6 +167,8 @@ interface Drawn {
   /** The mask the glint is drawn through: everything drawn. */
   glintMask?: CSSProperties;
   dark: boolean;
+  /** A flat item (layer textures, 16 texels to a side) rather than a 3D drawing. */
+  flat: boolean;
 }
 
 // Device pixels per CSS pixel, shared by every sprite: 1 on the server and while hydrating, then
@@ -287,6 +291,7 @@ function drawLayers(
       layers: [<Cut key="o" sheet={sheet} rect={rect} size={size} />],
       glintMask: mask(sheet, [rect], size),
       dark: false,
+      flat: true,
     };
   }
   if (resolved.source === "vanilla" && art?.vanilla) {
@@ -304,6 +309,7 @@ function drawLayers(
         layers: [<Cut key="l" sheet={largeSheet} rect={large} size={size} />],
         glintMask: mask(largeSheet, [large], size),
         dark: resolved.icon.dark === true,
+        flat: false,
       };
     }
     const drawn: Rect[] = [];
@@ -336,6 +342,7 @@ function drawLayers(
       layers,
       glintMask: drawn.length ? mask(sheet, drawn, size) : undefined,
       dark: resolved.icon.dark === true,
+      flat: resolved.icon.kind === "flat",
     };
   }
   return undefined;
@@ -418,7 +425,7 @@ export function ItemSprite({ size = 32, label, className, art: own, ...item }: I
       data-item={item.id}
       data-source={resolved.source}
       className={cn("shrink-0", className)}
-      style={drawn.dark ? { ...box, filter: rim(size) } : box}
+      style={drawn.dark ? { ...box, filter: rim(size, drawn.flat) } : box}
     >
       <span style={{ ...FILL, overflow: "hidden" }}>
         {drawn.layers}

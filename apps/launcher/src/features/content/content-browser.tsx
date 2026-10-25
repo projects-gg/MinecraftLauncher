@@ -130,6 +130,7 @@ function HitRow({
           onUpdate={onUpdate}
           onRemove={onRemove}
           onCancel={onCancel}
+          alignRemove
         />
       </div>
     </li>

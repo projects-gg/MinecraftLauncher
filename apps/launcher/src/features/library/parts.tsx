@@ -2,8 +2,8 @@
 import {
   Archive,
   ArrowCounterClockwise,
+  Cube,
   DotsThreeVertical,
-  Globe,
   ImageSquare,
   Package,
   Trash,
@@ -26,7 +26,8 @@ import { formatBytes, formatRelative } from "@/lib/format";
 import { trashLabel } from "./trash-label";
 
 export const trashIcons = {
-  world: Globe,
+  // A block, as the palette's worlds row (ICON1: a globe reads "internet").
+  world: Cube,
   backup: Archive,
   screenshot: ImageSquare,
   modSet: Package,

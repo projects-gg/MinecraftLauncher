@@ -438,6 +438,40 @@ pub struct SetApplyReport {
     pub removed_resource_packs: Vec<String>,
     /// Shader packs (file names) this apply put in place for the first time, in set order.
     pub new_shader_packs: Vec<String>,
+    /// Mods this apply put in place (a file downloaded where there was none, or a disabled copy
+    /// renamed back), by their Modrinth project (else their item id), each once in plan order:
+    /// the launcher writes their first settings files where none exist (pl-mc `mod_configs`).
+    #[serde(default)]
+    pub new_mods: Vec<String>,
+}
+
+/// The Modrinth projects (else the item ids) of the mods `plan` puts in place for `variant`: a
+/// file downloaded where none was, or a disabled copy renamed back. Each once, in plan order.
+fn placed_mods(plan: &SyncPlan, variant: &ModSetVariant) -> Vec<String> {
+    let project_of = |item: &str| {
+        variant.items.iter().find(|i| i.id == item).map(|i| {
+            i.modrinth
+                .as_ref()
+                .map_or_else(|| i.id.clone(), |m| m.project_id.clone())
+        })
+    };
+    let added = plan
+        .downloads
+        .iter()
+        .filter(|d| d.category == FileCategory::Mod && d.action == DownloadAction::Add)
+        .filter_map(|d| d.item.as_deref());
+    let restored = plan
+        .restores
+        .iter()
+        .filter(|r| r.category == FileCategory::Mod)
+        .filter_map(|r| r.item.as_deref());
+    let mut placed: Vec<String> = Vec::new();
+    for project in added.chain(restored).filter_map(project_of) {
+        if !placed.contains(&project) {
+            placed.push(project);
+        }
+    }
+    placed
 }
 
 /// Applies a plan from [`plan_set`] or [`plan_set_removal`] and records the result in
@@ -460,6 +494,10 @@ pub async fn apply_set(
         .map(|set| set.resource_packs.keys().cloned().collect())
         .unwrap_or_default();
     let installing = matches!(change, SetChange::Install { .. });
+    let new_mods = match &change {
+        SetChange::Install { variant, .. } => placed_mods(plan, variant),
+        SetChange::Remove => Vec::new(),
+    };
     let new_shader_packs: Vec<String> = plan
         .downloads
         .iter()
@@ -548,6 +586,7 @@ pub async fn apply_set(
         } else {
             Vec::new()
         },
+        new_mods,
     })
 }
 
@@ -710,6 +749,97 @@ mod tests {
             assert!(!game.join(gone).exists(), "{gone}");
         }
         assert!(!ModSetStates::path(game).exists(), "no set left");
+    }
+
+    #[tokio::test]
+    async fn the_mods_an_apply_puts_in_place_are_told_by_project() {
+        let server = TestServer::start().await;
+        let game = tempfile::tempdir().unwrap();
+        let game = game.path();
+        let mut variant = sample_variant(
+            Some(&server),
+            "26.3",
+            &[
+                ("mods/litematica.jar", b"schematics"),
+                ("mods/malilib.jar", b"library"),
+                ("resourcepacks/Blocks.zip", b"pack"),
+            ],
+        );
+        variant.items[0].requires = vec!["malilib".into()];
+        variant.items[1].library = true;
+        // The item's own id differs from its Modrinth project, which the settings table knows.
+        variant.items[0].modrinth = Some(crate::model::ModrinthRef {
+            project_id: "bEpr0Arc".into(),
+            version_id: "w8P6TokG".into(),
+        });
+        let catalog = sample_mod_sets(variant.clone());
+        let set = &catalog.sets[0];
+
+        let plan = plan_set(game, set, &variant, None, None, &BTreeSet::new())
+            .await
+            .unwrap();
+        let report = apply(&plan, set, &variant).await;
+        assert_eq!(
+            report.new_mods,
+            ["bEpr0Arc", "malilib"],
+            "mods only, by project"
+        );
+
+        // Applying again puts nothing in place.
+        let states = ModSetStates::load(game).await.unwrap();
+        let plan = plan_set(
+            game,
+            set,
+            &variant,
+            Some(&states.sets["pvp"]),
+            None,
+            &BTreeSet::new(),
+        )
+        .await
+        .unwrap();
+        assert!(apply(&plan, set, &variant).await.new_mods.is_empty());
+
+        // The player turned it off by renaming the file; switching it on renames it back.
+        std::fs::rename(
+            game.join("mods/litematica.jar"),
+            game.join("mods/litematica.jar.disabled"),
+        )
+        .unwrap();
+        let states = ModSetStates::load(game).await.unwrap();
+        let selection = PackSelection {
+            items: BTreeMap::from([("litematica".into(), true)]),
+            ..PackSelection::default()
+        };
+        let plan = plan_set(
+            game,
+            set,
+            &variant,
+            Some(&states.sets["pvp"]),
+            Some(&selection),
+            &BTreeSet::new(),
+        )
+        .await
+        .unwrap();
+        let report = apply(&plan, set, &variant).await;
+        assert!(game.join("mods/litematica.jar").exists());
+        assert_eq!(report.new_mods, ["bEpr0Arc"]);
+
+        // Removing the set puts nothing in place.
+        let states = ModSetStates::load(game).await.unwrap();
+        let plan = plan_set_removal(game, "pvp", &states.sets["pvp"])
+            .await
+            .unwrap();
+        let report = apply_set(
+            &plan,
+            "pvp",
+            SetChange::Remove,
+            &Downloader::new(test_http()),
+            &DownloadOptions::default(),
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(report.new_mods.is_empty());
     }
 
     #[tokio::test]

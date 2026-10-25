@@ -73,9 +73,15 @@ export function nextChangeMs(state: AfkState, now: number): number | null {
   return null;
 }
 
-/** The line's words for `state` at `now`. */
-export function stateText(state: AfkState, now: number, t: TFunction): string {
+/**
+ * The line's words for `state` at `now`. A stopped account that connects by itself when the
+ * launcher opens (`autoStart`) says so there, where it matters (SMALL10b: a pill beside the name
+ * said it before).
+ */
+export function stateText(state: AfkState, now: number, t: TFunction, autoStart = false): string {
   switch (state.kind) {
+    case "stopped":
+      return autoStart ? t("small10.afk.stoppedAutoStart") : t("afk.states.stopped");
     case "connected":
       return t("afk.states.connected", {
         uptime: formatDuration((now - Date.parse(state.since)) / 1000),
@@ -98,13 +104,22 @@ export function stateText(state: AfkState, now: number, t: TFunction): string {
   }
 }
 
-export function StateLine({ state, className }: { state: AfkState; className?: string }) {
+export function StateLine({
+  state,
+  autoStart = false,
+  className,
+}: {
+  state: AfkState;
+  /** The account connects by itself when the launcher opens (its card says so while stopped). */
+  autoStart?: boolean;
+  className?: string;
+}) {
   const { t } = useTranslation();
   const { unseen } = usePerf();
   const [ticks, tick] = useState(0);
   // The clock is read on every render, so a new state never shows with an old time.
   const now = Date.now();
-  const text = stateText(state, now, t);
+  const text = stateText(state, now, t, autoStart);
   // Only the uptime and the reconnect countdown tick, and only while somebody can see them.
   const wait = unseen ? null : nextChangeMs(state, now);
   useEffect(() => {

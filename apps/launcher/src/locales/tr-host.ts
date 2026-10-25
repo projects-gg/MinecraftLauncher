@@ -114,7 +114,8 @@ export const trHost = {
     },
   },
   copy: {
-    title: "Bu dünya başka modlarla açık",
+    /** The friend's name without a case ending (SMALL10). */
+    title: "{{name}} farklı modlarla oynuyor",
     body: "Katılmak için aynı modlarla yeni bir kurulum oluşturulur.",
     size: "{{count}} mod, {{size}}",
     confirm: "Kur ve katıl",

@@ -143,6 +143,9 @@ function Faces({ members }: { members: TeamMember[] }) {
   );
 }
 
+/** A call to Projects joins there: the caller's own "Katıl" would say it twice. */
+const SKIP_JOIN = ["join"] as const;
+
 interface Box {
   answer: CallAnswer;
   icon: ReactNode;
@@ -152,7 +155,8 @@ interface Box {
 /** One answer's box. Its right click lists the people in it, each with their own menu (FIX2). */
 function AnswerBox({ box, who, team }: { box: Box; who: TeamMember[]; team: SocialTeam }) {
   const { reduce } = useSocialMotion();
-  const items = usePeopleItems(who, { crew: team, from: "team" });
+  // The box lists who is in it: each by name, also when it is one (SMALL10).
+  const items = usePeopleItems(who, { crew: team, from: "team" }, true);
   return (
     <ContextMenu items={items} disabled={!items.length}>
       <li
@@ -256,7 +260,12 @@ export function CallRow({ call, team }: { call: CrewCall; team: SocialTeam }) {
   const where = callWhere(call);
   const here = useThere(callTarget(where));
   const openTeam = useSocialUi((s) => s.openTeam);
-  const callerItems = usePeopleItems([caller], { crew: team, from: "team" });
+  // The caller's rows follow the call's, without a second "Katıl" to the same Projects (SMALL10).
+  const callerItems = usePeopleItems([caller], {
+    crew: team,
+    from: "team",
+    ...(where.kind === "projects" ? { skip: SKIP_JOIN } : {}),
+  });
   const rows = rowsOf(
     callMenu({ joinable: where.kind !== "ready", here, answer: call.myAnswer }),
     (row): MenuItem | null => {
