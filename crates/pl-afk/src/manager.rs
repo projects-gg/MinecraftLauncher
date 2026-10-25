@@ -31,8 +31,8 @@ use crate::process::{ClientSpawner, ProcessSpawner};
 use crate::restart::RestartSchedule;
 use crate::runtime::{AfkClientRelease, AfkRuntime, ClientExe};
 use crate::session::{
-    AfkActivity, AfkEventKind, EventSink, Session, SessionEnv, SessionSnapshot, SessionState,
-    SessionStats,
+    AfkActivity, AfkEventKind, EventSink, READER_DRAIN, Session, SessionEnv, SessionSnapshot,
+    SessionState, SessionStats,
 };
 use crate::store::AccountStore;
 use crate::versions::VersionCatalog;
@@ -55,6 +55,10 @@ pub struct ManagerConfig {
     /// Least time between two connection attempts to one server, whichever accounts make them
     /// (see [`crate::pacing`]); zero turns the pacing off.
     pub connect_spacing: Duration,
+    /// How long the last output of a client that exited may still take to be read before its
+    /// exit is decided without it (its final bridge events tell why it left). Only a client that
+    /// left its pipes to a process of its own makes this run out (2 s).
+    pub reader_drain: Duration,
 }
 
 impl Default for ManagerConfig {
@@ -65,6 +69,7 @@ impl Default for ManagerConfig {
             stop_grace: Duration::from_secs(4),
             log_cap_bytes: DEFAULT_LOG_CAP_BYTES,
             connect_spacing: MIN_CONNECT_SPACING,
+            reader_drain: READER_DRAIN,
         }
     }
 }
@@ -252,6 +257,7 @@ impl AfkManager {
             log_cap: options.config.log_cap_bytes,
             pacer: ConnectPacer::default(),
             connect_spacing: options.config.connect_spacing,
+            reader_drain: options.config.reader_drain,
         });
         Self {
             inner: Arc::new(Inner {
