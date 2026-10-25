@@ -95,6 +95,10 @@ def main():
                     {"type": "reference", "id": "minecraft:include/unifont"},
                 ]
             }
+            # The colour emoji of the same scale (CHAT-EMOJI, tools/build-emoji.py): after the face's own letters, before
+            # the game's fonts. GUI 1 draws the game's font itself (ui/Fonts.java).
+            if scale >= 2:
+                definition["providers"].insert(1, {"type": "reference", "id": f"projects_overlay:emoji_{scale}"})
             path = FONT_DIR / f"{name}_{scale}.json"
             path.write_text(biome_style(json.dumps(definition, indent=2)) + "\n", encoding="utf-8", newline="\n")
 
