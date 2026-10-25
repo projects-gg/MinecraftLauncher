@@ -197,7 +197,7 @@ async fn sources_for(
     (origins, titles)
 }
 
-async fn scan(mods_dir: PathBuf) -> ModSnapshot {
+pub(crate) async fn scan(mods_dir: PathBuf) -> ModSnapshot {
     tokio::task::spawn_blocking(move || ModScanner::shared().scan_dir(&mods_dir))
         .await
         .unwrap_or_default()
