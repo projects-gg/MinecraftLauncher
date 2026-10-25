@@ -304,7 +304,11 @@ function InviteRow({ invite }: { invite: SocialInvite }) {
           size={36}
         />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-semibold text-bone-50">{name}</span>
+          <NameWithMark
+            name={name}
+            mark={invite.name ? invite.mark : undefined}
+            className="text-[14px] font-semibold text-bone-50"
+          />
           <span className="block truncate text-[12.5px] text-ash-300">
             {t("social.list.invitedYou")}, {ago(invite.at)}
           </span>

@@ -15,6 +15,7 @@ import { canJoinInvite, joinInvite } from "./join-dialog";
 import { isJoinable } from "./model";
 import { MarkedSentence } from "./person-mark";
 import { SocialAvatar } from "./social-face";
+import { useSocialUi } from "./store";
 
 function InviteToast({ toastId, invite }: { toastId: string | number; invite: SocialInvite }) {
   const { t } = useTranslation();
@@ -74,6 +75,8 @@ export function showInviteToast(invite: SocialInvite) {
 
 function WorldInviteToast({ toastId, invite }: { toastId: string | number; invite: WorldInvite }) {
   const { t } = useTranslation();
+  // The friend's mark (SOC-VERIFY) from the friend list: the invite itself does not carry it.
+  const mark = useSocialUi((s) => s.view.friends.find((friend) => friend.id === invite.from)?.mark);
   return (
     <div className="flex w-full items-center gap-3 font-normal">
       <SocialAvatar
@@ -83,7 +86,11 @@ function WorldInviteToast({ toastId, invite }: { toastId: string | number; invit
       />
       <div className="min-w-0 flex-1">
         <p className="text-[13.5px] leading-snug font-semibold text-bone-50">
-          {t("host.invite.title", { name: invite.name })}
+          <MarkedSentence
+            text={(who) => t("host.invite.title", { name: who })}
+            name={invite.name}
+            mark={mark}
+          />
         </p>
         <p className="truncate text-[12px] text-ash-400 tabular-nums">
           <span className="sr-only">{t("host.invite.version", { version: invite.mc })}</span>
