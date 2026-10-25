@@ -342,6 +342,11 @@ export type LaunchEvent =
       minecraft: string;
       recommended?: string;
     }
+  /**
+   * "Devam et" into a world while `mods` break the game's direct entry into worlds and no overlay
+   * opens it instead: the game starts on its main menu (OVL-FIX).
+   */
+  | { type: "worldFromTitle"; mods: string[] }
   /** The mods would certainly stop the game: it was not started. */
   | { type: "modsBlocked"; check: ModCheck }
   /** The instance's custom Java does not suit the game: it was not started (J1). */

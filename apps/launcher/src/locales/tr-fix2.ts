@@ -37,7 +37,7 @@ export const trFix2 = {
     cleared: "Not kaldırıldı",
     gone: "Bu plan artık yok.",
     /** A line about a plan (its chat line, its toast, its reminder) with the plan's note. */
-    with: "{{text}}: “{{note}}”",
+    with: '{{text}}: "{{note}}"',
   },
   /** Who answered a plan, opened under its faces. */
   answers: {

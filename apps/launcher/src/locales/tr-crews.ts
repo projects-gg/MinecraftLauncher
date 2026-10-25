@@ -22,7 +22,7 @@ export const trCrews = {
     theirsMany_one: "{{name}} {{count}} ekibi çağırıyor",
     theirsMany_other: "{{name}} {{count}} ekibi çağırıyor",
     needsServer: "Ekibini çağırmak için çok oyunculu bir sunucuda olmalısın.",
-    serverHidden: "“Başka sunuculardaysam adresini göster” kapalı.",
+    serverHidden: '"Başka sunuculardaysam adresini göster" kapalı.',
     showAndCall: "Aç ve çağır",
     several: "Birden çok ekibi çağır",
     pickTitle: "Ekiplerini çağır",

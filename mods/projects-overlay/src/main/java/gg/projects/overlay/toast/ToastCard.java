@@ -69,6 +69,8 @@ public final class ToastCard {
     final String hintAfter;
     /** The face is the world's grass block (a world invite, the world opening) rather than a disc. */
     final boolean sprite;
+    /** A travel card that only tells something (OVL-FIX): the quiet info sign instead of the gold join sign. */
+    final boolean info;
     // The short strings again, in the form the game draws: made once here, not on every frame (each String
     // draw runs the game's bidirectional text pass).
     private final FormattedCharSequence countLine;
@@ -98,6 +100,7 @@ public final class ToastCard {
         this.hintKeyWidth = b.hintKey == null ? 0 : Fonts.small().width(b.hintKey) + 2 * KEY_PAD;
         this.hintAfter = b.hintAfter;
         this.sprite = b.sprite;
+        this.info = b.info;
         this.narration = b.narration;
         this.countLine = line(b.countText);
         this.hintBeforeLine = line(b.hintBefore);
@@ -141,6 +144,7 @@ public final class ToastCard {
         String hintKey;
         String hintAfter;
         boolean sprite;
+        boolean info;
         Component narration;
     }
 
@@ -255,6 +259,20 @@ public final class ToastCard {
         return new ToastCard(b);
     }
 
+    /**
+     * A note in the travel toast's form that goes nowhere (OVL-FIX: the "Devam et" world is gone): one sentence beside the
+     * quiet info sign.
+     */
+    public static ToastCard note(String text) {
+        Builder b = new Builder();
+        b.kind = Kind.TRAVEL;
+        b.info = true;
+        b.initial = "";
+        b.body = Texts.wrap(Fonts.ui(), text, TEXT_W, MAX_BODY_LINES);
+        b.narration = Component.literal(text);
+        return new ToastCard(b);
+    }
+
     /** A travel toast: one sentence (up to two lines) beside the gold join sign, no title, no hint. */
     public static ToastCard travel(String text) {
         Builder b = new Builder();
@@ -354,8 +372,13 @@ public final class ToastCard {
         }
         switch (kind) {
             case TRAVEL -> {
-                Draw.disc(g, FACE, cx, cy, Theme.withAlpha(Theme.GOLD_500, 0.2f));
-                Draw.icon(g, Icon.JOIN, 10, cx - 5, cy - 5, Theme.GOLD_300);
+                if (info) {
+                    Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_700);
+                    Draw.icon(g, Icon.INFO, 10, cx - 5, cy - 5, Theme.ASH_300);
+                } else {
+                    Draw.disc(g, FACE, cx, cy, Theme.withAlpha(Theme.GOLD_500, 0.2f));
+                    Draw.icon(g, Icon.JOIN, 10, cx - 5, cy - 5, Theme.GOLD_300);
+                }
             }
             case CALL -> {
                 Draw.disc(g, FACE, cx, cy, Theme.withAlpha(Theme.GOLD_500, 0.2f));

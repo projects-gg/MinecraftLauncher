@@ -15,7 +15,9 @@
       "gg.projects.overlay.dev.Team6Scenario",
       "gg.projects.overlay.dev.LinkScenario",
       "gg.projects.overlay.dev.HostScenario",
-      "gg.projects.overlay.dev.LangScenario"
+      "gg.projects.overlay.dev.LangScenario",
+      "gg.projects.overlay.dev.ResumeScenario",
+      "gg.projects.overlay.dev.SettingsScenario"
     ]
   },
   "mixins": [

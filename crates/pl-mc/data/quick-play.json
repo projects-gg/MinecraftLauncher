@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "about": "Mods with which the launcher never opens a singleplayer world through the game's quick play (--quickPlaySingleplayer, used by \"Devam et\"). Quick play hands the world to the game while it starts; these mods make that happen before the game's first frame, and mods that finish setting up on the first frame then crash as the world's server starts. With the launcher's in-game overlay in place the world always opens from the overlay once the title screen has drawn a frame, whatever the mods (pl_overlay world_jvm_arg); without it, an instance with one of these mods starts on the title screen and the launcher says why. Servers keep quick play: they start no server in the game. Desktop: pl-mc launch::world_entry. An entry is a mod id as fabric.mod.json, mods.toml or neoforge.mods.toml declares it (top-level or nested); why says what goes wrong and how it was found.",
+  "beforeFirstFrame": [
+    {
+      "id": "rrls",
+      "name": "Remove Reloading Screen",
+      "why": "Finishes the game's loading inside Minecraft's constructor (its 'Trying to complete load early'), so quick play opens the world before the first frame. XaeroLib, nested in Xaero's Minimap, World Map and Better PvP (still in XaeroLib 1.8.5, 25 Oct 2026), freezes its config registry on the first frame and its SERVER_STARTING handler then throws 'Registry is not frozen yet!': the beta.1.11 testers' crash on \"Devam et\" (OVL-FIX, 25 Oct 2026)."
+    }
+  ]
+}

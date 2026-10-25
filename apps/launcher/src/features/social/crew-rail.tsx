@@ -193,9 +193,13 @@ function CrewTab({
             {null}
           </Badge>
         </span>
+        {/* The tag in the chips' Figtree SemiBold (docs/design.md §3): Tektur's Ş and Ç carry a
+            detached comma that drops to a pixel at 11 px ("GKŞ" read "GKS"). Its line stays 11 px;
+            padding inside the clip (taken back by the margins) keeps the cedillas and the dot of İ
+            out of the cut. */}
         <span
           className={cn(
-            "max-w-full truncate font-display text-[11px] leading-none tracking-[0.06em] transition-colors duration-150",
+            "-my-0.5 max-w-full truncate py-0.5 text-[11px] leading-none font-semibold tracking-[0.06em] transition-colors duration-150",
             selected ? "text-bone-50" : "text-ash-400 group-hover/tab:text-ash-300",
           )}
         >

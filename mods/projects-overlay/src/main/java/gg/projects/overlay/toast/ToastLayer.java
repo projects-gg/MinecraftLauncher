@@ -15,6 +15,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.TitleScreen;
 
 /**
  * The toasts, drawn in the mod's own HUD layer at the bottom right (or top right): not the game's toast
@@ -37,6 +38,8 @@ public final class ToastLayer implements HudElement {
     /** Room for five subtitle lines (the game draws them at the bottom right, 10 pixels each from 35 up). */
     private static final int ABOVE_SUBTITLES = 35 + 4 * 10 + 7;
     private static final int BELOW_EFFECTS = 52;
+    /** The title screen's copyright line (10 GUI pixels from the bottom) plus the card's usual margin. */
+    private static final int ABOVE_TITLE_COPYRIGHT = 10;
     private static final long MESSAGE_MS = 5_000;
     private static final long CALL_MS = 8_000;
     private static final long INFO_MS = 4_000;
@@ -55,6 +58,8 @@ public final class ToastLayer implements HudElement {
     private ToastCard travel;
     private final Tween travelAlpha = new Tween(0f);
     private final Tween travelDrop = new Tween(0f);
+    /** When a note in the travel toast's place ({@link #noteOverScreens}) fades by itself; 0: never. */
+    private long travelEndsAt;
 
     public ToastStack<ToastCard> stack() {
         return stack;
@@ -116,11 +121,21 @@ public final class ToastLayer implements HudElement {
         long now = now();
         stack.clear(now);
         travel = card;
+        travelEndsAt = 0;
         travelAlpha.snap(0f);
         travelAlpha.animateTo(1f, now, ToastStack.FADE_IN_MS, Ease.OUT_EXPO);
         travelDrop.snap(reducedMotion ? 0f : -ToastStack.ENTER_OFFSET);
         travelDrop.animateTo(0f, now, ToastStack.FADE_IN_MS + 80, Ease.OUT_EXPO);
         Minecraft.getInstance().getNarrator().saySystemQueued(card.narration());
+    }
+
+    /**
+     * A short note above whatever screen is open, the title screen included (the HUD's toasts draw only in a world):
+     * the travel toast's place, fading by itself after {@code ms} (OVL-FIX: the "Devam et" world is gone).
+     */
+    public void noteOverScreens(ToastCard card, long ms, boolean reducedMotion) {
+        travel(card, reducedMotion);
+        travelEndsAt = now() + ms;
     }
 
     /** The game arrived, or gave up: the travel toast fades where it is. */
@@ -258,6 +273,10 @@ public final class ToastLayer implements HudElement {
     }
 
     private void drawTravel(GuiGraphicsExtractor g, Minecraft mc, long now, boolean overScreen) {
+        if (travelEndsAt > 0 && now >= travelEndsAt) {
+            travelEndsAt = 0;
+            endTravel();
+        }
         if (travelAlpha.target() <= 0f && travelAlpha.done(now)) {
             travel = null;
             return;
@@ -272,6 +291,10 @@ public final class ToastLayer implements HudElement {
             y = overScreen ? MARGIN : topEdge(mc);
         } else {
             y = (overScreen ? height - MARGIN : bottomEdge(mc, width, height, x)) - travel.height();
+            // On the title screen the game's copyright line runs along the bottom right: the card keeps clear of it.
+            if (overScreen && Compat.screen(mc) instanceof TitleScreen) {
+                y -= ABOVE_TITLE_COPYRIGHT;
+            }
         }
         Draw.pushAlpha(travelAlpha.value(now));
         travel.draw(g, x, y + travelDrop.value(now), 1f);

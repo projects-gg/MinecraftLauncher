@@ -10,7 +10,7 @@ export const trChat = {
   list: {
     label: "Mesajların",
     empty: "Henüz mesaj yok",
-    emptyBody: "Bir arkadaşının kartında “Mesaj”a bas.",
+    emptyBody: 'Bir arkadaşının kartında "Mesaj"a bas.',
     you: "Sen: {{text}}",
     noMessages: "Henüz mesaj yok",
     failed: "Gönderilemedi",
