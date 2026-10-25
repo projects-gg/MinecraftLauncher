@@ -225,7 +225,7 @@ export function NewsPage() {
       </header>
       {/* Positioned: what a filter change takes away pops out of the flow here, clipped with
           the list, even when the list is scrolled. */}
-      <div className={cn("relative -mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-6")}>
+      <div className={cn("page-scroll relative min-h-0 flex-1 pb-6")}>
         {isPending ? (
           <>
             <Skeleton className="h-[clamp(200px,38vh,320px)] w-full rounded-[14px]" />

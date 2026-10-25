@@ -540,7 +540,7 @@ function NoteText({ note, onEdit }: { note: string; onEdit?: () => void }) {
   const { t } = useTranslation();
   const words = (
     <span className="min-w-0 flex-1 text-[13px] leading-snug text-bone-100 break-words">
-      <span className="sr-only">{t("fix2.note.label")}: </span>“{note}”
+      <span className="sr-only">{t("fix2.note.label")}: </span>"{note}"
     </span>
   );
   if (!onEdit) {

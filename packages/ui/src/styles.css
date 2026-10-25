@@ -522,6 +522,22 @@
   animation: panel-in 220ms var(--ease-out-expo);
 }
 
+/* A page's scrolling list (Library, AFK, News, the content browser): 7 px past the page's sides
+   with as much padding back, so hover lifts and focus rings are not clipped. On Windows our bar
+   (10 px, base layer) is drawn inside the box and took that much off the cards, whose right edge
+   then sat 10 px in from the header's buttons and the toasts. There the box reaches the bar's
+   width further right and always keeps the gutter, so the cards end on the page edge whether the
+   list scrolls or not. macOS and Linux draw overlay bars, which take no room. */
+@utility page-scroll {
+  margin-inline: calc(var(--spacing) * -2);
+  padding-inline: calc(var(--spacing) * 2);
+  overflow-y: auto;
+  html[data-os="windows"] & {
+    margin-right: calc(var(--spacing) * -2 - 10px);
+    scrollbar-gutter: stable;
+  }
+}
+
 @layer components {
   html[data-perf="on"] .glass,
   html[data-perf="on"] .glass-strong {
@@ -535,18 +551,6 @@
       backdrop-filter: none;
       background: var(--color-obsidian-900);
     }
-  }
-
-  /* Tektur at title and number sizes: the arm of its "r" ends 0.064 em before the next stem
-     (measured in Studio, STUDIO-PANO), under a pixel at 15 px, and antialiasing on the glass
-     blurs that gap shut: "rı" read as "n" ("Uyarılar" as "Uyanlar"). The dotless "ı" comes
-     from another subset file, so no kerning pair can help. 1 px of tracking up to 15 px, less
-     above, none from 25 px: page titles, OYNA and the hero keep their set width. Components
-     layer: an explicit tracking utility still wins. */
-  .font-display,
-  .prose-news h2,
-  .prose-news h3 {
-    letter-spacing: clamp(0px, calc(2.5px - 0.1em), 1px);
   }
 
   /* Long-form news text. */

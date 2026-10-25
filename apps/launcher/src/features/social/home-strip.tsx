@@ -476,7 +476,7 @@ function PlanLine() {
           <span className="shrink-0 text-[13.5px] font-medium text-bone-50">{text}</span>
           {/* The plan's note (FIX2), quieter, cut where the pill ends. */}
           {plan.note ? (
-            <span className="min-w-0 truncate text-[13px] text-ash-300">“{plan.note}”</span>
+            <span className="min-w-0 truncate text-[13px] text-ash-300">"{plan.note}"</span>
           ) : null}
         </button>
       </LineMenu>

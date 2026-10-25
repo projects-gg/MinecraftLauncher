@@ -293,7 +293,7 @@ export function ContentBrowser({
         />
       </div>
 
-      <div className="-mx-2 mt-4 min-h-0 flex-1 overflow-y-auto px-2 pb-8">
+      <div className="page-scroll mt-4 min-h-0 flex-1 pb-8">
         {search.isPending ? (
           <div className="space-y-1">
             {[0, 1, 2, 3, 4].map((i) => (

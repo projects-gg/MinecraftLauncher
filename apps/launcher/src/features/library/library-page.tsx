@@ -349,7 +349,7 @@ export function LibraryPage() {
       {/* Cards scrolled out of this area are not under the cursor while files are dragged.
           Positioned: a card or group that leaves pops out of the flow here, so it fades where it
           was (scrolled or not) and is clipped with the list, never drawn over the header. */}
-      <div data-drop-clip className="relative -mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-5">
+      <div data-drop-clip className="page-scroll relative min-h-0 flex-1 pb-5">
         {isPending ? (
           // A section title and cards, as the library will look.
           <div aria-busy>
