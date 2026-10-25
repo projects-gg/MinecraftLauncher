@@ -178,7 +178,6 @@ fn xdg_data_dirs(
 
 #[cfg(windows)]
 mod platform {
-    use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
     use windows::Win32::UI::Shell::{
         ASSOCF_IS_PROTOCOL, ASSOCF_NOTRUNCATE, ASSOCSTR_COMMAND, AssocQueryStringW,
     };
@@ -222,21 +221,10 @@ mod platform {
     }
 
     pub fn handler_installed() -> bool {
-        // The shell's association lookup may use COM: a fresh thread gets an apartment of its own.
-        let command = std::thread::spawn(|| {
-            // SAFETY: initializes COM for this thread only; balanced below when it succeeded.
-            let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-            let command = open_command();
-            if init.is_ok() {
-                // SAFETY: matches the successful CoInitializeEx above on the same thread.
-                unsafe { CoUninitialize() };
-            }
-            command
-        })
-        .join()
-        .ok()
-        .flatten();
-        command.is_some_and(|command| super::command_program(&command, |p| p.is_file()).is_some())
+        // The shell's association lookup may use COM: an apartment of its own (`crate::com`).
+        crate::com::in_apartment(open_command)
+            .flatten()
+            .is_some_and(|command| super::command_program(&command, |p| p.is_file()).is_some())
     }
 }
 

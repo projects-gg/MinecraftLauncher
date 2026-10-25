@@ -184,8 +184,7 @@ mod platform {
     use std::path::Path;
 
     use windows::Win32::System::Com::{
-        CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-        CoUninitialize, IPersistFile, STGM_READ,
+        CLSCTX_INPROC_SERVER, CoCreateInstance, IPersistFile, STGM_READ,
     };
     use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
     use windows::core::{HSTRING, Interface};
@@ -230,24 +229,13 @@ mod platform {
         }
     }
 
-    /// Runs `job` with COM, which wants an apartment of its own: a fresh thread never inherits
-    /// the caller's.
+    /// Runs `job` with COM, in an apartment of its own (`crate::com`).
     fn on_com_thread<T: Send + 'static>(
         job: impl FnOnce() -> windows::core::Result<T> + Send + 'static,
     ) -> Result<T> {
-        std::thread::spawn(move || {
-            // SAFETY: initializes COM for this thread only; balanced below when it succeeded.
-            let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-            let result = job();
-            if init.is_ok() {
-                // SAFETY: matches the successful CoInitializeEx above on the same thread.
-                unsafe { CoUninitialize() };
-            }
-            result
-        })
-        .join()
-        .map_err(|_| Error::Platform("the shortcut thread stopped".into()))?
-        .map_err(|e| Error::Platform(e.message()))
+        crate::com::in_apartment(job)
+            .ok_or_else(|| Error::Platform("the shortcut thread stopped".into()))?
+            .map_err(|e| Error::Platform(e.message()))
     }
 
     pub fn create(path: &Path, spec: &ShortcutSpec) -> Result<()> {
@@ -427,8 +415,7 @@ mod tests {
     #[test]
     fn windows_shell_link_round_trip() {
         use windows::Win32::System::Com::{
-            CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-            CoUninitialize, IPersistFile, STGM_READ,
+            CLSCTX_INPROC_SERVER, CoCreateInstance, IPersistFile, STGM_READ,
         };
         use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
         use windows::core::{HSTRING, Interface};
@@ -447,32 +434,31 @@ mod tests {
         // Creating it again replaces it.
         assert_eq!(create_shortcut(dir.path(), &spec).unwrap(), path);
 
-        let read = |buffer: &[u16]| {
+        fn read(buffer: &[u16]) -> String {
             let end = buffer.iter().position(|c| *c == 0).unwrap_or(buffer.len());
             String::from_utf16_lossy(&buffer[..end])
-        };
-        // SAFETY: test-only COM calls on this thread, balanced at the end.
-        unsafe {
-            let init = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            {
+        }
+        // In an apartment like the launcher's own lookups: one at a time in this process.
+        let (arguments, working_dir) = crate::com::in_apartment(move || {
+            // SAFETY: test-only COM calls inside the apartment `in_apartment` set up.
+            unsafe {
                 let link: IShellLinkW =
                     CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).unwrap();
                 let file: IPersistFile = link.cast().unwrap();
                 file.Load(&HSTRING::from(path.as_os_str()), STGM_READ)
                     .unwrap();
-                let mut buffer = [0u16; 1024];
-                link.GetArguments(&mut buffer).unwrap();
-                assert_eq!(read(&buffer), "projects://play/fabric-1-21");
-                let mut buffer = [0u16; 1024];
-                link.GetWorkingDirectory(&mut buffer).unwrap();
-                assert_eq!(
-                    PathBuf::from(read(&buffer)),
-                    target.parent().unwrap().to_path_buf()
-                );
+                let mut arguments = [0u16; 1024];
+                link.GetArguments(&mut arguments).unwrap();
+                let mut working_dir = [0u16; 1024];
+                link.GetWorkingDirectory(&mut working_dir).unwrap();
+                (read(&arguments), read(&working_dir))
             }
-            if init.is_ok() {
-                CoUninitialize();
-            }
-        }
+        })
+        .expect("the shell link was read back");
+        assert_eq!(arguments, "projects://play/fabric-1-21");
+        assert_eq!(
+            PathBuf::from(working_dir),
+            target.parent().unwrap().to_path_buf()
+        );
     }
 }
