@@ -5,8 +5,6 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-192.webp";
-import { AccountFace } from "@/features/accounts/account-face";
-import { useAccountsUi } from "@/features/accounts/store";
 import { FriendsRailEntry } from "@/features/social/rail-entry";
 import { api } from "@/lib/api";
 import { detectOs } from "@/lib/platform";
@@ -58,12 +56,12 @@ function RailLink({ item, active }: { item: Item; active: boolean }) {
             transition={{ type: "spring", stiffness: 420, damping: 34 }}
           />
         ) : null}
+        {/* The page you are on: a plain plate, as under the pointer. The gold notch and the gold
+            icon say "here"; a gold glow behind it was a second loud thing (SMALL10, §1.4). */}
         <span
           className={cn(
             "absolute inset-[3px] rounded-lg transition-colors duration-150",
-            active
-              ? "bg-[radial-gradient(circle_at_50%_50%,rgb(232_154_44/0.22),transparent_70%)]"
-              : "group-hover:bg-white/6",
+            active ? "bg-white/[0.06]" : "group-hover:bg-white/6",
           )}
         />
         <IconCmp
@@ -101,9 +99,6 @@ function useNewsWaiting(onNewsPage: boolean): boolean {
 export function NavRail() {
   const { t } = useTranslation();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts() });
-  const active = accounts?.find((a) => a.active);
-  const openCenter = useAccountsUi((s) => s.openCenter);
   const mac = detectOs() === "macos";
   const isActive = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
   const newsWaiting = useNewsWaiting(isActive("/news"));
@@ -152,24 +147,12 @@ export function NavRail() {
       <div className="mt-auto flex flex-col items-center gap-1.5">
         {/* Only when the player moved the friends button here (its home is the title bar). */}
         <FriendsRailEntry />
+        {/* The account lives in the title bar alone (SMALL10): its switcher chooses, the rail
+            leads to pages. */}
         <RailLink
           item={{ to: "/settings", icon: GearSix, label: t("nav.settings"), shortcut: "settings" }}
           active={isActive("/settings")}
         />
-        {active ? (
-          <Tooltip content={active.username} side="right">
-            {/* The account center opens over the page (as from the title bar), the page stays. */}
-            <button
-              type="button"
-              aria-label={t("accounts.center.open")}
-              onClick={(event) => openCenter({ from: event.currentTarget })}
-              className="mt-1 cursor-pointer rounded-[6px] p-[3px] ring-1 ring-white/10 transition-[box-shadow,transform,scale] duration-150 ease-out hover:ring-gold-400/60 active:scale-[0.94]"
-            >
-              {/* 32 px: head pixels stay whole at 100, 125, 150 and 200% scaling. */}
-              <AccountFace account={active} size={32} />
-            </button>
-          </Tooltip>
-        ) : null}
       </div>
     </nav>
   );

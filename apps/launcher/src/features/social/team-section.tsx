@@ -31,7 +31,6 @@ import { useTranslation } from "react-i18next";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { SocialTeam, TeamInvite } from "@/lib/api/social-types";
-import { formatRelative } from "@/lib/format";
 import { attempt, copyText } from "./actions";
 import { sayJoined, wearTag } from "./badge-actions";
 import { wearState } from "./badges";
@@ -45,10 +44,8 @@ import { rowsOf, type TeamAction, teamMenu, without } from "./menus";
 import { pop, swap, useSocialMotion } from "./motion";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
-import { crewRights, teammatesOnline } from "./teams";
+import { crewRights, teammates, teammatesOnline } from "./teams";
 import { useCallClock } from "./use-call-clock";
-
-const ago = (unixSeconds: number) => formatRelative(new Date(unixSeconds * 1000).toISOString());
 
 /** Where a crew's menu opens: the friend list's header, the crew page's rail or its card. */
 export interface CrewMenuPlace {
@@ -262,6 +259,7 @@ export function TeamHeader({
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const online = teammatesOnline(team);
+  const crewmates = teammates(team).filter((m) => !m.blocked).length;
   const items = useCrewItems(team, { folded, onToggle });
   const { muted: own, target, allMuted } = useCrewMute(team.id);
   const muted = own || (Boolean(target) && allMuted);
@@ -309,13 +307,18 @@ export function TeamHeader({
             {team.name}
           </span>
           <TeamTag tag={team.tag} color={team.color} />
-          <span className="relative ml-0.5 inline-flex font-display text-[12px] tabular-nums">
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.span key={online} className="flex" {...swap(reduce, 0.18)}>
-                <span className={online > 0 ? "text-jade-400" : "text-ash-400"}>{online}</span>
-                <span className="text-ash-400">/{team.members.length - 1}</span>
-              </motion.span>
-            </AnimatePresence>
+          {/* "4/6 çevrimiçi" (SMALL10: a bare "4/6" said nothing): the live numbers in Tektur and
+              their swap, the word quiet beside them. Blocked crewmates count on neither side. */}
+          <span className="ml-0.5 inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap">
+            <span className="relative inline-flex font-display text-[12px] tabular-nums">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.span key={online} className="flex" {...swap(reduce, 0.18)}>
+                  <span className={online > 0 ? "text-jade-400" : "text-ash-400"}>{online}</span>
+                  <span className="text-ash-400">/{crewmates}</span>
+                </motion.span>
+              </AnimatePresence>
+            </span>
+            <span className="text-[12px] text-ash-400">{t("small10.crew.online")}</span>
           </span>
           <AnimatePresence initial={false}>
             {muted ? (
@@ -396,8 +399,10 @@ export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
             <span className="truncate text-[14px] font-semibold text-bone-50">{invite.name}</span>
             <TeamTag tag={invite.tag} color={invite.color} />
           </span>
+          {/* Who asked, without when (SMALL10): beside three controls in the 440 px panel the time
+              cut the line, and a crew invite does not go stale as a game invite does. */}
           <span className="block truncate text-[12.5px] text-ash-300">
-            {t("teams.invitedBy", { name: invite.from.name })}, {ago(invite.sentAt)}
+            {t("teams.invitedBy", { name: invite.from.name })}
           </span>
         </span>
         <Tooltip content={t("crews.limit", { count: limit })} disabled={!full}>

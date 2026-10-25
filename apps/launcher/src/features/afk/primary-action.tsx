@@ -31,10 +31,16 @@ const ORDER: AfkAction[] = ["connect", "stop", "cancel", "retry"];
 export function AfkPrimaryAction({
   account,
   size = "sm",
+  quiet = false,
   className,
 }: {
   account: AfkAccount;
   size?: "sm" | "md";
+  /**
+   * The account runs in 7/24 Bulut: "Bağla" here is not the next step (it asks first), so it is
+   * secondary rather than gold (SMALL10).
+   */
+  quiet?: boolean;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -63,7 +69,7 @@ export function AfkPrimaryAction({
   return (
     <Button
       size={size}
-      variant={action === "connect" || action === "retry" ? "primary" : "secondary"}
+      variant={(action === "connect" || action === "retry") && !quiet ? "primary" : "secondary"}
       icon={ICONS[action](size === "sm" ? 14 : 15)}
       // Already on its way out: it can be connected again once it has stopped.
       disabled={account.state.kind === "stopping"}

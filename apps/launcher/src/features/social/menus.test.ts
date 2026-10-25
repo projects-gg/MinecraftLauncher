@@ -10,6 +10,7 @@ import {
   type PersonInput,
   type Plan,
   panelMenu,
+  peopleMenu,
   personMenu,
   planMenu,
   teamMenu,
@@ -294,6 +295,69 @@ describe("personMenu", () => {
     expect(
       words(personMenu({ ...open, blocked: true, world: { invite: "ready", guest: false } })),
     ).not.toContain("worldInvite");
+  });
+
+  it("leaves out what the row offers already, its separators tidied (SMALL10)", () => {
+    // A world invite's row has its own "Katıl": the friend's rows follow without it.
+    const inviter: PersonInput = { ...friend, categories: false, worldJoin: "ready" };
+    expect(words(without(personMenu(inviter), ["joinWorld"]))).toEqual([
+      "invite",
+      "chat",
+      "message",
+      "-",
+      "favorite",
+      "notifyOnline",
+      "-",
+      "removeFriend",
+      "block",
+      "report",
+    ]);
+    // A Discord invite's "Katıl" joins the same Projects as the friend's own: once is enough.
+    const together: PersonInput = { ...friend, invite: "hidden", chat: false, discord: false };
+    expect(words(without(personMenu({ ...together, joinable: true }), ["join"]))).toEqual([
+      "favorite",
+      "notifyOnline",
+      "category",
+      "-",
+      "removeFriend",
+      "block",
+      "report",
+    ]);
+  });
+});
+
+describe("peopleMenu", () => {
+  type Item = { label: string; items?: Array<Item | null> };
+  const rows: Record<string, Array<Item | null>> = {
+    Mert: [{ label: "join" }, null, { label: "block" }],
+    Ayşe: [{ label: "chat" }],
+    me: [],
+  };
+  const menu = (people: string[], named = false) =>
+    peopleMenu<string, Item>(
+      people,
+      (name) => rows[name] ?? [],
+      (name, items) => ({ label: `${name} ›`, items }),
+      named,
+    );
+
+  it("puts one person's rows straight in the line's menu", () => {
+    expect(menu(["Mert"])).toEqual([{ label: "join" }, null, { label: "block" }]);
+  });
+
+  it("gives each of several people a submenu, the player none", () => {
+    expect(menu(["Mert", "Ayşe", "me"]).map((item) => item?.label)).toEqual(["Mert ›", "Ayşe ›"]);
+    // The line shows the player and Ayşe: her rows are named, not loose.
+    expect(menu(["me", "Ayşe"]).map((item) => item?.label)).toEqual(["Ayşe ›"]);
+  });
+
+  it("names a single person where the place lists people (an answer box)", () => {
+    expect(menu(["Mert"], true).map((item) => item?.label)).toEqual(["Mert ›"]);
+  });
+
+  it("offers nothing for nobody", () => {
+    expect(menu([])).toEqual([]);
+    expect(menu(["me"])).toEqual([]);
   });
 });
 

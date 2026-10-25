@@ -64,6 +64,17 @@ describe("failedText", () => {
   });
 });
 
+describe("a stopped account that starts with the launcher", () => {
+  it("says it connects when the launcher opens, only while stopped", () => {
+    const at = Date.parse("2026-10-25T20:00:00Z");
+    expect(stateText({ kind: "stopped" }, at, t)).toBe("Durduruldu");
+    expect(stateText({ kind: "stopped" }, at, t, true)).toBe(
+      "Durduruldu, launcher açılınca bağlanır",
+    );
+    expect(stateText({ kind: "connecting" }, at, t, true)).toBe("Bağlanıyor");
+  });
+});
+
 describe("primaryAction", () => {
   it("connects an idle account and stops a running one", () => {
     expect(primaryAction({ kind: "stopped" })).toBe("connect");

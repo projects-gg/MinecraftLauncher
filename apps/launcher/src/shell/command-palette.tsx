@@ -6,11 +6,11 @@ import {
   CaretRight,
   Coffee,
   CopySimple,
+  Cube,
   FileZip,
   FolderOpen,
   Gauge,
   Gear,
-  Globe,
   House,
   ImageSquare,
   Images,
@@ -399,7 +399,8 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 entry(
                   "instance:worlds",
                   t("instance.tabs.worlds"),
-                  <Globe size={18} />,
+                  // A world is a block here as on its tab (ICON1: a globe reads "internet").
+                  <Cube size={18} />,
                   tab("worlds"),
                   {
                     words: PALETTE_WORDS.worlds,

@@ -84,11 +84,13 @@ function Pill() {
           onKeyDown={(event) => openMenuFromKeyboard(event, "titlebar")}
           className="group relative flex h-titlebar cursor-pointer items-center px-0.5 outline-none after:absolute after:inset-x-0 after:top-0 after:-bottom-1"
         >
+          {/* Round inside round (SMALL10b): the faces are circles 3 px inside the pill all round,
+              and the icon alone sits in a true 28 px circle, as tall as the account pill. */}
           <span
             className={cn(
               "relative flex h-8 items-center gap-2 rounded-full bg-obsidian-950/45 ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform,scale] duration-150",
               "group-hover:bg-obsidian-950/60 group-hover:ring-white/16 group-active:scale-[0.97] group-focus-visible:ring-2 group-focus-visible:ring-gold-300",
-              faces.length ? "pr-3 pl-1" : named ? "pr-3 pl-2.5" : "px-2.5",
+              faces.length ? "pr-3 pl-[3px]" : named ? "pr-3 pl-2.5" : "w-8 justify-center",
             )}
           >
             <EntryCue cue={cue} className="-inset-px rounded-full" />
@@ -102,14 +104,18 @@ function Pill() {
                       key={friend.id}
                       layout={layout ? "position" : false}
                       transition={{ layout: glide }}
-                      className="relative flex rounded-[5px] ring-2 ring-obsidian-950"
+                      className="relative flex rounded-full ring-2 ring-obsidian-950"
                       style={{ marginLeft: index ? -7 : 0, zIndex: faces.length - index }}
                       // Layout glides compose with `scale` (not a transform string).
                       initial={{ opacity: 0, scale: reduce ? 1 : 0.85 }}
                       animate={{ opacity: 1, scale: 1, transition: enter(0.22) }}
                       exit={{ opacity: 0, scale: reduce ? 1 : 0.85, transition: leave(0.22) }}
                     >
-                      <SocialFace source={friend} size={22} />
+                      <SocialFace
+                        source={friend}
+                        size={22}
+                        className="overflow-hidden rounded-full"
+                      />
                     </motion.span>
                   ))}
                 </AnimatePresence>

@@ -43,7 +43,14 @@ import { AfkConsole } from "./afk-console";
 import { AfkHead } from "./afk-head";
 import { CloudLocation, useCloudPlaces, useMoveMenuItem } from "./cloud/location";
 import { CloudSection } from "./cloud/section";
-import { useConnectAll, useGuardedConnect } from "./cloud/use-cloud";
+import { CloudStateLine } from "./cloud/state-line";
+import {
+  runsInCloud,
+  twinOf,
+  useCloudPage,
+  useConnectAll,
+  useGuardedConnect,
+} from "./cloud/use-cloud";
 import { afkFailed, isFriendly, runAfk } from "./errors";
 import { AfkPrimaryAction, primaryAction } from "./primary-action";
 import { AfkSettingsSheet, useAfkReconnect } from "./settings/settings-sheet";
@@ -173,6 +180,11 @@ function AfkCard({
   const guardedConnect = useGuardedConnect();
   const connect = () => guardedConnect(account);
   const places = useCloudPlaces();
+  // Idle here while its twin runs in the cloud: the card says the cloud's state, and "Bağla"
+  // steps back from gold (it would ask to stop the cloud first; SMALL10).
+  const { data: cloud, skewMs } = useCloudPage();
+  const twin = twinOf(cloud, account.id);
+  const inCloud = runsInCloud(twin) && isAfkIdle(account.state) ? twin : null;
   const moveItem = useMoveMenuItem(account);
   const stop = () => runAfk(api.afkStop(account.id), t("afk.stopFailed"));
   const openFolder = () => runAfk(api.afkOpenFolder(account.id), t("afk.openFolderFailed"));
@@ -235,12 +247,11 @@ function AfkCard({
           <div className="flex items-start gap-3">
             <AfkHead nickname={account.nickname} size={40} />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="truncate font-display text-[15px] font-semibold text-bone-50">
-                  {account.nickname}
-                </h3>
-                {account.autoStart ? <Chip>{t("afk.autoStart")}</Chip> : null}
-              </div>
+              {/* The name alone: "connects when the launcher opens" is in the state line, where it
+                  matters (SMALL10b; a pill beside the name read as a badge). */}
+              <h3 className="truncate font-display text-[15px] font-semibold text-bone-50">
+                {account.nickname}
+              </h3>
               {/* The address keeps its line: the version chip moves under it when both do not
                   fit (three cards in a row at 1200 px, "Automatic version" in English). */}
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ash-300">
@@ -273,7 +284,11 @@ function AfkCard({
           </div>
 
           <div className="mt-3 flex min-h-5 items-center gap-3">
-            <StateLine state={account.state} className="flex-1" />
+            {inCloud ? (
+              <CloudStateLine account={inCloud} skewMs={skewMs} onDesktopCard className="flex-1" />
+            ) : (
+              <StateLine state={account.state} autoStart={account.autoStart} className="flex-1" />
+            )}
             <AnimatePresence initial={false}>
               {connected ? (
                 <motion.span
@@ -312,7 +327,7 @@ function AfkCard({
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
           <div className="mt-auto flex gap-2 pt-3">
-            <AfkPrimaryAction account={account} className="flex-1" />
+            <AfkPrimaryAction account={account} quiet={inCloud !== null} className="flex-1" />
             <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
               {t("afk.console")}
             </Button>

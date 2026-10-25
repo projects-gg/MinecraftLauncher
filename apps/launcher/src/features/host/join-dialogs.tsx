@@ -5,7 +5,7 @@
 // oldest first; "Vazgeç" leaves that join. Also: the one sentence before "Dünyadan çıkar", and an
 // opening that failed while the launcher was in front, with its ways out.
 import { Warning } from "@phosphor-icons/react";
-import { Button, Chip, ContentIcon, cn, Dialog } from "@pl/ui";
+import { Button, Chip, cn, Dialog } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -91,11 +91,16 @@ function AccountChoice({
   );
 }
 
-function askWords(t: (key: string, options?: Record<string, unknown>) => string, ask: JoinAsk) {
+function askWords(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  ask: JoinAsk,
+  name: string,
+) {
   switch (ask.kind) {
     case "copy":
+      // Named, without a case ending (no name-suffix helper; SMALL9 decision 16).
       return {
-        title: t("host.copy.title"),
+        title: t("host.copy.title", { name }),
         body: t("host.copy.body"),
         confirm: t("host.copy.confirm"),
       };
@@ -138,7 +143,7 @@ export function JoinAskDialog() {
   const pick = chosen ?? others[0]?.id ?? null;
 
   if (!shown || !ask) return null;
-  const words = askWords(t, ask);
+  const words = askWords(t, ask, shown.name);
   const session = shown.session;
 
   const leave = () => {
@@ -194,12 +199,11 @@ export function JoinAskDialog() {
       <AnimatePresence initial={false} mode="popLayout">
         <motion.div key={ask.kind} {...crossfade()}>
           {ask.kind === "copy" ? (
-            <div className="space-y-2 rounded-[var(--radius-panel)] bg-obsidian-950/40 px-3.5 py-3 ring-1 ring-white/7">
-              <p className="flex items-center gap-2.5 text-[13.5px] text-bone-100">
-                <ContentIcon kind="pack" size={16} />
-                <span className="tabular-nums">
-                  {t("host.copy.size", { count: ask.mods, size: formatBytes(ask.bytes) })}
-                </span>
+            // What the copy takes, as a quiet line under the sentence (a boxed single line with a
+            // chest read as a card of its own; SMALL10). Missing mods only when there are some.
+            <div className="space-y-2">
+              <p className="text-meta text-ash-300 tabular-nums">
+                {t("host.copy.size", { count: ask.mods, size: formatBytes(ask.bytes) })}
               </p>
               {ask.unknown > 0 ? (
                 <p className="flex items-start gap-2.5 text-[12.5px] text-ash-300">
