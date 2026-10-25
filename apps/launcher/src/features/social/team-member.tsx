@@ -62,12 +62,15 @@ const CARD_QUESTION: Record<PersonQuestion, Question> = {
   block: "block",
 };
 
-/** A crown for the leader, a starred shield for a moderator (gold, quieter). */
+/**
+ * A crown for the leader, a starred shield for a moderator (gold, quieter); a little apart from a
+ * mark before it (SOC-VERIFY), so the two do not read as one cluster.
+ */
 export function RoleBadge({
   member,
   size = 12,
 }: {
-  member: Pick<TeamMember, "role" | "moderator">;
+  member: Pick<TeamMember, "role" | "moderator" | "mark">;
   size?: number;
 }) {
   const { t } = useTranslation();
@@ -76,7 +79,7 @@ export function RoleBadge({
       <Crown
         size={size}
         weight="fill"
-        className="shrink-0 text-gold-300"
+        className={cn("shrink-0 text-gold-300", member.mark && "ml-1")}
         aria-label={t("teams.founder")}
       />
     );
@@ -86,7 +89,7 @@ export function RoleBadge({
     <ShieldStar
       size={size + 1}
       weight="fill"
-      className="shrink-0 text-gold-300/75"
+      className={cn("shrink-0 text-gold-300/75", member.mark && "ml-1")}
       aria-label={t("teams.moderator")}
     />
   );

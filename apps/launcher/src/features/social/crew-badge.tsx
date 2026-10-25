@@ -785,6 +785,7 @@ export function BadgedName({
   size = "md",
   chip = "row",
   dim = false,
+  quietMark = false,
   className,
   nameClassName,
   children,
@@ -798,6 +799,8 @@ export function BadgedName({
   chip?: "row" | "button" | "still";
   /** The chip quieter, with a dimmed name (someone offline). */
   dim?: boolean;
+  /** The mark at 70 % beside a name in a quiet colour (a chat sender's line). */
+  quietMark?: boolean;
   className?: string;
   nameClassName?: string;
   children?: ReactNode;
@@ -865,7 +868,7 @@ export function BadgedName({
           <PersonMark
             mark={mark}
             size={MARK_SIZES[size]}
-            className={cn("transition-opacity duration-150", dim && "opacity-70")}
+            className={cn("transition-opacity duration-150", (dim || quietMark) && "opacity-70")}
           />
         </span>
       ) : (

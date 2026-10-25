@@ -34,6 +34,7 @@ export function SenderName({
         badge={wearer ? badge : undefined}
         wearer={wearer ?? ""}
         mark={wearer ? mark : undefined}
+        quietMark
         size="sm"
         className="gap-1"
       />
