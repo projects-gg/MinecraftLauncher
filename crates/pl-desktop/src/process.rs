@@ -204,9 +204,11 @@ mod tests {
         }
         child.wait().unwrap();
         drop(child);
-        // Not ours (any more): no wait at all (a wait takes at least one look).
+        // Ended: no wait at all (a wait takes at least one look). Windows may still tell its exit
+        // code for a moment, while something else (a virus scanner) holds the process open.
         let since = Instant::now();
-        assert_eq!(wait_for_exit(pid, started), None);
+        let again = wait_for_exit(pid, started);
         assert!(since.elapsed() < LOOK_EVERY, "{:?}", since.elapsed());
+        assert!(matches!(again, None | Some(3)), "{again:?}");
     }
 }
