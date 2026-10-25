@@ -23,10 +23,13 @@
   --pl-inv-min: 1;
   --pl-inv-max: 3;
   /* ITEMART's light edge for dark icons is for our dark slots; the game's grey needs none. Its
-     stand-ins (an item without a picture) are one flat tone: light here, so they never read as the
-     game's empty-slot hints (flat #555555, panel-art.tsx `GUI.ghost`) or as an empty slot. */
+     stand-ins (an item without a picture) are one flat tone: lighter than the slot, so they never
+     read as the game's empty-slot hints (flat #555555, panel-art.tsx `GUI.ghost`) or as an empty
+     slot, yet only a step lighter (1.6:1 on #8b8b8b), so the game's white counts stay readable on
+     them (2.1:1 plus their shadow; #d8d8d8 drowned them) and they stay below the real icons beside
+     them. The hand slot and the carried stack set the same. */
   --pl-item-rim: transparent;
-  --pl-item-standin: #d8d8d8;
+  --pl-item-standin: #b4b4b4;
   position: relative;
   min-width: 0;
   /* A menu picture wider than the window reaches past it, as in the game, but never past us. */
@@ -300,7 +303,7 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   --pl-item-rim: transparent;
-  --pl-item-standin: #d8d8d8;
+  --pl-item-standin: #b4b4b4;
 }
 .pl-inv-hand:focus-visible {
   outline: 2px solid var(--color-gold-300, #f6d58e);
@@ -379,7 +382,7 @@
   z-index: 70;
   transition: opacity 120ms ease;
   --pl-item-rim: transparent;
-  --pl-item-standin: #d8d8d8;
+  --pl-item-standin: #b4b4b4;
 }
 /* Carried past the component (onto the rest of the page): out of sight until the pointer is back. */
 .pl-inv-cursor[data-away] {

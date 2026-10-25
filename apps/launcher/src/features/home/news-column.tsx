@@ -1,4 +1,4 @@
-import { ArrowSquareOut, CaretRight } from "@phosphor-icons/react";
+import { ArrowSquareOut, CaretRight, CaretUp } from "@phosphor-icons/react";
 import {
   cn,
   countdownTickMs,
@@ -275,15 +275,17 @@ function StartsAt({ iso }: { iso: string }) {
 /**
  * The list behind "1 etkinlik daha": the other live and upcoming events, upcoming ones with their
  * reminder bell, each with the card's one line of time ("4 gün 23 saat kaldı", "Cumartesi
- * 20:00'de başlıyor": the words say which is which, no "Sürüyor" and no heading repeating the
- * link). It opens from its link, upward over the patch notes and inside the column, so the card
- * stays readable and the hero's words stay clear (beside the column it covered them at 1024 px);
- * its times are as of the moment it opened.
+ * 20:00'de başlıyor": the words say which is which, no "Sürüyor"). It opens from its link, upward
+ * over the patch notes and inside the column, so the card stays readable and the hero's words stay
+ * clear (beside the column it covered them at 1024 px), under its own quiet name: opening upward
+ * leaves its link below it and the patch notes' heading right above it, which then read as the
+ * list's name. Its times are as of the moment it opened.
  */
 function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [now] = useState(() => Date.now());
+  const headingId = useId();
   const choose = (event: EventItem) => {
     onChosen();
     if (event.newsId) void navigate({ to: "/", search: { news: event.newsId } });
@@ -291,14 +293,19 @@ function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () =
   };
   return (
     <Popover.Portal>
+      {/* Solid with the glass's edge, not glass: it lies over the patch notes' words, which showed
+          through beside its name. No drop shadow: opening upward, it would dim its own link. */}
       <Popover.Content
         side="top"
         align="end"
         sideOffset={6}
         collisionPadding={12}
-        aria-label={t("home.otherEvents")}
-        className="glass-strong pop-motion z-50 w-[264px] rounded-[var(--radius-panel)] p-1.5 shadow-[0_24px_60px_rgb(34_6_6/0.55)]"
+        aria-labelledby={headingId}
+        className="pop-motion z-50 w-[264px] rounded-[var(--radius-panel)] border border-white/7 bg-obsidian-900 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]"
       >
+        <h3 id={headingId} className="px-2 pt-1 pb-0.5 text-[12px] font-medium text-ash-300">
+          {t("home.otherEvents")}
+        </h3>
         <ul>
           {events.map((event) => {
             const live = phaseOf(event, now) === "live";
@@ -457,7 +464,8 @@ function EventBlock({
                 className="-mr-1 flex cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12.5px] font-medium text-ash-300 tabular-nums transition-colors duration-150 hover:text-gold-300 focus-visible:outline-2 data-[state=open]:text-gold-300"
               >
                 {t("home.moreEvents", { count: others.length })}
-                <CaretRight size={13} weight="bold" aria-hidden />
+                {/* Up, toward the list it opens; the column's other carets lead to pages. */}
+                <CaretUp size={13} weight="bold" aria-hidden />
               </button>
             </Popover.Trigger>
           ) : null}
