@@ -18,8 +18,13 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 
-/** The game side of {@link Connector}: its screens, leaving a world, and its own connect screen. */
-public final class MinecraftGame implements Connector.Game {
+/**
+ * The game side of {@link Connector} (its screens, leaving a world, and its own connect screen) and of
+ * {@link WorldResume} (opening the launcher's "Devam et" world from the title screen).
+ */
+public final class MinecraftGame implements Connector.Game, WorldResume.Game {
+    /** How long "<world> adlı dünya bulunamadı." stays on the title screen. */
+    private static final long MISSING_NOTE_MS = 6_000;
     private final OverlayClient overlay;
 
     public MinecraftGame(OverlayClient overlay) {
@@ -108,5 +113,36 @@ public final class MinecraftGame implements Connector.Game {
         String text = target.label() != null ? Texts.str("connect.already.world")
             : Texts.str("connect.already", target.displayName());
         overlay.toasts().notice(ToastCard.travel(text), overlay.settings(), overlay.reducedMotion());
+    }
+
+    @Override
+    public boolean onTitleScreen() {
+        return Compat.screen(Minecraft.getInstance()) instanceof TitleScreen;
+    }
+
+    @Override
+    public boolean elsewhere() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc.level != null || mc.getSingleplayerServer() != null || mc.getConnection() != null;
+    }
+
+    @Override
+    public boolean exists(String world) {
+        return Minecraft.getInstance().getLevelSource().levelExists(world);
+    }
+
+    @Override
+    public void open(String world) {
+        Minecraft mc = Minecraft.getInstance();
+        // What the game's own quick play does with --quickPlaySingleplayer: its questions (an old world's backup, an
+        // experimental one) come as they would; "Vazgeç" goes back to the title screen.
+        mc.createWorldOpenFlows().openWorld(world, () -> Compat.setScreen(mc, new TitleScreen()));
+    }
+
+    @Override
+    public void missing(String world) {
+        // On the title screen, where the HUD's toasts do not draw: in the travel toast's place, for a while.
+        overlay.toasts().noteOverScreens(ToastCard.travel(Texts.str("resume.missing", world)), MISSING_NOTE_MS,
+            overlay.reducedMotion());
     }
 }

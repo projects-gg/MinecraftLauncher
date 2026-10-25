@@ -18,6 +18,10 @@
     {
       "config": "projects-overlay.host.mixins.json",
       "environment": "client"
+    },
+    {
+      "config": "projects-overlay.connect.mixins.json",
+      "environment": "client"
     }
   ],
   "depends": {

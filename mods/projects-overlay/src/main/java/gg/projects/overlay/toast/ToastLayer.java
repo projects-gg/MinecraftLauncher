@@ -55,6 +55,8 @@ public final class ToastLayer implements HudElement {
     private ToastCard travel;
     private final Tween travelAlpha = new Tween(0f);
     private final Tween travelDrop = new Tween(0f);
+    /** When a note in the travel toast's place ({@link #noteOverScreens}) fades by itself; 0: never. */
+    private long travelEndsAt;
 
     public ToastStack<ToastCard> stack() {
         return stack;
@@ -116,11 +118,21 @@ public final class ToastLayer implements HudElement {
         long now = now();
         stack.clear(now);
         travel = card;
+        travelEndsAt = 0;
         travelAlpha.snap(0f);
         travelAlpha.animateTo(1f, now, ToastStack.FADE_IN_MS, Ease.OUT_EXPO);
         travelDrop.snap(reducedMotion ? 0f : -ToastStack.ENTER_OFFSET);
         travelDrop.animateTo(0f, now, ToastStack.FADE_IN_MS + 80, Ease.OUT_EXPO);
         Minecraft.getInstance().getNarrator().saySystemQueued(card.narration());
+    }
+
+    /**
+     * A short note above whatever screen is open, the title screen included (the HUD's toasts draw only in a world):
+     * the travel toast's place, fading by itself after {@code ms} (OVL-FIX: the "Devam et" world is gone).
+     */
+    public void noteOverScreens(ToastCard card, long ms, boolean reducedMotion) {
+        travel(card, reducedMotion);
+        travelEndsAt = now() + ms;
     }
 
     /** The game arrived, or gave up: the travel toast fades where it is. */
@@ -258,6 +270,10 @@ public final class ToastLayer implements HudElement {
     }
 
     private void drawTravel(GuiGraphicsExtractor g, Minecraft mc, long now, boolean overScreen) {
+        if (travelEndsAt > 0 && now >= travelEndsAt) {
+            travelEndsAt = 0;
+            endTravel();
+        }
         if (travelAlpha.target() <= 0f && travelAlpha.done(now)) {
             travel = null;
             return;

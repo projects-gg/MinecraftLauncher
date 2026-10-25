@@ -5,6 +5,7 @@ import gg.projects.overlay.lang.Language;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
+import gg.projects.overlay.settings.Defaults;
 import gg.projects.overlay.settings.OverlaySettings;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.Sounds;
@@ -28,17 +29,25 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 
 /**
- * The overlay's settings page, one list: switches, choices and sliders in rows, the shortcut, and
- * "Varsayılana dön" (with "Geri al" for a while after). The mouse clicks and drags; the keyboard moves with
- * the arrows (up and down between rows, left and right to change), Enter or Space flips. A change applies
- * at once: the next toast already follows it. Switch thumbs and choice plates glide on springs (they jump
- * under reduced motion).
+ * The overlay's settings page, one list: switches, choices and sliders in rows, the shortcuts, and "Varsayılana dön"
+ * (with "Geri al" for a while after). The mouse clicks and drags; the keyboard moves with the arrows (up and down between
+ * rows, left and right to change), Enter or Space flips. A change applies at once: the next toast already follows it.
+ * Switch thumbs and choice plates glide on springs (they jump under reduced motion).
+ *
+ * <p>Adding a row: one {@code items.add(...)} in the constructor, in its section. A row may carry a help line
+ * ({@link Item#hint}: one short sentence saying what it really changes, wrapped beside its control, as the launcher's
+ * settings rows do). A key the game binds goes in as a {@link Shortcut}: "Varsayılana dön" covers it with the display
+ * settings ({@link Defaults}).
  */
 public final class SettingsList extends PanelWidget {
     private static final int ROW_H = 20;
     private static final int SECTION_H = 18;
+    /** A help line's height (small face), and the gap between a row's words and its control. */
+    private static final int HINT_LINE_H = 10;
+    private static final int CONTROL_GAP = 10;
     private static final int TOGGLE_W = 18;
     private static final int TOGGLE_H = 10;
     private static final int SLIDER_W = 60;
@@ -46,6 +55,9 @@ public final class SettingsList extends PanelWidget {
 
     private abstract static class Item {
         String label;
+        /** One short line under the label saying what the row really changes, or null. Wrapped by {@link #layout}. */
+        String hint;
+        List<FormattedCharSequence> hintLines = List.of();
         float y;
         int height = ROW_H;
         boolean section;
@@ -175,27 +187,40 @@ public final class SettingsList extends PanelWidget {
         void pick(Language language);
     }
 
+    /**
+     * A key the game binds that the page offers under "Kısayol" (the overlay key): its row's words, the key's name, and
+     * changing it in the game's Controls. "Varsayılana dön" puts it back with the display settings ({@link Defaults}).
+     */
+    public interface Shortcut extends Defaults.Key {
+        /** The row's words ("Arayüzü aç ve kapat"). */
+        String label();
+
+        /** The bound key's name in the game's language ("F7"), or null when no key is bound. */
+        String name();
+
+        /** Opens the game's Controls, where the player binds it. */
+        void change();
+    }
+
     private static final class KeyRow extends Item {
-        final Supplier<String> key;
-        final Runnable change;
-        String changeLabel;
-        String noneLabel;
+        final Shortcut shortcut;
+        final String changeLabel;
+        final String noneLabel;
         String shown;
         boolean bound;
         long checkedAt;
 
-        KeyRow(String label, Supplier<String> key, Runnable change) {
-            this.label = label;
-            this.key = key;
-            this.change = change;
+        KeyRow(Shortcut shortcut) {
+            this.label = shortcut.label();
+            this.shortcut = shortcut;
             this.changeLabel = Texts.str("settings.key.change");
             this.noneLabel = Texts.str("settings.key.none");
         }
 
-        /** The key's name, read again at most twice a second (it changes only in Controls). */
+        /** The key's name, read again at most twice a second (it changes in Controls, or with "Varsayılana dön"). */
         void check(long now) {
             if (shown == null || now - checkedAt > 500) {
-                String k = key.get();
+                String k = shortcut.name();
                 bound = k != null;
                 shown = k == null ? noneLabel : k;
                 checkedAt = now;
@@ -204,7 +229,7 @@ public final class SettingsList extends PanelWidget {
 
         @Override
         Component value(OverlaySettings s) {
-            String k = key.get();
+            String k = shortcut.name();
             return k == null ? Texts.tr("settings.key.none") : Component.literal(k);
         }
     }
@@ -218,6 +243,7 @@ public final class SettingsList extends PanelWidget {
 
     private final Supplier<OverlaySettings> settings;
     private final java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply;
+    private final List<Shortcut> shortcuts;
     private final List<Item> items = new ArrayList<>();
     private final Spring scroll = Spring.snappy(0f);
     private int selected = -1;
@@ -225,21 +251,27 @@ public final class SettingsList extends PanelWidget {
     private boolean reducedMotion;
     private long lastFrame;
     private Slider dragging;
-    private OverlaySettings undo;
+    private Defaults.Undo undo;
     private long undoUntil;
     private String resetDone = "";
     private String undoLabel = "";
+    /** What the rows were laid out for: the list's width, the GUI scale and whether the bundled fonts draw. */
+    private int laidWidth = -1;
+    private int laidScale = -1;
+    private boolean laidBundled;
 
     /**
-     * {@code languages}: the "Dil" row's language, the launcher's (OVL-LANG), at the top under "Genel"; null leaves it out
-     * (an older launcher: the overlay follows the game's language).
+     * {@code shortcuts}: the keys under "Kısayol" (the overlay key). {@code languages}: the "Dil" row's language, the
+     * launcher's (OVL-LANG), at the top under "Genel"; null leaves it out (an older launcher: the overlay follows the
+     * game's language).
      */
     public SettingsList(Supplier<OverlaySettings> settings,
-        java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, Supplier<String> keyName,
-        Runnable changeKey, Languages languages) {
+        java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, List<Shortcut> shortcuts,
+        Languages languages) {
         super(0, 0, 100, 100, Texts.tr("settings.title"));
         this.settings = settings;
         this.apply = apply;
+        this.shortcuts = List.copyOf(shortcuts);
         if (languages != null) {
             Language[] all = Language.values();
             String[] names = new String[all.length];
@@ -282,19 +314,22 @@ public final class SettingsList extends PanelWidget {
         items.add(new Slider(Texts.str("settings.sound.volume"), OverlaySettings::callVolume,
             OverlaySettings::withCallVolume, Sounds.Cue.CALL, OverlaySettings::callSound));
         items.add(new Section(Texts.str("settings.motion")));
-        items.add(new Toggle(Texts.str("settings.reduce_motion"), OverlaySettings::reduceMotion,
-            s -> s.withReduceMotion(!s.reduceMotion())));
-        items.add(new Section(Texts.str("settings.key")));
-        items.add(new KeyRow(Texts.str("settings.key.toggle"), keyName, changeKey));
+        Toggle motion = new Toggle(Texts.str("settings.reduce_motion"), OverlaySettings::reduceMotion,
+            s -> s.withReduceMotion(!s.reduceMotion()));
+        // What it really turns off (OVL-FIX; testers did not know): the panel's and the toasts' slide, the stickers'
+        // motion. Dialogs, switches and scrolling stop moving too; those the player does not miss.
+        motion.hint = Texts.str("settings.reduce_motion.hint");
+        items.add(motion);
+        if (!this.shortcuts.isEmpty()) {
+            items.add(new Section(Texts.str("settings.key")));
+            for (Shortcut shortcut : this.shortcuts) {
+                items.add(new KeyRow(shortcut));
+            }
+        }
         items.add(new ResetRow(Texts.str("settings.reset")));
         resetDone = Texts.str("settings.reset.done");
         undoLabel = Texts.str("settings.reset.undo");
-        float y = 0f;
-        for (Item item : items) {
-            item.y = y;
-            y += item.height;
-        }
-        contentHeight = y + 4;
+        layout();
     }
 
     public void setReducedMotion(boolean value) {
@@ -325,6 +360,27 @@ public final class SettingsList extends PanelWidget {
         return null;
     }
 
+    /** The scenario driver: the list scrolled to its end at once ("Hareket", "Kısayol" and the reset in view). */
+    public void scrollToEnd() {
+        layout();
+        scroll.snap(maxScroll());
+    }
+
+    /** The scenario driver: the middle of "Varsayılana dön" (or "Geri al") on screen. */
+    public float[] resetButton() {
+        for (Item item : items) {
+            if (item instanceof ResetRow) {
+                return new float[] {getX() + getWidth() / 2f, getY() + item.y - scroll.value() + item.height / 2f};
+            }
+        }
+        return null;
+    }
+
+    /** The scenario driver: whether "Varsayılana dön" can be pressed now (something differs, or "Geri al" is up). */
+    public boolean resetAvailable() {
+        return resetAvailable(settings.get(), now());
+    }
+
     /** Stands where {@code from} stood: the same row chosen, the same scroll (the panel built anew in another language). */
     public void carry(SettingsList from) {
         if (from == null || from.items.size() != items.size()) {
@@ -332,6 +388,103 @@ public final class SettingsList extends PanelWidget {
         }
         selected = from.selected;
         scroll.snap(from.scroll.target());
+    }
+
+    /**
+     * Lays the rows out for the list's width and the fonts drawing now: a row with a help line is as tall as its
+     * wrapped words. Runs again only when the width, the GUI scale or the font (the game's at GUI 1) changed.
+     */
+    private void layout() {
+        int width = getWidth();
+        int scale = Draw.scale();
+        boolean bundled = Fonts.bundled();
+        if (width == laidWidth && scale == laidScale && bundled == laidBundled) {
+            return;
+        }
+        laidWidth = width;
+        laidScale = scale;
+        laidBundled = bundled;
+        Font small = Fonts.small();
+        float y = 0f;
+        for (Item item : items) {
+            if (item.hint != null) {
+                int room = Math.max(60, width - controlWidth(item, small) - CONTROL_GAP);
+                item.hintLines = balanced(small, Component.literal(item.hint), room);
+                // The label sits where a plain row's sits; the help lines follow, then a little air.
+                item.height = ROW_H + item.hintLines.size() * HINT_LINE_H - 1;
+            }
+            item.y = y;
+            y += item.height;
+        }
+        contentHeight = y + 4;
+        if (scroll.target() > maxScroll()) {
+            scroll.snap(maxScroll());
+        }
+    }
+
+    /**
+     * {@code text} wrapped to {@code room} in as many lines as that takes, but as narrow as those lines allow, so they
+     * come out even and no word is left alone on the last one (the launcher's {@code text-wrap: balance}). Two lines
+     * break after a comma when both halves fit: each line then reads as it is said.
+     */
+    private static List<FormattedCharSequence> balanced(Font font, Component text, int room) {
+        List<FormattedCharSequence> lines = font.split(text, room);
+        if (lines.size() < 2) {
+            return lines;
+        }
+        if (lines.size() == 2) {
+            List<FormattedCharSequence> clauses = atClause(font, text.getString(), room);
+            if (clauses != null) {
+                return clauses;
+            }
+        }
+        int lo = room / 2;
+        int hi = room;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            if (font.split(text, mid).size() <= lines.size()) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        return font.split(text, hi);
+    }
+
+    /** {@code text} as two lines broken after one of its commas (the evenest pair that fits), or null. */
+    private static List<FormattedCharSequence> atClause(Font font, String text, int room) {
+        List<FormattedCharSequence> best = null;
+        int bestWidth = Integer.MAX_VALUE;
+        for (int i = text.indexOf(", "); i > 0; i = text.indexOf(", ", i + 1)) {
+            String first = text.substring(0, i + 1);
+            String rest = text.substring(i + 2);
+            int widest = Math.max(font.width(first), font.width(rest));
+            if (widest <= room && widest < bestWidth) {
+                bestWidth = widest;
+                best = List.of(Component.literal(first).getVisualOrderText(),
+                    Component.literal(rest).getVisualOrderText());
+            }
+        }
+        return best;
+    }
+
+    /** How wide a row's control is (its words wrap beside it). */
+    private float controlWidthFloat(Item item, Font small) {
+        if (item instanceof Toggle) {
+            return TOGGLE_W;
+        } else if (item instanceof Slider) {
+            return SLIDER_W + 6 + small.width(Texts.percent(OverlaySettings.MAX_VOLUME));
+        } else if (item instanceof Choice c) {
+            return c.optionWidth * c.options.length + 4;
+        } else if (item instanceof KeyRow k) {
+            String shown = k.shown == null ? k.noneLabel : k.shown;
+            return changeWidth(k) + 6 + small.width(shown) + 6;
+        }
+        return 0f;
+    }
+
+    private int controlWidth(Item item, Font small) {
+        return (int) Math.ceil(controlWidthFloat(item, small));
     }
 
     /** A choice row's pick: the launcher's choice goes to it, the overlay's own changes its settings. */
@@ -353,9 +506,22 @@ public final class SettingsList extends PanelWidget {
         apply.accept(op);
     }
 
+    /** Whether a row takes input now: the reset only while something differs from its default or "Geri al" is up. */
+    private boolean enabled(Item item, OverlaySettings s, long now) {
+        return item instanceof ResetRow ? resetAvailable(s, now) : item.enabled(s);
+    }
+
+    private boolean resetAvailable(OverlaySettings s, long now) {
+        return undoing(now) || !Defaults.all(s, shortcuts);
+    }
+
+    private boolean undoing(long now) {
+        return undoUntil > now && undo != null;
+    }
+
     private void activate(Item item, int direction) {
         OverlaySettings s = settings.get();
-        if (!item.enabled(s)) {
+        if (!enabled(item, s, now())) {
             return;
         }
         if (item instanceof Toggle t) {
@@ -378,7 +544,7 @@ public final class SettingsList extends PanelWidget {
             }
         } else if (item instanceof KeyRow k) {
             if (direction == 0) {
-                k.change.run();
+                k.shortcut.change();
             }
         } else if (item instanceof ResetRow) {
             if (direction == 0) {
@@ -387,22 +553,34 @@ public final class SettingsList extends PanelWidget {
         }
     }
 
+    /** "Varsayılana dön", or "Geri al" while it is up: the display settings and the shortcuts ({@link Defaults}). */
     private void reset() {
         long now = now();
-        if (undoUntil > now && undo != null) {
-            OverlaySettings back = undo;
+        if (undoing(now)) {
+            Defaults.Undo back = undo;
             undo = null;
             undoUntil = 0;
-            apply.accept(x -> back.withHintSeen(x.hintSeen()));
+            Defaults.undo(back, apply, shortcuts);
+            keysChanged();
             return;
         }
-        OverlaySettings before = settings.get();
-        if (before.isDefault()) {
+        Defaults.Undo taken = Defaults.reset(settings.get(), apply, shortcuts);
+        if (taken == null) {
             return;
         }
-        apply.accept(OverlaySettings::reset);
-        undo = before;
+        keysChanged();
+        undo = taken;
         undoUntil = now + UNDO_MS;
+    }
+
+    /** The key rows read their key again at once (not within half a second) and the rows are laid out for it. */
+    private void keysChanged() {
+        for (Item item : items) {
+            if (item instanceof KeyRow k) {
+                k.shown = null;
+            }
+        }
+        laidWidth = -1;
     }
 
     private void moveSelection(int direction) {
@@ -523,7 +701,7 @@ public final class SettingsList extends PanelWidget {
         selected = i;
         Item item = items.get(i);
         OverlaySettings s = settings.get();
-        if (!item.enabled(s)) {
+        if (!enabled(item, s, now())) {
             return;
         }
         float right = getX() + getWidth();
@@ -538,7 +716,7 @@ public final class SettingsList extends PanelWidget {
             dragTo(sl, event.x());
         } else if (item instanceof KeyRow k) {
             if (event.x() >= right - changeWidth(k)) {
-                k.change.run();
+                k.shortcut.change();
             }
         } else if (item instanceof ResetRow) {
             reset();
@@ -579,6 +757,7 @@ public final class SettingsList extends PanelWidget {
     protected void draw(GuiGraphicsExtractor g, int mouseX, int mouseY, long now) {
         float dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
         lastFrame = now;
+        layout();
         scroll.step(dt);
         OverlaySettings s = settings.get();
         int x0 = getX();
@@ -604,7 +783,7 @@ public final class SettingsList extends PanelWidget {
                     Theme.withAlpha(0xFFFFFF, 0.07f));
                 continue;
             }
-            boolean enabled = item.enabled(s);
+            boolean enabled = enabled(item, s, now);
             boolean lit = isHovered() && mouseY >= y && mouseY < y + item.height;
             boolean chosen = i == selected && keyboardFocus();
             if (chosen || (lit && enabled && !(item instanceof ResetRow))) {
@@ -612,9 +791,12 @@ public final class SettingsList extends PanelWidget {
                     : 0x99FFFFFF);
             }
             Draw.pushAlpha(enabled ? 1f : 0.45f);
+            // The control sits in the middle of the whole row (words and help), as in the launcher's settings.
             float mid = y + item.height / 2f;
             if (!(item instanceof ResetRow)) {
-                Draw.text(g, ui, item.label, x0, Fonts.centeredY(Fonts.Face.UI, mid), Theme.BONE_100);
+                float labelMid = item.hintLines.isEmpty() ? mid : y + ROW_H / 2f;
+                Draw.text(g, ui, item.label, x0, Fonts.centeredY(Fonts.Face.UI, labelMid), Theme.BONE_100);
+                drawHint(g, item, small, x0, y);
             }
             if (item instanceof Toggle t) {
                 drawToggle(g, t, s, right - TOGGLE_W, mid - TOGGLE_H / 2f, now, dt, chosen);
@@ -626,11 +808,20 @@ public final class SettingsList extends PanelWidget {
                 k.check(now);
                 drawKey(g, k, right, mid, small, mouseX, lit);
             } else if (item instanceof ResetRow) {
-                drawReset(g, (ResetRow) item, x0, w, mid, now, small, lit, s);
+                drawReset(g, (ResetRow) item, x0, w, mid, now, small, lit && enabled);
             }
             Draw.popAlpha();
         }
         g.disableScissor();
+    }
+
+    /** A row's help lines under its label: the secondary ink of text on the panel (design.md: ash-400 on solid). */
+    private static void drawHint(GuiGraphicsExtractor g, Item item, Font small, float x0, float y) {
+        float lineMid = y + ROW_H / 2f + HINT_LINE_H;
+        for (FormattedCharSequence line : item.hintLines) {
+            Draw.text(g, small, line, x0, Fonts.centeredY(Fonts.Face.SMALL, lineMid), Theme.ASH_400);
+            lineMid += HINT_LINE_H;
+        }
     }
 
     /** Rows out of view still settle their springs, so a scroll back shows the right state. */
@@ -740,9 +931,13 @@ public final class SettingsList extends PanelWidget {
         }
     }
 
+    /**
+     * "Varsayılana dön" in the row's middle, soft while everything is at its default (the row's alpha); for a while after
+     * a reset "Varsayılanlar geri geldi." with "Geri al".
+     */
     private void drawReset(GuiGraphicsExtractor g, ResetRow r, float x0, int w, float mid, long now, Font small,
-        boolean lit, OverlaySettings s) {
-        boolean undoing = undoUntil > now && undo != null;
+        boolean lit) {
+        boolean undoing = undoing(now);
         String label = undoing ? undoLabel : r.label;
         float lw = small.width(label) + 22;
         if (undoing) {
@@ -752,9 +947,7 @@ public final class SettingsList extends PanelWidget {
             Draw.text(g, small, resetDone, sx, Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.ASH_300);
             drawResetButton(g, label, sx + dw + 8, mid, lw, small, lit, Icon.RESET);
         } else {
-            Draw.pushAlpha(s.isDefault() ? 0.45f : 1f);
-            drawResetButton(g, label, x0 + (w - lw) / 2f, mid, lw, small, lit && !s.isDefault(), Icon.RESET);
-            Draw.popAlpha();
+            drawResetButton(g, label, x0 + (w - lw) / 2f, mid, lw, small, lit, Icon.RESET);
         }
     }
 
@@ -771,8 +964,9 @@ public final class SettingsList extends PanelWidget {
         output.add(NarratedElementType.TITLE, getMessage());
         if (selected >= 0 && selected < items.size()) {
             Item item = items.get(selected);
-            output.add(NarratedElementType.HINT, Texts.tr("narration.setting", item.label,
-                item.value(settings.get())));
+            Component value = item.value(settings.get());
+            output.add(NarratedElementType.HINT, item.hint == null ? Texts.tr("narration.setting", item.label, value)
+                : Texts.tr("narration.setting.hint", item.label, value, item.hint));
             output.add(NarratedElementType.USAGE, Texts.tr("narration.settings.usage"));
         }
     }

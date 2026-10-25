@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "gg.projects.overlay.connect.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["MinecraftFramesMixin"],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
