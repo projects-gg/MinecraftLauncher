@@ -1,5 +1,7 @@
 package gg.projects.overlay.ui.panel;
 
+import com.mojang.blaze3d.platform.InputConstants;
+import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.ui.Fonts;
@@ -18,6 +20,7 @@ import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -25,8 +28,16 @@ import net.minecraft.network.chat.Component;
  * keys and fades at the ends that have more). A chip shows the name, the crew sign for crew chat and the
  * unread count in gold. The order is kept while the panel is open, so chips never jump under the pointer;
  * a new conversation joins at the end.
+ *
+ * <p>A friend's chip has their person menu (OVL-UX2; FIX2-D, as the launcher's conversation list): a right click opens
+ * it at the pointer, Shift+F10 or the menu key under the chosen chip; the chip stays lit while it is open.
  */
 public final class ChipRow extends PanelWidget {
+    /** A chip's person menu (the panel decides whether its conversation has one). */
+    public interface Menu {
+        void open(String conversation, PersonMenu.Anchor anchor, boolean keys);
+    }
+
     public static final int HEIGHT = 14;
     private static final int GAP = 4;
     private static final int PAD = 6;
@@ -36,6 +47,9 @@ public final class ChipRow extends PanelWidget {
     }
 
     private final Consumer<String> onPick;
+    private final Menu onMenu;
+    /** The chip whose person menu is open, or null. */
+    private String menuFor;
     private final List<String> order = new ArrayList<>();
     private final List<Chip> chips = new ArrayList<>();
     private final Spring scroll = Spring.snappy(0f);
@@ -45,8 +59,31 @@ public final class ChipRow extends PanelWidget {
     private boolean reducedMotion;
 
     public ChipRow(Consumer<String> onPick) {
+        this(onPick, (conversation, anchor, keys) -> {
+        });
+    }
+
+    public ChipRow(Consumer<String> onPick, Menu onMenu) {
         super(0, 0, 100, HEIGHT, Texts.tr("chats"));
         this.onPick = onPick;
+        this.onMenu = onMenu;
+    }
+
+    /** The chip whose person menu is open (it stays lit), or null. */
+    public void setMenuFor(String conversation) {
+        menuFor = conversation;
+    }
+
+    /** A chip as a menu's anchor (under it, the scenario driver opens it as the keys would), or null. */
+    public PersonMenu.Anchor anchorOf(String conversation) {
+        float x = 0f;
+        for (Chip c : chips) {
+            if (c.id.equals(conversation)) {
+                return new PersonMenu.Anchor(getX() + x - scroll.value(), getY(), c.width, HEIGHT, false);
+            }
+            x += c.width + GAP;
+        }
+        return null;
     }
 
     public void setReducedMotion(boolean value) {
@@ -135,6 +172,12 @@ public final class ChipRow extends PanelWidget {
         return -1;
     }
 
+    /** A right click opens a friend's chip's menu (OVL-UX2). */
+    @Override
+    protected boolean isValidClickButton(MouseButtonInfo info) {
+        return info.button() == InputConstants.MOUSE_BUTTON_LEFT || info.button() == InputConstants.MOUSE_BUTTON_RIGHT;
+    }
+
     @Override
     public void onClick(MouseButtonEvent event, boolean doubleClick) {
         PanelInput.usedMouse();
@@ -142,7 +185,13 @@ public final class ChipRow extends PanelWidget {
         float x = 0f;
         for (Chip c : chips) {
             if (local >= x && local < x + c.width) {
-                pick(c.id);
+                if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+                    if (!c.crew) {
+                        onMenu.open(c.id, PersonMenu.Anchor.at(event.x(), event.y()), false);
+                    }
+                } else {
+                    pick(c.id);
+                }
                 return;
             }
             x += c.width + GAP;
@@ -167,6 +216,13 @@ public final class ChipRow extends PanelWidget {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int i = indexOf(selected);
+        if (i >= 0 && !chips.get(i).crew && (event.key() == Compat.KEY_MENU
+            || (event.key() == InputConstants.KEY_F10 && event.hasShiftDown()))) {
+            // Shift+F10 or the menu key: the chosen friend's menu under their chip (OVL-UX2).
+            PanelInput.usedKeyboard();
+            onMenu.open(selected, anchorOf(selected), true);
+            return true;
+        }
         if (event.isLeft() && i > 0) {
             PanelInput.usedKeyboard();
             pick(chips.get(i - 1).id);
@@ -196,7 +252,7 @@ public final class ChipRow extends PanelWidget {
         for (Chip c : chips) {
             if (x + c.width >= x0 - 2 && x <= x0 + w + 2) {
                 boolean isSelected = c.id.equals(selected);
-                boolean lit = isHovered() && mouseX >= x && mouseX < x + c.width;
+                boolean lit = (isHovered() && mouseX >= x && mouseX < x + c.width) || c.id.equals(menuFor);
                 Frames frame = isSelected ? Frames.CHIP_SELECTED : lit ? Frames.CHIP_HOVER : Frames.CHIP;
                 Draw.frame(g, frame, x, y0, c.width, HEIGHT);
                 if (isSelected && keyboardFocus()) {

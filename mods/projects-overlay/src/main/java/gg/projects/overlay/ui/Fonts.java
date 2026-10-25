@@ -32,7 +32,9 @@ public final class Fonts {
         SMALL("small", 7.5f),
         DISPLAY("display", 9f),
         /** A crew tag's chip (TEAM6): Tektur as the launcher's {@code TeamTag}, small. */
-        TAG("tag", 6f);
+        TAG("tag", 6f),
+        /** A face's letter (OVL-UX2): Tektur, as the launcher's {@code PlayerHead} sets it. */
+        FACE("face", 7.5f);
 
         final String id;
         final float size;
@@ -86,6 +88,10 @@ public final class Fonts {
 
     public static Font tag() {
         return get(Face.TAG);
+    }
+
+    public static Font face() {
+        return get(Face.FACE);
     }
 
     /** True while the bundled fonts draw (else the game's own font stands in). */

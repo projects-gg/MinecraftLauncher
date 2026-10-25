@@ -532,6 +532,11 @@ public final class OverlayClient implements ClientModInitializer {
         friendAction(friendId, Protocol.discord(friendId), "failed");
     }
 
+    /** "Discord'dan mesaj at" on a crewmate who is not a friend (OVL-UX2, Q15): the name crew chat showed. */
+    public void openDiscord(String id, String name) {
+        personAction(id, name, null, Protocol.discord(id), "failed");
+    }
+
     /** "Arkadaşlıktan çıkar", after the panel's question. */
     public void unfriend(String friendId) {
         friendAction(friendId, Protocol.unfriend(friendId), "failed");
@@ -542,20 +547,91 @@ public final class OverlayClient implements ClientModInitializer {
         friendAction(friendId, Protocol.block(friendId), "failed");
     }
 
+    /** "Engelle" on someone the panel names (a crewmate from crew chat, OVL-UX2), after the panel's question. */
+    public void block(String id, String name) {
+        personAction(id, name, null, Protocol.block(id), "failed");
+    }
+
     /** "Rapor et": a player's reason, a note for moderators, maybe a block too. */
     public void report(String friendId, String reason, String note, boolean alsoBlock) {
         state.reportSent(friendId, alsoBlock);
-        friendAction(friendId, Protocol.report(friendId, reason, note, alsoBlock), "report_failed");
+        OverlayState.Friend friend = state.friend(friendId);
+        personAction(friendId, friend == null ? reportName(friendId) : friend.name(), null,
+            Protocol.report(friendId, reason, note, alsoBlock), "report_failed");
     }
 
     /** Sends a friend menu frame; when it cannot go at all the panel says so at once. */
     private void friendAction(String friendId, JsonObject frame, String failedKey) {
         OverlayState.Friend friend = state.friend(friendId);
-        state.actionSent(friendId);
+        personAction(friendId, friend == null ? "" : friend.name(), null, frame, failedKey);
+    }
+
+    /**
+     * Sends a person menu frame about {@code id} (a friend, or a crewmate from crew chat), keeping their {@code name}
+     * and what the answer's words name besides them ({@code detail}); when it cannot go at all the panel says so at
+     * once.
+     */
+    private void personAction(String id, String name, String detail, JsonObject frame, String failedKey) {
+        state.actionSent(id, name, detail);
         if (!bridge.send(frame)) {
-            state.personNote(failedKey, friend == null ? "" : friend.name(), true, System.currentTimeMillis());
+            state.personNote(failedKey, name, true, System.currentTimeMillis());
         }
         refreshScreen();
+    }
+
+    // ---- The rest of the launcher's person menu (OVL-UX2) -------------------------------------------------
+
+    /** Whom the report dialog is about while it is not a friend (a crewmate from crew chat), and their name. */
+    private String reportedId;
+    private String reportedName = "";
+
+    /** The report dialog opens about someone who is not on the friend list (a crewmate): their name for the note. */
+    public void reportingAbout(String id, String name) {
+        reportedId = id;
+        reportedName = name == null ? "" : name;
+    }
+
+    private String reportName(String id) {
+        return id.equals(reportedId) ? reportedName : "";
+    }
+
+    /** "Favorilere ekle" ({@code on}) or "Favorilerden çıkar": the launcher keeps it; the row's star follows. */
+    public void favorite(String friendId, boolean on) {
+        markAction(friendId, Protocol.favorite(friendId, on), on ? "favorited" : "unfavorited");
+    }
+
+    /** "Çevrimiçi olunca bildir" on or off for a friend. */
+    public void alert(String friendId, boolean on) {
+        markAction(friendId, Protocol.alert(friendId, on), on ? "alert_on" : "alert_off");
+    }
+
+    /** A favourite or an online notice: said under the list at once (the launcher answers only a refusal). */
+    private void markAction(String friendId, JsonObject frame, String doneKey) {
+        OverlayState.Friend friend = state.friend(friendId);
+        String name = friend == null ? "" : friend.name();
+        state.actionSent(friendId, name, null);
+        boolean sent = bridge.send(frame);
+        state.personNote(sent ? doneKey : "failed", name, !sent, System.currentTimeMillis());
+        refreshScreen();
+    }
+
+    /** "Kategoriye taşı": a category by id ({@code ""} for "Arkadaşlar"), and its name for the note. */
+    public void moveFriend(String friendId, String group, String groupName) {
+        OverlayState.Friend friend = state.friend(friendId);
+        personAction(friendId, friend == null ? "" : friend.name(), groupName, Protocol.move(friendId, group),
+            "failed");
+    }
+
+    /** "Ekibe davet et" to one crew, and its name for the note. */
+    public void crewInvite(String friendId, String crew, String crewName) {
+        OverlayState.Friend friend = state.friend(friendId);
+        personAction(friendId, friend == null ? "" : friend.name(), crewName, Protocol.crewInvite(friendId, crew),
+            "failed");
+    }
+
+    /** "Arkadaş ekle" or "İsteği kabul et" on a crewmate from crew chat. */
+    public void addCrewmate(String id, String name) {
+        personAction(id, name, null, Protocol.addFriend(id), "failed");
     }
 
     /**

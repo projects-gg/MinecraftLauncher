@@ -3,6 +3,7 @@ package gg.projects.overlay.ui.panel;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.state.OverlayState;
@@ -30,6 +31,7 @@ import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.joml.Matrix3x2fStack;
@@ -119,6 +121,14 @@ public final class MessageList extends PanelWidget {
 
         /** A link the launcher lets the player press. */
         void openLink(String url, boolean trusted);
+
+        /**
+         * The sender's person menu (OVL-UX2; FIX2-D): a right click on their name over a group in crew chat, or Shift+F10
+         * or the menu key on a message of theirs picked with the keys. {@code id}: their user id (crew chat), null for
+         * the friend of a direct conversation; {@code badge}: the tag they wear, or null.
+         */
+        default void person(String id, String name, String badge, PersonMenu.Anchor at, boolean keys) {
+        }
     }
 
     private static final class Row {
@@ -126,6 +136,8 @@ public final class MessageList extends PanelWidget {
         OverlayState.ChatLine line;
         boolean mine;
         FormattedCharSequence name;
+        /** The name's width (a right click on it opens the sender's menu, OVL-UX2). */
+        float nameW;
         /** TEAM6: the tag the sender wears, before their name over a group in crew chat. */
         TagChip chip;
         /** TEAM6 §7: someone came into the crew; the words of its quiet line. */
@@ -574,7 +586,9 @@ public final class MessageList extends PanelWidget {
             if (crew && !line.mine && newGroup) {
                 // "[GK] Mert": the tag they wear before the name (TEAM6); the name gives way, the chip does not.
                 row.chip = TagChip.of(state.badge(line.badge), TagChip.CHAT);
-                row.name = Texts.visual(Texts.fit(small, line.from, Math.round(maxBubble - TagChip.room(row.chip))));
+                String fitted = Texts.fit(small, line.from, Math.round(maxBubble - TagChip.room(row.chip)));
+                row.name = Texts.visual(fitted);
+                row.nameW = small.width(fitted);
                 y += SMALL_H + 1;
             }
             if (line.reply != null && !line.deleted) {
@@ -935,6 +949,19 @@ public final class MessageList extends PanelWidget {
             PanelInput.usedKeyboard();
             return true;
         }
+        if (selected >= 0 && selected < rows.size() && (event.key() == Compat.KEY_MENU
+            || (event.key() == InputConstants.KEY_F10 && event.hasShiftDown()))) {
+            // Shift+F10 or the menu key on someone else's message: its sender's menu (OVL-UX2), under the message.
+            Row row = rows.get(selected);
+            if (row.line != null && !row.mine) {
+                PanelInput.usedKeyboard();
+                float top = getY() + row.y - scroll.value() + row.bubbleTop;
+                actions.person(row.line.by, row.line.from, row.line.badge, PersonMenu.Anchor.at(getX() + 1,
+                    top + row.bubbleH + 1), true);
+                return true;
+            }
+            return false;
+        }
         switch (event.key()) {
             case InputConstants.KEY_UP -> select(selected < 0 ? rows.size() - 1 : selected - 1, -1);
             case InputConstants.KEY_DOWN -> {
@@ -1001,11 +1028,63 @@ public final class MessageList extends PanelWidget {
         net.minecraft.client.Minecraft.getInstance().getNarrator().saySystemQueued(lastNarration);
     }
 
+    /** A right click opens a sender's menu (OVL-UX2). */
+    @Override
+    protected boolean isValidClickButton(MouseButtonInfo info) {
+        return info.button() == InputConstants.MOUSE_BUTTON_LEFT || info.button() == InputConstants.MOUSE_BUTTON_RIGHT;
+    }
+
+    /**
+     * A right click on a sender's name (or the tag before it) over a group in crew chat: their person menu at the
+     * pointer, as the launcher's name does (OVL-UX2). Anything else a right click lands on does nothing.
+     */
+    private void rightClick(float mx, float my) {
+        if (my >= visibleBottom) {
+            return;
+        }
+        float cy = my - getY() + scroll.value();
+        for (Row row : rows) {
+            if (row.line == null || row.name == null || row.mine || cy < row.y || cy > row.y + row.height) {
+                continue;
+            }
+            float nameTop = row.y + (row.divider ? DIVIDER_H : 0);
+            float nameRight = getX() + 1 + TagChip.room(row.chip) + row.nameW;
+            if (cy >= nameTop && cy < nameTop + SMALL_H && mx >= getX() && mx < nameRight + 2) {
+                closeStrip();
+                actions.person(row.line.by, row.line.from, row.line.badge, PersonMenu.Anchor.at(mx, my), false);
+            }
+            return;
+        }
+    }
+
+    /** Where the sender's name over message {@code id} is on screen (the scenario driver points at it), or null. */
+    public float[] senderNameAt(String id) {
+        for (Row row : rows) {
+            if (row.line != null && row.name != null && id.equals(row.line.id)) {
+                float y = getY() + row.y - scroll.value() + (row.divider ? DIVIDER_H : 0) + SMALL_H / 2f;
+                if (y < getY() || y > getY() + getHeight()) {
+                    return null;
+                }
+                return new float[] {getX() + 1 + TagChip.room(row.chip) + row.nameW / 2f, y};
+            }
+        }
+        return null;
+    }
+
+    /** A right click at {@code (mx, my)} as the game would send it (the scenario driver). */
+    public void rightClickForDriver(float mx, float my) {
+        rightClick(mx, my);
+    }
+
     @Override
     public void onClick(MouseButtonEvent event, boolean doubleClick) {
         PanelInput.usedMouse();
         float mx = (float) event.x();
         float my = (float) event.y();
+        if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+            rightClick(mx, my);
+            return;
+        }
         if (newBelow && pillContains(mx, my)) {
             toBottom();
             return;

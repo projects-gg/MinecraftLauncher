@@ -65,7 +65,17 @@ public enum Icon {
     /** "Dünyadan çıkar" on a guest's row (HOST1). */
     USER_MINUS("UserMinus"),
     /** The "Paylaşımı kapat" question (HOST1): the world is the player's alone again. */
-    LOCK("LockSimple");
+    LOCK("LockSimple"),
+    // The rest of the launcher's person menu (OVL-UX2), with its signs.
+    /** "Favorilere ekle", and the list's star (filled: a favourite; "Favorilerden çıkar"). */
+    STAR("Star"),
+    STAR_FILL("StarFill"),
+    /** "Çevrimiçi olunca bildir": filled while it is on (with the row's check). */
+    BELL_FILL("BellFill"),
+    /** "Kategoriye taşı". */
+    FOLDER("FolderSimple"),
+    /** "İsteği kabul et" on a crewmate who asked first. */
+    USER_CHECK("UserCheck");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};

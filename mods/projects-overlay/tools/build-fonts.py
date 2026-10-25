@@ -50,6 +50,8 @@ FACES = {
     "display": ("tektur-semibold", 9.0, 0.0),
     # A crew tag's chip (TEAM6): the launcher's TeamTag is Tektur too, 11 px in an 18 px chip.
     "tag": ("tektur-semibold", 6.0, 0.0),
+    # A face's letter (OVL-UX2): the launcher's PlayerHead sets it in Tektur at 45 % of the face.
+    "face": ("tektur-semibold", 7.5, 0.0),
 }
 SCALES = range(1, 9)
 

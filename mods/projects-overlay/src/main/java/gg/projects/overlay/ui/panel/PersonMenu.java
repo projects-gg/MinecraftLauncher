@@ -11,6 +11,7 @@ import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -20,10 +21,17 @@ import net.minecraft.util.FormattedCharSequence;
 import org.joml.Matrix3x2fStack;
 
 /**
- * A friend's menu in the panel (OVL-UX; FIX2-D: the launcher's person menu, its rows and order from {@link FriendMenu}).
- * It opens at the pointer for a right click, under the row's "…" for its click, Shift+F10 or the menu key, and there
- * too for a click on a row with no conversation to open. Rows: a Phosphor sign and the words, soft rows dimmed, "Engelle"
- * in flare, groups apart by a hairline; the pointer and the arrow keys light the same row (as the launcher's menus).
+ * A person's menu in the panel (OVL-UX, OVL-UX2; FIX2-D: the launcher's person menu, its rows and order from
+ * {@link FriendMenu}). It opens at the pointer for a right click, under the row's "…" (or the chip) for its click,
+ * Shift+F10 or the menu key, and there too for a click on a row with no conversation to open. Rows: a Phosphor sign and
+ * the words, soft rows dimmed, "Engelle" in flare, groups apart by a hairline; a check on the right where the
+ * launcher's menu has one (a set online notice, an invite that went, the category they are in), a caret where the row
+ * opens a list; the pointer and the arrow keys light the same row (as the launcher's menus).
+ *
+ * <p>A row with a list ("Kategoriye taşı", "Ekibe davet et" with several crews) turns the popover into that list, in
+ * place: a row back to the menu first ("‹ Kategoriye taşı"), then the choices; → or Enter opens it, ← goes back, Esc
+ * closes it all. In place rather than beside it: the panel stands at the screen's right edge, where a list beside the
+ * menu would cover the friend list, and at GUI 3 it would not fit.
  *
  * <p>A row that asks first ("Arkadaşlıktan çıkar", "Engelle") turns the popover into its question, one sentence (and
  * for a block what it means), "Vazgeç" and the action in the danger style; the keyboard starts on "Vazgeç". In: 120 ms,
@@ -35,6 +43,14 @@ public final class PersonMenu {
     public interface Actions {
         /** A row was picked (one that asks: only after its question). */
         void picked(String friendId, FriendMenu.Action action);
+
+        /** A choice of a row's list (OVL-UX2): a category ({@code ""} for "Arkadaşlar") or a crew, by id. */
+        default void chose(String friendId, FriendMenu.Action action, String choice) {
+        }
+    }
+
+    /** A choice in a row's list (OVL-UX2): {@code checked} where the launcher's menu has its check. */
+    public record Choice(String id, String label, boolean disabled, boolean checked) {
     }
 
     /** What opened it: a point (the pointer) or a box (the "…"), in GUI pixels. */
@@ -49,6 +65,8 @@ public final class PersonMenu {
     private static final int PAD = 3;
     private static final int ICON_X = 5;
     private static final int TEXT_X = 19;
+    /** The column on the right for a check or a caret. */
+    private static final int MARK_W = 12;
     private static final int MIN_W = 116;
     private static final int EDGE = 4;
     private static final long IN_MS = 120;
@@ -60,7 +78,23 @@ public final class PersonMenu {
     private static final int BUTTON_PAD = 7;
     private static final int BUTTON_GAP = 6;
 
-    private record Line(FriendMenu.Row row, FormattedCharSequence label, float width, Icon icon) {
+    /**
+     * A line: a menu row ({@code row}), the way back from a list ({@code back}), or one of a list's choices
+     * ({@code choice}); a null line is a hairline.
+     */
+    private record Line(FriendMenu.Row row, boolean back, Choice choice, FormattedCharSequence label, float width,
+        Icon icon, boolean checked) {
+        boolean disabled() {
+            return choice != null ? choice.disabled() : row != null && row.disabled();
+        }
+
+        boolean danger() {
+            return row != null && row.action().danger();
+        }
+
+        String words() {
+            return choice != null ? choice.label() : Texts.str(labelKey(row));
+        }
     }
 
     private final Actions actions;
@@ -70,6 +104,11 @@ public final class PersonMenu {
     private String friendName = "";
     private Anchor anchor;
     private final List<Line> lines = new ArrayList<>();
+    /** The menu's own rows (a list goes back to them). */
+    private List<FriendMenu.Row> rows = List.of();
+    private Function<FriendMenu.Action, List<Choice>> choices = action -> List.of();
+    /** The row whose list shows now, or null. */
+    private FriendMenu.Action listOf;
     /** The lit row (pointer or keys), -1 for none. */
     private int focus = -1;
     private boolean keys;
@@ -109,7 +148,7 @@ public final class PersonMenu {
         return friendId != null && alpha.target() > 0f;
     }
 
-    /** The friend whose menu is open, or null. */
+    /** The person whose menu is open, or null. */
     public String friend() {
         return isOpen() ? friendId : null;
     }
@@ -117,6 +156,11 @@ public final class PersonMenu {
     /** Whether its question shows now. */
     public boolean asking() {
         return isOpen() && asking != null;
+    }
+
+    /** The row whose list shows now (OVL-UX2), or null. */
+    public FriendMenu.Action listing() {
+        return isOpen() ? listOf : null;
     }
 
     /** Whether {@code (mx, my)} is on it. */
@@ -127,31 +171,24 @@ public final class PersonMenu {
     /** Opens {@code rows} for a friend; {@code keys}: from the keyboard (its first row lit). */
     public void open(String friend, String name, List<FriendMenu.Row> rows, Anchor at, boolean fromKeys, int screenW,
         int screenH, long now) {
+        open(friend, name, rows, action -> List.of(), at, fromKeys, screenW, screenH, now);
+    }
+
+    /**
+     * Opens {@code rows} for a person; {@code lists} gives the choices of a row that opens a list (OVL-UX2);
+     * {@code keys}: from the keyboard (its first row lit).
+     */
+    public void open(String friend, String name, List<FriendMenu.Row> rows,
+        Function<FriendMenu.Action, List<Choice>> lists, Anchor at, boolean fromKeys, int screenW, int screenH,
+        long now) {
         friendId = friend;
         friendName = name == null ? "" : name;
         anchor = at;
         keys = fromKeys;
         asking = null;
-        Font ui = Fonts.ui();
-        lines.clear();
-        float widest = 0f;
-        for (FriendMenu.Row row : rows) {
-            if (row == null) {
-                lines.add(null);
-                continue;
-            }
-            String words = Texts.str(labelKey(row));
-            float w = ui.width(words);
-            widest = Math.max(widest, w);
-            lines.add(new Line(row, Texts.visual(words), w, icon(row)));
-        }
-        width = Math.max(MIN_W, (float) Math.ceil(TEXT_X + widest + 10));
-        width = Math.min(width, screenW - 2 * EDGE);
-        height = PAD * 2;
-        for (Line line : lines) {
-            height += line == null ? SEP_H : ROW_H;
-        }
-        place(screenW, screenH);
+        this.rows = rows;
+        this.choices = lists == null ? action -> List.of() : lists;
+        showRows(-1, screenW, screenH);
         focus = fromKeys ? next(-1, 1) : -1;
         lastMouseX = Integer.MIN_VALUE;
         appear(now);
@@ -163,10 +200,78 @@ public final class PersonMenu {
         }
         Component said = Texts.tr("people.menu.narration", friendName, count);
         if (focus >= 0) {
-            said = Component.empty().append(said).append(". ").append(Component.literal(Texts.str(labelKey(
-                lines.get(focus).row()))));
+            said = Component.empty().append(said).append(". ").append(Component.literal(lines.get(focus).words()));
         }
         Minecraft.getInstance().getNarrator().saySystemQueued(said);
+    }
+
+    /** The menu's own rows again (from a list: {@code from} is lit when the keys came back). */
+    private void showRows(int from, int screenW, int screenH) {
+        listOf = null;
+        Font ui = Fonts.ui();
+        lines.clear();
+        float widest = 0f;
+        boolean marks = false;
+        for (FriendMenu.Row row : rows) {
+            if (row == null) {
+                lines.add(null);
+                continue;
+            }
+            String words = Texts.str(labelKey(row));
+            float w = ui.width(words);
+            widest = Math.max(widest, w);
+            boolean checked = checked(row);
+            marks |= checked || row.sub();
+            lines.add(new Line(row, false, null, Texts.visual(words), w, icon(row), checked));
+        }
+        size(widest, marks, screenW, screenH);
+        focus = from;
+    }
+
+    /** {@code action}'s list in place of the rows (OVL-UX2), its checked choice lit for the keys. */
+    private void showList(FriendMenu.Action action, int screenW, int screenH, long now) {
+        List<Choice> list = choices.apply(action);
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        listOf = action;
+        Font ui = Fonts.ui();
+        lines.clear();
+        FriendMenu.Row parent = null;
+        for (FriendMenu.Row row : rows) {
+            if (row != null && row.action() == action) {
+                parent = row;
+            }
+        }
+        String backWords = parent == null ? "" : Texts.str(labelKey(parent));
+        float widest = ui.width(backWords);
+        lines.add(new Line(parent, true, null, Texts.visual(backWords), widest, Icon.BACK, false));
+        lines.add(null);
+        int lit = -1;
+        for (Choice choice : list) {
+            float w = ui.width(choice.label());
+            widest = Math.max(widest, w);
+            if (lit < 0 && choice.checked() && !choice.disabled()) {
+                lit = lines.size();
+            }
+            lines.add(new Line(null, false, choice, Texts.visual(choice.label()), w, null, choice.checked()));
+        }
+        size(widest, true, screenW, screenH);
+        focus = keys || PanelInput.keyboardMode() ? (lit >= 0 ? lit : next(1, 1)) : -1;
+        lastMouseX = Integer.MIN_VALUE;
+        appear(now);
+        Minecraft.getInstance().getNarrator().saySystemQueued(Texts.tr("people.list.narration", backWords,
+            list.size()));
+    }
+
+    private void size(float widest, boolean marks, int screenW, int screenH) {
+        width = Math.max(MIN_W, (float) Math.ceil(TEXT_X + widest + 10 + (marks ? MARK_W : 0)));
+        width = Math.min(width, screenW - 2 * EDGE);
+        height = PAD * 2;
+        for (Line line : lines) {
+            height += line == null ? SEP_H : ROW_H;
+        }
+        place(screenW, screenH);
     }
 
     /** Closes it (fading out); whether it was open. */
@@ -183,6 +288,7 @@ public final class PersonMenu {
         alpha.snap(0f);
         friendId = null;
         asking = null;
+        listOf = null;
     }
 
     private void appear(long now) {
@@ -218,12 +324,21 @@ public final class PersonMenu {
     }
 
     private static String labelKey(FriendMenu.Row row) {
+        if (row == null) {
+            return "people.cancel";
+        }
         return switch (row.action()) {
             case JOIN -> "people.join";
             case INVITE -> row.done() ? "people.invited" : "people.invite";
             case WORLD_INVITE -> row.done() ? "people.world_invited" : "people.world_invite";
             case MESSAGE -> "people.message";
             case DISCORD -> "people.discord";
+            case ADD_FRIEND -> row.accept() ? "people.accept_friend" : row.done() ? "people.request_sent"
+                : "people.add_friend";
+            case FAVORITE -> row.on() ? "people.unfavorite" : "people.favorite";
+            case ALERT -> "people.alert";
+            case MOVE -> "people.move";
+            case CREW_INVITE -> row.done() ? "people.crew_invited" : "people.crew_invite";
             case REMOVE_FROM_WORLD -> "people.remove_from_world";
             case UNFRIEND -> "people.unfriend";
             case BLOCK -> "people.block";
@@ -234,10 +349,15 @@ public final class PersonMenu {
     private static Icon icon(FriendMenu.Row row) {
         return switch (row.action()) {
             case JOIN -> Icon.JOIN;
-            case INVITE -> row.done() ? Icon.CHECK : Icon.PLAY_INVITE;
-            case WORLD_INVITE -> row.done() ? Icon.CHECK : Icon.WORLD_INVITE;
+            case INVITE -> Icon.PLAY_INVITE;
+            case WORLD_INVITE -> Icon.WORLD_INVITE;
             case MESSAGE -> Icon.MESSAGE;
             case DISCORD -> Icon.DISCORD;
+            case ADD_FRIEND -> row.accept() ? Icon.USER_CHECK : Icon.USER_PLUS;
+            case FAVORITE -> row.on() ? Icon.STAR_FILL : Icon.STAR;
+            case ALERT -> row.on() ? Icon.BELL_FILL : Icon.BELL;
+            case MOVE -> Icon.FOLDER;
+            case CREW_INVITE -> Icon.CREW;
             case REMOVE_FROM_WORLD -> Icon.SEND_OFF;
             case UNFRIEND -> Icon.UNFRIEND;
             case BLOCK -> Icon.BLOCK;
@@ -245,8 +365,17 @@ public final class PersonMenu {
         };
     }
 
+    /** The launcher's check: a set online notice, a world invite that went, a friend request that went. */
+    private static boolean checked(FriendMenu.Row row) {
+        return switch (row.action()) {
+            case ALERT -> row.on();
+            case WORLD_INVITE, ADD_FRIEND -> row.done();
+            default -> false;
+        };
+    }
+
     /**
-     * The next row that can be picked after {@code from} in {@code step}'s direction (from the top or the bottom when
+     * The next line that can be picked after {@code from} in {@code step}'s direction (from the top or the bottom when
      * {@code from} is -1), wrapping; -1 for none.
      */
     private int next(int from, int step) {
@@ -255,8 +384,19 @@ public final class PersonMenu {
         for (int i = 0; i < n; i++) {
             at = Math.floorMod(at + step, n);
             Line line = lines.get(at);
-            if (line != null && !line.row().disabled()) {
+            if (line != null && !line.disabled()) {
                 return at;
+            }
+        }
+        return -1;
+    }
+
+    /** The line of a menu row's action, or -1. */
+    private int indexOf(FriendMenu.Action action) {
+        for (int i = 0; i < lines.size(); i++) {
+            Line line = lines.get(i);
+            if (line != null && !line.back() && line.row() != null && line.row().action() == action) {
+                return i;
             }
         }
         return -1;
@@ -352,7 +492,7 @@ public final class PersonMenu {
 
     // ---- Input ----------------------------------------------------------------------------------------
 
-    /** The row under the pointer, or -1. */
+    /** The line under the pointer, or -1. */
     private int rowAt(double mx, double my) {
         if (!contains(mx, my) || asking != null) {
             return -1;
@@ -389,13 +529,31 @@ public final class PersonMenu {
             return;
         }
         int at = rowAt(mx, my);
-        if (at >= 0 && !lines.get(at).row().disabled()) {
+        if (at >= 0 && !lines.get(at).disabled()) {
             pick(at, screenW, screenH, now);
         }
     }
 
     private void pick(int index, int screenW, int screenH, long now) {
-        FriendMenu.Action action = lines.get(index).row().action();
+        Line line = lines.get(index);
+        if (line.back()) {
+            back(screenW, screenH, now);
+            return;
+        }
+        if (line.choice() != null) {
+            String friend = friendId;
+            FriendMenu.Action action = listOf;
+            close(now);
+            if (action != null) {
+                actions.chose(friend, action, line.choice().id());
+            }
+            return;
+        }
+        FriendMenu.Action action = line.row().action();
+        if (line.row().sub()) {
+            showList(action, screenW, screenH, now);
+            return;
+        }
         if (action.asks()) {
             ask(action, screenW, screenH, now);
             return;
@@ -405,20 +563,60 @@ public final class PersonMenu {
         actions.picked(friend, action);
     }
 
+    /** From a list back to the menu, its row lit for the keys. */
+    private void back(int screenW, int screenH, long now) {
+        FriendMenu.Action was = listOf;
+        showRows(-1, screenW, screenH);
+        focus = was != null && (keys || PanelInput.keyboardMode()) ? indexOf(was) : -1;
+        lastMouseX = Integer.MIN_VALUE;
+        appear(now);
+    }
+
     /** Presses the row of {@code action} as a click would (the scenario driver); false when it is not there or soft. */
     public boolean press(FriendMenu.Action action, int screenW, int screenH, long now) {
-        if (!isOpen() || asking != null) {
+        if (!isOpen() || asking != null || listOf != null) {
             return false;
         }
         for (int i = 0; i < lines.size(); i++) {
             Line line = lines.get(i);
-            if (line != null && line.row().action() == action && !line.row().disabled()) {
+            if (line != null && line.row() != null && line.row().action() == action && !line.disabled()) {
                 focus = i;
                 pick(i, screenW, screenH, now);
                 return true;
             }
         }
         return false;
+    }
+
+    /** Picks the choice {@code id} of the list showing now as a click would (the scenario driver); false without it. */
+    public boolean choose(String id, int screenW, int screenH, long now) {
+        if (!isOpen() || listOf == null) {
+            return false;
+        }
+        for (int i = 0; i < lines.size(); i++) {
+            Line line = lines.get(i);
+            if (line != null && line.choice() != null && line.choice().id().equals(id) && !line.disabled()) {
+                focus = i;
+                pick(i, screenW, screenH, now);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the open menu has the row of {@code action} (the scenario driver checks it). */
+    public boolean hasRow(FriendMenu.Action action) {
+        return isOpen() && indexOf(action) >= 0;
+    }
+
+    /** Lights the row of {@code action} as the arrow keys would (the scenario driver); false when it is not there. */
+    public boolean focusForDriver(FriendMenu.Action action) {
+        int at = isOpen() && asking == null && listOf == null ? indexOf(action) : -1;
+        if (at < 0 || lines.get(at).disabled()) {
+            return false;
+        }
+        focus = at;
+        return true;
     }
 
     /** Answers the question as a click would (the scenario driver): the action, or "Vazgeç". */
@@ -472,6 +670,16 @@ public final class PersonMenu {
             sayFocus();
             return true;
         }
+        if (event.isLeft() && listOf != null) {
+            // As a submenu: the way back.
+            back(screenW, screenH, now);
+            return true;
+        }
+        if (event.isRight() && listOf == null && focus >= 0 && lines.get(focus).row() != null
+            && lines.get(focus).row().sub()) {
+            pick(focus, screenW, screenH, now);
+            return true;
+        }
         if (event.isCycleFocus()) {
             // As the launcher's menus: Tab leaves the menu.
             close(now);
@@ -492,7 +700,7 @@ public final class PersonMenu {
 
     private void sayFocus() {
         if (focus >= 0) {
-            Minecraft.getInstance().getNarrator().saySystemQueued(Texts.tr(labelKey(lines.get(focus).row())));
+            Minecraft.getInstance().getNarrator().saySystemQueued(Component.literal(lines.get(focus).words()));
         }
     }
 
@@ -508,6 +716,7 @@ public final class PersonMenu {
             if (alpha.target() <= 0f) {
                 friendId = null;
                 asking = null;
+                listOf = null;
             }
             return;
         }
@@ -525,7 +734,7 @@ public final class PersonMenu {
             if (moved && contains(mouseX, mouseY)) {
                 // The pointer lights the row it is on, as the arrow keys do.
                 int at = rowAt(mouseX, mouseY);
-                if (at >= 0 && !lines.get(at).row().disabled()) {
+                if (at >= 0 && !lines.get(at).disabled()) {
                     if (at != focus) {
                         focus = at;
                     }
@@ -551,22 +760,27 @@ public final class PersonMenu {
                 ry += SEP_H;
                 continue;
             }
-            boolean soft = line.row().disabled();
+            boolean soft = line.disabled();
             boolean lit = i == focus && !soft;
             if (lit) {
                 Draw.frame(g, Frames.ROW_HOVER, x + PAD, ry, width - PAD * 2, ROW_H);
             }
-            boolean danger = line.row().action().danger();
+            boolean danger = line.danger();
             int ink = danger ? Theme.FLARE_300 : Theme.BONE_100;
             int iconInk = danger ? Theme.FLARE_300 : lit ? Theme.BONE_100 : Theme.ASH_300;
-            if (line.row().done()) {
-                iconInk = Theme.JADE_400;
-            }
             if (soft) {
                 Draw.pushAlpha(0.45f);
             }
-            Draw.icon(g, line.icon(), 10, x + ICON_X, ry + (ROW_H - 10) / 2f, iconInk);
+            if (line.icon() != null) {
+                Draw.icon(g, line.icon(), 10, x + ICON_X, ry + (ROW_H - 10) / 2f, iconInk);
+            }
             Draw.text(g, ui, line.label(), x + TEXT_X, Fonts.centeredY(Fonts.Face.UI, ry + ROW_H / 2f), ink);
+            float markX = x + width - PAD - 4 - 8;
+            if (line.checked()) {
+                Draw.icon(g, Icon.CHECK, 8, markX, ry + (ROW_H - 8) / 2f, Theme.GOLD_400);
+            } else if (line.row() != null && !line.back() && line.row().sub()) {
+                Draw.icon(g, Icon.NEXT, 8, markX, ry + (ROW_H - 8) / 2f, Theme.ASH_400);
+            }
             if (soft) {
                 Draw.popAlpha();
             }

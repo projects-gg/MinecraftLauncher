@@ -7,6 +7,7 @@ import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
@@ -58,9 +59,8 @@ public final class HostList extends PanelWidget {
         public String label = "";
         FormattedCharSequence name;
         FormattedCharSequence sub;
-        String initial;
-        FormattedCharSequence initialLine;
-        float initialWidth;
+        /** Their face: the launcher's player head with their first letter (OVL-UX2). */
+        Face face;
         boolean online;
         boolean inGame;
         boolean dim;
@@ -185,7 +185,7 @@ public final class HostList extends PanelWidget {
             row.dim = false;
             row.removable = false;
             row.guest = "";
-            face(row, strong);
+            row.face = Face.of(row.label);
             row.narration = Texts.tr("narration.friend", badge == null ? row.label
                 : Texts.str("row.badge", row.label, badge.tag()), where);
             next.add(row);
@@ -245,7 +245,7 @@ public final class HostList extends PanelWidget {
             row.inGame = g.in();
             row.dim = !row.online;
             row.removable = !g.guest().isEmpty();
-            face(row, strong);
+            row.face = Face.of(row.label);
             row.narration = Texts.tr("narration.friend", row.label, state);
             next.add(row);
         }
@@ -256,12 +256,6 @@ public final class HostList extends PanelWidget {
 
     private static int rank(OverlayState.HostGuest g) {
         return g.in() ? 0 : g.joining() ? 1 : 2;
-    }
-
-    private static void face(Row row, Font strong) {
-        row.initial = Texts.initial(row.label);
-        row.initialLine = Texts.visual(row.initial);
-        row.initialWidth = strong.width(row.initial);
     }
 
     private void setEmpty(String key) {
@@ -494,9 +488,7 @@ public final class HostList extends PanelWidget {
             float cx = fx + FACE / 2f;
             float cy = y + ROW_H / 2f;
             Draw.pushAlpha(row.dim ? 0.55f : 1f);
-            Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_600);
-            Draw.text(g, strong, row.initialLine, cx - row.initialWidth / 2f, Fonts.centeredY(Fonts.Face.STRONG, cy),
-                Theme.BONE_100);
+            row.face.draw(g, FACE, cx, cy);
             Draw.popAlpha();
             if (row.online) {
                 // Filled jade in a game (in the world), a jade ring in the launcher (on the way).

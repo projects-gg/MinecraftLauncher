@@ -61,6 +61,7 @@ public final class Protocol {
             features.add(feature);
         }
         features.add(PEOPLE);
+        features.add(PEOPLE2);
         o.add("features", features);
         return o;
     }
@@ -198,6 +199,47 @@ public final class Protocol {
             o.addProperty("block", true);
         }
         return o;
+    }
+
+    // ---- The rest of the launcher's person menu (OVL-UX2, rows Q of docs/tasks/ovl2-protocol.md) ----------
+
+    /**
+     * The whole person menu's feature in {@code hello} (OVL-UX2): the mod reads the friends' {@code fav}, {@code alert},
+     * {@code group} and {@code crews}, hears {@code lists} and sends the frames below. Sent beside {@link #FEATURES}.
+     */
+    public static final String PEOPLE2 = "people2";
+
+    /** "Favorilere ekle" ({@code on}) or "Favorilerden çıkar" (Q8). */
+    public static JsonObject favorite(String friend, boolean on) {
+        JsonObject o = friendFrame("favorite", friend);
+        o.addProperty("on", on);
+        return o;
+    }
+
+    /** "Çevrimiçi olunca bildir" on or off (Q9). */
+    public static JsonObject alert(String friend, boolean on) {
+        JsonObject o = friendFrame("alert", friend);
+        o.addProperty("on", on);
+        return o;
+    }
+
+    /** "Kategoriye taşı" (Q10): a category id, empty for "Arkadaşlar". */
+    public static JsonObject move(String friend, String group) {
+        JsonObject o = friendFrame("move", friend);
+        o.addProperty("group", group == null ? "" : group);
+        return o;
+    }
+
+    /** "Ekibe davet et" (Q11). */
+    public static JsonObject crewInvite(String friend, String crew) {
+        JsonObject o = friendFrame("crew-invite", friend);
+        o.addProperty("crew", crew);
+        return o;
+    }
+
+    /** "Arkadaş ekle" or "İsteği kabul et" on a crewmate (Q12). */
+    public static JsonObject addFriend(String crewmate) {
+        return friendFrame("add-friend", crewmate);
     }
 
     private static JsonObject friendFrame(String type, String friend) {
