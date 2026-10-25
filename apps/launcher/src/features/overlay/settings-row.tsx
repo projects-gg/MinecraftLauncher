@@ -49,7 +49,8 @@ function markRow(from: Element | null, on: boolean) {
  * while the switch is on but the overlay cannot work it says why instead, in the same cell, so
  * nothing below moves (`overlayLine`, the most basic blocker first): no install can carry it
  * (LIB1: the player deleted the official pack and has no Fabric install of a supported version),
- * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın"; or the install Play opens is not
+ * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın", with "Simge durumuna küçülsün"
+ * (its default); or the install Play opens is not
  * Fabric, or not a version the mod is made for (OVL-SEL1), with "Projects kurulumuna geç", which
  * selects the official pack or another install it works in for Play. A line with an action is not
  * the switch's label: a click beside the action does nothing. The shortcut itself is set in the
@@ -91,15 +92,21 @@ export function OverlayRow() {
   const home =
     instances && overlay ? overlayHome(instances, official, overlay.versions) : undefined;
   // The install the install lines named last: fading out after a switch, they keep their words.
-  // Before they ever showed, Play's own: the cell is as tall as it will be.
-  const named = useRef({ name: "", version: "" });
+  // Before they ever showed, Play's own.
+  const named = useRef({ name: "", version: "", fabricFixes: true });
   if ((line.kind === "notFabric" || line.kind === "version") && play) {
-    named.current = { name: play.name, version: play.mcVersion };
+    named.current = {
+      name: play.name,
+      version: play.mcVersion,
+      fabricFixes: line.fabricFixes ?? named.current.fabricFixes,
+    };
   }
   const shownName = shortName(named.current.name || (play?.name ?? ""));
   const shownVersion = named.current.version || (play?.mcVersion ?? "");
   const hasAction = (kind: OverlayLineKind) =>
-    kind === "noHome" || ((kind === "notFabric" || kind === "version") && home !== undefined);
+    kind === "noHome" ||
+    kind === "closes" ||
+    ((kind === "notFabric" || kind === "version") && home !== undefined);
   const grid = useRef<HTMLSpanElement>(null);
   const words = useLineWords(hasAction(line.kind));
   // A line that goes takes the pointer's mark with it (no pointerleave reaches an inert line).
@@ -114,7 +121,10 @@ export function OverlayRow() {
     opens: t("overlay.settingHelp", { key: OVERLAY_KEY }),
     noHome: t("overlay.packMissing"),
     closes: t("overlay.closeHelp"),
-    notFabric: t("overlay.fabricOnly", { name: shownName }),
+    // "Fabric gerekir" only when Fabric alone would do (not for a Forge 1.20.1 install).
+    notFabric: t(named.current.fabricFixes ? "overlay.fabricOnly" : "overlay.notHere", {
+      name: shownName,
+    }),
     version: t("overlay.versionMissing", { version: shownVersion }),
   };
   /** The sentence as shown: the shortcut as a key cap. */
@@ -130,7 +140,10 @@ export function OverlayRow() {
     );
   };
 
-  /** The action a line carries: "Resmî paketi kur", or the switch to an install it works in. */
+  /**
+   * The fix a line carries: "Resmî paketi kur", "Simge durumuna küçülsün", or the switch to an
+   * install the overlay works in.
+   */
   const action = (kind: OverlayLineKind, active: boolean): ReactNode => {
     if (kind === "noHome") {
       return (
@@ -154,24 +167,51 @@ export function OverlayRow() {
         </LineAction>
       );
     }
+    if (kind === "closes") {
+      // "Oyun açılınca launcher" one row up goes back to its default; the line follows it.
+      return (
+        <LineAction
+          shown={active}
+          onPress={(refocus) => {
+            refocus();
+            set("onGameStart", "minimize");
+          }}
+        >
+          {t("overlay.toMinimize")}
+        </LineAction>
+      );
+    }
     // Nothing else carries the overlay: the line says why, with no action.
     if (!hasAction(kind) || !home) return null;
     const short = shortName(home.name);
     return (
-      <LineAction
-        shown={active && !busy}
-        // A game is prepared or open: the command bar's picker is locked; the line says why the
-        // overlay is not in that game, and the switch fades out until it ends.
-        faded={busy}
-        // The whole name when the words cut it.
-        name={short === home.name ? undefined : t("overlay.switchTo", { name: home.name })}
-        onPress={(refocus) => {
-          refocus();
-          selectInstance(home.id);
-        }}
-      >
-        {t("overlay.switchTo", { name: short })}
-      </LineAction>
+      // While a game is prepared or open the command bar's picker is locked: the switch fades out
+      // and the line says when it comes back, in the same place (the grid keeps the wider one).
+      <span className="inline-grid justify-items-start">
+        <LineAction
+          shown={active && !busy}
+          faded={busy}
+          // The whole name when the words cut it.
+          name={short === home.name ? undefined : t("overlay.switchTo", { name: home.name })}
+          onPress={(refocus) => {
+            refocus();
+            selectInstance(home.id);
+          }}
+          className="[grid-area:1/1]"
+        >
+          {t("overlay.switchTo", { name: short })}
+        </LineAction>
+        <span
+          aria-hidden={!busy}
+          // Never in the way of the switch it stands over (hidden, it still sat on top of it).
+          className={cn(
+            "pointer-events-none [grid-area:1/1] ml-1.5 transition-opacity",
+            busy ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
+          )}
+        >
+          {t("overlay.waitsForGame")}
+        </span>
+      </span>
     );
   };
 
@@ -302,6 +342,7 @@ function LineAction({
   name,
   busy = false,
   onPress,
+  className,
   children,
 }: {
   /** Its line shows and the action can be taken. */
@@ -314,6 +355,7 @@ function LineAction({
   busy?: boolean;
   /** The press; `refocus` keeps the keyboard's focus in the row once the line is gone. */
   onPress: (refocus: () => void) => void;
+  className?: string;
   children: ReactNode;
 }) {
   const guard = usePressGuard(shown ? "shown" : "hidden");
@@ -331,8 +373,9 @@ function LineAction({
       // it has the pseudo-element (measured).
       className={cn(
         "relative ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[opacity,text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] [&_.swap-label]:justify-items-start",
-        faded ? "opacity-0" : "opacity-100",
+        faded ? "opacity-0 duration-100" : "opacity-100",
         shown && "hit-area",
+        className,
       )}
       onPointerLeave={guard.handlers.onPointerLeave}
       onKeyDown={(event) => {

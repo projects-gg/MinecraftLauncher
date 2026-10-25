@@ -30,9 +30,14 @@ export interface OverlayLine {
   switchTo?: InstanceSummary;
   /**
    * A game is prepared or open: the command bar stays on it and its picker is locked, so the
-   * action waits (out of sight until the game ends).
+   * action waits until the game ends.
    */
   locked?: boolean;
+  /**
+   * `notFabric`: a Fabric install of the same Minecraft version would carry it, so "Fabric
+   * gerekir" is the whole reason (a Forge 1.20.1 install also misses the version).
+   */
+  fabricFixes?: boolean;
 }
 
 export interface OverlayLineInput {
@@ -63,8 +68,10 @@ export function overlayLine(input: OverlayLineInput): OverlayLine {
   if (leaves) return { kind: "closes" };
   if (!instances || !official || !versions || !play) return { kind: "opens" };
   if (carriesOverlay(play, official, versions)) return { kind: "opens" };
-  const kind = play.loader === "fabric" ? "version" : "notFabric";
-  return { kind, switchTo: overlayHome(instances, official, versions), locked };
+  const switchTo = overlayHome(instances, official, versions);
+  if (play.loader === "fabric") return { kind: "version", switchTo, locked };
+  const fabricFixes = versions.some((shipped) => shipsFor(shipped, play.mcVersion));
+  return { kind: "notFabric", switchTo, locked, fabricFixes };
 }
 
 /**

@@ -100,6 +100,18 @@ describe("the overlay switch's line", () => {
     expect(line(instance("snap", { mcVersion: "26.2-pre1" })).kind).toBe("version");
   });
 
+  it("says Fabric is the whole reason only when the version is one the mod ships for", () => {
+    // Vanilla 26.3: a Fabric install of 26.3 would carry it.
+    expect(line(vanilla).fabricFixes).toBe(true);
+    expect(line(instance("neo", { loader: "neoForge", mcVersion: "26.1.3" })).fabricFixes).toBe(
+      true,
+    );
+    // Forge 1.20.1 misses the version too: Fabric alone would not do.
+    expect(line(forge).fabricFixes).toBe(false);
+    // Only the loader lines carry it.
+    expect(line(oldFabric).fabricFixes).toBeUndefined();
+  });
+
   it("offers the official pack to switch to", () => {
     expect(line(vanilla).switchTo?.id).toBe("projects");
     expect(line(oldFabric).switchTo?.id).toBe("projects");
@@ -110,6 +122,7 @@ describe("the overlay switch's line", () => {
       kind: "notFabric",
       switchTo: projects,
       locked: true,
+      fabricFixes: true,
     });
     expect(line(vanilla).locked).toBe(false);
   });
@@ -166,7 +179,12 @@ describe("the install the line's switch picks", () => {
     const instances = [vanilla, ownFabric];
     const official = status({ removed: true });
     const before = line(vanilla, { instances, official });
-    expect(before).toEqual({ kind: "notFabric", switchTo: ownFabric, locked: false });
+    expect(before).toEqual({
+      kind: "notFabric",
+      switchTo: ownFabric,
+      locked: false,
+      fabricFixes: true,
+    });
     expect(line(before.switchTo, { instances, official })).toEqual({ kind: "opens" });
   });
 });
