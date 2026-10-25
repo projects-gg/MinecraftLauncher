@@ -1,5 +1,21 @@
-import { signalLevel } from "@pl/ui";
+import { signalLevel, signalTone } from "@pl/ui";
 import { describe, expect, it } from "vitest";
+
+describe("signalTone", () => {
+  it("colours the bars by how many are lit: all green, one missing amber, more red", () => {
+    expect(signalTone(31)).toBe("good");
+    expect(signalTone(149)).toBe("good");
+    expect(signalTone(150)).toBe("fair");
+    expect(signalTone(299)).toBe("fair");
+    expect(signalTone(300)).toBe("poor");
+    expect(signalTone(4200)).toBe("poor");
+  });
+
+  it("reads an unknown latency as good, as its five bars do", () => {
+    expect(signalTone(null)).toBe("good");
+    expect(signalTone(undefined)).toBe("good");
+  });
+});
 
 describe("signalLevel", () => {
   it("lights the bars the game's server list lights", () => {

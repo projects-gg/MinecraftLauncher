@@ -89,9 +89,10 @@ export function Skeleton({ className }: { className?: string }) {
  * it moves; the outgoing words fade first, the new ones follow (POLISH2: the buttons next to
  * "Güncellemeleri denetle" slid 60 px and back). Only the shown words are in the accessible name.
  * Centred on their own; a `Button` with an icon sets them beside it (`swap-label`, REVIEW2: a
- * short wording floated 37 px away from its icon).
+ * short wording floated 37 px away from its icon). A wording may carry its own mark (Home's
+ * "Katıl" with its gold play glyph, SMALL10): the mark comes and goes with its words.
  */
-export function SwapLabel({ labels, active }: { labels: string[]; active: number }) {
+export function SwapLabel({ labels, active }: { labels: ReactNode[]; active: number }) {
   return (
     <span className="swap-label inline-grid justify-items-center">
       {labels.map((label, i) => (
