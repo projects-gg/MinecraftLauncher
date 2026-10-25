@@ -151,7 +151,6 @@ export function ModCenter({
     value,
     label: sectionLabel(value),
   }));
-  const pack = section === "recommended" ? view.data?.pack : undefined;
   const position = prefs.layout ? ("position" as const) : false;
   // Files the sync already lists as unreadable are not repeated by the mod check.
   const unreadable = new Set((view.data?.issues ?? []).map((i) => i.fileName.toLowerCase()));
@@ -259,23 +258,10 @@ export function ModCenter({
               label={t("modCenter.sectionsLabel")}
               options={sections}
             />
-            {/* One quiet slot on the right: which pack the recommended mods are, or "Set ekle"
-                beside the added sets (with none, the section's own empty state offers it). */}
+            {/* "Set ekle" beside the added sets (with none, the section's own empty state offers
+                it); the other sections keep this row to their names. */}
             <div className="ml-auto flex items-center gap-3">
               <AnimatePresence initial={false}>
-                {pack ? (
-                  <motion.span
-                    key="pack"
-                    {...fade(0.16)}
-                    className="text-[12.5px] text-ash-400 tabular-nums"
-                  >
-                    {t("modCenter.packCaption", {
-                      name: pack.name,
-                      version: pack.version,
-                      minecraft: pack.minecraft,
-                    })}
-                  </motion.span>
-                ) : null}
                 {section === "sets" && addedSets.size > 0 ? (
                   <motion.span key="add-set" {...fade(0.16)} className="flex">
                     <Button
