@@ -199,6 +199,12 @@ function scenario(): string {
   return (globalThis as { __plMockLogin?: string }).__plMockLogin ?? "added";
 }
 
+/** A game started with this account: its "Son oynama" moves, as the backend's `mark_used`. */
+export function mockMarkUsed(id: string) {
+  const account = accounts.find((a) => a.id === id);
+  if (account) account.lastUsedAt = new Date().toISOString();
+}
+
 /** Names of offline accounts, for the AFK preview and the skin panel. */
 export function mockAccountName(id: string): string | undefined {
   return accounts.find((a) => a.id === id)?.username;

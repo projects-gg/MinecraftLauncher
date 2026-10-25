@@ -350,11 +350,8 @@ function AddressRow({ target }: { target: JoinTarget }) {
   );
 }
 
-/**
- * A quiet line that moves while the game closes or moves (only while the dialog waits). Also the
- * game switch's (features/game-switch, PLAY-ACCT).
- */
-export function Waiting() {
+/** A quiet line that moves while the game closes or moves (only while the dialog waits). */
+function Waiting() {
   const { reduce } = useSocialMotion();
   if (reduce) return null;
   return (

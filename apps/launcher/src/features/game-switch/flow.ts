@@ -58,11 +58,11 @@ export function cancelSwitch() {
 
 /** Each step's title, which a screen reader hears as it begins. */
 const STEP_TITLES: Record<CloseStep["kind"], string> = {
-  inGame: "fix2.connect.closingTitle",
-  closing: "fix2.connect.closingTitle",
-  stopping: "fix2.connect.closingTitle",
-  overdue: "fix2.connect.overdueTitle",
-  forcing: "fix2.connect.forcingTitle",
+  inGame: "playAcct.switch.closingTitle",
+  closing: "playAcct.switch.closingTitle",
+  stopping: "playAcct.switch.closingTitle",
+  overdue: "playAcct.switch.overdueTitle",
+  forcing: "playAcct.switch.forcingTitle",
 };
 
 /** One step on the way: the answers, the timers and the game's end lead here. */

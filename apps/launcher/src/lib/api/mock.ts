@@ -7,7 +7,7 @@ import coverSpawn from "@/assets/art/news-spawn-city.webp";
 import coverWinter from "@/assets/art/news-winter.webp";
 import { newsHighlights } from "@/lib/news";
 import type { LauncherApi } from "./index";
-import { mockAccountName, mockAccounts } from "./mock-accounts";
+import { mockAccountName, mockAccounts, mockMarkUsed } from "./mock-accounts";
 import { mockAfk } from "./mock-afk";
 import { createMockCleanup } from "./mock-cleanup";
 import { mockCloseGame, mockKillGame, mockSession } from "./mock-connect";
@@ -1171,6 +1171,7 @@ export const mockApi: LauncherApi = {
     const selected = (await mockAccounts.accounts()).find((a) => a.active);
     const account =
       options?.account ?? (selected ? { id: selected.id, name: selected.username } : null);
+    if (account) mockMarkUsed(account.id);
     onEvent({ type: "launching" });
     await delay(1600);
     // Preview switches (mock-opening.ts): how long the game's window takes, a first start.

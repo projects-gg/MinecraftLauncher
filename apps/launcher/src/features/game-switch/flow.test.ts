@@ -44,7 +44,6 @@ const sides = {
     instanceName: "Projects",
   },
   to: { account: kor, instance: "projects", instanceName: "Projects" },
-  world: true,
 };
 
 const play = () => vi.mocked(useLaunch.getState().play);
