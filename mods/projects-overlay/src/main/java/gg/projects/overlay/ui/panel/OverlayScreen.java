@@ -601,6 +601,7 @@ public final class OverlayScreen extends Screen {
         menuName = name == null ? "" : name;
         menuBadge = badge;
         menu.setReducedMotion(reducedMotion());
+        menu.setPanelLeft(panelX);
         menu.open(id, menuName, rows, action -> choicesFor(id, action), anchor, keys, width, height, now);
         return true;
     }
@@ -983,10 +984,14 @@ public final class OverlayScreen extends Screen {
 
     /**
      * A sender's menu in the open conversation as a right click on their name over message {@code messageId} would
-     * open it (the scenario driver; the driver's pointer rests on the name); false when the name is not on screen.
+     * open it (the scenario driver; the driver's pointer rests on the name). A name above the newest messages is
+     * scrolled into view first, as a player would with the wheel; false when the conversation does not have it.
      */
     public boolean openSenderMenuAt(String messageId) {
         float[] at = messages.senderNameAt(messageId);
+        if (at == null && messages.revealForDriver(messageId)) {
+            at = messages.senderNameAt(messageId);
+        }
         if (at == null) {
             return false;
         }

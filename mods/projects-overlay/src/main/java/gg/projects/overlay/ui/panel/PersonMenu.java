@@ -131,9 +131,15 @@ public final class PersonMenu {
     private float width;
     private float height;
     private boolean below;
+    private float panelLeft;
     private long shownAt;
     private int lastMouseX = Integer.MIN_VALUE;
     private int lastMouseY = Integer.MIN_VALUE;
+    /**
+     * {@link #lastMouseX} of rows the keys opened: the first frame takes the pointer where it rests, so a resting
+     * pointer never takes the lit row from the keys (Shift+F10 and Enter pick the first row); only a move lights one.
+     */
+    private static final int REST = Integer.MAX_VALUE;
 
     public PersonMenu(Actions actions) {
         this.actions = actions;
@@ -190,7 +196,7 @@ public final class PersonMenu {
         this.choices = lists == null ? action -> List.of() : lists;
         showRows(-1, screenW, screenH);
         focus = fromKeys ? next(-1, 1) : -1;
-        lastMouseX = Integer.MIN_VALUE;
+        lastMouseX = fromKeys ? REST : Integer.MIN_VALUE;
         appear(now);
         int count = 0;
         for (Line line : lines) {
@@ -257,8 +263,9 @@ public final class PersonMenu {
             lines.add(new Line(null, false, choice, Texts.visual(choice.label()), w, null, choice.checked()));
         }
         size(widest, true, screenW, screenH);
-        focus = keys || PanelInput.keyboardMode() ? (lit >= 0 ? lit : next(1, 1)) : -1;
-        lastMouseX = Integer.MIN_VALUE;
+        boolean byKeys = keys || PanelInput.keyboardMode();
+        focus = byKeys ? (lit >= 0 ? lit : next(1, 1)) : -1;
+        lastMouseX = byKeys ? REST : Integer.MIN_VALUE;
         appear(now);
         Minecraft.getInstance().getNarrator().saySystemQueued(Texts.tr("people.list.narration", backWords,
             list.size()));
@@ -291,6 +298,11 @@ public final class PersonMenu {
         listOf = null;
     }
 
+    /** Where the panel starts (GUI pixels): a menu under a box keeps to its side of it. */
+    public void setPanelLeft(float left) {
+        panelLeft = left;
+    }
+
     private void appear(long now) {
         shownAt = now;
         alpha.snap(0f);
@@ -310,8 +322,12 @@ public final class PersonMenu {
                 below = false;
             }
         } else {
-            // Under the "…", its right edge on the button's.
+            // Under the "…", its right edge on the button's; under a box near the panel's left edge (a chat chip from
+            // the keys) its left edge on the box's, so it stays over the panel instead of the game.
             x = anchor.x() + anchor.w() - width;
+            if (x < panelLeft + EDGE && anchor.x() + width <= screenW - EDGE) {
+                x = anchor.x();
+            }
             y = anchor.y() + anchor.h() + 2;
             below = true;
             if (y + height > screenH - EDGE) {
@@ -567,8 +583,9 @@ public final class PersonMenu {
     private void back(int screenW, int screenH, long now) {
         FriendMenu.Action was = listOf;
         showRows(-1, screenW, screenH);
-        focus = was != null && (keys || PanelInput.keyboardMode()) ? indexOf(was) : -1;
-        lastMouseX = Integer.MIN_VALUE;
+        boolean byKeys = keys || PanelInput.keyboardMode();
+        focus = was != null && byKeys ? indexOf(was) : -1;
+        lastMouseX = byKeys ? REST : Integer.MIN_VALUE;
         appear(now);
     }
 
@@ -719,6 +736,10 @@ public final class PersonMenu {
                 listOf = null;
             }
             return;
+        }
+        if (lastMouseX == REST) {
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
         }
         boolean moved = mouseX != lastMouseX || mouseY != lastMouseY;
         lastMouseX = mouseX;

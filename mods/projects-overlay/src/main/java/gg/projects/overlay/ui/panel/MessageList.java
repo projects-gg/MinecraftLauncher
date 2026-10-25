@@ -1071,6 +1071,21 @@ public final class MessageList extends PanelWidget {
         return null;
     }
 
+    /**
+     * Scrolls message {@code id} into view as a player would with the wheel (the scenario driver: a sender's name above
+     * the newest messages); false when the conversation does not have it.
+     */
+    public boolean revealForDriver(String id) {
+        for (int i = 0; i < rows.size(); i++) {
+            Row row = rows.get(i);
+            if (row.line != null && id.equals(row.line.id)) {
+                reveal(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** A right click at {@code (mx, my)} as the game would send it (the scenario driver). */
     public void rightClickForDriver(float mx, float my) {
         rightClick(mx, my);

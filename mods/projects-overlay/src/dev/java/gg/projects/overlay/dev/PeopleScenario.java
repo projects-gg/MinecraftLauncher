@@ -452,18 +452,18 @@ public final class PeopleScenario implements ClientModInitializer {
             shot(mc, "chip-menu");
             results.addProperty("chipMenuFor", String.valueOf(need(mc).menuFriend()));
         });
-        step2(0.1, "esc", mc -> key(need(mc), InputConstants.KEY_ESCAPE, 0));
+        step2(0.1, "esc", this::escMenu);
         // Shift+F10 on the chosen chip: Ayşe's menu, without "Mesaj gönder" (her conversation is on screen).
         step2(0.3, "chip menu from keys", mc -> need(mc).openChipMenu("dm:ayse", true));
         step2(0.4, "shot chip menu keys", mc -> shot(mc, "chip-menu-keys"));
-        step2(0.1, "esc", mc -> key(need(mc), InputConstants.KEY_ESCAPE, 0));
+        step2(0.1, "esc", this::escMenu);
         step2(0.2, "crew chat", mc -> need(mc).showConversation("crew:gece"));
         step2(0.9, "Mert's name", mc -> results.addProperty("senderMenuFriend", need(mc).openSenderMenuAt("m6")));
         step2(0.4, "shot sender friend", mc -> {
             shot(mc, "sender-menu-friend");
             results.addProperty("senderMenuFor", String.valueOf(need(mc).menuFriend()));
         });
-        step2(0.1, "esc", mc -> key(need(mc), InputConstants.KEY_ESCAPE, 0));
+        step2(0.1, "esc", this::escMenu);
         step2(0.3, "Cem's name", mc -> results.addProperty("senderMenuCrewmate", need(mc).openSenderMenuAt("m6c")));
         step2(0.4, "shot sender crewmate", mc -> {
             shot(mc, "sender-menu-crewmate");
@@ -659,6 +659,13 @@ public final class PeopleScenario implements ClientModInitializer {
             WorldDataConfiguration.DEFAULT);
         mc.createWorldOpenFlows().createFreshLevel(WORLD, settings, new WorldOptions(20261024L, false, false),
             DevCompat.flatWorld(), new TitleScreen());
+    }
+
+    /** Esc on the open menu; nothing when none opened (a missing menu must not close the panel and end the run). */
+    private void escMenu(Minecraft mc) {
+        if (need(mc).menuFriend() != null) {
+            key(need(mc), InputConstants.KEY_ESCAPE, 0);
+        }
     }
 
     private void shot(Minecraft mc, String name) {
