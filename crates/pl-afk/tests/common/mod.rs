@@ -27,19 +27,20 @@ pub struct TestEnv {
 }
 
 impl TestEnv {
-    /// A fresh AFK root whose "client" is `client` copied into a dev-override folder (a dummy file
-    /// when `None`, for the in-memory spawner).
+    /// A fresh AFK root whose "client" is `client` in a dev-override folder ([`shared_client`];
+    /// a dummy file when `None`, for the in-memory spawner).
     pub fn new(client: Option<&Path>) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let paths = AfkPaths::new(dir.path().join("afk"));
-        let dev = dir.path().join("dev");
-        std::fs::create_dir_all(&dev).unwrap();
-        match client {
-            Some(source) => {
-                std::fs::copy(source, dev.join(CLIENT_EXE_NAME)).unwrap();
+        let dev = match client {
+            Some(source) => shared_client(source),
+            None => {
+                let dev = dir.path().join("dev");
+                std::fs::create_dir_all(&dev).unwrap();
+                std::fs::write(dev.join(CLIENT_EXE_NAME), b"in-memory client").unwrap();
+                dev
             }
-            None => std::fs::write(dev.join(CLIENT_EXE_NAME), b"in-memory client").unwrap(),
-        }
+        };
         let secrets = Arc::new(MemorySecretStore::new());
         let dyn_secrets: Arc<dyn SecretStore> = secrets.clone();
         let (store, _) = AccountStore::open(paths.clone(), dyn_secrets).unwrap();
@@ -143,6 +144,49 @@ impl TestEnv {
             .map(|e| serde_json::to_string(e).unwrap())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+/// A folder holding `source` as the client executable, shared by every test and every later run
+/// of this build of it: each fresh copy is a new program to the virus scanner, which reads it
+/// before its first start (seconds on a loaded machine). The runtime only reads the folder.
+pub fn shared_client(source: &Path) -> PathBuf {
+    let meta = std::fs::metadata(source).unwrap();
+    let stamp = meta
+        .modified()
+        .unwrap()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("pl-afk-fake-client-{}-{stamp}", meta.len()));
+    let exe = dir.join(CLIENT_EXE_NAME);
+    if !exe.is_file() {
+        std::fs::create_dir_all(&dir).unwrap();
+        // Copied aside and moved in whole: a test running meanwhile never sees half a file, and
+        // when another one got there first, its copy stays.
+        let mut part = tempfile::NamedTempFile::new_in(&dir).unwrap();
+        std::io::copy(
+            &mut std::fs::File::open(source).unwrap(),
+            part.as_file_mut(),
+        )
+        .unwrap();
+        let _ = part.persist_noclobber(&exe);
+    }
+    dir
+}
+
+/// Waits for `condition` in real time, looking less often the longer it takes, and fails after
+/// `max` (for real processes; [`until`] is the paused-clock one).
+pub async fn eventually(what: &str, max: Duration, mut condition: impl FnMut() -> bool) {
+    let deadline = std::time::Instant::now() + max;
+    let mut pause = Duration::from_millis(5);
+    while !condition() {
+        if std::time::Instant::now() >= deadline {
+            panic!("timed out after {max:?} waiting for: {what}");
+        }
+        tokio::time::sleep(pause).await;
+        pause = (pause * 2).min(Duration::from_millis(200));
     }
 }
 

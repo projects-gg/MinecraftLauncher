@@ -184,12 +184,15 @@ mod tests {
             origin: ConsoleOrigin::Client,
         });
         drop(log);
-        for _ in 0..200 {
-            if std::fs::read_to_string(&path).is_ok_and(|t| t.contains("merhaba")) {
-                return;
-            }
+        // The writer thread takes its time on a loaded machine; the deadline only runs out when
+        // nothing is ever written.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+        while !std::fs::read_to_string(&path).is_ok_and(|t| t.contains("merhaba")) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "console log was not written"
+            );
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        panic!("console log was not written");
     }
 }
