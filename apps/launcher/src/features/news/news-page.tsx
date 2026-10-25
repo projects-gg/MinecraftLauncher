@@ -1,5 +1,5 @@
 import { Cube } from "@phosphor-icons/react";
-import { Button, Chip, cn, EmptyState, Segmented, Skeleton, useMotionPrefs } from "@pl/ui";
+import { Button, cn, EmptyState, Segmented, Skeleton, useMotionPrefs } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
@@ -10,7 +10,7 @@ import { formatRelative } from "@/lib/format";
 import { liveMinecraft } from "@/lib/minecraft";
 import { isNewsNew, newestPublished, useNewsSeen } from "@/stores/news-seen";
 import { CoverImage } from "./cover-image";
-import { MinecraftChip, useMinecraftText } from "./minecraft";
+import { MinecraftLabel, useMinecraftText } from "./minecraft";
 import { NewDot, NewLabel } from "./new-dot";
 
 /** Every Projects category, or Minecraft's updates (a source, listed last). */
@@ -47,14 +47,11 @@ function Featured({ face }: { face: CardFace }) {
       />
       <div className="absolute inset-0 bg-[linear-gradient(to_top,rgb(10_9_12/0.92),rgb(10_9_12/0.25)_55%,transparent)]" />
       <div className="absolute inset-x-0 bottom-0 p-5">
-        <div className="flex items-center gap-2.5">
+        <div className="text-shadow-art flex items-center gap-1.5 text-[12.5px] text-bone-100/90">
           {face.label}
-          <span className="flex items-center gap-1.5">
-            <NewDot on={face.isNew} />
-            <span className="text-shadow-art text-[12.5px] text-bone-100/90">
-              {formatRelative(face.publishedAt)}
-            </span>
-          </span>
+          <span aria-hidden>·</span>
+          <NewDot on={face.isNew} />
+          <span>{formatRelative(face.publishedAt)}</span>
         </div>
         <h2 className="text-shadow-art mt-2 max-w-[26ch] font-display text-[26px] leading-[1.05] font-semibold text-bone-50">
           {face.title}
@@ -94,14 +91,13 @@ function Card({ face, ref }: { face: CardFace; ref?: Ref<HTMLLIElement> }) {
           imgClassName="group-hover:scale-[1.05]"
         />
         <div className="p-3.5">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 text-[12px] text-ash-300">
             {face.label}
-            <span className="flex min-w-0 items-center gap-1.5">
-              <NewDot on={face.isNew} />
-              <span className="truncate text-[12px] text-ash-300">
-                {formatRelative(face.publishedAt)}
-              </span>
+            <span aria-hidden className="text-ash-500">
+              ·
             </span>
+            <NewDot on={face.isNew} />
+            <span className="truncate">{formatRelative(face.publishedAt)}</span>
           </div>
           <h3
             className={cn(
@@ -119,13 +115,13 @@ function Card({ face, ref }: { face: CardFace; ref?: Ref<HTMLLIElement> }) {
   );
 }
 
-/** A Projects news item as a card face. */
-function useNewsFace(chipTone: "neutral" | "onArt") {
+/** A Projects news item as a card face: its category in words, as the meta line's first part. */
+function useNewsFace() {
   const { t } = useTranslation();
   return (item: NewsItem, isNew: boolean): CardFace => ({
     id: item.id,
     coverUrl: item.coverUrl,
-    label: <Chip tone={chipTone}>{t(`categories.${item.category}`)}</Chip>,
+    label: <span className="shrink-0 font-medium">{t(`categories.${item.category}`)}</span>,
     publishedAt: item.publishedAt,
     title: item.title,
     summary: item.summary,
@@ -142,7 +138,7 @@ function minecraftFace(
     id: item.id,
     coverUrl: item.coverUrl,
     coverBlurhash: item.coverBlurhash,
-    label: <MinecraftChip />,
+    label: <MinecraftLabel />,
     publishedAt: item.publishedAt,
     title: text.title,
     summary: text.summary,
@@ -185,8 +181,8 @@ export function NewsPage() {
     queryFn: () => api.homeContent(),
   });
   const seen = useVisitSeen(data?.news);
-  const featuredFace = useNewsFace("onArt");
-  const cardFace = useNewsFace("neutral");
+  const featuredFace = useNewsFace();
+  const cardFace = useNewsFace();
   const minecraft = useMemo(() => liveMinecraft(data?.minecraft, Date.now()), [data]);
   // The Minecraft filter exists only while there is something under it.
   const active: Filter = filter === "minecraft" && !minecraft.length ? "all" : filter;

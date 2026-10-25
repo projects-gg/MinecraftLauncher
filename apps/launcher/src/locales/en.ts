@@ -325,8 +325,6 @@ export const en: DeepPartial<Strings> = {
     patchVersion: "{{pack}} {{version}}",
     seeAll: "See all",
     nextEvent: "Next event",
-    eventLive: "Happening now",
-    eventLeft: "left",
     eventStarted: "Started {{when}}",
     openInDiscord: "Open in Discord",
     offlineBanner: "You're offline. You can still play installed games.",
@@ -336,8 +334,8 @@ export const en: DeepPartial<Strings> = {
     maintenanceUntilTomorrow: "Expected to end tomorrow at {{time}}",
     statusPage: "Status page",
     dismissBanner: "Dismiss",
-    moreEvents: "+{{count}} events",
-    moreEvents_one: "+{{count}} event",
+    moreEvents: "{{count}} more events",
+    moreEvents_one: "{{count}} more event",
     otherEvents: "Other events",
     eventRunning: "Live",
     eventEndsIn: "{{when}} left",
@@ -355,13 +353,6 @@ export const en: DeepPartial<Strings> = {
     announcement: "Announcement",
     patchNotes: "Patch notes",
     community: "Community",
-  },
-  // Under the event card's digits: as short as the Turkish words, so the digits keep one rhythm.
-  countdown: {
-    days: "days",
-    hours: "hrs",
-    minutes: "mins",
-    seconds: "secs",
   },
   units: {
     hoursMinutes: "{{hours}} h {{minutes}} min",

@@ -1,4 +1,4 @@
-import { countdownCells, countdownTickMs } from "@pl/ui";
+import { countdownTickMs } from "@pl/ui";
 import { describe, expect, it } from "vitest";
 
 const SECOND = 1000;
@@ -6,46 +6,23 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-describe("countdownCells", () => {
-  it("shows days, hours and minutes while days are left", () => {
-    expect(countdownCells(2 * DAY + 3 * HOUR + 4 * MINUTE + 5 * SECOND)).toEqual({
-      days: 2,
-      hours: 3,
-      minutes: 4,
-      seconds: null,
-    });
-  });
-
-  it("shows the seconds on the last day, hours even at zero", () => {
-    expect(countdownCells(DAY - 1)).toEqual({ days: 0, hours: 23, minutes: 59, seconds: 59 });
-    expect(countdownCells(43 * MINUTE + 8 * SECOND + 400)).toEqual({
-      days: 0,
-      hours: 0,
-      minutes: 43,
-      seconds: 8,
-    });
-  });
-
-  it("stays at zero once the moment has come", () => {
-    expect(countdownCells(-5 * SECOND)).toEqual({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-  });
-});
-
 describe("countdownTickMs", () => {
-  it("renders again when the seconds change on the last day", () => {
-    // 4.3 s left shows 04; 03 from 2.999 s.
+  it("changes the words once a minute until the last minute", () => {
+    expect(countdownTickMs(2 * DAY + 30 * SECOND + 250)).toBe(30_251);
+    // 2 h 14 min 57 s: the next change is the minute, 57 s away (never every second).
+    expect(countdownTickMs(2 * HOUR + 14 * MINUTE + 57 * SECOND)).toBe(57_001);
+  });
+
+  it("brings the seconds in as the last minute begins", () => {
+    // Exactly one minute left still says "1 dk"; a millisecond later it counts seconds.
+    expect(countdownTickMs(MINUTE)).toBe(1);
+    expect(countdownTickMs(MINUTE - 1)).toBe(1000);
+  });
+
+  it("changes each second in the last minute", () => {
+    // 4.3 s left says 4 s; 3 s from 3.999 s.
     expect(countdownTickMs(4300)).toBe(301);
     expect(countdownTickMs(4000)).toBe(1);
-  });
-
-  it("renders once a minute while days are left", () => {
-    expect(countdownTickMs(2 * DAY + 30 * SECOND + 250)).toBe(30_251);
-  });
-
-  it("brings the seconds in as the last day begins", () => {
-    // Exactly one day left still shows "01 gün"; a millisecond later it is 23:59:59.
-    expect(countdownTickMs(DAY)).toBe(1);
-    expect(countdownCells(DAY - 1).seconds).toBe(59);
   });
 
   it("stops once the moment has come", () => {

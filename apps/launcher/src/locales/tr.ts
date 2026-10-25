@@ -119,8 +119,6 @@ export const tr = {
     patchVersion: "{{pack}} {{version}}",
     seeAll: "Tamamını gör",
     nextEvent: "Sıradaki etkinlik",
-    eventLive: "Etkinlik sürüyor",
-    eventLeft: "kaldı",
     eventStarted: "{{when}} başladı",
     openInDiscord: "Discord'da aç",
     offlineBanner: "Çevrimdışısın. Kurulu oyunları oynayabilirsin.",
@@ -130,7 +128,7 @@ export const tr = {
     maintenanceUntilTomorrow: "Tahmini bitiş yarın {{time}}",
     statusPage: "Durum sayfası",
     dismissBanner: "Kapat",
-    moreEvents: "+{{count}} etkinlik",
+    moreEvents: "{{count}} etkinlik daha",
     otherEvents: "Diğer etkinlikler",
     eventRunning: "Sürüyor",
     eventEndsIn: "{{when}} kaldı",
@@ -149,7 +147,6 @@ export const tr = {
     patchNotes: "Yama notu",
     community: "Topluluk",
   },
-  countdown: { days: "gün", hours: "saat", minutes: "dakika", seconds: "saniye" },
   /** Short spans of time ("2 sa 14 dk", "38 dk", "45 sn") and download speed (lib/format). */
   units: {
     hoursMinutes: "{{hours}} sa {{minutes}} dk",
