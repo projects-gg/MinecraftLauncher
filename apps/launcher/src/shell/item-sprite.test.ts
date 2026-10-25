@@ -431,8 +431,8 @@ describe("ItemSprite", () => {
     expect(html.match(/<path/g)).toHaveLength(1);
     expect(html).toContain("fill:var(--pl-item-standin, #5a5462)");
     expect(html).not.toMatch(/fill="#/);
-    // The block's three faces: its sides parted by the near edge.
-    expect(html).toContain("M0 7h7v1h-7zM8 7h8v1h-8z");
+    // The block's three faces, 14 texels wide like the game's: its sides parted by the near edge.
+    expect(html).toContain("M1 7h6v1h-6zM8 7h7v1h-7z");
   });
 
   it("draws Projects' art from the overlay atlas on its servers", () => {
