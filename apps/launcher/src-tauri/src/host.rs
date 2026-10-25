@@ -308,6 +308,12 @@ async fn install_manifest(state: &AppState, instance_id: &str) -> Option<(Manife
             id: pack.pack_id.clone(),
             version: pack.version_id.clone(),
         });
+    // The ready-made sets installed here: a friend's copy adds the same ones (their both-side
+    // mods are in `mods` too).
+    let sets = pl_content::ModSetStates::load(&game_dir)
+        .await
+        .map(|states| states.installed_ids())
+        .unwrap_or_default();
     let side = InstallSide {
         mc: instance.mc_version.clone(),
         loader: Loader {
@@ -315,8 +321,7 @@ async fn install_manifest(state: &AppState, instance_id: &str) -> Option<(Manife
             version: instance.loader.version.clone().unwrap_or_default(),
         },
         pack,
-        // Ready-made sets are in `mods` already; a copy takes every mod (phase 1).
-        sets: Vec::new(),
+        sets,
     };
     let last_played = instance.last_played_at.map_or(0, |at| at.as_second());
     Some((
@@ -363,7 +368,7 @@ async fn create_member(state: &AppState, name: &str, mc: &str) -> Option<String>
 }
 
 /// The manifest's mods an install lacks, from Modrinth, into its `mods/` (the pack's own items
-/// come with the game's start).
+/// come with the game's start, the ready-made sets' are installed already).
 async fn add_mods(
     app: &AppHandle,
     state: &AppState,
@@ -378,7 +383,7 @@ async fn add_mods(
         return false;
     };
     // The pack's items by project: its sync brings them.
-    let pack_projects: std::collections::HashSet<String> = match official_family(state).await {
+    let mut provided: std::collections::HashSet<String> = match official_family(state).await {
         Some((snapshot, family)) => match snapshot.index.family_member(&family, &manifest.mc) {
             Some(member) => state
                 .content
@@ -396,6 +401,10 @@ async fn add_mods(
         },
         None => Default::default(),
     };
+    // The ready-made sets' files (a second copy of one of their mods would stop the game).
+    if let Ok(states) = pl_content::ModSetStates::load(&game_dir).await {
+        provided.extend(states.owned_projects());
+    }
     let mods = game_dir.join("mods");
     let have: std::collections::HashSet<String> = {
         let jars = tokio::task::spawn_blocking(move || pl_worlds::manifest::scan(&mods))
@@ -404,12 +413,7 @@ async fn add_mods(
         let found = look_up(state, jars.iter().map(|jar| jar.sha1.clone()).collect()).await;
         found.into_values().map(|m| m.version).collect()
     };
-    let wanted: Vec<String> = manifest
-        .mods
-        .iter()
-        .filter(|m| !pack_projects.contains(&m.project) && !have.contains(&m.version))
-        .map(|m| m.version.clone())
-        .collect();
+    let wanted = pl_worlds::manifest::mods_to_add(manifest, &provided, &have);
     if wanted.is_empty() {
         progress(100);
         return true;
@@ -557,9 +561,11 @@ impl Launcher for AppLauncher {
                     progress(u8::try_from(percent.min(100)).unwrap_or(100));
                 }
             });
-            match pl_mc::gamefiles::backup_world(
+            // Marked, so the Worlds tab lists it as "Arkadaşlarına açılmadan önce".
+            match pl_mc::gamefiles::backup_world_marked(
                 &world,
                 &dest,
+                Some(pl_mc::gamefiles::BackupReason::BeforeSharing),
                 pl_net::CancellationToken::new(),
                 Some(report),
             )
@@ -679,6 +685,10 @@ impl Launcher for AppLauncher {
             let state = self.state();
             let instance_id = create_member(&state, &name, &manifest.mc).await?;
             remember_copy(&state.root, &instance_id, &host);
+            // The host's ready-made sets first, then the world's mods nothing else brings.
+            let sets = pl_worlds::manifest::copy_sets(&manifest);
+            crate::commands::modsets::install_for_copy(&self.app, &state, &instance_id, &sets)
+                .await;
             add_mods(&self.app, &state, &instance_id, &manifest, &progress)
                 .await
                 .then_some(instance_id)
@@ -694,13 +704,17 @@ impl Launcher for AppLauncher {
         let (instance_id, manifest) = (instance_id.to_owned(), manifest.clone());
         Box::pin(async move {
             let state = self.state();
+            // Sets the host added since the copy was made come first, like in a new copy.
+            let sets = pl_worlds::manifest::copy_sets(&manifest);
+            crate::commands::modsets::install_for_copy(&self.app, &state, &instance_id, &sets)
+                .await;
             add_mods(&self.app, &state, &instance_id, &manifest, &progress).await
         })
     }
 
     /// Only the game this launcher started may come in (PROTOCOL.md §8): the connection's owner
-    /// must be its process, when Windows tells who owns it. A game started through a wrapper
-    /// command (`hooks.wrapper`) runs as the wrapper's child and is not recognised (HOST1-E).
+    /// must be its process, or one it started (a wrapper command's Java: `hooks.wrapper` starts
+    /// the game through another program), when Windows tells who owns it.
     fn accept_filter(&self) -> Option<pl_host::guest::local::AcceptFilter> {
         let app = self.app.clone();
         Some(Arc::new(move |remote: std::net::SocketAddr| {
@@ -718,11 +732,11 @@ impl Launcher for AppLauncher {
                 return false;
             };
             match pl_desktop::tcp::loopback_owner(remote.port()) {
-                Some(owner) if owner != game => {
+                Some(owner) if !pl_desktop::process::started_by(owner, game) => {
                     tracing::warn!("a connection to a friend's world came from another program");
                     false
                 }
-                // The game's, or the system can't tell.
+                // The game's (or its wrapper's Java), or the system can't tell.
                 _ => true,
             }
         }))

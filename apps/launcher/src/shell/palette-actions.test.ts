@@ -86,6 +86,7 @@ const palette: { id: string; entries: Candidate[] }[] = [
     entries: [
       item("action:new-instance", tr.palette.newInstance, PALETTE_WORDS.newInstance),
       item("action:copy-address", tr.tuning.palette.copyAddress, PALETTE_WORDS.copyAddress),
+      item("action:host-world", tr.small9.palette.openWorld, PALETTE_WORDS.hostWorld),
       item("action:afk-all", tr.palette.afkConnectAll, PALETTE_WORDS.afkConnectAll),
       item("action:updates", tr.palette.checkUpdates, PALETTE_WORDS.updates),
       item("action:shortcuts", tr.shortcuts.title, PALETTE_WORDS.shortcuts),
@@ -158,6 +159,12 @@ describe("palette search", () => {
     ["ss", "instance:screenshots"],
     ["ekran görüntüsü", "instance:screenshots"],
     ["dünya yedeği", "instance:worlds"],
+    // A world played with friends (HOST1), the game's "LAN'a aç" too.
+    ["arkadaşlarla oyna", "action:host-world"],
+    ["dünyamı aç", "action:host-world"],
+    ["dünyanı arkadaşlarına aç", "action:host-world"],
+    ["lan", "action:host-world"],
+    ["lana aç", "action:host-world"],
     ["crash", "instance:logs"],
     ["log", "instance:logs"],
     ["destek", "setting:support"],

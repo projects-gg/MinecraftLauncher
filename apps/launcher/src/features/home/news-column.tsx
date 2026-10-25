@@ -1,8 +1,7 @@
 import { ArrowSquareOut, CaretRight } from "@phosphor-icons/react";
 import {
-  Chip,
-  Countdown,
   cn,
+  countdownTickMs,
   easeOutExpo,
   exitOf,
   Skeleton,
@@ -16,7 +15,7 @@ import { Popover } from "radix-ui";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverImage } from "@/features/news/cover-image";
-import { MinecraftChip, useMinecraftText } from "@/features/news/minecraft";
+import { MinecraftLabel, useMinecraftText } from "@/features/news/minecraft";
 import { NewDot, NewLabel } from "@/features/news/new-dot";
 import type { EventItem, HomeContent, MinecraftNewsItem, NewsItem, PatchNotes } from "@/lib/api";
 import { cardEvents, nextBoundary, phaseOf } from "@/lib/event-card";
@@ -28,14 +27,6 @@ import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
 import { CommunityRow } from "./community-links";
 import { EventJoin } from "./event-join";
 import { ReminderBell } from "./event-reminders";
-
-const categoryTone = {
-  event: "gold",
-  update: "neutral",
-  announcement: "neutral",
-  patchNotes: "jade",
-  community: "neutral",
-} as const;
 
 function NewsRow({
   item,
@@ -75,14 +66,15 @@ function NewsRow({
           ) : null}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <Chip tone={categoryTone[item.category]}>{t(`categories.${item.category}`)}</Chip>
-            <span className="flex min-w-0 items-center gap-1.5">
-              <NewDot on={isNew} />
-              <span className="truncate text-[11.5px] text-ash-300">
-                {formatRelative(item.publishedAt)}
-              </span>
+          {/* What it is and when, in quiet words (a coloured pill per category was a badge over
+              every title and a second accent beside the gold). */}
+          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ash-300">
+            <span className="shrink-0 font-medium">{t(`categories.${item.category}`)}</span>
+            <span aria-hidden className="text-ash-500">
+              ·
             </span>
+            <NewDot on={isNew} />
+            <span className="truncate">{formatRelative(item.publishedAt)}</span>
           </span>
           <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
             {item.title}
@@ -130,11 +122,12 @@ function MinecraftRow({
           imgClassName="group-hover:scale-[1.06]"
         />
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <MinecraftChip />
-            <span className="truncate text-[11.5px] text-ash-300">
-              {formatRelative(item.publishedAt)}
+          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ash-300">
+            <MinecraftLabel />
+            <span aria-hidden className="text-ash-500">
+              ·
             </span>
+            <span className="truncate">{formatRelative(item.publishedAt)}</span>
           </span>
           <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-medium text-bone-100/90 transition-colors duration-150 group-hover:text-bone-50">
             {text.title}
@@ -175,7 +168,7 @@ function PatchNotesBox({ notes }: { notes: PatchNotes }) {
           <h3 className="font-display text-[14px] font-semibold text-bone-50">
             {t("home.patchNotes")}
           </h3>
-          <span className="text-[12px] text-gold-300">
+          <span className="text-[12px] text-ash-300">
             {t("home.patchVersion", { pack: notes.packName, version: notes.version })}
           </span>
         </div>
@@ -194,7 +187,7 @@ function PatchNotesBox({ notes }: { notes: PatchNotes }) {
           <span className="font-display text-[14px] font-semibold text-bone-50">
             {t("home.patchNotes")}
           </span>
-          <span className="flex shrink-0 items-center gap-1 text-[12px] text-gold-300">
+          <span className="flex shrink-0 items-center gap-1 text-[12px] text-ash-300 transition-colors duration-150 group-hover:text-gold-300">
             {formatRelative(notes.publishedAt)}
             <CaretRight
               size={12}
@@ -283,7 +276,7 @@ function StartsAt({ iso }: { iso: string }) {
     const id = window.setTimeout(() => setNow(Date.now()), wait);
     return () => window.clearTimeout(id);
   }, [now]);
-  return <p className="mt-0.5 text-[12.5px] text-ash-300 tabular-nums">{startMoment(iso, now)}</p>;
+  return <p className="mt-1 text-[12.5px] text-ash-300 tabular-nums">{startMoment(iso, now)}</p>;
 }
 
 /**
@@ -381,10 +374,30 @@ function StartedAgo({ at }: { at: string }) {
     const id = window.setInterval(() => tick((n) => n + 1), 30_000);
     return () => window.clearInterval(id);
   }, [unseen]);
+  return <span>{t("home.eventStarted", { when: formatRelative(at) })}</span>;
+}
+
+/**
+ * "2 sa 14 dk kaldı" (in the other events list's words): changes once a minute and each second only
+ * in the last minute, and stops while nobody can see it; right again the moment it is back.
+ */
+function TimeLeft({ to }: { to: string }) {
+  const { t } = useTranslation();
+  const { unseen } = usePerf();
+  const [ticks, tick] = useState(0);
+  const left = Date.parse(to) - Date.now();
+  const wait = unseen ? null : countdownTickMs(left);
+  useEffect(() => {
+    // Armed again after every tick, also when the next wait equals the last one.
+    void ticks;
+    if (wait === null) return;
+    const id = window.setTimeout(() => tick((n) => n + 1), wait);
+    return () => window.clearTimeout(id);
+  }, [wait, ticks]);
   return (
-    <p className="mt-1.5 text-[12.5px] text-ash-300">
-      {t("home.eventStarted", { when: formatRelative(at) })}
-    </p>
+    <span className="tabular-nums">
+      {t("home.eventEndsIn", { when: spanText(Math.max(0, left)) })}
+    </span>
   );
 }
 
@@ -427,22 +440,33 @@ function EventBlock({
 }) {
   const { t } = useTranslation();
   const glide = useInteractionMotion();
-  const units = {
-    days: t("countdown.days"),
-    hours: t("countdown.hours"),
-    minutes: t("countdown.minutes"),
-    seconds: t("countdown.seconds"),
-  };
   // Reduced motion keeps the cross-fade only.
   const shift = glide ? 6 : 0;
   const enter = 0.28;
-  const hasTarget = Boolean(event.newsId || event.url);
   const [listOpen, setListOpen] = useState(false);
   const titleId = useId();
   return (
     <Popover.Root open={listOpen} onOpenChange={setListOpen}>
       <Popover.Anchor asChild>
-        <section className="relative border-t border-white/7 px-3.5 pt-1.5">
+        <section className="relative border-t border-white/7 px-3.5 pt-2.5">
+          {/* The block's own heading, as the patch notes have theirs (it was a small coloured
+              kicker over the event's title), and the other events behind a plain link beside it. */}
+          <div className="flex min-h-[22px] items-center justify-between gap-3">
+            <h3 className="font-display text-[14px] font-semibold text-bone-50">
+              {live ? t("categories.event") : t("home.nextEvent")}
+            </h3>
+            {others.length ? (
+              <Popover.Trigger asChild>
+                <button
+                  type="button"
+                  className="-mr-1.5 flex cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12.5px] font-medium text-ash-300 tabular-nums transition-colors duration-150 hover:text-gold-300 focus-visible:outline-2 data-[state=open]:text-gold-300"
+                >
+                  {t("home.moreEvents", { count: others.length })}
+                  <CaretRight size={13} weight="bold" aria-hidden />
+                </button>
+              </Popover.Trigger>
+            ) : null}
+          </div>
           {/* The leaving event is lifted out of the flow, so a switch cross-fades at once and a
           second switch mid-way retargets instead of waiting. The bell goes with its event. */}
           <AnimatePresence mode="popLayout" initial={false}>
@@ -463,82 +487,51 @@ function EventBlock({
               }}
             >
               <EventTarget event={event}>
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={cn(
-                      "text-[12px] font-medium",
-                      live ? "text-gold-300" : "text-ash-300",
-                    )}
+                <div className="flex items-start justify-between gap-2">
+                  <p
+                    id={titleId}
+                    className="line-clamp-2 text-[13px] leading-snug font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50"
                   >
-                    {live ? t("home.eventLive") : t("home.nextEvent")}
-                  </span>
-                  {event.newsId || (event.url && !isWebLink(event.url)) ? (
-                    // Inside the launcher (an article, a projects:// link).
-                    <CaretRight
-                      size={13}
-                      weight="bold"
-                      aria-hidden
-                      className="text-ash-400 transition-[color,transform,translate] duration-200 ease-out group-hover:translate-x-0.5 group-hover:text-gold-300"
-                    />
-                  ) : event.url ? (
+                    {event.title}
+                  </p>
+                  {/* Like the stories above, an article opens without a caret (one already leads to
+                      the other events beside the heading); the browser's mark stays. */}
+                  {event.url && !event.newsId && isWebLink(event.url) ? (
                     <ArrowSquareOut
                       size={14}
                       aria-hidden
-                      className="text-ash-400 transition-colors duration-200 group-hover:text-gold-300"
+                      className="mt-[2px] shrink-0 text-ash-400 transition-colors duration-200 group-hover:text-gold-300"
                     />
                   ) : null}
                 </div>
-                <p
-                  id={titleId}
-                  className="mt-0.5 line-clamp-2 font-display text-[14px] leading-snug font-semibold text-bone-50"
-                >
-                  {event.title}
-                </p>
-                {live ? null : <StartsAt iso={event.startsAt} />}
-                {live && event.openEnded ? (
-                  <StartedAgo at={event.startsAt} />
+                {/* One line of time, in the other events list's words: running and what is left
+                    (or since when), or when it starts. Big ticking digits outshouted the panel. */}
+                {live ? (
+                  <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[12.5px] text-ash-300">
+                    <span className="shrink-0 font-medium text-gold-300">
+                      {t("home.eventRunning")}
+                    </span>
+                    {event.openEnded ? (
+                      <StartedAgo at={event.startsAt} />
+                    ) : (
+                      <TimeLeft to={event.endsAt} />
+                    )}
+                  </p>
                 ) : (
-                  <div className="mt-2 flex items-end gap-3">
-                    <Countdown to={new Date(live ? event.endsAt : event.startsAt)} units={units} />
-                    {live ? (
-                      <span className="text-[11px] font-medium text-ash-300">
-                        {t("home.eventLeft")}
-                      </span>
-                    ) : null}
-                  </div>
+                  <StartsAt iso={event.startsAt} />
                 )}
               </EventTarget>
               {live ? (
-                // On the server: "Katıl" takes the bell's place, level with the countdown's digits
-                // (or with the "started" line of an open-ended event) and flush with the caret.
+                // On the server: "Katıl" takes the bell's place, level with the time line.
                 event.join ? (
-                  <EventJoin
-                    describedBy={titleId}
-                    className={cn(
-                      "absolute right-0",
-                      event.openEnded ? "bottom-[1px]" : "bottom-[22px]",
-                    )}
-                  />
+                  <EventJoin describedBy={titleId} className="absolute right-0 bottom-[1px]" />
                 ) : null
               ) : (
-                // Level with the countdown's digits; its glyph lines up with the caret above.
-                <ReminderBell event={event} className="absolute right-[-6px] bottom-[22px]" />
+                // Level with the start time.
+                <ReminderBell event={event} className="absolute right-[-6px] bottom-[1px]" />
               )}
             </motion.div>
           </AnimatePresence>
-          {others.length ? (
-            <Popover.Trigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "hit-area absolute top-[11px] cursor-pointer rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-medium text-ash-300 tabular-nums transition-[color,background-color,transform,scale] duration-150 [--hit:6px] hover:bg-white/12 hover:text-bone-50 focus-visible:outline-2 active:scale-[0.96] data-[state=open]:bg-white/12 data-[state=open]:text-bone-50",
-                  hasTarget ? "right-[38px]" : "right-3.5",
-                )}
-              >
-                {t("home.moreEvents", { count: others.length })}
-              </button>
-            </Popover.Trigger>
-          ) : null}
         </section>
       </Popover.Anchor>
       {others.length ? <OtherEvents events={others} onChosen={() => setListOpen(false)} /> : null}
@@ -553,14 +546,17 @@ let columnArrived = false;
 export function NewsColumn({ content, loading }: { content?: HomeContent; loading: boolean }) {
   const { t } = useTranslation();
   const notes = content?.patchNotes;
-  // The patch notes box already shows its article; the hero shows its own.
+  const { event, live, others } = useEventCard(content?.events);
+  // The patch notes box already shows its article, the hero its own and the event card the one
+  // about its event (the Discord feed makes a story and an event from one message): each story
+  // shows once.
   const boxed = notes?.kind === "news" ? notes.newsId : undefined;
+  const carded = event?.newsId;
   const news = (content?.news ?? [])
-    .filter((n) => n.id !== content?.hero.newsId && n.id !== boxed)
+    .filter((n) => n.id !== content?.hero.newsId && n.id !== boxed && n.id !== carded)
     .slice(0, NEWS_COLUMN_ROWS);
   const watermark = useNewsSeen((s) => s.watermark);
   const read = useNewsSeen((s) => s.read);
-  const { event, live, others } = useEventCard(content?.events);
   // The column settles in once per start (the boot moment), not on every return to Home.
   const [arrive] = useState(() => !columnArrived);
   useEffect(() => {

@@ -158,6 +158,32 @@ impl ModSetStates {
             .map(|(id, set)| (id.as_str(), set))
     }
 
+    /// The sets installed for this version, by id (a friend's copy of the install adds the same
+    /// ones: HOST1's world manifest, `sets`).
+    pub fn installed_ids(&self) -> Vec<String> {
+        self.sets
+            .iter()
+            .filter(|(_, set)| set.installed())
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// The Modrinth projects whose files the sets installed here (an item a set left out because
+    /// another part of the instance has it is not theirs).
+    pub fn owned_projects(&self) -> BTreeSet<String> {
+        self.sets
+            .values()
+            .filter_map(|set| set.applied.as_ref().map(|variant| (set, variant)))
+            .flat_map(|(set, variant)| {
+                variant
+                    .items
+                    .iter()
+                    .filter(move |item| set.state.files.contains_key(&item.path))
+            })
+            .filter_map(|item| item.modrinth.as_ref().map(|m| m.project_id.clone()))
+            .collect()
+    }
+
     /// Resource packs waiting to be turned on, in the order the sets list them (a set's first
     /// pack ends up on top of the game's list).
     pub fn pending_resource_packs(&self) -> Vec<String> {
@@ -862,6 +888,29 @@ mod tests {
             resource_packs: BTreeMap::from([("LowFire.zip".into(), true)]),
             added_at: Timestamp::UNIX_EPOCH,
         }
+    }
+
+    #[test]
+    fn installed_sets_and_the_projects_their_files_belong_to() {
+        let states = ModSetStates {
+            sets: BTreeMap::from([
+                (
+                    "pvp".into(),
+                    added("26.3", &[("mods/zoom.jar", "zoom")], true),
+                ),
+                // Carried over from another version, not installed for this one yet.
+                ("perf".into(), added("26.3", &[], false)),
+            ]),
+        };
+        assert_eq!(states.installed_ids(), ["pvp"]);
+        assert_eq!(states.owned_projects(), BTreeSet::from(["zoom".to_owned()]));
+        // An item the set left out (the instance had it already) is not the set's.
+        let left_out = ModSetStates {
+            sets: BTreeMap::from([("pvp".into(), added("26.3", &[], true))]),
+        };
+        assert_eq!(left_out.installed_ids(), ["pvp"]);
+        assert!(left_out.owned_projects().is_empty());
+        assert!(ModSetStates::default().installed_ids().is_empty());
     }
 
     #[test]

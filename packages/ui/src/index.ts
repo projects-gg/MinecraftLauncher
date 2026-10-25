@@ -22,7 +22,7 @@ export {
   spritePaths,
   spriteSize,
 } from "./components/content-icon";
-export { Countdown, countdownCells, countdownTickMs } from "./components/countdown";
+export { countdownTickMs } from "./components/countdown";
 export { Dialog } from "./components/dialog";
 export {
   DropZone,

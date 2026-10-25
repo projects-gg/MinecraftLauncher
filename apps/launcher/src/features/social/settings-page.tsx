@@ -1,6 +1,7 @@
 // "Arkadaş ayarları": profile picture (bundled pictures, the Discord photo, the Minecraft head),
 // privacy (the crew tag worn before the name, TEAM6; with crews, "Birlikte oynanan süre": kept on
-// this computer only, deleted when turned off or with "Süreleri sil", TEAM5), favourite
+// this computer only, deleted when turned off or with "Süreleri sil", TEAM5), world sharing's
+// privacy by its name (HOST1), favourite
 // notifications, the settings backup, sessions, blocked players, sign-out and "Verilerimi sil". The
 // same component shows in the panel and in Settings → Arkadaşlar.
 import { Desktop, SignOut, Trash } from "@phosphor-icons/react";
@@ -11,6 +12,7 @@ import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce, useAccounts } from "@/features/accounts/use-accounts";
 import { AvatarPicker } from "@/features/avatars/avatar-picker";
+import { useHostUi } from "@/features/host/store";
 import { api } from "@/lib/api";
 import type { SocialMe, SocialSession } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
@@ -254,6 +256,23 @@ function PrivacySection({ me }: { me: SocialMe }) {
         ) : null}
         {crews ? <TogetherSetting /> : null}
       </div>
+    </Section>
+  );
+}
+
+/**
+ * "Dünyanı arkadaşlarına aç" by its name, while world sharing is on (HOST1): what it keeps to
+ * itself. The invite window says the first half once per computer; here it can be found again.
+ */
+function WorldsSection() {
+  const { t } = useTranslation();
+  const on = useHostUi((s) => s.view.enabled);
+  if (!on) return null;
+  return (
+    <Section title={t("small9.settings.worlds")}>
+      <p className="max-w-[60ch] text-[13px] leading-relaxed text-ash-300 [text-wrap:pretty]">
+        {t("small9.settings.worldsPrivacy")}
+      </p>
     </Section>
   );
 }
@@ -544,6 +563,7 @@ export function SocialSettings() {
     <div>
       <PictureSection me={me} />
       <PrivacySection me={me} />
+      <WorldsSection />
       <NotificationSection />
       <BackupSection me={me} />
       <SessionsSection />

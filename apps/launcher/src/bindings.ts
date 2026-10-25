@@ -1553,6 +1553,17 @@ export type BackupProgress = {
 	bytesTotal: number,
 };
 
+/**
+ *  Why the launcher made a backup by itself. It travels inside the archive (its zip comment), so
+ *  it stays with the file when the folder is copied, and the game and other tools ignore it.
+ */
+export type BackupReason = 
+/**
+ *  Before the world first opened to friends from the launcher (HOST1, "Arkadaşlarına
+ *  açılmadan önce").
+ */
+"beforeSharing";
+
 /**  Why a join request from a tag's card did not go (TEAM6). */
 export type BadgeRefusal = 
 /**
@@ -7653,6 +7664,11 @@ export type WorldBackupView = {
 	worldName: string | null,
 	/**  False when the archive does not hold a world. */
 	valid: boolean,
+	/**
+	 *  Why the launcher made it by itself ("Arkadaşlarına açılmadan önce"); none for the
+	 *  player's own backups and the game's.
+	 */
+	reason: BackupReason | null,
 };
 
 export type WorldDetailView = {
@@ -7755,7 +7771,7 @@ export type WorldInviteView_Serialize = {
 
 /**  The answer to a join's question. */
 export type WorldJoinAnswer = 
-/**  "Kopyala ve katıl": the new install's name in the player's language. */
+/**  "Kur ve katıl": the new install's name in the player's language. */
 { kind: "copy"; name: string } | 
 /**  "Kur ve katıl". */
 { kind: "install" } | 
@@ -7764,7 +7780,7 @@ export type WorldJoinAnswer =
 
 /**  What a join's window asks. */
 export type WorldJoinAsk = 
-/**  A new install with exactly the world's mods ("Kopyala ve katıl"). */
+/**  A new install with exactly the world's mods ("Kur ve katıl"). */
 { kind: "copy"; mods: number; bytes: number; unknown: number } | 
 /**  No install of the world's Minecraft version: the official pack is installed for it. */
 { kind: "install"; mc: string } | 

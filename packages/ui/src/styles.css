@@ -277,13 +277,16 @@
 
 /* `hovered:` is `hover:`, and also "the pointer is on the words that label me": a row marked
    `switch-row` whose <label> names the switch in it (Settings, AFK settings) lifts the switch
-   while the pointer is on the label, since a click there toggles it. */
+   while the pointer is on the label, since a click there toggles it. Not while the pointer is on
+   an action inside those words, which does something else: the action marks the row
+   (`data-action-hover`, the overlay row's "Kur"), since Chromium hands a label's :hover to its
+   control too. (A :has(button:hover) test instead went stale in Chromium as the pointer moved.) */
 @custom-variant hovered {
   @media (hover: hover) {
-    &:hover {
+    &:hover:not(:where([data-action-hover] *)) {
       @slot;
     }
-    :where(.switch-row:has(label:hover)) & {
+    :where(.switch-row:not([data-action-hover]):has(label:hover)) & {
       @slot;
     }
   }

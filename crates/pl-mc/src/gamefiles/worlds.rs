@@ -255,6 +255,42 @@ pub struct BackupProgress {
 
 pub type BackupProgressFn = Arc<dyn Fn(BackupProgress) + Send + Sync>;
 
+/// Why the launcher made a backup by itself. It travels inside the archive (its zip comment), so
+/// it stays with the file when the folder is copied, and the game and other tools ignore it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum BackupReason {
+    /// Before the world first opened to friends from the launcher (HOST1, "Arkadaşlarına
+    /// açılmadan önce").
+    BeforeSharing,
+}
+
+/// The zip comment that names a [`BackupReason`]: the launcher's prefix, then the reason.
+const REASON_COMMENT_PREFIX: &str = "projects-launcher-backup:";
+
+impl BackupReason {
+    fn wire(self) -> &'static str {
+        match self {
+            Self::BeforeSharing => "before-sharing",
+        }
+    }
+
+    /// The archive comment that carries this reason.
+    pub(crate) fn comment(self) -> String {
+        format!("{REASON_COMMENT_PREFIX}{}", self.wire())
+    }
+
+    /// The reason in an archive comment; none for any other comment (the game's backups have
+    /// none, other tools write their own).
+    pub(crate) fn from_comment(comment: &[u8]) -> Option<Self> {
+        let text = std::str::from_utf8(comment).ok()?.trim();
+        match text.strip_prefix(REASON_COMMENT_PREFIX)? {
+            "before-sharing" => Some(Self::BeforeSharing),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupSummary {
@@ -297,14 +333,27 @@ pub async fn backup_world(
     cancel: CancellationToken,
     progress: Option<BackupProgressFn>,
 ) -> Result<BackupSummary> {
+    backup_world_marked(world_dir, dest_zip, None, cancel, progress).await
+}
+
+/// [`backup_world`] that keeps why the launcher made it inside the archive
+/// ([`BackupReason`]; the backups list shows it).
+pub async fn backup_world_marked(
+    world_dir: &Path,
+    dest_zip: &Path,
+    reason: Option<BackupReason>,
+    cancel: CancellationToken,
+    progress: Option<BackupProgressFn>,
+) -> Result<BackupSummary> {
     let world_dir = world_dir.to_path_buf();
     let dest = dest_zip.to_path_buf();
-    blocking(move || backup_blocking(&world_dir, &dest, &cancel, progress.as_ref())).await
+    blocking(move || backup_blocking(&world_dir, &dest, reason, &cancel, progress.as_ref())).await
 }
 
 fn backup_blocking(
     world_dir: &Path,
     dest: &Path,
+    reason: Option<BackupReason>,
     cancel: &CancellationToken,
     progress: Option<&BackupProgressFn>,
 ) -> Result<BackupSummary> {
@@ -358,6 +407,7 @@ fn backup_blocking(
         root_name: &root_name,
         dirs: &dirs,
         files: &files,
+        reason,
         cancel,
         progress,
     };
@@ -385,6 +435,7 @@ struct BackupJob<'a> {
     root_name: &'a str,
     dirs: &'a [String],
     files: &'a [(PathBuf, String, std::fs::Metadata)],
+    reason: Option<BackupReason>,
     cancel: &'a CancellationToken,
     progress: Option<&'a BackupProgressFn>,
 }
@@ -394,6 +445,10 @@ impl BackupJob<'_> {
         let root_name = self.root_name;
         let file = File::create(tmp).map_err(|e| Error::io(tmp, e))?;
         let mut zip = zip::ZipWriter::new(BufWriter::new(file));
+        if let Some(reason) = self.reason {
+            zip.set_comment(reason.comment())
+                .map_err(|e| Error::archive(tmp, e))?;
+        }
         let base =
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         for dir in self.dirs {

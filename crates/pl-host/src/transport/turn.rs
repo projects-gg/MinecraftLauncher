@@ -467,6 +467,13 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// The allocation's end, when it already came. A path asks before it trusts its QUIC endpoint:
+/// `close_when_lost` closes that endpoint only once its task runs, which may be after the caller
+/// heard `closed()`.
+fn lost_now(allocation: &Allocation) -> Option<PathError> {
+    allocation.shared().dead().borrow().clone()
+}
+
 /// Waits until the allocation is gone.
 async fn allocation_lost(allocation: &Allocation) -> PathError {
     let mut dead = allocation.shared().dead();
@@ -681,10 +688,17 @@ impl HostPath for TurnHostPath {
 
     fn accept(&self) -> BoxFuture<'_, Result<BoxStream, PathError>> {
         Box::pin(async move {
-            let stream = self.inner.streams.lock().await.recv().await;
-            match stream {
-                Some(stream) => Ok(stream),
-                None => Err(allocation_lost(&self.inner.allocation).await),
+            // A lost allocation accepts nothing, at once (not once its endpoint has closed).
+            if let Some(lost) = lost_now(&self.inner.allocation) {
+                return Err(lost);
+            }
+            let mut streams = self.inner.streams.lock().await;
+            tokio::select! {
+                stream = streams.recv() => match stream {
+                    Some(stream) => Ok(stream),
+                    None => Err(allocation_lost(&self.inner.allocation).await),
+                },
+                lost = allocation_lost(&self.inner.allocation) => Err(lost),
             }
         })
     }
@@ -918,6 +932,11 @@ impl GuestPath for TurnGuestPath {
         Box::pin(async move {
             if *self.closed.borrow() {
                 return Err(fail(Step::Quic, "turn_quic_timeout"));
+            }
+            // A lost allocation opens nothing, at once: until its endpoint closes, the old
+            // connection would still hand out a stream that leads nowhere.
+            if let Some(lost) = lost_now(&self.node.allocation) {
+                return Err(lost);
             }
             let connection = self.connection().await?;
             let (send, recv) = connection

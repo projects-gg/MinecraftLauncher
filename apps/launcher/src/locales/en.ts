@@ -35,6 +35,7 @@ import { enSafety } from "./en-safety";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
+import { enSmall9 } from "./en-small9";
 import { enTeam6 } from "./en-team6";
 import { enTeams } from "./en-teams";
 import { enTray } from "./en-tray";
@@ -279,6 +280,7 @@ export const en: DeepPartial<Strings> = {
   homeLinks: enHomeLinks,
   tray: enTray,
   small7: enSmall7,
+  small9: enSmall9,
   crews: enCrews,
   chat: enChat,
   reports: enReports,
@@ -323,8 +325,6 @@ export const en: DeepPartial<Strings> = {
     patchVersion: "{{pack}} {{version}}",
     seeAll: "See all",
     nextEvent: "Next event",
-    eventLive: "Happening now",
-    eventLeft: "left",
     eventStarted: "Started {{when}}",
     openInDiscord: "Open in Discord",
     offlineBanner: "You're offline. You can still play installed games.",
@@ -334,8 +334,8 @@ export const en: DeepPartial<Strings> = {
     maintenanceUntilTomorrow: "Expected to end tomorrow at {{time}}",
     statusPage: "Status page",
     dismissBanner: "Dismiss",
-    moreEvents: "+{{count}} events",
-    moreEvents_one: "+{{count}} event",
+    moreEvents: "{{count}} more events",
+    moreEvents_one: "{{count}} more event",
     otherEvents: "Other events",
     eventRunning: "Live",
     eventEndsIn: "{{when}} left",
@@ -353,13 +353,6 @@ export const en: DeepPartial<Strings> = {
     announcement: "Announcement",
     patchNotes: "Patch notes",
     community: "Community",
-  },
-  // Under the event card's digits: as short as the Turkish words, so the digits keep one rhythm.
-  countdown: {
-    days: "days",
-    hours: "hrs",
-    minutes: "mins",
-    seconds: "secs",
   },
   units: {
     hoursMinutes: "{{hours}} h {{minutes}} min",
