@@ -124,6 +124,16 @@ processResources {
     }
 }
 
+// The mod is GPL-3.0-only: every jar carries the license text at its root, named as Fabric's mod template names it
+// (LICENSE_<archive name>, so it never clashes with another mod's LICENSE in a merged or nested jar).
+// scripts/release/overlay-jars.mjs refuses a jar without it.
+jar {
+    inputs.property 'archivesName', base.archivesName
+    from(file('../../LICENSE')) {
+        rename { "${it}_${inputs.properties.archivesName}" }
+    }
+}
+
 tasks.withType(JavaCompile).configureEach {
     it.options.release = 25
     it.options.encoding = 'UTF-8'
