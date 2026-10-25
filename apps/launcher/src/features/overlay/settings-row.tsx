@@ -1,3 +1,4 @@
+import { Warning } from "@phosphor-icons/react";
 import { ARM_MS, cn, focusPanel, Kbd, SwapLabel, Switch, toast, usePressGuard } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { type MouseEvent, type ReactNode, useEffect, useRef } from "react";
@@ -21,9 +22,9 @@ const OVERLAY_KEY = "F7";
 const KEY_SLOT = "@@key@@";
 
 /**
- * The longest install name a line shows in full: with the longest sentence ("Minecraft 1.21.11
- * sürümünde çalışmaz.") and a name this long, the line still fits the help's width (measured: 406
- * of 449 px).
+ * The longest install name a line shows in full. The lines never wrap (a second line would make
+ * the cell taller for every line); with two names this long the widest, in English, is ~570 px,
+ * inside the ~610 px the row's words have at the launcher's narrowest window (measured).
  */
 const NAME_MAX = 16;
 
@@ -159,8 +160,9 @@ export function OverlayRow() {
     return (
       <LineAction
         shown={active && !busy}
-        // A game is prepared or open: the command bar's picker is locked, and so is this.
-        disabled={busy}
+        // A game is prepared or open: the command bar's picker is locked; the line says why the
+        // overlay is not in that game, and the switch fades out until it ends.
+        faded={busy}
         // The whole name when the words cut it.
         name={short === home.name ? undefined : t("overlay.switchTo", { name: home.name })}
         onPress={(refocus) => {
@@ -200,12 +202,24 @@ export function OverlayRow() {
                   onPointerLeave={
                     withAction ? (event) => markRow(event.currentTarget, false) : undefined
                   }
+                  // One line each, never wrapped: a second line would make the cell taller for
+                  // every line (the row's words have room past the help's measure).
                   className={cn(
-                    "[grid-area:1/1] transition-opacity",
+                    "[grid-area:1/1] whitespace-nowrap transition-opacity",
                     withAction && "cursor-default",
                     active ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
                   )}
                 >
+                  {/* A line that says it will not work leads with the launcher's warning mark
+                      (gold, as in the help panel and the mod center). */}
+                  {kind === "opens" ? null : (
+                    <Warning
+                      size={13}
+                      weight="fill"
+                      aria-hidden
+                      className="mr-1.5 inline-block align-[-2px] text-gold-300"
+                    />
+                  )}
                   <span aria-hidden>{shownSentence(kind)}</span>
                   {action(kind, active)}
                 </span>
@@ -284,7 +298,7 @@ function focusRowSwitch(from: HTMLElement, keyHeld: boolean) {
  */
 function LineAction({
   shown,
-  disabled = false,
+  faded = false,
   name,
   busy = false,
   onPress,
@@ -292,8 +306,8 @@ function LineAction({
 }: {
   /** Its line shows and the action can be taken. */
   shown: boolean;
-  /** Its line shows but the action waits (a game is open): it greys out in place. */
-  disabled?: boolean;
+  /** Its line shows but the action waits (a game is open): it fades out in place until then. */
+  faded?: boolean;
   /** The name a screen reader says when the words shown are not the whole of it. */
   name?: string;
   /** Its work is under way: a press does nothing more. */
@@ -308,15 +322,16 @@ function LineAction({
   return (
     <button
       type="button"
-      disabled={disabled}
+      inert={faded || undefined}
       aria-label={name}
       aria-busy={busy || undefined}
       // The words start right after the sentence (`SwapLabel` centres them). The underline fades
-      // in under the pointer; a press squeezes them as it does a button; waiting, they grey out.
-      // The wider target only while it shows: Chromium reads a hidden line's action into the
-      // switch's description when it has the pseudo-element (measured).
+      // in under the pointer; a press squeezes them as it does a button. The wider target only
+      // while it shows: Chromium reads a hidden line's action into the switch's description when
+      // it has the pseudo-element (measured).
       className={cn(
-        "relative ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[color,text-decoration-color,scale] duration-150 focus-visible:ring-2 focus-visible:ring-gold-300 enabled:hover:decoration-current enabled:active:scale-[0.97] disabled:cursor-default disabled:text-ash-400 [&_.swap-label]:justify-items-start",
+        "relative ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[opacity,text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] [&_.swap-label]:justify-items-start",
+        faded ? "opacity-0" : "opacity-100",
         shown && "hit-area",
       )}
       onPointerLeave={guard.handlers.onPointerLeave}
@@ -330,7 +345,7 @@ function LineAction({
       onClick={(event) => {
         // Inside the row's label: the switch must not flip with it.
         event.preventDefault();
-        if (!guard.take(event) || busy || disabled) return;
+        if (!guard.take(event) || busy || faded) return;
         const button = event.currentTarget;
         const byKeyboard = event.detail === 0;
         onPress(() => {

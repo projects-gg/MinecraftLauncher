@@ -30,7 +30,7 @@ export interface OverlayLine {
   switchTo?: InstanceSummary;
   /**
    * A game is prepared or open: the command bar stays on it and its picker is locked, so the
-   * action waits (shown, not taken).
+   * action waits (out of sight until the game ends).
    */
   locked?: boolean;
 }
