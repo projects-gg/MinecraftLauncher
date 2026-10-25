@@ -10,6 +10,7 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use pl_lang::Lang;
 use pl_social::{
     CallAnswer as SocialAnswer, ChatChangeView, ChatMessageView, ChatPage, ChatRejection,
     ChatTypingView, ErrorCode, FriendGroup, GroupMember, InviteResult, McIntent, ReportReason,
@@ -22,9 +23,9 @@ use crate::OverlayConfig;
 use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_LINK, FEATURE_PEOPLE,
-    FEATURE_PEOPLE2, FEATURE_TAGS, FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS,
-    ReactFailure, Secret, SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_LANG, FEATURE_LINK,
+    FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_TAGS, FriendAction, FriendRefusal, FromGame,
+    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -368,6 +369,8 @@ pub(crate) enum Msg {
     /// HOST1: the friends who invited the player to their world, and whether the player may open
     /// theirs now.
     Worlds(WorldsShown),
+    /// OVL-LANG: the overlay's language now (the player's pick, else the launcher's).
+    Language(Lang),
 }
 
 /// The panel sends at most this many messages ...
@@ -417,6 +420,9 @@ pub(crate) type DiscordFn = Arc<dyn Fn(&str, &str) -> bool + Send + Sync>;
 
 /// A mark changed on a friend from the game (OVL-UX2): the launcher's page keeps it.
 pub(crate) type PeopleFn = Arc<dyn Fn(PeopleChange) + Send + Sync>;
+
+/// The player picked the overlay's language in its settings (OVL-LANG): the launcher keeps it.
+pub(crate) type LangFn = Arc<dyn Fn(Lang) + Send + Sync>;
 
 /// Whom a person menu frame may be about (OVL-UX2): the friend list's people for most rows; crew
 /// chat's senders (a crewmate who is not a friend) for "Engelle", "Rapor et" and "Arkadaş ekle".
@@ -492,6 +498,9 @@ struct Live {
     /// The mod has the launcher's whole person menu (OVL-UX2: `people2` in its hello): it hears
     /// `lists` and the new `friend-result` actions.
     people2: bool,
+    /// The mod's words follow the launcher (OVL-LANG: `lang` in its hello): its welcome names the
+    /// overlay's language and the player picks it there.
+    langs: bool,
 }
 
 /// The codeless linking permit this session holds (SKIN1-O). It never goes to a log.
@@ -558,6 +567,10 @@ pub(crate) struct Session<S> {
     last_discord: Option<(String, Instant)>,
     /// OVL-UX2: favourites and online notices changed from the game go to the launcher's page.
     people: PeopleFn,
+    /// OVL-LANG: the overlay's language (the player's pick, else the launcher's), and where the
+    /// player's pick from the game goes.
+    lang: Lang,
+    lang_picked: LangFn,
 }
 
 fn now_ms() -> i64 {
@@ -660,6 +673,7 @@ impl<S: SocialActions> Session<S> {
         game: Option<String>,
         discord: DiscordFn,
         people: PeopleFn,
+        (lang, lang_picked): (Lang, LangFn),
     ) -> Self {
         // The friends feature as it is now; every change after comes as a message.
         let view = Arc::new(social.view());
@@ -694,6 +708,8 @@ impl<S: SocialActions> Session<S> {
             discord,
             last_discord: None,
             people,
+            lang,
+            lang_picked,
         }
     }
 
@@ -861,7 +877,25 @@ impl<S: SocialActions> Session<S> {
                     self.refresh();
                 }
             }
+            Msg::Language(lang) => self.set_language(lang),
         }
+    }
+
+    /// OVL-LANG: the overlay speaks `lang` from now on. A mod whose words follow the launcher is
+    /// greeted again in it (its panel builds itself anew and asks for the open conversation again);
+    /// an older mod keeps the language its hello named.
+    fn set_language(&mut self, lang: Lang) {
+        if self.lang == lang {
+            return;
+        }
+        self.lang = lang;
+        let Some(live) = self.live.as_mut().filter(|live| live.langs) else {
+            return;
+        };
+        tracing::info!(lang = lang.code(), "the in-game overlay's language changed");
+        live.listener.english = lang == Lang::En;
+        live.mirror.set_lang(Some(lang));
+        self.refresh();
     }
 
     /// SKIN1-O: a Projects server asked the game whether its launcher vouches for the player
@@ -1123,7 +1157,9 @@ impl<S: SocialActions> Session<S> {
         {
             return;
         }
-        let name = self.scene.sender(&typing.conv, &typing.by);
+        let name = self
+            .scene
+            .sender(&typing.conv, &typing.by, self.listener().english);
         self.send(vec![ToGame::Typing {
             conv: typing.conv.clone(),
             by: typing.by.clone(),
@@ -1150,7 +1186,9 @@ impl<S: SocialActions> Session<S> {
                 );
                 let tags = features.iter().any(|f| f == FEATURE_TAGS);
                 let people2 = features.iter().any(|f| f == FEATURE_PEOPLE2);
+                let langs = features.iter().any(|f| f == FEATURE_LANG);
                 let mut mirror = Mirror::for_mod(tags, people2);
+                mirror.set_lang(langs.then_some(self.lang));
                 let frames = mirror.greet(&self.scene, &self.launcher, self.config.reduced_motion);
                 // A reconnect forgets a "Bağlan" the earlier connection never answered.
                 if let Some(pending) = self.pending_connect.take() {
@@ -1165,7 +1203,7 @@ impl<S: SocialActions> Session<S> {
                     panel: false,
                     open: None,
                     connects: features.iter().any(|f| f == FEATURE_CONNECT),
-                    listener: Listener::from_hello(&language, &features),
+                    listener: Listener::from_hello(&language, &features, self.lang),
                     typed_at: None,
                     hosts,
                     tags,
@@ -1173,6 +1211,7 @@ impl<S: SocialActions> Session<S> {
                     link_wanted_at: None,
                     people: features.iter().any(|f| f == FEATURE_PEOPLE),
                     people2,
+                    langs,
                 }));
                 self.send(frames);
                 (self.host)(HostSignal::Connected { hosts });
@@ -1330,8 +1369,29 @@ impl<S: SocialActions> Session<S> {
             FromGame::Move { friend, group } => self.on_move(friend, &group),
             FromGame::CrewInvite { friend, crew } => self.on_crew_invite(friend, &crew),
             FromGame::AddFriend { friend } => self.on_add_friend(friend),
+            FromGame::Lang { lang } => self.on_lang_pick(&lang),
             FromGame::Hello { .. } | FromGame::Unknown => {}
         }
+    }
+
+    /// OVL-LANG (G4): the player picked the overlay's language in its settings. It speaks it at
+    /// once (the answer is the new greeting) and the launcher keeps the pick for every game after.
+    /// Only from a mod whose words follow the launcher; a value that is no language is ignored.
+    fn on_lang_pick(&mut self, lang: &str) {
+        if !self.live.as_ref().is_some_and(|live| live.langs) {
+            return;
+        }
+        let lang = match lang {
+            "tr" => Lang::Tr,
+            "en" => Lang::En,
+            _ => return,
+        };
+        tracing::info!(
+            lang = lang.code(),
+            "the player picked the overlay's language in game"
+        );
+        self.set_language(lang);
+        (self.lang_picked)(lang);
     }
 
     // --- the friend menu (OVL-UX) ------------------------------------------------------------------

@@ -1120,3 +1120,14 @@ async fn a_first_answer_lowers_the_guest_limit_to_studios() {
     assert!(h.bridge.sent().iter().any(|f| matches!(f,
         ToGame::HostStop { reason: Some(r) } if r == "error")));
 }
+
+/// OVL-LANG: the label a friend's world shows in the game, in either language the overlay speaks.
+#[test]
+fn a_friends_world_reads_in_the_overlays_language() {
+    use pl_lang::Lang;
+    assert_eq!(
+        crate::world_label_in("Ayşe", Lang::Tr),
+        "Arkadaş dünyası: Ayşe"
+    );
+    assert_eq!(crate::world_label_in("Ayşe", Lang::En), "Ayşe's world");
+}

@@ -209,6 +209,13 @@ pub enum FromGame {
     /// OVL-UX2 (Q12): "Arkadaş ekle" (or "İsteği kabul et" when they asked first) on a crewmate who
     /// is not a friend yet. Answered with `friend-result` (`queued`: the request waits for them).
     AddFriend { friend: String },
+    /// OVL-LANG (G4; from a mod whose hello lists `lang`): the player picked the overlay's language
+    /// in its settings ("Dil": `tr` or `en`). The launcher keeps it for every game from now on and
+    /// answers with a new `welcome` in that language; anything else is ignored.
+    Lang {
+        #[serde(default)]
+        lang: String,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -250,6 +257,10 @@ pub const FEATURE_INVITE: &str = "invite";
 /// those frames (signed in to friends).
 pub const FEATURE_PEOPLE2: &str = "people2";
 
+/// The `hello` feature of a mod whose words follow the launcher (OVL-LANG, G1): it reads `lang` in
+/// `welcome`, shows the "Dil" row in its settings and sends `lang` when the player picks there.
+pub const FEATURE_LANG: &str = "lang";
+
 impl FromGame {
     /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
     /// feature.
@@ -281,7 +292,7 @@ pub enum CallAnswer {
 #[serde(tag = "t", rename_all = "kebab-case")]
 pub enum ToGame {
     /// The handshake's answer. Comes again (followed by a `snapshot`) when the account, the
-    /// features or the reduced-motion choice change mid-session.
+    /// features, the reduced-motion choice or the overlay's language change mid-session.
     Welcome {
         proto: u32,
         launcher: String,
@@ -291,6 +302,11 @@ pub enum ToGame {
         reduced_motion: bool,
         /// What works now: `friends` (signed in), `chat`, `calls`. Empty: not signed in.
         features: Vec<String>,
+        /// OVL-LANG (G3): the language the overlay shows (`tr`, `en`): the player's pick in its
+        /// settings, else the launcher's own. Everything the launcher words for this mod follows
+        /// it. Only to a mod that said `lang`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lang: Option<pl_lang::Lang>,
     },
     Snapshot {
         friends: Vec<FriendView>,
@@ -689,7 +705,7 @@ pub struct MsgView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid: Option<String>,
     pub from: String,
-    /// A sticker's words ("[Çıkartma: GG]", in the game's language) for a mod that cannot draw it.
+    /// A sticker's words ("[Çıkartma: GG]", in the overlay's language) for a mod that cannot draw it.
     pub text: String,
     /// Unix time in milliseconds.
     pub at: i64,
@@ -848,7 +864,7 @@ pub enum ToastKind {
     /// `title` is the sender, `body` the text (the mod hides it when the player turned message
     /// text off in its settings).
     Message,
-    /// A crew call: `title` is the crew, `body` the caller; the mod words it in the game's language.
+    /// A crew call: `title` is the crew, `body` the caller; the mod words it in its own language.
     Call,
     /// "Play together": `title` is the friend; the mod words it.
     Invite,
@@ -1029,6 +1045,48 @@ mod tests {
             connect,
             serde_json::json!({"t":"connect","id":"1","host":"play.projects.gg","port":25565})
         );
+    }
+
+    #[test]
+    fn the_overlays_language_reads_and_writes_as_the_log_says() {
+        // G4: the player's pick from the game.
+        let pick: FromGame = serde_json::from_str(r#"{"t":"lang","lang":"en"}"#).unwrap();
+        assert_eq!(pick, FromGame::Lang { lang: "en".into() });
+        let bare: FromGame = serde_json::from_str(r#"{"t":"lang"}"#).unwrap();
+        assert_eq!(
+            bare,
+            FromGame::Lang {
+                lang: String::new()
+            }
+        );
+        // G3: the welcome names the language only when there is one to name (a mod that said
+        // `lang`); an older mod's welcome stays exactly as it was.
+        let welcome = |lang| ToGame::Welcome {
+            proto: PROTO,
+            launcher: "t".into(),
+            me: Me {
+                name: "Ece".into(),
+                badge: None,
+            },
+            dnd: false,
+            reduced_motion: false,
+            features: Vec::new(),
+            lang,
+        };
+        assert_eq!(
+            serde_json::to_value(welcome(Some(pl_lang::Lang::En))).unwrap()["lang"],
+            "en"
+        );
+        assert_eq!(
+            serde_json::to_value(welcome(Some(pl_lang::Lang::Tr))).unwrap()["lang"],
+            "tr"
+        );
+        assert_eq!(
+            serde_json::to_value(welcome(None)).unwrap(),
+            serde_json::json!({"t":"welcome","proto":1,"launcher":"t","me":{"name":"Ece"},"dnd":false,
+                "reducedMotion":false,"features":[]})
+        );
+        assert_eq!(FEATURE_LANG, "lang");
     }
 
     #[test]

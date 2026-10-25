@@ -27,6 +27,9 @@ use crate::token::SessionToken;
 /// JVM argument prefixes the mod reads (`-Dprojects.overlay.port=…`, `-Dprojects.overlay.token=…`).
 pub const PORT_ARG: &str = "-Dprojects.overlay.port=";
 pub const TOKEN_ARG: &str = "-Dprojects.overlay.token=";
+/// OVL-LANG (G2): the overlay's language as the game starts (`tr`, `en`), so the mod shows it from
+/// its first frame, before the bridge has said anything.
+pub const LANG_ARG: &str = "-Dprojects.overlay.lang=";
 
 /// Whether a launch argument carries the session token and must be masked in logs.
 pub fn is_secret_jvm_arg(arg: &str) -> bool {
@@ -37,6 +40,8 @@ pub fn is_secret_jvm_arg(arg: &str) -> bool {
 pub struct Endpoint {
     port: u16,
     token: SessionToken,
+    /// The overlay's language at the start ([`LANG_ARG`]); none for a bare bridge.
+    lang: Option<pl_lang::Lang>,
 }
 
 impl Endpoint {
@@ -44,12 +49,25 @@ impl Endpoint {
         self.port
     }
 
-    /// The two JVM arguments for the game's command line.
-    pub fn jvm_args(&self) -> [String; 2] {
-        [
+    /// The JVM arguments for the game's command line: the port, the token and, when the overlay
+    /// has one, its language.
+    pub fn jvm_args(&self) -> Vec<String> {
+        let mut args = vec![
             format!("{PORT_ARG}{}", self.port),
             format!("{TOKEN_ARG}{}", self.token.expose()),
-        ]
+        ];
+        if let Some(lang) = self.lang {
+            args.push(format!("{LANG_ARG}{}", lang.code()));
+        }
+        args
+    }
+
+    /// The same endpoint for a game whose overlay starts in `lang`.
+    pub(crate) fn speaking(self, lang: pl_lang::Lang) -> Self {
+        Self {
+            lang: Some(lang),
+            ..self
+        }
     }
 
     /// The token's value, for the launch command's list of values to mask in logs. Never log it.
@@ -216,7 +234,11 @@ impl Bridge {
                 listener,
                 token: token.clone(),
             },
-            Endpoint { port, token },
+            Endpoint {
+                port,
+                token,
+                lang: None,
+            },
         ))
     }
 
@@ -516,6 +538,7 @@ mod tests {
             dnd: false,
             reduced_motion: false,
             features: vec!["chat".into()],
+            lang: None,
         }
     }
 
@@ -790,7 +813,7 @@ mod tests {
     #[tokio::test]
     async fn jvm_args_carry_port_and_token_and_are_redactable() {
         let h = start().await;
-        let [port, token] = h.endpoint.jvm_args();
+        let [port, token] = h.endpoint.jvm_args().try_into().unwrap();
         assert_eq!(port, format!("{PORT_ARG}{}", h.endpoint.port()));
         assert!(token.starts_with(TOKEN_ARG));
         assert_eq!(token.len(), TOKEN_ARG.len() + 43);
@@ -798,6 +821,12 @@ mod tests {
         assert!(is_secret_jvm_arg(&token));
         assert!(!is_secret_jvm_arg(&port));
         assert!(!format!("{:?}", h.endpoint).contains(h.endpoint.secret()));
+        // OVL-LANG (G2): the overlay's language rides along, never a secret.
+        let english = h.endpoint.speaking(pl_lang::Lang::En);
+        let args = english.jvm_args();
+        assert_eq!(args.len(), 3);
+        assert_eq!(args[2], "-Dprojects.overlay.lang=en");
+        assert!(!is_secret_jvm_arg(&args[2]));
     }
 
     #[test]

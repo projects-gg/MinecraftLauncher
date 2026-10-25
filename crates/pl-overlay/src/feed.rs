@@ -18,6 +18,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use pl_lang::Lang;
 use pl_social::{
     ActivityView, AuthPhase, CallAnswer as SocialAnswer, CardState, ChatChangeView, ChatExtrasView,
     ChatMessageView, ChatPage, Connection, CrewBadgeView, GameLocation, MeView, MessageState,
@@ -792,8 +793,9 @@ impl Scene {
     }
 
     /// The name a message shows for its sender: as the lists know them, else the conversation's
-    /// title for a direct conversation (the sender is the other one), else "someone".
-    pub(crate) fn sender(&self, conv: &str, from: &str) -> String {
+    /// title for a direct conversation (the sender is the other one), else "someone" in the
+    /// overlay's language.
+    pub(crate) fn sender(&self, conv: &str, from: &str, english: bool) -> String {
         if let Some(name) = self.name_of(from) {
             return name.to_owned();
         }
@@ -803,7 +805,7 @@ impl Scene {
         {
             return conv.title.clone();
         }
-        pl_lang::pick("Biri", "Someone").to_owned()
+        if english { "Someone" } else { "Biri" }.to_owned()
     }
 }
 
@@ -816,12 +818,16 @@ struct Identity {
     me_badge: Option<String>,
     features: Vec<String>,
     reduced_motion: bool,
+    /// The overlay's language (OVL-LANG): another one greets again.
+    lang: Option<Lang>,
 }
 
 /// What the live connection was told, for the next differences.
 #[derive(Debug, Clone, Default)]
 pub struct Mirror {
     identity: Option<Identity>,
+    /// The language the mod's words follow (OVL-LANG: `lang` in its hello), none for an older mod.
+    lang: Option<Lang>,
     friends: BTreeMap<String, FriendView>,
     convs: BTreeMap<String, ConvView>,
     calls: BTreeMap<String, CallView>,
@@ -848,6 +854,12 @@ impl Mirror {
         }
     }
 
+    /// The language the mod's words follow from now on (OVL-LANG; a mod whose hello lists
+    /// `lang`): another one than the greeting named greets again in the next update.
+    pub fn set_lang(&mut self, lang: Option<Lang>) {
+        self.lang = lang;
+    }
+
     /// `welcome` and `snapshot`: everything after a handshake or a change of account. A mod that
     /// draws tags hears every card first (`badges`, the whole set) and the crews' join lines after.
     pub fn greet(&mut self, scene: &Scene, launcher: &str, reduced_motion: bool) -> Vec<ToGame> {
@@ -861,6 +873,7 @@ impl Mirror {
                 Vec::new()
             },
             reduced_motion,
+            lang: self.lang,
         };
         let welcome = ToGame::Welcome {
             proto: PROTO,
@@ -872,12 +885,15 @@ impl Mirror {
             dnd: scene.dnd,
             reduced_motion,
             features: identity.features.clone(),
+            lang: identity.lang,
         };
         let (friends, convs, calls) = fitting_snapshot(scene);
         let tags = self.tags;
         let people2 = self.people2;
+        let lang = self.lang;
         *self = Self {
             identity: Some(identity),
+            lang,
             friends: friends.iter().map(|f| (f.id.clone(), f.clone())).collect(),
             convs: convs.iter().map(|c| (c.id.clone(), c.clone())).collect(),
             calls: calls.iter().map(|c| (c.id.clone(), c.clone())).collect(),
@@ -926,6 +942,7 @@ impl Mirror {
                 || known.me != scene.me
                 || known.me_badge != scene.me_badge
                 || known.reduced_motion != reduced_motion
+                || known.lang != self.lang
                 || (if scene.signed_in {
                     known.features != scene.features
                 } else {
@@ -1076,8 +1093,9 @@ fn failure_of(failure: Option<SocialFailure>, listener: Listener) -> SendFailure
     }
 }
 
-/// Who hears the frames: the game's language (a sticker in words, for a mod that cannot draw it)
-/// and whether the mod knows CHAT2 (`chat2` in its hello: it hears the precise reasons).
+/// Who hears the frames: the overlay's language (the words the launcher writes for it: a sticker
+/// in words, a sender nobody named) and whether the mod knows CHAT2 (`chat2` in its hello: it hears
+/// the precise reasons).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Listener {
     pub english: bool,
@@ -1085,11 +1103,15 @@ pub struct Listener {
 }
 
 impl Listener {
-    /// From the mod's hello: its language (`tr_tr`, `en_us`; the launcher's own when it says
-    /// none) and its features.
-    pub fn from_hello(language: &str, features: &[String]) -> Self {
-        let english = if language.trim().is_empty() {
-            pl_lang::pick("tr", "en") == "en"
+    /// From the mod's hello: its features and its language. A mod whose words follow the launcher
+    /// (OVL-LANG: `lang` among its features) shows `overlay`, the overlay's language; an older one
+    /// says its own (the game's: `tr_tr`, `en_us`; `overlay` when it says none).
+    pub fn from_hello(language: &str, features: &[String], overlay: Lang) -> Self {
+        let follows = features
+            .iter()
+            .any(|feature| feature == crate::protocol::FEATURE_LANG);
+        let english = if follows || language.trim().is_empty() {
+            overlay == Lang::En
         } else {
             !language.trim().to_ascii_lowercase().starts_with("tr")
         };
@@ -1185,7 +1207,7 @@ pub fn msg_view(
             } else if mine {
                 scene.me.clone()
             } else {
-                scene.sender(conv, &reply.from)
+                scene.sender(conv, &reply.from, listener.english)
             },
             mine,
             text: reply
@@ -1227,7 +1249,7 @@ pub fn msg_view(
         from: if message.mine {
             scene.me.clone()
         } else {
-            scene.sender(conv, &message.from)
+            scene.sender(conv, &message.from, listener.english)
         },
         text,
         at: message.at,
@@ -1428,7 +1450,7 @@ pub fn toast_of(
                 .map(|id| (id, scene.crew_name(id).unwrap_or_default()));
             let from = name
                 .clone()
-                .unwrap_or_else(|| scene.sender(conv, &message.from));
+                .unwrap_or_else(|| scene.sender(conv, &message.from, listener.english));
             // A sticker is told in words ("Çıkartma · GG"); a mod that knows it draws it too.
             let text = match &message.sticker {
                 Some(sticker) => sticker_words(sticker, listener.english),
@@ -2659,13 +2681,58 @@ pub(crate) mod tests {
         let quiet = Scene::from_view(&view(), &NotifyPrefs::default(), NOW);
         assert!(!wants_card(&m, &quiet, NOW), "links off");
         assert_eq!(
-            Listener::from_hello("en_us", &["connect".into(), "chat2".into()]),
+            Listener::from_hello("en_us", &["connect".into(), "chat2".into()], Lang::Tr),
             Listener {
                 english: true,
                 chat2: true
             }
         );
-        assert_eq!(Listener::from_hello("tr_tr", &[]), Listener::default());
+        assert_eq!(
+            Listener::from_hello("tr_tr", &[], Lang::En),
+            Listener::default()
+        );
+    }
+
+    /// OVL-LANG: a mod whose words follow the launcher hears the overlay's language whatever its
+    /// game speaks; an older one keeps the game's (the overlay's only when its hello names none).
+    #[test]
+    fn the_launchers_words_follow_the_overlays_language() {
+        let follows: Vec<String> = vec!["chat2".into(), "lang".into()];
+        assert!(Listener::from_hello("tr_tr", &follows, Lang::En).english);
+        assert!(!Listener::from_hello("en_us", &follows, Lang::Tr).english);
+        assert!(Listener::from_hello("", &[], Lang::En).english);
+        assert!(Listener::from_hello("de_de", &[], Lang::Tr).english);
+        // A sender nobody named, in the overlay's words.
+        let scene = Scene::from_view(&view(), &NotifyPrefs::default(), NOW);
+        assert_eq!(scene.sender("t:t1", "u-nobody", false), "Biri");
+        assert_eq!(scene.sender("t:t1", "u-nobody", true), "Someone");
+        // The greeting names the language only for a mod that follows it, and another language
+        // greets again.
+        let mut old = Mirror::for_mod(false, false);
+        let greeting = old.greet(&scene, "2.0.0", false);
+        assert!(matches!(greeting[0], ToGame::Welcome { lang: None, .. }));
+        let mut mirror = Mirror::for_mod(false, false);
+        mirror.set_lang(Some(Lang::Tr));
+        let greeting = mirror.greet(&scene, "2.0.0", false);
+        assert!(matches!(
+            greeting[0],
+            ToGame::Welcome {
+                lang: Some(Lang::Tr),
+                ..
+            }
+        ));
+        assert!(mirror.update(&scene, "2.0.0", false).is_empty());
+        mirror.set_lang(Some(Lang::En));
+        let again = mirror.update(&scene, "2.0.0", false);
+        assert!(matches!(
+            again[0],
+            ToGame::Welcome {
+                lang: Some(Lang::En),
+                ..
+            }
+        ));
+        assert!(matches!(again.last(), Some(ToGame::Snapshot { .. })));
+        assert!(mirror.update(&scene, "2.0.0", false).is_empty());
     }
 
     pub fn card(crew: &str, tag: &str, name: &str) -> Box<CrewBadgeView> {

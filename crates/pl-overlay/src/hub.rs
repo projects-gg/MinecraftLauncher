@@ -7,10 +7,12 @@
 //! the launcher quitting or the switch turning off end it ([`Overlay::stop`]).
 
 use std::io;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use pl_lang::Lang;
 use pl_social::SocialUpdate;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
@@ -20,12 +22,29 @@ use crate::policy::NotifyPrefs;
 use crate::protocol::{ByeReason, ToGame};
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
-    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, Msg, PeopleChange, PeopleFn, Session,
-    SocialActions,
+    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, LangFn, Msg, PeopleChange, PeopleFn,
+    Session, SocialActions,
 };
 
 /// How long [`Overlay::stop`] waits for the goodbye to leave.
 const STOP_WAIT: Duration = Duration::from_secs(1);
+
+/// OVL-LANG: the file in the launcher's data folder that keeps the language the player picked in
+/// the overlay's settings (`tr`, `en`; `auto` or none: the launcher's own language). One choice for
+/// every install and Minecraft version, kept between games and launcher starts.
+pub const LANGUAGE_FILE: &str = "overlay-language";
+
+/// The overlay's language pick kept in `dir` ([`LANGUAGE_FILE`]); `None`: the player never picked
+/// (or the file cannot be read), so the overlay speaks the launcher's language.
+pub fn read_language_pick(dir: &Path) -> Option<Lang> {
+    pl_lang::read_pick(&dir.join(LANGUAGE_FILE))
+}
+
+/// Keeps the overlay's language pick in `dir` (written only when it changed, through a temporary
+/// file, so a crash never leaves half of it).
+pub fn write_language_pick(dir: &Path, pick: Option<Lang>) -> io::Result<()> {
+    pl_lang::write_pick(&dir.join(LANGUAGE_FILE), pick)
+}
 
 /// The player's choices that reach the overlay (Settings → Genel "Oyun içi katman", the friends
 /// notification choices, Hareketi azalt). The page pushes them at its start and on every change;
@@ -69,6 +88,10 @@ type DiscordSink = Arc<dyn Fn(String, String) + Send + Sync>;
 /// favourites and "Çevrimiçi olunca bildir", which the launcher's page keeps.
 type PeopleSink = Arc<dyn Fn(PeopleChange) + Send + Sync>;
 
+/// Hears the language the player picked in the overlay's settings (OVL-LANG): the launcher keeps
+/// it ([`write_language_pick`]).
+type LangSink = Arc<dyn Fn(Lang) + Send + Sync>;
+
 struct Running {
     id: u64,
     /// The bridge's port: names the session for [`Overlay::stop_for`].
@@ -81,6 +104,17 @@ struct Inner {
     running: Option<Running>,
     /// What world sharing shows in every session (HOST1).
     worlds: WorldsShown,
+    /// OVL-LANG: the language the player picked in the overlay's settings (none: the launcher's).
+    lang_pick: Option<Lang>,
+    /// The launcher's own language (Settings → Dil, else the automatic one).
+    launcher_lang: Lang,
+}
+
+impl Inner {
+    /// The overlay's language: the player's pick in it, else the launcher's.
+    fn language(&self) -> Lang {
+        self.lang_pick.unwrap_or(self.launcher_lang)
+    }
 }
 
 struct Shared {
@@ -94,6 +128,8 @@ struct Shared {
     discord: Mutex<Option<DiscordSink>>,
     /// Favourites and online notices changed from the game (OVL-UX2).
     people: Mutex<Option<PeopleSink>>,
+    /// The overlay's language picked in the game (OVL-LANG).
+    lang: Mutex<Option<LangSink>>,
 }
 
 /// Cheap to clone; the launcher keeps one.
@@ -118,6 +154,8 @@ impl Overlay {
                     config,
                     running: None,
                     worlds: WorldsShown::default(),
+                    lang_pick: None,
+                    launcher_lang: Lang::default(),
                 }),
                 next: AtomicU64::new(1),
                 connected: AtomicBool::new(false),
@@ -125,6 +163,7 @@ impl Overlay {
                 host: Mutex::new(None),
                 discord: Mutex::new(None),
                 people: Mutex::new(None),
+                lang: Mutex::new(None),
             }),
         }
     }
@@ -143,6 +182,77 @@ impl Overlay {
     /// "Oyun içi katman" is on.
     pub fn enabled(&self) -> bool {
         self.lock().config.enabled
+    }
+
+    /// OVL-LANG: the overlay's language: the player's pick in its settings, else the launcher's.
+    /// The game starts in it ([`crate::LANG_ARG`]) and the launcher words everything it writes
+    /// for the mod in it.
+    pub fn language(&self) -> Lang {
+        self.lock().language()
+    }
+
+    /// The language the player picked in the overlay's settings (`None`: they never did).
+    pub fn language_pick(&self) -> Option<Lang> {
+        self.lock().lang_pick
+    }
+
+    /// The pick as the launcher kept it ([`read_language_pick`]), at its start. Nobody hears it
+    /// back.
+    pub fn set_language_pick(&self, pick: Option<Lang>) {
+        let mut inner = self.lock();
+        let before = inner.language();
+        inner.lang_pick = pick;
+        Self::tell_language(&inner, before);
+    }
+
+    /// The launcher's own language, at its start and whenever the player changes it there: the
+    /// overlay follows it while the player has picked none in the game.
+    pub fn set_launcher_language(&self, lang: Lang) {
+        let mut inner = self.lock();
+        let before = inner.language();
+        inner.launcher_lang = lang;
+        Self::tell_language(&inner, before);
+    }
+
+    /// The running session hears the overlay's language when it is no longer `before`.
+    fn tell_language(inner: &Inner, before: Lang) {
+        let now = inner.language();
+        if now != before
+            && let Some(running) = &inner.running
+        {
+            let _ = running.msgs.send(Msg::Language(now));
+        }
+    }
+
+    /// The language the player picks in the overlay's settings (OVL-LANG): `sink` keeps it
+    /// ([`write_language_pick`]). The overlay speaks it at once.
+    pub fn on_language(&self, sink: impl Fn(Lang) + Send + Sync + 'static) {
+        *self
+            .shared
+            .lang
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// A session's mod picked the overlay's language: it holds from now on (the sessions that
+    /// start later too), then the launcher keeps it. Only the running session counts.
+    fn language_picked(&self, session: u64, lang: Lang) {
+        {
+            let mut inner = self.lock();
+            if inner.running.as_ref().map(|running| running.id) != Some(session) {
+                return;
+            }
+            inner.lang_pick = Some(lang);
+        }
+        let sink = self
+            .shared
+            .lang
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if let Some(sink) = sink {
+            sink(lang);
+        }
     }
 
     /// The page's choices. A session running now follows them; turning the overlay off ends it
@@ -248,15 +358,17 @@ impl Overlay {
         let (control, control_rx) = mpsc::unbounded_channel();
         let (events_tx, events) = mpsc::unbounded_channel();
         let (msgs, msgs_rx) = mpsc::unbounded_channel();
-        let (config, worlds) = {
+        let (config, worlds, lang) = {
             let mut inner = self.lock();
             inner.running = Some(Running {
                 id,
                 port: endpoint.port(),
                 msgs: msgs.clone(),
             });
-            (inner.config.clone(), inner.worlds.clone())
+            (inner.config.clone(), inner.worlds.clone(), inner.language())
         };
+        // The game starts in the overlay's language (G2).
+        let endpoint = endpoint.speaking(lang);
         let hub = self.clone();
         let connected: ConnectedFn = Arc::new(move |on| hub.report(id, on, false));
         let hub = self.clone();
@@ -265,8 +377,20 @@ impl Overlay {
         let discord: DiscordFn = Arc::new(move |friend, url| hub.open_discord(friend, url));
         let hub = self.clone();
         let people: PeopleFn = Arc::new(move |change| hub.people_change(id, change));
+        let hub = self.clone();
+        let picked: LangFn = Arc::new(move |lang| hub.language_picked(id, lang));
         let session = Session::new(
-            social, launcher, config, control, connected, host, worlds, game, discord, people,
+            social,
+            launcher,
+            config,
+            control,
+            connected,
+            host,
+            worlds,
+            game,
+            discord,
+            people,
+            (lang, picked),
         );
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));
@@ -504,6 +628,49 @@ mod tests {
         )
         .unwrap();
         assert!(!config.enabled && config.reduced_motion && config.notify.crew_chat);
+    }
+
+    #[test]
+    fn the_overlays_language_is_the_players_pick_else_the_launchers() {
+        let overlay = Overlay::new(OverlayConfig::default());
+        assert_eq!(overlay.language(), Lang::Tr);
+        overlay.set_launcher_language(Lang::En);
+        assert_eq!(overlay.language(), Lang::En, "it follows the launcher");
+        assert_eq!(overlay.language_pick(), None);
+        overlay.set_language_pick(Some(Lang::Tr));
+        assert_eq!(overlay.language(), Lang::Tr);
+        overlay.set_launcher_language(Lang::Tr);
+        overlay.set_launcher_language(Lang::En);
+        assert_eq!(
+            overlay.language(),
+            Lang::Tr,
+            "a pick holds, whatever the launcher speaks"
+        );
+        overlay.set_language_pick(None);
+        assert_eq!(overlay.language(), Lang::En);
+    }
+
+    #[test]
+    fn the_pick_is_kept_in_the_data_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(read_language_pick(dir.path()), None, "never picked");
+        write_language_pick(dir.path(), Some(Lang::En)).unwrap();
+        assert_eq!(read_language_pick(dir.path()), Some(Lang::En));
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join(LANGUAGE_FILE)).unwrap(),
+            "en"
+        );
+        write_language_pick(dir.path(), Some(Lang::Tr)).unwrap();
+        assert_eq!(read_language_pick(dir.path()), Some(Lang::Tr));
+        write_language_pick(dir.path(), None).unwrap();
+        assert_eq!(read_language_pick(dir.path()), None);
+        std::fs::write(dir.path().join(LANGUAGE_FILE), "\u{0}garbage").unwrap();
+        assert_eq!(
+            read_language_pick(dir.path()),
+            None,
+            "unreadable: the launcher's"
+        );
+        assert!(!dir.path().join("overlay-language.tmp").exists());
     }
 
     #[test]

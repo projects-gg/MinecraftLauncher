@@ -1589,3 +1589,105 @@ async fn a_crewmates_katil_and_discord_reach_crew_chats_menu() {
     assert_eq!(opened.lock().unwrap().len(), 1);
     overlay.stop(ByeReason::LauncherExit).await;
 }
+
+/// OVL-LANG: the overlay speaks the launcher's language until the player picks one in its settings;
+/// the pick holds for this game and the next, and everything the launcher words for the mod
+/// follows it. An older mod keeps its game's language and cannot pick.
+#[tokio::test]
+async fn the_overlay_speaks_the_launchers_language_until_the_player_picks_one() {
+    use pl_lang::Lang;
+    use serde_json::json;
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    overlay.set_launcher_language(Lang::En);
+    let picks = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&picks);
+    overlay.on_language(move |lang| sink.lock().unwrap().push(lang));
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    // G2: the game starts in it.
+    assert!(
+        endpoint
+            .jvm_args()
+            .contains(&format!("{}en", crate::LANG_ARG))
+    );
+
+    // An older mod: its welcome names no language, the launcher words for it in its game's
+    // language, and a pick from it changes nothing.
+    let mut old = MockMod::connect_with(&endpoint, &["chat2"]).await;
+    assert!(old.next_of("welcome").await.get("lang").is_none());
+    old.send(json!({"t":"lang","lang":"en"})).await;
+    old.send(json!({"t":"open-conv","conv":"d:f-ayse:me"}))
+        .await;
+    assert_eq!(old.next_of("history").await["t"], "history");
+    assert!(picks.lock().unwrap().is_empty());
+    drop(old);
+
+    // G3: a mod whose words follow the launcher hears the overlay's language, here the launcher's.
+    let mut game = MockMod::connect_with(&endpoint, &["chat2", "lang"]).await;
+    assert_eq!(game.next_of("welcome").await["lang"], "en");
+    game.next_of("snapshot").await;
+    let sticker = |key: &str| {
+        let mut m = message(key, "f-ayse", false, MessageState::Sent);
+        m.sticker = Some("pl1/gg".into());
+        SocialUpdate::Notice(SocialNotice::ChatMessage {
+            conv: "d:f-ayse:me".into(),
+            message: Box::new(m),
+            name: Some("Ayşe".into()),
+            crew: None,
+        })
+    };
+    overlay.on_social(sticker("i:21"));
+    assert!(
+        game.next_of("toast").await["body"]
+            .as_str()
+            .unwrap()
+            .starts_with("Sticker")
+    );
+
+    // G4: the player picks Turkish in the game: a new greeting in it, the launcher keeps it.
+    game.send(json!({"t":"lang","lang":"tr"})).await;
+    let welcome = game.next_of("welcome").await;
+    assert_eq!(welcome["lang"], "tr");
+    game.next_of("snapshot").await;
+    assert_eq!(picks.lock().unwrap().as_slice(), [Lang::Tr]);
+    assert_eq!(overlay.language_pick(), Some(Lang::Tr));
+    overlay.on_social(sticker("i:22"));
+    assert!(
+        game.next_of("toast").await["body"]
+            .as_str()
+            .unwrap()
+            .starts_with("Çıkartma")
+    );
+    // The same pick again, a value that is no language, and the launcher changing its own
+    // language: the pick holds, nothing greets again.
+    game.send(json!({"t":"lang","lang":"tr"})).await;
+    game.send(json!({"t":"lang","lang":"de"})).await;
+    overlay.set_launcher_language(Lang::Tr);
+    overlay.set_launcher_language(Lang::En);
+    game.send(json!({"t":"open-conv","conv":"d:f-ayse:me"}))
+        .await;
+    assert_eq!(
+        game.next().await.unwrap()["t"],
+        "history",
+        "no greeting first"
+    );
+    assert_eq!(
+        picks.lock().unwrap().len(),
+        2,
+        "the same pick is kept again"
+    );
+
+    // Without a pick the overlay follows the launcher again, at once.
+    overlay.set_language_pick(None);
+    assert_eq!(game.next_of("welcome").await["lang"], "en");
+    overlay.set_launcher_language(Lang::Tr);
+    assert_eq!(game.next_of("welcome").await["lang"], "tr");
+    overlay.stop(ByeReason::LauncherExit).await;
+
+    // The next game starts in the language that holds now.
+    overlay.set_language_pick(Some(Lang::En));
+    let next = overlay.start(social, "t").await.unwrap();
+    assert!(next.jvm_args().contains(&format!("{}en", crate::LANG_ARG)));
+    overlay.stop(ByeReason::LauncherExit).await;
+}
