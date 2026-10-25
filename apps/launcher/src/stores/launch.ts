@@ -421,8 +421,10 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           announceVersionDropped(instanceId, event.minecraft, event.recommended);
           break;
         case "worldFromTitle":
-          // The game opens on its main menu instead of the world (OVL-FIX): said once, why and what to do.
-          toast(i18n.t("worldEntry.fromTitle", { mods: event.mods.join(", ") }));
+          // The game opens on its main menu instead of the world (OVL-FIX): what to do, and why under it.
+          toast.info(i18n.t("worldEntry.fromTitle"), {
+            description: i18n.t("worldEntry.fromTitleWhy", { mods: event.mods.join(", ") }),
+          });
           break;
       }
     };

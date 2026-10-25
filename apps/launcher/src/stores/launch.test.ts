@@ -15,7 +15,7 @@ vi.mock("@/features/accounts/afk-guard", () => ({
   confirmAfkBeforePlay: () => confirm(),
 }));
 vi.mock("@pl/ui", () => ({
-  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: vi.fn() }));
 vi.mock("@/lib/sound", () => ({ playSound: vi.fn() }));
@@ -150,15 +150,16 @@ describe("the game opening (PLAY1)", () => {
 });
 
 describe('"Devam et" into a world from the main menu (OVL-FIX)', () => {
-  it("says once why the game opens on its main menu, and the launch goes on", async () => {
+  it("says what to do and why when the game opens on its main menu, and the launch goes on", async () => {
     useLaunch.setState({ phase: { kind: "idle" }, instanceId: null });
     const { toast } = await import("@pl/ui");
-    const shown = vi.mocked(toast);
+    const shown = vi.mocked(toast.info);
     shown.mockClear();
     const send = await startLaunch();
     send({ type: "worldFromTitle", mods: ["Remove Reloading Screen"] });
     expect(shown).toHaveBeenCalledTimes(1);
     expect(shown.mock.calls[0]?.[0]).toBe("worldEntry.fromTitle");
+    expect(shown.mock.calls[0]?.[1]).toEqual({ description: "worldEntry.fromTitleWhy" });
     send({ type: "launching" });
     expect(isOpening(useLaunch.getState().phase)).toBe(true);
   });
