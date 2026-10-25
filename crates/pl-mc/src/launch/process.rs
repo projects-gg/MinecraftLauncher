@@ -299,6 +299,18 @@ impl GameProcess {
         options: SpawnOptions,
         on_event: GameEventFn,
     ) -> Result<Self> {
+        Self::spawn_draining(command, options, DRAIN_TIMEOUT, on_event).await
+    }
+
+    /// [`Self::spawn`], reading the output for up to `drain` once the process has exited. Tests
+    /// that check the last lines a process printed give it longer than a loaded machine takes to
+    /// read them: the 5 s ran out there, and lines still in the pipes were lost.
+    async fn spawn_draining(
+        command: &LaunchCommand,
+        options: SpawnOptions,
+        drain: Duration,
+        on_event: GameEventFn,
+    ) -> Result<Self> {
         tokio::fs::create_dir_all(&command.cwd)
             .await
             .map_err(|e| Error::io(&command.cwd, e))?;
@@ -371,6 +383,7 @@ impl GameProcess {
             kill: kill.clone(),
             shared: Arc::clone(&shared),
             readers,
+            drain,
             exit: tx,
             started,
             started_at,
@@ -553,6 +566,8 @@ struct Supervision {
     kill: CancellationToken,
     shared: Arc<Shared>,
     readers: Vec<JoinHandle<()>>,
+    /// How long the readers may still take once the process has exited ([`DRAIN_TIMEOUT`]).
+    drain: Duration,
     exit: tokio::sync::watch::Sender<Option<GameExit>>,
     started: Instant,
     started_at: SystemTime,
@@ -631,7 +646,7 @@ async fn supervise(mut s: Supervision) {
     let on_screen = (*s.shared.shown_after.lock()).map(|after| runtime.saturating_sub(after));
     for reader in s.readers {
         let abort = reader.abort_handle();
-        if tokio::time::timeout(DRAIN_TIMEOUT, reader).await.is_err() {
+        if tokio::time::timeout(s.drain, reader).await.is_err() {
             abort.abort();
         }
     }
@@ -761,12 +776,12 @@ mod tests {
         let command = LaunchCommand::for_tests(program, args, tmp.path().join("game"))
             .with_player_jvm_options(player);
         assert_eq!(command.player_jvm_options(), ["-XX:+UseFancyThing"]);
-        // "At once": the exit is told right after the JVM's last line, without waiting out the
-        // pipes' drain. Counted between those two events, not from the start: starting a process
-        // (a fresh script the virus scanner reads first) took 5 s on a busy machine.
+        // "At once": the exit is told right after the JVM's last line, once its pipes close, not
+        // when the drain runs out. Counted between those two events, not from the start: starting
+        // a process (a fresh script the virus scanner reads first) took 5 s on a busy machine.
         let times = Arc::new(Mutex::new((None::<Instant>, None::<Instant>)));
         let seen = Arc::clone(&times);
-        let process = GameProcess::spawn(
+        let process = GameProcess::spawn_draining(
             &command,
             SpawnOptions {
                 instance_id: "jvm".into(),
@@ -774,6 +789,7 @@ mod tests {
                 max_memory_mb: Some(4096),
                 ..SpawnOptions::default()
             },
+            SLOW_DRAIN,
             Arc::new(move |event| {
                 let mut seen = seen.lock();
                 match event {
@@ -802,13 +818,19 @@ mod tests {
         let since = exited
             .expect("the exit was told")
             .duration_since(last_line.expect("the JVM's lines were read"));
-        assert!(since < DRAIN_TIMEOUT, "{since:?}");
+        assert!(since < SLOW_DRAIN, "the drain ran out: {since:?}");
     }
 
     /// Deadline of a wait for a real process: it only runs out when something is broken (on a
     /// loaded machine a fake game that lived 2 s once took more than 20 s to be reported; beside a
     /// busy-loop on 12 of 16 threads, real-process tests ran some 30 times slower).
     const DEADLINE: Duration = Duration::from_secs(300);
+
+    /// Drain of the tests that check the last lines a process printed before it exited: longer
+    /// than a loaded machine takes to read them (beside a busy-loop on 12 of 16 threads the
+    /// production 5 s ran out and a line still in the pipe was lost), shorter than [`DEADLINE`],
+    /// so a drain that is waited out fails on its own.
+    const SLOW_DRAIN: Duration = Duration::from_secs(120);
 
     /// Checks `condition` until it holds, failing after [`DEADLINE`].
     async fn eventually(what: &str, condition: impl Fn() -> bool) {
@@ -1132,7 +1154,7 @@ mod tests {
         let command = LaunchCommand::for_tests(script.0, script.1, game_dir.clone());
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&events);
-        let process = GameProcess::spawn(
+        let process = GameProcess::spawn_draining(
             &command,
             SpawnOptions {
                 instance_id: "test".into(),
@@ -1140,11 +1162,14 @@ mod tests {
                 max_memory_mb: Some(4096),
                 ..SpawnOptions::default()
             },
+            SLOW_DRAIN,
             Arc::new(move |event| sink.lock().push(event)),
         )
         .await
         .unwrap();
-        let exit = process.wait().await;
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
+            .await
+            .unwrap();
         assert_eq!(exit.code, Some(1));
         assert!(!exit.killed);
         let crash = exit.crash.unwrap();
@@ -1190,18 +1215,21 @@ mod tests {
         let command = LaunchCommand::for_tests(program, args, tmp.path().join("game"));
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&events);
-        let process = GameProcess::spawn(
+        let process = GameProcess::spawn_draining(
             &command,
             SpawnOptions {
                 instance_id: "mask".into(),
                 logs_dir: tmp.path().join("logs"),
                 ..SpawnOptions::default()
             },
+            SLOW_DRAIN,
             Arc::new(move |event| sink.lock().push(event)),
         )
         .await
         .unwrap();
-        let exit = process.wait().await;
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
+            .await
+            .unwrap();
         let saved = std::fs::read_to_string(exit.log_file.unwrap()).unwrap();
         let shown: Vec<String> = events
             .lock()
