@@ -61,13 +61,14 @@ interface Sheet {
 const FILL: CSSProperties = { position: "absolute", inset: 0 };
 
 /**
- * The edge of icons whose outline melts into our dark slots: one texel wide, hard and on the
- * game's pixel grid (four unblurred shadows a texel out), in a quiet tone a step above the slot.
- * Opaque, so the corners match the sides; a light surface turns it off with `transparent`.
+ * The edge of icons whose outline is near-black on our dark slots: one texel wide, hard and on the
+ * game's pixel grid (four unblurred shadows a texel out), in a tone only a few steps above the
+ * darkest card (L* 16 on 9), so it separates without reading as a frame or a selection. Opaque, so
+ * the corners match the sides; a light surface turns it off with `transparent`.
  */
 function rim(size: number): string {
   const t = size / 16;
-  const color = "var(--pl-item-rim, #3a3340)";
+  const color = "var(--pl-item-rim, #2c2733)";
   return [`${t}px 0`, `${-t}px 0`, `0 ${t}px`, `0 ${-t}px`]
     .map((offset) => `drop-shadow(${offset} 0 ${color})`)
     .join(" ");
@@ -133,26 +134,27 @@ function mask(sheet: Sheet, rects: readonly Rect[], size: number): CSSProperties
   };
 }
 
-/** The stand-ins' light outline: what makes them read as a deliberate placeholder on any slot. */
-const GLYPH_OUTLINE = "#b3aa9d";
+/** The stand-ins' outline: dark, as the game's own items have (L* about 19). */
+const GLYPH_OUTLINE = "#322d29";
 
 /**
- * The stand-in drawings' tones: flat warm neutrals (body, detail and trim, light to dark) inside a
- * light one-texel outline, like the game's own empty-slot silhouettes; no texture, so they never
- * pass for a real material, and darker than the game's textures, so they never outshine them.
+ * The stand-in drawings' tones: flat neutral greys (body, detail and trim, light to dark; the body
+ * at L* about 55 with one lighter step for edges that catch the light) inside a dark one-texel
+ * outline. No texture, so they never pass for a real material; no bright outline, so they never
+ * outshine the real icons beside them.
  */
 const GLYPH_TONES: Readonly<Record<string, string>> = {
-  A: "#8f877c",
-  B: "#776f65",
-  C: "#635c54",
-  D: "#514b44",
-  E: "#403b36",
+  A: "#a39d95",
+  B: "#8a857e",
+  C: "#74706a",
+  D: "#5f5b56",
+  E: "#4a4743",
   F: GLYPH_OUTLINE,
-  a: "#a08f76",
-  b: "#877862",
-  c: "#6f634f",
-  d: "#5a5040",
-  e: "#463e31",
+  a: "#a8957a",
+  b: "#8e7d65",
+  c: "#766852",
+  d: "#615542",
+  e: "#4c4334",
   f: GLYPH_OUTLINE,
   "0": "#9a876f",
   "1": "#7c6b56",

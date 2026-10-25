@@ -1,5 +1,5 @@
 // The stand-in drawings for items with no icon yet (no atlas loaded, an unknown or custom item
-// outside its server): one quiet 16 x 16 drawing per category, flat neutral fills inside a light
+// outside its server): one quiet 16 x 16 drawing per category, flat neutral fills inside a dark
 // outline, in the proportions of the game's own items. Keys name a tone slot ("A"-"E" body,
 // "a"-"e" detail, "0"-"4" trim, light to dark; "F", "f" and "5" the outline), "." is nothing.
 

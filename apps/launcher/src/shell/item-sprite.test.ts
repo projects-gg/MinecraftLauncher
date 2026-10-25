@@ -404,7 +404,7 @@ describe("ItemSprite", () => {
   it("edges a dark icon by one hard texel, which a light surface can turn off", () => {
     const edge = (t: number) =>
       [`${t}px 0`, `-${t}px 0`, `0 ${t}px`, `0 -${t}px`]
-        .map((offset) => `drop-shadow(${offset} 0 var(--pl-item-rim, #3a3340))`)
+        .map((offset) => `drop-shadow(${offset} 0 var(--pl-item-rim, #2c2733))`)
         .join(" ");
     expect(render({ id: "obsidian", size: 32, art: art() })).toContain(`filter:${edge(2)}`);
     expect(render({ id: "obsidian", size: 16, art: art() })).toContain(`filter:${edge(1)}`);
@@ -412,12 +412,12 @@ describe("ItemSprite", () => {
     expect(render({ id: "stone", art: art() })).not.toContain("drop-shadow");
   });
 
-  it("draws the stand-ins flat inside a light outline, the same on every render", () => {
+  it("draws the stand-ins flat inside a dark outline, the same on every render", () => {
     const html = render({ id: "minecraft:unknown_block" });
     expect(render({ id: "minecraft:unknown_block" })).toBe(html);
     const fills = new Set([...html.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1]));
     // The outline, the lit top and its edge highlight, and the two shaded sides.
-    expect(fills).toContain("#b3aa9d");
+    expect(fills).toContain("#322d29");
     expect(fills.size).toBe(5);
   });
 
