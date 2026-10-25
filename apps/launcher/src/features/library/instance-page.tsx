@@ -7,7 +7,7 @@ import {
   MonitorPlay,
   Play,
 } from "@phosphor-icons/react";
-import { Button, Chip, IconButton, Menu, Skeleton, TabPanel, Tabs, Tooltip } from "@pl/ui";
+import { Button, IconButton, Menu, Skeleton, TabPanel, Tabs, Tooltip } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
@@ -136,13 +136,13 @@ export function InstancePage() {
       <header className="flex items-center gap-4">
         <InstanceIcon icon={data.icon} size={56} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2.5">
-            <h1 className="page-title truncate">{data.name}</h1>
-            {data.managed ? <Chip tone="gold">{t("instances.managed")}</Chip> : null}
-          </div>
+          <h1 className="page-title truncate">{data.name}</h1>
           {/* Said the way the command bar says it ("… oynandı", "Son oynama …"): bare figures
-              side by side read as one number. The loader's own version is on "Genel". */}
+              side by side read as one number. The loader's own version is on "Genel". "Resmî
+              paket" leads the line: a fact about the instance, not a pill beside its name
+              (projects-taste, SMALL11). */}
           <p className="mt-0.5 flex flex-wrap gap-x-3 text-[12.5px] text-ash-300 tabular-nums">
+            {data.managed ? <span>{t("instances.managed")}</span> : null}
             <span>
               {loader} {data.mcVersion}
             </span>

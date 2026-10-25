@@ -104,8 +104,9 @@ export function InstanceCard({
           <>
             <div className="flex items-start justify-between">
               <InstanceIcon icon={instance.icon} size={48} />
+              {/* No "Resmî paket" chip: an official pack's card always sits under the "Resmî
+                  paketler" heading, which says it (SMALL11's second look). */}
               <div className="flex flex-col items-end gap-1.5">
-                {instance.managed ? <Chip tone="gold">{t("instances.managed")}</Chip> : null}
                 {instance.state === "needsInstall" ? (
                   <Chip>{t("instances.needsInstall")}</Chip>
                 ) : null}
