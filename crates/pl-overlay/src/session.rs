@@ -73,6 +73,8 @@ struct PendingConnect {
 /// fake.
 pub trait SocialActions: Clone + Send + Sync + 'static {
     fn view(&self) -> SocialView;
+    /// The game showed Cloud AFK's notice `id` (AFKPLUS).
+    fn afk_seen(&self, _id: &str) {}
     fn chat_page(&self, conv: &str) -> ChatPage;
     fn chat_send(&self, conv: &str, text: &str) -> pl_social::Result<String>;
     /// CHAT2: a message answering message `reply` (its service id).
@@ -144,6 +146,10 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
 impl SocialActions for SocialService {
     fn view(&self) -> SocialView {
         SocialService::view(self)
+    }
+
+    fn afk_seen(&self, id: &str) {
+        SocialService::afk_seen(self, id);
     }
 
     fn chat_page(&self, conv: &str) -> ChatPage {
@@ -1020,6 +1026,12 @@ impl<S: SocialActions> Session<S> {
         });
         if !shown {
             self.send(vec![ToGame::Toast(toast)]);
+        }
+        // An AFK notice the game showed was seen: the phone stays quiet (AFKPLUS).
+        if let SocialNotice::AfkNotice { notice } = notice
+            && self.live.is_some()
+        {
+            self.social.afk_seen(&notice.id);
         }
     }
 

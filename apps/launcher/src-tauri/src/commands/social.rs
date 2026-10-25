@@ -37,6 +37,14 @@ pub fn create(
 ) -> SocialService {
     let emitter = app.clone();
     let sink: pl_social::UpdateSink = Arc::new(move |update| {
+        // An AFK notice about an item carries the item's names when the launcher knows them.
+        let update = match update {
+            SocialUpdate::Notice(pl_social::SocialNotice::AfkNotice { mut notice }) => {
+                crate::commands::cloud_afk_plus::name_items(&emitter, &mut notice);
+                SocialUpdate::Notice(pl_social::SocialNotice::AfkNotice { notice })
+            }
+            other => other,
+        };
         let _ = match &update {
             SocialUpdate::View(view) => emitter.emit("social-view", &**view),
             SocialUpdate::Notice(notice) => emitter.emit("social-notice", notice),

@@ -17,6 +17,7 @@
 //! The mod itself ships with the launcher, one jar per Minecraft version; [`install`] keeps the
 //! right one in the instance a game starts from (OVL-B).
 
+mod afk;
 mod feed;
 mod host;
 mod hub;

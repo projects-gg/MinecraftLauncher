@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::afk::AfkNotice;
 use crate::minecraft::McMessage;
 use crate::model::{
     ChatCaps, ChatDeletion, ChatMessage, ChatReacted, ChatStatus, CrewBadge, CrewMute,
@@ -13,9 +14,10 @@ use crate::model::{
 
 /// What this launcher understands on the presence socket (`GET /v1/presence?caps=…`): crew calls
 /// that carry their server and may end with `server` (`callServer`), several crews (`crews`),
-/// crew plans (`plans`, TEAM5), crew tag changes (`badges`, TEAM6) and SKIN1's game account link
-/// and Projects skin news (`mc`). Older services ignore the query, and names they do not know.
-pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges,mc";
+/// crew plans (`plans`, TEAM5), crew tag changes (`badges`, TEAM6), SKIN1's game account link
+/// and Projects skin news (`mc`) and Cloud AFK's notices (`afk`, AFKPLUS). Older services ignore
+/// the query, and names they do not know.
+pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges,mc,afk";
 
 /// Crew plans (TEAM5): the capability the service names in `hello.caps` when it took it.
 pub const PLANS_CAP: &str = "plans";
@@ -25,6 +27,10 @@ pub const BADGES_CAP: &str = "badges";
 
 /// SKIN1: `mc` messages (a job closed, the link changed elsewhere, staff reset the skin).
 pub const MC_CAP: &str = "mc";
+
+/// AFKPLUS: Cloud AFK's notices (`afk_notice`) come to this socket instead of the phone; the
+/// launcher answers `afk_seen` once the player saw one.
+pub const AFK_CAP: &str = "afk";
 
 /// Crew chat and direct messages (CHAT1): asked for only while the signed content allows chat.
 pub const CHAT_CAP: &str = "chat";
@@ -471,6 +477,10 @@ pub(crate) enum ClientMessage {
         plan: String,
         rid: u32,
     },
+    /// The player saw Cloud AFK's notice `id` (AFKPLUS): no `rid`, never answered.
+    AfkSeen {
+        id: String,
+    },
 }
 
 impl ClientMessage {
@@ -778,6 +788,10 @@ pub(crate) enum ServerMessage {
     /// SKIN1 (with `mc` in the capabilities): a job of the player's closed, or ProBot reported a
     /// link change or a staff reset of the Projects skin.
     Mc(Box<McMessage>),
+    /// Cloud AFK's notice about one of the player's cloud accounts (with `afk`, AFKPLUS).
+    AfkNotice {
+        notice: AfkNotice,
+    },
     Ack {
         #[serde(default)]
         rid: Option<u32>,
@@ -1167,10 +1181,10 @@ mod tests {
 
     #[test]
     fn chat_frames_both_ways() {
-        assert_eq!(presence_caps(false), "callServer,crews,plans,badges,mc");
+        assert_eq!(presence_caps(false), "callServer,crews,plans,badges,mc,afk");
         assert_eq!(
             presence_caps(true),
-            "callServer,crews,plans,badges,mc,chat,replies,stickers,reactions,typing,reads"
+            "callServer,crews,plans,badges,mc,afk,chat,replies,stickers,reactions,typing,reads"
         );
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(

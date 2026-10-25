@@ -50,6 +50,9 @@ function view(): CloudEditData {
     },
     rev: 4,
     serverChanges: { used: 0, limit: 6, resetAt: null },
+    tier: "plain",
+    plusUntil: null,
+    ai: null,
   };
   return {
     account,
