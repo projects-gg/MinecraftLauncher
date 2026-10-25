@@ -189,8 +189,8 @@ function initialInvites(): WorldInvite[] {
       return [
         mertInvite({
           join: { kind: "failed", failure },
-          // A full world counts everyone it holds (8/8), as the live count would.
-          ...(failure === "full" ? { guests: MAX - 1 } : {}),
+          // A full world counts everyone it holds (8/8, the host too), as the live count would.
+          ...(failure === "full" ? { guests: MAX } : {}),
         }),
       ];
     }

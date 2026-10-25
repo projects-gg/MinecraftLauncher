@@ -12,11 +12,11 @@ export const trSmall9 = {
      * list's other lines (the name above is the subject where one is needed).
      */
     failed: {
-      full: "Dünya dolu",
+      full: "Dünya doluydu",
       closed: "Dünyasını kapattı",
       removed: "Dünyadan çıkarıldın",
       unreachable: "Bağlanılamadı",
-      hostPackOld: "Oyunu yeniden açması gerekiyor",
+      hostPackOld: "Oyunu yeniden açmasını söyle",
       mods: "Aynı modlar gerekiyor",
     },
     /** Home's line for an invite whose join met missing mods: the goal, the friend, and why its

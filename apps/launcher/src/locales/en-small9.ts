@@ -5,11 +5,11 @@ export const enSmall9 = {
   },
   join: {
     failed: {
-      full: "The world is full",
+      full: "The world was full",
       closed: "Closed their world",
       removed: "You were removed",
       unreachable: "Couldn't connect",
-      hostPackOld: "They need to restart the game",
+      hostPackOld: "Ask them to restart the game",
       mods: "You need the same mods",
     },
     homeMissingMods: "You need the same mods as {{name}} to join",
