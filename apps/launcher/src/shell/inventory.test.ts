@@ -142,7 +142,7 @@ describe("menu titles with IA-ART's glyphs", () => {
     [0xe052, { advance: 257, image: { src: "market.png", width: 256, height: 256, ascent: 36 } }],
   ]);
   const glyph = (codePoint: number) => glyphs.get(codePoint);
-  const title = String.fromCodePoint(0xf808, 0xe052, 0xe999) + "Pazar";
+  const title = `${String.fromCodePoint(0xf808, 0xe052, 0xe999)}Pazar`;
 
   it("draws a picture at the pen, moves by advances and leaves unknown glyphs out", () => {
     const layout = layoutTitle(titleRuns(title), 8, 6, glyph);
