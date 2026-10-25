@@ -19,7 +19,8 @@ use std::path::{Path, PathBuf};
 use pl_items::AssetSource;
 use pl_items::JarSource;
 use pl_items::data::{
-    Aliases, DataFile, DataInputs, DataManifest, Report, build_item_data, compare_versions,
+    Aliases, DataFile, DataInputs, DataManifest, ItemData, Report, build_item_data,
+    compare_versions,
 };
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
@@ -176,6 +177,12 @@ fn main() {
     .unwrap_or_else(|error| fail(error));
 
     let bytes = build.data.to_json();
+    // The file reads back as what was built (what every reader gets).
+    match ItemData::parse(&bytes) {
+        Ok(read) if read == build.data && read.to_json() == bytes => {}
+        Ok(_) => fail("the written file reads back differently"),
+        Err(error) => fail(format!("the written file does not read back: {error}")),
+    }
     let sha256 = sha256_hex(&bytes);
     let name = format!("items.{}.json", &sha256[..12]);
     let dir = out.join(&minecraft);

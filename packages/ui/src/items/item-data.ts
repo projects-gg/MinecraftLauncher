@@ -356,6 +356,8 @@ interface Folded {
   /** The other language's. */
   other: Field[];
   aliases: Field[];
+  /** All of them. */
+  all: Field[];
 }
 
 const field = (text: string): Field => {
@@ -370,6 +372,13 @@ const field = (text: string): Field => {
 const namesOf = (names: ItemNames | undefined, lang: ItemLang): Field[] =>
   names ? [field(names[lang])] : [];
 
+const foldedOf = (own: Field[], other: Field[], aliases: Field[]): Folded => ({
+  own,
+  other,
+  aliases,
+  all: [...own, ...other, ...aliases],
+});
+
 const foldedItems = new WeakMap<ItemData, Record<ItemLang, Folded[]>>();
 
 function foldedFor(data: ItemData, lang: ItemLang): Folded[] {
@@ -377,11 +386,13 @@ function foldedFor(data: ItemData, lang: ItemLang): Folded[] {
   if (!byLang) {
     const make = (l: ItemLang): Folded[] => {
       const other: ItemLang = l === "tr" ? "en" : "tr";
-      return data.items.map((item) => ({
-        own: [...namesOf(item.name, l), ...namesOf(item.desc, l)],
-        other: [...namesOf(item.name, other), ...namesOf(item.desc, other)],
-        aliases: item.aliases.map(field),
-      }));
+      return data.items.map((item) =>
+        foldedOf(
+          [...namesOf(item.name, l), ...namesOf(item.desc, l)],
+          [...namesOf(item.name, other), ...namesOf(item.desc, other)],
+          item.aliases.map(field),
+        ),
+      );
     };
     byLang = { tr: make("tr"), en: make("en") };
     foldedItems.set(data, byLang);
@@ -389,32 +400,43 @@ function foldedFor(data: ItemData, lang: ItemLang): Folded[] {
   return byLang[lang];
 }
 
+/** Three rows of the distance table, reused (a search compares thousands of short words). */
+let rows = [new Int32Array(32), new Int32Array(32), new Int32Array(32)];
+
 /** Optimal string alignment distance, or `max + 1` once it is certainly above `max`. */
 function distance(a: string, b: string, max: number): number {
-  if (Math.abs(a.length - b.length) > max) return max + 1;
-  let prev2: number[] = [];
-  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  const n = b.length;
+  if (Math.abs(a.length - n) > max) return max + 1;
+  if (n + 1 > (rows[0]?.length ?? 0)) rows = rows.map(() => new Int32Array(n + 1));
+  let [before, prev, row] = rows as [Int32Array, Int32Array, Int32Array];
+  for (let j = 0; j <= n; j++) prev[j] = j;
   for (let i = 1; i <= a.length; i++) {
-    const row = [i];
+    const ca = a.charCodeAt(i - 1);
+    row[0] = i;
     let best = i;
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      let d = Math.min((prev[j] ?? 0) + 1, (row[j - 1] ?? 0) + 1, (prev[j - 1] ?? 0) + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        d = Math.min(d, (prev2[j - 2] ?? 0) + 1);
+    for (let j = 1; j <= n; j++) {
+      const cb = b.charCodeAt(j - 1);
+      let d = Math.min(
+        (prev[j] ?? 0) + 1,
+        (row[j - 1] ?? 0) + 1,
+        (prev[j - 1] ?? 0) + (ca === cb ? 0 : 1),
+      );
+      if (i > 1 && j > 1 && ca === b.charCodeAt(j - 2) && a.charCodeAt(i - 2) === cb) {
+        d = Math.min(d, (before[j - 2] ?? 0) + 1);
       }
-      row.push(d);
-      best = Math.min(best, d);
+      row[j] = d;
+      if (d < best) best = d;
     }
     if (best > max) return max + 1;
-    prev2 = prev;
-    prev = row;
+    [before, prev, row] = [prev, row, before];
   }
-  return prev[b.length] ?? max + 1;
+  return prev[n] ?? max + 1;
 }
 
 /** Each token starts a word of the field (a word once; "elmas kil" in "elmas kilic"). */
 function wordsStart(f: Field, tokens: readonly string[]): boolean {
+  const [only] = tokens;
+  if (tokens.length === 1 && only !== undefined) return f.words.some((w) => w.startsWith(only));
   const used = new Set<number>();
   return tokens.every((token) => {
     const at = f.words.findIndex((w, i) => !used.has(i) && w.startsWith(token));
@@ -437,12 +459,16 @@ function wordsNear(f: Field, tokens: readonly string[]): boolean {
   });
 }
 
+/** The rank of a typo match: below every other. */
+const TYPO = 9;
+
 /**
  * How well a thing's fields match the query, best first (undefined: no match): its name in the
  * interface language exactly, an alias exactly, that name's beginning, the beginnings of its
  * words (and its description line's), the other language's name the same three ways, the
- * beginnings of an alias's words, the query inside any of them (3 letters or more), then a typo
- * in each word (1 letter; 2 from 7 letters).
+ * beginnings of an alias's words, the query inside any of them (3 letters or more). A typo in
+ * each word (1 letter; 2 from 7 letters) ranks `TYPO`, checked apart (`wordsNear`) and only
+ * while there are fewer hits than asked.
  */
 function rank(f: Folded, query: string, tokens: readonly string[]): number | undefined {
   const [name] = f.own;
@@ -455,10 +481,35 @@ function rank(f: Folded, query: string, tokens: readonly string[]): number | und
   if (otherName?.whole.startsWith(query)) return 5;
   if (f.other.some((x) => wordsStart(x, tokens))) return 6;
   if (f.aliases.some((a) => a.whole.startsWith(query) || wordsStart(a, tokens))) return 7;
-  const all = [...f.own, ...f.other, ...f.aliases];
-  if (query.length >= 3 && all.some((x) => x.whole.includes(query))) return 8;
-  if (all.some((x) => wordsNear(x, tokens))) return 9;
+  if (query.length >= 3 && f.all.some((x) => x.whole.includes(query))) return 8;
   return undefined;
+}
+
+interface Ranked<T> {
+  hit: T;
+  rank: number;
+  order: number;
+}
+
+/** Ranks everything, then (when short of `limit`) the typo matches; best first. */
+function ranked<T>(things: readonly { folded: Folded; hit: T }[], q: Field, limit: number): T[] {
+  const hits: Ranked<T>[] = [];
+  const misses: number[] = [];
+  for (const [order, thing] of things.entries()) {
+    const r = rank(thing.folded, q.whole, q.words);
+    if (r === undefined) misses.push(order);
+    else hits.push({ hit: thing.hit, rank: r, order });
+  }
+  if (hits.length < limit) {
+    for (const order of misses) {
+      const thing = things[order];
+      if (thing?.folded.all.some((x) => wordsNear(x, q.words))) {
+        hits.push({ hit: thing.hit, rank: TYPO, order });
+      }
+    }
+  }
+  hits.sort((a, b) => a.rank - b.rank || a.order - b.order);
+  return hits.slice(0, limit).map((h) => h.hit);
 }
 
 export interface SearchItemsOptions {
@@ -482,24 +533,18 @@ export function searchItems(
 ): ItemSearchHit[] {
   const q = field(query);
   if (!q.whole) return [];
-  const limit = options.limit ?? 20;
-  const hits: { hit: ItemSearchHit; rank: number; order: number }[] = [];
-  for (const [order, extra] of (options.extras ?? []).entries()) {
-    const names = extra.names.map(field);
-    const r = rank({ own: names, other: [], aliases: [] }, q.whole, q.words);
-    if (r !== undefined) hits.push({ hit: { ref: extra.ref, extra }, rank: r, order });
-  }
+  const things: { folded: Folded; hit: ItemSearchHit }[] = (options.extras ?? []).map((extra) => ({
+    folded: foldedOf(extra.names.map(field), [], []),
+    hit: { ref: extra.ref, extra },
+  }));
   if (data) {
     const folded = foldedFor(data, options.lang);
-    const offset = options.extras?.length ?? 0;
     for (const [i, item] of data.items.entries()) {
       const f = folded[i];
-      const r = f ? rank(f, q.whole, q.words) : undefined;
-      if (r !== undefined) hits.push({ hit: { ref: item.id, item }, rank: r, order: offset + i });
+      if (f) things.push({ folded: f, hit: { ref: item.id, item } });
     }
   }
-  hits.sort((a, b) => a.rank - b.rank || a.order - b.order);
-  return hits.slice(0, limit).map((h) => h.hit);
+  return ranked(things, q, options.limit ?? 20);
 }
 
 export interface SearchEnchantmentsOptions {
@@ -519,16 +564,9 @@ export function searchEnchantments(
   const other: ItemLang = options.lang === "tr" ? "en" : "tr";
   const pool = options.item ? enchantmentsFor(data, options.item) : [...data.enchantments];
   if (!q.whole) return pool.slice(0, options.limit ?? pool.length);
-  const hits: { e: EnchantmentInfo; rank: number; order: number }[] = [];
-  for (const [order, e] of pool.entries()) {
-    const f: Folded = {
-      own: [field(e.name[options.lang])],
-      other: [field(e.name[other])],
-      aliases: e.aliases.map(field),
-    };
-    const r = rank(f, q.whole, q.words);
-    if (r !== undefined) hits.push({ e, rank: r, order });
-  }
-  hits.sort((a, b) => a.rank - b.rank || a.order - b.order);
-  return hits.slice(0, options.limit ?? 20).map((h) => h.e);
+  const things = pool.map((e) => ({
+    folded: foldedOf([field(e.name[options.lang])], [field(e.name[other])], e.aliases.map(field)),
+    hit: e,
+  }));
+  return ranked(things, q, options.limit ?? 20);
 }
