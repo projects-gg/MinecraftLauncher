@@ -189,41 +189,64 @@ impl Image {
         out
     }
 
-    /// How much of the silhouette's edge stands clear of a ground colour: of the opaque pixels
-    /// within `radius` pixels of a clear one (or of the border), the share at least `distance`
-    /// away from the ground in OKLab. Small when the outline melts into that ground (a netherite
-    /// ingot or black wool on a near-black card). None for a picture without opaque pixels.
-    pub fn edge_clearance(&self, ground: [u8; 3], radius: u32, distance: f32) -> Option<f32> {
-        let (w, h, r) = (self.width as i64, self.height as i64, radius as i64);
-        let opaque = |x: i64, y: i64| {
-            (0..w).contains(&x) && (0..h).contains(&y) && self.get(x as u32, y as u32)[3] >= 128
-        };
-        let base = oklab(ground);
-        let (mut band, mut clear) = (0u32, 0u32);
-        for y in 0..h {
-            for x in 0..w {
-                if !opaque(x, y) || (-r..=r).all(|dy| (-r..=r).all(|dx| opaque(x + dx, y + dy))) {
+    /// Whether the pixel is inside the picture and at least half opaque.
+    fn solid(&self, x: i64, y: i64) -> bool {
+        (0..self.width as i64).contains(&x)
+            && (0..self.height as i64).contains(&y)
+            && self.get(x as u32, y as u32)[3] >= 128
+    }
+
+    /// How light the silhouette's edge looks on a ground colour: the median CIELAB lightness (L*,
+    /// 0–100) of the opaque pixels within `radius` pixels of a clear one (or of the border), each
+    /// laid over the ground. Low when the outline melts into a near-black card (obsidian, black
+    /// wool). None for a picture without opaque pixels.
+    pub fn edge_lightness(&self, ground: [u8; 3], radius: u32) -> Option<f32> {
+        let r = radius as i64;
+        let mut values = Vec::new();
+        for y in 0..self.height as i64 {
+            for x in 0..self.width as i64 {
+                let inner = (-r..=r).all(|dy| (-r..=r).all(|dx| self.solid(x + dx, y + dy)));
+                if !self.solid(x, y) || inner {
                     continue;
                 }
-                band += 1;
-                let px = self.get(x as u32, y as u32);
-                let c = oklab([px[0], px[1], px[2]]);
-                let d = [c[0] - base[0], c[1] - base[1], c[2] - base[2]];
-                if (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt() >= distance {
-                    clear += 1;
+                let seen = over(
+                    [ground[0], ground[1], ground[2], 255],
+                    self.get(x as u32, y as u32),
+                );
+                values.push(lightness([seen[0], seen[1], seen[2]]));
+            }
+        }
+        if values.is_empty() {
+            return None;
+        }
+        values.sort_by(f32::total_cmp);
+        Some(values[values.len() / 2])
+    }
+
+    /// How much an edge `width` pixels wide drawn around the silhouette would fill in between its
+    /// parts (the holes in leaves, a chain's links, the crook of a pickaxe): the clear pixels with an
+    /// opaque one within `width` on both sides of a row, a column or a diagonal, per opaque pixel.
+    pub fn gap_share(&self, width: u32) -> f32 {
+        let reach = |x: i64, y: i64, dx: i64, dy: i64| {
+            (1..=width as i64).any(|k| self.solid(x + dx * k, y + dy * k))
+        };
+        let (mut gaps, mut solid) = (0u32, 0u32);
+        for y in 0..self.height as i64 {
+            for x in 0..self.width as i64 {
+                if self.solid(x, y) {
+                    solid += 1;
+                } else if [(1, 0), (0, 1), (1, 1), (1, -1)]
+                    .iter()
+                    .any(|&(dx, dy)| reach(x, y, dx, dy) && reach(x, y, -dx, -dy))
+                {
+                    gaps += 1;
                 }
             }
         }
-        (band > 0).then(|| clear as f32 / band as f32)
-    }
-
-    /// Lays the see-through pixels over a ground colour, as the game shows them on its slot
-    /// (stained glass, ice): they become opaque; clear and opaque pixels stay as they are.
-    pub fn flatten_translucency(&mut self, ground: [u8; 3]) {
-        for px in self.pixels.as_chunks_mut::<4>().0 {
-            if px[3] > 0 && px[3] < 255 {
-                *px = over([ground[0], ground[1], ground[2], 255], *px);
-            }
+        if solid == 0 {
+            0.0
+        } else {
+            gaps as f32 / solid as f32
         }
     }
 }
@@ -238,17 +261,15 @@ fn linear(c: u8) -> f32 {
     }
 }
 
-/// An sRGB colour in OKLab (Björn Ottosson's matrices), where distances match what the eye sees.
-fn oklab(rgb: [u8; 3]) -> [f32; 3] {
+/// An sRGB colour's CIELAB lightness L* (0–100).
+fn lightness(rgb: [u8; 3]) -> f32 {
     let [r, g, b] = rgb.map(linear);
-    let l = (0.412_221_46 * r + 0.536_332_55 * g + 0.051_445_995 * b).cbrt();
-    let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();
-    let s = (0.088_302_46 * r + 0.281_718_85 * g + 0.629_978_7 * b).cbrt();
-    [
-        0.210_454_26 * l + 0.793_617_8 * m - 0.004_072_047 * s,
-        1.977_998_5 * l - 2.428_592_2 * m + 0.450_593_7 * s,
-        0.025_904_037 * l + 0.782_771_77 * m - 0.808_675_77 * s,
-    ]
+    let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if y > 216.0 / 24389.0 {
+        116.0 * y.cbrt() - 16.0
+    } else {
+        y * 24389.0 / 27.0
+    }
 }
 
 /// `top` over `bottom`, straight alpha.

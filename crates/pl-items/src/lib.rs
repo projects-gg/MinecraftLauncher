@@ -48,8 +48,8 @@ pub const INDEX_FORMAT: u32 = 1;
 /// Bumped whenever icons are drawn differently, so caches of older drawings are redrawn.
 /// 2: the game's slot lighting by face normals, beds, the piglin head and skins' hat layer, the
 /// static glint frame, dark icons marked, hidden dye layers. 3: the dragon head and the decorated
-/// pot. 4: copper golem statues, dark icons by their outline, see-through pixels over the game's
-/// slot grey, 3D icons drawn at 48 px too, cells on even pixels.
+/// pot. 4: copper golem statues, dark icons by their outline's lightness, 3D icons drawn at 48 px
+/// too, cells on even pixels.
 pub const ATLAS_REVISION: u32 = 4;
 
 /// The atlas index (`index.json`).
@@ -177,16 +177,14 @@ const DEFAULT_BLOCK_GUI: Display = Display {
 /// Our darkest card colour (`--color-obsidian-800`), the ground a dark icon is measured against.
 const DARK_GROUND: [u8; 3] = [0x1b, 0x18, 0x20];
 
-/// How deep (in texels) a silhouette's edge is taken, how far (OKLab) an edge pixel must be from
-/// the ground to stand clear of it, and the share of the edge below which an icon is marked dark:
-/// near-black outlines (obsidian, black wool, netherite, the ender chest), not dark items whose
-/// outline reads (a cherry log's pink top, red concrete).
+/// An icon is marked dark when its outline is near-black on that ground: the median lightness of
+/// its silhouette's edge (two texels deep) within about 6 L* of the ground's 8.9 (obsidian, black
+/// wool, the ender chest, netherite armour; not a netherite ingot or a hopper, which read). And only
+/// when the client's one-texel edge would not fill in between its parts: see-through structure
+/// (leaves, sculk veins, spawners, chains) keeps its holes and gets no edge.
 const DARK_EDGE_TEXELS: u32 = 2;
-const DARK_CLEAR_DISTANCE: f32 = 0.2;
-const DARK_CLEAR_SHARE: f32 = 0.25;
-
-/// The game's slot grey: see-through pixels are shown laid over it, as in the game.
-const SLOT_GREY: [u8; 3] = [0x8b, 0x8b, 0x8b];
+const DARK_EDGE_LIGHTNESS: f32 = 15.0;
+const DARK_GAP_SHARE: f32 = 0.02;
 
 /// A flat item's layers, each with the tint the client applies.
 type FlatLayers = Vec<(Image, Option<LayerTint>)>;
@@ -427,12 +425,7 @@ impl Builder<'_> {
                 .map(|(layers, preview)| Drawn::Flat { layers, preview });
         }
         let display = display.unwrap_or(DEFAULT_BLOCK_GUI);
-        // See-through faces (stained glass, ice) as the game shows them: over its slot grey.
-        let draw = |size: u32| {
-            let mut image = render::rasterize(&scene, &display, size, front);
-            image.flatten_translucency(SLOT_GREY);
-            image
-        };
+        let draw = |size: u32| render::rasterize(&scene, &display, size, front);
         let image = draw(self.block_size);
         if image.is_blank() {
             return None;
@@ -565,8 +558,9 @@ pub fn build_atlas(source: &mut dyn AssetSource, options: &BuildOptions) -> Resu
     let dark = |picture: &Image| {
         let texel = (picture.width / 16).max(1);
         picture
-            .edge_clearance(DARK_GROUND, DARK_EDGE_TEXELS * texel, DARK_CLEAR_DISTANCE)
-            .is_some_and(|share| share < DARK_CLEAR_SHARE)
+            .edge_lightness(DARK_GROUND, DARK_EDGE_TEXELS * texel)
+            .is_some_and(|lightness| lightness <= DARK_EDGE_LIGHTNESS)
+            && picture.gap_share(texel) <= DARK_GAP_SHARE
     };
     let mut drawn: Vec<DrawnIcon> = Vec::new();
     let mut missing = Vec::new();
@@ -590,24 +584,13 @@ pub fn build_atlas(source: &mut dyn AssetSource, options: &BuildOptions) -> Resu
             }]
         };
         match builder.draw(&parts) {
-            Some(Drawn::Flat {
-                mut layers,
-                mut preview,
-            }) => {
-                // See-through pixels over the game's slot grey, unless a layer takes its colour
-                // later (the client multiplies it over what lies below).
-                if let [(layer, None)] = layers.as_mut_slice() {
-                    layer.flatten_translucency(SLOT_GREY);
-                    preview.flatten_translucency(SLOT_GREY);
-                }
-                drawn.push(DrawnIcon {
-                    id: id.clone(),
-                    kind: IconKind::Flat,
-                    dark: dark(&preview),
-                    layers,
-                    large: None,
-                });
-            }
+            Some(Drawn::Flat { layers, preview }) => drawn.push(DrawnIcon {
+                id: id.clone(),
+                kind: IconKind::Flat,
+                dark: dark(&preview),
+                layers,
+                large: None,
+            }),
             Some(Drawn::Rendered(Rendered { kind, image, large })) => drawn.push(DrawnIcon {
                 id: id.clone(),
                 kind,

@@ -200,8 +200,30 @@ fn jar() -> MemSource {
                 "model":{"type":"minecraft:copper_golem_statue","pose":"standing","texture":"minecraft:textures/entity/copper_golem/copper_golem.png"}},
             "transformation":{"left_rotation":[0,0,0,1],"right_rotation":[0,0,0,1],"scale":[1,-1,-1],"translation":[0.5,1.5,0.5]}}}"#,
     );
-    // Dark grey with a few highlights (netherite) melts into a dark slot; a saturated dark red
-    // does not.
+    // Dark grey with a few highlights (a netherite ingot) still reads on a dark slot, as does a
+    // saturated dark red; a near-black item full of holes (leaves) keeps its holes, so no edge.
+    let mut leaves = Image::new(16, 16);
+    for y in 0..16 {
+        for x in 0..16 {
+            if (x + y) % 2 == 0 {
+                leaves.put(x, y, [20, 24, 20, 255]);
+            }
+        }
+    }
+    s.insert(
+        "assets/minecraft/textures/item/dark_leaves.png",
+        leaves.encode_png().unwrap(),
+    );
+    model(
+        &mut s,
+        "item/dark_leaves",
+        r#"{"parent":"item/generated","textures":{"layer0":"item/dark_leaves"}}"#,
+    );
+    item(
+        &mut s,
+        "dark_leaves",
+        r#"{"model":{"type":"minecraft:model","model":"minecraft:item/dark_leaves"}}"#,
+    );
     let mut ingot = Image::new(16, 16);
     for y in 0..16 {
         for x in 0..16 {
@@ -490,13 +512,16 @@ fn hides_a_dye_layer_until_dyed() {
 #[test]
 fn marks_dark_icons() {
     let atlas = build_atlas(&mut jar(), &options()).unwrap();
-    // Near-black outlines, and dark grey with a few highlights (netherite).
+    // A near-black outline.
     assert!(atlas.index.icons["minecraft:obsidian"].dark);
-    assert!(atlas.index.icons["minecraft:netherite_ingot"].dark);
-    // A dark but saturated colour, a lit block, a light item: their outline reads.
+    // Outlines that read on a dark slot: dark grey with highlights, a saturated dark red, a lit
+    // block, a light item.
+    assert!(!atlas.index.icons["minecraft:netherite_ingot"].dark);
     assert!(!atlas.index.icons["minecraft:red_dye"].dark);
     assert!(!atlas.index.icons["minecraft:stone"].dark);
     assert!(!atlas.index.icons["minecraft:sword"].dark);
+    // Near-black, but its holes would fill in under an edge.
+    assert!(!atlas.index.icons["minecraft:dark_leaves"].dark);
 }
 
 #[test]
@@ -665,7 +690,9 @@ fn places_every_icon_on_even_pixels() {
 }
 
 #[test]
-fn lays_see_through_pixels_over_the_slot_grey() {
+fn keeps_see_through_pixels_see_through() {
+    // Stained glass shows whatever slot it is drawn on, as in the game; laid over a fixed grey it
+    // read as concrete on our dark slots.
     let atlas = build_atlas(&mut jar(), &options()).unwrap();
     let image = Image::decode_png(&atlas.png).unwrap();
     for id in [
@@ -679,14 +706,7 @@ fn lays_see_through_pixels_over_the_slot_grey() {
             .filter(|p| p[3] > 0)
             .collect();
         assert!(!pixels.is_empty(), "{id}");
-        assert!(pixels.iter().all(|p| p[3] == 255), "{id}: see-through left");
-        // Half red, half the game's grey (139) where fully lit.
-        assert!(
-            pixels
-                .iter()
-                .any(|p| p[0].abs_diff(170) <= 2 && p[1].abs_diff(95) <= 2),
-            "{id}: no pixel laid over the grey"
-        );
+        assert!(pixels.iter().all(|p| p[3] < 255), "{id}: drawn opaque");
     }
 }
 
