@@ -181,6 +181,7 @@ export function InstallControl({
   onRemove,
   onCancel,
   installLabel,
+  alignRemove = false,
 }: {
   state: InstallState;
   job?: RunningJob;
@@ -189,6 +190,11 @@ export function InstallControl({
   onRemove: () => void;
   onCancel: () => void;
   installLabel?: string;
+  /**
+   * In a list: rows without the remove button keep its place, so every row's main button
+   * ends at the same edge ("Yükle" under "Güncelle").
+   */
+  alignRemove?: boolean;
 }) {
   const { t } = useTranslation();
   const shown = useShownJob(job);
@@ -196,18 +202,29 @@ export function InstallControl({
   // job fails at once.
   const held = job && !shown ? "scale-[0.97]" : undefined;
   if (shown) return <JobStatus job={shown} onCancel={onCancel} />;
-  if (state === "pack") return <Chip>{t("content.actions.inPack")}</Chip>;
+  const removeSlot = alignRemove ? <span aria-hidden className="size-8 shrink-0" /> : null;
+  if (state === "pack") {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Chip>{t("content.actions.inPack")}</Chip>
+        {removeSlot}
+      </div>
+    );
+  }
   if (state === "none") {
     return (
-      <Button
-        size="sm"
-        variant="secondary"
-        icon={<DownloadSimple size={15} weight="bold" className="text-gold-300" />}
-        onClick={onInstall}
-        className={held}
-      >
-        {installLabel ?? t("content.actions.install")}
-      </Button>
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<DownloadSimple size={15} weight="bold" className="text-gold-300" />}
+          onClick={onInstall}
+          className={held}
+        >
+          {installLabel ?? t("content.actions.install")}
+        </Button>
+        {removeSlot}
+      </div>
     );
   }
   return (
