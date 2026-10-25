@@ -15,7 +15,8 @@
 // Each mod frame is written to --log, so a run's connect-result answers can be checked afterwards.
 // --team6 plays crew tags (docs/tasks/ovl2-protocol.md, TEAM6-O): "tags" in the welcome, the cards ("badges")
 // before the snapshot, friends', crew messages' and toasts' "badge", the crews' "ekibe katıldı" lines ("note");
-// dev commands "joined", "tag-change", "hide-crew", "tags-off" and "tags-on" play the live changes.
+// dev commands "joined", "tag-change", "hide-crew", "tags-off" and "tags-on" play the live changes; "tag-text" (with
+// "crew" and "tag") renames a crew's tag.
 // --people plays the friend menu (docs/tasks/ovl2-protocol.md, OVL-UX): "people" and "invite" in the welcome (the
 // player is on Projects), friends' "dm" and "discord", the player's own tag in "me" (with --team6); the menu's frames
 // (invite, discord, unfriend, block, report) are answered with "friend-result" as the launcher would (an invite to an
@@ -42,9 +43,16 @@
 // ("relayPorts" in the --info file, in order; friend is ayse, mert or deniz; --relay-as <name> is g1:ayse:<name>).
 // Dev commands: "world-invite", "world-connect", "host-mirror", "host-fail", "host-refuse" (the next opening),
 // "host-stop", "host-remove".
+// --lang tr|en plays the overlay's language (docs/tasks/ovl2-protocol.md, OVL-LANG, G1-G4) with this as the launcher's
+// own language: a mod whose hello lists "lang" hears "lang" in every welcome (the player's pick, else the launcher's),
+// its "lang" pick is kept (in --lang-file <file> when given, "tr", "en" or "auto", as the launcher's overlay-language
+// file; read at the start, so a second run starts where the first left) and answered with a new welcome in it; the
+// mock's own words for the mod (a sticker in words) follow it. Dev commands "launcher-lang" (with "lang": the
+// launcher's language changes; the overlay follows while nothing is picked) and "clear-pick". --welcome-delay <ms>
+// greets that much later (under the mod's 5 s handshake wait), to see the panel before the launcher said anything.
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
 
 const PROTO = 1;
@@ -61,6 +69,38 @@ let port = Number(args.port ?? 0);
 let server = null;
 let session = null;
 let nextId = 100;
+
+// OVL-LANG: the launcher's own language, the player's pick in the overlay (kept in --lang-file), and whether the
+// connected mod's words follow the launcher (its hello lists "lang").
+const langs = {
+  launcher: args.lang === "en" || args.lang === "tr" ? args.lang : null,
+  pick: readPick(),
+  follows: false,
+};
+function readPick() {
+  if (typeof args.langFile !== "string") {
+    return null;
+  }
+  try {
+    const text = readFileSync(args.langFile, "utf8").trim();
+    return text === "tr" || text === "en" ? text : null;
+  } catch {
+    return null;
+  }
+}
+function keepPick() {
+  if (typeof args.langFile === "string") {
+    writeFileSync(args.langFile, langs.pick ?? "auto");
+  }
+}
+/** The overlay's language: the player's pick, else the launcher's (null: this mock plays no language). */
+function overlayLang() {
+  return langs.pick ?? langs.launcher;
+}
+/** The mock's own words for the mod in English (a mod that follows the launcher, which speaks English now). */
+function inEnglish() {
+  return langs.follows && overlayLang() === "en";
+}
 
 const now = () => Date.now();
 const minutes = (m) => now() - m * 60000;
@@ -484,6 +524,7 @@ function onConnection(socket) {
           return;
         }
         authed = true;
+        langs.follows = Array.isArray(frame.features) && frame.features.includes("lang");
         startSession(socket);
         continue;
       }
@@ -514,6 +555,7 @@ function welcome(socket) {
     me: state.me,
     dnd: Boolean(args.dnd),
     reducedMotion: Boolean(args.reducedMotion),
+    ...(langs.follows && overlayLang() ? { lang: overlayLang() } : {}),
     features: args.signedOut
       ? []
       : [
@@ -552,7 +594,12 @@ function startSession(socket) {
     session.destroy();
   }
   session = socket;
-  welcome(socket);
+  const delay = Number(args.welcomeDelay ?? 0);
+  if (delay > 0) {
+    later(delay, () => welcome(socket));
+  } else {
+    welcome(socket);
+  }
   if (args.autoDemo) {
     demo(socket);
   }
@@ -573,7 +620,9 @@ function incoming(socket, convId, from, text, sticker) {
     msg.sid = newSid();
     if (sticker) {
       msg.sticker = sticker;
-      msg.text = `[Çıkartma: ${stickerName(sticker)}]`;
+      msg.text = inEnglish()
+        ? `[Sticker: ${stickerName(sticker)}]`
+        : `[Çıkartma: ${stickerName(sticker)}]`;
     }
   }
   state.history[convId].push(msg);
@@ -582,7 +631,7 @@ function incoming(socket, convId, from, text, sticker) {
     c.unread += 1;
     send(socket, { t: "conv", ...c });
   }
-  const body = sticker ? `Çıkartma · ${stickerName(sticker)}` : text;
+  const body = sticker ? `${inEnglish() ? "Sticker" : "Çıkartma"} · ${stickerName(sticker)}` : text;
   const toast = { t: "toast", kind: "message", key: convId, title: from, body, conv: convId };
   if (sticker) {
     toast.sticker = sticker;
@@ -602,8 +651,14 @@ const STICKER_NAMES = {
   "pl1/love": "Kalp",
   "pl1/party": "Kutlama",
 };
+const STICKER_NAMES_EN = {
+  "pl1/gg": "GG",
+  "pl1/hi": "Hi",
+  "pl1/love": "Love",
+  "pl1/party": "Party",
+};
 function stickerName(ref) {
-  return STICKER_NAMES[ref] ?? "Çıkartma";
+  return inEnglish() ? (STICKER_NAMES_EN[ref] ?? "Sticker") : (STICKER_NAMES[ref] ?? "Çıkartma");
 }
 
 /** The message a reply answers, as the launcher resolves it from its own history. */
@@ -784,6 +839,20 @@ function onFrame(socket, frame) {
     case "dev":
       onDev(socket, frame);
       break;
+    case "lang": {
+      // OVL-LANG (G4): the player's pick, kept; a new welcome in it when the overlay's language changed.
+      if (!langs.follows || (frame.lang !== "tr" && frame.lang !== "en")) {
+        break;
+      }
+      const before = overlayLang();
+      langs.pick = frame.lang;
+      keepPick();
+      log("info", { t: "lang-pick", lang: frame.lang });
+      if (overlayLang() !== before) {
+        welcome(socket);
+      }
+      break;
+    }
     case "host-world":
     case "host-request":
     case "host-published":
@@ -1099,6 +1168,15 @@ function onDev(socket, frame) {
       send(socket, { t: "history", conv: "crew:gece", msgs: historyOf("crew:gece") });
       break;
     }
+    case "tag-text": {
+      // TEAM6: a crew's tag reads otherwise (Turkish letters at every GUI scale, OVL-LANG's legibility check).
+      const card = CARDS[frame.crew];
+      if (card && typeof frame.tag === "string") {
+        card.tag = frame.tag;
+        send(socket, { t: "badges", all: false, cards: { [frame.crew]: card } });
+      }
+      break;
+    }
     case "hide-crew": {
       // TEAM6 §5: Gece Kartalları' leader hides the crew: its card goes, its wearers' rows lose it.
       delete CARDS["t-gk"];
@@ -1266,6 +1344,21 @@ function onDev(socket, frame) {
         reason: frame.reason ?? "removed",
       });
       break;
+    case "launcher-lang":
+    case "clear-pick": {
+      // OVL-LANG: the launcher's own language changes, or the pick goes; the overlay follows when it changed.
+      const before = overlayLang();
+      if (frame.cmd === "launcher-lang" && (frame.lang === "tr" || frame.lang === "en")) {
+        langs.launcher = frame.lang;
+      } else if (frame.cmd === "clear-pick") {
+        langs.pick = null;
+        keepPick();
+      }
+      if (langs.follows && overlayLang() !== before) {
+        welcome(socket);
+      }
+      break;
+    }
     case "bye":
       send(socket, { t: "bye", reason: frame.reason ?? "launcher-exit" });
       socket.end();
