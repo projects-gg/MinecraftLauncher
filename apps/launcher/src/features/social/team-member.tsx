@@ -352,6 +352,7 @@ function MemberCard({
             name={member.name}
             badge={member.badge}
             wearer={member.id}
+            mark={member.mark}
             size="lg"
             chip="button"
             className="gap-2"
@@ -601,7 +602,7 @@ export function TeamMemberRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${badgeRowLabel(member.name, badge, t)}, ${presence}`}
+              aria-label={`${badgeRowLabel(member.name, badge, t, member.mark)}, ${presence}`}
               className={cn(
                 "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
                 line === "where" ? "py-1.5" : "py-2",
@@ -619,6 +620,7 @@ export function TeamMemberRow({
                   name={member.name}
                   badge={member.badge}
                   wearer={member.id}
+                  mark={member.mark}
                   dim={member.state === "offline" || member.blocked}
                   nameClassName={cn(
                     "text-[14px] font-semibold",

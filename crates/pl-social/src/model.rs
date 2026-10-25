@@ -26,6 +26,32 @@ pub struct PublicProfile {
         skip_serializing_if = "Option::is_none"
     )]
     pub badge: Option<CrewBadge>,
+    /// The mark Projects' staff gave the account in Studio (SOC-VERIFY): None without one, from a
+    /// service without marks, and for a mark this version does not know.
+    #[serde(
+        default,
+        deserialize_with = "readable_mark",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub mark: Option<ProfileMark>,
+}
+
+/// A mark Projects' staff give an account in Studio (SOC-VERIFY), shown right of the name wherever
+/// the account shows: the verified mark (blue, "Doğrulanmış hesap") or the admin mark (red,
+/// "Projects yöneticisi").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ProfileMark {
+    Verified,
+    Admin,
+}
+
+/// A mark this version cannot read is no mark: the profile around it still reads.
+pub(crate) fn readable_mark<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<ProfileMark>, D::Error> {
+    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw.and_then(|value| serde_json::from_value(value).ok()))
 }
 
 /// The card of a crew tag ("[GK] Ayşe", TEAM6): what a wearer's profile carries. The service makes

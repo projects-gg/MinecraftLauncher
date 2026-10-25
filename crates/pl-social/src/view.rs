@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{
     ChatExtras, ChatLinkRules, CrewMute, FriendGroup, JoinMode, LimitedItem, LimitedKey, Limits,
-    LinkRule, Me, NoticeKind, Privacy, PublicProfile, Relation, ReportReason, SettingsMeta,
-    StatusMode, TeamExit, TeamPermissions, TeamRelation, TeamRole, discord_avatar_url,
+    LinkRule, Me, NoticeKind, Privacy, ProfileMark, PublicProfile, Relation, ReportReason,
+    SettingsMeta, StatusMode, TeamExit, TeamPermissions, TeamRelation, TeamRole,
+    discord_avatar_url,
 };
 use crate::protocol::{
     CallAnswer, CallKind, Game, LocalStatus, PlanAnswer, PresenceState, is_projects_host,
@@ -618,6 +619,8 @@ pub struct CrewCallView {
     pub name: Option<String>,
     pub avatar: Option<String>,
     pub avatar_url: Option<String>,
+    /// The caller's mark (SOC-VERIFY), as the crew shows them.
+    pub mark: Option<ProfileMark>,
     /// `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
     /// call from before CALL1: an answer, nothing to join).
     pub kind: CallKind,
@@ -744,6 +747,8 @@ pub struct JoinRequestView {
     pub username: String,
     pub avatar: String,
     pub avatar_url: Option<String>,
+    /// Their mark (SOC-VERIFY).
+    pub mark: Option<ProfileMark>,
     /// Unix seconds.
     pub sent_at: i64,
     /// The member whose tag's card it came from (TEAM6): "Ayşe aracılığıyla", with their name as
@@ -968,6 +973,8 @@ pub struct TeamMemberView {
     pub together_month: u32,
     /// The crew tag they wear, of any crew (TEAM6; None while crew tags are off).
     pub badge: Option<Box<CrewBadgeView>>,
+    /// Their mark (SOC-VERIFY), the player's own too.
+    pub mark: Option<ProfileMark>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -1036,6 +1043,8 @@ pub struct MeView {
     pub limited: Option<LimitedView>,
     /// The crew tag the player wears (TEAM6; None when none, and while crew tags are off).
     pub badge: Option<Box<CrewBadgeView>>,
+    /// The player's own mark (SOC-VERIFY), as friends see it.
+    pub mark: Option<ProfileMark>,
 }
 
 /// Someone shown with name and picture (requests, blocked users, code lookups).
@@ -1047,6 +1056,8 @@ pub struct ProfileView {
     pub username: String,
     pub avatar: String,
     pub avatar_url: Option<String>,
+    /// Their mark (SOC-VERIFY).
+    pub mark: Option<ProfileMark>,
 }
 
 impl From<&PublicProfile> for ProfileView {
@@ -1057,6 +1068,7 @@ impl From<&PublicProfile> for ProfileView {
             username: profile.username.clone(),
             avatar: profile.avatar.clone(),
             avatar_url: profile.discord_avatar_url(128),
+            mark: profile.mark,
         }
     }
 }
@@ -1082,6 +1094,8 @@ pub struct FriendView {
     pub discord_url: String,
     /// The crew tag they wear before their name (TEAM6; None while crew tags are off).
     pub badge: Option<Box<CrewBadgeView>>,
+    /// Their mark right of the name (SOC-VERIFY).
+    pub mark: Option<ProfileMark>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -1092,6 +1106,8 @@ pub struct RequestView {
     pub username: String,
     pub avatar: String,
     pub avatar_url: Option<String>,
+    /// Their mark (SOC-VERIFY).
+    pub mark: Option<ProfileMark>,
     /// Unix seconds.
     pub sent_at: i64,
 }
@@ -1106,6 +1122,8 @@ pub struct InviteView {
     pub name: Option<String>,
     pub avatar: Option<String>,
     pub avatar_url: Option<String>,
+    /// Their mark (SOC-VERIFY), from the friend list.
+    pub mark: Option<ProfileMark>,
     /// Unix seconds.
     pub at: i64,
     /// Their server when it can be shared (`projects` = "Katıl").
@@ -1312,6 +1330,7 @@ pub(crate) fn me_view(
         backup: me.settings.clone(),
         limited: me.limited.as_ref().map(LimitedView::of),
         badge,
+        mark: me.profile.mark,
     }
 }
 

@@ -13,6 +13,7 @@ import type { WorldInvite } from "@/lib/api/host-types";
 import type { SocialInvite } from "@/lib/api/social-types";
 import { canJoinInvite, joinInvite } from "./join-dialog";
 import { isJoinable } from "./model";
+import { MarkedSentence } from "./person-mark";
 import { SocialAvatar } from "./social-face";
 
 function InviteToast({ toastId, invite }: { toastId: string | number; invite: SocialInvite }) {
@@ -32,7 +33,11 @@ function InviteToast({ toastId, invite }: { toastId: string | number; invite: So
       />
       <div className="min-w-0 flex-1">
         <p className="text-[13.5px] leading-snug font-semibold text-bone-50">
-          {t("social.notices.invite", { name })}
+          <MarkedSentence
+            text={(who) => t("social.notices.invite", { name: who })}
+            name={name}
+            mark={invite.mark}
+          />
         </p>
         {where ? <p className="truncate text-[12.5px] text-jade-400">{where}</p> : null}
       </div>

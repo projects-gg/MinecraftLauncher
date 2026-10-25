@@ -14,7 +14,7 @@ import { WorldShareHost } from "@/features/host/host";
 import { shownInGame } from "@/features/overlay/store";
 import { useOverlaySync } from "@/features/overlay/use-overlay-sync";
 import { api } from "@/lib/api";
-import type { BackupMeta, Friend, SocialNotice } from "@/lib/api/social-types";
+import type { BackupMeta, Friend, SocialNotice, TeamMember } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
@@ -46,6 +46,7 @@ import {
 } from "./model";
 import { crewMutedNow, crewmateHeardIn, mutedNow } from "./mute";
 import { NoticeDialog } from "./notice-dialog";
+import { MarkedSentence } from "./person-mark";
 import { PersonAskDialog } from "./person-menu";
 import { PlanReminders } from "./plan-reminders";
 import { ReportDialog } from "./report-dialog";
@@ -62,9 +63,13 @@ const crewThrottle = new NoticeThrottle(FRIEND_NOTICE_GAP_MS);
 const crewArrivals: { ids: string[]; timer: number | null } = { ids: [], timer: null };
 
 function crewmateName(id: string): string | null {
+  return crewmate(id)?.name ?? null;
+}
+
+function crewmate(id: string): TeamMember | null {
   for (const crew of useSocialUi.getState().view.crews) {
     const member = crew.members.find((m) => m.id === id);
-    if (member) return member.name;
+    if (member) return member;
   }
   return null;
 }
@@ -86,13 +91,15 @@ function showCrewArrival(id: string) {
     const first = ids[0];
     if (!first || mutedNow(view.crewNotifications, now)) return;
     const name = crewmateName(first) ?? "";
-    const text =
+    const sentence = (who: string) =>
       ids.length > 1
-        ? i18n.t("teams.notify.crewJoinedMany", { name, count: ids.length - 1 })
-        : i18n.t("teams.notify.crewJoined", { name });
+        ? i18n.t("teams.notify.crewJoinedMany", { name: who, count: ids.length - 1 })
+        : i18n.t("teams.notify.crewJoined", { name: who });
+    const text = sentence(name);
     void notifyOutside(text, { onClick: openFriends }).then((sent) => {
       if (sent) return;
-      toast(text, {
+      // The first crewmate's mark right after their name (SOC-VERIFY; the system's notice is text).
+      toast(<MarkedSentence text={sentence} name={name} mark={crewmate(first)?.mark} />, {
         action: { label: i18n.t("social.actions.join"), onClick: () => void joinProjects() },
       });
     });
@@ -107,7 +114,11 @@ const friendThrottle = new NoticeThrottle(FRIEND_NOTICE_GAP_MS);
 const pendingFriendNotices = new Map<string, { kind: "online" | "projects"; timer: number }>();
 
 function friendName(id: string): string | null {
-  return useSocialUi.getState().view.friends.find((f: Friend) => f.id === id)?.name ?? null;
+  return friendOf(id)?.name ?? null;
+}
+
+function friendOf(id: string): Friend | null {
+  return useSocialUi.getState().view.friends.find((f: Friend) => f.id === id) ?? null;
 }
 
 function showFriendNotice(id: string, kind: "online" | "projects") {
@@ -120,12 +131,13 @@ function showFriendNotice(id: string, kind: "online" | "projects") {
     pendingFriendNotices.delete(id);
     const name = friendName(id);
     if (!name || !friendThrottle.allow(id, Date.now())) return;
-    const text =
+    const sentence = (who: string) =>
       kind === "projects"
-        ? i18n.t("social.notices.onProjects", { name })
-        : i18n.t("social.notices.online", { name });
+        ? i18n.t("social.notices.onProjects", { name: who })
+        : i18n.t("social.notices.online", { name: who });
+    const text = sentence(name);
     void notifyOutside(text, { onClick: openFriends }).then((sent) => {
-      if (!sent) toast(text);
+      if (!sent) toast(<MarkedSentence text={sentence} name={name} mark={friendOf(id)?.mark} />);
     });
   }, 400);
   pendingFriendNotices.set(id, { kind, timer });
@@ -206,24 +218,33 @@ function handleNotice(notice: SocialNotice) {
       break;
     }
     case "request": {
-      const text = i18n.t("social.notices.request", { name: notice.request.name });
+      const sentence = (who: string) => i18n.t("social.notices.request", { name: who });
+      const text = sentence(notice.request.name);
       // The open list already shows it, in place.
       if (listInView()) {
         announce(text);
         break;
       }
-      toast(text, {
-        action: {
-          label: i18n.t("social.notices.show"),
-          onClick: () => useSocialUi.getState().openPanel({ page: "list" }),
+      // Their mark right after their name (SOC-VERIFY): a stranger's request says who is verified.
+      toast(
+        <MarkedSentence text={sentence} name={notice.request.name} mark={notice.request.mark} />,
+        {
+          action: {
+            label: i18n.t("social.notices.show"),
+            onClick: () => useSocialUi.getState().openPanel({ page: "list" }),
+          },
         },
-      });
+      );
       break;
     }
     case "friendAdded": {
-      const text = i18n.t("social.notices.friendAdded", { name: notice.friend.name });
+      const sentence = (who: string) => i18n.t("social.notices.friendAdded", { name: who });
+      const text = sentence(notice.friend.name);
       if (listInView()) announce(text);
-      else toast.success(text);
+      else
+        toast.success(
+          <MarkedSentence text={sentence} name={notice.friend.name} mark={notice.friend.mark} />,
+        );
       break;
     }
     case "friendOnline":
@@ -241,17 +262,17 @@ function handleNotice(notice: SocialNotice) {
       });
       break;
     case "teamInvite": {
-      const text = i18n.t("teams.notices.invite", {
-        name: notice.invite.from.name,
-        team: notice.invite.name,
-      });
+      const sentence = (who: string) =>
+        i18n.t("teams.notices.invite", { name: who, team: notice.invite.name });
+      const text = sentence(notice.invite.from.name);
       void notifyOutside(text, { onClick: openFriends });
       // The open list already shows it, in place.
       if (listInView()) {
         announce(text);
         break;
       }
-      toast(text, {
+      const from = notice.invite.from;
+      toast(<MarkedSentence text={sentence} name={from.name} mark={from.mark} />, {
         action: {
           label: i18n.t("social.notices.show"),
           onClick: () => useSocialUi.getState().openPanel({ page: "list" }),
@@ -307,17 +328,17 @@ function handleNotice(notice: SocialNotice) {
     case "joinRequest": {
       const crew = ui.view.crews.find((one) => one.id === notice.crew);
       if (!crew) break;
-      const text = i18n.t("crewWave2.requests.notice", {
-        name: notice.request.name,
-        crew: crew.name,
-      });
+      const sentence = (who: string) =>
+        i18n.t("crewWave2.requests.notice", { name: who, crew: crew.name });
+      const text = sentence(notice.request.name);
       // The crew's page shows it already, in place.
       if (crewInView(crew.id)) {
         announce(text);
         break;
       }
       void notifyOutside(text, { onClick: () => showCrew(crew.id) });
-      toast(text, {
+      const asker = notice.request;
+      toast(<MarkedSentence text={sentence} name={asker.name} mark={asker.mark} />, {
         action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(crew.id) },
       });
       break;

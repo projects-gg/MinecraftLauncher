@@ -22,6 +22,7 @@ import { tagChoices } from "./badges";
 import { CrewNotifyGroup } from "./crew-notify";
 import { dayMonth, limitOf } from "./limits";
 import { rise, useSocialMotion } from "./motion";
+import { NameWithMark } from "./person-mark";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 
@@ -476,7 +477,13 @@ function BlockedSection() {
           {blocked.map((user) => (
             <div key={user.id} className="flex items-center gap-3 py-2">
               <SocialAvatar source={user} size={32} />
-              <span className="min-w-0 flex-1 truncate text-[14px] text-bone-100">{user.name}</span>
+              <span className="min-w-0 flex-1">
+                <NameWithMark
+                  name={user.name}
+                  mark={user.mark}
+                  className="text-[14px] text-bone-100"
+                />
+              </span>
               <Button
                 size="sm"
                 variant="ghost"

@@ -58,6 +58,7 @@ import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { crewmatesOnProjects, type HomeHint, homeStrip, isJoinable, playingPeople } from "./model";
 import { enter, leave, useSocialMotion } from "./motion";
+import { MarkedSentence } from "./person-mark";
 import { type PersonPlace, type PersonRef, usePeopleItems } from "./person-menu";
 import { type FaceSource, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -234,7 +235,18 @@ function PlayingLine() {
           className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2.5 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
         >
           <Faces sources={shown} />
-          <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+          <span className="truncate text-[13.5px] font-medium text-bone-50">
+            {/* The first friend's mark right after their name (SOC-VERIFY). */}
+            <MarkedSentence
+              text={(name) =>
+                others
+                  ? t(`social.home.${where}With`, { name, count: others })
+                  : t(`social.home.${where}Alone`, { name })
+              }
+              name={first.name}
+              mark={first.mark}
+            />
+          </span>
         </button>
       </LineMenu>
       {onProjects.length ? <JoinButton glyph /> : null}
@@ -297,7 +309,13 @@ function CallLine() {
               <MegaphoneSimple size={9} weight="fill" aria-hidden />
             </span>
           </span>
-          <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+          <span className="truncate text-[13.5px] font-medium text-bone-50">
+            <MarkedSentence
+              text={(name) => callSentenceOf(call, view.crews, t, false, name)}
+              name={caller.name || t("teams.call.someone")}
+              mark={caller.mark}
+            />
+          </span>
         </button>
       </LineMenu>
       <button

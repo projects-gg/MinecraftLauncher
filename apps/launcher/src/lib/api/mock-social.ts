@@ -63,6 +63,7 @@ import type {
   FriendGroups,
   FriendRequest,
   LimitedAccount,
+  ProfileMark,
   SocialApi,
   SocialInvite,
   SocialNotice,
@@ -99,6 +100,28 @@ function searchParam(key: string): string | null {
   const fromSearch = new URLSearchParams(window.location.search).get(key);
   const fromHash = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get(key);
   return fromSearch ?? fromHash;
+}
+
+/**
+ * `&marks=1` (SOC-VERIFY): some people carry a mark, Ayşe and Zeynep the verified one, KorAteşi the
+ * admin one, the request from Yiğit and two crewmates the verified one; `&marks=me` the player's own
+ * admin mark too.
+ */
+const MARKS: Record<string, ProfileMark> = {
+  "301": "verified",
+  "302": "admin",
+  "307": "verified",
+  "401": "verified",
+  "703": "verified",
+  "802": "verified",
+};
+
+function markOf(id: string): { mark?: ProfileMark } {
+  const asked = searchParam("marks");
+  if (asked === null) return {};
+  if (id === "100") return asked === "me" ? { mark: "admin" } : {};
+  const mark = MARKS[id];
+  return mark ? { mark } : {};
 }
 
 /** `&muted=`: until when the preview's crew is muted (Unix seconds; null: until unmuted), or
@@ -150,6 +173,10 @@ const QR_ROTATED = {
 };
 
 function friendsList(): Friend[] {
+  return friendsBase().map((friend) => ({ ...friend, ...markOf(friend.id) }));
+}
+
+function friendsBase(): Friend[] {
   return [
     {
       id: "301",
@@ -294,6 +321,7 @@ function teamMember(
           game: friend.game?.where === "other" ? { where: "other" as const } : friend.game,
         }
       : {}),
+    ...markOf(extra.id),
     ...extra,
   };
 }
@@ -524,6 +552,7 @@ function initial(): SocialSnapshot {
       status: "online",
       privacy: { shareServer: false, shareLastSeen: true },
       backup,
+      ...markOf("100"),
     },
     friends: friendsList(),
     incoming: [
@@ -533,6 +562,7 @@ function initial(): SocialSnapshot {
         username: "yigitmc",
         avatar: "preset:baby-dragon",
         sentAt: now() - 600,
+        ...markOf("401"),
       },
     ],
     outgoing: [
@@ -553,6 +583,7 @@ function initial(): SocialSnapshot {
         name: "KorAteşi",
         avatar: "discord",
         avatarUrl: discord(2),
+        ...markOf("302"),
         at: now() - 900,
         server: { where: "projects", host: "play.projects.gg" },
         quiet: true,

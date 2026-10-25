@@ -238,6 +238,7 @@ function AnswerRow({ member, team }: { member: TeamMember; team: SocialTeam }) {
         name={member.name}
         badge={member.badge}
         wearer={member.id}
+        mark={member.mark}
         size="sm"
         className="flex-1"
         nameClassName={cn(

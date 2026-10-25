@@ -40,6 +40,13 @@
   --color-signal-poor: var(--color-flare-400);
   --color-signal-poor-shade: var(--color-ember-700);
 
+  /* Profile marks (VerifiedMark, SOC-VERIFY; docs/design.md §6): the two colours outside the palette
+     besides Discord's, only on the mark. Blue "Doğrulanmış hesap", red "Projects yöneticisi" (a
+     crimson, not the error flare); the white check is 3.5:1 and 4.1:1 on them, the marks 5.4:1 and
+     4.6:1 on obsidian-900. */
+  --color-mark-verified: #2a8af0;
+  --color-mark-admin: #e0434a;
+
   --font-display: "Tektur Variable", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
 
