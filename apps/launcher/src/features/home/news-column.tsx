@@ -18,8 +18,8 @@ import { CoverImage } from "@/features/news/cover-image";
 import { MinecraftLabel, useMinecraftText } from "@/features/news/minecraft";
 import { NewDot, NewLabel } from "@/features/news/new-dot";
 import type { EventItem, HomeContent, MinecraftNewsItem, NewsItem, PatchNotes } from "@/lib/api";
-import { cardEvents, nextBoundary, phaseOf } from "@/lib/event-card";
-import { dateTimeFormat, formatDuration, formatRelative } from "@/lib/format";
+import { cardEvents, nextBoundary, phaseOf, timeLeftText } from "@/lib/event-card";
+import { dateTimeFormat, formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { isWebLink, openLink } from "@/lib/links";
 import { columnFill, liveMinecraft, NEWS_COLUMN_ROWS } from "@/lib/minecraft";
@@ -76,7 +76,8 @@ function NewsRow({
             <NewDot on={isNew} />
             <span className="truncate">{formatRelative(item.publishedAt)}</span>
           </span>
-          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
+          {/* Balanced, so a second line never holds one word ("İnşa yarışması: Gökyüzü / şehri"). */}
+          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-semibold text-balance text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
             {item.title}
           </span>
           <NewLabel on={isNew} />
@@ -129,7 +130,7 @@ function MinecraftRow({
             </span>
             <span className="truncate">{formatRelative(item.publishedAt)}</span>
           </span>
-          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-medium text-bone-100/90 transition-colors duration-150 group-hover:text-bone-50">
+          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-medium text-balance text-bone-100/90 transition-colors duration-150 group-hover:text-bone-50">
             {text.title}
           </span>
         </span>
@@ -138,7 +139,10 @@ function MinecraftRow({
   );
 }
 
-/** Bullet lines of the patch notes box (a repeated line is shown once). */
+/**
+ * Bullet lines of the patch notes box (a repeated line is shown once). The square is a quiet mark:
+ * gold stays with OYNA and the actions.
+ */
 function Highlights({ lines }: { lines: string[] }) {
   return (
     <ul className="mt-2 space-y-1.5">
@@ -147,7 +151,7 @@ function Highlights({ lines }: { lines: string[] }) {
           key={line}
           className="flex gap-2 text-[12.5px] leading-snug text-ash-300 [overflow-wrap:anywhere]"
         >
-          <span className="mt-[6px] size-1 shrink-0 bg-gold-500" />
+          <span className="mt-[6px] size-1 shrink-0 bg-ash-500" />
           <span className="line-clamp-2">{line}</span>
         </li>
       ))}
@@ -187,18 +191,29 @@ function PatchNotesBox({ notes }: { notes: PatchNotes }) {
           <span className="font-display text-[14px] font-semibold text-bone-50">
             {t("home.patchNotes")}
           </span>
-          <span className="flex shrink-0 items-center gap-1 text-[12px] text-ash-300 transition-colors duration-150 group-hover:text-gold-300">
-            {formatRelative(notes.publishedAt)}
+          {/* What the box does, named like the column's other links ("Tümü", "1 etkinlik daha"):
+              a bare "5 saat önce ›" read as a link to a time. */}
+          <span className="flex shrink-0 items-center gap-0.5 text-[12.5px] font-medium text-ash-300 transition-colors duration-150 group-hover:text-gold-300">
+            {t("newsColumn.readNotes")}
             <CaretRight
-              size={12}
+              size={13}
               weight="bold"
               aria-hidden
               className="transition-transform duration-200 ease-out group-hover:translate-x-0.5"
             />
           </span>
         </span>
-        <span className="mt-1 block truncate text-[13px] font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
-          {notes.title}
+        {/* The notes' title, then when they came out as plain meta (a long title gives way). */}
+        <span className="mt-1 flex min-w-0 items-baseline gap-1.5">
+          <span className="min-w-0 truncate text-[13px] font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
+            {notes.title}
+          </span>
+          <span aria-hidden className="shrink-0 text-[12px] text-ash-500">
+            ·
+          </span>
+          <span className="shrink-0 text-[12px] text-ash-300">
+            {formatRelative(notes.publishedAt)}
+          </span>
         </span>
         <Highlights lines={notes.highlights} />
       </Link>
@@ -236,17 +251,6 @@ function useEventCard(events: EventItem[] | undefined) {
   return { event, live, others: ordered.slice(1) };
 }
 
-/** "5 gün 3 sa", "2 sa 14 dk": time left in the other events list. */
-function spanText(ms: number): string {
-  const day = 86_400_000;
-  if (ms < day) return formatDuration(ms / 1000);
-  const days = Math.floor(ms / day);
-  const hours = Math.floor((ms % day) / 3_600_000);
-  return hours
-    ? i18n.t("reminders.daysHours", { days, hours })
-    : i18n.t("reminders.days", { days });
-}
-
 // In the interface's language, looked up at each call (the language can change live).
 const clock = () => dateTimeFormat({ hour: "2-digit", minute: "2-digit" });
 const weekdayMoment = () => dateTimeFormat({ weekday: "long", hour: "2-digit", minute: "2-digit" });
@@ -280,9 +284,10 @@ function StartsAt({ iso }: { iso: string }) {
 }
 
 /**
- * The list behind "+1 etkinlik": the other live and upcoming events, upcoming ones with their
+ * The list behind "1 etkinlik daha": the other live and upcoming events, upcoming ones with their
  * reminder bell. It opens beside the card (anchored to the whole event block), so the card stays
- * readable; its times are as of the moment it opened.
+ * readable; its times are as of the moment it opened. A live one says "Sürüyor" in the text's
+ * own colour (the list mixes both kinds; gold stays with the actions).
  */
 function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () => void }) {
   const { t } = useTranslation();
@@ -316,13 +321,15 @@ function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () =
                 </span>
                 <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ash-300">
                   {live ? (
-                    <span className="font-medium text-gold-300">{t("home.eventRunning")}</span>
+                    <span className="font-medium text-bone-100">{t("home.eventRunning")}</span>
                   ) : null}
                   <span className="tabular-nums">
                     {live
                       ? event.openEnded
                         ? t("home.eventStarted", { when: formatRelative(event.startsAt, now) })
-                        : t("home.eventEndsIn", { when: spanText(Date.parse(event.endsAt) - now) })
+                        : t("home.eventEndsIn", {
+                            when: timeLeftText(Date.parse(event.endsAt) - now),
+                          })
                       : t("home.eventStartsAt", { when: startMoment(event.startsAt, now) })}
                   </span>
                 </span>
@@ -378,8 +385,9 @@ function StartedAgo({ at }: { at: string }) {
 }
 
 /**
- * "2 sa 14 dk kaldı" (in the other events list's words): changes once a minute and each second only
- * in the last minute, and stops while nobody can see it; right again the moment it is back.
+ * "2 saat 14 dakika kaldı" (in the other events list's words): changes once a minute and each
+ * second only in the last minute, and stops while nobody can see it; right again the moment it is
+ * back.
  */
 function TimeLeft({ to }: { to: string }) {
   const { t } = useTranslation();
@@ -395,9 +403,7 @@ function TimeLeft({ to }: { to: string }) {
     return () => window.clearTimeout(id);
   }, [wait, ticks]);
   return (
-    <span className="tabular-nums">
-      {t("home.eventEndsIn", { when: spanText(Math.max(0, left)) })}
-    </span>
+    <span className="tabular-nums">{t("home.eventEndsIn", { when: timeLeftText(left) })}</span>
   );
 }
 
@@ -450,10 +456,12 @@ function EventBlock({
       <Popover.Anchor asChild>
         <section className="relative border-t border-white/7 px-3.5 pt-2.5">
           {/* The block's own heading, as the patch notes have theirs (it was a small coloured
-              kicker over the event's title), and the other events behind a plain link beside it. */}
+              kicker over the event's title), and the other events behind a plain link beside it.
+              "Süren etkinlik" says it runs, so the time line below needs no word for it (a bare
+              "Etkinlik" also repeated the stories' category). */}
           <div className="flex min-h-[22px] items-center justify-between gap-3">
             <h3 className="font-display text-[14px] font-semibold text-bone-50">
-              {live ? t("categories.event") : t("home.nextEvent")}
+              {live ? t("newsColumn.liveEvent") : t("home.nextEvent")}
             </h3>
             {others.length ? (
               <Popover.Trigger asChild>
@@ -490,7 +498,7 @@ function EventBlock({
                 <div className="flex items-start justify-between gap-2">
                   <p
                     id={titleId}
-                    className="line-clamp-2 text-[13px] leading-snug font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50"
+                    className="line-clamp-2 text-[13px] leading-snug font-semibold text-balance text-bone-100 transition-colors duration-150 group-hover:text-bone-50"
                   >
                     {event.title}
                   </p>
@@ -504,13 +512,10 @@ function EventBlock({
                     />
                   ) : null}
                 </div>
-                {/* One line of time, in the other events list's words: running and what is left
-                    (or since when), or when it starts. Big ticking digits outshouted the panel. */}
+                {/* One line of time, in the other events list's words: what is left (or since
+                    when), or when it starts. Big ticking digits outshouted the panel. */}
                 {live ? (
-                  <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[12.5px] text-ash-300">
-                    <span className="shrink-0 font-medium text-gold-300">
-                      {t("home.eventRunning")}
-                    </span>
+                  <p className="mt-1 min-w-0 text-[12.5px] text-ash-300">
                     {event.openEnded ? (
                       <StartedAgo at={event.startsAt} />
                     ) : (

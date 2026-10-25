@@ -4,6 +4,31 @@
 // The backend sends the events in this order for the moment it built the home content; the
 // card applies the rule again whenever an event starts or ends, so it changes on time.
 import type { EventItem } from "@/lib/api";
+import i18n from "@/lib/i18n";
+
+type SpanUnit = "days" | "hours" | "minutes" | "seconds";
+
+const spanUnit = (name: SpanUnit, count: number) => i18n.t(`newsColumn.span.${name}`, { count });
+
+/**
+ * Time left on the event card and in the other events list, in whole words like the column's
+ * "5 saat önce": "4 gün 23 saat", "2 saat 14 dakika", "38 dakika", "45 saniye" (the app's short
+ * "sa" and "dk" have no match for "gün"). Two units at most, the larger first, a zero second unit
+ * left out. It rounds down, so it changes 1 ms past each boundary as `countdownTickMs` expects,
+ * and says "1 saniye" to the end rather than "0 saniye".
+ */
+export function timeLeftText(ms: number): string {
+  const secs = Math.max(1, Math.floor(ms / 1000));
+  const days = Math.floor(secs / 86_400);
+  const hours = Math.floor((secs % 86_400) / 3600);
+  const minutes = Math.floor((secs % 3600) / 60);
+  const parts = days
+    ? [spanUnit("days", days), hours ? spanUnit("hours", hours) : ""]
+    : hours
+      ? [spanUnit("hours", hours), minutes ? spanUnit("minutes", minutes) : ""]
+      : [minutes ? spanUnit("minutes", minutes) : spanUnit("seconds", secs)];
+  return parts.filter(Boolean).join(" ");
+}
 
 export type EventPhase = "upcoming" | "live" | "ended";
 
