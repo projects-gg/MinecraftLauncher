@@ -31,8 +31,11 @@ public final class Fonts {
         STRONG("ui_strong", 8.5f),
         SMALL("small", 7.5f),
         DISPLAY("display", 9f),
-        /** A crew tag's chip (TEAM6): Tektur as the launcher's {@code TeamTag}, small. */
-        TAG("tag", 6f),
+        /**
+         * A crew tag's chip (TEAM6): Figtree SemiBold, as the launcher's {@code TeamTag}. Not Tektur: its cedilla is a
+         * detached comma that shrinks to a pixel at chip size, and "GKŞ" read "GKS".
+         */
+        TAG("tag", 6.5f),
         /** A face's letter (OVL-UX2): Tektur, as the launcher's {@code PlayerHead} sets it. */
         FACE("face", 7.5f);
 

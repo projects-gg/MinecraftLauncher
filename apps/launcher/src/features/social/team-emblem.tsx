@@ -168,7 +168,9 @@ const TAG_SIZES = {
 export type TagSize = keyof typeof TAG_SIZES;
 
 /** `[GKR]` beside a crew's name, or before a player's (TEAM6): the crew colour at 24 % under bone
- * text. The chip never shrinks; the name beside it truncates. */
+ * text. The chip never shrinks; the name beside it truncates. The tag is the chip's own Figtree
+ * SemiBold (docs/design.md §3, micro): Tektur's cedilla is a detached comma that drops to a
+ * pixel at 11 px, so "GKŞ" read "GKS" (OVL-LANG; the in-game overlay's chip is the same). */
 export function TeamTag({
   tag,
   color,
@@ -182,7 +184,7 @@ export function TeamTag({
 }) {
   return (
     <Chip
-      className={cn("font-display text-bone-50", TAG_SIZES[size], className)}
+      className={cn("text-bone-50", TAG_SIZES[size], className)}
       style={{ background: tagTint(color ?? "gold") }}
     >
       {tag}

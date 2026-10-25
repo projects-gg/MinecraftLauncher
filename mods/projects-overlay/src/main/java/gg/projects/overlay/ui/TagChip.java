@@ -7,9 +7,10 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.util.FormattedCharSequence;
 
 /**
- * A crew tag's chip before a name (TEAM6: "[GK] Ayşe"): the tag in Tektur, bone-50 on the crew colour at 24 %,
- * chamfered as the launcher's {@code TeamTag}. Laid out once (its text keeps its layout) and drawn with two calls,
- * the frame and the text. The chip never shrinks; the name beside it does.
+ * A crew tag's chip before a name (TEAM6: "[GK] Ayşe"): the tag in Figtree SemiBold (Turkish letters legible at every
+ * GUI scale: Ş with its cedilla, not Tektur's one-pixel comma), bone-50 on the crew colour at 24 %, chamfered as the
+ * launcher's {@code TeamTag}. Laid out once (its text keeps its layout) and drawn with two calls, the frame and the
+ * text. The chip never shrinks; the name beside it does.
  */
 public final class TagChip {
     /** Beside a name in a list row or a toast's title. */
