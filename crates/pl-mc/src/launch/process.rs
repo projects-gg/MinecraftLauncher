@@ -761,10 +761,11 @@ mod tests {
         let command = LaunchCommand::for_tests(program, args, tmp.path().join("game"))
             .with_player_jvm_options(player);
         assert_eq!(command.player_jvm_options(), ["-XX:+UseFancyThing"]);
-        // "At once" counts from the JVM's last line, not from the start: starting a process (a
-        // fresh script the virus scanner reads first) took 5 s on a busy machine.
-        let last_line = Arc::new(Mutex::new(None::<Instant>));
-        let seen = Arc::clone(&last_line);
+        // "At once": the exit is told right after the JVM's last line, without waiting out the
+        // pipes' drain. Counted between those two events, not from the start: starting a process
+        // (a fresh script the virus scanner reads first) took 5 s on a busy machine.
+        let times = Arc::new(Mutex::new((None::<Instant>, None::<Instant>)));
+        let seen = Arc::clone(&times);
         let process = GameProcess::spawn(
             &command,
             SpawnOptions {
@@ -774,14 +775,17 @@ mod tests {
                 ..SpawnOptions::default()
             },
             Arc::new(move |event| {
-                if matches!(event, GameEvent::Line(_)) {
-                    *seen.lock() = Some(Instant::now());
+                let mut seen = seen.lock();
+                match event {
+                    GameEvent::Line(_) => seen.0 = Some(Instant::now()),
+                    GameEvent::Exited { .. } => seen.1 = Some(Instant::now()),
+                    _ => {}
                 }
             }),
         )
         .await
         .unwrap();
-        let exit = tokio::time::timeout(Duration::from_secs(10), process.wait())
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
             .await
             .unwrap();
         assert_eq!(exit.code, Some(1));
@@ -794,60 +798,127 @@ mod tests {
             crash.suggested_actions[0],
             crate::launch::crash::SuggestedAction::ResetJvmArguments
         );
-        let since = last_line
-            .lock()
-            .expect("the JVM's lines were read")
-            .elapsed();
+        let (last_line, exited) = *times.lock();
+        let since = exited
+            .expect("the exit was told")
+            .duration_since(last_line.expect("the JVM's lines were read"));
         assert!(since < DRAIN_TIMEOUT, "{since:?}");
     }
 
-    /// A shell command that prints `line` (a log line, or nothing) and then lives about a second
-    /// and a half, so the probe looks a few times.
-    fn opening_game(dir: &Path, line: Option<&str>) -> LaunchCommand {
-        let (program, args) = if cfg!(windows) {
-            let print = line.map(|l| format!("echo {l} & ")).unwrap_or_default();
-            (
-                PathBuf::from("cmd"),
-                vec!["/C".to_owned(), format!("{print}ping -n 3 127.0.0.1 >NUL")],
-            )
-        } else {
-            let print = line.map(|l| format!("echo '{l}'; ")).unwrap_or_default();
-            (
-                PathBuf::from("sh"),
-                vec!["-c".to_owned(), format!("{print}sleep 1.5")],
-            )
-        };
-        LaunchCommand::for_tests(program, args, dir.join("game"))
+    /// Deadline of a wait for a real process: it only runs out when something is broken (on a
+    /// loaded machine a fake game that lived 2 s once took more than 20 s to be reported; beside a
+    /// busy-loop on 12 of 16 threads, real-process tests ran some 30 times slower).
+    const DEADLINE: Duration = Duration::from_secs(300);
+
+    /// Checks `condition` until it holds, failing after [`DEADLINE`].
+    async fn eventually(what: &str, condition: impl Fn() -> bool) {
+        let deadline = Instant::now() + DEADLINE;
+        let mut pause = Duration::from_millis(5);
+        while !condition() {
+            assert!(Instant::now() < deadline, "timed out waiting for: {what}");
+            tokio::time::sleep(pause).await;
+            pause = (pause * 2).min(Duration::from_millis(100));
+        }
     }
 
-    async fn window_events(
-        command: &LaunchCommand,
-        logs: &Path,
-        window_probe: Option<WindowProbe>,
-    ) -> (Vec<GameEvent>, bool, GameExit) {
-        let events = Arc::new(Mutex::new(Vec::new()));
-        let sink = Arc::clone(&events);
-        let process = GameProcess::spawn(
-            command,
-            SpawnOptions {
-                instance_id: "window".into(),
-                logs_dir: logs.to_path_buf(),
-                window_probe,
-                ..SpawnOptions::default()
-            },
-            Arc::new(move |event| {
-                if !matches!(event, GameEvent::Line(_)) {
-                    sink.lock().push(event);
-                }
-            }),
-        )
-        .await
-        .unwrap();
-        let exit = tokio::time::timeout(Duration::from_secs(20), process.wait())
+    /// A fake game that prints `line` (a log line, or nothing) and then runs until it is closed:
+    /// the test decides what happens while it opens, not a timer racing a loaded machine. It looks
+    /// for its quit file in its game folder about once a second.
+    struct OpeningGame {
+        command: LaunchCommand,
+        quit_file: PathBuf,
+    }
+
+    impl OpeningGame {
+        fn new(dir: &Path, line: Option<&str>) -> Self {
+            let id = uuid::Uuid::new_v4().simple().to_string();
+            let game_dir = dir.join("game");
+            let quit = format!("quit-{id}");
+            let (program, args) = if cfg!(windows) {
+                let print = line.map(|l| format!("echo {l}\r\n")).unwrap_or_default();
+                let script = dir.join(format!("game-{id}.cmd"));
+                std::fs::write(
+                    &script,
+                    format!(
+                        "@echo off\r\n{print}:open\r\nif exist {quit} exit /b 0\r\nping -n 2 127.0.0.1 >NUL\r\ngoto open\r\n"
+                    ),
+                )
+                .unwrap();
+                (
+                    PathBuf::from("cmd"),
+                    vec!["/C".to_owned(), script.display().to_string()],
+                )
+            } else {
+                let print = line.map(|l| format!("echo '{l}'; ")).unwrap_or_default();
+                (
+                    PathBuf::from("sh"),
+                    vec![
+                        "-c".to_owned(),
+                        format!("{print}while [ ! -e {quit} ]; do sleep 0.05; done"),
+                    ],
+                )
+            };
+            Self {
+                command: LaunchCommand::for_tests(program, args, game_dir.clone()),
+                quit_file: game_dir.join(quit),
+            }
+        }
+
+        /// The game exits by itself within about a second.
+        fn close(&self) {
+            std::fs::write(&self.quit_file, b"").unwrap();
+        }
+    }
+
+    /// A started [`OpeningGame`] and every event it sent.
+    struct Watched {
+        process: GameProcess,
+        events: Arc<Mutex<Vec<GameEvent>>>,
+    }
+
+    impl Watched {
+        async fn start(game: &OpeningGame, logs: &Path, window_probe: Option<WindowProbe>) -> Self {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let sink = Arc::clone(&events);
+            let process = GameProcess::spawn(
+                &game.command,
+                SpawnOptions {
+                    instance_id: "window".into(),
+                    logs_dir: logs.to_path_buf(),
+                    window_probe,
+                    ..SpawnOptions::default()
+                },
+                Arc::new(move |event| sink.lock().push(event)),
+            )
             .await
             .unwrap();
-        let events = events.lock().clone();
-        (events, process.window_shown(), exit)
+            Self { process, events }
+        }
+
+        fn saw(&self, check: impl Fn(&GameEvent) -> bool) -> bool {
+            self.events.lock().iter().any(check)
+        }
+
+        /// Closes the game and waits for the end of its run: its events (the lines left out),
+        /// whether its window showed, and the exit.
+        async fn close(self, game: &OpeningGame) -> (Vec<GameEvent>, bool, GameExit) {
+            game.close();
+            let exit = tokio::time::timeout(DEADLINE, self.process.wait())
+                .await
+                .expect("the game exits once closed");
+            let events = self
+                .events
+                .lock()
+                .iter()
+                .filter(|event| !matches!(event, GameEvent::Line(_)))
+                .cloned()
+                .collect();
+            (events, self.process.window_shown(), exit)
+        }
+    }
+
+    fn window_shown(event: &GameEvent) -> bool {
+        *event == GameEvent::WindowShown
     }
 
     static LOOKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -861,13 +932,25 @@ mod tests {
         false
     }
 
+    static LOOKS_BEFORE_CLOSING: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(0);
+
+    /// No window yet (counting the looks).
+    fn not_yet(_pid: u32) -> bool {
+        LOOKS_BEFORE_CLOSING.fetch_add(1, Ordering::SeqCst);
+        false
+    }
+
     /// The probe finds the window while the game opens: told once, between start and exit, and
     /// nothing is asked after that.
     #[tokio::test]
     async fn the_probe_tells_when_the_window_shows() {
         let tmp = tempfile::tempdir().unwrap();
-        let command = opening_game(tmp.path(), None);
-        let (events, shown, exit) = window_events(&command, tmp.path(), Some(second_look)).await;
+        let game = OpeningGame::new(tmp.path(), None);
+        let run = Watched::start(&game, tmp.path(), Some(second_look)).await;
+        // The probe looks every 250 ms; the game runs until it is closed.
+        eventually("the window shows", || run.saw(window_shown)).await;
+        let (events, shown, exit) = run.close(&game).await;
         assert!(shown);
         // The window was on screen for the rest of the run, which counts as played.
         assert!(
@@ -904,17 +987,29 @@ mod tests {
     async fn lines_before_the_window_count_only_without_a_probe() {
         let tmp = tempfile::tempdir().unwrap();
         let line = "[12:00:00] [Render thread/INFO]: Backend library: LWJGL version 3.3.3+5";
-        let command = opening_game(tmp.path(), Some(line));
-        let (events, shown, _) = window_events(&command, tmp.path(), Some(never)).await;
+        let game = OpeningGame::new(tmp.path(), Some(line));
+        let run = Watched::start(&game, tmp.path(), Some(never)).await;
+        // Closed only once the line was taken in while the game ran (lines read after the exit
+        // never count, for another reason).
+        eventually("the line is read", || {
+            run.saw(|e| matches!(e, GameEvent::Line(l) if l.message.contains("LWJGL")))
+        })
+        .await;
+        let (events, shown, _) = run.close(&game).await;
         assert!(!shown, "{events:?}");
         assert!(!events.contains(&GameEvent::WindowShown));
-        let (events, shown, _) = window_events(&command, tmp.path(), None).await;
+        let game = OpeningGame::new(tmp.path(), Some(line));
+        let run = Watched::start(&game, tmp.path(), None).await;
+        eventually("the window shows", || run.saw(window_shown)).await;
+        let (events, shown, _) = run.close(&game).await;
         assert!(shown, "{events:?}");
         // A line logged once the window exists counts either way.
         let line = "[12:00:01] [Render thread/INFO]: Sound engine started";
-        let command = opening_game(tmp.path(), Some(line));
-        let (_, shown, _) = window_events(&command, tmp.path(), Some(never)).await;
-        assert!(shown);
+        let game = OpeningGame::new(tmp.path(), Some(line));
+        let run = Watched::start(&game, tmp.path(), Some(never)).await;
+        eventually("the window shows", || run.saw(window_shown)).await;
+        let (events, shown, _) = run.close(&game).await;
+        assert!(shown, "{events:?}");
     }
 
     /// A game that closes before any window showed is never "shown": its exit takes over, and
@@ -922,8 +1017,14 @@ mod tests {
     #[tokio::test]
     async fn a_game_that_closes_first_never_shows() {
         let tmp = tempfile::tempdir().unwrap();
-        let command = opening_game(tmp.path(), None);
-        let (events, shown, exit) = window_events(&command, tmp.path(), Some(never)).await;
+        let game = OpeningGame::new(tmp.path(), None);
+        let run = Watched::start(&game, tmp.path(), Some(not_yet)).await;
+        // The probe looks and finds nothing; then the game closes.
+        eventually("the probe looks", || {
+            LOOKS_BEFORE_CLOSING.load(Ordering::SeqCst) >= 2
+        })
+        .await;
+        let (events, shown, exit) = run.close(&game).await;
         assert!(!shown);
         assert!(!events.contains(&GameEvent::WindowShown), "{events:?}");
         assert!(matches!(events.last(), Some(GameEvent::Exited { .. })));
@@ -1209,7 +1310,7 @@ mod tests {
         assert_eq!(process.shown_at(), Some(shown));
         assert!(process.log_file().is_none() && process.tail().is_empty());
         end.send(Some(0)).unwrap();
-        let exit = tokio::time::timeout(Duration::from_secs(5), process.wait())
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
             .await
             .unwrap();
         assert_eq!(exit.code, Some(0));
@@ -1244,7 +1345,7 @@ mod tests {
         );
         assert!(process.shown_at().is_some());
         process.kill();
-        let exit = tokio::time::timeout(Duration::from_secs(5), process.wait())
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
             .await
             .unwrap();
         assert!(asked.load(Ordering::SeqCst));
@@ -1279,7 +1380,7 @@ mod tests {
         .unwrap();
         assert!(process.is_running());
         process.kill();
-        let exit = tokio::time::timeout(Duration::from_secs(20), process.wait())
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
             .await
             .unwrap();
         assert!(exit.killed);
