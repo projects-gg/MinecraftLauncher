@@ -117,8 +117,6 @@ export const tr = {
     patchVersion: "{{pack}} {{version}}",
     seeAll: "Tamamını gör",
     nextEvent: "Sıradaki etkinlik",
-    eventLeft: "kaldı",
-    eventLater: "sonra",
     eventStarted: "{{when}} başladı",
     openInDiscord: "Discord'da aç",
     offlineBanner: "Çevrimdışısın. Kurulu oyunları oynayabilirsin.",
@@ -147,7 +145,6 @@ export const tr = {
     patchNotes: "Yama notu",
     community: "Topluluk",
   },
-  countdown: { days: "gün", hours: "saat", minutes: "dakika", seconds: "saniye" },
   /** Short spans of time ("2 sa 14 dk", "38 dk", "45 sn") and download speed (lib/format). */
   units: {
     hoursMinutes: "{{hours}} sa {{minutes}} dk",

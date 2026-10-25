@@ -1,7 +1,7 @@
 import { ArrowSquareOut, CaretRight } from "@phosphor-icons/react";
 import {
-  Countdown,
   cn,
+  countdownTickMs,
   easeOutExpo,
   exitOf,
   Skeleton,
@@ -168,7 +168,7 @@ function PatchNotesBox({ notes }: { notes: PatchNotes }) {
           <h3 className="font-display text-[14px] font-semibold text-bone-50">
             {t("home.patchNotes")}
           </h3>
-          <span className="text-[12px] text-gold-300">
+          <span className="text-[12px] text-ash-300">
             {t("home.patchVersion", { pack: notes.packName, version: notes.version })}
           </span>
         </div>
@@ -187,7 +187,7 @@ function PatchNotesBox({ notes }: { notes: PatchNotes }) {
           <span className="font-display text-[14px] font-semibold text-bone-50">
             {t("home.patchNotes")}
           </span>
-          <span className="flex shrink-0 items-center gap-1 text-[12px] text-gold-300">
+          <span className="flex shrink-0 items-center gap-1 text-[12px] text-ash-300 transition-colors duration-150 group-hover:text-gold-300">
             {formatRelative(notes.publishedAt)}
             <CaretRight
               size={12}
@@ -276,7 +276,7 @@ function StartsAt({ iso }: { iso: string }) {
     const id = window.setTimeout(() => setNow(Date.now()), wait);
     return () => window.clearTimeout(id);
   }, [now]);
-  return <p className="mt-0.5 text-[12.5px] text-ash-300 tabular-nums">{startMoment(iso, now)}</p>;
+  return <p className="mt-1 text-[12.5px] text-ash-300 tabular-nums">{startMoment(iso, now)}</p>;
 }
 
 /**
@@ -374,10 +374,30 @@ function StartedAgo({ at }: { at: string }) {
     const id = window.setInterval(() => tick((n) => n + 1), 30_000);
     return () => window.clearInterval(id);
   }, [unseen]);
+  return <span>{t("home.eventStarted", { when: formatRelative(at) })}</span>;
+}
+
+/**
+ * "2 sa 14 dk kaldı" (in the other events list's words): changes once a minute and each second only
+ * in the last minute, and stops while nobody can see it; right again the moment it is back.
+ */
+function TimeLeft({ to }: { to: string }) {
+  const { t } = useTranslation();
+  const { unseen } = usePerf();
+  const [ticks, tick] = useState(0);
+  const left = Date.parse(to) - Date.now();
+  const wait = unseen ? null : countdownTickMs(left);
+  useEffect(() => {
+    // Armed again after every tick, also when the next wait equals the last one.
+    void ticks;
+    if (wait === null) return;
+    const id = window.setTimeout(() => tick((n) => n + 1), wait);
+    return () => window.clearTimeout(id);
+  }, [wait, ticks]);
   return (
-    <p className="mt-1.5 text-[12.5px] text-ash-300">
-      {t("home.eventStarted", { when: formatRelative(at) })}
-    </p>
+    <span className="tabular-nums">
+      {t("home.eventEndsIn", { when: spanText(Math.max(0, left)) })}
+    </span>
   );
 }
 
@@ -420,12 +440,6 @@ function EventBlock({
 }) {
   const { t } = useTranslation();
   const glide = useInteractionMotion();
-  const units = {
-    days: t("countdown.days"),
-    hours: t("countdown.hours"),
-    minutes: t("countdown.minutes"),
-    seconds: t("countdown.seconds"),
-  };
   // Reduced motion keeps the cross-fade only.
   const shift = glide ? 6 : 0;
   const enter = 0.28;
@@ -490,33 +504,31 @@ function EventBlock({
                     />
                   ) : null}
                 </div>
-                {live ? null : <StartsAt iso={event.startsAt} />}
-                {live && event.openEnded ? (
-                  <StartedAgo at={event.startsAt} />
-                ) : (
-                  <div className="mt-2 flex items-end gap-3">
-                    <Countdown to={new Date(live ? event.endsAt : event.startsAt)} units={units} />
-                    <span className="text-[11px] font-medium text-ash-300">
-                      {live ? t("home.eventLeft") : t("home.eventLater")}
+                {/* One line of time, in the other events list's words: running and what is left
+                    (or since when), or when it starts. Big ticking digits outshouted the panel. */}
+                {live ? (
+                  <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[12.5px] text-ash-300">
+                    <span className="shrink-0 font-medium text-gold-300">
+                      {t("home.eventRunning")}
                     </span>
-                  </div>
+                    {event.openEnded ? (
+                      <StartedAgo at={event.startsAt} />
+                    ) : (
+                      <TimeLeft to={event.endsAt} />
+                    )}
+                  </p>
+                ) : (
+                  <StartsAt iso={event.startsAt} />
                 )}
               </EventTarget>
               {live ? (
-                // On the server: "Katıl" takes the bell's place, level with the countdown's digits
-                // (or with the "started" line of an open-ended event) and flush with the caret.
+                // On the server: "Katıl" takes the bell's place, level with the time line.
                 event.join ? (
-                  <EventJoin
-                    describedBy={titleId}
-                    className={cn(
-                      "absolute right-0",
-                      event.openEnded ? "bottom-[1px]" : "bottom-[22px]",
-                    )}
-                  />
+                  <EventJoin describedBy={titleId} className="absolute right-0 bottom-[1px]" />
                 ) : null
               ) : (
-                // Level with the countdown's digits; its glyph lines up with the caret above.
-                <ReminderBell event={event} className="absolute right-[-6px] bottom-[22px]" />
+                // Level with the start time.
+                <ReminderBell event={event} className="absolute right-[-6px] bottom-[1px]" />
               )}
             </motion.div>
           </AnimatePresence>

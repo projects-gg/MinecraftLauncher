@@ -90,7 +90,7 @@ const content: HomeContent = {
     {
       id: "qa",
       level: "info",
-      text: "Cuma 21.00'de Discord'da soru-cevap yayını var.",
+      text: "Cuma 21:00'de Discord'da soru-cevap yayını var.",
       url: "https://discord.gg/projects",
       dismissible: true,
     },

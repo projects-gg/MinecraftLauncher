@@ -323,8 +323,6 @@ export const en: DeepPartial<Strings> = {
     patchVersion: "{{pack}} {{version}}",
     seeAll: "See all",
     nextEvent: "Next event",
-    eventLeft: "left",
-    eventLater: "to go",
     eventStarted: "Started {{when}}",
     openInDiscord: "Open in Discord",
     offlineBanner: "You're offline. You can still play installed games.",
@@ -353,13 +351,6 @@ export const en: DeepPartial<Strings> = {
     announcement: "Announcement",
     patchNotes: "Patch notes",
     community: "Community",
-  },
-  // Under the event card's digits: as short as the Turkish words, so the digits keep one rhythm.
-  countdown: {
-    days: "days",
-    hours: "hrs",
-    minutes: "mins",
-    seconds: "secs",
   },
   units: {
     hoursMinutes: "{{hours}} h {{minutes}} min",

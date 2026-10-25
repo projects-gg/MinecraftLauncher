@@ -192,7 +192,7 @@ function VerdictCard({
   // Heard once a run ends (the rows are not announced one by one).
   const announced = shown.kind === "checking" ? "" : `${t("help.verdict.done")} ${headline}.`;
   return (
-    <div className="relative overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/45 px-4 py-3 ring-1 ring-white/7">
+    <div className="relative overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/45 px-4 py-2.5 ring-1 ring-white/7">
       <div className="flex items-center gap-3.5">
         <VerdictMark kind={shown.kind} />
         <div className="min-w-0 flex-1">
@@ -417,7 +417,7 @@ function GroupBlock({
       transition={{ layout: glide }}
       aria-labelledby={id}
     >
-      <div className="mb-1.5 flex min-h-[24px] items-center justify-between gap-4">
+      <div className="mb-1 flex min-h-[24px] items-center justify-between gap-4">
         <h3 id={id} className="text-[12.5px] font-medium text-ash-400">
           {t(`help.groups.${group}`)}
         </h3>
