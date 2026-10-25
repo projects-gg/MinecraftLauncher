@@ -6,33 +6,38 @@ import type { InstanceSummary, OfficialStatus } from "@/lib/api";
 
 /**
  * The lines, in the order they share one grid cell (the cell keeps the tallest one's height, so
- * nothing below moves when they take turns):
+ * nothing below moves when they take turns). Each that says it will not work names where or why,
+ * and its action (if any) the fix:
  * - `opens`: how it opens (the switch is off, or nothing stands in its way);
- * - `noHome`: no install can carry it, with "Kur" (the official pack was deleted and no Fabric
- *   install of the player's is on a version the mod ships for);
- * - `closes`: "Oyun açılınca launcher: Kapansın" is chosen;
+ * - `noHome`: no install can carry it, with "Resmî paketi kur" (the official pack was deleted and
+ *   no Fabric install of the player's is on a version the mod ships for);
+ * - `closes`: "Oyun açılınca launcher: Kapansın" is chosen, with "Kapanmak yerine küçülsün";
  * - `notFabric`: the install Play opens is not Fabric (the backend's `NotFabric`);
- * - `version`: it is Fabric on a version the mod does not ship for (`NoJar`).
- * The last two switch Play to an install that carries it, named in the action.
+ * - `version`: it is Fabric on a version the mod does not ship for (`NoJar`);
+ * - `waits`: one of those two while its game is prepared or open: the command bar's picker is
+ *   locked, so the line says where it can switch once the game closes.
+ * `notFabric` and `version` switch Play to an install that carries it, named in the action.
  * A later state (OVL-AUTO: "not out for this Minecraft version yet", for a newer version whose
  * tested jar is still to come) is one more name here, one more sentence in `tr/en-overlay.ts` and
  * one more rule in `overlayLine`, before `version`.
  */
-export const OVERLAY_LINES = ["opens", "noHome", "closes", "notFabric", "version"] as const;
+export const OVERLAY_LINES = [
+  "opens",
+  "noHome",
+  "closes",
+  "notFabric",
+  "version",
+  "waits",
+] as const;
 export type OverlayLineKind = (typeof OVERLAY_LINES)[number];
 
 export interface OverlayLine {
   kind: OverlayLineKind;
   /**
-   * The install the line's action selects (`notFabric`, `version`): none while no other install
-   * can carry the overlay.
+   * The install the line selects or names (`notFabric`, `version`, `waits`): none while no other
+   * install can carry the overlay.
    */
   switchTo?: InstanceSummary;
-  /**
-   * A game is prepared or open: the command bar stays on it and its picker is locked, so the
-   * action waits until the game ends.
-   */
-  locked?: boolean;
   /**
    * `notFabric`: a Fabric install of the same Minecraft version would carry it, so "Fabric
    * gerekir" is the whole reason (a Forge 1.20.1 install also misses the version).
@@ -69,9 +74,33 @@ export function overlayLine(input: OverlayLineInput): OverlayLine {
   if (!instances || !official || !versions || !play) return { kind: "opens" };
   if (carriesOverlay(play, official, versions)) return { kind: "opens" };
   const switchTo = overlayHome(instances, official, versions);
-  if (play.loader === "fabric") return { kind: "version", switchTo, locked };
+  // The switch waits for the game; with nothing to switch to, the reason stays as it is.
+  if (locked && switchTo) return { kind: "waits", switchTo };
+  if (play.loader === "fabric") return { kind: "version", switchTo };
   const fabricFixes = versions.some((shipped) => shipsFor(shipped, play.mcVersion));
-  return { kind: "notFabric", switchTo, locked, fabricFixes };
+  return { kind: "notFabric", switchTo, fabricFixes };
+}
+
+/**
+ * The Minecraft versions the mod ships for, as one range for a sentence ("26.1.2–26.3"; one
+ * version alone as it is). Patch releases in between count too (`shipsFor`). Releases in their
+ * order, anything else after them.
+ */
+export function versionRange(versions: readonly string[]): string {
+  const sorted = [...versions].sort((a, b) => {
+    const x = releaseNumbers(a);
+    const y = releaseNumbers(b);
+    if (!x || !y) return x ? -1 : y ? 1 : a.localeCompare(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const d = (x[i] ?? 0) - (y[i] ?? 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  });
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (first === undefined || last === undefined) return "";
+  return first === last ? first : `${first}–${last}`;
 }
 
 /**

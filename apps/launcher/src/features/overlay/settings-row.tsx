@@ -10,7 +10,13 @@ import { Row } from "@/features/settings/row";
 import { api, type InstanceSummary } from "@/lib/api";
 import { usePrefs } from "@/stores/prefs";
 import { overlayApi } from "./api";
-import { OVERLAY_LINES, type OverlayLineKind, overlayHome, overlayLine } from "./line";
+import {
+  OVERLAY_LINES,
+  type OverlayLineKind,
+  overlayHome,
+  overlayLine,
+  versionRange,
+} from "./line";
 
 /** Before the instance list is read. */
 const NO_INSTANCES: InstanceSummary[] = [];
@@ -49,11 +55,12 @@ function markRow(from: Element | null, on: boolean) {
  * while the switch is on but the overlay cannot work it says why instead, in the same cell, so
  * nothing below moves (`overlayLine`, the most basic blocker first): no install can carry it
  * (LIB1: the player deleted the official pack and has no Fabric install of a supported version),
- * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın", with "Simge durumuna küçülsün" (its
+ * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın", with "Kapanmak yerine küçülsün" (its
  * default); or the install Play opens is not Fabric, or not a version the mod is made for
  * (OVL-SEL1), with "Projects kurulumuna geç", which selects the official pack or another install it
- * works in for Play. A line with an action is not the switch's label: a click beside the action
- * does nothing. The shortcut itself is set in the game's Controls.
+ * works in for Play (while that install's game is prepared or open, the line says it can switch
+ * once the game closes). A line with an action is not the switch's label: a click beside the
+ * action does nothing. The shortcut itself is set in the game's Controls.
  */
 export function OverlayRow() {
   const { t } = useTranslation();
@@ -92,16 +99,14 @@ export function OverlayRow() {
     instances && overlay ? overlayHome(instances, official, overlay.versions) : undefined;
   // The install the install lines named last: fading out after a switch, they keep their words.
   // Before they ever showed, Play's own.
-  const named = useRef({ name: "", version: "", fabricFixes: true });
+  const named = useRef({ name: "", fabricFixes: true });
   if ((line.kind === "notFabric" || line.kind === "version") && play) {
     named.current = {
       name: play.name,
-      version: play.mcVersion,
       fabricFixes: line.fabricFixes ?? named.current.fabricFixes,
     };
   }
   const shownName = shortName(named.current.name || (play?.name ?? ""));
-  const shownVersion = named.current.version || (play?.mcVersion ?? "");
   const hasAction = (kind: OverlayLineKind) =>
     kind === "noHome" ||
     kind === "closes" ||
@@ -121,10 +126,14 @@ export function OverlayRow() {
     noHome: t("overlay.packMissing"),
     closes: t("overlay.closeHelp"),
     // "Fabric gerekir" only when Fabric alone would do (not for a Forge 1.20.1 install).
-    notFabric: t(named.current.fabricFixes ? "overlay.fabricOnly" : "overlay.notHere", {
+    notFabric: t(named.current.fabricFixes ? "overlay.fabricOnly" : "overlay.fabricAndVersion", {
       name: shownName,
     }),
-    version: t("overlay.versionMissing", { version: shownVersion }),
+    version: t("overlay.versionMissing", {
+      name: shownName,
+      range: versionRange(overlay?.versions ?? []),
+    }),
+    waits: t("overlay.waitsForGame", { name: shortName(home?.name ?? "") }),
   };
   /** The sentence as shown: the shortcut as a key cap. */
   const shownSentence = (kind: OverlayLineKind): ReactNode => {
@@ -140,8 +149,8 @@ export function OverlayRow() {
   };
 
   /**
-   * The fix a line carries: "Resmî paketi kur", "Simge durumuna küçülsün", or the switch to an
-   * install the overlay works in.
+   * The fix a line carries: "Resmî paketi kur", "Kapanmak yerine küçülsün", or the switch to an
+   * install the overlay works in. (`waits` says its fix in its sentence: nothing switches then.)
    */
   const action = (kind: OverlayLineKind, active: boolean): ReactNode => {
     if (kind === "noHome") {
@@ -184,33 +193,17 @@ export function OverlayRow() {
     if (!hasAction(kind) || !home) return null;
     const short = shortName(home.name);
     return (
-      // While a game is prepared or open the command bar's picker is locked: the switch fades out
-      // and the line says when it comes back, in the same place (the grid keeps the wider one).
-      <span className="inline-grid justify-items-start">
-        <LineAction
-          shown={active && !busy}
-          faded={busy}
-          // The whole name when the words cut it.
-          name={short === home.name ? undefined : t("overlay.switchTo", { name: home.name })}
-          onPress={(refocus) => {
-            refocus();
-            selectInstance(home.id);
-          }}
-          className="[grid-area:1/1]"
-        >
-          {t("overlay.switchTo", { name: short })}
-        </LineAction>
-        <span
-          aria-hidden={!busy}
-          // Never in the way of the switch it stands over (hidden, it still sat on top of it).
-          className={cn(
-            "pointer-events-none [grid-area:1/1] ml-1.5 transition-opacity",
-            busy ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
-          )}
-        >
-          {t("overlay.waitsForGame")}
-        </span>
-      </span>
+      <LineAction
+        shown={active}
+        // The whole name when the words cut it.
+        name={short === home.name ? undefined : t("overlay.switchTo", { name: home.name })}
+        onPress={(refocus) => {
+          refocus();
+          selectInstance(home.id);
+        }}
+      >
+        {t("overlay.switchTo", { name: short })}
+      </LineAction>
     );
   };
 
@@ -337,24 +330,19 @@ function focusRowSwitch(from: HTMLElement, keyHeld: boolean) {
  */
 function LineAction({
   shown,
-  faded = false,
   name,
   busy = false,
   onPress,
-  className,
   children,
 }: {
   /** Its line shows and the action can be taken. */
   shown: boolean;
-  /** Its line shows but the action waits (a game is open): it fades out in place until then. */
-  faded?: boolean;
   /** The name a screen reader says when the words shown are not the whole of it. */
   name?: string;
   /** Its work is under way: a press does nothing more. */
   busy?: boolean;
   /** The press; `refocus` keeps the keyboard's focus in the row once the line is gone. */
   onPress: (refocus: () => void) => void;
-  className?: string;
   children: ReactNode;
 }) {
   const guard = usePressGuard(shown ? "shown" : "hidden");
@@ -363,7 +351,6 @@ function LineAction({
   return (
     <button
       type="button"
-      inert={faded || undefined}
       aria-label={name}
       aria-busy={busy || undefined}
       // The words start right after the sentence (`SwapLabel` centres them). The underline fades
@@ -371,10 +358,8 @@ function LineAction({
       // while it shows: Chromium reads a hidden line's action into the switch's description when
       // it has the pseudo-element (measured).
       className={cn(
-        "relative ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[opacity,text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] [&_.swap-label]:justify-items-start",
-        faded ? "opacity-0 duration-100" : "opacity-100",
+        "relative ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] [&_.swap-label]:justify-items-start",
         shown && "hit-area",
-        className,
       )}
       onPointerLeave={guard.handlers.onPointerLeave}
       onKeyDown={(event) => {
@@ -387,7 +372,7 @@ function LineAction({
       onClick={(event) => {
         // Inside the row's label: the switch must not flip with it.
         event.preventDefault();
-        if (!guard.take(event) || busy || faded) return;
+        if (!guard.take(event) || busy) return;
         const button = event.currentTarget;
         const byKeyboard = event.detail === 0;
         onPress(() => {

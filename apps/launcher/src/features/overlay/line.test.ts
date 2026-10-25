@@ -12,6 +12,7 @@ const {
   overlayHome,
   overlayLine,
   shipsFor,
+  versionRange,
 } = await import("./line");
 
 function instance(id: string, extra: Partial<InstanceSummary> = {}): InstanceSummary {
@@ -117,22 +118,23 @@ describe("the overlay switch's line", () => {
     expect(line(oldFabric).switchTo?.id).toBe("projects");
   });
 
-  it("keeps the switch waiting while a game is prepared or open", () => {
-    expect(line(vanilla, { locked: true })).toEqual({
-      kind: "notFabric",
-      switchTo: projects,
-      locked: true,
-      fabricFixes: true,
-    });
-    expect(line(vanilla).locked).toBe(false);
+  it("waits for the game while one is prepared or open, naming where it can switch then", () => {
+    expect(line(vanilla, { locked: true })).toEqual({ kind: "waits", switchTo: projects });
+    expect(line(oldFabric, { locked: true })).toEqual({ kind: "waits", switchTo: projects });
+    // A game in an install that carries it: nothing to wait for.
+    expect(line(projects, { locked: true })).toEqual({ kind: "opens" });
   });
 
   it("offers nothing when no install carries it but the official pack is there", () => {
     // The pack on a version the mod is not shipped for yet (OVL-AUTO's case).
     const ahead = instance("projects", { managed: true, mcVersion: "26.4" });
-    expect(
-      line(ahead, { instances: [ahead, vanilla], official: status({ instanceId: "projects" }) }),
-    ).toEqual({ kind: "version", switchTo: undefined, locked: false });
+    const only = { instances: [ahead, vanilla], official: status({ instanceId: "projects" }) };
+    expect(line(ahead, only)).toEqual({ kind: "version", switchTo: undefined });
+    // Nothing to switch to after the game either: the reason stays.
+    expect(line(ahead, { ...only, locked: true })).toEqual({
+      kind: "version",
+      switchTo: undefined,
+    });
   });
 
   it("decides nothing about the install while a list is unknown", () => {
@@ -145,7 +147,23 @@ describe("the overlay switch's line", () => {
   });
 
   it("names every state the row draws", () => {
-    expect([...OVERLAY_LINES]).toEqual(["opens", "noHome", "closes", "notFabric", "version"]);
+    expect([...OVERLAY_LINES]).toEqual([
+      "opens",
+      "noHome",
+      "closes",
+      "notFabric",
+      "version",
+      "waits",
+    ]);
+  });
+});
+
+describe("the versions a line names", () => {
+  it("are one range from the oldest to the newest, whatever their order", () => {
+    expect(versionRange(VERSIONS)).toBe("26.1.2–26.3");
+    expect(versionRange(["26.3", "26.10", "26.1.2", "26.2"])).toBe("26.1.2–26.10");
+    expect(versionRange(["26.2"])).toBe("26.2");
+    expect(versionRange([])).toBe("");
   });
 });
 
@@ -182,7 +200,6 @@ describe("the install the line's switch picks", () => {
     expect(before).toEqual({
       kind: "notFabric",
       switchTo: ownFabric,
-      locked: false,
       fabricFixes: true,
     });
     expect(line(before.switchTo, { instances, official })).toEqual({ kind: "opens" });
