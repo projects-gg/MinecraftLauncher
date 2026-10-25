@@ -595,10 +595,16 @@ async fn console_masks_login_commands_and_tracks_the_script_file() {
     let everything = env.all_event_json();
     assert!(!everything.contains("hunter22") && !everything.contains("topsecret99"));
     let console_log = env.account_dir(&id).join("konsol.txt");
-    until("console log written", LONG, || {
-        std::fs::read_to_string(&console_log).is_ok_and(|t| t.contains("send /kit"))
-    })
-    .await;
+    // A real thread writes the file: waited for on the real clock (the paused one rushes ahead
+    // while nothing else is due, a deadline of 600 s on it passes in moments).
+    let deadline = std::time::Instant::now() + Duration::from_secs(300);
+    while !std::fs::read_to_string(&console_log).is_ok_and(|t| t.contains("send /kit")) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "console log not written"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
     let log = std::fs::read_to_string(&console_log).unwrap();
     assert!(
         !log.contains("hunter22") && !log.contains("topsecret99"),
@@ -880,5 +886,78 @@ async fn auto_start_also_connects_the_accounts_an_update_stopped() {
         "the same staggered queue as \"connect all\""
     );
     assert_eq!(launches[1].spec.cwd, env.account_dir(&stopped_by_update));
+    manager.shutdown().await;
+}
+
+/// Connections to one server go one by one, in the order they asked (`pacing`): three accounts
+/// asking together start a spacing apart, and the first one's reconnect after the server dropped
+/// it waits behind the two that asked before it. Real clients: `session_e2e.rs`.
+#[tokio::test(start_paused = true)]
+async fn connections_to_one_server_go_one_by_one_in_order() {
+    let env = TestEnv::new(None);
+    let ids: Vec<String> = ["Birinci", "Ikinci", "Ucuncu"]
+        .iter()
+        .map(|n| env.add(n).id)
+        .collect();
+    // The first client is dropped at once (its server restarted); every other one stays in game.
+    let s = ScriptedSpawner::new(|run, mut proc| async move {
+        if run == 0 {
+            proc.event(r#"{"e":"disconnected","reason":"ConnectionLost","msg":"Sunucu kapandı"}"#)
+                .await;
+            return Some(3);
+        }
+        proc.event(r#"{"e":"joined","user":"x","host":"h","port":25565,"protocol":777}"#)
+            .await;
+        proc.until_quit().await
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    let start = tokio::time::Instant::now();
+    for id in &ids {
+        manager.connect(id).await.unwrap();
+        // The actor takes its slot as it picks the start up, before this thread runs anything else.
+        until("start picked up", LONG, || {
+            manager.snapshot(id).state != SessionState::Stopped
+        })
+        .await;
+    }
+    until("four launches", LONG, || s.launch_count() == 4).await;
+
+    let launches = s.launches.lock().clone();
+    let order: Vec<_> = launches.iter().map(|l| l.spec.cwd.clone()).collect();
+    let asked: Vec<_> = [&ids[0], &ids[1], &ids[2], &ids[0]]
+        .iter()
+        .map(|id| env.account_dir(id))
+        .collect();
+    assert_eq!(order, asked);
+    // `MIN_CONNECT_SPACING` (4.5 s) apart from the first ask: the reconnect, due after its 4-6 s
+    // delay, goes after the slot the third account took.
+    let offsets: Vec<f64> = launches.iter().map(|l| secs(l.at - start)).collect();
+    for (offset, expected) in offsets.iter().zip([0.0, 4.5, 9.0, 13.5]) {
+        assert!((offset - expected).abs() < 0.1, "{offsets:?}");
+    }
+    // Waiting for its turn, the reconnect showed when it would go, on top of its delay's own time.
+    let shown = env
+        .states(&ids[0])
+        .into_iter()
+        .filter(|state| {
+            matches!(
+                state,
+                SessionState::Reconnecting {
+                    next_attempt_at: Some(_),
+                    ..
+                }
+            )
+        })
+        .count();
+    assert_eq!(shown, 2, "{:?}", env.states(&ids[0]));
+    // A first start that waits for its slot stays "starting".
+    for id in &ids[1..] {
+        assert!(
+            !env.states(id)
+                .iter()
+                .any(|state| matches!(state, SessionState::Reconnecting { .. })),
+            "{id}"
+        );
+    }
     manager.shutdown().await;
 }
