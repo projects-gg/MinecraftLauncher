@@ -146,7 +146,8 @@ function Pill() {
                 <motion.span
                   key="pending"
                   aria-hidden
-                  className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-gold-400 ring-2 ring-obsidian-950"
+                  // On the pill's round end (its centre on the curve), not floating off its corner.
+                  className="absolute top-0 right-0 size-2.5 rounded-full bg-gold-400 ring-2 ring-obsidian-950"
                   {...pop(reduce)}
                 />
               ) : null}

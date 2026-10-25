@@ -1,18 +1,24 @@
 import { Toaster as Sonner } from "sonner";
 
-/** Toasts are for transient confirmations only; errors that need action stay inline. */
+/**
+ * Toasts are for transient confirmations only; errors that need action stay inline. They sit on
+ * the page's grid (SMALL10b): their right edge on the page gutter's (`--spacing-page`, where the
+ * news column, the cards and the panels end) and as wide as the news column (`--spacing-news`), so
+ * on Home a toast lies exactly over the column's foot instead of overhanging it.
+ */
 export function Toaster() {
   return (
     <Sonner
       position="bottom-right"
-      offset={{ bottom: 88, right: 20 }}
+      // The gutter where the app defines one (the launcher's pages), else 20 px (Studio).
+      offset={{ bottom: 88, right: "var(--spacing-page, 20px)" }}
       gap={10}
       toastOptions={{
         unstyled: true,
         classNames: {
           // Not `glass-strong`: see `toast-surface` in styles.css.
           toast:
-            "toast-surface flex w-[320px] items-start gap-3 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100",
+            "toast-surface flex w-news items-start gap-3 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100",
           title: "font-semibold text-bone-50",
           description: "mt-0.5 text-ash-300",
           // `pointer-events-auto`: a modal sheet turns pointer events off outside itself, the

@@ -69,7 +69,7 @@ describe("a stopped account that starts with the launcher", () => {
     const at = Date.parse("2026-10-25T20:00:00Z");
     expect(stateText({ kind: "stopped" }, at, t)).toBe("Durduruldu");
     expect(stateText({ kind: "stopped" }, at, t, true)).toBe(
-      "Durduruldu, launcher açılınca bağlanır",
+      "Durduruldu, launcher yeniden açılınca bağlanır",
     );
     expect(stateText({ kind: "connecting" }, at, t, true)).toBe("Bağlanıyor");
   });

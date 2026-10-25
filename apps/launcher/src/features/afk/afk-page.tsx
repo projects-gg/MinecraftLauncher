@@ -191,7 +191,12 @@ function AfkCard({
 
   // The main button's action leads the menu too.
   const main: Record<ReturnType<typeof primaryAction>, MenuItem> = {
-    connect: { label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect },
+    connect: {
+      // The button's own words: "Burada bağla" while the account runs in the cloud.
+      label: inCloud ? t("small10.afk.connectHere") : t("afk.connect"),
+      icon: <Play size={16} />,
+      onSelect: connect,
+    },
     stop: { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop },
     cancel: { label: t("afkConnect.cancel"), icon: <X size={16} />, onSelect: stop },
     retry: { label: t("common.retry"), icon: <ArrowsClockwise size={16} />, onSelect: connect },

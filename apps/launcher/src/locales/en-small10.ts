@@ -10,7 +10,8 @@ export const enSmall10 = {
     online: "online",
   },
   afk: {
-    stoppedAutoStart: "Stopped, connects when the launcher opens",
+    stoppedAutoStart: "Stopped, connects next time the launcher starts",
+    connectHere: "Connect here",
     inCloud: "Cloud: {{state}}",
   },
 };

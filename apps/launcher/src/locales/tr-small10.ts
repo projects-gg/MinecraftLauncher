@@ -16,8 +16,16 @@ export const trSmall10 = {
     online: "çevrimiçi",
   },
   afk: {
-    /** A stopped account that connects by itself when the launcher opens (its AFK settings). */
-    stoppedAutoStart: "Durduruldu, launcher açılınca bağlanır",
+    /**
+     * A stopped account that connects by itself when the launcher starts (its AFK settings), said
+     * inside the open launcher: the next start.
+     */
+    stoppedAutoStart: "Durduruldu, launcher yeniden açılınca bağlanır",
+    /**
+     * The main button of a desktop account whose twin runs in the cloud: it brings it to this
+     * computer (asked first), so it says where.
+     */
+    connectHere: "Burada bağla",
     /**
      * A desktop account whose twin runs in 7/24 Bulut: the twin's state, its first letter small
      * ("Bulutta oyunda, 3 sa 12 dk", "Bulutta yeniden bağlanacak, 13 sn").

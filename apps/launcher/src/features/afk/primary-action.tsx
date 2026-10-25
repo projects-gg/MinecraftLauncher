@@ -53,7 +53,8 @@ export function AfkPrimaryAction({
   // Asks first when the same account runs in 7/24 Bulut.
   const connect = useGuardedConnect();
   const labels: Record<AfkAction, string> = {
-    connect: t("afk.connect"),
+    // Running in the cloud, "Bağla" would read as the cloud's own state: here it says where.
+    connect: quiet ? t("small10.afk.connectHere") : t("afk.connect"),
     stop: t("afk.stop"),
     cancel: t("afkConnect.cancel"),
     retry: t("common.retry"),
