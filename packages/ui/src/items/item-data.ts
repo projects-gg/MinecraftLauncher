@@ -76,6 +76,7 @@ export interface ItemData {
 type Row = readonly unknown[];
 
 const RESOURCE_ID = /^[a-z0-9_.-]+:[a-z0-9_./-]+$/;
+const FILE = /^[0-9A-Za-z_-][0-9A-Za-z._-]*\/items\.([0-9a-f]{12})\.json$/;
 const ALIAS = /^[a-z0-9]+( [a-z0-9]+)*$/;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -287,7 +288,14 @@ export function loadItemData(
       const typed = manifest as unknown as ItemDataManifest;
       const version = pickItemDataVersion(typed, minecraft);
       const entry = version ? typed.versions[version] : undefined;
-      if (!entry || typeof entry.file !== "string" || typeof entry.sha256 !== "string")
+      // Only a file next to the manifest, named by its own hash (`<version>/items.<12 hex>.json`).
+      const name = typeof entry?.file === "string" ? FILE.exec(entry.file) : null;
+      if (
+        !entry ||
+        !name ||
+        typeof entry.sha256 !== "string" ||
+        !entry.sha256.startsWith(name[1] ?? "-")
+      )
         return undefined;
       const bytes = await get(new URL(entry.file, manifestUrl).href);
       if (!bytes || (await sha256(bytes)) !== entry.sha256) return undefined;

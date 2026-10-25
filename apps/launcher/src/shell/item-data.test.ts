@@ -227,6 +227,22 @@ describe("item data", () => {
       2,
     );
     expect(await loadItemData("26.3", { base: "https://cdn.test/none/", get })).toBeUndefined();
+    // A manifest naming a file anywhere but next to it, or under another hash, is not followed.
+    const elsewhere = `https://evil.test/items.${sha.slice(0, 12)}.json`;
+    for (const file of [
+      elsewhere,
+      `26.3/items.${"0".repeat(12)}.json`,
+      `../items.${sha.slice(0, 12)}.json`,
+    ]) {
+      const odd = { ...manifest, versions: { "26.3": { ...manifest.versions["26.3"], file } } };
+      const oddBase = `https://cdn.test/odd-${asked.length}/`;
+      const oddGet = async (url: string) =>
+        url === `${oddBase}manifest.json`
+          ? new TextEncoder().encode(JSON.stringify(odd))
+          : get(url);
+      expect(await loadItemData("26.3", { base: oddBase, get: oddGet })).toBeUndefined();
+    }
+    expect(asked).not.toContain(elsewhere);
   });
 
   it("folds like pl_items::data::fold", () => {
