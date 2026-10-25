@@ -320,7 +320,7 @@ export const en: DeepPartial<Strings> = {
     copied: "Copied",
   },
   home: {
-    readNews: "Read more",
+    readNews: "Read the article",
     newsTitle: "News",
     allNews: "All",
     patchNotes: "Patch notes",
