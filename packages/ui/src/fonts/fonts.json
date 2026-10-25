@@ -18,9 +18,9 @@
     "pairs": {
       "r dotlessi": 80
     },
-    "yShoulders": [
-      270,
-      370
-    ]
+    "yShoulders": {
+      "wght400": 270,
+      "wght900": 370
+    }
   }
 }

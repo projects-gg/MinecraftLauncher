@@ -134,7 +134,12 @@ def main() -> None:
             "file": target.name,
             "sha256": sha256(target),
             "pairs": {f"{a} {b}": value for (a, b), value in pairs.items()},
-            **({"yShoulders": list(Y_SHOULDERS[family])} if family in Y_SHOULDERS else {}),
+            # An object, not a list: Biome keeps it as written, so the file needs no formatting pass.
+            **(
+                {"yShoulders": dict(zip(("wght400", "wght900"), Y_SHOULDERS[family]))}
+                if family in Y_SHOULDERS
+                else {}
+            ),
         }
         print(f"{target.name}: {target.stat().st_size} bytes, from {family} {version}")
     # LF on every platform (write_text would write CRLF on Windows).
