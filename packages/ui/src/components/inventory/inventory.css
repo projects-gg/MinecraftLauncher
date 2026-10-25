@@ -127,6 +127,9 @@
   min-width: 0;
   min-height: 32px;
   margin-top: 8px;
+  /* Its ends meet the window's visible edge: the black outline melts into a dark page, so at the
+     outline's outer edge the hand slot and the button's words looked a GUI pixel too wide. */
+  padding-inline: var(--pl-inv-px);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
