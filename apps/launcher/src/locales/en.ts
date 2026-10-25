@@ -22,6 +22,7 @@ import { enLib1 } from "./en-lib1";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
 import { enModSets } from "./en-modsets";
+import { enNewsColumn } from "./en-news-column";
 import { enOverlay } from "./en-overlay";
 import { enOverview } from "./en-overview";
 import { enPlacement } from "./en-placement";
@@ -295,6 +296,7 @@ export const en: DeepPartial<Strings> = {
   cloudAfk: enCloudAfk,
   projectsSkin: enProjectsSkin,
   host: enHost,
+  newsColumn: enNewsColumn,
   nav: {
     home: "Home",
     library: "Library",
