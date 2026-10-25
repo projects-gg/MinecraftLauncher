@@ -85,7 +85,9 @@ async fn the_next_start_stops_only_the_clients_this_launcher_left_running() {
     // The launcher starts again.
     let manager = env.manager(None, ManagerConfig::default());
     let gone = {
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        // A deadline that only runs out when the kill never came (a loaded machine is slow to
+        // tear a process down, not this slow).
+        let deadline = std::time::Instant::now() + Duration::from_secs(300);
         loop {
             if !alive(ours_pid) {
                 break true;

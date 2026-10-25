@@ -24,7 +24,9 @@ use pl_net::{Downloader, HashAlgo, Http, HttpConfig, hash_bytes};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Semaphore;
 
-const WAIT: Duration = Duration::from_secs(20);
+/// Deadline of every wait: it only runs out when something is broken (these tests run while other
+/// builds load the machine).
+const WAIT: Duration = Duration::from_secs(300);
 
 /// A build like the client's CI makes: the executable at the zip root.
 fn package(exe: &[u8]) -> Vec<u8> {
@@ -646,11 +648,13 @@ async fn stopping_a_queued_account_takes_it_out_of_the_run() {
     let env = Env::new();
     let zip = package(b"client 4.0.0");
     let server = Server::start(vec![("afk.zip", Route::Body(Arc::new(zip.clone())))]).await;
-    // Long enough a gap to stop Beta while it waits for its turn.
+    // Long enough a gap to stop Beta while it waits for its turn, also when this test gets to
+    // run only seconds after Alpha's launch (2 s ran out on a loaded machine; Gamma then waits
+    // the whole gap).
     let manager = env.manager_with(
         None,
         Some(release("4.0.0", server.url("afk.zip"), &zip)),
-        Duration::from_secs(2),
+        Duration::from_secs(10),
     );
     let alpha = env.add("Alpha");
     let beta = env.add("Beta");

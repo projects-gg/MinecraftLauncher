@@ -72,10 +72,10 @@ pub fn kill(pid: u32, started: u64) -> bool {
 
 #[cfg(windows)]
 mod imp {
-    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, WAIT_OBJECT_0};
     use windows::Win32::System::Threading::{
-        GetExitCodeProcess, INFINITE, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-        PROCESS_SYNCHRONIZE, WaitForSingleObject,
+        GetExitCodeProcess, GetProcessTimes, INFINITE, OpenProcess,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, WaitForSingleObject,
     };
 
     pub(super) fn wait_for_exit(pid: u32, started: u64) -> Option<i32> {
@@ -89,8 +89,10 @@ mod imp {
         }
         .ok()?;
         // While the handle is open the number cannot pass to another process: the one it names
-        // must be ours, started when ours did.
-        let ours = super::is_same(pid, started);
+        // must be ours, started when ours did. The handle itself tells when its process started,
+        // also when it ended just now (the process table no longer lists it then, and its exit
+        // code would be lost).
+        let ours = started_at(handle) == Some(started);
         let code = ours.then(|| {
             // SAFETY: as above.
             let waited = unsafe { WaitForSingleObject(handle, INFINITE) };
@@ -102,6 +104,19 @@ mod imp {
         // SAFETY: the handle opened above, closed once.
         let _ = unsafe { CloseHandle(handle) };
         code.flatten()
+    }
+
+    /// When the process behind `handle` started, counted as [`super::start_time`] does (whole
+    /// seconds since the Unix epoch).
+    fn started_at(handle: HANDLE) -> Option<u64> {
+        let mut created = FILETIME::default();
+        let (mut exited, mut kernel, mut user) = (created, created, created);
+        // SAFETY: a query on an open process handle; the four times outlive the call.
+        unsafe { GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user) }
+            .ok()?;
+        let ticks = (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime);
+        // 100 ns ticks since 1601 → seconds since 1970.
+        (ticks / 10_000_000).checked_sub(11_644_473_600)
     }
 }
 
@@ -120,29 +135,39 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
-    /// A child that lives about a second, then exits with 3.
-    fn short_lived() -> std::process::Child {
+    /// A child that runs until its input closes ([`end`]), then exits with 3: the test decides
+    /// when it ends, not a timer racing a loaded machine.
+    fn until_told() -> std::process::Child {
         let mut command = if cfg!(windows) {
             let mut command = std::process::Command::new("cmd");
-            command.args(["/C", "ping -n 2 127.0.0.1 >NUL & exit 3"]);
+            command.args(["/C", "set /p line= & exit 3"]);
             command
         } else {
             let mut command = std::process::Command::new("sh");
-            command.args(["-c", "sleep 1; exit 3"]);
+            command.args(["-c", "read line; exit 3"]);
             command
         };
-        command.stdout(std::process::Stdio::null()).spawn().unwrap()
+        command
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap()
+    }
+
+    fn end(child: &mut std::process::Child) {
+        drop(child.stdin.take());
     }
 
     #[test]
     fn a_process_is_told_by_its_number_and_start() {
-        let mut child = short_lived();
+        let mut child = until_told();
         let pid = child.id();
         let started = start_time(pid).expect("the child runs");
         assert!(is_same(pid, started));
         assert!(!is_same(pid, started + 1));
         assert!(!kill(pid, started + 1), "another start is another process");
-        child.wait().unwrap();
+        end(&mut child);
+        assert_eq!(child.wait().unwrap().code(), Some(3), "it ran to its end");
         drop(child);
         assert!(!is_same(pid, started));
     }
@@ -150,33 +175,40 @@ mod tests {
     /// A process this one started counts as started by it; this one was not started by its child.
     #[test]
     fn a_child_is_started_by_its_parent() {
-        let mut child = short_lived();
+        let mut child = until_told();
         let pid = child.id();
         let me = std::process::id();
         assert!(started_by(pid, me));
         assert!(started_by(me, me));
         assert!(!started_by(me, pid));
+        end(&mut child);
         child.wait().unwrap();
     }
 
     #[test]
     fn waiting_ends_with_the_process() {
-        let mut child = short_lived();
+        let mut child = until_told();
         let pid = child.id();
         let started = start_time(pid).expect("the child runs");
-        let since = Instant::now();
-        let waiter = std::thread::spawn(move || wait_for_exit(pid, started));
-        let code = waiter.join().unwrap();
-        // Windows waits on the process itself; elsewhere the look comes within `LOOK_EVERY`.
-        assert!(since.elapsed() < LOOK_EVERY + Duration::from_secs(10));
+        let (done, waited) = std::sync::mpsc::channel();
+        std::thread::spawn(move || done.send(wait_for_exit(pid, started)));
+        // Whether the waiter looks before or after the end: Windows waits on the process itself
+        // and still knows it once it ended (this test holds it until then); elsewhere the look
+        // comes every `LOOK_EVERY`. The deadline only runs out when the wait never ends.
+        end(&mut child);
+        let code = waited
+            .recv_timeout(LOOK_EVERY + Duration::from_secs(300))
+            .expect("the wait ends with the process");
         if cfg!(windows) {
             assert_eq!(code, Some(3));
         }
         child.wait().unwrap();
         drop(child);
-        // Not ours (any more): no wait at all.
+        // Ended: no wait at all (a wait takes at least one look). Windows may still tell its exit
+        // code for a moment, while something else (a virus scanner) holds the process open.
         let since = Instant::now();
-        assert_eq!(wait_for_exit(pid, started), None);
-        assert!(since.elapsed() < Duration::from_secs(2));
+        let again = wait_for_exit(pid, started);
+        assert!(since.elapsed() < LOOK_EVERY, "{:?}", since.elapsed());
+        assert!(matches!(again, None | Some(3)), "{again:?}");
     }
 }

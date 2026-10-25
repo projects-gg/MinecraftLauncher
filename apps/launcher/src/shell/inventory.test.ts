@@ -142,7 +142,7 @@ describe("menu titles with IA-ART's glyphs", () => {
     [0xe052, { advance: 257, image: { src: "market.png", width: 256, height: 256, ascent: 36 } }],
   ]);
   const glyph = (codePoint: number) => glyphs.get(codePoint);
-  const title = String.fromCodePoint(0xf808, 0xe052, 0xe999) + "Pazar";
+  const title = `${String.fromCodePoint(0xf808, 0xe052, 0xe999)}Pazar`;
 
   it("draws a picture at the pen, moves by advances and leaves unknown glyphs out", () => {
     const layout = layoutTitle(titleRuns(title), 8, 6, glyph);
@@ -179,6 +179,14 @@ describe("the game's letters as pixels", () => {
     expect(textPath(" ")).toBe("");
   });
 
+  it("leans italic rows as the game's glyph quad does, the top right and the bottom left", () => {
+    const one = textPath("1", true);
+    // Row 0 moves 0.875 right, the baseline's row (6) 0.625 left; the upright path is untouched.
+    expect(one.startsWith("M2.875 0h1v1h-1z")).toBe(true);
+    expect(one.endsWith("M-0.625 6h5v1h-5z")).toBe(true);
+    expect(textPath("1").startsWith("M2 0h1v1h-1z")).toBe(true);
+  });
+
   it("knows which lines it can draw, and wraps and clips by advances", () => {
     expect(canDraw("Dayanıklılık: 1440 / 1561")).toBe(true);
     expect(canDraw("Ейдер")).toBe(false);
@@ -213,10 +221,17 @@ describe("anyone's text", () => {
     expect(lines.map((l) => l.text)).toContain("Keskinlik V");
     expect(lines.at(-1)?.text).toBe("Dayanıklılık: 1440 / 1561");
     const shulker = SAMPLE_INVENTORY.items.find((i) => i.slot === 17) as InvItem;
-    const inside = tooltipLines(shulker, "tr", tr).map((l) => l.text);
+    const insideLines = tooltipLines(shulker, "tr", tr);
+    const inside = insideLines.map((l) => l.text);
+    // The game's Turkish puts spaces round the "x" ("%s x %s"; English "%s x%s").
     expect(inside).toContain("Elmas x 64");
-    // Six stacks hold all 292: five listed, one more (the game counts stacks, not items).
-    expect(inside.at(-1)).toBe("ve 1 tane daha...");
+    // Six stacks hold all 292: five listed, one more (the game counts stacks, not items), in the
+    // game's white italic.
+    expect(insideLines.at(-1)).toEqual({
+      text: "ve 1 tane daha...",
+      color: TEXT_COLOR.white,
+      italic: true,
+    });
     // Nine stacks listed and more items than they hold: more stacks than the frame tells.
     const full = {
       ...shulker,

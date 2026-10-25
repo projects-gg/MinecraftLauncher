@@ -46,8 +46,9 @@ use crate::util::{eq_ignore_case, remove_file_if_exists};
 
 /// Longest stdout/stderr line read (bytes); the rest of the line is dropped.
 const MAX_LINE_BYTES: usize = 64 * 1024;
-/// How long to wait for the output pipes to drain after the process has exited.
-const READER_DRAIN: Duration = Duration::from_secs(2);
+/// How long to wait for the output pipes to drain after the process has exited (the default of
+/// `ManagerConfig::reader_drain`).
+pub(crate) const READER_DRAIN: Duration = Duration::from_secs(2);
 
 /// Session lifecycle.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -178,6 +179,8 @@ pub(crate) struct SessionEnv {
     pub(crate) pacer: ConnectPacer,
     /// Zero: no pacing.
     pub(crate) connect_spacing: Duration,
+    /// See `ManagerConfig::reader_drain`.
+    pub(crate) reader_drain: Duration,
 }
 
 impl SessionEnv {
@@ -472,6 +475,11 @@ impl Actor {
                 }
             }
         }
+        // The console log's file is closed before the actor ends: a removed account's folder is
+        // deleted right after, and Windows keeps a folder with an open file in it.
+        if let Some(log) = self.log.take() {
+            log.close().await;
+        }
     }
 
     // --- Commands ---------------------------------------------------------------------------
@@ -756,6 +764,7 @@ impl Actor {
         let kill = CancellationToken::new();
         let io_tx = self.io_tx.clone();
         let exit_kill = kill.clone();
+        let drain = self.env.reader_drain;
         tokio::spawn(async move {
             let code = exit.wait(exit_kill).await;
             // Deliver all output (the final bridge events) before the exit.
@@ -763,7 +772,7 @@ impl Actor {
                 let _ = out_task.await;
                 let _ = err_task.await;
             };
-            let _ = tokio::time::timeout(READER_DRAIN, drained).await;
+            let _ = tokio::time::timeout(drain, drained).await;
             let _ = io_tx.send(Io::Exited { generation, code });
         });
 

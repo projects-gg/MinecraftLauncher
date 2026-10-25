@@ -23,6 +23,7 @@ import { trLib1 } from "./tr-lib1";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
 import { trModSets } from "./tr-modsets";
+import { trNewsColumn } from "./tr-news-column";
 import { trOverlay } from "./tr-overlay";
 import { trOverview } from "./tr-overview";
 import { trPlacement } from "./tr-placement";
@@ -89,6 +90,7 @@ export const tr = {
   cloudAfk: trCloudAfk,
   projectsSkin: trProjectsSkin,
   host: trHost,
+  newsColumn: trNewsColumn,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
@@ -130,9 +132,7 @@ export const tr = {
     dismissBanner: "Kapat",
     moreEvents: "{{count}} etkinlik daha",
     otherEvents: "Diğer etkinlikler",
-    eventRunning: "Sürüyor",
     eventEndsIn: "{{when}} kaldı",
-    eventStartsAt: "{{when}}",
     noNews: "Henüz haber yok.",
     welcomeTitle: "Projects'e hoş geldin",
     welcomeSubtitle: "Oyna'ya bas, sunucuda görüşürüz.",

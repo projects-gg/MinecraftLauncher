@@ -13,6 +13,8 @@ export interface PixelLineProps {
   color: string;
   /** The drop shadow's colour; none when left out (the game's window titles have none). */
   shadow?: string;
+  /** The game's italic (a shulker box's "ve 2 tane daha..."): the rows lean, the shadow too. */
+  italic?: boolean;
   /** Characters past this many GUI pixels are left out (a window title stops at the window's edge). */
   maxWidth?: number;
   className?: string;
@@ -21,7 +23,15 @@ export interface PixelLineProps {
 
 const unit = (n: number) => `calc(${n} * var(--pl-inv-px))`;
 
-export function PixelLine({ text, color, shadow, maxWidth, className, style }: PixelLineProps) {
+export function PixelLine({
+  text,
+  color,
+  shadow,
+  italic = false,
+  maxWidth,
+  className,
+  style,
+}: PixelLineProps) {
   const shown = maxWidth === undefined ? text : clipText(text, maxWidth);
   if (!canDraw(shown)) {
     return (
@@ -32,6 +42,7 @@ export function PixelLine({ text, color, shadow, maxWidth, className, style }: P
         style={{
           ...style,
           color,
+          fontStyle: italic ? "italic" : undefined,
           textShadow: shadow ? `var(--pl-inv-px) var(--pl-inv-px) 0 ${shadow}` : undefined,
           maxWidth: maxWidth === undefined ? undefined : unit(maxWidth),
         }}
@@ -41,7 +52,7 @@ export function PixelLine({ text, color, shadow, maxWidth, className, style }: P
     );
   }
   const width = textAdvance(shown);
-  const d = textPath(shown);
+  const d = textPath(shown, italic);
   return (
     <svg
       className={cn("pl-inv-line", className)}

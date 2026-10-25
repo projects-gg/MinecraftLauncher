@@ -116,6 +116,8 @@ mod win {
         found
     }
 
+    /// Called by the system for every top-level window. Nothing in it may panic: a panic cannot
+    /// leave a function the system calls, so it would end the process.
     unsafe extern "system" fn visit(hwnd: HWND, found: LPARAM) -> BOOL {
         // SAFETY: `found` is the vector `game_kind_windows` passed for this enumeration.
         let found = unsafe { &mut *(found.0 as *mut Vec<(HWND, u32)>) };
@@ -128,11 +130,11 @@ mod win {
             }
             let mut class = [0u16; 64];
             let len = GetClassNameW(hwnd, &mut class);
-            let Ok(len) = usize::try_from(len) else {
+            let Some(class) = usize::try_from(len).ok().and_then(|len| class.get(..len)) else {
                 return BOOL(1);
             };
             // Hidden and minimized windows count too: closing is not about being on screen.
-            if len > 0 && is_game_window_class(&String::from_utf16_lossy(&class[..len])) {
+            if !class.is_empty() && is_game_window_class(&String::from_utf16_lossy(class)) {
                 found.push((hwnd, pid));
             }
         }
