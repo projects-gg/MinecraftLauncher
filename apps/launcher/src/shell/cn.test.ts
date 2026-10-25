@@ -86,8 +86,8 @@ describe("cn with the theme's names", () => {
       cn("font-display font-semibold text-bone-50 outline-none", "text-hero tracking-[-0.01em]"),
     ).toBe("font-display font-semibold text-bone-50 outline-none text-hero tracking-[-0.01em]");
     // The troubleshooter's verdict: its size went with `text-bone-50`.
-    expect(cn("grid", "font-display text-section font-semibold text-bone-50")).toBe(
-      "grid font-display text-section font-semibold text-bone-50",
+    expect(cn("grid", "font-display text-title font-semibold text-bone-50")).toBe(
+      "grid font-display text-title font-semibold text-bone-50",
     );
     // The cloud inventory's status line.
     expect(cn("flex items-center text-meta text-ash-300")).toBe(
