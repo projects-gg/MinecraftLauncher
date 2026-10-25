@@ -1310,16 +1310,16 @@ export const mockSocial: SocialApi = {
     );
     return code;
   },
+  // Like the launcher (SOC-LAG): the view shows a profile change at once, the answer comes later.
   async setStatus(status: StatusMode) {
-    await delay(200);
     commit((v) => (v.me ? { ...v, me: { ...v.me, status } } : v));
+    await delay(200);
   },
   async setPrivacy(change) {
-    await delay(200);
     commit((v) => (v.me ? { ...v, me: { ...v.me, privacy: { ...v.me.privacy, ...change } } } : v));
+    await delay(200);
   },
   async setAvatar(avatar) {
-    await delay(200);
     commit((v) =>
       v.me
         ? {
@@ -1332,6 +1332,7 @@ export const mockSocial: SocialApi = {
           }
         : v,
     );
+    await delay(200);
   },
   async invite(id) {
     await delay(400);
