@@ -42,6 +42,7 @@ import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { TabEmpty } from "../parts";
 import { modRowKeys } from "./mod-keys";
+import { ownMods } from "./own-mods";
 
 /** A vanilla instance's Modlar tab: it cannot load mods; a new instance with a loader can. */
 export function VanillaModsEmpty() {
@@ -257,20 +258,11 @@ export function ModsTab({
   };
 
   const { isHidden } = removal;
-  // The player's own mods, then the ones the search keeps. A ready-made set's files live in
-  // "Setler"; the official pack's in "Önerilenler" (only its instances have that section).
+  // The player's own mods (own-mods.ts), then the ones the search keeps.
   const managed = instance.managed;
   const listed = useMemo(
     () =>
-      instance.mods
-        .filter(
-          (m) =>
-            !m.modSet &&
-            !(
-              managed &&
-              (m.fromPack || entries.get(m.fileName.replace(/\.disabled$/, ""))?.fromPack)
-            ),
-        )
+      ownMods(instance.mods, managed, (name) => Boolean(entries.get(name)?.fromPack))
         .filter((m) => !isHidden(m.fileName))
         .sort((a, b) => a.name.localeCompare(b.name, "tr")),
     [instance.mods, managed, entries, isHidden],
