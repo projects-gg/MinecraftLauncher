@@ -20,3 +20,5 @@ tempfile = { workspace = true }
 # The build_atlas example names the site's files by their SHA-256 (`--cdn`).
 sha2 = { workspace = true }
 hex = { workspace = true }
+# The build_item_data example records the game files' SHA-1s (the ones Mojang publishes).
+sha1 = { workspace = true }
