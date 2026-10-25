@@ -174,6 +174,13 @@ public final class OverlayScreen extends Screen {
     private OverlayState.Note lineNote;
     private String lineConversation;
     private String lastDraft = "";
+    /**
+     * The overlay's language revision this panel's words were laid out in (OVL-LANG): when the launcher names another
+     * language, the panel builds itself anew in it where it stood.
+     */
+    private final int languageRevision;
+    /** A reply carried over from the panel this one stands in for (its strip is laid out once the panel is). */
+    private OverlayState.Reply carriedReply;
 
     public OverlayScreen(OverlayClient overlay) {
         this(overlay, null, null);
@@ -282,8 +289,10 @@ public final class OverlayScreen extends Screen {
         replyClose = new IconButton(Icon.CLOSE, Texts.tr("chat.reply.cancel"), this::clearReply);
         picker = new StickerPicker(this::sendSticker);
         picker.visible = false;
+        languageRevision = Texts.language().revision();
         settingsList = new SettingsList(overlay::settings, overlay::updateSettings, overlay.key()::keyName,
-            () -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)));
+            () -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)),
+            Texts.language().managed() ? overlay.languages() : null);
         lastListPage = state.has("chat") || !state.welcomed() ? Page.CHATS : Page.FRIENDS;
         page = overlay.lastPage() == Page.SETTINGS || overlay.lastPage() == Page.WORLD ? lastListPage
             : overlay.lastPage();
@@ -300,6 +309,27 @@ public final class OverlayScreen extends Screen {
         // The tabs open on the page the panel opens on (the plate stood on "Sohbetler" over the friend list).
         tabs.select(lastListPage == Page.FRIENDS ? 1 : 0);
         conversation = pickConversation();
+    }
+
+    /**
+     * The panel again in the overlay's new language (OVL-LANG), standing where {@code from} stood: the same page,
+     * conversation, draft, reply and settings row. No entrance: only the page's words fade in, as on a page change.
+     */
+    private OverlayScreen(OverlayClient overlay, OverlayScreen from) {
+        this(overlay, from.page == Page.WORLD ? Page.WORLD : null, from.parent);
+        page = from.page;
+        lastListPage = from.lastListPage;
+        tabs.select(lastListPage == Page.FRIENDS ? 1 : 0);
+        if (from.conversation != null) {
+            conversation = from.conversation;
+        }
+        field.setValue(from.field.getValue());
+        lastDraft = field.getValue();
+        carriedReply = from.replyTo;
+        settingsList.carry(from.settingsList);
+        long now = now();
+        openedAt = now - 10 * ENTER_MS;
+        pageChangedAt = now;
     }
 
     static long now() {
@@ -1043,6 +1073,13 @@ public final class OverlayScreen extends Screen {
             overlay.openConversation(conversation);
         }
         sync(true);
+        if (carriedReply != null) {
+            OverlayState.Reply quote = carriedReply;
+            carriedReply = null;
+            if (composerOpen() && state.has("replies")) {
+                setReply(quote);
+            }
+        }
         setInitialFocus(initialFocus());
     }
 
@@ -1783,6 +1820,12 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public void tick() {
+        if (!closing && languageRevision != Texts.language().revision()) {
+            // OVL-LANG: the launcher named another language (the player's pick here, or its own while there is none):
+            // the panel builds itself anew in it, where it stood.
+            overlay.swapPanel(new OverlayScreen(overlay, this));
+            return;
+        }
         if (page == Page.CHATS && quick.visible) {
             quick.setHidden(!field.getValue().isEmpty(), now());
         }

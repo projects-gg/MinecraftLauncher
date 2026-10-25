@@ -10,6 +10,8 @@ import gg.projects.overlay.connect.MinecraftGame;
 import gg.projects.overlay.connect.ServerTarget;
 import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.host.HostGate;
+import gg.projects.overlay.lang.Language;
+import gg.projects.overlay.lang.LanguageChoice;
 import gg.projects.overlay.link.CodelessLink;
 import gg.projects.overlay.link.LinkMessages;
 import gg.projects.overlay.link.LinkPayload;
@@ -26,6 +28,7 @@ import gg.projects.overlay.ui.panel.DiscordLinkScreen;
 import gg.projects.overlay.ui.panel.HostPauseButton;
 import gg.projects.overlay.ui.panel.JoinScreen;
 import gg.projects.overlay.ui.panel.OverlayScreen;
+import gg.projects.overlay.ui.panel.SettingsList;
 import java.util.List;
 import java.util.function.UnaryOperator;
 import net.fabricmc.api.ClientModInitializer;
@@ -103,6 +106,9 @@ public final class OverlayClient implements ClientModInitializer {
             LOG.info("Not started by Projects Launcher; the overlay stays off.");
             return;
         }
+        // The overlay speaks the launcher's language from its first frame (OVL-LANG): the game starts with it, every
+        // welcome names it again; an older launcher names none and the game's own language stays.
+        Texts.speak(new LanguageChoice(System.getProperty(LanguageChoice.PROPERTY), Texts::gameLanguage));
         state = new OverlayState();
         settings = new SettingsStore(FabricLoader.getInstance().getGameDir());
         key = new OverlayKey(KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main")));
@@ -147,7 +153,7 @@ public final class OverlayClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
 
         bridge = new BridgeClient(config, version(MOD_ID), version("minecraft"),
-            () -> Minecraft.getInstance().options.languageCode, new BridgeClient.Listener() {
+            () -> Texts.language().helloCode(), new BridgeClient.Listener() {
                 @Override
                 public void onStatus(BridgeClient.Status status, String reason) {
                     Minecraft.getInstance().execute(() -> onBridgeStatus(status, reason));
@@ -444,15 +450,67 @@ public final class OverlayClient implements ClientModInitializer {
     }
 
     public void panelOpened() {
+        if (swappingPanel) {
+            return;
+        }
         toasts.clear();
         bridge.send(Protocol.panel(true));
     }
 
     public void panelClosed() {
+        if (swappingPanel) {
+            return;
+        }
         bridge.send(Protocol.panel(false));
         // No "yazıyor…" comes while the panel is closed: what was shown would only go stale.
         state.clearTyping();
         typedIn = null;
+    }
+
+    // ---- The overlay's language (OVL-LANG) ----------------------------------------------------------------
+
+    /** The panel is being built anew in another language: it neither closes nor opens for the launcher. */
+    private boolean swappingPanel;
+
+    /** The open panel gives way to {@code next}, the same panel in the overlay's new language. */
+    public void swapPanel(OverlayScreen next) {
+        swappingPanel = true;
+        try {
+            Compat.setScreen(Minecraft.getInstance(), next);
+        } finally {
+            swappingPanel = false;
+        }
+    }
+
+    /** The settings' "Dil" row: the overlay's language, kept by the launcher. */
+    public SettingsList.Languages languages() {
+        return new SettingsList.Languages() {
+            @Override
+            public Language current() {
+                return Texts.current();
+            }
+
+            @Override
+            public boolean editable() {
+                return Texts.language().editable() && state.online();
+            }
+
+            @Override
+            public void pick(Language language) {
+                pickLanguage(language);
+            }
+        };
+    }
+
+    /**
+     * The player picked the overlay's language in its settings: the launcher keeps it and answers with a welcome in it,
+     * which is when the panel changes (never before: its words and the launcher's stay one language).
+     */
+    public void pickLanguage(Language language) {
+        String code = Texts.language().pick(language, monotonicMs());
+        if (code != null) {
+            bridge.send(Protocol.lang(code));
+        }
     }
 
     public void openConversation(String conversation) {
@@ -711,6 +769,10 @@ public final class OverlayClient implements ClientModInitializer {
             default -> {
             }
         }
+        if ("welcome".equals(Protocol.type(frame))) {
+            // The overlay's language (G3): the open panel builds itself anew in another one on its next tick.
+            Texts.language().welcome(Protocol.str(frame, "lang", null));
+        }
         OverlayState.HostView before = state.host();
         OverlayState.ToastRequest toast = state.apply(frame, System.currentTimeMillis());
         if (toast != null) {
@@ -735,6 +797,8 @@ public final class OverlayClient implements ClientModInitializer {
         host.onBridgeStatus(status);
         state.setStatus(status, reason);
         if (status != BridgeClient.Status.ONLINE) {
+            // No launcher keeps a language pick until the next welcome.
+            Texts.language().offline();
             toasts.clear();
             // No permit can come now: a server waiting for one hears there is none.
             link.onClear();

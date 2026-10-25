@@ -62,7 +62,23 @@ public final class Protocol {
         }
         features.add(PEOPLE);
         features.add(PEOPLE2);
+        features.add(LANG);
         o.add("features", features);
+        return o;
+    }
+
+    // ---- The overlay's language (OVL-LANG, rows G1-G4 of docs/tasks/ovl2-protocol.md) ---------------------
+
+    /**
+     * The language feature in {@code hello}: the mod's words follow the launcher (the {@code welcome}'s {@code lang}),
+     * its settings show the "Dil" row and it sends {@link #lang} on a pick. Sent beside {@link #FEATURES}.
+     */
+    public static final String LANG = "lang";
+
+    /** The player picked the overlay's language in its settings ({@code tr}, {@code en}); the launcher keeps it. */
+    public static JsonObject lang(String code) {
+        JsonObject o = message("lang");
+        o.addProperty("lang", code);
         return o;
     }
 

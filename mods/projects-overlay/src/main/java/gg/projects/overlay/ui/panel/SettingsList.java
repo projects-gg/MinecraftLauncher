@@ -1,6 +1,7 @@
 package gg.projects.overlay.ui.panel;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import gg.projects.overlay.lang.Language;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
@@ -14,7 +15,9 @@ import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -24,7 +27,6 @@ import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -86,7 +88,8 @@ public final class SettingsList extends PanelWidget {
 
         @Override
         Component value(OverlaySettings s) {
-            return get.test(s) ? CommonComponents.OPTION_ON : CommonComponents.OPTION_OFF;
+            // The overlay's words, not the game's "On" / "Off": the game may speak another language.
+            return Texts.tr(get.test(s) ? "settings.on" : "settings.off");
         }
     }
 
@@ -127,6 +130,9 @@ public final class SettingsList extends PanelWidget {
         final Function<OverlaySettings, Integer> get;
         final java.util.function.BiFunction<OverlaySettings, Integer, OverlaySettings> set;
         final Spring plate = Spring.snappy(0f);
+        /** A choice kept elsewhere than in the overlay's settings (the language, the launcher's): the pick goes here. */
+        IntConsumer pick;
+        BooleanSupplier enabledIf;
         boolean placed;
         float optionWidth;
 
@@ -147,9 +153,26 @@ public final class SettingsList extends PanelWidget {
         }
 
         @Override
+        boolean enabled(OverlaySettings s) {
+            return enabledIf == null || enabledIf.getAsBoolean();
+        }
+
+        @Override
         Component value(OverlaySettings s) {
             return Component.literal(options[get.apply(s)]);
         }
+    }
+
+    /**
+     * The "Dil" row (OVL-LANG): the language the overlay shows, whether a pick reaches the launcher now (which keeps it),
+     * and the pick. The options name themselves in their own language.
+     */
+    public interface Languages {
+        Language current();
+
+        boolean editable();
+
+        void pick(Language language);
     }
 
     private static final class KeyRow extends Item {
@@ -207,12 +230,29 @@ public final class SettingsList extends PanelWidget {
     private String resetDone = "";
     private String undoLabel = "";
 
+    /**
+     * {@code languages}: the "Dil" row's language, the launcher's (OVL-LANG), at the top under "Genel"; null leaves it out
+     * (an older launcher: the overlay follows the game's language).
+     */
     public SettingsList(Supplier<OverlaySettings> settings,
         java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, Supplier<String> keyName,
-        Runnable changeKey) {
+        Runnable changeKey, Languages languages) {
         super(0, 0, 100, 100, Texts.tr("settings.title"));
         this.settings = settings;
         this.apply = apply;
+        if (languages != null) {
+            Language[] all = Language.values();
+            String[] names = new String[all.length];
+            for (int i = 0; i < all.length; i++) {
+                names[i] = all[i].ownName;
+            }
+            items.add(new Section(Texts.str("settings.general")));
+            Choice language = new Choice(Texts.str("settings.language"), names, s -> languages.current().ordinal(),
+                null);
+            language.pick = i -> languages.pick(all[i]);
+            language.enabledIf = languages::editable;
+            items.add(language);
+        }
         items.add(new Section(Texts.str("settings.notifications")));
         items.add(new Toggle(Texts.str("settings.toasts.message"), OverlaySettings::messageToasts,
             s -> s.withMessageToasts(!s.messageToasts())));
@@ -261,6 +301,49 @@ public final class SettingsList extends PanelWidget {
         reducedMotion = value;
     }
 
+    /** The scenario driver: the "Dil" row chosen as the arrow keys choose it (false: there is no such row). */
+    public boolean chooseLanguageRow() {
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i) instanceof Choice c && c.pick != null) {
+                selected = i;
+                reveal();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The scenario driver: the middle of the "Dil" row's option {@code index} on screen, or null without the row. */
+    public float[] languageOption(int index) {
+        for (Item item : items) {
+            if (item instanceof Choice c && c.pick != null) {
+                float wellX = getX() + getWidth() - (c.optionWidth * c.options.length + 4);
+                return new float[] {wellX + 2 + (index + 0.5f) * c.optionWidth,
+                    getY() + c.y - scroll.value() + c.height / 2f};
+            }
+        }
+        return null;
+    }
+
+    /** Stands where {@code from} stood: the same row chosen, the same scroll (the panel built anew in another language). */
+    public void carry(SettingsList from) {
+        if (from == null || from.items.size() != items.size()) {
+            return;
+        }
+        selected = from.selected;
+        scroll.snap(from.scroll.target());
+    }
+
+    /** A choice row's pick: the launcher's choice goes to it, the overlay's own changes its settings. */
+    private void choose(Choice c, int option) {
+        if (c.pick != null) {
+            undoUntil = 0;
+            c.pick.accept(option);
+        } else {
+            change(x -> c.set.apply(x, option));
+        }
+    }
+
     private float maxScroll() {
         return Math.max(0f, contentHeight - getHeight());
     }
@@ -285,7 +368,7 @@ public final class SettingsList extends PanelWidget {
             int next = direction == 0 ? (now + 1) % c.options.length
                 : Math.max(0, Math.min(c.options.length - 1, now + direction));
             if (next != now) {
-                change(x -> c.set.apply(x, next));
+                choose(c, next);
             }
         } else if (item instanceof Slider sl) {
             if (direction != 0) {
@@ -448,7 +531,7 @@ public final class SettingsList extends PanelWidget {
             float start = right - c.optionWidth * c.options.length - 2;
             int option = (int) ((event.x() - start - 2) / c.optionWidth);
             if (option >= 0 && option < c.options.length && option != c.get.apply(s)) {
-                change(x -> c.set.apply(x, option));
+                choose(c, option);
             }
         } else if (item instanceof Slider sl) {
             dragging = sl;

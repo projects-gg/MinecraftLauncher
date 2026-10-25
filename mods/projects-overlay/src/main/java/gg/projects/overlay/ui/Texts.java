@@ -1,11 +1,12 @@
 package gg.projects.overlay.ui;
 
+import gg.projects.overlay.lang.Dictionary;
+import gg.projects.overlay.lang.Language;
+import gg.projects.overlay.lang.LanguageChoice;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.MutableComponent;
@@ -15,20 +16,64 @@ import net.minecraft.util.FormattedCharSequence;
 /**
  * Words and lines: translations, ellipsis, wrapping to a number of lines, initials. Lines for drawing come out
  * as {@link PreparedLine}s, laid out once and drawn with that layout until something it depends on changes.
+ *
+ * <p>The words are the overlay's own ({@link Dictionary}) in the language the launcher names ({@link LanguageChoice},
+ * OVL-LANG), whatever language the game itself shows; without the launcher's word, the game's.
  */
 public final class Texts {
     public static final String ELLIPSIS = "…";
     private static final String PREFIX = "projects_overlay.";
 
+    private static volatile LanguageChoice language = new LanguageChoice(null, Texts::gameLanguage);
+
     private Texts() {
     }
 
-    public static Component tr(String key, Object... args) {
-        return Component.translatable(PREFIX + key, args);
+    /** The overlay speaks what {@code choice} says from now on (set once, as the overlay starts). */
+    public static void speak(LanguageChoice choice) {
+        language = choice;
     }
 
+    /** Which language the overlay shows, and the launcher's word on it. */
+    public static LanguageChoice language() {
+        return language;
+    }
+
+    /** The language the overlay shows now. */
+    public static Language current() {
+        return language.current();
+    }
+
+    /** The game's own language code (what the overlay follows without the launcher's word). */
+    public static String gameLanguage() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc == null || mc.options == null ? Language.ENGLISH.gameCode : mc.options.languageCode;
+    }
+
+    /** {@code key}'s words in the overlay's language; arguments that are components keep their style. */
+    public static Component tr(String key, Object... args) {
+        Dictionary words = Dictionary.shared();
+        List<Dictionary.Part> parts = words.parts(words.template(current(), PREFIX + key));
+        if (parts.size() == 1 && !parts.get(0).argument()) {
+            return Component.literal(parts.get(0).text());
+        }
+        MutableComponent out = Component.empty();
+        for (Dictionary.Part part : parts) {
+            if (!part.argument()) {
+                out.append(Component.literal(part.text()));
+            } else if (args != null && part.index() < args.length && args[part.index()] != null) {
+                Object arg = args[part.index()];
+                out.append(arg instanceof Component c ? c : Component.literal(String.valueOf(arg)));
+            }
+        }
+        return out;
+    }
+
+    /** {@code key}'s words in the overlay's language, as plain text. */
     public static String str(String key, Object... args) {
-        return tr(key, args).getString();
+        Dictionary words = Dictionary.shared();
+        return Dictionary.fill(words.parts(words.template(current(), PREFIX + key)), args,
+            arg -> arg instanceof Component c ? c.getString() : String.valueOf(arg));
     }
 
     /** {@code text} cut to {@code maxWidth} with an ellipsis when it does not fit. */
@@ -62,7 +107,7 @@ public final class Texts {
      * stays on screen unchanged ({@link PreparedLine}).
      */
     public static FormattedCharSequence visual(String line) {
-        return PreparedLine.of(Language.getInstance().getVisualOrder(FormattedText.of(line)));
+        return PreparedLine.of(net.minecraft.locale.Language.getInstance().getVisualOrder(FormattedText.of(line)));
     }
 
     /** A link the player may press, where it sits in a wrapped text (line index, x range in GUI pixels). */
@@ -131,7 +176,7 @@ public final class Texts {
             if (pos < e) {
                 line.append(Component.literal(text.substring(pos, e)));
             }
-            lines.add(PreparedLine.of(Language.getInstance().getVisualOrder(line)));
+            lines.add(PreparedLine.of(net.minecraft.locale.Language.getInstance().getVisualOrder(line)));
         }
         return new Wrapped(lines, spans);
     }
@@ -144,7 +189,7 @@ public final class Texts {
         return b.toString();
     }
 
-    /** The first letter of a name, as a capital in the game's language (İ for i in Turkish). */
+    /** The first letter of a name, as a capital in the overlay's language (İ for i in Turkish). */
     public static String initial(String name) {
         if (name == null || name.isBlank()) {
             return "?";
@@ -152,17 +197,15 @@ public final class Texts {
         String trimmed = name.strip();
         int cp = trimmed.codePointAt(0);
         String first = new String(Character.toChars(cp));
-        Locale locale = turkish() ? Locale.forLanguageTag("tr") : Locale.ROOT;
-        return first.toUpperCase(locale);
+        return first.toUpperCase(current().locale);
     }
 
-    /** The game speaks Turkish. */
+    /** The overlay speaks Turkish. */
     public static boolean turkish() {
-        String code = Minecraft.getInstance().options.languageCode;
-        return code != null && code.toLowerCase(Locale.ROOT).startsWith("tr");
+        return current() == Language.TURKISH;
     }
 
-    /** A percentage in the game's language: "%70" in Turkish, "70%" in English. */
+    /** A percentage in the overlay's language: "%70" in Turkish, "70%" in English. */
     public static String percent(int value) {
         return turkish() ? "%" + value : value + "%";
     }
