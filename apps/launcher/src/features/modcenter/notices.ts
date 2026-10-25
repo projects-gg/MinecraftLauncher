@@ -1,17 +1,21 @@
-// Non-blocking notices about the mod center that arrive during a launch (adopted changes in
-// the mods folder, a Minecraft version the pack stopped offering). Details live in the mod
-// center; the toast only says what happened and links there.
+// Non-blocking notices about the mods that arrive during a launch (adopted changes in the mods
+// folder, a Minecraft version the pack stopped offering). Details live in the "Modlar" tab; the
+// toast only says what happened and links there.
 import { toast } from "@pl/ui";
+import type { ModsSection } from "@/features/library/instance-tab";
 import type { ModsNotice } from "@/lib/api";
 import i18n from "@/lib/i18n";
 
-/** Opens the instance page on its mod center (the router is loaded lazily: no import cycle). */
-export function openModCenter(instanceId: string) {
+/**
+ * Opens the instance page on its "Modlar" tab, on `section` when given (else where the player
+ * left it). The router is loaded lazily: no import cycle.
+ */
+export function openModCenter(instanceId: string, section?: ModsSection) {
   void import("@/router").then(({ router }) =>
     router.navigate({
       to: "/library/$instanceId",
       params: { instanceId },
-      search: { tab: "modcenter" },
+      search: { tab: "mods", focus: section },
     }),
   );
 }
@@ -52,7 +56,8 @@ export function announceModsNotice(instanceId: string, notice: ModsNotice) {
         : undefined,
     action: {
       label: i18n.t("modCenter.notice.details"),
-      onClick: () => openModCenter(instanceId),
+      // The adopted changes are told on the recommended mods' rows.
+      onClick: () => openModCenter(instanceId, "recommended"),
     },
   });
 }
@@ -69,7 +74,8 @@ export function announceVersionDropped(
       : undefined,
     action: {
       label: i18n.t("modCenter.dropped.action"),
-      onClick: () => openModCenter(instanceId),
+      // The recommended mods say which versions the pack offers and switch the version.
+      onClick: () => openModCenter(instanceId, "recommended"),
     },
   });
 }

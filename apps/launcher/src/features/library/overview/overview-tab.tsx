@@ -23,7 +23,7 @@ import {
 import { type OverviewWorld, ServerSection, ShotsSection, WorldsSection } from "./sections";
 import { SidePanel } from "./side-panel";
 
-export type OverviewTarget = "worlds" | "servers" | "screenshots" | "modcenter";
+export type OverviewTarget = "worlds" | "servers" | "screenshots" | "mods";
 
 const fromDetail = (world: WorldDetail): OverviewWorld => ({
   folder: world.folder,
@@ -237,7 +237,7 @@ export function OverviewTab({
           instance={instance}
           sizeBytes={sizeBytes}
           notDownloaded={notDownloaded}
-          onOpenModCenter={() => onOpenTab("modcenter")}
+          onOpenModCenter={() => onOpenTab("mods")}
           onBrowse={onBrowse}
         />
         {ready && serverPlan.server ? (

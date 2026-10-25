@@ -1895,8 +1895,7 @@ export const tr = {
     listFailed: "Veri paketleri okunamadı.",
   },
   modCenter: {
-    tab: "Mod merkezi",
-    sectionsLabel: "Mod merkezi bölümleri",
+    sectionsLabel: "Mod bölümleri",
     sections: {
       recommended: "Önerilenler",
       recommendedNew: "Önerilenler ({{count}} yeni)",
@@ -1904,7 +1903,7 @@ export const tr = {
       own: "Kendi modların",
     },
     version: { change: "Sürümü değiştir", changeFor: "Minecraft {{version}} sürümünü değiştir" },
-    loadFailed: "Mod merkezi açılamadı",
+    loadFailed: "Modlar açılamadı",
     packCaption: "{{name}} {{version}}, Minecraft {{minecraft}}",
     search: "Önerilen modlarda ara",
     categoriesLabel: "Kategori",
@@ -2008,9 +2007,8 @@ export const tr = {
       reset: "Mod klasörü boştu; seçtiğin modlar yeniden kuruldu.",
       issues: "Bazı mod dosyaları okunamadı.",
       issuesToo: "Bazı dosyalar okunamadı.",
-      details: "Mod merkezi",
+      details: "Modları göster",
     },
-    fromMods: { chip: "Önerilen", open: "Mod merkezinde göster" },
     own: {
       migrate: "Başka sürüme taşı",
       emptyTitle: "Henüz kendi modun yok",
@@ -2052,7 +2050,7 @@ export const tr = {
       readyBack: "Minecraft {{version}} geri geldi",
       carriedList: "Taşınan seçimler",
       newList: "Yeni öneriler",
-      openModCenter: "Mod merkezinde gör",
+      openModCenter: "Önerilenlerde gör",
       notSynced: "Modlar oyunu açınca indirilecek.",
       ownTitle: "{{version}} setinde {{count}} kendi modun kaldı",
       ownCompatible: "Bu sürüme uygun olanlar",
@@ -2368,7 +2366,7 @@ export const tr = {
     },
     toast: {
       warnings: "Bazı modlar çalışmayabilir.",
-      details: "Mod merkezi",
+      details: "Modları göster",
     },
   },
 };

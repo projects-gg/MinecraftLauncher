@@ -94,7 +94,8 @@ export function DropHost({ disabled = false }: { disabled?: boolean }) {
                 void navigate({
                   to: "/library/$instanceId",
                   params: { instanceId: into.id },
-                  search: { tab },
+                  // A dropped mod is the player's own: "Modlar" opens on those (MODHUB2).
+                  search: { tab, focus: tab === "mods" ? "own" : undefined },
                 }),
             }
           : undefined;
