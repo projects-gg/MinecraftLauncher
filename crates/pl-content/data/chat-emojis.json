@@ -1,0 +1,406 @@
+{
+  "schema": 1,
+  "hosts": [
+    "projects.gg"
+  ],
+  "emojis": [
+    {
+      "code": ":kalp:",
+      "aliases": [
+        "<3",
+        "♥"
+      ],
+      "look": "&c❤",
+      "kind": "symbol",
+      "rank": "VIP"
+    },
+    {
+      "code": ":kazma:",
+      "aliases": [
+        ":pickaxe:"
+      ],
+      "look": "&e⛏",
+      "kind": "symbol",
+      "rank": "VIP"
+    },
+    {
+      "code": ":ok:",
+      "look": "&a👍",
+      "kind": "symbol",
+      "rank": "VIP"
+    },
+    {
+      "code": ":no:",
+      "look": "&c👎",
+      "kind": "symbol",
+      "rank": "VIP"
+    },
+    {
+      "code": ":smile:",
+      "look": "&a☻",
+      "kind": "symbol",
+      "rank": "VIP"
+    },
+    {
+      "code": ":ates:",
+      "look": "&c🔥",
+      "kind": "symbol",
+      "rank": "VIP+"
+    },
+    {
+      "code": ":kar:",
+      "look": "&b❄",
+      "kind": "symbol",
+      "rank": "VIP+"
+    },
+    {
+      "code": ":kardanadam:",
+      "look": "&d☃",
+      "kind": "symbol",
+      "rank": "VIP+"
+    },
+    {
+      "code": ":elmaskilic:",
+      "aliases": [
+        ":diamondsword:"
+      ],
+      "look": "&b🗡",
+      "kind": "symbol",
+      "rank": "VIP+"
+    },
+    {
+      "code": ":netheritkilic:",
+      "aliases": [
+        ":netheritesword:"
+      ],
+      "look": "&8🗡",
+      "kind": "symbol",
+      "rank": "VIP+"
+    },
+    {
+      "code": ":shrug:",
+      "look": "¯\\_(ツ)_/¯",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":masa:",
+      "aliases": [
+        ":table:"
+      ],
+      "look": "(╯°□°)╯︵ ┻━┻",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":yey:",
+      "look": "\\ (•◡•) /",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":wink:",
+      "look": "✌(◕‿-)✌",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":excited:",
+      "look": "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":vibe:",
+      "look": "(づ￣ ³￣)づ",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":beslik:",
+      "aliases": [
+        ":highfive:"
+      ],
+      "look": "ヘ( ^o^)ノ＼(^_^ )",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":cry:",
+      "look": "&b(╥﹏╥)",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":stare:",
+      "look": "(；一_一)",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":frustrated:",
+      "look": "ლ(ಠ益ಠლ)",
+      "kind": "text",
+      "rank": "VIP"
+    },
+    {
+      "code": ":gg:",
+      "look": "&d&lGG",
+      "kind": "text",
+      "rank": "VIP+"
+    },
+    {
+      "code": ":wp:",
+      "look": "&a&lWP",
+      "kind": "text",
+      "rank": "VIP+"
+    },
+    {
+      "code": ":wow:",
+      "look": "&6&lWOW",
+      "kind": "text",
+      "rank": "VIP+"
+    },
+    {
+      "code": ":selam:",
+      "look": "&e(・ω・)ノ",
+      "glyph": "\ue10f",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":lol:",
+      "look": "&e(≧▽≦)",
+      "glyph": "\ue10a",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":asik:",
+      "look": "&c(♥‿♥)",
+      "glyph": "\ue107",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":havali:",
+      "look": "&b(⌐■_■)",
+      "glyph": "\ue10c",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":zengin:",
+      "look": "&a($‿$)",
+      "glyph": "\ue108",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":hmm:",
+      "look": "&e(・・?)",
+      "glyph": "\ue106",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":sok:",
+      "look": "&e(⊙_⊙)",
+      "glyph": "\ue10d",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":agla:",
+      "look": "&b(╥_╥)",
+      "glyph": "\ue109",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":kizgin:",
+      "look": "&c(ಠ_ಠ)",
+      "glyph": "\ue10b",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":uyku:",
+      "look": "&7(-_-)zZ",
+      "glyph": "\ue10e",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": [
+        "Survival"
+      ]
+    },
+    {
+      "code": ":ping:",
+      "kind": "shortcut",
+      "rank": "VIP",
+      "meaning": {
+        "tr": "Pingini yazar",
+        "en": "Writes your ping"
+      }
+    },
+    {
+      "code": ":para:",
+      "kind": "shortcut",
+      "rank": "VIP",
+      "meaning": {
+        "tr": "Paranı yazar",
+        "en": "Writes your money"
+      }
+    },
+    {
+      "code": ":exp:",
+      "kind": "shortcut",
+      "rank": "VIP",
+      "meaning": {
+        "tr": "Deneyimini ve seviyeni yazar",
+        "en": "Writes your XP and level"
+      }
+    },
+    {
+      "code": ":discord:",
+      "aliases": [
+        ":dc:"
+      ],
+      "kind": "shortcut",
+      "rank": "VIP",
+      "meaning": {
+        "tr": "Eşlediğin Discord adını yazar",
+        "en": "Writes your linked Discord name"
+      }
+    },
+    {
+      "code": ":ah:",
+      "kind": "shortcut",
+      "rank": "VIP",
+      "servers": [
+        "Survival",
+        "SMP",
+        "Skyblock"
+      ],
+      "meaning": {
+        "tr": "İhalelerini gösteren bağlantı",
+        "en": "A link to your auctions"
+      }
+    },
+    {
+      "code": ":pazar:",
+      "kind": "shortcut",
+      "rank": "VIP",
+      "servers": [
+        "Survival",
+        "SMP"
+      ],
+      "meaning": {
+        "tr": "Siparişlerini gösteren bağlantı",
+        "en": "A link to your orders"
+      }
+    },
+    {
+      "code": ":warp:",
+      "kind": "shortcut",
+      "rank": "VIP",
+      "servers": [
+        "Skyblock"
+      ],
+      "meaning": {
+        "tr": "Adana gelme komutunu yazdıran bağlantı",
+        "en": "A link that writes the warp to your island"
+      }
+    },
+    {
+      "code": ":prestij:",
+      "kind": "shortcut",
+      "rank": "VIP",
+      "servers": [
+        "Skyblock"
+      ],
+      "meaning": {
+        "tr": "Prestijini yazar",
+        "en": "Writes your prestige"
+      }
+    },
+    {
+      "code": ":başarım:",
+      "aliases": [
+        ":basarim:"
+      ],
+      "kind": "shortcut",
+      "rank": "VIP+",
+      "meaning": {
+        "tr": "Başarımlarının yüzdesini yazar",
+        "en": "Writes how many advancements you have"
+      }
+    },
+    {
+      "code": ":kdr:",
+      "kind": "shortcut",
+      "rank": "VIP+",
+      "servers": [
+        "Survival"
+      ],
+      "meaning": {
+        "tr": "Öldürme ve ölüm oranını yazar",
+        "en": "Writes your kill/death ratio"
+      }
+    },
+    {
+      "code": ":profil:",
+      "kind": "shortcut",
+      "rank": "VIP+",
+      "servers": [
+        "Survival"
+      ],
+      "meaning": {
+        "tr": "Profilini gösteren bağlantı",
+        "en": "A link to your profile"
+      }
+    },
+    {
+      "code": ":hatıra:",
+      "aliases": [
+        ":hatira:"
+      ],
+      "kind": "shortcut",
+      "rank": "VIP+",
+      "servers": [
+        "Survival"
+      ],
+      "meaning": {
+        "tr": "Hatıralarını gösteren bağlantı",
+        "en": "A link to your memories"
+      }
+    }
+  ]
+}

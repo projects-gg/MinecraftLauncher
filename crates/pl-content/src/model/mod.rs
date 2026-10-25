@@ -3,6 +3,7 @@
 //! Enums read from remote documents end with an `unknown` catch-all for the same reason.
 //! The normative description lives in `docs/content-format.md`.
 
+mod chatemoji;
 mod common;
 mod config;
 mod feed;
@@ -14,6 +15,13 @@ mod news;
 mod pack;
 mod release;
 
+pub use chatemoji::{
+    CHAT_EMOJIS_SCHEMA, ChatEmoji, ChatEmojiFault, ChatEmojiKind, ChatEmojiMeaning,
+    ChatEmojiProblem, ChatEmojis, DEFAULT_CHAT_EMOJI_HOSTS, MAX_CHAT_EMOJI_ALIASES,
+    MAX_CHAT_EMOJI_CODE_CHARS, MAX_CHAT_EMOJI_HOSTS, MAX_CHAT_EMOJI_LOOK_CHARS,
+    MAX_CHAT_EMOJI_MEANING_CHARS, MAX_CHAT_EMOJI_RANK_CHARS, MAX_CHAT_EMOJI_SERVER_CHARS,
+    MAX_CHAT_EMOJI_SERVERS, MAX_CHAT_EMOJIS, emoji_fault, is_chat_emoji_code, look_problem,
+};
 pub use common::{Cta, DocRef, FileRef, MediaKind, MediaRef};
 pub use config::{
     Banner, BannerLevel, CustomLink, DEFAULT_RECOMMENDED_MINECRAFT_VERSION, DiscordConfig,

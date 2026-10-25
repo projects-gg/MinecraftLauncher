@@ -33,8 +33,8 @@ use url::Url;
 use crate::error::{Error, Result};
 use crate::fsutil::{normalize_hex, read_optional, sha256_hex, write_atomic};
 use crate::model::{
-    DocRef, FileRef, ItemArt, LauncherConfig, MediaRef, ModSetCatalog, NewsFeed, PackManifest,
-    PackRef, RootIndex,
+    ChatEmojis, DocRef, FileRef, ItemArt, LauncherConfig, MediaRef, ModSetCatalog, NewsFeed,
+    PackManifest, PackRef, RootIndex,
 };
 use crate::signing::{SignatureFile, VerifyingKey, verify_index};
 
@@ -341,6 +341,24 @@ impl ContentClient {
             tracing::warn!(%error, "item art cache cleanup failed");
         }
         Ok(Some(art))
+    }
+
+    /// The chat emojis the in-game overlay's picker offers on the Projects server: the list the
+    /// index references (from the document cache when present), else [`ChatEmojis::builtin`].
+    /// Entries that break a rule are left out (and logged); the others stay usable. An error
+    /// (the document cannot be fetched or read) leaves the caller to keep what it had.
+    pub async fn chat_emojis(&self, index: &RootIndex) -> Result<ChatEmojis> {
+        let Some(doc) = &index.chat_emojis else {
+            return Ok(ChatEmojis::builtin());
+        };
+        let bytes = self.ensure_doc(doc, None).await?;
+        let emojis: ChatEmojis = parse_json(&bytes, &doc.path)?;
+        emojis.check_schema()?;
+        let (emojis, dropped) = emojis.without_broken();
+        for problem in dropped {
+            tracing::warn!(%problem, "leaving out a broken chat emoji");
+        }
+        Ok(emojis)
     }
 
     /// Local path of an item art file (an atlas or a glyph picture of [`Self::item_art`]),
@@ -1368,6 +1386,47 @@ mod tests {
         let mut wrong = atlas.clone();
         wrong.sha256 = "d".repeat(64);
         assert!(content.item_art_file(&wrong).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn chat_emojis_are_the_published_list_or_the_builtin_one() {
+        let server = TestServer::start().await;
+        let signer = key(1);
+        let dir = tempfile::tempdir().unwrap();
+        let content = client(&[server.base()], dir.path(), &signer);
+
+        // Nothing published: the built-in list, without a request.
+        Publish::new(1).put(&server, &signer);
+        let snapshot = content.refresh().await.unwrap();
+        assert_eq!(
+            content.chat_emojis(&snapshot.index).await.unwrap(),
+            ChatEmojis::builtin()
+        );
+
+        let mut mine = ChatEmojis::builtin();
+        mine.emojis.truncate(3);
+        let mut publish = Publish::new(2);
+        publish.chat_emojis = Some(mine.clone());
+        publish.put(&server, &signer);
+        let snapshot = content.refresh().await.unwrap();
+        let doc = snapshot.index.chat_emojis.clone().unwrap();
+        assert_eq!(content.chat_emojis(&snapshot.index).await.unwrap(), mine);
+        content.chat_emojis(&snapshot.index).await.unwrap();
+        assert_eq!(server.hits(&format!("/v1/{}", doc.path)), 1, "cached");
+
+        // An empty list stays empty: no emojis on its hosts.
+        let mut publish = Publish::new(3);
+        publish.chat_emojis = Some(ChatEmojis::default());
+        publish.put(&server, &signer);
+        let snapshot = content.refresh().await.unwrap();
+        assert!(
+            content
+                .chat_emojis(&snapshot.index)
+                .await
+                .unwrap()
+                .emojis
+                .is_empty()
+        );
     }
 
     #[test]
