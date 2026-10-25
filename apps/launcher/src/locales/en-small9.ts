@@ -10,7 +10,7 @@ export const enSmall9 = {
       removed: "You were removed",
       unreachable: "Couldn't connect",
       hostPackOld: "They need to restart the game",
-      mods: "You're missing some mods",
+      mods: "You need the same mods",
     },
     homeMissingMods: "You need the same mods as {{name}} to join",
   },

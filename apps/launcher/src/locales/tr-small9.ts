@@ -8,7 +8,7 @@ export const trSmall9 = {
   join: {
     /**
      * A world invite's second line after its join failed, under the friend's name and beside
-     * "Tekrar dene" or "Kopyala ve katıl": the toast's words, short, without a full stop like the
+     * "Tekrar dene" or "Kur ve katıl": the toast's words, short, without a full stop like the
      * list's other lines (the name above is the subject where one is needed).
      */
     failed: {
@@ -16,8 +16,8 @@ export const trSmall9 = {
       closed: "Dünyasını kapattı",
       removed: "Dünyadan çıkarıldın",
       unreachable: "Bağlanılamadı",
-      hostPackOld: "Oyunu yeniden açmalı",
-      mods: "Bazı modlar sende yok",
+      hostPackOld: "Oyunu yeniden açması gerekiyor",
+      mods: "Aynı modlar gerekiyor",
     },
     /** Home's line for an invite whose join met missing mods: the goal, the friend, and why its
      * button copies the install (the name stays without a suffix: "ile" fits every name). */

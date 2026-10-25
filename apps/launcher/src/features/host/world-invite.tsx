@@ -19,7 +19,7 @@ import { useHostUi } from "./store";
 function useInviteItems(invite: WorldInvite): Array<MenuItem | null> {
   const { t } = useTranslation();
   const active = joinActive(invite.join);
-  // After the game turned away for missing mods the row's button is "Kopyala ve katıl": the menu
+  // After the game turned away for missing mods the row's button is "Kur ve katıl": the menu
   // names the same action the same way (it still ends in joining, hence the same mark).
   const copy = retryWithCopy(invite.join);
   const people = usePeopleItems(
@@ -67,9 +67,11 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
   const { t } = useTranslation();
   const items = useInviteItems(invite);
   const active = joinActive(invite.join);
-  // A failed join says why beside its button ("Tekrar dene", or "Kopyala ve katıl" after
-  // missing mods): the toast that said it may be gone when the player looks.
+  // A failed join says why beside its button ("Tekrar dene", or "Kur ve katıl" after
+  // missing mods): the toast that said it may be gone when the player looks. Missing mods are one
+  // press from fixed, so their line stays calm; a refused join reads as an error.
   const failed = inviteFailureKey(invite.join);
+  const calm = retryWithCopy(invite.join);
   return (
     <ContextMenu items={items}>
       <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
@@ -84,7 +86,9 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
           </span>
           <span className="flex items-center gap-2 text-[12.5px] text-ash-300">
             {failed ? (
-              <span className="truncate text-flare-300">{t(failed, { name: invite.name })}</span>
+              <span className={calm ? "truncate" : "truncate text-flare-300"}>
+                {t(failed, { name: invite.name })}
+              </span>
             ) : (
               <>
                 <span className="truncate">{t("host.invite.line")}</span>

@@ -219,7 +219,7 @@ export function hostRowAction(input: RowInput): HostRowAction {
 export type JoinButton =
   | { kind: "join" }
   | { kind: "retry" }
-  /** Mods were missing: "Kopyala ve katıl" (the way that fixes it, `retryWithCopy`). */
+  /** Mods were missing: "Kur ve katıl" (the way that fixes it, `retryWithCopy`). */
   | { kind: "copy" }
   | { kind: "rejoin" }
   | { kind: "busy"; step: "preparing" | "opening" | "connecting"; percent?: number }

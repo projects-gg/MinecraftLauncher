@@ -7748,7 +7748,7 @@ export type WorldInviteView_Serialize = {
 
 /**  The answer to a join's question. */
 export type WorldJoinAnswer = 
-/**  "Kopyala ve katıl": the new install's name in the player's language. */
+/**  "Kur ve katıl": the new install's name in the player's language. */
 { kind: "copy"; name: string } | 
 /**  "Kur ve katıl". */
 { kind: "install" } | 
@@ -7757,7 +7757,7 @@ export type WorldJoinAnswer =
 
 /**  What a join's window asks. */
 export type WorldJoinAsk = 
-/**  A new install with exactly the world's mods ("Kopyala ve katıl"). */
+/**  A new install with exactly the world's mods ("Kur ve katıl"). */
 { kind: "copy"; mods: number; bytes: number; unknown: number } | 
 /**  No install of the world's Minecraft version: the official pack is installed for it. */
 { kind: "install"; mc: string } | 
