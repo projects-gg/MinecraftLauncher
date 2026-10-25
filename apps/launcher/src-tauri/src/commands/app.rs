@@ -51,6 +51,18 @@ pub async fn app_set_language(
     crate::overlay::launcher_language(&app, lang);
 }
 
+/// Whether the selected account is in game, as OYNA says it (PLAY-ACCT): the tray's "Oyna" reads
+/// "Oyunda" and does nothing meanwhile. The page tells it when the game starts or ends and when
+/// another account is selected. Async for the same reason as [`app_set_language`].
+#[tauri::command]
+#[specta::specta]
+pub async fn app_tray_in_game(app: tauri::AppHandle, in_game: bool) {
+    #[cfg(desktop)]
+    crate::shell::set_tray_in_game(&app, in_game);
+    #[cfg(not(desktop))]
+    let _ = (app, in_game);
+}
+
 /// Basic facts about the running launcher, shown in Settings → About.
 #[tauri::command]
 #[specta::specta]

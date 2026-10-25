@@ -10,7 +10,7 @@ import { useResumeTarget } from "@/features/resume/resume-button";
 import { api, type ContentKind, type InstanceDetail, type WorldDetail } from "@/lib/api";
 import { ModpackCard } from "../modpack-update";
 import { canQuickPlay } from "../quick-play";
-import { useGameRunning } from "../use-game-running";
+import { useGameRunning, useOthersGame } from "../use-game-running";
 import { LeadCard } from "./lead-card";
 import {
   featuredServer,
@@ -80,7 +80,11 @@ export function OverviewTab({
   const motionPrefs = useMotionPrefs();
   const notesId = useId();
   const id = instance.id;
-  const locked = useGameRunning(id);
+  const running = useGameRunning(id);
+  const othersGame = useOthersGame();
+  // "Devam et", the worlds' and the server's "Oyna": off while this account's game of the instance
+  // runs; another account's game leaves them on, and they ask first (PLAY-ACCT).
+  const locked = running && !othersGame;
   // The worlds and screenshots tabs' own queries: what one reads, the other shows at once.
   const worlds = useQuery({ queryKey: ["worlds", id], queryFn: () => api.library.worlds(id) });
   const shots = useQuery({
@@ -100,15 +104,15 @@ export function OverviewTab({
 
   // A session changes the worlds, the play time, the server list and the folder's size: read
   // them again once the game closes (the screenshots follow the session's own notice).
-  const wasLocked = useRef(locked);
+  const wasRunning = useRef(running);
   useEffect(() => {
-    if (wasLocked.current && !locked) {
+    if (wasRunning.current && !running) {
       for (const key of ["worlds", "instance", "instance-size"]) {
         void queryClient.invalidateQueries({ queryKey: [key, id] });
       }
     }
-    wasLocked.current = locked;
-  }, [locked, id, queryClient]);
+    wasRunning.current = running;
+  }, [running, id, queryClient]);
 
   const ready = !worlds.isPending && !shots.isPending && !modpack.isPending && resume !== undefined;
   // Content that replaces the shimmer fades in; content that was already there just shows.

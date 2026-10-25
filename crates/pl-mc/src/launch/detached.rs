@@ -12,6 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::launch::GameAccount;
 use crate::paths::write_durable_blocking;
 
 /// The note's file name, in the launcher's data folder.
@@ -38,6 +39,10 @@ pub struct DetachedGame {
     pub shown_at_ms: Option<i64>,
     /// The instance's game folder.
     pub game_dir: PathBuf,
+    /// The account the game plays with, so the next start says "Oyunda" for that account alone.
+    /// A note left by an older launcher has none: its game counts as every account's.
+    #[serde(default)]
+    pub account: Option<GameAccount>,
 }
 
 /// `time` in Unix milliseconds (0 before 1970).
@@ -106,7 +111,32 @@ mod tests {
             started_at_ms: 1_792_000_000_500,
             shown_at_ms: Some(1_792_000_030_000),
             game_dir: dir.join("game"),
+            account: Some(GameAccount {
+                id: "0b7d6c1e-3f42-4c55-9d1a-2f0e8c4b6a10".into(),
+                name: "EjderAvcisi".into(),
+            }),
         }
+    }
+
+    #[test]
+    fn the_note_keeps_the_account_the_game_plays_with() {
+        let dir = tempfile::tempdir().unwrap();
+        let note = game(dir.path());
+        note.save(dir.path()).unwrap();
+        let read = DetachedGame::take(dir.path()).unwrap();
+        assert_eq!(read.account, note.account);
+    }
+
+    #[test]
+    fn a_note_from_an_older_launcher_has_no_account() {
+        // PLAY-ACCT added `account`; a game left running by an older launcher is still followed.
+        let dir = tempfile::tempdir().unwrap();
+        let old = r#"{"instanceId":"projects","pid":4242,"processStarted":1792000000,
+            "startedAtMs":1792000000500,"shownAtMs":null,"gameDir":"C:/games/projects"}"#;
+        std::fs::write(dir.path().join(DETACHED_FILE), old).unwrap();
+        let read = DetachedGame::take(dir.path()).unwrap();
+        assert_eq!(read.instance_id, "projects");
+        assert_eq!(read.account, None);
     }
 
     #[test]

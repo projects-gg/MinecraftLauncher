@@ -17,6 +17,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useOwnLaunch } from "@/features/accounts/use-own-launch";
 import { launchErrorAction } from "@/features/disk/launch-error";
 import { helpsWithLaunchError } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
@@ -365,10 +366,16 @@ function LaunchStatus({ phase }: { phase: LaunchPhase }) {
   );
 }
 
-function StatusArea({ selected }: { selected: InstanceSummary | undefined }) {
+function StatusArea({
+  selected,
+  phase,
+}: {
+  selected: InstanceSummary | undefined;
+  /** The launch as the selected account sees it (idle while another account's game runs). */
+  phase: LaunchPhase;
+}) {
   const { t } = useTranslation();
   const reduce = useReducedMotion() ?? false;
-  const phase = useLaunch((s) => s.phase);
   const autoJoin = usePrefs((s) => s.autoJoin);
   const setAutoJoin = usePrefs((s) => s.setAutoJoin);
   // "Devam et" only while nothing runs (a click would start nothing otherwise).
@@ -441,7 +448,9 @@ function StatusArea({ selected }: { selected: InstanceSummary | undefined }) {
 
 /**
  * Bottom command bar: what to play, progress, and the OYNA button. The account is the title
- * bar's (SMALL10: it showed in three places, and only the title bar's chooses).
+ * bar's (SMALL10: it showed in three places, and only the title bar's chooses), and the bar is
+ * that account's (PLAY-ACCT): while another account's game runs it shows this account's own
+ * instance and OYNA, which asks before closing the other game.
  */
 export function CommandBar() {
   const { t, i18n } = useTranslation();
@@ -454,8 +463,7 @@ export function CommandBar() {
   const navigate = useNavigate();
   // Only what the bar shows: the rest of the launch store (crash, notes, screenshots) changes
   // without it.
-  const phase = useLaunch((s) => s.phase);
-  const launchId = useLaunch((s) => s.instanceId);
+  const { phase, instanceId: launchId } = useOwnLaunch();
   const play = useLaunch((s) => s.play);
   const cancel = useLaunch((s) => s.cancel);
   const reset = useLaunch((s) => s.reset);
@@ -559,7 +567,7 @@ export function CommandBar() {
         onSelect={selectInstance}
       />
       <div className={cn("flex min-w-0 flex-1 items-center border-l border-white/8 pl-4")}>
-        <StatusArea selected={selected} />
+        <StatusArea selected={selected} phase={phase} />
       </div>
       <PlayButton
         state={state}

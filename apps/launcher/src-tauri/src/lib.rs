@@ -206,6 +206,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
+            commands::app::app_tray_in_game,
             commands::accounts::accounts_list,
             commands::accounts::account_add_offline,
             commands::accounts::account_login_microsoft,
