@@ -10,6 +10,7 @@
 //! a potion) is kept apart with its tint source and default colour, so a client multiplies it.
 //! Overlays (Projects' own ItemsAdder items) are a separate document resolved first by the client.
 
+pub mod data;
 mod image;
 mod itemdef;
 mod math;
