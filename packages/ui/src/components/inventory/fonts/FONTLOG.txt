@@ -1,0 +1,30 @@
+FONTLOG for Projects Pixel
+==========================
+
+Projects Pixel is the text face of the cloud inventory (@pl/ui InventoryView): window titles,
+item counts and item tooltips, drawn the way the game draws its own text.
+
+Source
+------
+Minecraft Font v1.0 by Idrees Hassan (https://github.com/IdreesInc/Minecraft-Font),
+SIL Open Font License 1.1, no Reserved Font Name. It is a fan-made rendition of the game's
+typeface and contains no assets of the game; this font contains none either. Not affiliated
+with Mojang or Minecraft.
+
+Changes (24 Oct 2026, Projects)
+-------------------------------
+- The source draws every pixel as a 2-unit square starting half a pixel right of the pen, so
+  glyph edges fall between screen pixels at odd sizes. Each glyph was read back into its pixel
+  grid and rebuilt with one pixel = 128 units and an em of 8 pixels (unitsPerEm 1024): at a font
+  size of 8n CSS pixels every pixel covers n x n CSS pixels and every edge lands on a whole pixel.
+  Advances are the glyph width plus one pixel, as in the game.
+- Vertical metrics: ascent 8 and descent 2 pixels (typo metrics in use), so a 10-pixel line, the
+  game's tooltip pitch, puts the baseline on a whole pixel.
+- Added the Turkish letters the source lacks, in its style: dotless i, capital I with dot, g with
+  breve (both cases) and s with cedilla (both cases), plus the ellipsis.
+- Renamed to Projects Pixel (the OFL asks derivatives not to pass for the original).
+
+Build
+-----
+packages/ui/scripts/build-pixel-font.py (fontTools 4.67) from the source OTF; the output is
+projects-pixel.woff2 (3.6 KB, 200 glyphs).

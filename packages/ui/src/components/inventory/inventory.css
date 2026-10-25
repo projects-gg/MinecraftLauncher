@@ -1,0 +1,492 @@
+/*
+ * The cloud inventory, drawn like the game's own screens: every length is a whole number of GUI
+ * pixels (`--pl-inv-px`), and a GUI pixel is a whole number of device pixels, the largest that
+ * fits the component's width between the min and max scale. The screen's pixel ratio comes from
+ * the media queries below (and exactly from the script once it runs), so the first paint of a
+ * prerendered page is already sharp.
+ */
+@font-face {
+  font-family: "Projects Pixel";
+  src: url("./fonts/projects-pixel.woff2") format("woff2");
+  font-display: block;
+}
+
+@property --pl-inv-px {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 2px;
+}
+
+.pl-inv {
+  container-type: inline-size;
+  --pl-inv-dpr: 1;
+  --pl-inv-min: 1;
+  --pl-inv-max: 3;
+  /* ITEMART's light edge for dark icons is for our dark slots; the game's grey needs none. */
+  --pl-item-rim: transparent;
+  position: relative;
+  min-width: 0;
+  /* A menu picture wider than the window reaches past it, as in the game, but never past us. */
+  overflow-x: clip;
+}
+
+@media (min-resolution: 1.1dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 1.1;
+  }
+}
+@media (min-resolution: 1.25dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 1.25;
+  }
+}
+@media (min-resolution: 1.5dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 1.5;
+  }
+}
+@media (min-resolution: 1.75dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 1.75;
+  }
+}
+@media (min-resolution: 2dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 2;
+  }
+}
+@media (min-resolution: 2.5dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 2.5;
+  }
+}
+@media (min-resolution: 2.75dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 2.75;
+  }
+}
+@media (min-resolution: 3dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 3;
+  }
+}
+@media (min-resolution: 3.5dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 3.5;
+  }
+}
+@media (min-resolution: 4dppx) {
+  .pl-inv {
+    --pl-inv-dpr: 4;
+  }
+}
+
+/* The stage is inside the container, so `cqi` measures the component. */
+.pl-inv-stage {
+  --pl-inv-n: clamp(
+    max(1px, round(down, calc(var(--pl-inv-min) * var(--pl-inv-dpr) * 1px), 1px)),
+    round(down, calc(100cqi * var(--pl-inv-dpr) / var(--pl-inv-w)), 1px),
+    max(1px, round(down, calc(var(--pl-inv-max) * var(--pl-inv-dpr) * 1px), 1px))
+  );
+  --pl-inv-px: calc(var(--pl-inv-n) / var(--pl-inv-dpr));
+  display: flex;
+  justify-content: center;
+}
+.pl-inv[data-align="start"] .pl-inv-stage {
+  justify-content: flex-start;
+}
+@supports not (width: round(down, 10px, 1px)) {
+  .pl-inv-stage {
+    --pl-inv-px: 2px;
+  }
+}
+
+/* The game's window and our line under it, as wide as the window. */
+.pl-inv-column {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: calc(var(--pl-inv-gw) * var(--pl-inv-px));
+}
+
+.pl-inv-panel {
+  position: relative;
+  flex: none;
+  width: calc(var(--pl-inv-gw) * var(--pl-inv-px));
+  height: calc(var(--pl-inv-gh) * var(--pl-inv-px));
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.pl-inv-bar {
+  display: flex;
+  min-width: 0;
+  min-height: 32px;
+  margin-top: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pl-inv-art {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* A Projects menu's own picture (IA-ART's title glyphs): under the slots, drawn pixel for pixel. */
+.pl-inv-glyph {
+  position: absolute;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* The game's words as whole pixels (pixel-text.tsx): a line box 10 GUI pixels tall, its top the
+   letters' top; accents, tails and the shadow reach past it. */
+.pl-inv-line {
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* A line with a character the pixels lack: the font, its letters' top on the box's top. */
+.pl-inv-text {
+  display: block;
+  font-family: "Projects Pixel", var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: calc(8 * var(--pl-inv-px));
+  line-height: calc(10 * var(--pl-inv-px));
+  font-weight: 400;
+  font-style: normal;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  font-synthesis: none;
+  letter-spacing: 0;
+  white-space: pre;
+  -webkit-font-smoothing: none;
+  text-rendering: optimizeSpeed;
+  translate: 0 calc(-1 * var(--pl-inv-px));
+  pointer-events: none;
+}
+
+.pl-inv-title {
+  position: absolute;
+}
+.pl-inv-text.pl-inv-title {
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.pl-inv-slots {
+  position: absolute;
+  inset: 0;
+}
+
+/* Where a slot's action menu hangs from: the slot's square, never hit by the pointer. */
+.pl-inv-menu-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.pl-inv-row {
+  position: absolute;
+  height: calc(18 * var(--pl-inv-px));
+}
+
+.pl-inv-cell {
+  position: absolute;
+  top: 0;
+  width: calc(18 * var(--pl-inv-px));
+  height: calc(18 * var(--pl-inv-px));
+  outline: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pl-inv-item {
+  position: absolute;
+  left: var(--pl-inv-px);
+  top: var(--pl-inv-px);
+  width: calc(16 * var(--pl-inv-px));
+  height: calc(16 * var(--pl-inv-px));
+  transition: opacity 120ms ease;
+}
+.pl-inv-item > svg,
+.pl-inv-item > img,
+.pl-inv-item > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The game's count: its right edge one past the item's, its top 9 under the item's. */
+.pl-inv-count {
+  position: absolute;
+  right: 0;
+  top: calc(10 * var(--pl-inv-px));
+  transition: opacity 120ms ease;
+}
+
+.pl-inv-wear {
+  position: absolute;
+  left: calc(3 * var(--pl-inv-px));
+  top: calc(14 * var(--pl-inv-px));
+  width: calc(13 * var(--pl-inv-px));
+  height: calc(2 * var(--pl-inv-px));
+  background: #000000;
+}
+.pl-inv-wear > span {
+  display: block;
+  height: var(--pl-inv-px);
+}
+
+/* Waiting for the machine: the item and its count stay, a little faint, once the wait is long
+   enough to see (a quick answer shows nothing). */
+.pl-inv-cell[data-pending] .pl-inv-item,
+.pl-inv-cell[data-pending] .pl-inv-count,
+.pl-inv-cursor[data-pending] {
+  opacity: 0.6;
+  transition-delay: 80ms;
+}
+
+/* A move tried where nothing moves (looking only, a trade's lock): the lock (panel-art.tsx) at the
+   item's top left, clear of the tooltip and the count, at once, then fading; the item stays as it
+   is. Opacity only. */
+.pl-inv-lock {
+  position: absolute;
+  left: var(--pl-inv-px);
+  top: var(--pl-inv-px);
+  width: calc(8 * var(--pl-inv-px));
+  height: calc(9 * var(--pl-inv-px));
+  pointer-events: none;
+  z-index: 1;
+  animation: pl-inv-lock 900ms ease-out both;
+}
+@keyframes pl-inv-lock {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Under a finger the carried stack waits here, under the window: one slot of the game's. A tap on
+   it puts the stack back. */
+.pl-inv-hand {
+  position: relative;
+  flex: none;
+  width: calc(18 * var(--pl-inv-px));
+  height: calc(18 * var(--pl-inv-px));
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  --pl-item-rim: transparent;
+}
+.pl-inv-hand:focus-visible {
+  outline: 2px solid var(--color-gold-300, #f6d58e);
+  outline-offset: 2px;
+}
+.pl-inv-hand[data-pending] .pl-inv-item,
+.pl-inv-hand[data-pending] .pl-inv-count {
+  opacity: 0.6;
+  transition-delay: 80ms;
+}
+
+/* The game's slot highlight as it is drawn now (container/slot_highlight_back and _front): white
+   at 38 % behind the item and 13 % over it, at once, so the item stays readable. */
+.pl-inv-hl-back,
+.pl-inv-hl {
+  position: absolute;
+  left: var(--pl-inv-px);
+  top: var(--pl-inv-px);
+  width: calc(16 * var(--pl-inv-px));
+  height: calc(16 * var(--pl-inv-px));
+  opacity: 0;
+  pointer-events: none;
+}
+.pl-inv-hl-back {
+  background: rgb(255 255 255 / 0.376);
+}
+.pl-inv-hl {
+  background: rgb(255 255 255 / 0.125);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pl-inv[data-live] .pl-inv-cell:hover .pl-inv-hl-back,
+  .pl-inv[data-live] .pl-inv-cell:hover .pl-inv-hl {
+    opacity: 1;
+  }
+}
+/* A slot whose menu is open or whose tooltip was tapped. Keyboard focus has its brackets alone. */
+.pl-inv-cell[data-lit] .pl-inv-hl-back,
+.pl-inv-cell[data-lit] .pl-inv-hl {
+  opacity: 1;
+}
+
+/* Keyboard focus: the brand's pixel brackets at the slot's corners. */
+.pl-inv-focus {
+  position: absolute;
+  left: calc(-2 * var(--pl-inv-px));
+  top: calc(-2 * var(--pl-inv-px));
+  width: calc(22 * var(--pl-inv-px));
+  height: calc(22 * var(--pl-inv-px));
+  display: none;
+  pointer-events: none;
+  z-index: 1;
+}
+.pl-inv-cell:focus-visible .pl-inv-focus {
+  display: block;
+}
+
+/* The held hotbar slot's frame (panel-art.tsx), over the neighbours' edges as in the game's hotbar. */
+.pl-inv-held {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(22 * var(--pl-inv-px));
+  height: calc(22 * var(--pl-inv-px));
+  pointer-events: none;
+  transition: translate 180ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* The item on the cursor, over everything, following the pointer. */
+.pl-inv-cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: calc(18 * var(--pl-inv-px));
+  height: calc(18 * var(--pl-inv-px));
+  pointer-events: none;
+  z-index: 70;
+  transition: opacity 120ms ease;
+  --pl-item-rim: transparent;
+}
+/* Carried past the component (onto the rest of the page): out of sight until the pointer is back. */
+.pl-inv-cursor[data-away] {
+  opacity: 0;
+}
+
+/* The game's tooltip: near-black purple, a violet frame fading down, notched corners. Solid (the
+   game's is 94 %): counts under it never show through its words. */
+.pl-inv-tip {
+  --pl-inv-tip-bg: rgb(16 0 16);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 71;
+  box-sizing: border-box;
+  max-width: min(calc(100vw - 16px), calc(240 * var(--pl-inv-px)));
+  padding: calc(2 * var(--pl-inv-px));
+  border: var(--pl-inv-px) solid transparent;
+  border-image: linear-gradient(rgb(80 0 255 / 0.31), rgb(40 0 127 / 0.31)) 1;
+  background: var(--pl-inv-tip-bg);
+  background-clip: border-box;
+  box-shadow:
+    0 calc(-1 * var(--pl-inv-px)) 0 0 var(--pl-inv-tip-bg),
+    0 var(--pl-inv-px) 0 0 var(--pl-inv-tip-bg),
+    calc(-1 * var(--pl-inv-px)) 0 0 0 var(--pl-inv-tip-bg),
+    var(--pl-inv-px) 0 0 0 var(--pl-inv-tip-bg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 90ms ease;
+}
+.pl-inv-tip[data-shown] {
+  opacity: 1;
+}
+.pl-inv-tip[data-instant] {
+  transition: none;
+}
+/* Lines 10 apart and the name 2 more, as the game: the words are 8 tall alone, else 10 a line. */
+.pl-inv-tip-lines {
+  margin-bottom: calc(-2 * var(--pl-inv-px));
+}
+.pl-inv-tip-line:first-child {
+  margin-bottom: calc(2 * var(--pl-inv-px));
+}
+.pl-inv-tip-line:only-child {
+  margin-bottom: 0;
+}
+.pl-inv-tip-line > .pl-inv-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The item's tooltip heading its action menu: the game's words on the menu's own surface. */
+.pl-inv-menu-head {
+  box-sizing: border-box;
+  max-width: min(calc(100vw - 32px), calc(176 * var(--pl-inv-px)));
+  padding: calc(4 * var(--pl-inv-px)) calc(4 * var(--pl-inv-px)) calc(5 * var(--pl-inv-px));
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  pointer-events: none;
+}
+
+/* A slot's menu over the game's bright window: solid obsidian, so no slot or count shows through
+   its words. */
+.pl-inv-menu {
+  background: var(--color-obsidian-900, #121016);
+  backdrop-filter: none;
+}
+/* Opened by a finger: rows a finger's height. */
+.pl-inv-menu-touch [role="menuitem"] {
+  min-height: 44px;
+}
+
+/* A move tried under a line that holds (a trade's lock, looking only): the line in bone at once,
+   crossing back to ash. The two copies' opacities always add up to one, so the words never thicken.
+   Opacity only; a new try starts it again. */
+.pl-inv-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  animation: pl-inv-flash 900ms ease-out both;
+}
+.pl-inv-dim {
+  animation: pl-inv-dim 900ms ease-out both;
+}
+@keyframes pl-inv-flash {
+  0%,
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes pl-inv-dim {
+  0%,
+  30% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pl-inv-item,
+  .pl-inv-count,
+  .pl-inv-cursor,
+  .pl-inv-tip {
+    transition-property: opacity;
+  }
+  .pl-inv-held {
+    transition: none;
+  }
+}
+html[data-perf="on"] .pl-inv-held {
+  transition: none;
+}
