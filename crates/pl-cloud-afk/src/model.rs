@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::plus::{MePlus, PlusAi, PlusOffer};
+
 /// Turkish and English words written in Studio (a maintenance note, a block list reason).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct CloudLocalized {
@@ -34,7 +36,7 @@ pub struct CloudSales {
 }
 
 /// One plan's price: `plan` is `month` or `year`, `price_tl` a decimal string (`"60.00"`).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CloudPlanPrice {
     pub plan: String,
@@ -43,7 +45,7 @@ pub struct CloudPlanPrice {
 }
 
 /// `remaining` only below Studio's "Son N yer" threshold.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CloudStock {
     pub sold_out: bool,
@@ -104,6 +106,8 @@ pub struct Offer {
     pub grace_days: u32,
     pub recommended_version: String,
     pub limits: CloudLimits,
+    /// AFK+ as sold now; None while the service's `plusMode` is `off` (nothing of AFK+ shows).
+    pub plus: Option<PlusOffer>,
 }
 
 impl Offer {
@@ -160,6 +164,8 @@ pub struct Me {
     pub can_buy: CloudCanBuy,
     pub restricted: Option<CloudRestriction>,
     pub now: i64,
+    /// Whether this player may buy AFK+, and AFK+'s own restriction of them.
+    pub plus: Option<MePlus>,
 }
 
 /// A server address as the service stores it: `host` normalized (lowercase ASCII, punycode),
@@ -395,12 +401,31 @@ pub struct CloudAccount {
     /// Version of name, server, version, lang and config (`If-Match`).
     pub rev: u64,
     pub server_changes: CloudServerChanges,
+    /// `plain` or `plus` ("plus" while `plus_until` is ahead); "" from a service before AFK+.
+    #[serde(default)]
+    pub tier: String,
+    /// AFK+ until then; None: never AFK+. May lie in the past (its deals and settings stay readable).
+    #[serde(default)]
+    pub plus_until: Option<i64>,
+    /// The assistant's state; None unless the tier is `plus`.
+    #[serde(default)]
+    pub ai: Option<PlusAi>,
 }
 
 impl CloudAccount {
     /// Wanted, and nothing holds it: it runs or is on its way (the machine may not say yet).
     pub fn wants_to_run(&self) -> bool {
         self.desired == "run" && self.hold.is_none() && !self.expired
+    }
+
+    /// AFK+ now.
+    pub fn is_plus(&self) -> bool {
+        self.tier == "plus"
+    }
+
+    /// AFK+ now or before: its AFK+ settings, deals and history are still readable.
+    pub fn was_plus(&self) -> bool {
+        self.is_plus() || self.plus_until.is_some()
     }
 }
 

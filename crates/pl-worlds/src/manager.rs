@@ -151,6 +151,11 @@ pub trait Bridge: Send + Sync + 'static {
     fn show(&self, shown: WorldsShown);
     /// The running game moves into a friend's world (`127.0.0.1:port`), showing `label`.
     fn connect(&self, port: u16, label: String) -> BoxFuture<'_, bool>;
+    /// The label the game shows for `friend`'s world, in the overlay's language (OVL-LANG: the
+    /// player may pick another one in the game than the launcher's). The launcher's by default.
+    fn world_label(&self, friend: &str) -> String {
+        world_label(friend)
+    }
 }
 
 /// "Birlikte oyna" for "Projects'te buluşun" (the friends feature's invite).
@@ -381,7 +386,12 @@ fn is_projects(host: &str) -> bool {
 
 /// The copy's name and the in-game label for a friend's world, in the player's language.
 pub fn world_label(friend: &str) -> String {
-    pl_lang::pick(
+    world_label_in(friend, pl_lang::Lang::current())
+}
+
+/// [`world_label`] in `lang` (the in-game label follows the overlay's language, OVL-LANG).
+pub fn world_label_in(friend: &str, lang: pl_lang::Lang) -> String {
+    lang.pick(
         format!("Arkadaş dünyası: {friend}"),
         format!("{friend}'s world"),
     )
@@ -2647,7 +2657,10 @@ impl Worlds {
             let in_game = invite.in_game;
             let from = invite.from.clone();
             let same_game = st.game.instance_id.as_deref() == Some(instance_id);
-            (in_game && same_game, world_label(&st.person(&from).name))
+            (
+                in_game && same_game,
+                self.inner.bridge.world_label(&st.person(&from).name),
+            )
         };
         self.changed();
         if in_game {
@@ -2833,19 +2846,29 @@ impl Worlds {
     }
 
     /// "Bağlan" in game: the overlay moves the running game into the world. False: it could not.
+    /// The game shows the friend's world in the overlay's language (`label`, the page's, only when
+    /// the invite names nobody).
     pub async fn connect_in_game(&self, session: &str, label: String) -> bool {
-        let port = {
+        let ready = {
             let st = self.state();
             st.invites
                 .iter()
                 .find(|i| i.session == session)
                 .and_then(|i| match &i.stage {
-                    Some(WorldJoinStage::Ready { port, .. }) => Some(*port),
+                    Some(WorldJoinStage::Ready { port, .. }) => {
+                        let name = st.person(&i.from).name;
+                        let shown = if name.trim().is_empty() {
+                            label.clone()
+                        } else {
+                            self.inner.bridge.world_label(&name)
+                        };
+                        Some((*port, shown))
+                    }
                     _ => None,
                 })
         };
-        match port {
-            Some(port) => self.inner.bridge.connect(port, label).await,
+        match ready {
+            Some((port, shown)) => self.inner.bridge.connect(port, shown).await,
             None => false,
         }
     }

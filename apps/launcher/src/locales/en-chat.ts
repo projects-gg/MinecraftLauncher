@@ -81,7 +81,7 @@ export const enChat = {
     coming: "On my way",
     fiveMinutes: "5 min",
     where: "Where are you?",
-    come: "Come",
+    come: "Come over",
   },
   day: {
     today: "Today",

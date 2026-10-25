@@ -2,8 +2,8 @@
   "providers": [
     {
       "type": "ttf",
-      "file": "projects_overlay:tektur-semibold.ttf",
-      "size": 6.0,
+      "file": "projects_overlay:figtree-semibold.ttf",
+      "size": 6.5,
       "oversample": 8.0,
       "shift": [0.0, 0.0],
       "skip": ""

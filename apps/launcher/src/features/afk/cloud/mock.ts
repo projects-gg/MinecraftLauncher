@@ -8,7 +8,8 @@
 // - `expired`: `accounts` plus one whose time is up;
 // - `paused`: maintenance (Studio's note, the accounts held);
 // - `failed`: signed in, the accounts could not be read.
-// `&reveal=offline|retype|limited` makes "Göster" fail that way.
+// `&reveal=offline|retype|limited` makes "Göster" fail that way. AFK+ adds `&plus=<scenario>`
+// (plus/mock-data.ts); without it AFK+ is off, as the service is until its release.
 import { api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
@@ -24,6 +25,16 @@ import type {
   CloudMovePlan,
   CloudPageData,
 } from "./api";
+import { mockLive } from "./mock-live";
+import {
+  mockMe as mockPlusMe,
+  mockOffer as mockPlusOffer,
+  PLUS_ID,
+  PLUS_NAME,
+  plusAccountParts,
+  plusScenario,
+  withPlus,
+} from "./plus/mock-data";
 
 type Scenario =
   | "off"
@@ -171,12 +182,31 @@ function account(
     config: config("full"),
     rev: 4,
     serverChanges: { used: 0, limit: 6, resetAt: null },
+    tier: plusScenario === "off" ? "" : "plain",
+    plusUntil: null,
+    ai: null,
     ...overrides,
   };
 }
 
 function initialAccounts(which: Scenario): CloudAccount[] {
   if (!["accounts", "expired", "paused"].includes(which)) return [];
+  return withPlus(plainAccounts(which), () =>
+    account(PLUS_ID, PLUS_NAME, "play.projects.gg", 0, {
+      ...plusAccountParts(),
+      live: {
+        state: "running",
+        since: nowSecs() - 5 * 3_600 - 40 * 60,
+        reason: null,
+        attempt: null,
+        retryAt: null,
+      },
+      rev: 11,
+    }),
+  );
+}
+
+function plainAccounts(which: Scenario): CloudAccount[] {
   const now = nowSecs();
   const list = [
     account("a_7KQ2MZ3P9TW4XB1C", "Madenci07", "mc.madenciler.net", 25570, {
@@ -262,10 +292,7 @@ previewTexts();
 
 const which = scenario();
 let accounts = initialAccounts(which);
-const listeners = new Set<(event: CloudLiveEvent) => void>();
-const emit = (event: CloudLiveEvent) => {
-  for (const listener of listeners) listener(event);
-};
+const emit = (event: CloudLiveEvent) => mockLive.emit(event);
 
 function replace(next: CloudAccount): CloudAccount {
   accounts = accounts.map((item) => (item.id === next.id ? next : item));
@@ -325,6 +352,8 @@ async function overview(): Promise<CloudPageData> {
           ? null
           : { ok: which !== "soldout", reason: null, until: null },
       now,
+      plus: hidden ? null : mockPlusOffer(),
+      plusMe: which === "signedout" || hidden ? null : mockPlusMe(),
     },
     twins,
   };
@@ -564,10 +593,7 @@ export const mockCloudApi: CloudApi = {
     watching.delete(id);
   },
   onLive(listener) {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
+    return mockLive.listen(listener);
   },
   async edit(id) {
     await delay(220);

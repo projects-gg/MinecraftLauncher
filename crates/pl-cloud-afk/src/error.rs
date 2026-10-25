@@ -17,9 +17,13 @@ pub enum CloudError {
     /// `503 unavailable`, a 5xx, or a platform page without the envelope.
     #[error("the service is unavailable")]
     Unavailable { retry_after: Option<u64> },
-    /// `429`: a quota or the flood control.
+    /// `429`: a quota or the flood control; `reason` when the service named one (`daily`: a
+    /// day's allowance such as the typed rules', rather than a short wait).
     #[error("rate limited")]
-    RateLimited { retry_after: Option<u64> },
+    RateLimited {
+        retry_after: Option<u64>,
+        reason: Option<String>,
+    },
     /// `401`: the friends session is gone.
     #[error("unauthorized")]
     Unauthorized,
@@ -74,6 +78,14 @@ impl CloudError {
         self.extra(name).and_then(Value::as_str)
     }
 
+    /// The refusal's `reason` (`text_rejected`, `parse_failed`, a `daily` limit, …).
+    pub fn reason(&self) -> Option<&str> {
+        match self {
+            Self::RateLimited { reason, .. } => reason.as_deref(),
+            _ => self.extra_str("reason"),
+        }
+    }
+
     /// Worth trying again later (never in a loop).
     pub fn is_transient(&self) -> bool {
         matches!(
@@ -85,7 +97,9 @@ impl CloudError {
     /// The seconds the service asked to wait, when it said.
     pub fn retry_after(&self) -> Option<u64> {
         match self {
-            Self::Unavailable { retry_after } | Self::RateLimited { retry_after } => *retry_after,
+            Self::Unavailable { retry_after } | Self::RateLimited { retry_after, .. } => {
+                *retry_after
+            }
             Self::Refused { extra, .. } => extra.get("retryAfter").and_then(Value::as_u64),
             _ => None,
         }
@@ -108,6 +122,7 @@ pub(crate) fn from_response(status: u16, retry_after: Option<&str>, body: &[u8])
             401 => CloudError::Unauthorized,
             429 => CloudError::RateLimited {
                 retry_after: header_wait,
+                reason: None,
             },
             _ => CloudError::Unavailable {
                 retry_after: header_wait,
@@ -122,7 +137,13 @@ pub(crate) fn from_response(status: u16, retry_after: Option<&str>, body: &[u8])
     let wait = header_wait.or_else(|| extra.get("retryAfter").and_then(Value::as_u64));
     match (status, code.as_str()) {
         (401, _) => CloudError::Unauthorized,
-        (429, "rate_limited" | "") => CloudError::RateLimited { retry_after: wait },
+        (429, "rate_limited" | "") => CloudError::RateLimited {
+            retry_after: wait,
+            reason: extra
+                .get("reason")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        },
         (503, "unavailable" | "") | (500, _) => CloudError::Unavailable { retry_after: wait },
         (_, "") => CloudError::Unavailable { retry_after: wait },
         _ => CloudError::Refused {
@@ -156,10 +177,20 @@ mod tests {
         assert!(matches!(
             error,
             CloudError::RateLimited {
-                retry_after: Some(30)
+                retry_after: Some(30),
+                reason: None,
             }
         ));
         assert!(error.is_transient());
+
+        // A day's allowance says so (AFK+'s typed rules).
+        let error = from_response(
+            429,
+            None,
+            br#"{"error": {"code": "rate_limited", "reason": "daily"}}"#,
+        );
+        assert_eq!(error.code(), "rate_limited");
+        assert_eq!(error.reason(), Some("daily"));
 
         let error = from_response(
             503,

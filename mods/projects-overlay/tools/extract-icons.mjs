@@ -51,6 +51,12 @@ const ICONS = [
   ["UserPlus", "regular"],
   ["UserMinus", "regular"],
   ["LockSimple", "regular"],
+  // The rest of the launcher's person menu (OVL-UX2). A third entry names a second weight of an icon.
+  ["Star", "regular"],
+  ["Star", "fill", "StarFill"],
+  ["Bell", "fill", "BellFill"],
+  ["FolderSimple", "regular"],
+  ["UserCheck", "regular"],
 ];
 
 // The crew palette's emblems (crew-look.ts EMBLEMS) and the icons team-emblem.tsx draws them with.
@@ -116,8 +122,8 @@ function outline(name, weight) {
 }
 
 const lines = header("the interface's icons");
-for (const [name, weight] of ICONS) {
-  lines.push(`${name}\t${weight}\t${outline(name, weight)}`);
+for (const [name, weight, alias = name] of ICONS) {
+  lines.push(`${alias}\t${weight}\t${outline(name, weight)}`);
 }
 writeFileSync(out, `${lines.join("\n")}\n`);
 console.log(`${ICONS.length} icons -> ${out}`);

@@ -10,7 +10,8 @@ publish = false
 [dependencies]
 # What the overlay shows comes from the friends feature's views and goes back to its actions.
 pl-social = { workspace = true }
-# A message from someone the lists do not know reads "Biri" / "Someone".
+# The overlay's language (OVL-LANG: the player's pick in it, else the launcher's) and the words the
+# launcher writes for it ("Biri" / "Someone").
 pl-lang = { workspace = true }
 # The mod's jar in a game folder (install.rs): the mods folder scan, the pre-launch mod check, the
 # version ranges and atomic writes are the launcher's own; files are hashed the downloader's way.

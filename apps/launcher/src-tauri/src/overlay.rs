@@ -33,6 +33,9 @@ use crate::state::AppState;
 pub const STATUS_EVENT: &str = "overlay-status";
 /// The switch changed without the page (the crash help's "Bu modu kapat" on the overlay).
 pub const ENABLED_EVENT: &str = "overlay-enabled";
+/// A friend's favourite or "Çevrimiçi olunca bildir" changed from the game's person menu
+/// (`PeopleChange`, OVL-UX2): the page keeps those marks, as its own buttons would.
+pub const PEOPLE_EVENT: &str = "overlay-people";
 /// The choices, in the data folder.
 const CONFIG_FILE: &str = "overlay.json";
 /// How long a start waits for the Fabric API the overlay's jar needs: past it, the game starts
@@ -60,9 +63,33 @@ pub fn create(app: &AppHandle, root: &Path) -> Overlay {
         .unwrap_or_default();
     ENABLED.store(config.enabled, Ordering::Relaxed);
     let overlay = Overlay::new(config);
+    // The overlay's language (OVL-LANG): the one the player picked in its settings, kept here in
+    // the data folder for every install and game, else the launcher's own (it follows changes).
+    overlay.set_launcher_language(pl_lang::Lang::current());
+    overlay.set_language_pick(pl_overlay::read_language_pick(root));
+    let kept = root.to_path_buf();
+    overlay.on_language(move |lang| {
+        if let Err(error) = pl_overlay::write_language_pick(&kept, Some(lang)) {
+            tracing::warn!(%error, "the overlay's language pick was not kept");
+        }
+    });
     let emitter = app.clone();
     overlay.on_status(move |status| {
         let _ = emitter.emit(STATUS_EVENT, status);
+    });
+    // Favourites and "Çevrimiçi olunca bildir" from the game's person menu (OVL-UX2): the page keeps
+    // them, so it hears the change awake (a resting page is woken for it on the main thread), and
+    // the data folder's copy follows for the starts before the page pushes its choices again.
+    let emitter = app.clone();
+    overlay.on_people(move |change| {
+        if let Some(state) = emitter.try_state::<AppState>() {
+            save(&state.root, &state.overlay.config());
+        }
+        let main = emitter.clone();
+        let _ = emitter.run_on_main_thread(move || {
+            crate::webview_rest::wake_if_suspended(&main, "overlay-people");
+            let _ = main.emit(PEOPLE_EVENT, change);
+        });
     });
     // "Discord'dan mesaj at" from the game's friend menu (OVL-UX): the profile in the Discord app
     // when it is installed, else the web profile (`https://` only), as the page's button does.
@@ -156,6 +183,14 @@ pub fn set_enabled(app: &AppHandle, enabled: bool) {
     config.enabled = enabled;
     tracing::info!(enabled, "in-game overlay switched");
     apply(&state, config);
+}
+
+/// The launcher's own language changed (Settings → Dil): the overlay follows it while the player
+/// has picked no language in the game (OVL-LANG).
+pub fn launcher_language(app: &AppHandle, lang: pl_lang::Lang) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.overlay.set_launcher_language(lang);
+    }
 }
 
 /// The overlay's mod was switched outside Settings (the crash help's "Bu modu kapat"): the switch

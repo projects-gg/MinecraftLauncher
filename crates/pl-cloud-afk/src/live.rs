@@ -9,8 +9,13 @@
 //! session ended, 4004 the player's accounts there changed (reopened at once), 4008 too many
 //! messages (a minute's pause); anything else reopens with backoff (2 s doubling to 5 minutes,
 //! ±20 %).
+//!
+//! AFK+ (README "AFK+ live socket"): the AFK+ panel watches its account with `ai: true`, which
+//! streams the account's AI state, feed and approvals as well (same lease). A console and the
+//! panel watch the same account through one subscription: closing the panel while its console stays
+//! on screen watches the account again without `ai`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -31,6 +36,7 @@ use url::Url;
 
 use crate::client::Bearer;
 use crate::model::{CloudConsoleLine, CloudLiveState};
+use crate::plus::{PlusAi, PlusApproval, PlusFeedItem};
 use crate::tls;
 
 const PING: &str = r#"{"t":"ping"}"#;
@@ -85,19 +91,52 @@ pub enum CloudLiveEvent {
         host: String,
         status: CloudLiveStatus,
     },
+    /// AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`).
+    Ai { acct: String, ai: Option<PlusAi> },
+    /// AFK+: feed items in batches at least 2 s apart; `snapshot`: the latest 20 right after
+    /// `watch`.
+    Feed {
+        acct: String,
+        items: Vec<PlusFeedItem>,
+        snapshot: bool,
+    },
+    /// AFK+: an approval came, was answered, expired or closed.
+    Approval {
+        acct: String,
+        approval: PlusApproval,
+    },
+    /// AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again.
+    Messages { acct: String, count: u32, at: i64 },
 }
 
 pub type LiveSink = Arc<dyn Fn(CloudLiveEvent) + Send + Sync>;
 
 enum Command {
-    Watch(String),
+    /// Watch the account (again), with its AI or without.
+    Watch {
+        acct: String,
+        ai: bool,
+    },
     Unwatch(String),
+}
+
+/// Who watches an account: its console, the AFK+ panel, or both.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Want {
+    console: bool,
+    ai: bool,
+}
+
+impl Want {
+    fn any(self) -> bool {
+        self.console || self.ai
+    }
 }
 
 struct HostTask {
     generation: u64,
     commands: mpsc::UnboundedSender<Command>,
-    watched: HashSet<String>,
+    watched: HashMap<String, Want>,
 }
 
 struct Hub {
@@ -135,12 +174,27 @@ impl LiveHub {
 
     /// Streams `acct`'s console and state from `host`'s socket at `url` (opened when it is not).
     pub fn watch(&self, url: Url, token: Bearer, host: &str, acct: &str) {
+        self.start(url, token, host, acct, |want| want.console = true);
+    }
+
+    /// AFK+: streams `acct`'s AI state, feed and approvals too, while the AFK+ panel is on screen.
+    pub fn watch_ai(&self, url: Url, token: Bearer, host: &str, acct: &str) {
+        self.start(url, token, host, acct, |want| want.ai = true);
+    }
+
+    fn start(&self, url: Url, token: Bearer, host: &str, acct: &str, change: fn(&mut Want)) {
         let mut hosts = self.hub.hosts.lock();
-        if let Some(task) = hosts.get_mut(host)
-            && task.commands.send(Command::Watch(acct.to_owned())).is_ok()
-        {
-            task.watched.insert(acct.to_owned());
-            return;
+        if let Some(task) = hosts.get_mut(host) {
+            let mut want = task.watched.get(acct).copied().unwrap_or_default();
+            change(&mut want);
+            let command = Command::Watch {
+                acct: acct.to_owned(),
+                ai: want.ai,
+            };
+            if task.commands.send(command).is_ok() {
+                task.watched.insert(acct.to_owned(), want);
+                return;
+            }
         }
         let generation = {
             let mut next = self.hub.next_generation.lock();
@@ -148,13 +202,15 @@ impl LiveHub {
             *next
         };
         let (commands, receiver) = mpsc::unbounded_channel();
-        let watched: HashSet<String> = [acct.to_owned()].into();
+        let mut want = Want::default();
+        change(&mut want);
+        let watched: HashMap<String, bool> = [(acct.to_owned(), want.ai)].into();
         hosts.insert(
             host.to_owned(),
             HostTask {
                 generation,
                 commands,
-                watched: watched.clone(),
+                watched: [(acct.to_owned(), want)].into(),
             },
         );
         let hub = self.hub.clone();
@@ -176,16 +232,40 @@ impl LiveHub {
         });
     }
 
-    /// Stops streaming `acct`; the socket closes with its last watched account.
+    /// The console left the screen; the socket closes with its last watched account.
     pub fn unwatch(&self, acct: &str) {
+        self.stop(acct, |want| want.console = false);
+    }
+
+    /// The AFK+ panel left the screen.
+    pub fn unwatch_ai(&self, acct: &str) {
+        self.stop(acct, |want| want.ai = false);
+    }
+
+    fn stop(&self, acct: &str, change: fn(&mut Want)) {
         let mut hosts = self.hub.hosts.lock();
         let mut emptied = None;
         for (host, task) in hosts.iter_mut() {
-            if task.watched.remove(acct) {
-                let _ = task.commands.send(Command::Unwatch(acct.to_owned()));
-                if task.watched.is_empty() {
-                    emptied = Some(host.clone());
-                }
+            let Some(want) = task.watched.get_mut(acct) else {
+                continue;
+            };
+            let before = *want;
+            change(want);
+            if *want == before {
+                continue;
+            }
+            if want.any() {
+                // Still watched, now without its AI (or the other way round).
+                let _ = task.commands.send(Command::Watch {
+                    acct: acct.to_owned(),
+                    ai: want.ai,
+                });
+                continue;
+            }
+            task.watched.remove(acct);
+            let _ = task.commands.send(Command::Unwatch(acct.to_owned()));
+            if task.watched.is_empty() {
+                emptied = Some(host.clone());
             }
         }
         if let Some(host) = emptied {
@@ -342,6 +422,29 @@ enum Incoming {
         #[serde(default)]
         acct: Option<String>,
     },
+    Aist {
+        acct: String,
+        #[serde(default)]
+        ai: Option<PlusAi>,
+    },
+    Aifeed {
+        acct: String,
+        #[serde(default)]
+        items: Vec<PlusFeedItem>,
+        #[serde(default)]
+        snapshot: bool,
+    },
+    Aiapproval {
+        acct: String,
+        approval: PlusApproval,
+    },
+    Aimsg {
+        acct: String,
+        #[serde(default)]
+        count: u32,
+        #[serde(default)]
+        at: i64,
+    },
     Bye,
     Pong,
     #[serde(other)]
@@ -362,11 +465,20 @@ fn watch_frame(t: &str, acct: &str) -> String {
     serde_json::json!({ "t": t, "acct": acct }).to_string()
 }
 
+/// `watch`, with `ai: true` for the AFK+ panel.
+fn watch_ai_frame(acct: &str, ai: bool) -> String {
+    if ai {
+        serde_json::json!({ "t": "watch", "acct": acct, "ai": true }).to_string()
+    } else {
+        watch_frame("watch", acct)
+    }
+}
+
 /// One machine's socket until nobody watches or it must not reopen.
 async fn run(
     endpoint: &Endpoint,
     host: &str,
-    mut watched: HashSet<String>,
+    mut watched: HashMap<String, bool>,
     mut commands: mpsc::UnboundedReceiver<Command>,
     sink: &LiveSink,
 ) {
@@ -425,7 +537,7 @@ async fn run(
                 () = sleep_until(until) => break,
                 command = commands.recv() => match command {
                     None => return,
-                    Some(Command::Watch(acct)) => { watched.insert(acct); }
+                    Some(Command::Watch { acct, ai }) => { watched.insert(acct, ai); }
                     Some(Command::Unwatch(acct)) => {
                         watched.remove(&acct);
                         if watched.is_empty() {
@@ -441,13 +553,13 @@ async fn run(
 async fn connected(
     socket: &mut Socket,
     host: &str,
-    watched: &mut HashSet<String>,
+    watched: &mut HashMap<String, bool>,
     commands: &mut mpsc::UnboundedReceiver<Command>,
     sink: &LiveSink,
     backoff: &mut Duration,
 ) -> Outcome {
-    for acct in watched.iter() {
-        if !send_text(socket, watch_frame("watch", acct)).await {
+    for (acct, ai) in watched.iter() {
+        if !send_text(socket, watch_ai_frame(acct, *ai)).await {
             return Outcome::Retry(Duration::ZERO);
         }
     }
@@ -474,6 +586,16 @@ async fn connected(
                             sink(CloudLiveEvent::Machine { host: host.to_owned(), online });
                         }
                         Ok(Incoming::Error { code, acct }) => sink(CloudLiveEvent::Problem { acct, code }),
+                        Ok(Incoming::Aist { acct, ai }) => sink(CloudLiveEvent::Ai { acct, ai }),
+                        Ok(Incoming::Aifeed { acct, items, snapshot }) => {
+                            sink(CloudLiveEvent::Feed { acct, items, snapshot });
+                        }
+                        Ok(Incoming::Aiapproval { acct, approval }) => {
+                            sink(CloudLiveEvent::Approval { acct, approval });
+                        }
+                        Ok(Incoming::Aimsg { acct, count, at }) => {
+                            sink(CloudLiveEvent::Messages { acct, count, at });
+                        }
                         Ok(Incoming::Bye | Incoming::Pong | Incoming::Other) => {}
                         Err(error) => tracing::debug!(%error, "unreadable live console message"),
                     }
@@ -496,13 +618,23 @@ async fn connected(
                         .await;
                     return Outcome::Done;
                 }
-                Some(Command::Watch(acct)) => {
-                    if watched.insert(acct.clone()) && !send_text(socket, watch_frame("watch", &acct)).await {
+                Some(Command::Watch { acct, ai }) => {
+                    let before = watched.insert(acct.clone(), ai);
+                    let sent = match before {
+                        Some(same) if same == ai => true,
+                        // The AI's stream ends only with the subscription: watch again without it.
+                        Some(true) => {
+                            send_text(socket, watch_frame("unwatch", &acct)).await
+                                && send_text(socket, watch_ai_frame(&acct, false)).await
+                        }
+                        _ => send_text(socket, watch_ai_frame(&acct, ai)).await,
+                    };
+                    if !sent {
                         return Outcome::Retry(Duration::ZERO);
                     }
                 }
                 Some(Command::Unwatch(acct)) => {
-                    if watched.remove(&acct) {
+                    if watched.remove(&acct).is_some() {
                         let _ = send_text(socket, watch_frame("unwatch", &acct)).await;
                     }
                     if watched.is_empty() {
@@ -602,6 +734,26 @@ mod tests {
             }
         ));
         assert!(matches!(parse(r#"{"t":"pong"}"#), Incoming::Pong));
+        assert!(matches!(
+            parse(r#"{"t":"aist","acct":"a_1","ai":{"state":"on","pendingApprovals":2}}"#),
+            Incoming::Aist { ai: Some(ai), .. } if ai.pending_approvals == 2
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"aifeed","acct":"a_1","items":[{"id":"01J","at":5,"kind":"pm_in","counterpart":"Kaan_07","text":"elytra var 45k"}],"snapshot":true}"#),
+            Incoming::Aifeed { snapshot: true, items, .. } if items[0].kind == "pm_in"
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"aiapproval","acct":"a_1","approval":{"id":"01J","state":"expired"}}"#),
+            Incoming::Aiapproval { approval, .. } if approval.state == "expired"
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"aimsg","acct":"a_1","count":2,"at":9}"#),
+            Incoming::Aimsg {
+                count: 2,
+                at: 9,
+                ..
+            }
+        ));
         assert!(matches!(parse(r#"{"t":"later","x":1}"#), Incoming::Other));
     }
 
@@ -707,6 +859,44 @@ mod tests {
         .unwrap();
         let sent = sent.lock().unwrap().clone();
         assert_eq!(sent[0], watch_frame("watch", "a_1"));
+    }
+
+    /// Waits (at most 5 s) until the service heard `count` frames.
+    async fn heard(sent: &Arc<StdMutex<Vec<String>>>, count: usize) -> Vec<String> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let frames = sent.lock().unwrap().clone();
+                if frames.len() >= count {
+                    return frames;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_afk_plus_panel_watches_with_ai_and_leaves_its_console_watched() {
+        let sent = Arc::new(StdMutex::new(Vec::new()));
+        let url = fake_service(sent.clone()).await;
+        let sink: LiveSink = Arc::new(|_| {});
+        let hub = LiveHub::new(Handle::current(), "test", sink);
+        hub.watch(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
+        hub.watch_ai(url, Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 2).await;
+        assert_eq!(frames[0], watch_frame("watch", "a_1"));
+        assert_eq!(frames[1], watch_ai_frame("a_1", true));
+        // The panel closes, the console stays: watched again without the AI.
+        hub.unwatch_ai("a_1");
+        let frames = heard(&sent, 4).await;
+        assert_eq!(frames[2], watch_frame("unwatch", "a_1"));
+        assert_eq!(frames[3], watch_frame("watch", "a_1"));
+        assert!(hub.is_watching());
+        hub.unwatch("a_1");
+        assert!(!hub.is_watching());
+        let frames = heard(&sent, 5).await;
+        assert_eq!(frames[4], watch_frame("unwatch", "a_1"));
     }
 
     #[test]

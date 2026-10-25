@@ -1,6 +1,7 @@
 // Tauri implementation of `api.social`: maps the generated bindings onto the UI shapes.
 import { listen } from "@tauri-apps/api/event";
 import {
+  type AfkNotice_Serialize,
   type ChatCardView,
   type ChatChangeView,
   type ChatMessageView,
@@ -565,6 +566,24 @@ function notice(v: NoticeBinding): SocialNotice {
       };
     case "restricted":
       return { kind: "restricted", until: opt(v.until) };
+    case "afkNotice": {
+      // Sent by the backend: every field is there (the optional ones are its reading side).
+      const n = v.notice as AfkNotice_Serialize;
+      return {
+        kind: "afkNotice",
+        notice: {
+          id: n.id,
+          event: n.event,
+          kind: n.kind,
+          priority: n.priority,
+          at: n.at,
+          tag: opt(n.tag),
+          quiet: n.quiet,
+          data: n.data,
+          itemName: opt(n.itemName),
+        },
+      };
+    }
   }
 }
 

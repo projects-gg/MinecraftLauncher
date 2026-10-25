@@ -45,9 +45,14 @@ public final class OverlayState {
 
     /**
      * A friend. {@code badge} (TEAM6): the crew whose tag they wear, as the launcher named it (its card is in
-     * {@link #badge(String)}), or null.
+     * {@link #badge(String)}), or null. {@code seen} (OVL-UX2, Q2): when an offline friend was last seen, as roughly as
+     * the launcher's list says it ({@code today}, {@code yesterday}, {@code week}, {@code long}), or null. OVL-UX2
+     * (Q3-Q5): {@code fav}, one of the player's favourites (the list's star); {@code alert}, "Çevrimiçi olunca bildir"
+     * is on for them; {@code group}, their category's id (null: "Arkadaşlar"); {@code crews}, where they stand in the
+     * crews the player may invite to ({@code member} or {@code invited}, by crew id).
      */
-    public record Friend(String id, String name, String where, boolean joinable, String host, String badge) {
+    public record Friend(String id, String name, String where, boolean joinable, String host, String badge,
+        String seen, boolean fav, boolean alert, String group, Map<String, String> crews) {
         public boolean onProjects() {
             return where.equals("projects");
         }
@@ -121,7 +126,15 @@ public final class OverlayState {
      * ({@code people.note.<key>}) with the friend's {@code name}, or {@code text} is the line itself (world sharing's);
      * {@code error} when it did not go.
      */
-    public record PersonNote(String key, String name, String text, boolean error, long at) {
+    public record PersonNote(String key, String name, String text, boolean error, long at, String detail) {
+    }
+
+    /** One of the player's friend categories (OVL-UX2, Q7). */
+    public record Group(String id, String name) {
+    }
+
+    /** A crew the player may invite friends to (OVL-UX2, Q7); {@code full}: nobody more can be invited. */
+    public record CrewTarget(String id, String name, boolean full) {
     }
 
     /**
@@ -206,6 +219,8 @@ public final class OverlayState {
         public Card card;
         /** TEAM6: the crew whose tag its sender wears (someone else's message in crew chat), or null. */
         public String badge;
+        /** OVL-UX2 (Q6): its sender's user id (someone else's message in crew chat; their name opens their menu). */
+        public String by;
 
         ChatLine(String id, String clientId, String from, String text, boolean mine, Delivery delivery, long at,
             long createdAt) {
@@ -308,7 +323,19 @@ public final class OverlayState {
     private final Set<String> reportBlocks = new HashSet<>();
     /** The names of friends an action is on its way for (an unfriended one leaves the list before the answer). */
     private final Map<String, String> actionNames = new HashMap<>();
+    /** What a note names besides the person (a category, a crew), by the person an action is on its way for. */
+    private final Map<String, String> actionDetails = new HashMap<>();
     private PersonNote personNote;
+    // ---- The rest of the launcher's person menu (OVL-UX2) ----
+    private List<Group> groups = List.of();
+    private List<CrewTarget> inviteCrews = List.of();
+    private boolean crewmatesAsk;
+    private final Set<String> asked = new HashSet<>();
+    private final Set<String> asking = new HashSet<>();
+    /** Q15: crewmates who are not friends, playing on Projects now ("Katıl"). */
+    private final Set<String> matesHere = new HashSet<>();
+    /** Q15: crewmates who are not friends, whose Discord profile is known ("Discord'dan mesaj at"). */
+    private final Set<String> matesDiscord = new HashSet<>();
 
     public BridgeClient.Status status() {
         return status;
@@ -557,6 +584,19 @@ public final class OverlayState {
         return friendId == null || !has("chat") ? null : directs.get(friendId);
     }
 
+    /** OVL-UX2: the friend whose direct conversation {@code conversation} is (its chip's menu is theirs), or null. */
+    public String friendOfDirect(String conversation) {
+        if (conversation == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> e : directs.entrySet()) {
+            if (e.getValue().equals(conversation)) {
+                return e.getKey();
+            }
+        }
+        return draftFriends.get(conversation);
+    }
+
     /** Whether {@code friendId}'s Discord profile is known ("Discord'dan mesaj at"). */
     public boolean discord(String friendId) {
         return friendId != null && discords.contains(friendId);
@@ -592,6 +632,55 @@ public final class OverlayState {
         if (friend != null) {
             actionNames.put(friendId, friend.name());
         }
+        actionDetails.remove(friendId);
+    }
+
+    /**
+     * An action for {@code id} goes now (OVL-UX2): their name (a crewmate is not on the friend list) and what the
+     * answer's words name besides them ({@code detail}: a category, a crew; may be null) are kept.
+     */
+    public void actionSent(String id, String name, String detail) {
+        actionNames.put(id, name == null ? "" : name);
+        if (detail == null) {
+            actionDetails.remove(id);
+        } else {
+            actionDetails.put(id, detail);
+        }
+    }
+
+    /** OVL-UX2 (Q7): the player's friend categories, in their order (empty: none, or an older service). */
+    public List<Group> groups() {
+        return groups;
+    }
+
+    /** OVL-UX2 (Q7): the crews the player may invite friends to (empty: none, or crews off). */
+    public List<CrewTarget> inviteCrews() {
+        return inviteCrews;
+    }
+
+    /** OVL-UX2 (Q7): crewmates may ask each other to be friends now. */
+    public boolean crewmatesAsk() {
+        return crewmatesAsk && has("people2");
+    }
+
+    /** OVL-UX2 (Q7): crewmate {@code id} asked the player to be friends. */
+    public boolean askedBy(String id) {
+        return id != null && asked.contains(id);
+    }
+
+    /** OVL-UX2 (Q7): the player asked crewmate {@code id} to be friends. */
+    public boolean asking(String id) {
+        return id != null && asking.contains(id);
+    }
+
+    /** OVL-UX2 (Q15): crewmate {@code id} (not a friend) plays on Projects now: their menu's "Katıl". */
+    public boolean mateOnProjects(String id) {
+        return id != null && has("people2") && matesHere.contains(id);
+    }
+
+    /** OVL-UX2 (Q15): crewmate {@code id}'s (not a friend) Discord profile is known: "Discord'dan mesaj at". */
+    public boolean mateDiscord(String id) {
+        return id != null && has("people2") && matesDiscord.contains(id);
     }
 
     /** A report about {@code friendId} went, {@code alsoBlock}: with "Ayrıca engelle" ticked. */
@@ -610,13 +699,18 @@ public final class OverlayState {
 
     /** Shows a note under the friend list for a moment (the mod's own, as when nothing could be sent). */
     public void personNote(String key, String name, boolean error, long now) {
-        personNote = new PersonNote(key, name == null ? "" : name, null, error, now);
+        personNote(key, name, null, error, now);
+    }
+
+    /** {@link #personNote(String, String, boolean, long)} naming something besides the person (OVL-UX2). */
+    public void personNote(String key, String name, String detail, boolean error, long now) {
+        personNote = new PersonNote(key, name == null ? "" : name, null, error, now, detail);
         revision++;
     }
 
     /** Shows a line of world sharing's under the friend list for a moment (an invite to the world that did not go). */
     public void personNoteText(String text, boolean error, long now) {
-        personNote = new PersonNote(null, "", text, error, now);
+        personNote = new PersonNote(null, "", text, error, now, null);
         revision++;
     }
 
@@ -641,8 +735,16 @@ public final class OverlayState {
         draftFriends.clear();
         invitedAt.clear();
         actionNames.clear();
+        actionDetails.clear();
         reportBlocks.clear();
         personNote = null;
+        groups = List.of();
+        inviteCrews = List.of();
+        crewmatesAsk = false;
+        asked.clear();
+        asking.clear();
+        matesHere.clear();
+        matesDiscord.clear();
     }
 
     /** P8: how a friend menu action went; the words come from the action and the reason. */
@@ -654,6 +756,8 @@ public final class OverlayState {
         Friend known = friends.get(friend);
         String name = actionNames.containsKey(friend) ? actionNames.remove(friend) : known == null ? ""
             : known.name();
+        String detail = actionDetails.remove(friend);
+        boolean queued = Protocol.bool(frame, "queued", false);
         String key = switch (action) {
             case "invite" -> {
                 if (ok || reason.equals("wait")) {
@@ -671,10 +775,25 @@ public final class OverlayState {
                 yield ok ? (blocked ? "reported_blocked" : "reported") : "report_failed";
             }
             case "discord" -> ok ? null : "failed";
+            // OVL-UX2: a mark that did not keep, a category, a crew invite, a crewmate's request.
+            case "favorite", "alert" -> ok ? null : "failed";
+            case "move" -> ok ? (detail == null ? null : "moved") : "failed";
+            case "crew-invite" -> {
+                if (ok && detail != null) {
+                    yield "crew_invited";
+                }
+                yield ok ? "crew_invited_one" : "failed";
+            }
+            case "add-friend" -> {
+                if (ok && queued) {
+                    asking.add(friend);
+                }
+                yield ok ? (queued ? "request_sent" : "now_friends") : "failed";
+            }
             default -> null;
         };
         if (key != null) {
-            personNote = new PersonNote(key, name, null, !ok, now);
+            personNote = new PersonNote(key, name, null, !ok, now, detail);
         }
     }
 
@@ -886,6 +1005,7 @@ public final class OverlayState {
             case "badges" -> putBadges(frame);
             case "note" -> putArrival(frame);
             case "friend-result" -> onFriendResult(frame, now);
+            case "lists" -> putLists(frame);
             case "toast" -> {
                 String sticker = Protocol.str(frame, "sticker", null);
                 String kind = Protocol.str(frame, "kind", "message");
@@ -931,7 +1051,8 @@ public final class OverlayState {
 
         String host = Protocol.plain(Protocol.str(o, "host", ""), 255);
         friends.put(id, new Friend(id, name(o, "name"), Protocol.str(o, "where", "offline"),
-            Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host, crewId(o)));
+            Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host, crewId(o), seenOf(o),
+            Protocol.bool(o, "fav", false), Protocol.bool(o, "alert", false), groupId(o), crewPlaces(o)));
         // HOST1 (H13): only the launcher that got the invite sends it; gone with the next frame without it.
         JsonObject world = obj(o, "world");
         if (world == null) {
@@ -959,6 +1080,90 @@ public final class OverlayState {
         });
         host = new HostView(open, (int) Math.max(1, Math.min(7, Protocol.num(frame, "max", 7))), List.copyOf(guests),
             open ? null : (error == null ? "unavailable" : error));
+    }
+
+    /** Q4: a friend's category id ({@code [a-z0-9]}, at most 12, as the launcher makes them), or null. */
+    private static String groupId(JsonObject o) {
+        String group = Protocol.str(o, "group", "");
+        return group.matches("[a-z0-9]{1,12}") ? group : null;
+    }
+
+    /** Q5: where a friend stands in the crews the player may invite to: {@code member} or {@code invited}. */
+    private static Map<String, String> crewPlaces(JsonObject o) {
+        JsonObject crews = obj(o, "crews");
+        if (crews == null || crews.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> out = new HashMap<>();
+        for (Map.Entry<String, JsonElement> e : crews.entrySet()) {
+            String place = e.getValue().isJsonPrimitive() && e.getValue().getAsJsonPrimitive().isString()
+                ? e.getValue().getAsString() : "";
+            if (!e.getKey().isEmpty() && e.getKey().length() <= 64 && (place.equals("member")
+                || place.equals("invited")) && out.size() < 16) {
+                out.put(e.getKey(), place);
+            }
+        }
+        return Map.copyOf(out);
+    }
+
+    /** Q7: what the person menu's rows choose from, whole (categories, crews to invite to, crewmates' requests). */
+    private void putLists(JsonObject frame) {
+        List<Group> nextGroups = new ArrayList<>();
+        forEach(frame, "groups", g -> {
+            String id = Protocol.str(g, "id", "");
+            String name = Protocol.plain(Protocol.str(g, "name", ""), 24);
+            if (id.matches("[a-z0-9]{1,12}") && !name.isEmpty() && nextGroups.size() < 20) {
+                nextGroups.add(new Group(id, name));
+            }
+        });
+        List<CrewTarget> nextCrews = new ArrayList<>();
+        forEach(frame, "crews", c -> {
+            String id = Protocol.str(c, "id", "");
+            if (!id.isEmpty() && id.length() <= 64 && nextCrews.size() < 10) {
+                nextCrews.add(new CrewTarget(id, name(c, "name"), Protocol.bool(c, "full", false)));
+            }
+        });
+        groups = List.copyOf(nextGroups);
+        inviteCrews = List.copyOf(nextCrews);
+        crewmatesAsk = Protocol.bool(frame, "crewmates", false);
+        asked.clear();
+        asking.clear();
+        putIds(arr(frame, "asked"), asked);
+        putIds(arr(frame, "asking"), asking);
+        // Q15: crewmates who are not friends, on Projects or with a known Discord profile.
+        matesHere.clear();
+        matesDiscord.clear();
+        putIds(arr(frame, "projects"), matesHere);
+        putIds(arr(frame, "discord"), matesDiscord);
+    }
+
+    private static void putIds(JsonArray list, Set<String> into) {
+        if (list == null) {
+            return;
+        }
+        for (JsonElement e : list) {
+            if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString() && into.size() < 200) {
+                String id = e.getAsString();
+                if (!id.isEmpty() && id.length() <= 64) {
+                    into.add(id);
+                }
+            }
+        }
+    }
+
+    /** Q6: the user id a message's sender has (someone else's message in crew chat), or null. */
+    private static String senderId(JsonObject o) {
+        String by = Protocol.str(o, "by", "");
+        return by.isEmpty() || by.length() > 64 ? null : by;
+    }
+
+    /** Q2: an offline friend's last seen, one of the launcher's rough words; anything else is not shown. */
+    private static String seenOf(JsonObject o) {
+        String seen = Protocol.str(o, "seen", "");
+        return switch (seen) {
+            case "today", "yesterday", "week", "long" -> seen;
+            default -> null;
+        };
     }
 
     /** A crew id a frame names in {@code badge} (TEAM6), or null. */
@@ -1146,6 +1351,7 @@ public final class OverlayState {
         line.sid = sid > 0 ? sid : line.sid;
         // The launcher's word on the sender's tag stands each time the message comes (it took it off: none).
         line.badge = line.mine ? null : crewId(o);
+        line.by = line.mine ? null : senderId(o);
         if (line.deleted) {
             line.sticker = null;
             line.reply = null;

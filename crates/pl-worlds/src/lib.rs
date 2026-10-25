@@ -22,7 +22,7 @@ pub use link::{
 };
 pub use manager::{
     Account, Bridge, HostInstall, Launcher, PlayTogether, Progress, UiEvent, UiSink, Worlds,
-    WorldsConfig, refusal_text, world_label,
+    WorldsConfig, refusal_text, world_label, world_label_in,
 };
 pub use view::{
     HostNotice, HostPlace, HostSessionView, HostView, WorldGameMode, WorldGuest, WorldGuestState,

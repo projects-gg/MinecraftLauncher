@@ -42,6 +42,7 @@
 //! ([`SocialError::is_transient`]) carry `retry_after` when the service sent one; retry them later
 //! with backoff, never in a loop. The launcher must keep working when the service is down.
 
+mod afk;
 mod auth;
 mod backoff;
 mod cards;
@@ -71,6 +72,7 @@ mod world;
 #[cfg(test)]
 mod testutil;
 
+pub use afk::{AfkItemName, AfkNotice};
 pub use auth::{AUTH_DONE_LINK, LoginAttempt, SessionToken, SignedIn, auth_code_from_deep_link};
 pub use backoff::{Backoff, BackoffPolicy};
 pub use cards::{CARDS_MAX_BYTES, StoredCard};
@@ -125,10 +127,10 @@ pub use presence::{
     PresenceOptions, StopReason,
 };
 pub use protocol::{
-    BADGES_CAP, CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall, CrewPlan,
-    Game, GameLocation, Invite, LocalStatus, MC_CAP, OnlineStatus, PLANS_CAP, PRESENCE_CAPS,
-    PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP, STICKERS_CAP,
-    TYPING_CAP, is_projects_host, presence_caps,
+    AFK_CAP, BADGES_CAP, CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall,
+    CrewPlan, Game, GameLocation, Invite, LocalStatus, MC_CAP, OnlineStatus, PLANS_CAP,
+    PRESENCE_CAPS, PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP,
+    STICKERS_CAP, TYPING_CAP, is_projects_host, presence_caps,
 };
 pub use qr::{QrPath, qr_path};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};

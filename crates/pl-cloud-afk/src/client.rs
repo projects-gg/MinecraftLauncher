@@ -131,10 +131,10 @@ impl std::fmt::Debug for CloudClient {
     }
 }
 
-struct Reply {
-    status: u16,
-    retry_after: Option<String>,
-    body: Vec<u8>,
+pub(crate) struct Reply {
+    pub(crate) status: u16,
+    pub(crate) retry_after: Option<String>,
+    pub(crate) body: Vec<u8>,
 }
 
 impl Reply {
@@ -142,13 +142,13 @@ impl Reply {
         (200..300).contains(&self.status)
     }
 
-    fn json<T: DeserializeOwned>(&self) -> Result<T> {
+    pub(crate) fn json<T: DeserializeOwned>(&self) -> Result<T> {
         serde_json::from_slice(&self.body).map_err(|error| {
             CloudError::Protocol(format!("invalid JSON (HTTP {}): {error}", self.status))
         })
     }
 
-    fn into_result(self) -> Result<Self> {
+    pub(crate) fn into_result(self) -> Result<Self> {
         if self.is_success() {
             Ok(self)
         } else {
@@ -163,7 +163,7 @@ impl Reply {
 
 /// Whether a request may be sent again after it may have reached the service.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Repeat {
+pub(crate) enum Repeat {
     /// A read, or a write that sets a wanted state: a timeout or a 502/504 is tried once more.
     Safe,
     /// `restart`, `send`, `reveal`: only a connection that never opened is tried again.
@@ -357,7 +357,11 @@ impl CloudClient {
 
     // --- plumbing ----------------------------------------------------------------------------
 
-    async fn get<T: DeserializeOwned>(&self, token: Option<&Bearer>, path: &str) -> Result<T> {
+    pub(crate) async fn get<T: DeserializeOwned>(
+        &self,
+        token: Option<&Bearer>,
+        path: &str,
+    ) -> Result<T> {
         self.send(Method::GET, path, token, None, &[], Repeat::Safe)
             .await?
             .into_result()?
@@ -399,7 +403,7 @@ impl CloudClient {
         .map(|_| ())
     }
 
-    async fn send(
+    pub(crate) async fn send(
         &self,
         method: Method,
         path: &str,
@@ -488,7 +492,7 @@ fn log_params(query: &LogQuery) -> String {
 }
 
 /// `accounts/<id><rest>`, refusing ids that could leave the route.
-fn account_path(id: &str, rest: &str) -> Result<String> {
+pub(crate) fn account_path(id: &str, rest: &str) -> Result<String> {
     let safe = !id.is_empty()
         && id.len() <= 32
         && id

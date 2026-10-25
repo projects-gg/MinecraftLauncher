@@ -455,6 +455,19 @@ impl SocialService {
     }
 
     fn on_presence(&self, generation: u64, epoch: u64, event: PresenceEvent) {
+        // Cloud AFK's notices (AFKPLUS) change nothing of the friends view: straight to the launcher.
+        if let PresenceEvent::AfkNotice(notice) = &event {
+            let current = {
+                let core = self.lock();
+                core.generation == generation && core.epoch == epoch
+            };
+            if current {
+                self.notify(SocialNotice::AfkNotice {
+                    notice: notice.clone(),
+                });
+            }
+            return;
+        }
         // World sessions (HOST1) go to the launcher's host as they come: no view changes. A drop
         // of this connection tells it too.
         let world = match &event {
@@ -2456,6 +2469,17 @@ impl SocialService {
         };
         self.chat_tombstone(generation, conv, id, &by);
         Ok(())
+    }
+
+    /// The player saw Cloud AFK's notice `id` (AFKPLUS): the launcher's window was in front when it
+    /// showed, or the in-game overlay showed it. The friends service then keeps the phone quiet.
+    pub fn afk_seen(&self, id: &str) {
+        if id.is_empty() || id.len() > 64 {
+            return;
+        }
+        if let Some(presence) = self.lock().presence.as_ref() {
+            presence.afk_seen(id);
+        }
     }
 
     /// Everything in a conversation is read now: it is on screen at its newest message, someone

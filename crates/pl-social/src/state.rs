@@ -539,8 +539,8 @@ impl SocialState {
             }
             PresenceEvent::Notice(notice) => self.add_notice(notice.clone()),
             // Chat lives in the service's history (history.rs), not here.
-            // SKIN1's news go to `crate::minecraft`.
-            PresenceEvent::Mc(_) => {}
+            // SKIN1's news go to `crate::minecraft`; Cloud AFK's notices straight to the launcher.
+            PresenceEvent::Mc(_) | PresenceEvent::AfkNotice(_) => {}
             PresenceEvent::ChatState(_)
             | PresenceEvent::ChatMessage(_)
             | PresenceEvent::ChatEdited(_)

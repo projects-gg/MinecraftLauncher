@@ -4,6 +4,8 @@
 import {
   ArrowSquareOut,
   ArrowsClockwise,
+  CaretRight,
+  ChatsCircle,
   DotsThreeVertical,
   GearSix,
   Play,
@@ -29,6 +31,8 @@ import { useTranslation } from "react-i18next";
 import { AfkHead } from "../afk-head";
 import { afkFailed } from "../errors";
 import { type CloudAccount, cloudApi } from "./api";
+import { AI_TONE, useAiSentence } from "./plus/rail";
+import { plusAi } from "./plus/types";
 import { CloudStateLine } from "./state-line";
 import { type CloudPrimary, cloudPrimary, isInGame, serverLabel, timeLeft } from "./status";
 
@@ -122,6 +126,56 @@ function PrimaryButton({
   );
 }
 
+/**
+ * An AFK+ account's line on its card: the assistant's state in one sentence and what waits for the
+ * player (approvals in gold); the whole line opens the AFK+ panel.
+ */
+function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => void }) {
+  const { t } = useTranslation();
+  const sentence = useAiSentence(account);
+  // The row has room for the state only: its first clause ("Kontörün bitti"); the rest ("13:07'de
+  // yenilenir") is in the panel's rail and the row's tooltip, never cut mid-word.
+  const brief = sentence.text.split("; ")[0] ?? sentence.text;
+  const ai = plusAi(account);
+  // A machine that cannot be asked has no current count (the panel shows none either).
+  const approvals = ai && ai.state !== "unknown" ? ai.pendingApprovals : 0;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={t("afkPlus.card.openLabel", { name: account.name })}
+      className={cn(
+        "group/plus mt-3 flex w-full cursor-pointer items-center gap-2.5 rounded-md bg-white/[0.04] px-2.5 py-[7px] text-left outline-none",
+        "transition-[background-color,transform,scale] duration-150 ease-out hover:bg-white/[0.07] active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-gold-300",
+      )}
+    >
+      <span className="shrink-0 font-display text-[13px] font-semibold text-bone-50">
+        {t("afkPlus.name")}
+      </span>
+      <span
+        title={sentence.text}
+        className={cn(
+          "min-w-0 flex-1 truncate text-[12.5px] transition-colors duration-150",
+          AI_TONE[sentence.tone],
+        )}
+      >
+        {brief}
+      </span>
+      {approvals > 0 ? (
+        <span className="shrink-0 font-display text-[12.5px] font-semibold text-gold-200 tabular-nums">
+          {t("afkPlus.card.approvals", { count: approvals })}
+        </span>
+      ) : null}
+      <CaretRight
+        size={14}
+        weight="bold"
+        aria-hidden
+        className="shrink-0 text-ash-400 transition-[color,transform,translate] duration-150 ease-out group-hover/plus:translate-x-0.5 group-hover/plus:text-bone-100 motion-reduce:group-hover/plus:translate-x-0"
+      />
+    </button>
+  );
+}
+
 export function CloudCard({
   account,
   skewMs,
@@ -131,6 +185,8 @@ export function CloudCard({
   onRestart,
   onConsole,
   onSettings,
+  onPlus,
+  onUpgrade,
   ref,
 }: {
   account: CloudAccount;
@@ -141,6 +197,10 @@ export function CloudCard({
   onRestart: () => void;
   onConsole: () => void;
   onSettings: () => void;
+  /** An AFK+ account (while AFK+ shows): its line opens the panel. */
+  onPlus?: () => void;
+  /** A plain account the player may upgrade (the site does it). */
+  onUpgrade?: () => void;
   ref?: Ref<HTMLLIElement>;
 }) {
   const { t } = useTranslation();
@@ -169,7 +229,19 @@ export function CloudCard({
       : []),
     { label: t("cloudAfk.actions.console"), icon: <Terminal size={16} />, onSelect: onConsole },
     { label: t("cloudAfk.actions.settings"), icon: <GearSix size={16} />, onSelect: onSettings },
+    ...(onPlus
+      ? [{ label: t("afkPlus.card.open"), icon: <ChatsCircle size={16} />, onSelect: onPlus }]
+      : []),
     null,
+    ...(onUpgrade
+      ? [
+          {
+            label: t("afkPlus.card.upgrade"),
+            icon: <ArrowSquareOut size={16} />,
+            onSelect: onUpgrade,
+          },
+        ]
+      : []),
     ...(account.renewal.open || account.expired
       ? [
           {
@@ -249,6 +321,7 @@ export function CloudCard({
             <CloudStateLine account={account} skewMs={skewMs} className="flex-1" showHint />
           </div>
           <TimeRow account={account} skewMs={skewMs} />
+          {onPlus ? <PlusLine account={account} onOpen={onPlus} /> : null}
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
           <div className="mt-auto flex gap-2 pt-3">

@@ -22,6 +22,7 @@ public final class Theme {
     public static final int GOLD_400 = 0xFFF0B849;
     public static final int GOLD_500 = 0xFFE89A2C;
     public static final int GOLD_600 = 0xFFC9741A;
+    public static final int GOLD_700 = 0xFF8E4A12;
     public static final int GOLD_INK = 0xFF1A0F05;
     public static final int EMBER_950 = 0xFF220606;
     public static final int EMBER_900 = 0xFF3F0A0A;

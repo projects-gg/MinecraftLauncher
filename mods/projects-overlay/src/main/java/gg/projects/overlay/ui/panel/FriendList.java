@@ -6,6 +6,7 @@ import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
@@ -14,8 +15,11 @@ import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import gg.projects.overlay.ui.draw.ShapeSet;
+import java.text.Collator;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
@@ -42,6 +46,10 @@ import net.minecraft.util.FormattedCharSequence;
  * <p>A friend who wears a crew tag has its chip before the name ("[GK] Ayşe", TEAM6): the name gives way, the chip
  * never does. The pointer resting on a chip, or a row with one picked with the keys, opens the tag's bubble. How a menu
  * action went is said for a moment at the list's bottom.
+ *
+ * <p>As the launcher's list (OVL-UX2, its {@code groupFriends}): favourites lead each section and carry a small gold
+ * star after the name; then, in a game, the ones the player can join; offline, the ones seen most recently; then names
+ * in Turkish order.
  */
 public final class FriendList extends PanelWidget {
     private static final int ROW_H = 24;
@@ -52,6 +60,8 @@ public final class FriendList extends PanelWidget {
     private static final int DOTS = 14;
     private static final int DOTS_GAP = 3;
     private static final int NOTE_H = 14;
+    /** Room the star takes after a favourite's name (its gap and the 8 px sign). */
+    private static final int STAR_ROOM = 11;
     private static final long DOTS_IN_MS = 120;
     private static final long DOTS_OUT_MS = 80;
     /** The name line's middle in a row. */
@@ -78,9 +88,11 @@ public final class FriendList extends PanelWidget {
         boolean online;
         boolean inGame;
         boolean joinable;
-        String initial;
-        FormattedCharSequence initialLine;
-        float initialWidth;
+        /** Their face: the launcher's player head with their first letter (OVL-UX2). */
+        Face face;
+        /** One of the player's favourites: the star after the name (OVL-UX2). */
+        boolean fav;
+        float nameW;
         float y;
         float joinWidth;
         Component narration;
@@ -219,14 +231,17 @@ public final class FriendList extends PanelWidget {
         Font small = Fonts.small();
         // The "…" keeps its place on every row (OVL-UX): names and places end before it and "Katıl".
         int nameRoom = getWidth() - FACE - 8 - (int) joinWidth - 6 - DOTS - DOTS_GAP;
+        friends.sort(order(titleKey, canJoin));
         for (OverlayState.Friend f : friends) {
             Row row = new Row();
             row.id = f.id();
             OverlayState.Badge badge = state.badge(f.badge());
             row.chip = TagChip.of(badge, TagChip.ROW);
+            row.fav = f.fav();
             String name = Texts.fit(strong, f.name().isEmpty() ? Texts.str("toast.someone") : f.name(),
-                Math.round(nameRoom - TagChip.room(row.chip)));
+                Math.round(nameRoom - TagChip.room(row.chip) - (row.fav ? STAR_ROOM : 0)));
             row.name = Texts.visual(name);
+            row.nameW = strong.width(name);
             row.online = f.online();
             row.inGame = f.inGame();
             row.joinable = f.joinable() && canJoin.test(f);
@@ -234,6 +249,9 @@ public final class FriendList extends PanelWidget {
             String where = Texts.str("friend.where." + whereKey(f.where()));
             if (f.where().equals("server") && f.host() != null) {
                 where = Texts.str("friend.where.server_at", f.host());
+            } else if (!f.online() && f.seen() != null) {
+                // OVL-UX2: as the launcher's list, when they were last seen rather than the section's word again.
+                where = Texts.str("friend.seen." + f.seen());
             }
             OverlayState.WorldMark world = state.world(f.id());
             if (world != null) {
@@ -241,18 +259,47 @@ public final class FriendList extends PanelWidget {
                 where = Texts.str("friend.where.world", (world.guests() + 1) + "/" + (world.max() + 1));
             }
             row.where = Texts.visual(Texts.fit(small, where, nameRoom));
-            row.initial = Texts.initial(f.name());
-            row.initialLine = Texts.visual(row.initial);
-            row.initialWidth = strong.width(row.initial);
+            row.face = Face.of(f.name());
             row.joinWidth = joinWidth;
             row.y = y;
-            // "Ayşe, etiket GK, Projects'te": the chip is drawn, the row says it.
-            row.narration = Texts.tr("narration.friend", badge == null ? name : Texts.str("row.badge", name,
-                badge.tag()), where);
+            // "Ayşe, etiket GK, Projects'te": the chip is drawn, the row says it (and the star: "Favori").
+            String said = badge == null ? name : Texts.str("row.badge", name, badge.tag());
+            if (row.fav) {
+                said += ", " + Texts.str("people.list.star");
+            }
+            row.narration = Texts.tr("narration.friend", said, where);
             rows.add(row);
             y += ROW_H;
         }
         return y + 4;
+    }
+
+    /** Turkish order for names, as the launcher's list sorts them. */
+    private static final Collator NAMES = Collator.getInstance(Locale.forLanguageTag("tr"));
+
+    /** The launcher's order inside a section ({@code groupFriends}): favourites first, then as the section wants. */
+    private static Comparator<OverlayState.Friend> order(String section, Predicate<OverlayState.Friend> canJoin) {
+        Comparator<OverlayState.Friend> favorites = Comparator.comparing(f -> !f.fav());
+        Comparator<OverlayState.Friend> names = (a, b) -> NAMES.compare(a.name(), b.name());
+        return switch (section) {
+            case "friends.in_game" -> favorites.thenComparing(f -> !(f.joinable() && canJoin.test(f))).thenComparing(
+                names);
+            case "friends.offline" -> favorites.thenComparingInt(FriendList::seenOrder).thenComparing(names);
+            default -> favorites.thenComparing(names);
+        };
+    }
+
+    /** Seen most recently first; never seen (or not shared) last. */
+    private static int seenOrder(OverlayState.Friend f) {
+        if (f.seen() == null) {
+            return 9;
+        }
+        return switch (f.seen()) {
+            case "today" -> 0;
+            case "yesterday" -> 1;
+            case "week" -> 2;
+            default -> 3;
+        };
     }
 
     private static String whereKey(String where) {
@@ -436,6 +483,17 @@ public final class FriendList extends PanelWidget {
         }
     }
 
+    /** A person note's words: its own line, or {@code people.note.<key>} with the name and what else it names. */
+    static String noteWords(OverlayState.PersonNote note) {
+        if (note.text() != null) {
+            return note.text();
+        }
+        if (note.name().isEmpty() && note.key().equals("invite_queued")) {
+            return Texts.str("people.note.invited");
+        }
+        return Texts.str("people.note." + note.key(), note.name(), note.detail());
+    }
+
     /** How a friend menu action went, said under the list for a moment (null: nothing to say). */
     public void setNote(OverlayState.PersonNote next, long now) {
         if (next == note) {
@@ -443,9 +501,7 @@ public final class FriendList extends PanelWidget {
         }
         note = next;
         if (next != null) {
-            String words = next.text() != null ? next.text()
-                : next.name().isEmpty() && next.key().equals("invite_queued") ? Texts.str("people.note.invited")
-                : Texts.str("people.note." + next.key(), next.name());
+            String words = noteWords(next);
             Font small = Fonts.small();
             String fitted = Texts.fit(small, words, Math.max(40, getWidth() - 12));
             noteText = Texts.visual(fitted);
@@ -505,9 +561,7 @@ public final class FriendList extends PanelWidget {
             float cx = x0 + FACE / 2f + 1;
             float cy = y + ROW_H / 2f;
             Draw.pushAlpha(row.online ? 1f : 0.55f);
-            Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_600);
-            Draw.text(g, strong, row.initialLine, cx - row.initialWidth / 2f, Fonts.centeredY(Fonts.Face.STRONG, cy),
-                Theme.BONE_100);
+            row.face.draw(g, FACE, cx, cy);
             Draw.popAlpha();
             if (row.online) {
                 // Filled jade in a game, a jade ring in the launcher (docs/design.md, Friends).
@@ -526,6 +580,13 @@ public final class FriendList extends PanelWidget {
             }
             Draw.text(g, strong, row.name, tx + TagChip.room(row.chip), Fonts.centeredY(Fonts.Face.STRONG, y + NAME_MID),
                 row.online ? Theme.BONE_100 : Theme.ASH_400);
+            if (row.fav) {
+                // The launcher's star after a favourite's name: small, filled, gold (dimmer offline, as the name).
+                Draw.pushAlpha(row.online ? 1f : 0.7f);
+                Draw.icon(g, Icon.STAR_FILL, 8, Draw.snap(tx + TagChip.room(row.chip) + row.nameW + 3),
+                    Draw.snap(y + NAME_MID - 4.5f), Theme.GOLD_300);
+                Draw.popAlpha();
+            }
             Draw.text(g, small, row.where, tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
                 ? Theme.ASH_300 : Theme.ASH_400);
             if (row.joinable) {

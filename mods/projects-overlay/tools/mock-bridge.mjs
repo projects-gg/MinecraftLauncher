@@ -15,13 +15,21 @@
 // Each mod frame is written to --log, so a run's connect-result answers can be checked afterwards.
 // --team6 plays crew tags (docs/tasks/ovl2-protocol.md, TEAM6-O): "tags" in the welcome, the cards ("badges")
 // before the snapshot, friends', crew messages' and toasts' "badge", the crews' "ekibe katıldı" lines ("note");
-// dev commands "joined", "tag-change", "hide-crew", "tags-off" and "tags-on" play the live changes.
+// dev commands "joined", "tag-change", "hide-crew", "tags-off" and "tags-on" play the live changes; "tag-text" (with
+// "crew" and "tag") renames a crew's tag.
 // --people plays the friend menu (docs/tasks/ovl2-protocol.md, OVL-UX): "people" and "invite" in the welcome (the
 // player is on Projects), friends' "dm" and "discord", the player's own tag in "me" (with --team6); the menu's frames
 // (invite, discord, unfriend, block, report) are answered with "friend-result" as the launcher would (an invite to an
 // offline friend waits for them, a second one to Mert is too soon; unfriend and block take the friend off the list). A
 // message to a conversation that had none yet makes it real ("conv"). Dev commands "badge-off" / "badge-on" take the
 // player's own tag off and on (a new welcome), "invite-off" leaves Projects.
+// --people2 (with --people) plays the rest of the launcher's person menu (docs/tasks/ovl2-protocol.md, OVL-UX2):
+// "people2" in the welcome, the "lists" frame (two categories, two crews the player may invite to, one of them full,
+// crewmates' friend requests: Cem asked the player; Cem plays on Projects and his Discord profile is known),
+// friends' "fav", "alert", "group", "crews" and offline ones'
+// "seen", crew messages' "by" (and a message from Cem, a crewmate who is not a friend). "favorite" and "alert" come
+// back as the friend's frame, "move", "crew-invite" and "add-friend" also with "friend-result"; "block" and "report"
+// take a crewmate too.
 // --link plays codeless Discord linking (docs/tasks/ovl2-protocol.md, SKIN1-O): "link" in the welcome; a mod's
 // "link-want" gets a made-up permit ("link-offer") for that name, or "link-clear" for the name "Nobody".
 // --host plays world sharing's host launcher (docs/tasks/ovl2-protocol.md, HOST1, H1-H17): "host" in the welcome;
@@ -35,9 +43,16 @@
 // ("relayPorts" in the --info file, in order; friend is ayse, mert or deniz; --relay-as <name> is g1:ayse:<name>).
 // Dev commands: "world-invite", "world-connect", "host-mirror", "host-fail", "host-refuse" (the next opening),
 // "host-stop", "host-remove".
+// --lang tr|en plays the overlay's language (docs/tasks/ovl2-protocol.md, OVL-LANG, G1-G4) with this as the launcher's
+// own language: a mod whose hello lists "lang" hears "lang" in every welcome (the player's pick, else the launcher's),
+// its "lang" pick is kept (in --lang-file <file> when given, "tr", "en" or "auto", as the launcher's overlay-language
+// file; read at the start, so a second run starts where the first left) and answered with a new welcome in it; the
+// mock's own words for the mod (a sticker in words) follow it. Dev commands "launcher-lang" (with "lang": the
+// launcher's language changes; the overlay follows while nothing is picked) and "clear-pick". --welcome-delay <ms>
+// greets that much later (under the mod's 5 s handshake wait), to see the panel before the launcher said anything.
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
 
 const PROTO = 1;
@@ -54,6 +69,38 @@ let port = Number(args.port ?? 0);
 let server = null;
 let session = null;
 let nextId = 100;
+
+// OVL-LANG: the launcher's own language, the player's pick in the overlay (kept in --lang-file), and whether the
+// connected mod's words follow the launcher (its hello lists "lang").
+const langs = {
+  launcher: args.lang === "en" || args.lang === "tr" ? args.lang : null,
+  pick: readPick(),
+  follows: false,
+};
+function readPick() {
+  if (typeof args.langFile !== "string") {
+    return null;
+  }
+  try {
+    const text = readFileSync(args.langFile, "utf8").trim();
+    return text === "tr" || text === "en" ? text : null;
+  } catch {
+    return null;
+  }
+}
+function keepPick() {
+  if (typeof args.langFile === "string") {
+    writeFileSync(args.langFile, langs.pick ?? "auto");
+  }
+}
+/** The overlay's language: the player's pick, else the launcher's (null: this mock plays no language). */
+function overlayLang() {
+  return langs.pick ?? langs.launcher;
+}
+/** The mock's own words for the mod in English (a mod that follows the launcher, which speaks English now). */
+function inEnglish() {
+  return langs.follows && overlayLang() === "en";
+}
 
 const now = () => Date.now();
 const minutes = (m) => now() - m * 60000;
@@ -312,6 +359,52 @@ if (args.people) {
     state.me.badge = "t-gece";
   }
 }
+// OVL-UX2: the person menu's lists, the friends' marks and crews, and a crewmate who is not a friend.
+const LISTS = {
+  groups: [
+    { id: "okul", name: "Okul" },
+    { id: "pvp", name: "PvP" },
+  ],
+  crews: [
+    { id: "t-gece", name: "Gece Kuşları" },
+    { id: "t-akn", name: "Akıncılar", full: true },
+  ],
+  crewmates: true,
+  asked: ["u-cem"],
+  asking: [],
+  // Crewmates who are not friends, on Projects now and with a known Discord profile ("Katıl", Discord).
+  projects: ["u-cem"],
+  discord: ["u-cem"],
+};
+const CREWMATES = { "u-cem": "Cem" };
+if (args.people2) {
+  const mark = (id, fields) =>
+    Object.assign(
+      state.friends.find((f) => f.id === id),
+      fields,
+    );
+  mark("f-ayse", { fav: true, alert: true, group: "okul" });
+  mark("f-elif", { crews: { "t-akn": "member" } });
+  mark("f-deniz", { crews: { "t-gece": "member" } });
+  mark("f-mert", { crews: { "t-gece": "member" } });
+  mark("f-can", { seen: "yesterday", group: "okul" });
+  mark("f-ece", { seen: "week" });
+  const byName = { Mert: "f-mert", Deniz: "f-deniz", Cem: "u-cem" };
+  state.history["crew:gece"].splice(1, 0, {
+    id: "m6c",
+    sid: 1061,
+    from: "Cem",
+    text: "Ben de gelirim, haritayı kim seçiyor?",
+    at: minutes(85),
+    mine: false,
+  });
+  for (const msg of state.history["crew:gece"]) {
+    if (!msg.mine && byName[msg.from]) {
+      msg.by = byName[msg.from];
+    }
+  }
+}
+
 let tagsOn = Boolean(args.team6);
 const wornBy = (name) => (tagsOn ? WEARS[NAMES[name]] : undefined);
 if (args.team6) {
@@ -431,6 +524,7 @@ function onConnection(socket) {
           return;
         }
         authed = true;
+        langs.follows = Array.isArray(frame.features) && frame.features.includes("lang");
         startSession(socket);
         continue;
       }
@@ -461,6 +555,7 @@ function welcome(socket) {
     me: state.me,
     dnd: Boolean(args.dnd),
     reducedMotion: Boolean(args.reducedMotion),
+    ...(langs.follows && overlayLang() ? { lang: overlayLang() } : {}),
     features: args.signedOut
       ? []
       : [
@@ -470,12 +565,16 @@ function welcome(socket) {
           ...(args.chat2 ? EXTRAS : []),
           ...(tagsOn ? ["tags"] : []),
           ...(args.people ? ["people", ...(inviteOn ? ["invite"] : [])] : []),
+          ...(args.people && args.people2 ? ["people2"] : []),
           ...(args.link ? ["link"] : []),
           ...(args.host ? ["host"] : []),
         ],
   });
   if (args.team6) {
     send(socket, cardsFrame());
+  }
+  if (args.people && args.people2 && !args.signedOut) {
+    send(socket, { t: "lists", ...LISTS });
   }
   send(socket, {
     t: "snapshot",
@@ -495,7 +594,12 @@ function startSession(socket) {
     session.destroy();
   }
   session = socket;
-  welcome(socket);
+  const delay = Number(args.welcomeDelay ?? 0);
+  if (delay > 0) {
+    later(delay, () => welcome(socket));
+  } else {
+    welcome(socket);
+  }
   if (args.autoDemo) {
     demo(socket);
   }
@@ -516,7 +620,9 @@ function incoming(socket, convId, from, text, sticker) {
     msg.sid = newSid();
     if (sticker) {
       msg.sticker = sticker;
-      msg.text = `[Çıkartma: ${stickerName(sticker)}]`;
+      msg.text = inEnglish()
+        ? `[Sticker: ${stickerName(sticker)}]`
+        : `[Çıkartma: ${stickerName(sticker)}]`;
     }
   }
   state.history[convId].push(msg);
@@ -525,7 +631,7 @@ function incoming(socket, convId, from, text, sticker) {
     c.unread += 1;
     send(socket, { t: "conv", ...c });
   }
-  const body = sticker ? `Çıkartma · ${stickerName(sticker)}` : text;
+  const body = sticker ? `${inEnglish() ? "Sticker" : "Çıkartma"} · ${stickerName(sticker)}` : text;
   const toast = { t: "toast", kind: "message", key: convId, title: from, body, conv: convId };
   if (sticker) {
     toast.sticker = sticker;
@@ -545,8 +651,14 @@ const STICKER_NAMES = {
   "pl1/love": "Kalp",
   "pl1/party": "Kutlama",
 };
+const STICKER_NAMES_EN = {
+  "pl1/gg": "GG",
+  "pl1/hi": "Hi",
+  "pl1/love": "Love",
+  "pl1/party": "Party",
+};
 function stickerName(ref) {
-  return STICKER_NAMES[ref] ?? "Çıkartma";
+  return inEnglish() ? (STICKER_NAMES_EN[ref] ?? "Sticker") : (STICKER_NAMES[ref] ?? "Çıkartma");
 }
 
 /** The message a reply answers, as the launcher resolves it from its own history. */
@@ -712,12 +824,35 @@ function onFrame(socket, frame) {
         onPeople(socket, frame);
       }
       break;
+    case "favorite":
+    case "alert":
+    case "move":
+    case "crew-invite":
+    case "add-friend":
+      if (args.people && args.people2) {
+        onPeople2(socket, frame);
+      }
+      break;
     case "typing":
       // The player writes in the panel: a launcher passes it to the friends service; the mock only logs it.
       break;
     case "dev":
       onDev(socket, frame);
       break;
+    case "lang": {
+      // OVL-LANG (G4): the player's pick, kept; a new welcome in it when the overlay's language changed.
+      if (!langs.follows || (frame.lang !== "tr" && frame.lang !== "en")) {
+        break;
+      }
+      const before = overlayLang();
+      langs.pick = frame.lang;
+      keepPick();
+      log("info", { t: "lang-pick", lang: frame.lang });
+      if (overlayLang() !== before) {
+        welcome(socket);
+      }
+      break;
+    }
     case "host-world":
     case "host-request":
     case "host-published":
@@ -764,6 +899,18 @@ function onPeople(socket, frame) {
     later(180, () =>
       send(socket, { t: "friend-result", friend: frame.friend, action: frame.t, ok, ...more }),
     );
+  if (!friend && args.people2 && CREWMATES[frame.friend] && frame.t === "discord") {
+    // OVL-UX2: a crewmate's Discord profile opens in the launcher; nothing comes back when it could.
+    if (!LISTS.discord.includes(frame.friend)) {
+      result(false, { reason: "failed" });
+    }
+    return;
+  }
+  if (!friend && args.people2 && CREWMATES[frame.friend] && ["block", "report"].includes(frame.t)) {
+    // OVL-UX2: crew chat's sender menu blocks and reports a crewmate who is not a friend.
+    result(true);
+    return;
+  }
   if (!friend) {
     result(false, { reason: "failed" });
     return;
@@ -799,6 +946,85 @@ function onPeople(socket, frame) {
       // unfriend, block: the friend leaves the list first, then the answer comes.
       gone(socket, friend.id);
       result(true);
+  }
+}
+
+/** OVL-UX2: the rest of the person menu, answered as the launcher would. */
+function onPeople2(socket, frame) {
+  const result = (ok, more = {}) =>
+    later(180, () =>
+      send(socket, { t: "friend-result", friend: frame.friend, action: frame.t, ok, ...more }),
+    );
+  if (frame.t === "add-friend") {
+    const name = CREWMATES[frame.friend];
+    if (!name || LISTS.asking.includes(frame.friend)) {
+      result(false, { reason: "failed" });
+      return;
+    }
+    if (LISTS.asked.includes(frame.friend)) {
+      // They asked first: friends now (in the launcher, with a row).
+      LISTS.asked = LISTS.asked.filter((id) => id !== frame.friend);
+      // The lists name crewmates who are not friends only.
+      LISTS.projects = LISTS.projects.filter((id) => id !== frame.friend);
+      LISTS.discord = LISTS.discord.filter((id) => id !== frame.friend);
+      const made = { id: frame.friend, name, where: "projects", joinable: true, dm: "dm:cem" };
+      state.friends.push(made);
+      delete CREWMATES[frame.friend];
+      later(120, () => {
+        send(socket, { t: "lists", ...LISTS });
+        send(socket, { t: "friend", ...made });
+      });
+      result(true);
+    } else {
+      LISTS.asking.push(frame.friend);
+      later(120, () => send(socket, { t: "lists", ...LISTS }));
+      result(true, { queued: true });
+    }
+    return;
+  }
+  const friend = state.friends.find((f) => f.id === frame.friend);
+  if (!friend) {
+    result(false, { reason: "failed" });
+    return;
+  }
+  switch (frame.t) {
+    case "favorite":
+      friend.fav = frame.on === true;
+      // The launcher's rule: an online notice follows the favourite unless chosen for them.
+      if (friend.alertChosen === undefined) {
+        friend.alert = friend.fav;
+      }
+      later(60, () => send(socket, { t: "friend", ...friend }));
+      break;
+    case "alert":
+      friend.alert = frame.on === true;
+      friend.alertChosen = true;
+      later(60, () => send(socket, { t: "friend", ...friend }));
+      break;
+    case "move": {
+      const known = LISTS.groups.some((g) => g.id === frame.group);
+      if (frame.group && !known) {
+        result(false, { reason: "failed" });
+        break;
+      }
+      friend.group = known ? frame.group : undefined;
+      later(60, () => send(socket, { t: "friend", ...friend }));
+      result(true);
+      break;
+    }
+    case "crew-invite": {
+      const crew = LISTS.crews.find((c) => c.id === frame.crew);
+      if (!crew || crew.full || friend.crews?.[crew.id]) {
+        result(false, { reason: "failed" });
+        break;
+      }
+      friend.crews = { ...(friend.crews ?? {}), [crew.id]: "invited" };
+      later(60, () => send(socket, { t: "friend", ...friend }));
+      result(true);
+      break;
+    }
+    default:
+      break;
   }
 }
 
@@ -940,6 +1166,15 @@ function onDev(socket, frame) {
       }
       send(socket, { t: "friend", ...mert });
       send(socket, { t: "history", conv: "crew:gece", msgs: historyOf("crew:gece") });
+      break;
+    }
+    case "tag-text": {
+      // TEAM6: a crew's tag reads otherwise (Turkish letters at every GUI scale, OVL-LANG's legibility check).
+      const card = CARDS[frame.crew];
+      if (card && typeof frame.tag === "string") {
+        card.tag = frame.tag;
+        send(socket, { t: "badges", all: false, cards: { [frame.crew]: card } });
+      }
       break;
     }
     case "hide-crew": {
@@ -1109,6 +1344,21 @@ function onDev(socket, frame) {
         reason: frame.reason ?? "removed",
       });
       break;
+    case "launcher-lang":
+    case "clear-pick": {
+      // OVL-LANG: the launcher's own language changes, or the pick goes; the overlay follows when it changed.
+      const before = overlayLang();
+      if (frame.cmd === "launcher-lang" && (frame.lang === "tr" || frame.lang === "en")) {
+        langs.launcher = frame.lang;
+      } else if (frame.cmd === "clear-pick") {
+        langs.pick = null;
+        keepPick();
+      }
+      if (langs.follows && overlayLang() !== before) {
+        welcome(socket);
+      }
+      break;
+    }
     case "bye":
       send(socket, { t: "bye", reason: frame.reason ?? "launcher-exit" });
       socket.end();

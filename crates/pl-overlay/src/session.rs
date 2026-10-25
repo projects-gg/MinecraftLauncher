@@ -10,10 +10,11 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use pl_lang::Lang;
 use pl_social::{
     CallAnswer as SocialAnswer, ChatChangeView, ChatMessageView, ChatPage, ChatRejection,
-    ChatTypingView, ErrorCode, InviteResult, McIntent, ReportReason, ReportTarget, SocialError,
-    SocialNotice, SocialService, SocialView,
+    ChatTypingView, ErrorCode, FriendGroup, GroupMember, InviteResult, McIntent, ReportReason,
+    ReportTarget, SendOutcome, SocialError, SocialNotice, SocialService, SocialView,
 };
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
@@ -22,9 +23,9 @@ use crate::OverlayConfig;
 use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_LINK, FEATURE_PEOPLE,
-    FEATURE_TAGS, FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret,
-    SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_LANG, FEATURE_LINK,
+    FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_TAGS, FriendAction, FriendRefusal, FromGame,
+    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -62,6 +63,18 @@ impl ConnectOutcome {
     }
 }
 
+/// A mark the player changed on a friend from the game's person menu (OVL-UX2): the launcher's
+/// page keeps these (its friend list's star and "Çevrimiçi olunca bildir"), so it hears them as
+/// the `overlay-people` event and keeps them as its own buttons would.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PeopleChange {
+    /// "Favorilere ekle" (`on`) or "Favorilerden çıkar".
+    Favorite { friend: String, on: bool },
+    /// "Çevrimiçi olunca bildir" on or off.
+    Alert { friend: String, on: bool },
+}
+
 /// A "Bağlan" the game has not answered yet.
 struct PendingConnect {
     id: String,
@@ -73,6 +86,8 @@ struct PendingConnect {
 /// fake.
 pub trait SocialActions: Clone + Send + Sync + 'static {
     fn view(&self) -> SocialView;
+    /// The game showed Cloud AFK's notice `id` (AFKPLUS).
+    fn afk_seen(&self, _id: &str) {}
     fn chat_page(&self, conv: &str) -> ChatPage;
     fn chat_send(&self, conv: &str, text: &str) -> pl_social::Result<String>;
     /// CHAT2: a message answering message `reply` (its service id).
@@ -139,11 +154,35 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
         note: Option<String>,
         block: bool,
     ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-UX2: "Kategoriye taşı": the player's friend categories, saved whole as the launcher's
+    /// list saves them.
+    fn save_groups(
+        &self,
+        groups: Vec<FriendGroup>,
+        members: Vec<GroupMember>,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-UX2: "Ekibe davet et".
+    fn invite_to_team(
+        &self,
+        team: &str,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-UX2: "Arkadaş ekle" on a crewmate (a request without their code).
+    fn request_crewmate(
+        &self,
+        user: &str,
+    ) -> impl Future<Output = pl_social::Result<SendOutcome>> + Send + 'static;
+    /// OVL-UX2: "İsteği kabul et" on a crewmate who asked first.
+    fn accept(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
 }
 
 impl SocialActions for SocialService {
     fn view(&self) -> SocialView {
         SocialService::view(self)
+    }
+
+    fn afk_seen(&self, id: &str) {
+        SocialService::afk_seen(self, id);
     }
 
     fn chat_page(&self, conv: &str) -> ChatPage {
@@ -274,6 +313,41 @@ impl SocialActions for SocialService {
         };
         async move { service.report(target, reason, note, block).await }
     }
+
+    fn save_groups(
+        &self,
+        groups: Vec<FriendGroup>,
+        members: Vec<GroupMember>,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        async move { SocialService::save_groups(&service, groups, members).await }
+    }
+
+    fn invite_to_team(
+        &self,
+        team: &str,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let team = team.to_owned();
+        let friend = friend.to_owned();
+        async move { SocialService::invite_to_team(&service, &team, &friend).await }
+    }
+
+    fn request_crewmate(
+        &self,
+        user: &str,
+    ) -> impl Future<Output = pl_social::Result<SendOutcome>> + Send + 'static {
+        let service = self.clone();
+        let user = user.to_owned();
+        async move { service.send_request_to_crewmate(&user).await }
+    }
+
+    fn accept(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let user = user.to_owned();
+        async move { SocialService::accept(&service, &user).await }
+    }
 }
 
 /// What the friends feature and the launcher tell a session.
@@ -301,6 +375,8 @@ pub(crate) enum Msg {
     /// HOST1: the friends who invited the player to their world, and whether the player may open
     /// theirs now.
     Worlds(WorldsShown),
+    /// OVL-LANG: the overlay's language now (the player's pick, else the launcher's).
+    Language(Lang),
 }
 
 /// The panel sends at most this many messages ...
@@ -347,6 +423,21 @@ pub(crate) type ConnectedFn = Arc<dyn Fn(bool) + Send + Sync>;
 /// Opens a friend's Discord profile (their user id, their web profile): the app's own way, in the
 /// Discord app when it is installed. False when nothing can open it (OVL-UX).
 pub(crate) type DiscordFn = Arc<dyn Fn(&str, &str) -> bool + Send + Sync>;
+
+/// A mark changed on a friend from the game (OVL-UX2): the launcher's page keeps it.
+pub(crate) type PeopleFn = Arc<dyn Fn(PeopleChange) + Send + Sync>;
+
+/// The player picked the overlay's language in its settings (OVL-LANG): the launcher keeps it.
+pub(crate) type LangFn = Arc<dyn Fn(Lang) + Send + Sync>;
+
+/// Whom a person menu frame may be about (OVL-UX2): the friend list's people for most rows; crew
+/// chat's senders (a crewmate who is not a friend) for "Engelle", "Rapor et" and "Arkadaş ekle".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Who {
+    Friend,
+    FriendOrCrewmate,
+    Crewmate,
+}
 
 /// A player's report reason from the friend menu (the launcher's player reasons), or None.
 fn player_reason(reason: &str) -> Option<ReportReason> {
@@ -410,6 +501,12 @@ struct Live {
     link_wanted_at: Option<Instant>,
     /// The mod has the friend menu (OVL-UX: `people` in its hello): it hears `friend-result`.
     people: bool,
+    /// The mod has the launcher's whole person menu (OVL-UX2: `people2` in its hello): it hears
+    /// `lists` and the new `friend-result` actions.
+    people2: bool,
+    /// The mod's words follow the launcher (OVL-LANG: `lang` in its hello): its welcome names the
+    /// overlay's language and the player picks it there.
+    langs: bool,
 }
 
 /// The codeless linking permit this session holds (SKIN1-O). It never goes to a log.
@@ -474,6 +571,12 @@ pub(crate) struct Session<S> {
     recent_people: VecDeque<Instant>,
     discord: DiscordFn,
     last_discord: Option<(String, Instant)>,
+    /// OVL-UX2: favourites and online notices changed from the game go to the launcher's page.
+    people: PeopleFn,
+    /// OVL-LANG: the overlay's language (the player's pick, else the launcher's), and where the
+    /// player's pick from the game goes.
+    lang: Lang,
+    lang_picked: LangFn,
 }
 
 fn now_ms() -> i64 {
@@ -575,6 +678,8 @@ impl<S: SocialActions> Session<S> {
         worlds: WorldsShown,
         game: Option<String>,
         discord: DiscordFn,
+        people: PeopleFn,
+        (lang, lang_picked): (Lang, LangFn),
     ) -> Self {
         // The friends feature as it is now; every change after comes as a message.
         let view = Arc::new(social.view());
@@ -608,6 +713,9 @@ impl<S: SocialActions> Session<S> {
             recent_people: VecDeque::new(),
             discord,
             last_discord: None,
+            people,
+            lang,
+            lang_picked,
         }
     }
 
@@ -775,7 +883,25 @@ impl<S: SocialActions> Session<S> {
                     self.refresh();
                 }
             }
+            Msg::Language(lang) => self.set_language(lang),
         }
+    }
+
+    /// OVL-LANG: the overlay speaks `lang` from now on. A mod whose words follow the launcher is
+    /// greeted again in it (its panel builds itself anew and asks for the open conversation again);
+    /// an older mod keeps the language its hello named.
+    fn set_language(&mut self, lang: Lang) {
+        if self.lang == lang {
+            return;
+        }
+        self.lang = lang;
+        let Some(live) = self.live.as_mut().filter(|live| live.langs) else {
+            return;
+        };
+        tracing::info!(lang = lang.code(), "the in-game overlay's language changed");
+        live.listener.english = lang == Lang::En;
+        live.mirror.set_lang(Some(lang));
+        self.refresh();
     }
 
     /// SKIN1-O: a Projects server asked the game whether its launcher vouches for the player
@@ -1021,6 +1147,12 @@ impl<S: SocialActions> Session<S> {
         if !shown {
             self.send(vec![ToGame::Toast(toast)]);
         }
+        // An AFK notice the game showed was seen: the phone stays quiet (AFKPLUS).
+        if let SocialNotice::AfkNotice { notice } = notice
+            && self.live.is_some()
+        {
+            self.social.afk_seen(&notice.id);
+        }
     }
 
     /// "Yazıyor…" reaches the game only while its panel is open (nothing to show otherwise) and
@@ -1037,7 +1169,9 @@ impl<S: SocialActions> Session<S> {
         {
             return;
         }
-        let name = self.scene.sender(&typing.conv, &typing.by);
+        let name = self
+            .scene
+            .sender(&typing.conv, &typing.by, self.listener().english);
         self.send(vec![ToGame::Typing {
             conv: typing.conv.clone(),
             by: typing.by.clone(),
@@ -1063,7 +1197,10 @@ impl<S: SocialActions> Session<S> {
                     "the in-game overlay connected"
                 );
                 let tags = features.iter().any(|f| f == FEATURE_TAGS);
-                let mut mirror = Mirror::for_mod(tags);
+                let people2 = features.iter().any(|f| f == FEATURE_PEOPLE2);
+                let langs = features.iter().any(|f| f == FEATURE_LANG);
+                let mut mirror = Mirror::for_mod(tags, people2);
+                mirror.set_lang(langs.then_some(self.lang));
                 let frames = mirror.greet(&self.scene, &self.launcher, self.config.reduced_motion);
                 // A reconnect forgets a "Bağlan" the earlier connection never answered.
                 if let Some(pending) = self.pending_connect.take() {
@@ -1078,13 +1215,15 @@ impl<S: SocialActions> Session<S> {
                     panel: false,
                     open: None,
                     connects: features.iter().any(|f| f == FEATURE_CONNECT),
-                    listener: Listener::from_hello(&language, &features),
+                    listener: Listener::from_hello(&language, &features, self.lang),
                     typed_at: None,
                     hosts,
                     tags,
                     links: features.iter().any(|f| f == FEATURE_LINK),
                     link_wanted_at: None,
                     people: features.iter().any(|f| f == FEATURE_PEOPLE),
+                    people2,
+                    langs,
                 }));
                 self.send(frames);
                 (self.host)(HostSignal::Connected { hosts });
@@ -1218,13 +1357,14 @@ impl<S: SocialActions> Session<S> {
             FromGame::Invite { friend } => self.on_invite(friend),
             FromGame::Discord { friend } => self.on_discord(friend),
             FromGame::Unfriend { friend } => {
-                if self.person_allowed(&friend, FriendAction::Unfriend, true) {
+                if self.person_allowed(&friend, FriendAction::Unfriend, Who::Friend, true) {
                     let doing = self.social.remove_friend(&friend);
                     self.settle(friend, FriendAction::Unfriend, doing);
                 }
             }
             FromGame::Block { friend } => {
-                if self.person_allowed(&friend, FriendAction::Block, true) {
+                // A friend, or a crewmate from crew chat (OVL-UX2): never anyone else.
+                if self.person_allowed(&friend, FriendAction::Block, Who::FriendOrCrewmate, true) {
                     let doing = self.social.block(&friend);
                     self.settle(friend, FriendAction::Block, doing);
                 }
@@ -1235,8 +1375,35 @@ impl<S: SocialActions> Session<S> {
                 note,
                 block,
             } => self.on_report(friend, &reason, &note, block),
+            // OVL-UX2: the rest of the launcher's person menu.
+            FromGame::Favorite { friend, on } => self.on_mark(friend, on, FriendAction::Favorite),
+            FromGame::Alert { friend, on } => self.on_mark(friend, on, FriendAction::Alert),
+            FromGame::Move { friend, group } => self.on_move(friend, &group),
+            FromGame::CrewInvite { friend, crew } => self.on_crew_invite(friend, &crew),
+            FromGame::AddFriend { friend } => self.on_add_friend(friend),
+            FromGame::Lang { lang } => self.on_lang_pick(&lang),
             FromGame::Hello { .. } | FromGame::Unknown => {}
         }
+    }
+
+    /// OVL-LANG (G4): the player picked the overlay's language in its settings. It speaks it at
+    /// once (the answer is the new greeting) and the launcher keeps the pick for every game after.
+    /// Only from a mod whose words follow the launcher; a value that is no language is ignored.
+    fn on_lang_pick(&mut self, lang: &str) {
+        if !self.live.as_ref().is_some_and(|live| live.langs) {
+            return;
+        }
+        let lang = match lang {
+            "tr" => Lang::Tr,
+            "en" => Lang::En,
+            _ => return,
+        };
+        tracing::info!(
+            lang = lang.code(),
+            "the player picked the overlay's language in game"
+        );
+        self.set_language(lang);
+        (self.lang_picked)(lang);
     }
 
     // --- the friend menu (OVL-UX) ------------------------------------------------------------------
@@ -1260,14 +1427,26 @@ impl<S: SocialActions> Session<S> {
         }
     }
 
-    /// Whether a friend menu frame may go on: the game has not sent too many, they are on the
-    /// friend list, and (`service`) the friends service is connected. Otherwise the mod hears why
-    /// at once.
-    fn person_allowed(&mut self, friend: &str, action: FriendAction, service: bool) -> bool {
+    /// Whether a friend menu frame may go on: the game has not sent too many, they are someone
+    /// the row may be about (`who`: on the friend list, or a crewmate), and (`service`) the
+    /// friends service is connected. Otherwise the mod hears why at once.
+    fn person_allowed(
+        &mut self,
+        friend: &str,
+        action: FriendAction,
+        who: Who,
+        service: bool,
+    ) -> bool {
         let now = Instant::now();
+        let is_friend = self.scene.friend(friend).is_some();
+        let known = match who {
+            Who::Friend => is_friend,
+            Who::FriendOrCrewmate => is_friend || self.scene.is_crewmate(friend),
+            Who::Crewmate => !is_friend && self.scene.is_crewmate(friend),
+        };
         let refused = if full(&mut self.recent_people, now, PEOPLE_WINDOW, PEOPLE_BURST) {
             Some(FriendRefusal::Rate)
-        } else if self.scene.friend(friend).is_none() {
+        } else if !known {
             Some(FriendRefusal::Failed)
         } else if service && !self.scene.online {
             Some(FriendRefusal::Offline)
@@ -1327,7 +1506,7 @@ impl<S: SocialActions> Session<S> {
     /// "Birlikte oyna" from the game: only while it can go (the player is on Projects or shows
     /// their server); the service keeps its own five minutes per friend.
     fn on_invite(&mut self, friend: String) {
-        if !self.person_allowed(&friend, FriendAction::Invite, true) {
+        if !self.person_allowed(&friend, FriendAction::Invite, Who::Friend, true) {
             return;
         }
         if !self.scene.may_invite() {
@@ -1383,7 +1562,8 @@ impl<S: SocialActions> Session<S> {
         {
             return;
         }
-        if !self.person_allowed(&friend, FriendAction::Discord, false) {
+        // A friend, or a crewmate from crew chat (OVL-UX2, Q15).
+        if !self.person_allowed(&friend, FriendAction::Discord, Who::FriendOrCrewmate, false) {
             return;
         }
         let Some(url) = self.scene.discord_url(&friend).map(str::to_owned) else {
@@ -1418,12 +1598,190 @@ impl<S: SocialActions> Session<S> {
             );
             return;
         };
-        if self.person_allowed(&friend, FriendAction::Report, true) {
+        if self.person_allowed(&friend, FriendAction::Report, Who::FriendOrCrewmate, true) {
             let doing = self
                 .social
                 .report_player(&friend, reason, report_note(note), block);
             self.settle(friend, FriendAction::Report, doing);
         }
+    }
+
+    // --- the rest of the launcher's person menu (OVL-UX2) ----------------------------------------
+
+    /// "Favorilere ekle" / "Çevrimiçi olunca bildir" from the game: the marks the launcher's page
+    /// keeps. This session shows the change at once (the friend's frame), the page hears it and
+    /// keeps it as its own buttons would.
+    fn on_mark(&mut self, friend: String, on: bool, action: FriendAction) {
+        if !self.live.as_ref().is_some_and(|live| live.people2)
+            || !self.person_allowed(&friend, action, Who::Friend, false)
+        {
+            return;
+        }
+        let change = if action == FriendAction::Favorite {
+            self.config.notify.set_favorite(&friend, on);
+            PeopleChange::Favorite {
+                friend: friend.clone(),
+                on,
+            }
+        } else {
+            self.config.notify.online_alerts.insert(friend.clone(), on);
+            PeopleChange::Alert {
+                friend: friend.clone(),
+                on,
+            }
+        };
+        tracing::info!(
+            ?action,
+            on,
+            "a friend's mark changed from the in-game overlay"
+        );
+        (self.people)(change);
+        self.set_view(Arc::clone(&self.view));
+        self.refresh();
+    }
+
+    /// "Kategoriye taşı" from the game: the categories saved whole, as the launcher's list saves
+    /// them (its `moveFriend`): an unknown category or "" puts them in "Arkadaşlar".
+    fn on_move(&mut self, friend: String, group: &str) {
+        if !self.live.as_ref().is_some_and(|live| live.people2)
+            || !self.person_allowed(&friend, FriendAction::Move, Who::Friend, true)
+        {
+            return;
+        }
+        let Some(doc) = self.view.groups.clone() else {
+            self.friend_result(
+                &friend,
+                FriendAction::Move,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+            return;
+        };
+        let known = doc.groups.iter().any(|g| g.id == group);
+        if !group.is_empty() && !known {
+            self.friend_result(
+                &friend,
+                FriendAction::Move,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+            return;
+        }
+        let now = doc
+            .members
+            .iter()
+            .find(|member| member.friend == friend)
+            .map(|member| member.group.as_str());
+        if now.unwrap_or_default() == group {
+            // Already there: nothing to save, and nothing went wrong (the mod says no failure).
+            self.friend_result(&friend, FriendAction::Move, true, None);
+            return;
+        }
+        let mut members: Vec<GroupMember> = doc
+            .members
+            .into_iter()
+            .filter(|member| member.friend != friend)
+            .collect();
+        if known {
+            members.push(GroupMember {
+                friend: friend.clone(),
+                group: group.to_owned(),
+            });
+        }
+        let doing = self.social.save_groups(doc.groups, members);
+        self.settle(friend, FriendAction::Move, doing);
+    }
+
+    /// "Ekibe davet et" from the game: only to a crew the player may invite to, with room, that
+    /// the friend is not in or invited to already.
+    fn on_crew_invite(&mut self, friend: String, crew: &str) {
+        if !self.live.as_ref().is_some_and(|live| live.people2)
+            || !self.person_allowed(&friend, FriendAction::CrewInvite, Who::Friend, true)
+        {
+            return;
+        }
+        let open = self
+            .scene
+            .lists
+            .crews
+            .iter()
+            .any(|item| item.id == crew && !item.full);
+        let placed = self
+            .scene
+            .friend(&friend)
+            .is_some_and(|f| f.crews.contains_key(crew));
+        if !open || placed {
+            self.friend_result(
+                &friend,
+                FriendAction::CrewInvite,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+            return;
+        }
+        let doing = self.social.invite_to_team(crew, &friend);
+        self.settle(friend, FriendAction::CrewInvite, doing);
+    }
+
+    /// "Arkadaş ekle" (or "İsteği kabul et") on a crewmate from crew chat: only while the service
+    /// lets crewmates ask each other. `queued`: the request waits for them; without it they are
+    /// friends now.
+    fn on_add_friend(&mut self, friend: String) {
+        if !self.live.as_ref().is_some_and(|live| live.people2)
+            || !self.person_allowed(&friend, FriendAction::AddFriend, Who::Crewmate, true)
+        {
+            return;
+        }
+        let lists = &self.scene.lists;
+        if !lists.crewmates || lists.asking.contains(&friend) {
+            self.friend_result(
+                &friend,
+                FriendAction::AddFriend,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+            return;
+        }
+        let reply = self
+            .live
+            .as_ref()
+            .filter(|live| live.people2)
+            .map(|live| live.conn);
+        let control = self.control.clone();
+        let answering = lists.asked.contains(&friend);
+        let accepting = answering.then(|| self.social.accept(&friend));
+        let asking = (!answering).then(|| self.social.request_crewmate(&friend));
+        tracing::info!(
+            answering,
+            "a crewmate's friend request from the in-game overlay"
+        );
+        tokio::spawn(async move {
+            let outcome = match (accepting, asking) {
+                (Some(accepting), _) => accepting.await.map(|()| SendOutcome::Friends),
+                (None, Some(asking)) => asking.await,
+                (None, None) => return,
+            };
+            let (queued, reason) = match outcome {
+                Ok(SendOutcome::Friends) => (false, None),
+                Ok(SendOutcome::Requested) => (true, None),
+                Err(error) => {
+                    tracing::info!(%error, "the overlay's friend request did not go");
+                    (false, Some(friend_refusal(&error)))
+                }
+            };
+            if let Some(conn) = reply {
+                let _ = control.send(Control::Send {
+                    conn,
+                    frames: vec![ToGame::FriendResult {
+                        friend,
+                        action: FriendAction::AddFriend,
+                        ok: reason.is_none(),
+                        queued,
+                        reason,
+                    }],
+                });
+            }
+        });
     }
 
     fn on_send(

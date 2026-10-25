@@ -23,7 +23,7 @@ use crate::state::AppState;
 static SERVICE: OnceLock<CloudService> = OnceLock::new();
 
 /// The service, made on first use (the AFK page's first look).
-fn service(app: &AppHandle, state: &AppState) -> &'static CloudService {
+pub(crate) fn service(app: &AppHandle, state: &AppState) -> &'static CloudService {
     SERVICE.get_or_init(|| {
         let identity = crate::identity::current();
         let store: Arc<dyn pl_afk::SecretStore> =
@@ -64,7 +64,7 @@ fn debug_override() -> Option<String> {
 }
 
 /// The friends session's token, or "sign in again".
-fn token(state: &AppState) -> CmdResult<Bearer> {
+pub(crate) fn token(state: &AppState) -> CmdResult<Bearer> {
     state
         .social
         .session_token()
@@ -444,6 +444,12 @@ pub enum CloudPage {
     Account,
     /// The player's accounts.
     Accounts,
+    /// AFK+'s page ("AFK+ ne yapar?").
+    Plus,
+    /// Upgrading `account` to AFK+, or buying a new AFK+ account without one.
+    PlusBuy,
+    /// The AFK+ tab of `account` on the site (what the launcher leaves to the site: plan changes).
+    PlusAccount,
 }
 
 /// Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there.
@@ -468,9 +474,14 @@ pub fn cloud_afk_open(
         (CloudPage::Buy, _) => "satin-al".to_owned(),
         (CloudPage::Renew, Some(id)) => format!("satin-al?hesap={id}"),
         (CloudPage::Account, Some(id)) => format!("hesap/{id}"),
-        (CloudPage::Accounts, _) | (CloudPage::Renew | CloudPage::Account, None) => {
+        (CloudPage::Accounts, _)
+        | (CloudPage::Renew | CloudPage::Account | CloudPage::PlusAccount, None) => {
             "hesaplar".to_owned()
         }
+        (CloudPage::Plus, _) => "afk-plus".to_owned(),
+        (CloudPage::PlusBuy, Some(id)) => format!("satin-al?hesap={id}&tier=plus"),
+        (CloudPage::PlusBuy, None) => "satin-al?tier=plus".to_owned(),
+        (CloudPage::PlusAccount, Some(id)) => format!("hesap/{id}/afk-plus"),
     };
     let url = client.site_url(&path);
     app.opener()
@@ -716,6 +727,54 @@ impl From<CloudError> for CmdError {
                     pick(
                         "Gizli satır okunamadı. Yeniden yaz.",
                         "The secret line can't be read. Type it again.",
+                    )
+                    .into(),
+                ),
+                "plus_off" | "feature_off" => (
+                    "AFKPLUS-KAPALI",
+                    pick(
+                        "AFK+ şu an kullanılamıyor.",
+                        "AFK+ isn't available right now.",
+                    )
+                    .into(),
+                ),
+                "plus_not_active" => (
+                    "AFKPLUS-YOK",
+                    pick(
+                        "Bu hesapta AFK+ yok.",
+                        "This account doesn't have AFK+.",
+                    )
+                    .into(),
+                ),
+                "plus_projects_only" => (
+                    "AFKPLUS-PROJECTS",
+                    pick(
+                        "AFK+ yalnız Projects'te çalışır.",
+                        "AFK+ only works on Projects.",
+                    )
+                    .into(),
+                ),
+                "plus_restricted" => (
+                    "AFKPLUS-UZAK",
+                    pick(
+                        "AFK+'dan uzaklaştırıldın.",
+                        "You're banned from AFK+.",
+                    )
+                    .into(),
+                ),
+                "approval_closed" | "approval_not_found" => (
+                    "AFKPLUS-ONAY",
+                    pick(
+                        "Bu onay artık beklemiyor.",
+                        "This approval isn't waiting any more.",
+                    )
+                    .into(),
+                ),
+                "history_not_found" => (
+                    "AFKPLUS-GECMIS",
+                    pick(
+                        "Bu eski hal artık kayıtlı değil.",
+                        "This earlier version isn't saved any more.",
                     )
                     .into(),
                 ),

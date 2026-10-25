@@ -1276,6 +1276,11 @@ pub enum SocialNotice {
     },
     /// The session ended elsewhere (signed out, revoked, expired or the account deleted).
     SignedOutRemotely,
+    /// Cloud AFK's notice about one of the player's cloud accounts (AFKPLUS): the launcher words it
+    /// and, once the player saw it, sends `afk_seen` ([`crate::SocialService::afk_seen`]).
+    AfkNotice {
+        notice: crate::afk::AfkNotice,
+    },
 }
 
 /// The player's own card; `badge`: their crew tag as the view may show it (TEAM6).

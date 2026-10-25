@@ -74,6 +74,11 @@ impl Bridge for OverlayLink {
             async move { self.0.connect_world_in_game(port, label).await == ConnectOutcome::Done },
         )
     }
+
+    /// In the overlay's language, which the player may have picked in the game (OVL-LANG).
+    fn world_label(&self, friend: &str) -> String {
+        pl_worlds::world_label_in(friend, self.0.language())
+    }
 }
 
 /// "Birlikte oyna" for "Projects'te buluşun".
