@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use image::{EdgeTone, Image};
+pub use image::{Contrast, EdgeTone, Image};
 pub use source::{AssetSource, JarSource, MemSource};
 
 use itemdef::{Part, Tint};
@@ -51,8 +51,10 @@ pub const INDEX_FORMAT: u32 = 1;
 /// static glint frame, dark icons marked, hidden dye layers. 3: the dragon head and the decorated
 /// pot. 4: copper golem statues, dark icons by their outline's lightness, 3D icons drawn at 48 px
 /// too, cells on even pixels. 5: dark icons count see-through pixels, leave coloured outlines
-/// alone and decide per armour and tool set.
-pub const ATLAS_REVISION: u32 = 5;
+/// alone and decide per armour and tool set. 6: dyed and see-through icons are never dark,
+/// see-through pixels lie over the slot grey at half strength, uniformly dim icons (an anvil) are
+/// dark, the glint frame moved so a streak crosses the item.
+pub const ATLAS_REVISION: u32 = 6;
 
 /// The atlas index (`index.json`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -180,21 +182,33 @@ const DEFAULT_BLOCK_GUI: Display = Display {
 const DARK_GROUND: [u8; 3] = [0x1b, 0x18, 0x20];
 
 /// An icon is marked dark when its outline is near-black and grey on that ground: the median
-/// lightness of its silhouette's edge (two texels deep, see-through pixels over the ground) within
-/// about 6 L* of the ground's 8.9 (obsidian, black wool, the ender chest, netherite armour, black
-/// and tinted glass; not a netherite ingot or a hopper, which read), and its median chroma low: a
-/// dark red or blue outline (redstone, netherrack, a blue shulker box) reads by its colour, and a
-/// grey edge around it looks like a sticker. And only when the client's one-texel edge would not
-/// fill in between its parts: see-through structure (leaves, sculk veins, spawners, chains) keeps
-/// its holes and gets no edge.
+/// lightness of its silhouette's edge (two texels deep) within about 6 L* of the ground's 8.9
+/// (obsidian, black wool, the ender chest, netherite armour; not a netherite ingot or a hopper,
+/// which read), or when the whole of it is uniformly dim there (the median pixel at most 1.35:1
+/// against the ground and the upper quartile at most 1.8:1: an anvil, cobbled deepslate); and its
+/// edge's median chroma is low: a dark red or blue outline (redstone, netherrack, a blue shulker
+/// box) reads by its colour, and a grey edge around it looks like a sticker. And only when the
+/// client's edge would not fill in between its parts: see-through structure (leaves, sculk veins,
+/// spawners, chains) keeps its holes and gets no edge. Never an icon the server colours (dyed
+/// leather: its colour is the server's and reads) or a see-through one (glass shows what it lies on).
 const DARK_EDGE_TEXELS: u32 = 2;
 const DARK_EDGE_LIGHTNESS: f32 = 15.0;
 const DARK_EDGE_CHROMA: f32 = 0.055;
 const DARK_GAP_SHARE: f32 = 0.02;
+const DIM_MEDIAN: f32 = 1.35;
+const DIM_UPPER: f32 = 1.8;
+
+/// The game's slot grey. See-through pixels (stained glass, ice, slime) lie over it at half
+/// strength: the game's grey inventory shows them exactly as the game does (grey over grey is the
+/// same grey), and on our dark slots glass still lets light through instead of turning into a
+/// dull dark block (over the full grey it read as opaque concrete there).
+const SLOT_GREY: [u8; 3] = [0x8b, 0x8b, 0x8b];
+const SEE_THROUGH_STRENGTH: f32 = 0.5;
 
 /// The pieces of an armour and tool set (`<material>_<piece>`). A set is dark as a whole when any
-/// piece is, so the armour row and the hotbar show one material one way (netherite boots and
-/// leggings, its sword and hoe, sit just either side of the line).
+/// piece is, so the armour row and the hotbar show one material one way (netherite's helmet and
+/// boots are near-black, its leggings and sword just above the line); dyed pieces are never judged,
+/// so leather stays as it is.
 const SET_PIECES: [&str; 10] = [
     "helmet",
     "chestplate",
@@ -225,6 +239,9 @@ struct DrawnIcon {
     /// The layers with their tints.
     layers: FlatLayers,
     dark: bool,
+    /// Its look is fixed and opaque, so the dark rule judges it (no layer the server colours, no
+    /// see-through pixels).
+    judged: bool,
     /// A 3D icon's larger drawing.
     large: Option<Image>,
 }
@@ -469,10 +486,12 @@ impl Builder<'_> {
 
 /// The static glint frame: its side in the atlas, the glint texels it spans across, where it
 /// starts in the glint texture and how far it is turned (the game's texture matrix turns the
-/// glint by π/18), and the game's default glint strength.
+/// glint by π/18), and the game's default glint strength. The start puts the texture's brightest
+/// streak through the middle of the frame, where an item's body is (a sword's blade, a pickaxe's
+/// head, an apple), so it shows at 16 px too; from (40, 56) it ran down the frame's left edge.
 const GLINT_FRAME: u32 = 32;
 const GLINT_TEXELS: f32 = 14.0;
-const GLINT_ORIGIN: [f32; 2] = [40.0, 56.0];
+const GLINT_ORIGIN: [f32; 2] = [12.0, 58.0];
 const GLINT_TURN_DEGREES: f32 = 10.0;
 const GLINT_STRENGTH: f32 = 0.75;
 /// How much of the game's added light stays everywhere, and how strongly the streaks show.
@@ -584,12 +603,17 @@ pub fn build_atlas(source: &mut dyn AssetSource, options: &BuildOptions) -> Resu
             .large_size
             .filter(|&size| size != options.block_size),
     };
+    // Whether an opaque picture melts into our darkest slot (see `DARK_EDGE_*`, `DIM_*`).
     let dark = |picture: &Image| {
         let texel = (picture.width / 16).max(1);
         picture
             .edge_tone(DARK_GROUND, DARK_EDGE_TEXELS * texel)
             .is_some_and(|edge| {
-                edge.lightness <= DARK_EDGE_LIGHTNESS && edge.chroma < DARK_EDGE_CHROMA
+                edge.chroma < DARK_EDGE_CHROMA
+                    && (edge.lightness <= DARK_EDGE_LIGHTNESS
+                        || picture.contrast(DARK_GROUND).is_some_and(|contrast| {
+                            contrast.median <= DIM_MEDIAN && contrast.upper <= DIM_UPPER
+                        }))
             })
             && picture.gap_share(texel) <= DARK_GAP_SHARE
     };
@@ -614,32 +638,63 @@ pub fn build_atlas(source: &mut dyn AssetSource, options: &BuildOptions) -> Resu
                 transform: None,
             }]
         };
+        // Judged as the game draws it, then its see-through pixels lie over the slot grey. A layer
+        // the server colours (a dye, a potion) keeps its pixels: a bottle's glass laid over grey
+        // would cover the potion.
         match builder.draw(&parts) {
-            Some(Drawn::Flat { layers, preview }) => drawn.push(DrawnIcon {
-                id: id.clone(),
-                kind: IconKind::Flat,
-                dark: dark(&preview),
-                layers,
-                large: None,
-            }),
-            Some(Drawn::Rendered(Rendered { kind, image, large })) => drawn.push(DrawnIcon {
-                id: id.clone(),
+            Some(Drawn::Flat {
+                mut layers,
+                preview,
+            }) => {
+                let fixed = layers.iter().all(|(_, tint)| tint.is_none());
+                let judged = fixed && !preview.has_translucency();
+                if fixed && layers.len() == 1 {
+                    layers[0]
+                        .0
+                        .lay_see_through_over(SLOT_GREY, SEE_THROUGH_STRENGTH);
+                }
+                drawn.push(DrawnIcon {
+                    id: id.clone(),
+                    kind: IconKind::Flat,
+                    dark: judged && dark(&preview),
+                    judged,
+                    layers,
+                    large: None,
+                });
+            }
+            Some(Drawn::Rendered(Rendered {
                 kind,
-                dark: dark(&image),
-                layers: vec![(image, None)],
-                large,
-            }),
+                mut image,
+                mut large,
+            })) => {
+                let judged = !image.has_translucency();
+                let is_dark = judged && dark(&image);
+                image.lay_see_through_over(SLOT_GREY, SEE_THROUGH_STRENGTH);
+                if let Some(large) = &mut large {
+                    large.lay_see_through_over(SLOT_GREY, SEE_THROUGH_STRENGTH);
+                }
+                drawn.push(DrawnIcon {
+                    id: id.clone(),
+                    kind,
+                    dark: is_dark,
+                    judged,
+                    layers: vec![(image, None)],
+                    large,
+                });
+            }
             None => missing.push(id.clone()),
         }
     }
-    // A set is dark as a whole when any piece is.
+    // A set is dark as a whole when any piece is (only pieces the rule judges).
     let dark_sets: HashSet<String> = drawn
         .iter()
         .filter(|icon| icon.dark)
         .filter_map(|icon| set_material(&icon.id).map(str::to_owned))
         .collect();
     for icon in &mut drawn {
-        if set_material(&icon.id).is_some_and(|material| dark_sets.contains(material)) {
+        if icon.judged
+            && set_material(&icon.id).is_some_and(|material| dark_sets.contains(material))
+        {
             icon.dark = true;
         }
     }
