@@ -471,13 +471,14 @@ describe("ItemSprite", () => {
   });
 
   it("keeps the stand-ins' lower right, where the game draws the stack count, free of inner lines", () => {
+    // The silhouette's cells, from the path's runs ("M<x> <y>h<length>...").
     const grid = (id: string) => {
-      const rows = Array.from({ length: 16 }, () => Array<boolean>(16).fill(false));
+      const filled = new Set<string>();
       const d = render({ id }).match(/ d="([^"]+)"/)?.[1] ?? "";
       for (const [, x, y, w] of d.matchAll(/M(\d+) (\d+)h(\d+)/g)) {
-        for (let i = 0; i < Number(w); i++) rows[Number(y)][Number(x) + i] = true;
+        for (let i = 0; i < Number(w); i++) filled.add(`${Number(x) + i},${y}`);
       }
-      return rows;
+      return (x: number, y: number) => filled.has(`${x},${y}`);
     };
     for (const id of [
       "projects:unknown_block",
@@ -489,11 +490,11 @@ describe("ItemSprite", () => {
       "projects:mystery_book",
       "minecraft:unknown_thing",
     ]) {
-      const rows = grid(id);
+      const at = grid(id);
       // Rows 9-15, columns 6-15: no gap with the silhouette left, right and above it.
       for (let y = 9; y < 16; y++) {
         for (let x = 6; x < 15; x++) {
-          const inner = !rows[y][x] && rows[y][x - 1] && rows[y][x + 1] && rows[y - 1][x];
+          const inner = !at(x, y) && at(x - 1, y) && at(x + 1, y) && at(x, y - 1);
           expect(inner, `${id} at ${x},${y}`).toBe(false);
         }
       }
