@@ -15,7 +15,9 @@ use zip::ZipArchive;
 
 use super::fsops::{blocking, modified_ms, read_dir_or_empty};
 use super::trash::{LauncherTrash, TrashEntry, TrashKind, free_path};
-use super::worlds::{BackupProgress, BackupProgressFn, level_name, level_name_from_bytes};
+use super::worlds::{
+    BackupProgress, BackupProgressFn, BackupReason, level_name, level_name_from_bytes,
+};
 use crate::error::{Error, Result};
 use crate::modpack::safe_path::{validate_file_name, validate_relative_path};
 
@@ -37,6 +39,9 @@ pub struct WorldBackupInfo {
     pub world_name: Option<String>,
     /// False when the archive does not hold a world (no `level.dat`) or cannot be read.
     pub valid: bool,
+    /// Why the launcher made it by itself (the archive's comment); none for the player's own
+    /// backups and the game's.
+    pub reason: Option<BackupReason>,
 }
 
 /// Where the world sits inside an archive.
@@ -111,10 +116,12 @@ fn read_backup_info(path: &Path, file_name: String, meta: &std::fs::Metadata) ->
         created_ms: modified_ms(meta),
         world_name: None,
         valid: false,
+        reason: None,
     };
     let Ok(mut archive) = open_archive(path) else {
         return info;
     };
+    info.reason = BackupReason::from_comment(archive.comment());
     let names = entry_names(&archive);
     let Some(layout) = find_layout(&names) else {
         return info;
@@ -570,6 +577,97 @@ mod tests {
             .filter(|n| n.starts_with('.'))
             .collect();
         assert!(leftovers.is_empty(), "{leftovers:?}");
+    }
+
+    /// The backup taken before a world first opens to friends keeps that in its zip comment; the
+    /// player's own backups and other tools' comments carry no reason.
+    #[tokio::test]
+    async fn a_backup_before_sharing_says_so() {
+        use crate::gamefiles::{BackupReason, backup_world_marked};
+
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path().join("minecraft");
+        let world = make_world(&game.join("saves"), "Kale", "Kale");
+        let backups = game.join("backups");
+        let marked = backups.join("2026-10-24_21-00-00_Kale.zip");
+        backup_world_marked(
+            &world,
+            &marked,
+            Some(BackupReason::BeforeSharing),
+            CancellationToken::new(),
+            None,
+        )
+        .await
+        .unwrap();
+        backup_world(
+            &world,
+            &backups.join("2026-10-24_21-00-01_Kale.zip"),
+            CancellationToken::new(),
+            None,
+        )
+        .await
+        .unwrap();
+        let mut other = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        other.set_comment("made by another tool").unwrap();
+        other
+            .start_file("Kale/level.dat", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        other.write_all(&level_dat("Kale")).unwrap();
+        std::fs::write(
+            backups.join("other.zip"),
+            other.finish().unwrap().into_inner(),
+        )
+        .unwrap();
+
+        let list = list_world_backups(&game).await.unwrap();
+        let reason_of = |name: &str| list.iter().find(|b| b.file_name == name).unwrap().reason;
+        assert_eq!(
+            reason_of("2026-10-24_21-00-00_Kale.zip"),
+            Some(BackupReason::BeforeSharing)
+        );
+        assert_eq!(reason_of("2026-10-24_21-00-01_Kale.zip"), None);
+        assert_eq!(reason_of("other.zip"), None);
+        assert!(list.iter().all(|b| b.valid));
+
+        // It restores like any other backup.
+        let restored = restore_world_backup(
+            &marked,
+            &game.join("saves"),
+            RestoreMode::AsNew,
+            CancellationToken::new(),
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(restored.folder, "Kale (2)");
+    }
+
+    #[test]
+    fn only_the_launchers_own_comment_names_a_reason() {
+        use crate::gamefiles::BackupReason;
+
+        assert_eq!(
+            BackupReason::from_comment(b"projects-launcher-backup:before-sharing"),
+            Some(BackupReason::BeforeSharing)
+        );
+        assert_eq!(
+            BackupReason::from_comment(BackupReason::BeforeSharing.comment().as_bytes()),
+            Some(BackupReason::BeforeSharing)
+        );
+        for comment in [
+            &b""[..],
+            &b"projects-launcher-backup:"[..],
+            &b"projects-launcher-backup:something-new"[..],
+            &b"before-sharing"[..],
+            &b"\xff\xfe"[..],
+        ] {
+            assert_eq!(BackupReason::from_comment(comment), None, "{comment:?}");
+        }
+        // The page reads it in camelCase like the other enums.
+        assert_eq!(
+            serde_json::to_value(BackupReason::BeforeSharing).unwrap(),
+            serde_json::json!("beforeSharing")
+        );
     }
 
     #[tokio::test]

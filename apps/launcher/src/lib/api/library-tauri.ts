@@ -48,6 +48,7 @@ const backup = (b: WorldBackupView): WorldBackup => ({
   worldFolder: b.worldFolder ?? undefined,
   worldName: b.worldName ?? undefined,
   valid: b.valid,
+  reason: b.reason ?? undefined,
 });
 
 function progressChannel(onProgress: (p: BackupProgress) => void): Channel<BackupProgress> {

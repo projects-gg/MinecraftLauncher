@@ -1,7 +1,6 @@
 import { ArrowSquareOut, X } from "@phosphor-icons/react";
 import {
   Button,
-  Chip,
   cn,
   dialogMotion,
   EntranceGate,
@@ -26,7 +25,7 @@ import { canOpenLink, isWebLink, openLink, openWebLink } from "@/lib/links";
 import { minecraftText } from "@/lib/minecraft";
 import { useNewsSeen } from "@/stores/news-seen";
 import { CoverImage } from "./cover-image";
-import { MinecraftChip } from "./minecraft";
+import { MinecraftLabel } from "./minecraft";
 
 /** The Discord message a feed post summarizes, opened in the browser. */
 function DiscordSourceLink({ url }: { url: string }) {
@@ -115,7 +114,7 @@ export default function NewsArticle({
       title: news.title,
       body: news.body,
       coverUrl: news.coverUrl,
-      label: <Chip tone="onArt">{t(`categories.${news.category}`)}</Chip>,
+      label: <span className="font-medium">{t(`categories.${news.category}`)}</span>,
       publishedAt: news.publishedAt,
       fromFeed: Boolean(news.fromFeed),
       source: news.sourceUrl ? <DiscordSourceLink url={news.sourceUrl} /> : undefined,
@@ -137,7 +136,7 @@ export default function NewsArticle({
       body: text.body,
       coverUrl: minecraft.coverUrl,
       coverBlurhash: minecraft.coverBlurhash,
-      label: <MinecraftChip />,
+      label: <MinecraftLabel />,
       publishedAt: minecraft.publishedAt,
       fromFeed: true,
       source: <MinecraftSourceLink url={minecraft.url} />,
@@ -214,12 +213,12 @@ export default function NewsArticle({
                           hasCover ? "-mt-14" : "pt-12",
                         )}
                       >
-                        <div className="relative flex items-center gap-2.5">
+                        <div className="text-shadow-art relative flex items-center gap-1.5 text-[12.5px] text-bone-100/85">
                           {article.label}
-                          <span className="text-shadow-art text-[12.5px] text-bone-100/85">
-                            {formatRelative(article.publishedAt)}
-                          </span>
-                          {article.source}
+                          <span aria-hidden>·</span>
+                          <span>{formatRelative(article.publishedAt)}</span>
+                          {/* The source link keeps its distance (no second separator). */}
+                          {article.source ? <span className="ml-1">{article.source}</span> : null}
                         </div>
                         <Dialog.Title className="text-shadow-art relative mt-2.5 font-display text-[30px] leading-[1.06] font-semibold text-bone-50 [text-wrap:balance]">
                           {article.title}

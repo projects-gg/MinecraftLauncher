@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use pl_host::guest::GuestEvent;
 use pl_host::manifest::matching::InstallInfo;
 use pl_host::manifest::{Loader, Manifest, ModRef, PackRef};
 use pl_host::policy::env::{CredsError, CredsReason, HostPaths};
@@ -26,7 +27,8 @@ use crate::link::{CredsTable, HostLink, Service, Transports};
 use crate::manager::Person;
 use crate::view::{
     HostNotice, HostSessionView, WorldGameMode, WorldGuestState, WorldInviteOutcome,
-    WorldOpenFailure, WorldOpenOutcome, WorldOpenRequest, WorldOpeningStep,
+    WorldJoinFailure, WorldJoinStage, WorldOpenFailure, WorldOpenOutcome, WorldOpenRequest,
+    WorldOpeningStep,
 };
 use crate::{
     Account, Bridge, HostInstall, Launcher, PlayTogether, Progress, UiEvent, Worlds, WorldsConfig,
@@ -759,6 +761,98 @@ async fn a_quiet_invite_is_listed_only_and_a_host_going_offline_takes_it() {
     );
     h.worlds.on_friends(friends(false), false);
     assert!(h.worlds.view().invites.is_empty());
+}
+
+const SESSION: &str = "stuiX9ATk0i2-2_h8YikXQ";
+
+fn mods_failures(h: &Harness) -> usize {
+    h.notices()
+        .iter()
+        .filter(|n| {
+            matches!(n, HostNotice::JoinFailed { session, name, failure: WorldJoinFailure::Mods }
+                if session == SESSION && name == "Ayşe")
+        })
+        .count()
+}
+
+/// Fabric's registry sync in the game's log while the game is in the friend's world: the join
+/// ends with `mods` once (its several lines tell once), and other lines change nothing.
+#[tokio::test]
+async fn a_registry_mismatch_in_the_games_log_ends_the_join_with_mods() {
+    let h = Harness::new().switched_on();
+    h.worlds.on_friends(friends(true), false);
+    h.worlds.on_service(WorldEvent::Invite {
+        invite: invite("f-ayse"),
+        quiet: false,
+    });
+    // No join under way: the game's other servers are none of this.
+    h.worlds
+        .game_log("Received unknown remote registry entries from server");
+    assert!(h.worlds.view().invites[0].join.is_none());
+    h.worlds.force_join_stage(SESSION, Some(WorldJoinStage::In));
+    h.worlds
+        .game_log("Client disconnected with reason: Network Protocol Error");
+    assert_eq!(h.worlds.view().invites[0].join, Some(WorldJoinStage::In));
+    for line in [
+        "Received unknown remote registry entries from server",
+        "Registry entry (farmersdelight:tomato) is missing from local registry (minecraft:item)",
+        "Registry remapping failed!",
+        "Client disconnected with reason: Received 1 registry entries that are unknown to this \
+         client.",
+    ] {
+        h.worlds.game_log(line);
+    }
+    assert_eq!(
+        h.worlds.view().invites[0].join,
+        Some(WorldJoinStage::Failed {
+            failure: WorldJoinFailure::Mods
+        })
+    );
+    assert_eq!(mods_failures(&h), 1);
+    // The connection's end after it changes nothing.
+    h.worlds.guest_event(SESSION, GuestEvent::GameEnded);
+    assert_eq!(
+        h.worlds.view().invites[0].join,
+        Some(WorldJoinStage::Failed {
+            failure: WorldJoinFailure::Mods
+        })
+    );
+}
+
+/// The connection may end before the log says why: a line within half a minute still counts, a
+/// later one (another server, another game) does not.
+#[tokio::test(start_paused = true)]
+async fn a_mismatch_line_right_after_the_connection_ended_still_counts() {
+    let h = Harness::new().switched_on();
+    h.worlds.on_friends(friends(true), false);
+    h.worlds.on_service(WorldEvent::Invite {
+        invite: invite("f-ayse"),
+        quiet: false,
+    });
+    h.worlds
+        .force_join_stage(SESSION, Some(WorldJoinStage::Connecting));
+    h.worlds.guest_event(SESSION, GuestEvent::GameEnded);
+    assert!(h.worlds.view().invites[0].join.is_none());
+    tokio::time::advance(Duration::from_secs(5)).await;
+    h.worlds.game_log(
+        "Client disconnected with reason: Received a registry entry that is unknown to this client.",
+    );
+    assert_eq!(
+        h.worlds.view().invites[0].join,
+        Some(WorldJoinStage::Failed {
+            failure: WorldJoinFailure::Mods
+        })
+    );
+    assert_eq!(mods_failures(&h), 1);
+
+    // Half a minute later the same words are another story.
+    h.worlds.force_join_stage(SESSION, Some(WorldJoinStage::In));
+    h.worlds.guest_event(SESSION, GuestEvent::GameEnded);
+    tokio::time::advance(Duration::from_secs(31)).await;
+    h.worlds
+        .game_log("Received unknown remote registry entries from server");
+    assert!(h.worlds.view().invites[0].join.is_none());
+    assert_eq!(mods_failures(&h), 1);
 }
 
 #[tokio::test]

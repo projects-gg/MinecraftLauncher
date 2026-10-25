@@ -174,6 +174,24 @@ export const PALETTE_WORDS = {
   },
   friends: { keywords: ["arkadaş", "arkadaşlar", "discord", "friends"] },
   addFriend: { keywords: ["arkadaş ekle", "kod", "davet", "PRJ"] },
+  // World sharing (HOST1): what players type for playing their own world together, the game's
+  // own "LAN'a aç" among them.
+  hostWorld: {
+    keywords: [
+      "arkadaşlarla oyna",
+      "arkadaşlarınla oyna",
+      "dünyamı aç",
+      "dünyayı aç",
+      "dünya paylaş",
+      "dünyamı paylaş",
+      "lan",
+      "lana aç",
+      "co-op",
+      "coop",
+      "host",
+    ],
+    related: ["birlikte", "multiplayer", "çok oyunculu"],
+  },
 
   // Settings
   performance: {

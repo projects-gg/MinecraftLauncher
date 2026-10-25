@@ -184,6 +184,10 @@ function BackupRow({
           <p className="flex gap-3 text-[12px] text-ash-300 tabular-nums">
             {showWorld && backup.createdAt ? <span>{formatWhen(backup.createdAt)}</span> : null}
             <span>{formatBytes(backup.sizeBytes)}</span>
+            {/* HOST1: the launcher took it before the world first opened to friends. */}
+            {backup.reason === "beforeSharing" ? (
+              <span className="min-w-0 truncate">{t("small9.backups.beforeSharing")}</span>
+            ) : null}
             {backup.valid ? null : (
               <span className="text-flare-400">{t("instance.worlds.backupInvalid")}</span>
             )}

@@ -178,6 +178,8 @@ function labelIndex(state: JoinButton): number {
       return 5;
     case "rejoin":
       return 6;
+    case "copy":
+      return 7;
   }
 }
 
@@ -216,6 +218,7 @@ export function WorldJoinButton({
     t("host.join.in"),
     t("host.join.retry"),
     t("host.join.rejoin"),
+    t("host.join.copyAction"),
   ];
   return (
     <Button

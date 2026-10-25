@@ -192,7 +192,7 @@ function VerdictCard({
   // Heard once a run ends (the rows are not announced one by one).
   const announced = shown.kind === "checking" ? "" : `${t("help.verdict.done")} ${headline}.`;
   return (
-    <div className="relative overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/45 px-4 py-3 ring-1 ring-white/7">
+    <div className="relative overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/45 px-4 py-2.5 ring-1 ring-white/7">
       <div className="flex items-center gap-3.5">
         <VerdictMark kind={shown.kind} />
         <div className="min-w-0 flex-1">
@@ -298,7 +298,8 @@ function HelpRow({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1, transition: enter(0.2) }}
       exit={{ opacity: 0, transition: leave(0.16) }}
-      className="flex min-h-[40px] items-center gap-3 border-white/6 border-t px-3.5 py-1.5 first:border-t-0"
+      // 36 px rows: the whole check fits the default 1200 x 712 window, footer included.
+      className="flex min-h-[36px] items-center gap-3 border-white/6 border-t px-3.5 py-1.5 first:border-t-0"
     >
       <Glyph state={state} />
       <span className="w-[150px] shrink-0 text-[13.5px] font-medium text-bone-50">{title}</span>
@@ -416,7 +417,7 @@ function GroupBlock({
       transition={{ layout: glide }}
       aria-labelledby={id}
     >
-      <div className="mb-1.5 flex min-h-[24px] items-center justify-between gap-4">
+      <div className="mb-1 flex min-h-[24px] items-center justify-between gap-4">
         <h3 id={id} className="text-[12.5px] font-medium text-ash-400">
           {t(`help.groups.${group}`)}
         </h3>
@@ -578,7 +579,7 @@ export function HelpSection() {
   const { end, below: stuck } = useContentBelow();
 
   return (
-    <div className="mt-3 space-y-4 pb-1">
+    <div className="mt-3 space-y-3 pb-1">
       {/* The failed launch first: it is why the player is here. */}
       <AnimatePresence initial={false}>
         {failure ? <LaunchNote key="failure" failure={failure} /> : null}
@@ -630,6 +631,14 @@ export function HelpSection() {
           aria-hidden
           className={cn(
             "pointer-events-none absolute inset-x-0 -top-6 bottom-0 bg-[linear-gradient(to_bottom,transparent,var(--color-obsidian-900)_21px)] transition-opacity duration-200",
+            stuck ? "opacity-100" : "opacity-0",
+          )}
+        />
+        {/* With rows under it, a hairline on the footer's edge says the list goes on there. */}
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-x-6 top-0 h-px bg-white/10 transition-opacity duration-200",
             stuck ? "opacity-100" : "opacity-0",
           )}
         />

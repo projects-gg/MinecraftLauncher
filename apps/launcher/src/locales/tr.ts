@@ -36,6 +36,7 @@ import { trSafety } from "./tr-safety";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
+import { trSmall9 } from "./tr-small9";
 import { trSocial } from "./tr-social";
 import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
@@ -73,6 +74,7 @@ export const tr = {
   homeLinks: trHomeLinks,
   tray: trTray,
   small7: trSmall7,
+  small9: trSmall9,
   crews: trCrews,
   chat: trChat,
   reports: trReports,
@@ -117,8 +119,6 @@ export const tr = {
     patchVersion: "{{pack}} {{version}}",
     seeAll: "Tamamını gör",
     nextEvent: "Sıradaki etkinlik",
-    eventLive: "Etkinlik sürüyor",
-    eventLeft: "kaldı",
     eventStarted: "{{when}} başladı",
     openInDiscord: "Discord'da aç",
     offlineBanner: "Çevrimdışısın. Kurulu oyunları oynayabilirsin.",
@@ -128,7 +128,7 @@ export const tr = {
     maintenanceUntilTomorrow: "Tahmini bitiş yarın {{time}}",
     statusPage: "Durum sayfası",
     dismissBanner: "Kapat",
-    moreEvents: "+{{count}} etkinlik",
+    moreEvents: "{{count}} etkinlik daha",
     otherEvents: "Diğer etkinlikler",
     eventRunning: "Sürüyor",
     eventEndsIn: "{{when}} kaldı",
@@ -147,7 +147,6 @@ export const tr = {
     patchNotes: "Yama notu",
     community: "Topluluk",
   },
-  countdown: { days: "gün", hours: "saat", minutes: "dakika", seconds: "saniye" },
   /** Short spans of time ("2 sa 14 dk", "38 dk", "45 sn") and download speed (lib/format). */
   units: {
     hoursMinutes: "{{hours}} sa {{minutes}} dk",

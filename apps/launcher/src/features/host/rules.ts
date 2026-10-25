@@ -219,6 +219,8 @@ export function hostRowAction(input: RowInput): HostRowAction {
 export type JoinButton =
   | { kind: "join" }
   | { kind: "retry" }
+  /** Mods were missing: "Kur ve katıl" (the way that fixes it, `retryWithCopy`). */
+  | { kind: "copy" }
   | { kind: "rejoin" }
   | { kind: "busy"; step: "preparing" | "opening" | "connecting"; percent?: number }
   | { kind: "in" };
@@ -256,7 +258,7 @@ export function joinButton(
     case "lost":
       return { kind: "rejoin" };
     case "failed":
-      return { kind: "retry" };
+      return join.failure === "mods" ? { kind: "copy" } : { kind: "retry" };
   }
 }
 
@@ -291,6 +293,14 @@ export function failureWords(failure: JoinFailure): {
     key: `host.join.failed.${failure}`,
     action: failure === "unreachable" ? "retry" : failure === "mods" ? "copy" : null,
   };
+}
+
+/**
+ * Why a join failed, on its invite row: the toast's words, short enough to sit beside the row's
+ * button (the toast may be long gone when the player looks). None while nothing failed.
+ */
+export function inviteFailureKey(join: JoinStage | undefined): string | null {
+  return join?.kind === "failed" ? `small9.join.failed.${join.failure}` : null;
 }
 
 export function refusalKey(why: InviteRefusal): string {
