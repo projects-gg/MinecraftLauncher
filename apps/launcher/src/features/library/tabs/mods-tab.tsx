@@ -37,19 +37,13 @@ import { JobStatus, useShownJob } from "@/features/content/parts";
 import { ProjectDialog } from "@/features/content/project-dialog";
 import { useContentScan } from "@/features/content/use-content";
 import { PageDropZone } from "@/features/drop/page-zone";
-import { SetBadgeChip } from "@/features/modsets/parts";
 import { api, type InstalledContent, type InstanceDetail, type ModEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
-import { useIncomingMods } from "../incoming-mods";
 import { TabEmpty } from "../parts";
-import { IncomingModsList, IncomingModsSkeleton, PackItemChip } from "./incoming-mods-list";
 import { modRowKeys } from "./mod-keys";
 
-/**
- * A vanilla instance's Modlar tab (and mod center): it cannot load mods; a new instance with a
- * loader can.
- */
+/** A vanilla instance's Modlar tab: it cannot load mods; a new instance with a loader can. */
 export function VanillaModsEmpty() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -80,7 +74,6 @@ function ModRow({
   onUpdate,
   onRemove,
   onCancel,
-  onPackItem,
   busy,
   ref,
 }: {
@@ -92,8 +85,6 @@ function ModRow({
   onUpdate: () => void;
   onRemove: () => void;
   onCancel: () => void;
-  /** A recommended mod of the pack: its chip opens the mod center. */
-  onPackItem?: () => void;
   /** A bulk update is running: single updates wait. */
   busy: boolean;
   ref?: Ref<HTMLLIElement>;
@@ -139,14 +130,10 @@ function ModRow({
             <span className="truncate text-[14px] font-semibold text-bone-50">{mod.name}</span>
           )}
           <span className="shrink-0 text-[12px] text-ash-300 tabular-nums">{mod.version}</span>
-          {fromPack && onPackItem ? (
-            <PackItemChip onClick={onPackItem} />
-          ) : fromPack ? (
-            <Chip className="shrink-0">{t("instance.mods.fromPack")}</Chip>
-          ) : mod.modSet ? (
-            <SetBadgeChip badge={mod.modSet} />
-          ) : null}
-          {entry?.update && !fromPack && !mod.modSet ? (
+          {/* A pack's file outside the official pack's instances (their pack mods are the
+              recommended ones), kept by a copy or an older launcher: still listed, not removable. */}
+          {fromPack ? <Chip className="shrink-0">{t("instance.mods.fromPack")}</Chip> : null}
+          {entry?.update && !fromPack ? (
             <Chip tone="gold" className="shrink-0">
               {t("content.updates.newVersion", { version: entry.update.versionNumber })}
             </Chip>
@@ -193,21 +180,21 @@ function ModRow({
   );
 }
 
+/**
+ * "Kendi modların" in the "Modlar" tab: every file in the mods folder that neither the official
+ * pack (its recommended mods, switched in "Önerilenler") nor a ready-made set (its section)
+ * installed. In an instance without the official pack that is every mod but the sets'.
+ */
 export function ModsTab({
   instance,
   onBrowse,
-  ownOnly = false,
   onMigrate,
-  onOpenModCenter,
 }: {
   instance: InstanceDetail;
+  /** "Mod bul": the tab's "Keşfet". */
   onBrowse: () => void;
-  /** Only the player's own mods ("Kendi modların" in the mod center). */
-  ownOnly?: boolean;
   /** "Başka sürüme taşı". */
   onMigrate?: () => void;
-  /** Opens the mod center (recommended mods of the pack). */
-  onOpenModCenter?: () => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -270,23 +257,23 @@ export function ModsTab({
   };
 
   const { isHidden } = removal;
-  // Every mod of the list (own ones only in the mod center), then the ones the search keeps.
+  // The player's own mods, then the ones the search keeps. A ready-made set's files live in
+  // "Setler"; the official pack's in "Önerilenler" (only its instances have that section).
+  const managed = instance.managed;
   const listed = useMemo(
     () =>
       instance.mods
         .filter(
           (m) =>
-            !ownOnly ||
-            // A ready-made set's files live in the "Setler" section.
+            !m.modSet &&
             !(
-              m.fromPack ||
-              m.modSet ||
-              entries.get(m.fileName.replace(/\.disabled$/, ""))?.fromPack
+              managed &&
+              (m.fromPack || entries.get(m.fileName.replace(/\.disabled$/, ""))?.fromPack)
             ),
         )
         .filter((m) => !isHidden(m.fileName))
         .sort((a, b) => a.name.localeCompare(b.name, "tr")),
-    [instance.mods, ownOnly, entries, isHidden],
+    [instance.mods, managed, entries, isHidden],
   );
   const mods = useMemo(
     () => (query.trim() ? listed.filter((m) => matchesQuery(m.name, query)) : listed),
@@ -307,22 +294,6 @@ export function ModsTab({
   const arriving = wasEmpty.current && listed.length > 0;
   useEffect(() => {
     wasEmpty.current = listed.length === 0;
-  });
-  // Before the first download the pack's mods are on their way (incoming-mods.ts): they are
-  // listed under the overview's words, in place of the empty drop zone or under the player's
-  // own mods. `undefined` while the mod center is asked; never in "Kendi modların".
-  const incoming = useIncomingMods(instance, !ownOnly);
-  const hasIncoming = (incoming?.length ?? 0) > 0;
-  const incomingShown =
-    incoming && query.trim()
-      ? incoming.filter((item) => matchesQuery(item.title, query))
-      : (incoming ?? []);
-  // Shown once the mod center answered, the list fades in where it stood (once: a search swaps
-  // it in place).
-  const asked = useRef(false);
-  if (incoming === undefined) asked.current = true;
-  useEffect(() => {
-    if (incoming !== undefined) asked.current = false;
   });
 
   if (!modded) return <VanillaModsEmpty />;
@@ -368,7 +339,7 @@ export function ModsTab({
         <Button
           variant="ghost"
           icon={<ArrowsClockwise size={17} />}
-          disabled={scan.isFetching || instance.mods.length === 0}
+          disabled={scan.isFetching || listed.length === 0}
           onClick={() => void checkUpdates()}
         >
           <SwapLabel
@@ -410,61 +381,43 @@ export function ModsTab({
         </div>
       ) : null}
 
-      {listed.length === 0 && incoming === undefined ? (
-        <IncomingModsSkeleton />
-      ) : listed.length === 0 && !hasIncoming ? (
+      {listed.length === 0 ? (
         <PageDropZone
           kind="mod"
-          label={ownOnly ? t("modCenter.own.emptyTitle") : t("instance.mods.emptyTitle")}
+          label={t("modCenter.own.emptyTitle")}
           actions={browseButton}
           className="-mt-1"
         />
-      ) : mods.length === 0 && incomingShown.length === 0 ? (
+      ) : mods.length === 0 ? (
         noMatch
       ) : (
-        <>
-          {mods.length > 0 ? (
-            // Searching swaps the list in place (no fades and glides while typing, as in the mod
-            // center); removals within it animate.
-            <ul key={query.trim()} className={cn("space-y-0.5", arriving && "panel-in")}>
-              <AnimatePresence initial={false} mode="popLayout">
-                {mods.map((mod) => {
-                  const entry = entryOf(mod);
-                  const projectId = mod.projectId ?? entry?.projectId;
-                  const key = projectJobKey(instance.id, projectId ?? mod.fileName);
-                  return (
-                    <ModRow
-                      // Without ".disabled": switching a mod off renames its file, and the row
-                      // stays (two copies of one mod keep a row each, mod-keys.ts).
-                      key={rowKeys.get(mod.fileName) ?? mod.fileName}
-                      mod={mod}
-                      entry={entry}
-                      job={jobs[key]}
-                      onToggle={(enabled) => toggle.mutate({ mod, enabled })}
-                      onOpen={projectId ? () => setOpened({ projectId, mod }) : undefined}
-                      onUpdate={() => entry && void actions.update([entry])}
-                      onRemove={() => removal.remove(mod.fileName, mod.name)}
-                      onCancel={() => actions.cancel(key)}
-                      onPackItem={mod.itemId && onOpenModCenter ? onOpenModCenter : undefined}
-                      busy={Boolean(shownBulkJob)}
-                    />
-                  );
-                })}
-              </AnimatePresence>
-            </ul>
-          ) : null}
-          {incomingShown.length > 0 ? (
-            // Keyed by the search like the list above: it swaps in place while typing, and
-            // glides only when mods are added or removed above it.
-            <IncomingModsList
-              key={query.trim()}
-              items={incomingShown}
-              fadeIn={asked.current}
-              onOpenModCenter={onOpenModCenter}
-              className={mods.length > 0 ? "mt-6" : undefined}
-            />
-          ) : null}
-        </>
+        // Searching swaps the list in place (no fades and glides while typing, as in the
+        // recommended list); removals within it animate.
+        <ul key={query.trim()} className={cn("space-y-0.5", arriving && "panel-in")}>
+          <AnimatePresence initial={false} mode="popLayout">
+            {mods.map((mod) => {
+              const entry = entryOf(mod);
+              const projectId = mod.projectId ?? entry?.projectId;
+              const key = projectJobKey(instance.id, projectId ?? mod.fileName);
+              return (
+                <ModRow
+                  // Without ".disabled": switching a mod off renames its file, and the row stays
+                  // (two copies of one mod keep a row each, mod-keys.ts).
+                  key={rowKeys.get(mod.fileName) ?? mod.fileName}
+                  mod={mod}
+                  entry={entry}
+                  job={jobs[key]}
+                  onToggle={(enabled) => toggle.mutate({ mod, enabled })}
+                  onOpen={projectId ? () => setOpened({ projectId, mod }) : undefined}
+                  onUpdate={() => entry && void actions.update([entry])}
+                  onRemove={() => removal.remove(mod.fileName, mod.name)}
+                  onCancel={() => actions.cancel(key)}
+                  busy={Boolean(shownBulkJob)}
+                />
+              );
+            })}
+          </AnimatePresence>
+        </ul>
       )}
 
       <ProjectDialog

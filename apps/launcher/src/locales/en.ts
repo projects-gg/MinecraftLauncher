@@ -2183,8 +2183,7 @@ export const en: DeepPartial<Strings> = {
     listFailed: "Couldn't read the data packs.",
   },
   modCenter: {
-    tab: "Mod center",
-    sectionsLabel: "Mod center sections",
+    sectionsLabel: "Mod sections",
     sections: {
       recommended: "Recommended",
       recommendedNew: "Recommended ({{count}} new)",
@@ -2195,7 +2194,7 @@ export const en: DeepPartial<Strings> = {
       change: "Change version",
       changeFor: "Change Minecraft version ({{version}})",
     },
-    loadFailed: "Couldn't open the mod center",
+    loadFailed: "Couldn't load the mods",
     packCaption: "{{name}} {{version}}, Minecraft {{minecraft}}",
     search: "Search recommended mods",
     categoriesLabel: "Category",
@@ -2312,11 +2311,7 @@ export const en: DeepPartial<Strings> = {
       reset: "The mods folder was empty; your chosen mods were installed again.",
       issues: "Some mod files couldn't be read.",
       issuesToo: "Some files couldn't be read.",
-      details: "Mod center",
-    },
-    fromMods: {
-      chip: "Recommended",
-      open: "Show in mod center",
+      details: "Show mods",
     },
     own: {
       migrate: "Move to another version",
@@ -2365,7 +2360,7 @@ export const en: DeepPartial<Strings> = {
       readyBack: "Minecraft {{version}} is back",
       carriedList: "Choices brought along",
       newList: "New recommendations",
-      openModCenter: "See in mod center",
+      openModCenter: "See in Recommended",
       notSynced: "Mods will download when you start the game.",
       ownTitle: "{{count}} of your mods stayed in the {{version}} set",
       ownTitle_one: "One of your mods stayed in the {{version}} set",
@@ -2684,7 +2679,7 @@ export const en: DeepPartial<Strings> = {
     },
     toast: {
       warnings: "Some mods may not work.",
-      details: "Mod center",
+      details: "Show mods",
     },
   },
 };
