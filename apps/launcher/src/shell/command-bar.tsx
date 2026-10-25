@@ -488,17 +488,19 @@ export function CommandBar() {
 
   // A launch installs the instance and records when and how long it was played: once the game
   // starts and once the launch or the game ends, the bar, the library and "Devam et" read it
-  // again instead of keeping "Henüz oynanmadı" until their next refresh.
-  const lastKind = useRef(phase.kind);
+  // again instead of keeping "Henüz oynanmadı" until their next refresh. The launch itself, not
+  // this account's view of it: another account's game ends too, and switching accounts is no end.
+  const launchKind = useLaunch((s) => s.phase.kind);
+  const lastKind = useRef(launchKind);
   useEffect(() => {
     const was = lastKind.current;
-    lastKind.current = phase.kind;
-    if (was === phase.kind || was === "idle") return;
-    if (phase.kind !== "running" && phase.kind !== "idle") return;
+    lastKind.current = launchKind;
+    if (was === launchKind || was === "idle") return;
+    if (launchKind !== "running" && launchKind !== "idle") return;
     for (const queryKey of [["instances"], ["instance"], ["resume"]]) {
       void queryClient.invalidateQueries({ queryKey });
     }
-  }, [phase.kind, queryClient]);
+  }, [launchKind, queryClient]);
 
   const selectedLaunchId = selected?.id;
   useEffect(() => {
