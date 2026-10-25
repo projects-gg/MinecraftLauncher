@@ -420,6 +420,10 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
         case "packVersionDropped":
           announceVersionDropped(instanceId, event.minecraft, event.recommended);
           break;
+        case "worldFromTitle":
+          // The game opens on its main menu instead of the world (OVL-FIX): said once, why and what to do.
+          toast(i18n.t("worldEntry.fromTitle", { mods: event.mods.join(", ") }));
+          break;
       }
     };
     try {

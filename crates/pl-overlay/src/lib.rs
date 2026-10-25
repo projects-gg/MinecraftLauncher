@@ -38,7 +38,7 @@ pub use hub::{
 };
 pub use server::{
     BYE_TIMEOUT, Bridge, BridgeEvent, ConnId, Control, Endpoint, LANG_ARG, PORT_ARG, TOKEN_ARG,
-    is_secret_jvm_arg,
+    WORLD_ARG, is_secret_jvm_arg, world_jvm_arg,
 };
 pub use session::{CONNECT_WAIT, ConnectOutcome, PeopleChange, SocialActions};
 pub use token::SessionToken;
