@@ -102,7 +102,7 @@ export const enHost = {
     rejoin: "Rejoin",
     missing_one: "Couldn't find {{count}} mod; you may have trouble getting in.",
     missing_other: "Couldn't find {{count}} mods; you may have trouble getting in.",
-    copyAction: "Copy their instance",
+    copyAction: "Copy and join",
     failed: {
       full: "The world is full.",
       closed: "{{name}} closed their world.",

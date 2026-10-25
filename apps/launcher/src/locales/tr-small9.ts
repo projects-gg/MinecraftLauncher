@@ -6,20 +6,29 @@ export const trSmall9 = {
     beforeSharing: "Arkadaşlarına açılmadan önce",
   },
   join: {
-    /** A world invite's row after the game turned away for mods it lacks ("Kurulumu kopyala"). */
-    missingMods: "Bazı modlar sende yok.",
-    /** The row's short words after the host's pack was out of date (the toast says the rest). */
-    packOld: "Bu dünyanın paketi eski.",
-    /** Home's line for that invite: the goal, the friend, and why its button copies the install
-     * (the name stays without a suffix: "ile" fits every name). */
+    /**
+     * A world invite's second line after its join failed, under the friend's name and beside
+     * "Tekrar dene" or "Kopyala ve katıl": the toast's words, short, without a full stop like the
+     * list's other lines (the name above is the subject where one is needed).
+     */
+    failed: {
+      full: "Dünya dolu",
+      closed: "Dünyasını kapattı",
+      removed: "Dünyadan çıkarıldın",
+      unreachable: "Bağlanılamadı",
+      hostPackOld: "Oyunu yeniden açmalı",
+      mods: "Bazı modlar sende yok",
+    },
+    /** Home's line for an invite whose join met missing mods: the goal, the friend, and why its
+     * button copies the install (the name stays without a suffix: "ile" fits every name). */
     homeMissingMods: "Katılmak için {{name}} ile aynı modlar gerekiyor",
   },
   palette: {
     /** Ctrl+K: the Worlds tab of the command bar's instance, where "Arkadaşlarınla oyna" is. */
     openWorld: "Dünyanı arkadaşlarına aç",
-    /** Ctrl+K while the player's world is open: its sheet ("açık", so it never reads as the
-     * Worlds tab beside it). */
-    manageWorld: "Açık dünyanı yönet",
+    /** Ctrl+K while the player's world is open to friends: its sheet (never "açık dünya", the
+     * game genre, and not the Worlds tab beside it). */
+    manageWorld: "Paylaştığın dünyayı yönet",
   },
   settings: {
     /** Settings → Arkadaşlar: the feature by its name, with what it shares and what it keeps. */

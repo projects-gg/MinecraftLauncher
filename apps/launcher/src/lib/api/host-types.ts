@@ -138,7 +138,7 @@ export type JoinFailure =
   | "unreachable"
   /** The host's pack is older than the one the player's content names. */
   | "hostPackOld"
-  /** After joining, the game's log names mods the player lacks ("Kurulumu kopyala"). */
+  /** After joining, the game's log names mods the player lacks ("Kopyala ve katıl"). */
   | "mods";
 
 /** A friend's world invite: only invitees ever learn that the world is open (host1.md §1.5). */
@@ -244,7 +244,7 @@ export interface HostApi {
   meetOnProjects(friends: string[]): Promise<void>;
   /**
    * "Katıl" on a world invite, also "Tekrar dene" and "Yeniden katıl". `copy`: a copy of the
-   * host's install even where another install would do ("Kurulumu kopyala"), with its name in the
+   * host's install even where another install would do ("Kopyala ve katıl"), with its name in the
    * player's language.
    */
   join(session: string, options?: { copy?: { name: string } }): Promise<void>;

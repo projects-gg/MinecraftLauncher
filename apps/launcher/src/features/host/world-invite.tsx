@@ -3,7 +3,7 @@
 // "Katıl" says where the join is in place (parts.tsx); while it is under way "Kapat" keeps its
 // place but waits, so nothing beside it moves. A right click (Shift+F10, the menu key) offers the
 // row's own actions, then the friend's whole menu (FIX2).
-import { Copy, Play, X } from "@phosphor-icons/react";
+import { Play, X } from "@phosphor-icons/react";
 import { ContextMenu, IconButton, type MenuItem } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import { openMenuFromKey } from "@/features/social/menu-key";
@@ -19,8 +19,8 @@ import { useHostUi } from "./store";
 function useInviteItems(invite: WorldInvite): Array<MenuItem | null> {
   const { t } = useTranslation();
   const active = joinActive(invite.join);
-  // After the game turned away for missing mods the row's button is "Kurulumu kopyala": the menu
-  // names the same action the same way.
+  // After the game turned away for missing mods the row's button is "Kopyala ve katıl": the menu
+  // names the same action the same way (it still ends in joining, hence the same mark).
   const copy = retryWithCopy(invite.join);
   const people = usePeopleItems(
     [{ id: invite.from, name: invite.name, avatar: invite.avatar, avatarUrl: invite.avatarUrl }],
@@ -29,7 +29,7 @@ function useInviteItems(invite: WorldInvite): Array<MenuItem | null> {
   return [
     {
       label: copy ? t("host.join.copyAction") : t("social.actions.join"),
-      icon: copy ? <Copy size={16} /> : <Play size={16} />,
+      icon: <Play size={16} />,
       disabled: active,
       onSelect: () => pressJoin(invite),
     },
@@ -67,7 +67,7 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
   const { t } = useTranslation();
   const items = useInviteItems(invite);
   const active = joinActive(invite.join);
-  // A failed join says why beside its button ("Tekrar dene", or "Kurulumu kopyala" after
+  // A failed join says why beside its button ("Tekrar dene", or "Kopyala ve katıl" after
   // missing mods): the toast that said it may be gone when the player looks.
   const failed = inviteFailureKey(invite.join);
   return (

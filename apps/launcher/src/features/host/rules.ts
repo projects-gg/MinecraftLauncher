@@ -219,7 +219,7 @@ export function hostRowAction(input: RowInput): HostRowAction {
 export type JoinButton =
   | { kind: "join" }
   | { kind: "retry" }
-  /** Mods were missing: "Kurulumu kopyala" (the way that fixes it, `retryWithCopy`). */
+  /** Mods were missing: "Kopyala ve katıl" (the way that fixes it, `retryWithCopy`). */
   | { kind: "copy" }
   | { kind: "rejoin" }
   | { kind: "busy"; step: "preparing" | "opening" | "connecting"; percent?: number }
@@ -300,15 +300,7 @@ export function failureWords(failure: JoinFailure): {
  * button (the toast may be long gone when the player looks). None while nothing failed.
  */
 export function inviteFailureKey(join: JoinStage | undefined): string | null {
-  if (join?.kind !== "failed") return null;
-  switch (join.failure) {
-    case "mods":
-      return "small9.join.missingMods";
-    case "hostPackOld":
-      return "small9.join.packOld";
-    default:
-      return `host.join.failed.${join.failure}`;
-  }
+  return join?.kind === "failed" ? `small9.join.failed.${join.failure}` : null;
 }
 
 export function refusalKey(why: InviteRefusal): string {

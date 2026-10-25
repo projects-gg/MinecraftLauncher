@@ -649,7 +649,7 @@ impl Worlds {
     /// A line of the running game's log (`pl_mc::launch::GameEvent::Line`). When it says a
     /// friend's world holds mods the game lacks (Fabric's registry sync, [`crate::mismatch`]),
     /// the join the game is in, or left a moment ago, ends with `mods`: "Bu dünyanın bazı modları
-    /// sende yok." and "Kurulumu kopyala" (PROTOCOL.md §10.2 step 7). Its session is left; the
+    /// sende yok." and "Kopyala ve katıl" (PROTOCOL.md §10.2 step 7). Its session is left; the
     /// copy joins anew. Any other line costs a few substring checks and no lock.
     pub fn game_log(&self, line: &str) {
         if !crate::mismatch::is_mod_mismatch(line) {
@@ -2136,7 +2136,7 @@ impl Worlds {
     }
 
     /// "Katıl", "Tekrar dene", "Yeniden katıl"; `copy`: a copy of the host's install even where
-    /// another would do ("Kurulumu kopyala"), named so.
+    /// another would do ("Kopyala ve katıl"), named so.
     pub fn join(&self, session: &str, copy: Option<String>) {
         self.start_join(session, copy, false);
     }
@@ -2493,7 +2493,7 @@ impl Worlds {
                 None => None,
             };
             let decision = decide(manifest, &installs, latest.as_deref(), host, refreshed);
-            // "Kurulumu kopyala": a copy even where an install would do.
+            // "Kopyala ve katıl": a copy even where an install would do.
             let forced = copy.is_some()
                 && matches!(decision, Decision::Use { .. } | Decision::UpdatePack { .. });
             let decision = if forced {

@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import type {
   HostSession,
   HostView,
+  JoinFailure,
   JoinStage,
   WorldGuest,
   WorldInvite,
 } from "@/lib/api/host-types";
 import type { Friend, SocialTeam, TeamMember } from "@/lib/api/social-types";
+import { enSmall9 } from "@/locales/en-small9";
+import { trSmall9 } from "@/locales/tr-small9";
 import type { LaunchPhase } from "@/stores/launch";
 import {
   defaultMode,
@@ -302,19 +305,24 @@ describe("Katıl", () => {
     expect(retryWithCopy(undefined)).toBe(false);
   });
 
-  it("says on the invite why its join failed", () => {
+  it("says on the invite why its join failed, for every failure", () => {
     expect(inviteFailureKey(undefined)).toBeNull();
     expect(inviteFailureKey({ kind: "in" })).toBeNull();
     expect(inviteFailureKey({ kind: "lost" })).toBeNull();
-    expect(inviteFailureKey({ kind: "failed", failure: "full" })).toBe("host.join.failed.full");
-    expect(inviteFailureKey({ kind: "failed", failure: "unreachable" })).toBe(
-      "host.join.failed.unreachable",
-    );
-    // The row's short words where the toast's sentence would not fit beside the button.
-    expect(inviteFailureKey({ kind: "failed", failure: "mods" })).toBe("small9.join.missingMods");
-    expect(inviteFailureKey({ kind: "failed", failure: "hostPackOld" })).toBe(
-      "small9.join.packOld",
-    );
+    const failures: JoinFailure[] = [
+      "full",
+      "closed",
+      "removed",
+      "unreachable",
+      "hostPackOld",
+      "mods",
+    ];
+    for (const failure of failures) {
+      expect(inviteFailureKey({ kind: "failed", failure })).toBe(`small9.join.failed.${failure}`);
+      // The row's own short words exist in both languages (the toast's would not fit).
+      expect(trSmall9.join.failed[failure]).toBeTruthy();
+      expect(enSmall9.join.failed[failure]).toBeTruthy();
+    }
   });
 
   it("asks one question at a time, the oldest first", () => {

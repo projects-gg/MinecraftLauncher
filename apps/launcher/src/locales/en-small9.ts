@@ -4,13 +4,19 @@ export const enSmall9 = {
     beforeSharing: "Before opening to friends",
   },
   join: {
-    missingMods: "You're missing some mods.",
-    packOld: "This world's pack is out of date.",
+    failed: {
+      full: "The world is full",
+      closed: "Closed their world",
+      removed: "You were removed",
+      unreachable: "Couldn't connect",
+      hostPackOld: "They need to restart the game",
+      mods: "You're missing some mods",
+    },
     homeMissingMods: "You need the same mods as {{name}} to join",
   },
   palette: {
     openWorld: "Open your world to friends",
-    manageWorld: "Manage your open world",
+    manageWorld: "Manage your shared world",
   },
   settings: {
     worlds: "Open your world to friends",

@@ -103,7 +103,7 @@ export const trHost = {
     retry: "Tekrar dene",
     rejoin: "Yeniden katıl",
     missing: "{{count}} mod bulunamadı; girerken sorun çıkabilir.",
-    copyAction: "Kurulumu kopyala",
+    copyAction: "Kopyala ve katıl",
     failed: {
       full: "Dünya dolu.",
       closed: "{{name}} dünyayı kapattı.",

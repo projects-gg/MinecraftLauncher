@@ -144,7 +144,7 @@ export function copyOf(invite: Pick<WorldInvite, "name">): { name: string } {
   return { name: i18n.t("host.copy.name", { name: invite.name }) };
 }
 
-/** "Kurulumu kopyala" after the game said mods were missing. */
+/** "Kopyala ve katıl" after the game said mods were missing. */
 export function copyAndJoin(session: string) {
   const invite = useHostUi.getState().view.invites.find((one) => one.session === session);
   if (!invite) return;
