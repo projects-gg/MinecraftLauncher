@@ -14,6 +14,7 @@ pub mod feed;
 pub mod host;
 pub mod import;
 pub mod instances;
+pub mod items;
 pub mod java;
 pub mod launch;
 pub mod library;
