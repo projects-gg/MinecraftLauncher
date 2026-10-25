@@ -46,6 +46,7 @@ const INDEX: VanillaAtlasIndex = {
       kind: "flat",
       layers: [{ rect: [96, 0, 16, 16] }, { rect: [112, 0, 16, 16], tint: { source: "dye" } }],
     },
+    "minecraft:coal": { kind: "flat", layers: [{ rect: [128, 0, 16, 16] }], dark: true },
   },
 };
 
@@ -413,14 +414,21 @@ describe("ItemSprite", () => {
     expect(html).toMatch(/mask-position:-48px 0px, -64px 0px/);
   });
 
-  it("edges a dark icon by one hard texel, which a light surface can turn off", () => {
+  it("edges a dark icon by one hard pixel of its own grid, which a light surface can turn off", () => {
     const edge = (t: number) =>
       [`${t}px 0`, `-${t}px 0`, `0 ${t}px`, `0 -${t}px`]
         .map((offset) => `drop-shadow(${offset} 0 var(--pl-item-rim, #2c2733))`)
         .join(" ");
-    expect(render({ id: "obsidian", size: 32, art: art() })).toContain(`filter:${edge(2)}`);
+    // A flat item: one texel (16 to a side).
+    expect(render({ id: "coal", size: 32, art: art() })).toContain(`filter:${edge(2)}`);
+    expect(render({ id: "coal", size: 16, art: art() })).toContain(`filter:${edge(1)}`);
+    expect(render({ id: "coal", size: 48, art: art() })).toContain(`filter:${edge(3)}`);
+    // A 3D icon: one pixel of its 32 px drawing, at least one CSS pixel (a texel wide ring sat
+    // around blocks and heads like a plate).
     expect(render({ id: "obsidian", size: 16, art: art() })).toContain(`filter:${edge(1)}`);
-    expect(render({ id: "obsidian", size: 48, art: art() })).toContain(`filter:${edge(3)}`);
+    expect(render({ id: "obsidian", size: 32, art: art() })).toContain(`filter:${edge(1)}`);
+    expect(render({ id: "obsidian", size: 48, art: art() })).toContain(`filter:${edge(1)}`);
+    expect(render({ id: "obsidian", size: 64, art: art() })).toContain(`filter:${edge(2)}`);
     expect(render({ id: "stone", art: art() })).not.toContain("drop-shadow");
   });
 
@@ -433,6 +441,64 @@ describe("ItemSprite", () => {
     expect(html).not.toMatch(/fill="#/);
     // The block's three faces, 14 texels wide like the game's: its sides parted by the near edge.
     expect(html).toContain("M1 7h6v1h-6zM8 7h7v1h-7z");
+  });
+
+  it("stands in for tools, weapons, armour and potions with a sack, never an empty-slot shape", () => {
+    // The game draws swords, pickaxes, armour and bottles as empty-slot hints: those items, and
+    // anything else without a shape of its own, show one tied sack.
+    const path = (id: string) => render({ id }).match(/ d="([^"]+)"/)?.[1];
+    const sack = path("minecraft:unknown_thing");
+    expect(sack).toBeDefined();
+    for (const id of [
+      "projects:mystery_sword",
+      "projects:mystery_pickaxe",
+      "projects:mystery_chestplate",
+      "projects:mystery_boots",
+      "projects:mystery_potion",
+    ]) {
+      expect(path(id)).toBe(sack);
+    }
+    // Its tied neck: two cord ends, the knot, a two-texel neck.
+    expect(sack).toContain("M5 1h2v1h-2zM9 1h2v1h-2zM6 2h4v1h-4zM7 3h2v1h-2z");
+    // Blocks, food and books keep their own shapes.
+    for (const id of [
+      "projects:unknown_block",
+      "projects:mystery_apple",
+      "projects:mystery_book",
+    ]) {
+      expect(path(id)).not.toBe(sack);
+    }
+  });
+
+  it("keeps the stand-ins' lower right, where the game draws the stack count, free of inner lines", () => {
+    // The silhouette's cells, from the path's runs ("M<x> <y>h<length>...").
+    const grid = (id: string) => {
+      const filled = new Set<string>();
+      const d = render({ id }).match(/ d="([^"]+)"/)?.[1] ?? "";
+      for (const [, x, y, w] of d.matchAll(/M(\d+) (\d+)h(\d+)/g)) {
+        for (let i = 0; i < Number(w); i++) filled.add(`${Number(x) + i},${y}`);
+      }
+      return (x: number, y: number) => filled.has(`${x},${y}`);
+    };
+    for (const id of [
+      "projects:unknown_block",
+      "projects:mystery_pickaxe",
+      "projects:mystery_sword",
+      "projects:mystery_chestplate",
+      "projects:mystery_apple",
+      "projects:mystery_potion",
+      "projects:mystery_book",
+      "minecraft:unknown_thing",
+    ]) {
+      const at = grid(id);
+      // Rows 9-15, columns 6-15: no gap with the silhouette left, right and above it.
+      for (let y = 9; y < 16; y++) {
+        for (let x = 6; x < 15; x++) {
+          const inner = !at(x, y) && at(x - 1, y) && at(x + 1, y) && at(x, y - 1);
+          expect(inner, `${id} at ${x},${y}`).toBe(false);
+        }
+      }
+    }
   });
 
   it("draws Projects' art from the overlay atlas on its servers", () => {

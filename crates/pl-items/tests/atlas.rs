@@ -90,9 +90,9 @@ fn jar() -> MemSource {
         "sword",
         r#"{"model":{"type":"minecraft:model","model":"minecraft:item/sword"}}"#,
     );
-    // A potion: a tinted liquid layer under the bottle.
+    // A potion: a tinted liquid layer under a see-through bottle.
     texture(&mut s, "item/liquid", 16, 16, [255, 255, 255, 255]);
-    texture(&mut s, "item/bottle", 16, 16, [0, 0, 0, 0]);
+    texture(&mut s, "item/bottle", 16, 16, [255, 255, 255, 100]);
     model(
         &mut s,
         "item/potion",
@@ -285,6 +285,21 @@ fn jar() -> MemSource {
     flat(&mut s, "netherite_helmet", [22, 20, 24, 255]);
     flat(&mut s, "netherite_sword", [70, 66, 70, 255]);
     flat(&mut s, "iron_sword", [200, 200, 200, 255]);
+    // Uniformly dim grey: its edge is above the near-black line (L* 20), but the whole of it stands
+    // out from the darkest card by 1.33:1 only, like an anvil.
+    flat(&mut s, "anvil", [48, 48, 48, 255]);
+    // A dyed piece whose default colour is near-black: the server colours it.
+    texture(&mut s, "item/leather_helmet", 16, 16, [40, 40, 40, 255]);
+    model(
+        &mut s,
+        "item/leather_helmet",
+        r#"{"parent":"item/generated","textures":{"layer0":"item/leather_helmet"}}"#,
+    );
+    item(
+        &mut s,
+        "leather_helmet",
+        r#"{"model":{"type":"minecraft:model","model":"minecraft:item/leather_helmet","tints":[{"type":"minecraft:dye","default":-6265536}]}}"#,
+    );
     // See-through black glass: the slot shows through it.
     texture(
         &mut s,
@@ -438,11 +453,13 @@ fn jar() -> MemSource {
         "red_stained_glass_pane",
         r#"{"model":{"type":"minecraft:model","model":"minecraft:item/red_stained_glass_pane"}}"#,
     );
-    // The game's glint texture.
+    // The game's glint texture: a thin streak every 16 diagonals, closer together than the about
+    // 27 the still frame spans (14 texels turned by 10°), so a streak crosses the frame wherever
+    // its origin is tuned to.
     let mut glint = Image::new(128, 128);
     for y in 0..128 {
         for x in 0..128 {
-            let streak = if (x + y) % 32 < 3 { 255 } else { 120 };
+            let streak = if (x + y) % 16 == 0 { 255 } else { 120 };
             glint.put(x, y, [streak / 2, streak / 4, streak, 255]);
         }
     }
@@ -551,9 +568,9 @@ fn hides_a_dye_layer_until_dyed() {
 #[test]
 fn marks_dark_icons() {
     let atlas = build_atlas(&mut jar(), &options()).unwrap();
-    // A near-black outline, also see-through.
+    // A near-black outline; a uniformly dim one (an anvil).
     assert!(atlas.index.icons["minecraft:obsidian"].dark);
-    assert!(atlas.index.icons["minecraft:black_stained_glass"].dark);
+    assert!(atlas.index.icons["minecraft:anvil"].dark);
     // Outlines that read on a dark slot: dark grey with highlights, a saturated dark red, a lit
     // block, a light item, a near-black red (a grey edge around it would look like a sticker).
     assert!(!atlas.index.icons["minecraft:netherite_ingot"].dark);
@@ -563,6 +580,9 @@ fn marks_dark_icons() {
     assert!(!atlas.index.icons["minecraft:redstone"].dark);
     // Near-black, but its holes would fill in under an edge.
     assert!(!atlas.index.icons["minecraft:dark_leaves"].dark);
+    // Near-black see-through glass shows what it lies on; a dyed piece is the server's colour.
+    assert!(!atlas.index.icons["minecraft:black_stained_glass"].dark);
+    assert!(!atlas.index.icons["minecraft:leather_helmet"].dark);
     // A set is dark as a whole: the helmet takes the sword of its material along, not another's.
     assert!(atlas.index.icons["minecraft:netherite_helmet"].dark);
     assert!(atlas.index.icons["minecraft:netherite_sword"].dark);
@@ -735,24 +755,60 @@ fn places_every_icon_on_even_pixels() {
 }
 
 #[test]
-fn keeps_see_through_pixels_see_through() {
-    // Stained glass shows whatever slot it is drawn on, as in the game; laid over a fixed grey it
-    // read as concrete on our dark slots.
+fn lays_see_through_pixels_over_the_slot_grey_at_half_strength() {
+    // Stained glass stays see-through, laid over half of the game's slot grey: on that grey it
+    // looks exactly as in the game, and on our dark slots it lets light through instead of turning
+    // into a dull dark block (over the full grey it read as concrete there).
     let atlas = build_atlas(&mut jar(), &options()).unwrap();
     let image = Image::decode_png(&atlas.png).unwrap();
-    for id in [
-        "minecraft:red_stained_glass",
-        "minecraft:red_stained_glass_pane",
-    ] {
+    let pixels = |id: &str| -> Vec<[u8; 4]> {
         let [x, y, w, h] = atlas.index.icons[id].layers[0].rect;
-        let pixels: Vec<[u8; 4]> = (y..y + h)
+        (y..y + h)
             .flat_map(|py| (x..x + w).map(move |px| (px, py)))
             .map(|(px, py)| image.get(px, py))
             .filter(|p| p[3] > 0)
-            .collect();
-        assert!(!pixels.is_empty(), "{id}");
-        assert!(pixels.iter().all(|p| p[3] < 255), "{id}: drawn opaque");
-    }
+            .collect()
+    };
+    // The pane's texture is [200, 50, 50] at alpha 128.
+    let pane = pixels("minecraft:red_stained_glass_pane");
+    assert!(!pane.is_empty());
+    assert!(
+        pane.iter().all(|&p| p == [180, 80, 80, 192]),
+        "{:?}",
+        pane[0]
+    );
+    // On the game's grey, the texture's own colour (to rounding).
+    let grey = [139, 139, 139, 255];
+    let (baked, game) = (
+        pl_items_over(grey, [180, 80, 80, 192]),
+        pl_items_over(grey, [200, 50, 50, 128]),
+    );
+    assert!(
+        baked.iter().zip(game).all(|(a, b)| a.abs_diff(b) <= 1),
+        "{baked:?} {game:?}"
+    );
+    // Lit block faces too; still see-through.
+    let block = pixels("minecraft:red_stained_glass");
+    assert!(!block.is_empty());
+    assert!(
+        block.iter().all(|p| (190..255).contains(&p[3])),
+        "{block:?}"
+    );
+    // An icon with a layer the server colours keeps its pixels (a bottle's glass laid over grey
+    // would cover the potion).
+    let [x, y, ..] = atlas.index.icons["minecraft:potion"].layers[1].rect;
+    assert_eq!(image.get(x + 3, y + 3), [255, 255, 255, 100]);
+}
+
+/// `top` over an opaque `bottom`, rounded as the atlas rounds (straight alpha).
+fn pl_items_over(bottom: [u8; 4], top: [u8; 4]) -> [u8; 3] {
+    let a = top[3] as f32 / 255.0;
+    let mix = |t: u8, b: u8| (t as f32 * a + b as f32 * (1.0 - a)).round() as u8;
+    [
+        mix(top[0], bottom[0]),
+        mix(top[1], bottom[1]),
+        mix(top[2], bottom[2]),
+    ]
 }
 
 #[test]

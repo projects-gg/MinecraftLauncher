@@ -21,6 +21,16 @@ pub struct EdgeTone {
     pub chroma: f32,
 }
 
+/// How far a whole silhouette stands out from a ground colour ([`Image::contrast`]): luminance
+/// contrast ratios (1 for none, 21 for white on black) of its pixels laid over the ground.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Contrast {
+    /// The median pixel's.
+    pub median: f32,
+    /// The upper quartile's: how much of it is lit.
+    pub upper: f32,
+}
+
 impl Image {
     /// A transparent image.
     pub fn new(width: u32, height: u32) -> Self {
@@ -239,6 +249,48 @@ impl Image {
         })
     }
 
+    /// How far the whole silhouette stands out from a ground colour: the luminance contrast of its
+    /// pixels, each laid over the ground (see-through ones show the ground through them). An anvil
+    /// on our darkest card is about 1.33 at the median and 1.74 at the upper quartile; a hopper,
+    /// which reads, 1.64 and 2.02. None for a picture with nothing in it.
+    pub fn contrast(&self, ground: [u8; 3]) -> Option<Contrast> {
+        let mut lums: Vec<f32> = (0..self.height as i64)
+            .flat_map(|y| (0..self.width as i64).map(move |x| (x, y)))
+            .filter(|&(x, y)| self.solid(x, y))
+            .map(|(x, y)| {
+                let seen = over(
+                    [ground[0], ground[1], ground[2], 255],
+                    self.get(x as u32, y as u32),
+                );
+                luminance([seen[0], seen[1], seen[2]])
+            })
+            .collect();
+        if lums.is_empty() {
+            return None;
+        }
+        lums.sort_by(f32::total_cmp);
+        let n = lums.len();
+        let floor = luminance(ground);
+        let ratio = |lum: f32| (lum.max(floor) + 0.05) / (lum.min(floor) + 0.05);
+        Some(Contrast {
+            median: ratio(lums[n / 2]),
+            upper: ratio(lums[(n * 3 / 4).min(n - 1)]),
+        })
+    }
+
+    /// Lays every see-through pixel (neither clear nor opaque) over a ground colour at `strength`
+    /// (0–1): over that ground at full strength the pixel looks as before; elsewhere it shows that
+    /// much of the ground. Clear and opaque pixels are kept.
+    pub fn lay_see_through_over(&mut self, ground: [u8; 3], strength: f32) {
+        let alpha = (strength.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let under = [ground[0], ground[1], ground[2], alpha];
+        for px in self.pixels.as_chunks_mut::<4>().0 {
+            if px[3] > 0 && px[3] < 255 {
+                *px = over(under, *px);
+            }
+        }
+    }
+
     /// How much an edge `width` pixels wide drawn around the silhouette would fill in between its
     /// parts (the holes in leaves, a chain's links, the crook of a pickaxe): the clear pixels with a
     /// silhouette one within `width` on both sides of a row, a column or a diagonal, per silhouette
@@ -278,10 +330,15 @@ fn linear(c: u8) -> f32 {
     }
 }
 
+/// An sRGB colour's relative luminance (0–1, as WCAG's contrast ratio uses it).
+fn luminance(rgb: [u8; 3]) -> f32 {
+    let [r, g, b] = rgb.map(linear);
+    0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
 /// An sRGB colour's CIELAB lightness L* (0–100).
 fn lightness(rgb: [u8; 3]) -> f32 {
-    let [r, g, b] = rgb.map(linear);
-    let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let y = luminance(rgb);
     if y > 216.0 / 24389.0 {
         116.0 * y.cbrt() - 16.0
     } else {
