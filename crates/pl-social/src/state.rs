@@ -156,10 +156,12 @@ impl SocialState {
             self.add_notice(notice);
         }
         // The player's own entries in the crews' member lists wear what `me` says (TEAM6): a tag
-        // put on here shows on the crew pages at once.
+        // put on here shows on the crew pages at once; so does a new picture (SOC-LAG).
         let (id, badge) = (me.profile.id.clone(), me.profile.badge.clone());
+        let (avatar, hash) = (me.profile.avatar.clone(), me.profile.avatar_hash.clone());
         self.me = Some(me);
         self.set_badge_of(&id, badge.as_ref());
+        self.set_picture_of(&id, &avatar, hash.as_deref());
     }
 
     /// The friend list arrived. Its crews become one list in the player's order (`crews`), also
@@ -236,10 +238,12 @@ impl SocialState {
                 self.absorb_picture(presence);
                 if presence.state == PresenceState::Offline {
                     self.online.remove(&presence.id);
+                    // Their bucket while they share it, nothing while they hide it (SOC-LAG: the
+                    // friend list's stayed until the next list); a presence without it keeps it.
                     if let Some(seen) = presence.last_seen
                         && let Some(friend) = self.friend_mut(&presence.id)
                     {
-                        friend.last_seen = Some(seen);
+                        friend.last_seen = seen;
                     }
                 } else {
                     let before = self.online.get(&presence.id);
@@ -515,6 +519,19 @@ impl SocialState {
             PresenceEvent::StatusChanged(status) => {
                 if let Some(me) = &mut self.me {
                     me.status = *status;
+                }
+            }
+            PresenceEvent::ProfileChanged {
+                privacy,
+                avatar,
+                avatar_hash,
+            } => {
+                if let Some(me) = &mut self.me {
+                    me.privacy = *privacy;
+                    let id = me.profile.id.clone();
+                    if let Some(avatar) = avatar {
+                        self.set_picture_of(&id, avatar, avatar_hash.as_deref());
+                    }
                 }
             }
             PresenceEvent::Disconnected { retry_in } => {
@@ -1810,15 +1827,33 @@ impl SocialState {
         ))
     }
 
-    /// A presence message carries the friend's current picture.
+    /// A presence message carries the friend's (or crewmate's) current picture.
     fn absorb_picture(&mut self, presence: &Presence) {
-        let Some(avatar) = presence.avatar.clone() else {
+        if let Some(avatar) = presence.avatar.as_deref() {
+            self.set_picture_of(&presence.id, avatar, presence.avatar_hash.as_deref());
+        }
+    }
+
+    /// Someone's picture, wherever they show: the player's own card, the friend list and every
+    /// crew's member list (SOC-LAG: the crew pages kept the old one until the next list).
+    fn set_picture_of(&mut self, id: &str, avatar: &str, hash: Option<&str>) {
+        let set = |profile: &mut PublicProfile| {
+            avatar.clone_into(&mut profile.avatar);
+            profile.avatar_hash = hash.map(str::to_owned);
+        };
+        if let Some(me) = self.me.as_mut().filter(|me| me.profile.id == id) {
+            set(&mut me.profile);
+        }
+        let Some(overview) = &mut self.overview else {
             return;
         };
-        let hash = presence.avatar_hash.clone();
-        if let Some(friend) = self.friend_mut(&presence.id) {
-            friend.profile.avatar = avatar;
-            friend.profile.avatar_hash = hash;
+        for friend in overview.friends.iter_mut().filter(|f| f.profile.id == id) {
+            set(&mut friend.profile);
+        }
+        for entry in overview.crews.iter_mut().flatten() {
+            for member in entry.team.members.iter_mut().filter(|m| m.profile.id == id) {
+                set(&mut member.profile);
+            }
         }
     }
 
@@ -2213,7 +2248,7 @@ mod tests {
         assert_eq!(both.len(), 2);
         // Going offline keeps the coarse "last seen" the service sent.
         let mut gone = presence("2", PresenceState::Offline, None);
-        gone.last_seen = Some(LastSeen::Today);
+        gone.last_seen = Some(Some(LastSeen::Today));
         assert!(state.apply(&PresenceEvent::Presence(gone), NOW).is_empty());
         let friends = state.friends();
         assert_eq!(by_id(&friends, "2").state, PresenceState::Offline);
@@ -2236,6 +2271,86 @@ mod tests {
             })
         );
         assert!(!friend.game.unwrap().joinable());
+    }
+
+    /// SOC-LAG: "Son görülmemi göster" turned off reaches friends when the player goes offline
+    /// (`lastSeen: null` forgets the friend list's); a presence without the field keeps it.
+    #[test]
+    fn a_hidden_last_seen_leaves_the_list_when_the_friend_goes_offline() {
+        let mut state = loaded();
+        assert_eq!(by_id(&state.friends(), "1").last_seen, Some(LastSeen::Week));
+        state.apply(
+            &PresenceEvent::Presence(presence("1", PresenceState::Offline, None)),
+            NOW,
+        );
+        assert_eq!(by_id(&state.friends(), "1").last_seen, Some(LastSeen::Week));
+        let mut hidden = presence("1", PresenceState::Offline, None);
+        hidden.last_seen = Some(None);
+        state.apply(&PresenceEvent::Presence(hidden), NOW);
+        assert_eq!(by_id(&state.friends(), "1").last_seen, None);
+        let mut shown = presence("1", PresenceState::Offline, None);
+        shown.last_seen = Some(Some(LastSeen::Today));
+        state.apply(&PresenceEvent::Presence(shown), NOW);
+        assert_eq!(
+            by_id(&state.friends(), "1").last_seen,
+            Some(LastSeen::Today)
+        );
+    }
+
+    /// SOC-LAG: a friend's or crewmate's new picture shows on the crew page too, and a change the
+    /// player made on another of their devices shows here (switches and picture).
+    #[test]
+    fn pictures_and_the_players_own_switches_follow_live() {
+        let mut state = loaded();
+        state.team_answer(TeamAnswer {
+            team: Some(team(&[
+                ("100000000000000000", "Ben", TeamRole::Founder),
+                ("1", "Ayşe", TeamRole::Member),
+                ("9", "Zeki", TeamRole::Member),
+            ])),
+            invited: vec![],
+        });
+        let avatar_of = |state: &SocialState, id: &str| {
+            crew_view(state)
+                .unwrap()
+                .members
+                .into_iter()
+                .find(|member| member.id == id)
+                .unwrap()
+                .avatar
+        };
+        // A friend in the crew, and a crewmate who is not a friend.
+        for id in ["1", "9"] {
+            let mut pictured = presence(id, PresenceState::Launcher, None);
+            pictured.avatar = Some("preset:fox".into());
+            state.apply(&PresenceEvent::Presence(pictured), NOW);
+            assert_eq!(avatar_of(&state, id), "preset:fox");
+        }
+        assert_eq!(by_id(&state.friends(), "1").avatar, "preset:fox");
+        // The player's other device.
+        state.apply(
+            &PresenceEvent::ProfileChanged {
+                privacy: Privacy {
+                    share_server: true,
+                    share_last_seen: false,
+                    share_read: Some(false),
+                    share_typing: Some(true),
+                },
+                avatar: Some("preset:owl".into()),
+                avatar_hash: None,
+            },
+            NOW,
+        );
+        let me = state.me().unwrap().clone();
+        assert!(me.privacy.share_server && !me.privacy.share_last_seen);
+        assert_eq!(me.privacy.share_read, Some(false));
+        assert_eq!(me.profile.avatar, "preset:owl");
+        assert_eq!(avatar_of(&state, "100000000000000000"), "preset:owl");
+        // The service's answer (`set_me`) puts the player's picture on their crew pages too.
+        let mut answered = me;
+        answered.profile.avatar = "discord".into();
+        state.set_me(answered);
+        assert_eq!(avatar_of(&state, "100000000000000000"), "discord");
     }
 
     #[test]
