@@ -486,13 +486,14 @@ impl Builder<'_> {
 
 /// The static glint frame: its side in the atlas, the glint texels it spans across, where it
 /// starts in the glint texture and how far it is turned (the game's texture matrix turns the
-/// glint by π/18), and the game's default glint strength. The start lays a thin streak across the
-/// middle of the frame, where an item's body is (a sword's blade, a bow), so it shows at 16 px too:
-/// from (40, 56) it ran down the frame's left edge, and with the texture's brightest knot in the
-/// middle (12, 58) dark netherite turned purple.
+/// glint by π/18), and the game's default glint strength. The start lays a streak across the middle
+/// of the frame, where an item's body is (a sword's blade, an apple), so it shows at 16 px and on
+/// bright items too: from (40, 56) it ran down the frame's left edge (an enchanted golden apple
+/// looked like a plain one), with the texture's brightest knot in the middle (12, 58) dark netherite
+/// turned purple, and from (10, 63) the line passed beside the apple.
 const GLINT_FRAME: u32 = 32;
 const GLINT_TEXELS: f32 = 14.0;
-const GLINT_ORIGIN: [f32; 2] = [10.0, 63.0];
+const GLINT_ORIGIN: [f32; 2] = [15.0, 53.0];
 const GLINT_TURN_DEGREES: f32 = 10.0;
 const GLINT_STRENGTH: f32 = 0.75;
 /// How much of the game's added light stays everywhere, and how strongly the streaks show.

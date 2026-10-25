@@ -28,7 +28,10 @@ const SACK = [
 ] as const;
 
 export const FALLBACK_GLYPHS = {
-  /** A block: its three faces. */
+  /**
+   * A block: its three faces. The near edge stops above the stack count (the game draws it over
+   * the lower right), so no line runs under its digits.
+   */
   block: [
     ".......##.......",
     ".....######.....",
@@ -39,11 +42,11 @@ export const FALLBACK_GLYPHS = {
     ".#####....#####.",
     ".######.#######.",
     ".######.#######.",
-    ".######.#######.",
-    ".######.#######.",
-    ".######.#######.",
-    "...####.#####...",
-    ".....##.###.....",
+    ".##############.",
+    ".##############.",
+    ".##############.",
+    "...##########...",
+    ".....######.....",
     ".......##.......",
     "................",
   ],

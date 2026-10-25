@@ -470,6 +470,36 @@ describe("ItemSprite", () => {
     }
   });
 
+  it("keeps the stand-ins' lower right, where the game draws the stack count, free of inner lines", () => {
+    const grid = (id: string) => {
+      const rows = Array.from({ length: 16 }, () => Array<boolean>(16).fill(false));
+      const d = render({ id }).match(/ d="([^"]+)"/)?.[1] ?? "";
+      for (const [, x, y, w] of d.matchAll(/M(\d+) (\d+)h(\d+)/g)) {
+        for (let i = 0; i < Number(w); i++) rows[Number(y)][Number(x) + i] = true;
+      }
+      return rows;
+    };
+    for (const id of [
+      "projects:unknown_block",
+      "projects:mystery_pickaxe",
+      "projects:mystery_sword",
+      "projects:mystery_chestplate",
+      "projects:mystery_apple",
+      "projects:mystery_potion",
+      "projects:mystery_book",
+      "minecraft:unknown_thing",
+    ]) {
+      const rows = grid(id);
+      // Rows 9-15, columns 6-15: no gap with the silhouette left, right and above it.
+      for (let y = 9; y < 16; y++) {
+        for (let x = 6; x < 15; x++) {
+          const inner = !rows[y][x] && rows[y][x - 1] && rows[y][x + 1] && rows[y - 1][x];
+          expect(inner, `${id} at ${x},${y}`).toBe(false);
+        }
+      }
+    }
+  });
+
   it("draws Projects' art from the overlay atlas on its servers", () => {
     const html = render({ id: "paper", cmd: 100001, size: 32, art: art("projects.gg") });
     expect(html).toContain('data-source="overlay"');
