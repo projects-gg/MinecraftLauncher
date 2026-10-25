@@ -166,27 +166,30 @@ function Highlights({ lines }: { lines: string[] }) {
 function PatchNotesBox({ notes }: { notes: PatchNotes }) {
   const { t } = useTranslation();
   // Like a story: the title, then when it came out under it, then the highlights.
-  const body = (title: string) => (
+  const body = (title: string, dated: boolean) => (
     <>
       <span className="mt-1 block truncate text-[13px] font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
         {title}
       </span>
-      <span className="mt-1 block truncate text-[11.5px] text-ash-300">
-        {formatRelative(notes.publishedAt)}
-      </span>
+      {dated ? (
+        <span className="mt-1 block truncate text-[11.5px] text-ash-300">
+          {formatRelative(notes.publishedAt)}
+        </span>
+      ) : null}
       <Highlights lines={notes.highlights} />
     </>
   );
   if (notes.kind === "pack") {
     // The official pack's changelog has no article: no link, and its version is the title (beside
-    // the heading, where the column's links sit, it read as a dead link).
+    // the heading, where the column's links sit, it read as a dead link). The version says how
+    // new it is; without a time line the box fits a 1024 × 640 window with three highlights.
     return (
       <section className="mt-1.5 border-t border-white/7 py-1.5">
         <div className="px-2 py-2">
           <h3 className="font-display text-title font-semibold text-bone-50">
             {t("home.patchNotes")}
           </h3>
-          {body(t("home.patchVersion", { pack: notes.packName, version: notes.version }))}
+          {body(t("home.patchVersion", { pack: notes.packName, version: notes.version }), false)}
         </div>
       </section>
     );
@@ -215,7 +218,7 @@ function PatchNotesBox({ notes }: { notes: PatchNotes }) {
             />
           </span>
         </span>
-        {body(notes.title)}
+        {body(notes.title, true)}
       </Link>
     </section>
   );
