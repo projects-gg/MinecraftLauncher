@@ -27,8 +27,18 @@
   --color-ember-900: #3f0a0a;
   --color-ember-700: #7a2416;
   --color-jade-400: #5fcb8e;
+  --color-jade-700: #1b6843;
   --color-flare-300: #f6836f;
   --color-flare-400: #f0624d;
+
+  /* Server bars by latency (SignalBars, docs/design.md §6): each tone's face and its one-pixel
+     shade. Good is green, as the game draws its bars; fair the gold amber; poor the error red. */
+  --color-signal-good: var(--color-jade-400);
+  --color-signal-good-shade: var(--color-jade-700);
+  --color-signal-fair: var(--color-gold-400);
+  --color-signal-fair-shade: var(--color-gold-700);
+  --color-signal-poor: var(--color-flare-400);
+  --color-signal-poor-shade: var(--color-ember-700);
 
   --font-display: "Tektur Variable", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
@@ -273,6 +283,44 @@
     scrollbar-width: thin;
     scrollbar-color: var(--color-obsidian-600) transparent;
   }
+
+  /* On Windows (WebView2; main.tsx marks the OS) the two properties above draw the system's own
+     bar: arrows at both ends and a track running into the panels' rounded corners (SMALL10). Our
+     bar there instead, as wide as the thin one (so nothing moves), with no arrows, its track kept
+     6 px off the ends and a round obsidian thumb a step lighter under the pointer. The standard
+     properties go back to auto so Chromium uses these; a row that hides its bar
+     (`[scrollbar-width:none]`, a utility) still hides it. macOS and Linux keep their overlay bars,
+     Studio its thin ones. */
+  html[data-os="windows"] * {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+  html[data-os="windows"] ::-webkit-scrollbar {
+    /* The thin bar's measured gutter (headless Edge, 100 and 125 %). */
+    width: 10px;
+    height: 10px;
+  }
+  html[data-os="windows"] ::-webkit-scrollbar-button {
+    display: none;
+  }
+  html[data-os="windows"] ::-webkit-scrollbar-track,
+  html[data-os="windows"] ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  html[data-os="windows"] ::-webkit-scrollbar-track:vertical {
+    margin: 6px 0;
+  }
+  html[data-os="windows"] ::-webkit-scrollbar-track:horizontal {
+    margin: 0 6px;
+  }
+  html[data-os="windows"] ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background: var(--color-obsidian-600) padding-box;
+  }
+  html[data-os="windows"] ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--color-obsidian-600), var(--color-ash-500) 25%);
+  }
 }
 
 /* `hovered:` is `hover:`, and also "the pointer is on the words that label me": a row marked
@@ -369,12 +417,13 @@
 
 /* Toasts. Inside Sonner's list `backdrop-filter` never reaches the page (Chromium/WebView2: no
    blur, the switches and text behind a toast showed through its tint; a copy of the toast
-   outside the list blurs fine). So a toast is nearly solid obsidian with the glass edge, the
-   inner highlight and a faint sheen at the top: legible over anything, still of the glass family. */
+   outside the list blurs fine). So a toast is solid obsidian with the glass edge, the inner
+   highlight and a faint sheen at the top: legible over anything, still of the glass family
+   (SMALL10b: at 99 % the words of a card under it showed as a ghost line). */
 @utility toast-surface {
   background:
     linear-gradient(180deg, rgb(255 255 255 / 0.045), transparent 60%),
-    color-mix(in oklab, var(--color-obsidian-900) 99%, transparent);
+    var(--color-obsidian-900);
   border: 1px solid rgb(255 255 255 / 0.08);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.07),
@@ -388,6 +437,27 @@
    the same curve; Sonner removes a leaving toast after 200 ms, when this exit has finished. */
 [data-sonner-toaster] [data-sonner-toast] {
   transition-timing-function: var(--ease-out-expo);
+}
+
+/* Toasts move only in the room above the command bar (SMALL10b). They rest 16 px over it, but
+   Sonner's own entrance starts a whole toast lower and its exit drops a whole toast, so in the
+   real app at 1200 × 712 a toast crossed OYNA's top edge on its way in and out. A toast rises the
+   16 px instead (its first frame sits on the bar's edge), a leaving one sinks 8 px as it fades,
+   and one leaving from behind the front toast fades where it is. Swipes still follow the finger. */
+[data-sonner-toaster] [data-sonner-toast][data-y-position="bottom"]:not([data-mounted="true"]) {
+  --y: translateY(16px);
+}
+[data-sonner-toaster]
+  [data-sonner-toast][data-y-position="bottom"][data-removed="true"][data-front="true"][data-swipe-out="false"] {
+  --y: translateY(8px);
+}
+[data-sonner-toaster]
+  [data-sonner-toast][data-y-position="bottom"][data-removed="true"][data-front="false"][data-swipe-out="false"][data-expanded="true"] {
+  --y: translateY(calc(var(--lift) * var(--offset) + 8px));
+}
+[data-sonner-toaster]
+  [data-sonner-toast][data-y-position="bottom"][data-removed="true"][data-front="false"][data-swipe-out="false"][data-expanded="false"] {
+  --y: translateY(calc(var(--lift-amount) * var(--toasts-before))) scale(calc(-1 * var(--scale)));
 }
 
 @utility text-shadow-art {
@@ -461,6 +531,18 @@
     }
   }
 
+  /* Tektur at title and number sizes: the arm of its "r" ends 0.064 em before the next stem
+     (measured in Studio, STUDIO-PANO), under a pixel at 15 px, and antialiasing on the glass
+     blurs that gap shut: "rı" read as "n" ("Uyarılar" as "Uyanlar"). The dotless "ı" comes
+     from another subset file, so no kerning pair can help. 1 px of tracking up to 15 px, less
+     above, none from 25 px: page titles, OYNA and the hero keep their set width. Components
+     layer: an explicit tracking utility still wins. */
+  .font-display,
+  .prose-news h2,
+  .prose-news h3 {
+    letter-spacing: clamp(0px, calc(2.5px - 0.1em), 1px);
+  }
+
   /* Long-form news text. */
   .prose-news {
     font-size: 15.5px;
@@ -527,16 +609,30 @@
     color: var(--color-ash-300);
   }
 
-  /* Server bars (SignalBars, docs/design.md §6): gold faces with a one-pixel shadow below right,
-     dim bars where nothing is lit, a flare cross when the server cannot be reached. Each rect
+  /* Server bars (SignalBars, docs/design.md §6): faces with a one-pixel shadow below right in the
+     latency's tone (green, amber, red: `data-tone`), dim bars where nothing is lit, a flare cross
+     when the server cannot be reached. The answer's fill flashes a light tint of the tone; the
+     sweep while the ping is out is the launcher's working gold (no tone is known yet). Each rect
      names its own --rest, --hot and --lit colours, so one set of keyframes drives both. */
   .signal-bars {
-    --signal-face: var(--color-gold-400);
-    --signal-shade: var(--color-gold-700);
-    --signal-hot-face: var(--color-gold-200);
-    --signal-hot-shade: var(--color-gold-600);
+    --signal-face: var(--color-signal-good);
+    --signal-shade: var(--color-signal-good-shade);
+    --signal-hot-face: color-mix(in oklab, var(--signal-face) 45%, white);
+    --signal-hot-shade: color-mix(in oklab, var(--signal-shade) 50%, var(--signal-face));
     --signal-dim-face: rgb(255 255 255 / 0.2);
     --signal-dim-shade: rgb(255 255 255 / 0.08);
+  }
+  .signal-bars[data-tone="fair"] {
+    --signal-face: var(--color-signal-fair);
+    --signal-shade: var(--color-signal-fair-shade);
+  }
+  .signal-bars[data-tone="poor"] {
+    --signal-face: var(--color-signal-poor);
+    --signal-shade: var(--color-signal-poor-shade);
+  }
+  .signal-bars[data-state="pending"] {
+    --signal-hot-face: var(--color-gold-200);
+    --signal-hot-shade: var(--color-gold-600);
   }
   .signal-face {
     --rest: var(--signal-dim-face);

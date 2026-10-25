@@ -259,16 +259,20 @@ function SentRow({ request }: { request: FriendRequest }) {
   );
 }
 
+/** An invite's "Katıl" is its sender's too. */
+const SKIP_JOIN = ["join"] as const;
+
 function InviteRow({ invite }: { invite: SocialInvite }) {
   const { t } = useTranslation();
   const name = invite.name ?? t("social.notices.someone");
   const joinable = canJoinInvite(invite);
-  // "Katıl" and "Kapat" first, then who sent it with their whole menu (FIX2).
+  // "Katıl" and "Daveti kapat" first (the ×'s name), then who sent it with their rows, without a
+  // second "Katıl" (it joins the same Projects; FIX2, SMALL10).
   const people = usePeopleItems(
     invite.name
       ? [{ id: invite.from, name, avatar: invite.avatar, avatarUrl: invite.avatarUrl }]
       : [],
-    { from: "list" },
+    { from: "list", skip: SKIP_JOIN },
   );
   const items: Array<MenuItem | null> = [
     ...(joinable
@@ -281,7 +285,7 @@ function InviteRow({ invite }: { invite: SocialInvite }) {
         ]
       : []),
     {
-      label: t("social.actions.dismiss"),
+      label: t("small10.menu.dismissInvite"),
       icon: <X size={16} />,
       onSelect: () => void api.social.dismissInvite(invite.id),
     },
@@ -306,7 +310,7 @@ function InviteRow({ invite }: { invite: SocialInvite }) {
           </Button>
         ) : null}
         <IconButton
-          label={t("social.actions.dismiss")}
+          label={t("small10.menu.dismissInvite")}
           icon={<X size={16} />}
           size="sm"
           onClick={() => void api.social.dismissInvite(invite.id)}

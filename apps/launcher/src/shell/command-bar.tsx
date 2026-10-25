@@ -17,7 +17,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AccountFace } from "@/features/accounts/account-face";
 import { launchErrorAction } from "@/features/disk/launch-error";
 import { helpsWithLaunchError } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
@@ -440,29 +439,10 @@ function StatusArea({ selected }: { selected: InstanceSummary | undefined }) {
   );
 }
 
-function AccountChip() {
-  const { t } = useTranslation();
-  const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts() });
-  const active = accounts?.find((a) => a.active);
-  if (!active) return null;
-  return (
-    // The title bar shows the account too: below 1180 px the bar keeps its room for play status.
-    <div className="hidden shrink-0 items-center gap-2 border-l border-white/8 pl-4 min-[1180px]:flex">
-      <AccountFace account={active} size={32} />
-      <div className="leading-tight">
-        <span className="block max-w-[140px] truncate text-[13px] font-semibold text-bone-50">
-          {active.username}
-        </span>
-        {/* A Microsoft account says so; one with only a username needs no second line. */}
-        {active.kind === "microsoft" ? (
-          <span className="block text-[11.5px] text-ash-300">{t("accounts.microsoft")}</span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-/** Bottom command bar: what to play, as whom, progress, and the OYNA button. */
+/**
+ * Bottom command bar: what to play, progress, and the OYNA button. The account is the title
+ * bar's (SMALL10: it showed in three places, and only the title bar's chooses).
+ */
 export function CommandBar() {
   const { t, i18n } = useTranslation();
   const { data: instances = [], isPending: instancesLoading } = useQuery({
@@ -578,7 +558,6 @@ export function CommandBar() {
         hint={hint}
         onSelect={selectInstance}
       />
-      <AccountChip />
       <div className={cn("flex min-w-0 flex-1 items-center border-l border-white/8 pl-4")}>
         <StatusArea selected={selected} />
       </div>

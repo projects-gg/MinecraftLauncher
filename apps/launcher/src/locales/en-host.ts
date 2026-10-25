@@ -114,8 +114,8 @@ export const enHost = {
     },
   },
   copy: {
-    title: "This world uses other mods",
-    body: "To join, a new instance with the same mods is made.",
+    title: "{{name}} is playing with different mods",
+    body: "Joining sets up a new instance with the same mods.",
     size_one: "{{count}} mod, {{size}}",
     size_other: "{{count}} mods, {{size}}",
     confirm: "Install and join",

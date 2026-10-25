@@ -20,7 +20,9 @@
 // The invitations close for good with ×; the friends button then lights up once wherever it is,
 // to show where friends live (from the keyboard the focus goes there too). A line that replaces
 // another cross-fades in place; the strips below glide. A line about people opens a menu on a right
-// click (Shift+F10, the menu key): its own actions, then each person with their whole menu (FIX2).
+// click (Shift+F10, the menu key): its own actions (its × under its own name: "Çağrıyı gizle"),
+// then one person's rows, or each of several people as a submenu (FIX2, SMALL10). "Katıl" is the
+// event card's: secondary with the gold play glyph. Faces are round, as the pill is (SMALL10b).
 import { Check, MegaphoneSimple, Play, UserPlus, UsersThree, X } from "@phosphor-icons/react";
 import { ContextMenu, cn, easeOutExpo, IconButton, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -68,21 +70,25 @@ const INVITE_FACES: FaceSource[] = ["fox", "golden-dragon", "wizard"].map((slug)
   avatar: `preset:${slug}`,
 }));
 
+/** Up to four round faces: inside the round pill a square's corners met its round end. */
 function Faces({ sources }: { sources: Array<FaceSource & { id?: string }> }) {
   return (
     <span className="flex shrink-0 items-center">
       {sources.slice(0, 4).map((source, index) => (
         <span
           key={source.id ?? source.avatar ?? source.name}
-          className="relative flex rounded-[5px] ring-2 ring-obsidian-900"
+          className="relative flex rounded-full ring-2 ring-obsidian-900"
           style={{ marginLeft: index ? -8 : 0, zIndex: 4 - index }}
         >
-          <SocialFace source={source} size={26} />
+          <SocialFace source={source} size={26} className="overflow-hidden rounded-full" />
         </span>
       ))}
     </span>
   );
 }
+
+/** A line's own "Katıl" is the person's too: their rows follow without it. */
+const SKIP_JOIN = ["join"] as const;
 
 /**
  * The line's action, drawn as a secondary button inside the line's own button: one control for
@@ -158,8 +164,9 @@ function InviteLine({ hint }: { hint: HomeHint }) {
 }
 
 /**
- * A line's right click (FIX2): its own actions, then each person on it with their whole menu (as
- * wherever they show). Shift+F10 and the menu key on the focused line open it too.
+ * A line's right click (FIX2): its own actions, then one person's rows or a submenu for each of
+ * several (person-menu.tsx `usePeopleItems`). Shift+F10 and the menu key on the focused line
+ * open it too.
  */
 function LineMenu({
   actions,
@@ -215,6 +222,7 @@ function PlayingLine() {
             : []
         }
         people={shown}
+        place={onProjects.length ? { skip: SKIP_JOIN } : undefined}
       >
         <button
           type="button"
@@ -229,7 +237,7 @@ function PlayingLine() {
           <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
         </button>
       </LineMenu>
-      {onProjects.length ? <JoinButton /> : null}
+      {onProjects.length ? <JoinButton glyph /> : null}
     </>
   );
 }
@@ -263,9 +271,10 @@ function CallLine() {
             onSelect: () => void answerCall(call, "yes"),
           },
           { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect: () => open() },
-          // The line's × as well, as the invite row has it (FIX2 menu table).
+          // The line's × as well, by its name (FIX2 menu table; SMALL10: a bare "Kapat" did not
+          // say what closes, nor that the call goes from Home only).
           {
-            label: t("social.actions.dismiss"),
+            label: t("small10.menu.hideCall"),
             icon: <X size={16} />,
             onSelect: () => closeCall(call.id),
           },
@@ -283,7 +292,7 @@ function CallLine() {
           className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
         >
           <span className="relative flex">
-            <SocialFace source={caller} size={26} />
+            <SocialFace source={caller} size={26} className="overflow-hidden rounded-full" />
             <span className="absolute -right-1.5 -bottom-1 flex size-[14px] items-center justify-center rounded-full bg-obsidian-950 text-gold-300 ring-1 ring-gold-400/40">
               <MegaphoneSimple size={9} weight="fill" aria-hidden />
             </span>
@@ -302,7 +311,7 @@ function CallLine() {
       </button>
       <IconButton
         size="sm"
-        label={t("social.actions.dismiss")}
+        label={t("small10.menu.hideCall")}
         icon={<X size={13} weight="bold" />}
         onClick={() => closeCall(call.id)}
         className="shrink-0 rounded-full"
@@ -343,7 +352,11 @@ function CrewLine() {
           { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect: () => open() },
         ]}
         people={crew}
-        place={view.crews.length === 1 ? { crew: team, from: "team" } : { from: "team" }}
+        place={
+          view.crews.length === 1
+            ? { crew: team, from: "team", skip: SKIP_JOIN }
+            : { from: "team", skip: SKIP_JOIN }
+        }
       >
         <button
           type="button"
@@ -359,7 +372,7 @@ function CrewLine() {
           <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
         </button>
       </LineMenu>
-      <JoinButton />
+      <JoinButton glyph />
     </>
   );
 }
@@ -398,8 +411,9 @@ function PlanLine() {
     setCrewTab(crew.id);
   };
   // The line's own actions on a right click, as its buttons have them (FIX2).
+  const joins = phase === "live" && plan.myAnswer !== "no";
   const actions: MenuItem[] = [
-    ...(phase === "live" && plan.myAnswer !== "no"
+    ...(joins
       ? [
           {
             label: t("social.actions.join"),
@@ -418,14 +432,18 @@ function PlanLine() {
         : []),
     { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect: () => open() },
     {
-      label: t("social.actions.dismiss"),
+      label: t("small10.menu.hidePlan"),
       icon: <X size={16} />,
       onSelect: () => closePlan(plan.id),
     },
   ];
   return (
     <>
-      <LineMenu actions={actions} people={faces} place={{ crew, from: "team" }}>
+      <LineMenu
+        actions={actions}
+        people={faces}
+        place={{ crew, from: "team", ...(joins ? { skip: SKIP_JOIN } : {}) }}
+      >
         <button
           type="button"
           aria-label={`${text}${plan.note ? `: ${plan.note}` : ""}. ${t("teams.open")}`}
@@ -444,8 +462,8 @@ function PlanLine() {
           ) : null}
         </button>
       </LineMenu>
-      {phase === "live" && plan.myAnswer !== "no" ? (
-        <JoinButton />
+      {joins ? (
+        <JoinButton glyph />
       ) : !plan.myAnswer ? (
         <button
           type="button"
@@ -459,7 +477,7 @@ function PlanLine() {
       ) : null}
       <IconButton
         size="sm"
-        label={t("social.actions.dismiss")}
+        label={t("small10.menu.hidePlan")}
         icon={<X size={13} weight="bold" />}
         onClick={() => closePlan(plan.id)}
         className="shrink-0 rounded-full"

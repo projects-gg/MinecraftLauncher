@@ -39,6 +39,7 @@ import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
 import { trSmall9 } from "./tr-small9";
+import { trSmall10 } from "./tr-small10";
 import { trSocial } from "./tr-social";
 import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
@@ -77,6 +78,7 @@ export const tr = {
   tray: trTray,
   small7: trSmall7,
   small9: trSmall9,
+  small10: trSmall10,
   crews: trCrews,
   chat: trChat,
   reports: trReports,
@@ -748,7 +750,6 @@ export const tr = {
     settings: "Ayarlar",
     remove: "Sil",
     more: "Diğer işlemler",
-    autoStart: "Otomatik başlar",
     states: {
       stopped: "Durduruldu",
       queued: "Sırada, {{secs}} sn",

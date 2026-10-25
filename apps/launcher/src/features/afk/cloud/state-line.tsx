@@ -11,17 +11,29 @@ export function CloudStateLine({
   skewMs,
   className,
   showHint = false,
+  onDesktopCard = false,
 }: {
   account: CloudAccount;
   /** The service's clock minus this computer's. */
   skewMs: number;
   className?: string;
   showHint?: boolean;
+  /**
+   * The line stands on the desktop card of the same account while it runs in the cloud: it says
+   * where ("Bulutta oyunda, 3 sa 12 dk"; SMALL10).
+   */
+  onDesktopCard?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const { unseen } = usePerf();
   const [ticks, tick] = useState(0);
-  const status = cloudStatus(account, Date.now() + skewMs, t, i18n.language === "en" ? "en" : "tr");
+  const lang = i18n.language === "en" ? "en" : "tr";
+  const status = cloudStatus(account, Date.now() + skewMs, t, lang);
+  const text = onDesktopCard
+    ? t("small10.afk.inCloud", {
+        state: status.text.charAt(0).toLocaleLowerCase(lang) + status.text.slice(1),
+      })
+    : status.text;
   const wait = unseen ? null : status.nextChangeMs;
   useEffect(() => {
     void ticks;
@@ -34,7 +46,7 @@ export function CloudStateLine({
       <p
         className="flex min-w-0 items-center gap-2 text-[12.5px]"
         // A long stop reason is cut in the line; the whole of it stays one hover away.
-        title={status.tone === "error" ? status.text : undefined}
+        title={status.tone === "error" ? text : undefined}
       >
         <SignalBars state={status.signal} />
         <span
@@ -46,7 +58,7 @@ export function CloudStateLine({
             status.tone === "error" && "text-flare-400",
           )}
         >
-          {status.text}
+          {text}
         </span>
       </p>
       {showHint && status.hint ? (

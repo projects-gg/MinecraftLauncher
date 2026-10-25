@@ -13,7 +13,7 @@ import { createRoot } from "react-dom/client";
 import { commands } from "@/bindings";
 import { api } from "@/lib/api";
 import i18n, { currentLanguage, startLanguage } from "@/lib/i18n";
-import { isTauri } from "@/lib/platform";
+import { detectOs, isTauri } from "@/lib/platform";
 import { playerActive, trackPlayerIdle, usePlayerIdle } from "@/lib/player-idle";
 import { prepareSounds } from "@/lib/sound";
 import {
@@ -28,6 +28,9 @@ import { usePrefs } from "@/stores/prefs";
 import { useUpdate } from "@/stores/update";
 import { router } from "./router";
 import "./styles.css";
+
+// The system's own look where CSS needs it: on Windows the scroll bars are ours (styles.css).
+document.documentElement.dataset.os = detectOs();
 
 // Polling (server status and the like) and ambient motion pause while the window is in the tray
 // or minimized (lib/window-away.ts). WebView2 keeps reporting the page as visible then, and the
