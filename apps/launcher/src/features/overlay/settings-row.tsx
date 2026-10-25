@@ -1,4 +1,4 @@
-import { ARM_MS, cn, focusPanel, SwapLabel, Switch, toast, usePressGuard } from "@pl/ui";
+import { ARM_MS, cn, focusPanel, Kbd, SwapLabel, Switch, toast, usePressGuard } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { type MouseEvent, type ReactNode, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,15 +14,31 @@ import { OVERLAY_LINES, type OverlayLineKind, overlayHome, overlayLine } from ".
 /** Before the instance list is read. */
 const NO_INSTANCES: InstanceSummary[] = [];
 
+/** The overlay's default shortcut (the player may bind another in the game's Controls). */
+const OVERLAY_KEY = "F7";
+
+/** Where the key cap goes in the sentence that names the shortcut. */
+const KEY_SLOT = "@@key@@";
+
 /**
- * The longest install name the switch shows in full: with the longest sentence ("Minecraft
- * 1.21.11 sürümünde çalışmaz.") the line still fits the help's width (measured: 406 of 449 px).
+ * The longest install name a line shows in full: with the longest sentence ("Minecraft 1.21.11
+ * sürümünde çalışmaz.") and a name this long, the line still fits the help's width (measured: 406
+ * of 449 px).
  */
 const NAME_MAX = 16;
 
-/** A long install name in the switch: cut so the verb stays ("Arkadaşlarla Sur… kurulumuna geç"). */
+/** A long install name in a line: cut so the words around it stay ("Arkadaşlarla Sur… kurulumuna geç"). */
 function shortName(name: string): string {
   return name.length > NAME_MAX ? `${name.slice(0, NAME_MAX - 1).trimEnd()}…` : name;
+}
+
+/**
+ * Marks the settings row while the pointer is on a line that carries an action: Chromium hands a
+ * label's :hover to the switch it names, and the switch would lift as if a click there flipped it
+ * (`hovered:` in `@pl/ui` styles.css leaves a marked row out).
+ */
+function markRow(from: Element | null, on: boolean) {
+  from?.closest(".switch-row")?.toggleAttribute("data-action-hover", on);
 }
 
 /**
@@ -30,12 +46,13 @@ function shortName(name: string): string {
  * ships and puts in every Fabric instance on a version it supports (OVL-B), and a bridge to it at
  * each game start. Its one place: no mod list shows the mod. The line under it says how it opens;
  * while the switch is on but the overlay cannot work it says why instead, in the same cell, so
- * nothing below moves (`overlayLine`, the most basic blocker first): no instance can carry it
- * (LIB1: the player deleted the official pack and has no Fabric instance of a supported version),
- * with "Kur" as the library offers it; "Oyun açılınca launcher: Kapansın"; or the install Play
- * opens is not Fabric, or not a version the mod is made for (OVL-SEL1), with "Projects kurulumuna
- * geç", which selects the official pack or another install it works in for Play. The shortcut
- * itself is set in the game's Controls.
+ * nothing below moves (`overlayLine`, the most basic blocker first): no install can carry it
+ * (LIB1: the player deleted the official pack and has no Fabric install of a supported version),
+ * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın"; or the install Play opens is not
+ * Fabric, or not a version the mod is made for (OVL-SEL1), with "Projects kurulumuna geç", which
+ * selects the official pack or another install it works in for Play. A line with an action is not
+ * the switch's label: a click beside the action does nothing. The shortcut itself is set in the
+ * game's Controls.
  */
 export function OverlayRow() {
   const { t } = useTranslation();
@@ -72,23 +89,47 @@ export function OverlayRow() {
   // that came with its line under a resting pointer must not take that pointer's double click).
   const home =
     instances && overlay ? overlayHome(instances, official, overlay.versions) : undefined;
-  // The version the `version` line named last: fading out after a switch, it keeps its words.
-  const shownVersion = useRef("");
-  if (line.kind === "version" && play) shownVersion.current = play.mcVersion;
-  const words = useLineWords();
+  // The install the install lines named last: fading out after a switch, they keep their words.
+  // Before they ever showed, Play's own: the cell is as tall as it will be.
+  const named = useRef({ name: "", version: "" });
+  if ((line.kind === "notFabric" || line.kind === "version") && play) {
+    named.current = { name: play.name, version: play.mcVersion };
+  }
+  const shownName = shortName(named.current.name || (play?.name ?? ""));
+  const shownVersion = named.current.version || (play?.mcVersion ?? "");
+  const hasAction = (kind: OverlayLineKind) =>
+    kind === "noHome" || ((kind === "notFabric" || kind === "version") && home !== undefined);
+  const grid = useRef<HTMLSpanElement>(null);
+  const words = useLineWords(hasAction(line.kind));
+  // A line that goes takes the pointer's mark with it (no pointerleave reaches an inert line).
+  const markedFor = useRef(line.kind);
+  useEffect(() => {
+    if (markedFor.current === line.kind) return;
+    markedFor.current = line.kind;
+    markRow(grid.current, false);
+  }, [line.kind]);
 
   const sentence: Record<OverlayLineKind, string> = {
-    opens: t("overlay.settingHelp"),
+    opens: t("overlay.settingHelp", { key: OVERLAY_KEY }),
     noHome: t("overlay.packMissing"),
     closes: t("overlay.closeHelp"),
-    notFabric: t("overlay.fabricOnly"),
-    // Before it ever showed, the install's own version: the cell is as tall as it will be.
-    version: t("overlay.versionMissing", {
-      version: shownVersion.current || (play?.mcVersion ?? ""),
-    }),
+    notFabric: t("overlay.fabricOnly", { name: shownName }),
+    version: t("overlay.versionMissing", { version: shownVersion }),
+  };
+  /** The sentence as shown: the shortcut as a key cap. */
+  const shownSentence = (kind: OverlayLineKind): ReactNode => {
+    if (kind !== "opens") return sentence[kind];
+    const [before, after] = t("overlay.settingHelp", { key: KEY_SLOT }).split(KEY_SLOT);
+    return (
+      <>
+        {before}
+        <Kbd>{OVERLAY_KEY}</Kbd>
+        {after}
+      </>
+    );
   };
 
-  /** The action a line carries: "Kur", or the switch to an install the overlay works in. */
+  /** The action a line carries: "Resmî paketi kur", or the switch to an install it works in. */
   const action = (kind: OverlayLineKind, active: boolean): ReactNode => {
     if (kind === "noHome") {
       return (
@@ -106,14 +147,14 @@ export function OverlayRow() {
           }
         >
           <SwapLabel
-            labels={[t("lib1.installShort"), t("lib1.installing")]}
+            labels={[t("lib1.install"), t("lib1.installing")]}
             active={installing ? 1 : 0}
           />
         </LineAction>
       );
     }
     // Nothing else carries the overlay: the line says why, with no action.
-    if ((kind !== "notFabric" && kind !== "version") || !home) return null;
+    if (!hasAction(kind) || !home) return null;
     const short = shortName(home.name);
     return (
       <LineAction
@@ -143,19 +184,29 @@ export function OverlayRow() {
             {sentence[line.kind]}
           </span>
           {/* As `SwapLine` does, with an action in a line: hidden lines are inert. */}
-          <span className="grid" {...words}>
+          <span ref={grid} className="grid" {...words}>
             {OVERLAY_LINES.map((kind) => {
               const active = kind === line.kind;
+              const withAction = hasAction(kind);
               return (
                 <span
                   key={kind}
                   inert={!active}
+                  // A line with an action is not the switch's label (`useLineWords`): no hand, and
+                  // the switch does not lift under the pointer.
+                  onPointerEnter={
+                    withAction ? (event) => markRow(event.currentTarget, true) : undefined
+                  }
+                  onPointerLeave={
+                    withAction ? (event) => markRow(event.currentTarget, false) : undefined
+                  }
                   className={cn(
                     "[grid-area:1/1] transition-opacity",
+                    withAction && "cursor-default",
                     active ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
                   )}
                 >
-                  <span aria-hidden>{sentence[kind]}</span>
+                  <span aria-hidden>{shownSentence(kind)}</span>
                   {action(kind, active)}
                 </span>
               );
@@ -175,18 +226,23 @@ export function OverlayRow() {
 }
 
 /**
- * The line's words belong to the row's label, which flips the switch. After a press on a line's
- * action its line goes (at once for a switch, once the pack is made for "Kur"), and the words that
- * take its place must not take the rest of that double click, nor a press while the pointer still
- * rests there (`ARM_MS`), as with every control that takes another's place (`usePressGuard`).
+ * The line's words belong to the row's label, which flips the switch. A line with an action does
+ * not: a click a little beside "Resmî paketi kur" must not turn the overlay off. After a press on
+ * an action its line goes (at once for a switch, once the pack is made for "Kur"), and the words
+ * that take its place must not take the rest of that double click, nor a press while the pointer
+ * still rests there (`ARM_MS`), as with every control that takes another's place (`usePressGuard`).
  */
-function useLineWords() {
+function useLineWords(actionLine: boolean) {
   const pressedAt = useRef<number | null>(null);
   return {
     onClick(event: MouseEvent<HTMLElement>) {
       if (event.target instanceof Element && event.target.closest("button")) {
         // A line's action (it keeps the switch still itself). The keyboard has no double click.
         pressedAt.current = event.detail > 0 ? performance.now() : null;
+        return;
+      }
+      if (actionLine) {
+        event.preventDefault();
         return;
       }
       const at = pressedAt.current;
@@ -221,18 +277,10 @@ function focusRowSwitch(from: HTMLElement, keyHeld: boolean) {
 }
 
 /**
- * Marks the settings row while the pointer is on an action in its words: Chromium hands a label's
- * :hover to the switch it names, and the switch lifts as if a click there would flip it
- * (`hovered:` in `@pl/ui` styles.css leaves a marked row out).
- */
-function markRow(from: Element | null, on: boolean) {
-  from?.closest(".switch-row")?.toggleAttribute("data-action-hover", on);
-}
-
-/**
- * A line's action: gold words right after its sentence ("Kur", "Projects kurulumuna geç"). It
- * comes with its line, maybe under a pointer that was pressing the row's words: it ignores the rest
- * of that double click and presses while the pointer rests there for a moment (`usePressGuard`).
+ * A line's action: gold words right after its sentence ("Resmî paketi kur", "Projects kurulumuna
+ * geç"), reaching a little past them (`hit-area`). It comes with its line, maybe under a pointer
+ * that was pressing the row's words: it ignores the rest of that double click and presses while
+ * the pointer rests there for a moment (`usePressGuard`).
  */
 function LineAction({
   shown,
@@ -244,7 +292,7 @@ function LineAction({
 }: {
   /** Its line shows and the action can be taken. */
   shown: boolean;
-  /** Its line shows but the action waits (a game is open): dimmed in place. */
+  /** Its line shows but the action waits (a game is open): it greys out in place. */
   disabled?: boolean;
   /** The name a screen reader says when the words shown are not the whole of it. */
   name?: string;
@@ -255,32 +303,23 @@ function LineAction({
   children: ReactNode;
 }) {
   const guard = usePressGuard(shown ? "shown" : "hidden");
-  const ref = useRef<HTMLButtonElement>(null);
   // Enter presses on its way down (Space on its way up): the switch takes the focus after it.
   const keyDown = useRef(false);
-  // No longer under the pointer once it hides or waits (no pointerleave reaches an inert one).
-  useEffect(() => {
-    if (!shown) markRow(ref.current, false);
-  }, [shown]);
-  useEffect(() => {
-    const row = ref.current;
-    return () => markRow(row, false);
-  }, []);
   return (
     <button
-      ref={ref}
       type="button"
       disabled={disabled}
       aria-label={name}
       aria-busy={busy || undefined}
       // The words start right after the sentence (`SwapLabel` centres them). The underline fades
-      // in under the pointer; a press squeezes them as it does a button; waiting, they dim.
-      className="ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[opacity,text-decoration-color,scale] duration-150 focus-visible:ring-2 focus-visible:ring-gold-300 enabled:hover:decoration-current enabled:active:scale-[0.97] disabled:cursor-default disabled:opacity-50 [&_.swap-label]:justify-items-start"
-      onPointerEnter={(event) => markRow(event.currentTarget, true)}
-      onPointerLeave={(event) => {
-        guard.handlers.onPointerLeave(event);
-        markRow(event.currentTarget, false);
-      }}
+      // in under the pointer; a press squeezes them as it does a button; waiting, they grey out.
+      // The wider target only while it shows: Chromium reads a hidden line's action into the
+      // switch's description when it has the pseudo-element (measured).
+      className={cn(
+        "relative ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[color,text-decoration-color,scale] duration-150 focus-visible:ring-2 focus-visible:ring-gold-300 enabled:hover:decoration-current enabled:active:scale-[0.97] disabled:cursor-default disabled:text-ash-400 [&_.swap-label]:justify-items-start",
+        shown && "hit-area",
+      )}
+      onPointerLeave={guard.handlers.onPointerLeave}
       onKeyDown={(event) => {
         guard.handlers.onKeyDown(event);
         keyDown.current = true;

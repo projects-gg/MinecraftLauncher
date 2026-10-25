@@ -1,10 +1,10 @@
 // English for tr-overlay.ts. Missing keys fall back to Turkish.
 export const enOverlay = {
   setting: "In-game overlay",
-  settingHelp: "Press F7 in game: messages, friends and crew calls.",
+  settingHelp: "Messages, friends and crew calls open in game with {{key}}.",
   closeHelp: "Won't work: the launcher closes when the game opens.",
-  packMissing: "The official pack isn't installed.",
-  fabricOnly: "Only works in Fabric installs.",
+  packMissing: "No install can run it.",
+  fabricOnly: "{{name}} isn't a Fabric install.",
   versionMissing: "Won't work on Minecraft {{version}}.",
-  switchTo: "Switch to {{name}}",
+  switchTo: "Switch to the {{name}} install",
 };
