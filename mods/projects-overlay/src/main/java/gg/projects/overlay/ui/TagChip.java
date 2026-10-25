@@ -34,8 +34,9 @@ public final class TagChip {
         this.badge = badge;
         this.text = Texts.visual(badge.tag());
         this.tint = CrewLook.tagTint(badge.color());
-        // The game's own font (GUI 1, "Force Unicode Font") is taller than ours: the chip grows with it.
-        this.height = Math.max(height, Math.round(Fonts.capHeight(Fonts.Face.TAG) + 4f));
+        // The game's own font (GUI 1, "Force Unicode Font") is taller than ours: the chip grows with it, with a pixel
+        // more above and below for its accents (Ğ's breve, Ş's cedilla touched the chip's edges).
+        this.height = Math.max(height, Math.round(Fonts.capHeight(Fonts.Face.TAG) + (Fonts.bundled() ? 4f : 6f)));
         this.width = Fonts.tag().width(badge.tag()) + 2 * PAD_X;
         // Three slices at the usual heights; nine only for the game's taller font.
         this.frame = this.height == ROW ? Frames.TAG_9 : this.height == CHAT ? Frames.TAG_8 : Frames.TAG;
