@@ -159,7 +159,7 @@ describe('"Devam et" into a world from the main menu (OVL-FIX)', () => {
     send({ type: "worldFromTitle", mods: ["Remove Reloading Screen"] });
     expect(shown).toHaveBeenCalledTimes(1);
     expect(shown.mock.calls[0]?.[0]).toBe("worldEntry.fromTitle");
-    expect(shown.mock.calls[0]?.[1]).toEqual({ description: "worldEntry.fromTitleWhy" });
+    expect(shown.mock.calls[0]?.[1]).toMatchObject({ description: "worldEntry.fromTitleWhy" });
     send({ type: "launching" });
     expect(isOpening(useLaunch.getState().phase)).toBe(true);
   });

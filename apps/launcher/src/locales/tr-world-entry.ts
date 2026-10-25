@@ -5,6 +5,6 @@
 export const trWorldEntry = {
   /** The toast's title while the game starts on its main menu instead of the world. */
   fromTitle: "Dünyanı Tek Oyunculu'dan aç",
-  /** Under it: why the world did not open by itself. */
-  fromTitleWhy: "{{mods}} modu varken doğrudan açılamıyor.",
+  /** Under it: why, with the game as the subject (what the player sees). */
+  fromTitleWhy: "{{mods}} modu varken oyun ana menüde açılıyor.",
 };

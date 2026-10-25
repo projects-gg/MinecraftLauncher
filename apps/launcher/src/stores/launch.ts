@@ -423,7 +423,12 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
         case "worldFromTitle":
           // The game opens on its main menu instead of the world (OVL-FIX): what to do, and why under it.
           toast.info(i18n.t("worldEntry.fromTitle"), {
-            description: i18n.t("worldEntry.fromTitleWhy", { mods: event.mods.join(", ") }),
+            // A mod's name never breaks across lines.
+            description: i18n.t("worldEntry.fromTitleWhy", {
+              mods: event.mods.map((name) => name.replaceAll(" ", "\u00a0")).join(", "),
+            }),
+            // No word left alone on the last line (design.md: paragraphs wrap `pretty`).
+            classNames: { description: "text-pretty" },
           });
           break;
       }
