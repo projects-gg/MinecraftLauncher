@@ -220,7 +220,7 @@ export const enCloudAfk = {
     antiAfkMin: "At least",
     antiAfkMax: "At most",
     owner: "Your own in-game name",
-    ownerHelp: "“Only from my main account” rules listen to this name.",
+    ownerHelp: '"Only from my main account" rules listen to this name.',
     seconds: "s",
     commands: {
       add: "Add command",

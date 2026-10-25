@@ -1,0 +1,26 @@
+{
+  "figtree": {
+    "package": "@fontsource-variable/figtree",
+    "version": "5.3.0",
+    "source": "4ba7d3d096695818fe0686be4f1e82c6b05134e18a22260336130335027462dd",
+    "file": "figtree-latin-wght-normal.woff2",
+    "sha256": "6172f5bd9bcbbd392973167d2e78eec4cd5e023a6a13226a1dcf8a5db047d4ba",
+    "pairs": {
+      "r dotlessi": 70
+    }
+  },
+  "tektur": {
+    "package": "@fontsource-variable/tektur",
+    "version": "5.3.0",
+    "source": "2c4e3f0723427b12e30b10fd233c362244963124ecbdd3a3cba40dcf78c3f22e",
+    "file": "tektur-latin-wght-normal.woff2",
+    "sha256": "68daf4052d9345e906e8e362f962167f7d898f4e0fab99baa89d6a4a9b04279d",
+    "pairs": {
+      "r dotlessi": 80
+    },
+    "yShoulders": {
+      "wght400": 270,
+      "wght900": 370
+    }
+  }
+}

@@ -9,7 +9,7 @@ export const enChat = {
   list: {
     label: "Your messages",
     empty: "No messages yet",
-    emptyBody: "Press “Message” on a friend's card.",
+    emptyBody: 'Press "Message" on a friend\'s card.',
     you: "You: {{text}}",
     noMessages: "No messages yet",
     failed: "Not sent",

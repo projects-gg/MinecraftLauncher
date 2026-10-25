@@ -343,7 +343,7 @@
   "projects_overlay.world.join.preparing": "Arkadaşının dünyası hazırlanıyor…",
   "projects_overlay.connect.travel.world": "Arkadaşının dünyasına bağlanılıyor…",
   "projects_overlay.connect.already.world": "Zaten bu dünyadasın.",
-  "projects_overlay.resume.missing": "“%s” dünyası bulunamadı.",
+  "projects_overlay.resume.missing": "\"%s\" dünyası bulunamadı.",
   "projects_overlay.host.card.in": "Dünyanda: %s",
   "projects_overlay.host.stop.title": "Paylaşım kapatılsın mı?",
   "modmenu.nameTranslation.projects_overlay": "Projects oyun içi katman",

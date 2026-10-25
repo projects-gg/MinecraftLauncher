@@ -89,6 +89,13 @@ function PrimaryButton({
   // click (@pl/ui press-guard), as on the desktop cards.
   const guard = usePressGuard(action);
   if (action === "none") return null;
+  // Stopped until something is fixed (the state line's hint says what, "… düzelt, sonra başlat"):
+  // "Başlat" steps back from gold, which called for a start that would stop again (SMALL11).
+  // After a plain disconnect ("other") starting again is the fix, and it stays gold.
+  const hold = account.hold;
+  const fixFirst =
+    action === "start" &&
+    ((hold?.kind === "cause" && hold.cause !== "other") || hold?.kind === "server_blocked");
   const labels: Record<Exclude<CloudPrimary, "none">, string> = {
     start: t("cloudAfk.actions.start"),
     stop: t("cloudAfk.actions.stop"),
@@ -111,7 +118,7 @@ function PrimaryButton({
   return (
     <Button
       size="sm"
-      variant={action === "stop" ? "secondary" : "primary"}
+      variant={action === "stop" || fixFirst ? "secondary" : "primary"}
       icon={icons[action]}
       aria-disabled={guard.armed ? undefined : true}
       onClick={press}

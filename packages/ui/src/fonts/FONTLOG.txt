@@ -1,0 +1,38 @@
+FONTLOG for the launcher's Figtree and Tektur latin subsets
+==========================================================
+
+figtree-latin-wght-normal.woff2 and tektur-latin-wght-normal.woff2 are the text and display faces
+of Projects Launcher and Projects Studio (@pl/ui, docs/design.md §3).
+
+Source
+------
+Figtree (Copyright 2022 The Figtree Project Authors, https://github.com/erikdkennedy/figtree) and
+Tektur (Copyright 2023 The Tektur Project Authors, https://www.github.com/hyvyys/Tektur), both under
+the SIL Open Font License 1.1 with no Reserved Font Name (OFL-Figtree.txt, OFL-Tektur.txt), as
+packaged by fontsource: @fontsource-variable/figtree and @fontsource-variable/tektur, the latin
+subset of each variable font (fonts.json names the versions and the source files' SHA-256).
+
+Changes (25 Oct 2026, Projects)
+-------------------------------
+- One pair-positioning lookup added to each font's "kern" feature: "r" followed by dotless "ı"
+  (U+0131) moves the "ı" 70 units right in Figtree and 80 in Tektur (1000 units per em). Turkish
+  writes "rı" in most plurals and possessives; the arm of "r" ends 0.07-0.09 em before the stem of
+  "ı" and neither font kerned the pair, so at 12-17 px antialiasing joined them and "rı" read "n"
+  ("Arkadaşlarında" as "Arkadaşlannda").
+- Tektur only: the capital "Y" meets its stem higher. Its four shoulder points move from 210 to
+  270 units at the weight axis's default (400) and to 370 at its maximum (900), 310 at the titles'
+  600, always under the arms' inner junction; the outer two slide along their arm's edge, so the
+  arms keep their slope and width. The stem was 0.21 em tall, two or three pixels under a wide V
+  at 13-17 px, and "Yama notları" read "Vama notları". Advance, side bearings and kerning are the
+  source's.
+- Nothing else changed: every other glyph, metric and kerning value is the source's.
+- The version strings (name IDs 3 and 5) end in "Projects build: r + dotless i kerning" (Figtree)
+  and "Projects build: r + dotless i kerning, longer Y stem" (Tektur).
+
+The families keep their names (no Reserved Font Name). The other subsets the launcher loads
+(latin-ext and, for Tektur, Cyrillic, Greek and Vietnamese) are fontsource's files, unchanged.
+
+Build
+-----
+packages/ui/scripts/build-text-fonts.py (fontTools 4.67, brotli) from the installed fontsource
+packages; it writes the two files and fonts.json. Run it again after upgrading either package.

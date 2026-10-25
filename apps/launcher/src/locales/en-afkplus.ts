@@ -679,8 +679,8 @@ export const enAfkPlus = {
       lede: "It only spends in-game money and never goes over these limits. It asks you first on big buys.",
       notNow: "No buying for now",
       notNowHelp: "It only tells you when it finds what you're after.",
-      required: "Enter both amounts, or turn on “No buying for now”.",
-      requiredOne: "Enter an amount, or turn on “No buying for now”.",
+      required: 'Enter both amounts, or turn on "No buying for now".',
+      requiredOne: 'Enter an amount, or turn on "No buying for now".',
     },
     list: {
       title: "Your first rule",
