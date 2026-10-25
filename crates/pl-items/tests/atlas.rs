@@ -453,11 +453,13 @@ fn jar() -> MemSource {
         "red_stained_glass_pane",
         r#"{"model":{"type":"minecraft:model","model":"minecraft:item/red_stained_glass_pane"}}"#,
     );
-    // The game's glint texture.
+    // The game's glint texture: a thin streak every 16 diagonals, closer together than the about
+    // 27 the still frame spans (14 texels turned by 10°), so a streak crosses the frame wherever
+    // its origin is tuned to.
     let mut glint = Image::new(128, 128);
     for y in 0..128 {
         for x in 0..128 {
-            let streak = if (x + y) % 32 < 3 { 255 } else { 120 };
+            let streak = if (x + y) % 16 == 0 { 255 } else { 120 };
             glint.put(x, y, [streak / 2, streak / 4, streak, 255]);
         }
     }
