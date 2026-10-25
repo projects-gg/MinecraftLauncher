@@ -412,13 +412,15 @@ describe("ItemSprite", () => {
     expect(render({ id: "stone", art: art() })).not.toContain("drop-shadow");
   });
 
-  it("draws the stand-ins flat inside a dark outline, the same on every render", () => {
+  it("draws the stand-ins as one flat silhouette, the same on every render", () => {
     const html = render({ id: "minecraft:unknown_block" });
     expect(render({ id: "minecraft:unknown_block" })).toBe(html);
-    const fills = new Set([...html.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1]));
-    // The outline, the lit top and its edge highlight, and the two shaded sides.
-    expect(fills).toContain("#322d29");
-    expect(fills.size).toBe(5);
+    // One path in one tone (no light, no outline) that a light surface can set.
+    expect(html.match(/<path/g)).toHaveLength(1);
+    expect(html).toContain("fill:var(--pl-item-standin, #7d7586)");
+    expect(html).not.toMatch(/fill="#/);
+    // The block's hexagon: its widest rows span the whole box.
+    expect(html).toContain("M0 3h16v1h-16z");
   });
 
   it("draws Projects' art from the overlay atlas on its servers", () => {

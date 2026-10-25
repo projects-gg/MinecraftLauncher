@@ -6,8 +6,9 @@
 // masks alike): a CDN answers a request without an Origin without CORS headers, and a browser that
 // cached that answer would refuse it to the masks. 3D icons drawn 48 device pixels wide (the
 // game's GUI scale 3) come from the atlas's second, 48 px image, loaded only then. Icons the atlas
-// marks dark get a faint light edge so they stay visible on our dark slots; a light surface (the
-// game-grey inventory) turns it off with `--pl-item-rim: transparent`. Renders on the server too.
+// marks dark get a quiet one-texel edge so they stay visible on our dark slots; a light surface (the
+// game-grey inventory) turns it off with `--pl-item-rim: transparent` and sets the stand-ins' tone
+// with `--pl-item-standin` (the game's own `#555555` there). Renders on the server too.
 import {
   type CSSProperties,
   createContext,
@@ -134,61 +135,27 @@ function mask(sheet: Sheet, rects: readonly Rect[], size: number): CSSProperties
   };
 }
 
-/** The stand-ins' outline: dark, as the game's own items have (L* about 19). */
-const GLYPH_OUTLINE = "#322d29";
-
 /**
- * The stand-in drawings' tones: flat neutral greys (body, detail and trim, light to dark; the body
- * at L* about 55 with one lighter step for edges that catch the light) inside a dark one-texel
- * outline. No texture, so they never pass for a real material; no bright outline, so they never
- * outshine the real icons beside them.
+ * The stand-ins' one flat tone, like the game's own empty-slot hints (one grey, no light, no
+ * outline), so a stand-in never passes for a real item: our placeholder grey (`ash-500`, 4:1 on
+ * the darkest card) by default; the game-grey inventory sets the game's own `#555555`.
  */
-const GLYPH_TONES: Readonly<Record<string, string>> = {
-  A: "#a39d95",
-  B: "#8a857e",
-  C: "#74706a",
-  D: "#5f5b56",
-  E: "#4a4743",
-  F: GLYPH_OUTLINE,
-  a: "#a8957a",
-  b: "#8e7d65",
-  c: "#766852",
-  d: "#615542",
-  e: "#4c4334",
-  f: GLYPH_OUTLINE,
-  "0": "#9a876f",
-  "1": "#7c6b56",
-  "2": "#605241",
-  "3": "#463a2e",
-  "4": "#2f261e",
-  "5": GLYPH_OUTLINE,
-  /** A glint (the potion's bubble). */
-  "+": "#e4ddd2",
-};
+const STANDIN_FILL = "var(--pl-item-standin, #7d7586)";
 
-const glyphPaths = new Map<string, { fill: string; d: string }[]>();
+const glyphPaths = new Map<string, string>();
 
-function glyph(category: keyof typeof FALLBACK_GLYPHS): { fill: string; d: string }[] {
+/** A stand-in's silhouette as one SVG path, a rectangle per run of filled cells. */
+function glyph(category: keyof typeof FALLBACK_GLYPHS): string {
   const hit = glyphPaths.get(category);
   if (hit) return hit;
-  const byFill = new Map<string, string>();
+  let d = "";
   FALLBACK_GLYPHS[category].forEach((row, y) => {
-    let x = 0;
-    while (x < row.length) {
-      const fill = GLYPH_TONES[row[x] ?? "."];
-      if (!fill) {
-        x++;
-        continue;
-      }
-      let w = 1;
-      while (GLYPH_TONES[row[x + w] ?? "."] === fill) w++;
-      byFill.set(fill, `${byFill.get(fill) ?? ""}M${x} ${y}h${w}v1h-${w}z`);
-      x += w;
+    for (const run of row.matchAll(/#+/g)) {
+      d += `M${run.index} ${y}h${run[0].length}v1h-${run[0].length}z`;
     }
   });
-  const paths = [...byFill].map(([fill, d]) => ({ fill, d }));
-  glyphPaths.set(category, paths);
-  return paths;
+  glyphPaths.set(category, d);
+  return d;
 }
 
 interface Drawn {
@@ -359,9 +326,7 @@ export function ItemSprite({ size = 32, label, className, art: own, ...item }: I
           shapeRendering="crispEdges"
           style={{ display: "block" }}
         >
-          {glyph(category).map((p) => (
-            <path key={p.fill} fill={p.fill} d={p.d} />
-          ))}
+          <path d={glyph(category)} style={{ fill: STANDIN_FILL }} />
         </svg>
       </span>
     );
