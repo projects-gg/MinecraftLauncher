@@ -197,7 +197,14 @@ export function Menu({
   strip,
   align = "end",
   side = "bottom",
+  sideOffset = 6,
+  collisionPadding,
+  open,
   onOpenChange,
+  onCloseAutoFocus,
+  header,
+  label,
+  className,
 }: {
   trigger: ReactElement;
   items: Array<MenuItem | null>;
@@ -205,20 +212,43 @@ export function Menu({
   strip?: readonly MenuStripItem[];
   align?: "start" | "center" | "end";
   side?: "top" | "right" | "bottom" | "left";
+  sideOffset?: number;
+  /**
+   * How far from the window's edges the menu keeps (Radix's default 0); per side when a menu must
+   * stay within its owner's edges (the inventory's slot menu within the game's window).
+   */
+  collisionPadding?: number | Partial<Record<"top" | "right" | "bottom" | "left", number>>;
+  /**
+   * Opened and closed by its owner instead of by the trigger (the inventory opens a slot's menu
+   * on a long press or Shift+F10, under the slot, with a hidden trigger there).
+   */
+  open?: boolean;
   /** When it opens and closes (a hover card holds itself open meanwhile). */
   onOpenChange?: (open: boolean) => void;
+  /** When the menu has closed; `preventDefault()` keeps the focus from going back. */
+  onCloseAutoFocus?: (event: Event) => void;
+  /** What the rows act on, above them (the inventory's item tooltip); never a row itself. */
+  header?: ReactNode;
+  /** The menu's accessible name, when the rows alone do not say what they act on. */
+  label?: string;
+  /** A class for the menu's surface (the inventory's slot menu is solid over the game's window). */
+  className?: string;
 }) {
   return (
-    <DropdownMenu.Root onOpenChange={onOpenChange}>
+    <DropdownMenu.Root open={open} onOpenChange={onOpenChange}>
       <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align={align}
           side={side}
-          sideOffset={6}
-          className={contentClass}
-          onCloseAutoFocus={(event) => focusBackAfterKeys(event)}
+          sideOffset={sideOffset}
+          collisionPadding={collisionPadding}
+          className={cn(contentClass, className)}
+          // Radix names the menu after its trigger; a label of its own replaces that name.
+          {...(label ? { "aria-label": label, "aria-labelledby": undefined } : {})}
+          onCloseAutoFocus={(event) => focusBackAfterKeys(event, onCloseAutoFocus)}
         >
+          {header}
           {stripRow(strip, DROPDOWN)}
           {menuRows(items, DROPDOWN)}
         </DropdownMenu.Content>
@@ -248,6 +278,7 @@ export function ContextMenu({
   disabled,
   wrapTrigger,
   onCloseAutoFocus,
+  onOpenChange,
 }: {
   /** The element that opens the menu on right click (one element; it receives the handlers). */
   children: ReactElement;
@@ -262,6 +293,8 @@ export function ContextMenu({
   wrapTrigger?: (trigger: ReactElement) => ReactElement;
   /** When the menu has closed; `preventDefault()` keeps the focus from going back. */
   onCloseAutoFocus?: (event: Event) => void;
+  /** When it opens and closes (the inventory shows the slot's tooltip meanwhile). */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const trigger = (
     <RadixContextMenu.Trigger asChild disabled={disabled} onContextMenu={skipPortalClicks}>
@@ -269,7 +302,7 @@ export function ContextMenu({
     </RadixContextMenu.Trigger>
   );
   return (
-    <RadixContextMenu.Root>
+    <RadixContextMenu.Root onOpenChange={onOpenChange}>
       {wrapTrigger ? wrapTrigger(trigger) : trigger}
       <RadixContextMenu.Portal>
         <RadixContextMenu.Content

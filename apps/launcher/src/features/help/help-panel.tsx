@@ -196,7 +196,8 @@ function VerdictCard({
       <div className="flex items-center gap-3.5">
         <VerdictMark kind={shown.kind} />
         <div className="min-w-0 flex-1">
-          <Swap text={headline} className="font-display text-section font-semibold text-bone-50" />
+          {/* A card title under the section's own (docs/design.md §3), a step below it. */}
+          <Swap text={headline} className="font-display text-title font-semibold text-bone-50" />
           <Swap text={line} className="mt-0.5 text-[13px] leading-[18px] text-ash-300" />
         </div>
         <div className="flex shrink-0 items-center gap-2">
