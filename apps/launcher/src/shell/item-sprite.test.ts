@@ -435,6 +435,33 @@ describe("ItemSprite", () => {
     expect(html).toContain("M1 7h6v1h-6zM8 7h7v1h-7z");
   });
 
+  it("stands in for tools, weapons, armour and potions with a sack, never an empty-slot shape", () => {
+    // The game draws swords, pickaxes, armour and bottles as empty-slot hints: those items, and
+    // anything else without a shape of its own, show one tied sack.
+    const path = (id: string) => render({ id }).match(/ d="([^"]+)"/)?.[1];
+    const sack = path("minecraft:unknown_thing");
+    expect(sack).toBeDefined();
+    for (const id of [
+      "projects:mystery_sword",
+      "projects:mystery_pickaxe",
+      "projects:mystery_chestplate",
+      "projects:mystery_boots",
+      "projects:mystery_potion",
+    ]) {
+      expect(path(id)).toBe(sack);
+    }
+    // Its tied neck: two cord ends, the knot, a two-texel neck.
+    expect(sack).toContain("M5 1h2v1h-2zM9 1h2v1h-2zM6 2h4v1h-4zM7 3h2v1h-2z");
+    // Blocks, food and books keep their own shapes.
+    for (const id of [
+      "projects:unknown_block",
+      "projects:mystery_apple",
+      "projects:mystery_book",
+    ]) {
+      expect(path(id)).not.toBe(sack);
+    }
+  });
+
   it("draws Projects' art from the overlay atlas on its servers", () => {
     const html = render({ id: "paper", cmd: 100001, size: 32, art: art("projects.gg") });
     expect(html).toContain('data-source="overlay"');
