@@ -1,4 +1,3 @@
-import { isValidElement, type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // BETA-GATE: picking Beta and staying on it, against a stubbed backend, preferences and toast.
@@ -25,11 +24,7 @@ vi.mock("@pl/ui", () => ({
     warning: (...args: unknown[]) => warning(...args),
   }),
 }));
-const check = vi.fn();
-vi.mock("@/stores/update", () => ({ useUpdate: { getState: () => ({ check }) } }));
 vi.mock("@/lib/i18n", () => ({ default: { t: (key: string) => key } }));
-const openWebLink = vi.fn();
-vi.mock("@/lib/links", () => ({ openWebLink: (href: string) => openWebLink(href) }));
 
 const { keepBeta, useBetaGate } = await import("./beta-gate");
 
@@ -41,11 +36,9 @@ beforeEach(() => {
   updateBetaKeep.mockReset();
   toast.mockReset();
   warning.mockReset();
-  check.mockReset();
-  openWebLink.mockReset();
   prefs.set.mockClear();
   prefs.updateChannel = "stable";
-  useBetaGate.setState({ asking: false, refusal: null });
+  useBetaGate.setState({ asking: false, refusal: null, rowsShown: 0 });
 });
 
 describe("join", () => {
@@ -104,47 +97,32 @@ describe("keepBeta", () => {
     expect(toast).not.toHaveBeenCalled();
   });
 
-  it("moves to Kararlı on a no, says so once and offers what to do", async () => {
+  it("moves to Kararlı on a no and says so once; what to do stays in Settings' line", async () => {
     prefs.updateChannel = "beta";
     updateBetaKeep.mockResolvedValue(ok("notMember", "https://projects.gg/arge"));
     expect(await keepBeta()).toBe("stable");
     expect(prefs.updateChannel).toBe("stable");
-    expect(useBetaGate.getState().refusal?.verdict).toBe("notMember");
+    expect(useBetaGate.getState().refusal).toEqual({
+      verdict: "notMember",
+      apply: "https://projects.gg/arge",
+    });
+    // A toast only tells: no button (a second gold thing over OYNA, its action is in the line).
     expect(toast).toHaveBeenCalledTimes(1);
-    const [message, options] = toast.mock.calls[0] as [
-      string,
-      { action: { label: ReactElement<{ children: unknown[] }>; onClick: () => void } },
-    ];
-    expect(message).toBe("betaGate.movedNotMember");
-    // The button's words, then the external-link mark (it opens the browser).
-    expect(isValidElement(options.action.label)).toBe(true);
-    expect(options.action.label.props.children[0]).toBe("betaGate.apply");
-    options.action.onClick();
-    expect(openWebLink).toHaveBeenCalledWith("https://projects.gg/arge");
+    expect(toast.mock.calls[0]).toEqual(["betaGate.movedNotMember"]);
 
-    // "Couldn't check": the warning state and "Tekrar dene", which asks again (Beta on a yes).
+    toast.mockReset();
+    prefs.updateChannel = "beta";
+    updateBetaKeep.mockResolvedValue(ok("signIn"));
+    expect(await keepBeta()).toBe("stable");
+    expect(toast.mock.calls[0]).toEqual(["betaGate.movedSignIn"]);
+
+    // "Couldn't check": the warning state.
     toast.mockReset();
     prefs.updateChannel = "beta";
     updateBetaKeep.mockResolvedValue(ok("unknown"));
     expect(await keepBeta()).toBe("stable");
     expect(toast).not.toHaveBeenCalled();
-    const [failed, retry] = warning.mock.calls[0] as [
-      string,
-      { action: { label: string; onClick: () => void } },
-    ];
-    expect(failed).toBe("betaGate.movedUnknown");
-    expect(retry.action.label).toBe("betaGate.retry");
-    updateBetaJoin.mockResolvedValue(ok("allowed"));
-    retry.action.onClick();
-    await vi.waitFor(() => expect(check).toHaveBeenCalledTimes(1));
-    expect(prefs.updateChannel).toBe("beta");
-    toast.mockReset();
-    prefs.updateChannel = "beta";
-    updateBetaKeep.mockResolvedValue(ok("signIn"));
-    expect(await keepBeta()).toBe("stable");
-    expect(toast.mock.calls[0]?.[0]).toBe("betaGate.movedSignIn");
-    const signIn = toast.mock.calls[0]?.[1] as { action: { label: string } };
-    expect(signIn.action.label).toBe("betaGate.signInShort");
+    expect(warning.mock.calls[0]).toEqual(["betaGate.movedUnknown"]);
   });
 
   it("leaves the toast to Settings' line while the channel row is on screen", async () => {
@@ -155,7 +133,6 @@ describe("keepBeta", () => {
     expect(useBetaGate.getState().refusal?.verdict).toBe("notMember");
     expect(toast).not.toHaveBeenCalled();
     expect(warning).not.toHaveBeenCalled();
-    useBetaGate.setState({ rowsShown: 0 });
   });
 
   it("stays where it is when the command itself fails", async () => {

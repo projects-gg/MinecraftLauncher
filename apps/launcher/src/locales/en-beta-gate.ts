@@ -5,13 +5,12 @@ export const enBetaGate = {
   checking: "Checking your R&D membership",
   notMember: "Beta is for the R&D team.",
   apply: "Apply to join",
-  // Followed by the action and a full stop: "… If you're on it, sign in with Discord.".
-  signIn: "Beta is for the R&D team. If you're on it,",
+  // Followed by the action and a full stop: "… If you're on the team, sign in with Discord.".
+  signIn: "Beta is for the R&D team. If you're on the team,",
   signInAction: "sign in with Discord",
   unknown: "Couldn't check your R&D membership right now.",
   retry: "Try again",
-  movedNotMember: "You're not on the R&D team, so you're on Stable now.",
-  movedSignIn: "You're not signed in with Discord, so you're on Stable for now.",
-  signInShort: "Sign in",
-  movedUnknown: "Couldn't check your R&D membership, so you're on Stable.",
+  movedNotMember: "Beta is for the R&D team. Your updates now come from Stable.",
+  movedSignIn: "Sign in with Discord to use Beta. Until then, your updates come from Stable.",
+  movedUnknown: "Couldn't check your R&D membership. For now, your updates come from Stable.",
 };

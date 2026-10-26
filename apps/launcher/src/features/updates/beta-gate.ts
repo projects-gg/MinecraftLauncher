@@ -4,13 +4,10 @@
 // an answer that says no moves the launcher back to Kararlı with one quiet toast. It never installs
 // an older version: the launcher keeps its beta until Kararlı passes it. What cannot be asked
 // keeps a launcher on beta for a week after the last yes (the backend decides).
-import { ArrowSquareOut } from "@phosphor-icons/react";
 import { toast } from "@pl/ui";
-import { createElement, Fragment, type ReactNode } from "react";
 import { create } from "zustand";
 import { type BetaAccess, commands } from "@/bindings";
 import i18n from "@/lib/i18n";
-import { openWebLink } from "@/lib/links";
 import { isTauri } from "@/lib/platform";
 import { type UpdateChannel, usePrefs } from "@/stores/prefs";
 
@@ -97,56 +94,17 @@ export const useBetaGate = create<BetaGateState>()((set, get) => ({
   },
 }));
 
-/** A toast button's words with the launcher's external-link mark (it opens the browser). */
-function externalLabel(text: string): ReactNode {
-  return createElement(
-    Fragment,
-    null,
-    text,
-    createElement(ArrowSquareOut, {
-      size: 11,
-      weight: "bold",
-      "aria-hidden": true,
-      className: "ml-1 inline-block align-[-1px]",
-    }),
-  );
-}
-
-/** The "couldn't check" toast's "Tekrar dene": the same as pressing Beta again. */
-async function retryJoin() {
-  if (!(await useBetaGate.getState().join())) return;
-  // Let in: a look at the beta channel at once (dynamic: the update store imports this file).
-  const { useUpdate } = await import("@/stores/update");
-  void useUpdate.getState().check();
-}
-
-/** The toast when an update look moved the launcher back to Kararlı, with what to do about it. */
+/**
+ * The toast when an update look moved the launcher back to Kararlı. It only tells (toasts are for
+ * news, actions stay inline: Settings' line keeps why with "Başvur", "Discord ile giriş yap" or
+ * "Tekrar dene"), so no second gold button sits over OYNA.
+ */
 function movedToast(access: BetaAccess) {
   const t = i18n.t.bind(i18n);
-  if (access.verdict === "notMember") {
-    toast(t("betaGate.movedNotMember"), {
-      action: {
-        label: externalLabel(t("betaGate.apply")),
-        onClick: () => openWebLink(access.apply),
-      },
-    });
-  } else if (access.verdict === "signIn") {
-    toast(t("betaGate.movedSignIn"), {
-      action: {
-        // The toast is narrow and its sentence already names Discord.
-        label: t("betaGate.signInShort"),
-        onClick: () =>
-          void import("@/features/social/store").then(({ useSocialUi }) =>
-            useSocialUi.getState().openPanel(),
-          ),
-      },
-    });
-  } else {
-    // A check that failed: the warning state (the row's mark), and a way to try again.
-    toast.warning(t("betaGate.movedUnknown"), {
-      action: { label: t("betaGate.retry"), onClick: () => void retryJoin() },
-    });
-  }
+  if (access.verdict === "notMember") toast(t("betaGate.movedNotMember"));
+  else if (access.verdict === "signIn") toast(t("betaGate.movedSignIn"));
+  // A check that failed: the warning state (the row's mark).
+  else toast.warning(t("betaGate.movedUnknown"));
 }
 
 /**
