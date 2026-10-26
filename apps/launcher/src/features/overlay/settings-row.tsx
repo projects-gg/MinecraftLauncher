@@ -8,7 +8,6 @@ import { useInstallOfficial } from "@/features/library/official-ui";
 import { usePlayInstance } from "@/features/settings/graphics-section";
 import { Row } from "@/features/settings/row";
 import { api, type InstanceSummary } from "@/lib/api";
-import { detectOs } from "@/lib/platform";
 import { usePrefs } from "@/stores/prefs";
 import { overlayApi } from "./api";
 import {
@@ -22,16 +21,13 @@ import {
 /** Before the instance list is read. */
 const NO_INSTANCES: InstanceSummary[] = [];
 
-/** The overlay's default shortcut (the player may bind another in the game's Controls). */
-const OVERLAY_KEY = "F7";
-
 /**
- * The emoji picker's shortcut in the game's chat (CHAT-EMOJI; Discord's): Ctrl+E, ⌘E on macOS,
- * where the game reads Command as its Control.
+ * The overlay's and the emoji picker's default keys (key bindings of the game's Controls, under
+ * "Projects"; the owner, 26 Oct: the picker's is F9). The player may bind others there, which the
+ * launcher cannot see, so the lines name them as the defaults they are.
  */
-function emojiKeys(): readonly string[] {
-  return detectOs() === "macos" ? ["⌘", "E"] : ["Ctrl", "E"];
-}
+const OVERLAY_KEY = "F7";
+const EMOJI_KEY = "F9";
 
 /** Where the key cap goes in the sentence that names the shortcut. */
 const KEY_SLOT = "@@key@@";
@@ -156,10 +152,10 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
   }, [line.kind]);
 
   const range = versionRange(overlay?.versions ?? []);
-  const keys = which === "overlay" ? [OVERLAY_KEY] : emojiKeys();
+  const keyName = which === "overlay" ? OVERLAY_KEY : EMOJI_KEY;
   const opensKey = which === "overlay" ? "overlay.settingHelp" : "overlay.emojiHelp";
   const sentence: Record<OverlayLineKind, string> = {
-    opens: t(opensKey, { key: keys.join(which === "overlay" ? "" : "+") }),
+    opens: t(opensKey, { key: keyName }),
     noHome: t("overlay.packMissing"),
     closes: t("overlay.closeHelp"),
     // One need for both: a Fabric install on a version the overlay is made for.
@@ -170,18 +166,14 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
       ? t("overlay.waitsOfficial", { name: shownName })
       : t("overlay.waitsInstall", { name: shownName, target: homeName }),
   };
-  /** The sentence as shown: the shortcut as key caps, one per key. */
+  /** The sentence as shown: the default key as a key cap. */
   const shownSentence = (kind: OverlayLineKind): ReactNode => {
     if (kind !== "opens") return sentence[kind];
     const [before, after] = t(opensKey, { key: KEY_SLOT }).split(KEY_SLOT);
     return (
       <>
         {before}
-        <span className="inline-flex gap-[3px]">
-          {keys.map((key) => (
-            <Kbd key={key}>{key}</Kbd>
-          ))}
-        </span>
+        <Kbd>{keyName}</Kbd>
         {after}
       </>
     );
