@@ -30,6 +30,8 @@ export interface AccountCardProps {
   accounts: readonly AccountSummary[];
   /** The online AFK session with this name, if any. */
   afk: AfkAccount | null;
+  /** The game on screen plays with this account (PLAY-ACCT): "Oyunda". */
+  playing?: boolean;
   bracketsId: string;
   onSwitch: () => void;
   onRemove: () => void;
@@ -196,6 +198,7 @@ export function AccountCard({
   account,
   accounts,
   afk,
+  playing = false,
   bracketsId,
   onSwitch,
   onRemove,
@@ -320,6 +323,11 @@ export function AccountCard({
                       </motion.span>
                     ) : null}
                   </AnimatePresence>
+                  {playing ? (
+                    <Chip tone="jade" className="shrink-0">
+                      {t("playAcct.inGame")}
+                    </Chip>
+                  ) : null}
                   {afk ? (
                     <Chip tone="jade" className="shrink-0">
                       {t("accounts.center.afk")}

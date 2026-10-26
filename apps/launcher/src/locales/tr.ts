@@ -28,6 +28,7 @@ import { trNewsColumn } from "./tr-news-column";
 import { trOverlay } from "./tr-overlay";
 import { trOverview } from "./tr-overview";
 import { trPlacement } from "./tr-placement";
+import { trPlayAcct } from "./tr-play-acct";
 import { trPlayOpen } from "./tr-play-open";
 import { trPlayTogether } from "./tr-play-together";
 import { trPrepare } from "./tr-prepare";
@@ -99,6 +100,7 @@ export const tr = {
   afkPlus: trAfkPlus,
   newsColumn: trNewsColumn,
   worldEntry: trWorldEntry,
+  playAcct: trPlayAcct,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

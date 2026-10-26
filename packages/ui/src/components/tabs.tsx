@@ -1,3 +1,4 @@
+import { WarningCircle } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
 import { Tabs as RadixTabs } from "radix-ui";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, type WheelEvent } from "react";
@@ -15,6 +16,11 @@ export interface TabItem<T extends string> {
    * this text. It sits in the tab's padding, so it never moves the other tabs.
    */
   marker?: string;
+  /**
+   * What the tab counts could not be read (its own notice is inside): a small red mark in the
+   * count's place, read out as this text, so the row neither drops a number silently nor shifts.
+   */
+  alert?: string;
 }
 
 /**
@@ -92,7 +98,12 @@ export function Tabs<T extends string>({
             className="group relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[13px] font-medium whitespace-nowrap text-ash-300 transition-colors duration-150 hover:text-bone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-inset data-[state=active]:text-bone-50"
           >
             {item.label}
-            {typeof item.count === "number" ? (
+            {item.alert ? (
+              <span className="flex">
+                <WarningCircle size={14} weight="fill" className="text-flare-400" aria-hidden />
+                <span className="sr-only">{item.alert}</span>
+              </span>
+            ) : typeof item.count === "number" ? (
               <span className="rounded bg-white/8 px-1.5 text-[11px] text-ash-300 tabular-nums">
                 {item.count}
               </span>

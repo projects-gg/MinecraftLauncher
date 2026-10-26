@@ -11,6 +11,7 @@ import { onlineAfkSession } from "./afk-match";
 import { useCalm } from "./calm";
 import { useAccountsUi } from "./store";
 import { useAccountHeads, useAccounts, useAfkSessions, useSwitchAccount } from "./use-accounts";
+import { usePlayingAccountId } from "./use-own-launch";
 
 const itemClass =
   "flex cursor-pointer items-center gap-3 rounded-md px-2 outline-none select-none data-[highlighted]:bg-white/8";
@@ -21,6 +22,8 @@ export function AccountSwitcher() {
   const { data: accounts = [], isPending } = useAccounts();
   const [open, setOpen] = useState(false);
   const sessions = useAfkSessions(open);
+  // The account whose game is on screen says so (PLAY-ACCT): OYNA is that account's alone.
+  const playing = usePlayingAccountId();
   const switchTo = useSwitchAccount();
   const openCenter = useAccountsUi((s) => s.openCenter);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -175,6 +178,11 @@ export function AccountSwitcher() {
                                       className="-ml-0.5 shrink-0 text-ash-400"
                                       aria-hidden
                                     />
+                                  ) : null}
+                                  {playing === account.id ? (
+                                    <Chip tone="jade" className="shrink-0">
+                                      {t("playAcct.inGame")}
+                                    </Chip>
                                   ) : null}
                                   {afk ? (
                                     <Chip tone="jade" className="shrink-0">

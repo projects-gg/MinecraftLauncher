@@ -1,7 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { useSelectedAccountId } from "@/features/accounts/use-own-launch";
 import { api } from "@/lib/api";
 import { useLaunch } from "@/stores/launch";
+import { launchOwner } from "@/stores/launch-owner";
 
 /**
  * True while the game of `instanceId` is starting or running. The launch store covers every
@@ -27,4 +29,14 @@ export function useGameRunning(instanceId: string): boolean {
     void queryClient.invalidateQueries({ queryKey: ["game-running"] });
   }, [launching, queryClient]);
   return launching || runningId === instanceId;
+}
+
+/**
+ * True while another account's game runs (PLAY-ACCT). An instance's play actions ("Devam et", a
+ * world's or a server's "Oyna") are off while its game runs, unless it is another account's: they
+ * then ask before closing it. The instance's files stay locked either way (`useGameRunning`).
+ */
+export function useOthersGame(): boolean {
+  const selected = useSelectedAccountId();
+  return useLaunch((s) => launchOwner(s.phase, s.account, selected) === "other");
 }

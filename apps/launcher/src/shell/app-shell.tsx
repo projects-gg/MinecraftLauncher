@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-
 import { useEffect } from "react";
 import heroFallback from "@/assets/art/hero-dragon-1.webp";
 import { DropHost } from "@/features/drop/drop-host";
+import { GameSwitchDialog } from "@/features/game-switch/switch-dialog";
 import { EventReminders } from "@/features/home/event-reminders";
 import { ImportHost } from "@/features/import/import-host";
 import { JavaPromptDialog } from "@/features/java/java-prompt";
@@ -40,6 +41,7 @@ import { TitleBar } from "./title-bar";
 import { useDesktopEvents } from "./use-desktop-events";
 import { usePresenceSync } from "./use-presence";
 import { useTaskbarProgress } from "./use-taskbar";
+import { useTrayInGame } from "./use-tray-in-game";
 
 // Hooks that follow fast-changing state (the launch's phase and progress, add-on downloads) live
 // in leaf components that render nothing: called in AppShell they re-rendered the whole app,
@@ -51,6 +53,11 @@ function PresenceSync() {
 
 function TaskbarProgress() {
   useTaskbarProgress();
+  return null;
+}
+
+function TrayInGame() {
+  useTrayInGame();
   return null;
 }
 
@@ -118,6 +125,7 @@ export function AppShell() {
     <div className="flex h-dvh w-dvw overflow-hidden text-bone-100">
       <PresenceSync />
       <TaskbarProgress />
+      <TrayInGame />
       <GlobalShortcuts disabled={onboarding} />
       <EventReminders />
       <Backdrop
@@ -139,6 +147,8 @@ export function AppShell() {
       <CommandPalette disabled={onboarding} />
       <ModFlowDialog />
       <JavaPromptDialog />
+      {/* "Oyna" while another account's game, or another installation's, runs (PLAY-ACCT). */}
+      <GameSwitchDialog />
       <DropHost disabled={onboarding} />
       <ScreenshotNotice />
       <WhatsNew />

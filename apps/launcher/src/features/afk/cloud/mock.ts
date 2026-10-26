@@ -168,7 +168,9 @@ function account(
     expiresAt,
     expired: false,
     graceUntil: expiresAt + 30 * DAY,
-    renewal: { open: expiresAt - now <= 7 * DAY, opensAt: expiresAt - 7 * DAY },
+    // Renewal is open at any time (owner, 25 Oct: "Süre uzatma"; the last-7-days rule is Studio's
+    // switch, off by default).
+    renewal: { open: true, opensAt: now - 12 * DAY },
     desired: "run",
     hold: null,
     live: {
@@ -219,11 +221,14 @@ function plainAccounts(which: Scenario): CloudAccount[] {
     }),
     account("a_3MCV7Y1KD5HS8FQ2", "Tuccar_Ali", "play.projects.gg", 0, {
       expiresAt: now + 27 * DAY,
-      // `?hold=invalid`: the machine stopped it on a row that starts with a backslash.
+      // `?hold=invalid`: the machine stopped it on a row that starts with a backslash;
+      // `?hold=blocked`: its server is one the cloud cannot join ("Girilemeyen sunucular").
       hold:
         param("hold") === "invalid"
           ? { kind: "cause", cause: "invalidCommand", at: now - 2 * 3_600, row: "c2" }
-          : { kind: "cause", cause: "wrongPassword", at: now - 2 * 3_600, row: null },
+          : param("hold") === "blocked"
+            ? { kind: "server_blocked", reason: null }
+            : { kind: "cause", cause: "wrongPassword", at: now - 2 * 3_600, row: null },
       live: {
         state: "stopped",
         since: now - 2 * 3_600,
