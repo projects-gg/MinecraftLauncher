@@ -279,9 +279,9 @@ public final class SettingsList extends PanelWidget {
     private boolean laidBundled;
 
     /**
-     * {@code shortcuts}: the keys under "Kısayol" (the overlay key). {@code languages}: the "Dil" row's language, the
-     * launcher's (OVL-LANG), at the top under "Genel"; null leaves it out (an older launcher: the overlay follows the
-     * game's language).
+     * {@code shortcuts}: the keys under "Kısayol" (the overlay key and the chat emoji picker's, both in the game's
+     * Controls). {@code languages}: the "Dil" row's language, the launcher's (OVL-LANG), at the top under "Genel"; null
+     * leaves it out (an older launcher: the overlay follows the game's language).
      */
     public SettingsList(Supplier<OverlaySettings> settings,
         java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, List<Shortcut> shortcuts,

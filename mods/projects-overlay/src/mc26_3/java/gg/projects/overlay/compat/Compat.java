@@ -8,8 +8,8 @@ import com.mojang.renderpearl.api.textures.FilterMode;
 import java.net.URI;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 
 /**
@@ -38,23 +38,10 @@ public final class Compat {
     }
 
     /**
-     * The chat's emoji picker shortcut (CHAT-EMOJI): Ctrl+E (⌘E on macOS), read as the game reads its own Ctrl+C in a
-     * text field: the key that types "e" in the player's layout (SDL's keycode), Control (Command on macOS), no Shift or
-     * Alt.
+     * Opens the chat the way T does (CHAT-EMOJI's key in the game), with the game's own refusal of a chat that is off.
      */
-    public static boolean isEmojiShortcut(KeyEvent event) {
-        return event.shortcutKey() == 'e' && event.hasControlDownWithQuirk() && !event.hasShiftDown()
-            && !event.hasAltDown();
-    }
-
-    /** The emoji picker shortcut as its tooltip names it. */
-    public static String emojiShortcutLabel() {
-        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("mac") ? "⌘E" : "Ctrl+E";
-    }
-
-    /** Ctrl+E as this version's keyboard reports it: SDL's scancode, its keycode ("e") and Control. */
-    public static KeyEvent emojiShortcutForDriver() {
-        return new KeyEvent(InputConstants.KEY_E, 'e', InputConstants.MOD_CONTROL);
+    public static void openChat(Minecraft mc) {
+        mc.gui.openChatScreen(ChatComponent.ChatMethod.MESSAGE);
     }
 
     /** The screen on top, or null in the game. */

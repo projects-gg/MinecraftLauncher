@@ -1,7 +1,7 @@
 package gg.projects.overlay.chat;
 
+import gg.projects.overlay.EmojiKey;
 import gg.projects.overlay.OverlayClient;
-import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.emoji.Emoji;
 import gg.projects.overlay.emoji.EmojiState;
 import gg.projects.overlay.emoji.Insertion;
@@ -40,12 +40,14 @@ import net.minecraft.util.FormattedCharSequence;
  * <p>The button is the pause menu's Projects button in another sprite (Küp smiling, 16 × 16 pixels in a 20 GUI pixel
  * chamfered square), right above the chat line's right end; its place is taken at the screen's first frame, once every mod
  * has added its own (No Chat Reports puts one in that very corner), moving left when it is taken and staying away when no
- * place is free. A press or Ctrl+E (⌘E on macOS; Discord's) opens the picker; the tooltip names both. On Projects the picker
- * writes the server's codes, elsewhere unicode text, at the caret ({@link Insertion}).
+ * place is free. A press or the picker's key (F9 by default, {@link EmojiKey}: a key binding of the game's Controls)
+ * opens the picker; the tooltip names the key bound now (no key cap while none is). In the game the key opens the chat
+ * with the picker ({@link #openPickerOnNextChat}). On Projects the picker writes the server's codes, elsewhere unicode
+ * text, at the caret ({@link Insertion}).
  *
  * <p>Nothing is a widget of the screen: everything is drawn over what the screen drew, and the screen's key, click and
  * wheel events are looked at first, so a click on the button or the picker never reaches chat text under it (a link). The
- * chat line keeps its focus and every key the picker does not need; while the picker is closed only Ctrl+E is taken.
+ * chat line keeps its focus and every key the picker does not need; while the picker is closed only its key is taken.
  */
 public final class ChatEmojiBar {
     /** What the bar needs from the running overlay (the whole overlay, or the emoji picker alone). */
@@ -60,6 +62,9 @@ public final class ChatEmojiBar {
 
         /** The host name of the server the game is on now, or null (singleplayer, menus). */
         String serverHost();
+
+        /** The picker's key (F9 by default), as the game's Controls bind it. */
+        EmojiKey emojiKey();
     }
 
     /** The game's chat line holds this many characters at most. */
@@ -79,6 +84,11 @@ public final class ChatEmojiBar {
     private static final int KEY_PAD = 3;
     private static final Identifier SPRITE_TEXTURE = Identifier.fromNamespaceAndPath(OverlayClient.MOD_ID,
         "textures/gui/emoji_button.png");
+    /** How long the key's wish to open the picker waits for the chat's first frame (a chat the game refused). */
+    private static final long REQUEST_MS = 1_000;
+
+    /** When the picker's key asked, in the game, for the chat with the picker open (0: no wish). */
+    private static volatile long pickerRequestedAt;
 
     /** The last bar made (the scenario driver looks at it and presses it as a player would). */
     private static ChatEmojiBar last;
@@ -153,9 +163,19 @@ public final class ChatEmojiBar {
         toggle(false);
     }
 
-    /** Opens or closes the picker as Ctrl+E would. */
+    /** Opens or closes the picker as its key would on the chat screen. */
     public void shortcutForDriver() {
         toggle(true);
+    }
+
+    /** The picker's key in the game (no screen open): the chat that opens now opens with the picker. */
+    public static void openPickerOnNextChat() {
+        pickerRequestedAt = now();
+    }
+
+    /** Whether the key's wish is waiting for a chat (the scenario driver looks). */
+    public static boolean pickerRequested() {
+        return pickerRequestedAt != 0;
     }
 
     /** Writes the emoji with this code (or text) as a click on it would; false when it is not in the picker. */
@@ -219,7 +239,7 @@ public final class ChatEmojiBar {
         if (!host.emojis().on()) {
             return true;
         }
-        if (Compat.isEmojiShortcut(event)) {
+        if (host.emojiKey().pressed(event)) {
             if (picker.isOpen() || active()) {
                 toggle(true);
                 return false;
@@ -382,6 +402,14 @@ public final class ChatEmojiBar {
 
     private void draw(GuiGraphicsExtractor g, int realX, int realY) {
         placeOnce();
+        long requested = pickerRequestedAt;
+        if (requested != 0) {
+            // The picker's key opened this chat from the game: the picker comes with it (from the keyboard).
+            pickerRequestedAt = 0;
+            if (now() - requested < REQUEST_MS && !picker.isOpen()) {
+                toggle(true);
+            }
+        }
         // The scenario driver's pointer (development runs), never the player's own.
         int mouseX = PanelInput.pointerSet() ? PanelInput.pointerX() : realX;
         int mouseY = PanelInput.pointerSet() ? PanelInput.pointerY() : realY;
@@ -440,7 +468,10 @@ public final class ChatEmojiBar {
         }
     }
 
-    /** "Emojiler" and the shortcut on a keycap, above the button, once the pointer settles on it. */
+    /**
+     * "Emojiler" and the picker's key on a keycap (the one bound now in the game's Controls; none while it is unbound),
+     * above the button, once the pointer settles on it.
+     */
     private void drawTip(GuiGraphicsExtractor g, long now) {
         if (tipSince == 0) {
             return;
@@ -451,22 +482,29 @@ public final class ChatEmojiBar {
         }
         Font small = Fonts.small();
         String words = Texts.str("chat_emoji.button");
-        String key = Compat.emojiShortcutLabel();
+        String key = host.emojiKey().keyName();
         float wordsW = small.width(words);
-        float keyW = small.width(key) + 2 * KEY_PAD;
-        float w = TIP_PAD + wordsW + 4 + keyW + TIP_PAD;
+        float keyW = key == null ? 0f : small.width(key) + 2 * KEY_PAD;
+        float w = TIP_PAD + wordsW + (key == null ? 0f : 4 + keyW) + TIP_PAD;
         float tx = Draw.snap(Math.max(2f, Math.min(screen.width - 2f - w, x + SIZE - w)));
         float ty = Draw.snap(y - TIP_GAP - TIP_H);
         Draw.pushAlpha(Ease.OUT.at(Math.min(1f, shownFor / (float) TIP_IN_MS)));
         Draw.frame(g, Frames.TOOLTIP, tx, ty, w, TIP_H);
         float textY = Fonts.centeredY(Fonts.Face.SMALL, ty + TIP_H / 2f);
         Draw.text(g, small, Texts.visual(words), tx + TIP_PAD, textY, Theme.BONE_100);
-        float kx = tx + TIP_PAD + wordsW + 4;
-        float ky = ty + (TIP_H - KEY_H) / 2f;
-        Draw.frame(g, Frames.KEYCAP, kx, ky, keyW, KEY_H);
-        Draw.text(g, small, Texts.visual(key), kx + KEY_PAD, Fonts.centeredY(Fonts.Face.SMALL, ky + KEY_H / 2f) - 0.5f,
-            Theme.BONE_100);
+        if (key != null) {
+            float kx = tx + TIP_PAD + wordsW + 4;
+            float ky = ty + (TIP_H - KEY_H) / 2f;
+            Draw.frame(g, Frames.KEYCAP, kx, ky, keyW, KEY_H);
+            Draw.text(g, small, Texts.visual(key), kx + KEY_PAD, Fonts.centeredY(Fonts.Face.SMALL, ky + KEY_H / 2f) - 0.5f,
+                Theme.BONE_100);
+        }
         Draw.popAlpha();
+    }
+
+    /** The key the tooltip names now (the scenario driver reads it), or null while the picker's key is unbound. */
+    public String tipKeyForDriver() {
+        return host.emojiKey().keyName();
     }
 
     /**
