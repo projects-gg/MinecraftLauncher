@@ -23,8 +23,7 @@ export const enPlayAcct = {
     closingInstance: "Once it closes, {{instance}} will start.",
     closingGame: "Once it closes, the game will start again.",
     overdueTitle: "The game hasn't closed yet",
-    overdueBody:
-      "If you force it to close, unsaved progress in your singleplayer world may be lost.",
+    overdueBody: "If you force it to close, unsaved progress may be lost.",
     wait: "Keep waiting",
     force: "Force close and play",
     forcingTitle: "Closing the game",

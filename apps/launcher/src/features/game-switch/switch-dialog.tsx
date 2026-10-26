@@ -97,8 +97,9 @@ export function GameSwitchDialog() {
   const words = question ?? stepWords(shown.sides, step ?? "closing");
   const title = say(t, words.title);
   const body = words.body.map((line) => say(t, line)).join(" ");
-  // The question and the late game's choices can be left; the way between runs to its end.
-  const open = step === undefined || step === "overdue";
+  // The question can be left with its X; the late game's choices are its three buttons (an X
+  // there would not say whether it waits on or gives up); the way between runs to its end.
+  const open = step === undefined;
   const footer = question ? (
     <>
       <Button variant="ghost" className="mr-auto" onClick={cancelSwitch}>

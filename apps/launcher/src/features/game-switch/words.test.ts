@@ -29,7 +29,7 @@ function sides(overrides: Partial<SwitchSides> = {}): SwitchSides {
 describe("the question (PLAY-ACCT)", () => {
   it("names the account to play with and the one whose game is saved and closed", () => {
     const words = questionWords(sides());
-    expect(turkish(words.title)).toBe("Oyun KorAtesi_ ile açılsın mı?");
+    expect(turkish(words.title)).toBe("Oyun KorAtesi_ hesabıyla açılsın mı?");
     expect(words.body.map(turkish)).toEqual([
       "EjderAvcisi ile açık olan oyun kaydedilip kapanacak.",
     ]);
@@ -45,7 +45,7 @@ describe("the question (PLAY-ACCT)", () => {
     const words = questionWords(
       sides({ to: { account: kor, instance: "fabric", instanceName: "Fabric 1.21" } }),
     );
-    expect(turkish(words.title)).toBe("Oyun KorAtesi_ ile açılsın mı?");
+    expect(turkish(words.title)).toBe("Oyun KorAtesi_ hesabıyla açılsın mı?");
     expect(words.body.map(turkish)).toEqual([
       "EjderAvcisi ile Projects kurulumunda açık olan oyun kaydedilip kapanacak.",
     ]);
@@ -55,7 +55,7 @@ describe("the question (PLAY-ACCT)", () => {
     const words = questionWords(
       sides({ to: { account: ejder, instance: "fabric", instanceName: "Fabric 1.21" } }),
     );
-    expect(turkish(words.title)).toBe("Fabric 1.21 açılsın mı?");
+    expect(turkish(words.title)).toBe("Fabric 1.21 kurulumu açılsın mı?");
     // "Projects" is also the server: the installation is called one.
     expect(words.body.map(turkish)).toEqual([
       "Projects kurulumunda açık olan oyun kaydedilip kapanacak.",
@@ -78,7 +78,7 @@ describe("the question (PLAY-ACCT)", () => {
         to: { account: ejder, instance: "fabric", instanceName: "Fabric 1.21" },
       }),
     );
-    expect(turkish(words.title)).toBe("Fabric 1.21 açılsın mı?");
+    expect(turkish(words.title)).toBe("Fabric 1.21 kurulumu açılsın mı?");
     expect(words.body.map(turkish)).toEqual(["Projects kurulumunun hazırlığı durdurulacak."]);
     expect(turkish(words.confirm)).toBe("Durdur ve oyna");
   });
@@ -99,7 +99,7 @@ describe("the way after the answer", () => {
   it("says what comes once the game has closed", () => {
     const closing = stepWords(sides(), "closing");
     expect(turkish(closing.title)).toBe("Oyun kapanıyor");
-    expect(closing.body.map(turkish)).toEqual(["Kapanınca KorAtesi_ ile açılacak."]);
+    expect(closing.body.map(turkish)).toEqual(["Kapanınca KorAtesi_ hesabıyla açılacak."]);
     const other = sides({
       to: { account: ejder, instance: "fabric", instanceName: "Fabric 1.21" },
     });
@@ -115,7 +115,7 @@ describe("the way after the answer", () => {
     const words = stepWords(sides(), "overdue");
     expect(turkish(words.title)).toBe("Oyun henüz kapanmadı");
     expect(words.body.map(turkish)).toEqual([
-      "Zorla kapatırsan tek oyunculu dünyandaki kaydedilmemiş ilerleme kaybolabilir.",
+      "Zorla kapatırsan kaydedilmemiş ilerleme kaybolabilir.",
     ]);
     expect(turkish(stepWords(sides(), "forcing").title)).toBe("Oyun kapatılıyor");
     expect(tr.playAcct.switch.force).toBe("Zorla kapat ve oyna");

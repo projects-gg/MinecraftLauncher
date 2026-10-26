@@ -7,9 +7,9 @@ export const trPlayAcct = {
   inGame: "Oyunda",
   switch: {
     /** Another account: the title names the account to play with. */
-    titleAccount: "Oyun {{name}} ile açılsın mı?",
+    titleAccount: "Oyun {{name}} hesabıyla açılsın mı?",
     /** The same account, another installation. */
-    titleInstance: "{{instance}} açılsın mı?",
+    titleInstance: "{{instance}} kurulumu açılsın mı?",
     /** What happens to the game that is on, by how far it is. */
     openAccount: "{{name}} ile açık olan oyun kaydedilip kapanacak.",
     openAccountInstance:
@@ -31,12 +31,12 @@ export const trPlayAcct = {
     stop: "Durdur ve oyna",
     /** On the way: the game closes (its words stay until it has). */
     closingTitle: "Oyun kapanıyor",
-    closingAccount: "Kapanınca {{name}} ile açılacak.",
+    closingAccount: "Kapanınca {{name}} hesabıyla açılacak.",
     closingInstance: "Kapanınca {{instance}} kurulumu açılacak.",
     closingGame: "Kapanınca oyun yeniden açılacak.",
     /** It has not closed in 20 s: the player may wait on, end it, or leave it open. */
     overdueTitle: "Oyun henüz kapanmadı",
-    overdueBody: "Zorla kapatırsan tek oyunculu dünyandaki kaydedilmemiş ilerleme kaybolabilir.",
+    overdueBody: "Zorla kapatırsan kaydedilmemiş ilerleme kaybolabilir.",
     wait: "Beklemeye devam et",
     force: "Zorla kapat ve oyna",
     forcingTitle: "Oyun kapatılıyor",
