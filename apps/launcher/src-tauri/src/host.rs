@@ -344,6 +344,24 @@ async fn install_manifest(state: &AppState, instance_id: &str) -> Option<(Manife
             },
             id: pack.pack_id.clone(),
             version: pack.version_id.clone(),
+        })
+        // An install that follows a pack it has not installed yet (a new launcher's "Projects"
+        // before its first OYNA): that pack at no version, so matching syncs it at the game's start
+        // instead of offering a copy of every mod (PROTOCOL.md §10.2, HOST1-E).
+        .or_else(|| {
+            let managed = instance.managed_pack.as_ref()?;
+            let family = snapshot.as_ref().and_then(|snapshot| {
+                crate::commands::official::instance_family(
+                    &snapshot.index,
+                    &instance,
+                    Some(game_dir.as_path()),
+                )
+            })?;
+            Some(PackRef {
+                family,
+                id: managed.pack_id.clone(),
+                version: String::new(),
+            })
         });
     // The ready-made sets installed here: a friend's copy adds the same ones (their both-side
     // mods are in `mods` too).

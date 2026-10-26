@@ -1032,6 +1032,68 @@
         "action": "use",
         "install": "Projects"
       }
+    },
+    {
+      "case": "an official install the guest never played (no pack installed yet, no mods): sync it at the game's start, no copy",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": ""
+          },
+          "sets": [],
+          "mods": [],
+          "unknown": 0,
+          "lastPlayed": 0
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "update-pack",
+        "install": "Projects"
+      },
+      "hostId": "234567890123456789"
     }
   ]
 }

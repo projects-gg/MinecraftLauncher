@@ -608,7 +608,9 @@ Sent by the host on every control stream after `ok` (never through the service):
 
 The guest computes the same manifest for each of its installs (same code) and decides
 (`testdata/manifest/match.json`); "latest" is the pack version the guest's signed content names for
-that Minecraft version.
+that Minecraft version. An install that follows a pack it has not installed yet (a new launcher's
+official install before its first start) counts as that pack at version `""`: no mods, so step 2
+syncs it (`update-pack`) instead of step 4 offering a copy of every mod.
 
 1. `mc` and `loader.kind` must match; no install of that version → `install` (LIB1's "Kur" for the
    official pack at that version), then decide again.
