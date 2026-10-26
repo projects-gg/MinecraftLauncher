@@ -451,9 +451,12 @@ export const commands = {
 	cloudAfkTryReply: (pattern: string, regex: boolean, from: string, reply: string, sample: string, sender: string) => __TAURI_INVOKE<CloudReplyTry>("cloud_afk_try_reply", { pattern, regex, from, reply, sample, sender }),
 	/**
 	 *  "İndir": the masked console of `range` as a `.txt` in the Downloads folder (UTF-8 with a byte
-	 *  order mark, CRLF, Turkey time; kind names in the launcher's language).
+	 *  order mark, CRLF, Turkey time; kind names in the launcher's language). Null: no line in that
+	 *  range, nothing written.
 	 */
-	cloudAfkConsoleDownload: (id: string, name: string, range: CloudLogRange) => typedError<CloudConsoleFile, CmdError>(__TAURI_INVOKE("cloud_afk_console_download", { id, name, range })),
+	cloudAfkConsoleDownload: (id: string, name: string, range: CloudLogRange) => typedError<{
+	fileName: string,
+} | null, CmdError>(__TAURI_INVOKE("cloud_afk_console_download", { id, name, range })),
 	/**  "Klasörde göster" for a console download (only such a file, in Downloads). */
 	cloudAfkShowDownload: (fileName: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_show_download", { fileName })),
 	/**  "Ayarları kopyala": the source's secret rows this computer has no words for. */
