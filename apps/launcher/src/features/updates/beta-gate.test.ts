@@ -1,3 +1,4 @@
+import { isValidElement, type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // BETA-GATE: picking Beta and staying on it, against a stubbed backend, preferences and toast.
@@ -18,7 +19,14 @@ const prefs = {
 };
 vi.mock("@/stores/prefs", () => ({ usePrefs: { getState: () => prefs } }));
 const toast = vi.fn();
-vi.mock("@pl/ui", () => ({ toast: (...args: unknown[]) => toast(...args) }));
+const warning = vi.fn();
+vi.mock("@pl/ui", () => ({
+  toast: Object.assign((...args: unknown[]) => toast(...args), {
+    warning: (...args: unknown[]) => warning(...args),
+  }),
+}));
+const check = vi.fn();
+vi.mock("@/stores/update", () => ({ useUpdate: { getState: () => ({ check }) } }));
 vi.mock("@/lib/i18n", () => ({ default: { t: (key: string) => key } }));
 const openWebLink = vi.fn();
 vi.mock("@/lib/links", () => ({ openWebLink: (href: string) => openWebLink(href) }));
@@ -32,6 +40,8 @@ beforeEach(() => {
   updateBetaJoin.mockReset();
   updateBetaKeep.mockReset();
   toast.mockReset();
+  warning.mockReset();
+  check.mockReset();
   openWebLink.mockReset();
   prefs.set.mockClear();
   prefs.updateChannel = "stable";
@@ -103,18 +113,31 @@ describe("keepBeta", () => {
     expect(toast).toHaveBeenCalledTimes(1);
     const [message, options] = toast.mock.calls[0] as [
       string,
-      { action: { label: string; onClick: () => void } },
+      { action: { label: ReactElement<{ children: unknown[] }>; onClick: () => void } },
     ];
     expect(message).toBe("betaGate.movedNotMember");
-    expect(options.action.label).toBe("betaGate.apply");
+    // The button's words, then the external-link mark (it opens the browser).
+    expect(isValidElement(options.action.label)).toBe(true);
+    expect(options.action.label.props.children[0]).toBe("betaGate.apply");
     options.action.onClick();
     expect(openWebLink).toHaveBeenCalledWith("https://projects.gg/arge");
 
+    // "Couldn't check": the warning state and "Tekrar dene", which asks again (Beta on a yes).
     toast.mockReset();
     prefs.updateChannel = "beta";
     updateBetaKeep.mockResolvedValue(ok("unknown"));
     expect(await keepBeta()).toBe("stable");
-    expect(toast).toHaveBeenCalledWith("betaGate.movedUnknown");
+    expect(toast).not.toHaveBeenCalled();
+    const [failed, retry] = warning.mock.calls[0] as [
+      string,
+      { action: { label: string; onClick: () => void } },
+    ];
+    expect(failed).toBe("betaGate.movedUnknown");
+    expect(retry.action.label).toBe("betaGate.retry");
+    updateBetaJoin.mockResolvedValue(ok("allowed"));
+    retry.action.onClick();
+    await vi.waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+    expect(prefs.updateChannel).toBe("beta");
     toast.mockReset();
     prefs.updateChannel = "beta";
     updateBetaKeep.mockResolvedValue(ok("signIn"));

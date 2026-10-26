@@ -154,7 +154,7 @@ export function UpdateChannelRow() {
                 ends in its action's words). */}
             <span className="sr-only" aria-live="polite" aria-atomic="true">
               {line === "signIn"
-                ? `${sentence.signIn} ${t("betaGate.signInAction")}`
+                ? `${sentence.signIn} ${t("betaGate.signInAction")}.`
                 : sentence[line]}
             </span>
             <span className="grid">
@@ -181,6 +181,8 @@ export function UpdateChannelRow() {
                     ) : null}
                     <span aria-hidden>{sentence[kind]}</span>
                     {action(kind, shown)}
+                    {/* The sign-in words finish their sentence. */}
+                    {kind === "signIn" ? <span aria-hidden>.</span> : null}
                   </span>
                 );
               })}

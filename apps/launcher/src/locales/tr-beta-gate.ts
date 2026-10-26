@@ -8,16 +8,16 @@ export const trBetaGate = {
   notMember: "Beta, Ar-Ge ekibine özel.",
   // Opens the application page in the browser (one name in the line and the toast).
   apply: "Başvur",
-  // Followed by the action: "… Ekipteysen Discord ile giriş yap".
+  // Followed by the action and a full stop: "… Ekipteysen Discord ile giriş yap.".
   signIn: "Beta, Ar-Ge ekibine özel. Ekipteysen",
   signInAction: "Discord ile giriş yap",
   unknown: "Ar-Ge üyeliğine şu an bakılamadı.",
-  retry: "Yeniden dene",
+  retry: "Tekrar dene",
   // The toasts after an update look moved the launcher back to Kararlı (it keeps its version):
-  // what happened, then why, so the action sits next to its reason.
-  movedNotMember: "Artık Kararlı kanaldasın. Beta, Ar-Ge ekibine özel.",
-  movedSignIn: "Şimdilik Kararlı kanaldasın. Beta için Discord ile giriş yap.",
+  // one sentence each, why and where the launcher is now, its action right after the reason.
+  movedNotMember: "Ar-Ge ekibinde olmadığın için Kararlı kanaldasın.",
+  movedSignIn: "Discord ile giriş yapmadığın için şimdilik Kararlı kanaldasın.",
   // The sign-in toast's button (the toast is narrow; its sentence names Discord).
   signInShort: "Giriş yap",
-  movedUnknown: "Şimdilik Kararlı kanaldasın. Ar-Ge üyeliğine uzun süredir bakılamadı.",
+  movedUnknown: "Ar-Ge üyeliğine bakılamadığı için şimdilik Kararlı kanaldasın.",
 };
