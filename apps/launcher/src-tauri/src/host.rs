@@ -110,13 +110,17 @@ pub fn create(
             UiEvent::Notice(notice) => emitter.emit(NOTICE_EVENT, notice),
         };
     });
+    let mut config = WorldsConfig::new(version, root.to_path_buf());
+    // Synchronous commands ("Katıl", "Vazgeç") run on the main thread, outside any runtime: world
+    // sharing's tasks go to the app's own (a bare `tokio::spawn` there crashed the launcher).
+    config.runtime = Some(tauri::async_runtime::handle().inner().clone());
     let worlds = Worlds::new(
         Arc::new(SocialLink(social.clone())),
         Arc::new(OverlayLink(overlay.clone())),
         Arc::new(AppLauncher { app: app.clone() }),
         Arc::new(Together(social.clone())),
         ui,
-        WorldsConfig::new(version, root.to_path_buf()),
+        config,
     );
     let hears = worlds.clone();
     social.on_world(move |event| hears.on_service(event));

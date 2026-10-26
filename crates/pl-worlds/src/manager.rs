@@ -181,6 +181,10 @@ pub struct WorldsConfig {
     pub data_dir: PathBuf,
     pub policy: Policy,
     pub transports: Transports,
+    /// The runtime world sharing's tasks run on. The launcher gives its own: its synchronous
+    /// commands ("Katıl", "Vazgeç") call in from the main thread, outside any runtime, where a bare
+    /// `tokio::spawn` panics (HOST1-E). `None`: the calling task's runtime.
+    pub runtime: Option<tokio::runtime::Handle>,
 }
 
 impl WorldsConfig {
@@ -190,6 +194,7 @@ impl WorldsConfig {
             data_dir,
             policy: Policy::default(),
             transports: Transports::new(launcher_version),
+            runtime: None,
         }
     }
 }
@@ -461,6 +466,19 @@ impl Worlds {
         lock(&self.inner.state)
     }
 
+    /// Every task of world sharing starts here: on the launcher's runtime when it gave one
+    /// ([`WorldsConfig::runtime`]), so a call from any thread works.
+    fn spawn<F>(&self, future: F) -> tokio::task::JoinHandle<F::Output>
+    where
+        F: std::future::Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        match &self.inner.config.runtime {
+            Some(runtime) => runtime.spawn(future),
+            None => tokio::spawn(future),
+        }
+    }
+
     // ── What the page shows ──────────────────────────────────────────────────────────────────
 
     /// The view now (`host_state`).
@@ -628,7 +646,7 @@ impl Worlds {
         }
         let worlds = self.clone();
         let instance_id = instance_id.to_owned();
-        tokio::spawn(async move {
+        self.spawn(async move {
             let hostable = worlds
                 .inner
                 .launcher
@@ -691,7 +709,7 @@ impl Worlds {
         tracing::info!("the game said a friend's world holds mods it lacks");
         self.fail_join(&session, generation, WorldJoinFailure::Mods);
         if let Some(live) = live {
-            tokio::spawn(async move { live.leave().await });
+            self.spawn(async move { live.leave().await });
         }
     }
 
@@ -823,7 +841,7 @@ impl Worlds {
                     hosting.live.clone()
                 };
                 if let Some(live) = live {
-                    tokio::spawn(async move { live.remove(&to, false).await });
+                    self.spawn(async move { live.remove(&to, false).await });
                 }
             }
             WorldEvent::Peer {
@@ -851,7 +869,7 @@ impl Worlds {
                 };
                 let relay = relay.and_then(|r| pl_host::tunnel::invite::parse_relay(r.expose()));
                 let service = Arc::clone(&self.inner.service);
-                tokio::spawn(async move {
+                self.spawn(async move {
                     if let Some(paths) = live.world_peer(&slot_id, kind, relay).await
                         && let Ok(paths) = serde_json::to_value(&paths)
                     {
@@ -895,7 +913,7 @@ impl Worlds {
                     live.turn_move(&reason);
                 }
                 if let Some(live) = host {
-                    tokio::spawn(async move { live.turn_move(&reason).await });
+                    self.spawn(async move { live.turn_move(&reason).await });
                 }
             }
         }
@@ -1175,7 +1193,7 @@ impl Worlds {
             let _ = cancel.send(());
         }
         if let Some(live) = live {
-            tokio::spawn(async move { live.close().await });
+            self.spawn(async move { live.close().await });
         }
         self.changed();
     }
@@ -1371,7 +1389,7 @@ impl Worlds {
             }]);
         }
         if let Some(live) = live {
-            tokio::spawn(async move { live.close().await });
+            self.spawn(async move { live.close().await });
         }
     }
 
@@ -1401,7 +1419,7 @@ impl Worlds {
 
     fn send_meet(&self, friends: Vec<String>) {
         let together = Arc::clone(&self.inner.together);
-        tokio::spawn(async move {
+        self.spawn(async move {
             for friend in friends {
                 together.invite(&friend).await;
             }
@@ -1410,7 +1428,7 @@ impl Worlds {
 
     fn spawn_publish(&self, generation: u64) {
         let worlds = self.clone();
-        tokio::spawn(async move { worlds.publish(generation).await });
+        self.spawn(async move { worlds.publish(generation).await });
     }
 
     /// The world opens (PROTOCOL.md §3.1 steps 2–6): the service's `world{open:true}`, the mod's
@@ -1908,7 +1926,7 @@ impl Worlds {
                 if let Some(generation) = self.add_guests(&invite) {
                     self.changed();
                     let worlds = self.clone();
-                    tokio::spawn(async move {
+                    self.spawn(async move {
                         if let Some(why) = worlds.send_invites(generation, invite).await {
                             worlds.notice(HostNotice::InviteRefused { why });
                         }
@@ -1928,7 +1946,7 @@ impl Worlds {
                 };
                 if let Some(friend) = friend {
                     let worlds = self.clone();
-                    tokio::spawn(async move { worlds.remove(&friend).await });
+                    self.spawn(async move { worlds.remove(&friend).await });
                 }
             }
             FromGame::HostStop { .. } => {
@@ -1940,7 +1958,7 @@ impl Worlds {
                 let friends: Vec<String> = invite.into_iter().take(7).collect();
                 if !friends.is_empty() {
                     let worlds = self.clone();
-                    tokio::spawn(async move { worlds.meet_on_projects(friends).await });
+                    self.spawn(async move { worlds.meet_on_projects(friends).await });
                 }
             }
             _ => {}
@@ -2001,7 +2019,7 @@ impl Worlds {
             Next::Open(generation) => {
                 self.changed();
                 let worlds = self.clone();
-                tokio::spawn(async move {
+                self.spawn(async move {
                     let (instance, folder) = {
                         let st = worlds.state();
                         match st.hosting.as_ref() {
@@ -2025,7 +2043,7 @@ impl Worlds {
                 if self.add_guests(&invite).is_some() {
                     self.changed();
                     let worlds = self.clone();
-                    tokio::spawn(async move {
+                    self.spawn(async move {
                         if let Some(why) = worlds.send_invites(generation, invite).await {
                             worlds.notice(HostNotice::InviteRefused { why });
                         }
@@ -2194,7 +2212,7 @@ impl Worlds {
                 let session = session.clone();
                 (
                     generation,
-                    tokio::spawn(async move {
+                    self.spawn(async move {
                         worlds.rejoin(&session, generation, live).await;
                     }),
                 )
@@ -2203,7 +2221,7 @@ impl Worlds {
                 let session = session.clone();
                 (
                     generation,
-                    tokio::spawn(async move {
+                    self.spawn(async move {
                         worlds.join_task(&session, generation, copy).await;
                     }),
                 )
