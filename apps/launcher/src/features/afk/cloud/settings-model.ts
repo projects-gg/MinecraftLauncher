@@ -71,13 +71,16 @@ export function toEdit(draft: Draft, baseline: Draft, view: CloudEditData): Clou
   const changed = <K extends keyof Draft>(key: K) =>
     JSON.stringify(draft[key]) !== JSON.stringify(baseline[key]);
   const serverChanged = serverChanges(draft, view);
+  // Old rules match the new way once the config is saved again, unchanged or not (README "Console
+  // kinds" → existing rules).
+  const resave = Boolean(view.account.features?.legacyRules);
   return {
     rev: view.account.rev,
     name: changed("name") ? draft.name.trim() : null,
     server: serverChanged ? { host: draft.host.trim(), port: portOf(draft) } : null,
     version: changed("version") ? draft.version : null,
     lang: changed("lang") ? draft.lang : null,
-    config: changed("config") || serverChanged ? draft.config : null,
+    config: changed("config") || serverChanged || resave ? draft.config : null,
   };
 }
 

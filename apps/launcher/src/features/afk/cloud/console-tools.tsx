@@ -84,7 +84,7 @@ export function ConsoleTools({
           {KIND_FILTERS.map((value) => (
             <ToggleChip
               key={value}
-              tone="info"
+              tone="chosen"
               pressed={filter === value}
               onPressedChange={() => onFilter(value)}
             >

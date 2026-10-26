@@ -5,7 +5,7 @@
 // too. With a service of the cloud features and two accounts or more, "Seç" chooses several for
 // one action at a time (CAFK-FEAT §3.4).
 import { ArrowSquareOut, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
-import { Button, cn, enter, IconButton, leave } from "@pl/ui";
+import { Button, cn, enter, IconButton, leave, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -40,6 +40,29 @@ interface CopyRequest {
   targets: string[];
 }
 
+/** The bulk bar's height, its gap to the bottom and some air above it. */
+const BAR_ROOM = 96;
+
+/** The nearest ancestor that scrolls vertically (the AFK page's scroll area). */
+function scrollParentOf(node: HTMLElement | null): HTMLElement | null {
+  for (let element = node?.parentElement ?? null; element; element = element.parentElement) {
+    const { overflowY } = getComputedStyle(element);
+    if (overflowY === "auto" || overflowY === "scroll") return element;
+  }
+  return null;
+}
+
+/** Scrolls the cards' end clear of the bulk bar, as far as the section's header stays in view. */
+function revealChosen(list: HTMLElement | null, head: HTMLElement | null, reduce: boolean) {
+  const scroller = scrollParentOf(list);
+  if (!list || !scroller) return;
+  const view = scroller.getBoundingClientRect();
+  const covered = list.getBoundingClientRect().bottom - (view.bottom - BAR_ROOM);
+  const room = head ? head.getBoundingClientRect().top - view.top : covered;
+  const by = Math.min(covered, Math.max(0, room));
+  if (by > 0) scroller.scrollBy({ top: by, behavior: reduce ? "auto" : "smooth" });
+}
+
 export function CloudSection({
   desktop,
   centered = false,
@@ -65,6 +88,9 @@ export function CloudSection({
   const selectRef = useRef<HTMLButtonElement>(null);
   const allRef = useRef<HTMLButtonElement>(null);
   const moveFocus = useRef(false);
+  const listRef = useRef<HTMLUListElement>(null);
+  const headRef = useRef<HTMLElement>(null);
+  const { reduce } = useMotionPrefs();
   const overview = data?.overview;
   const listed = overview?.session === "signedIn" ? overview.accounts : [];
   // Several accounts at once: a service of the cloud features, and something to choose among.
@@ -93,6 +119,18 @@ export function CloudSection({
     moveFocus.current = false;
     (selecting ? allRef : selectRef).current?.focus({ preventScroll: true });
   }, [selecting]);
+
+  // The bar rises over the last row of cards when the first one is chosen: the list glides up clear
+  // of it (the bar's spacer leaves the room), but never past the section's own header, where
+  // "Hepsini seç" and "Vazgeç" are.
+  const barOpen = selecting && chosen.size > 0;
+  useEffect(() => {
+    if (!barOpen) return;
+    const frame = requestAnimationFrame(() =>
+      revealChosen(listRef.current, headRef.current, reduce),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [barOpen, reduce]);
 
   // Accounts that went (deleted elsewhere) leave the choice.
   const listedIds = listed.map((account) => account.id).join("|");
@@ -157,7 +195,10 @@ export function CloudSection({
       className={cn("mt-7", centered && "mx-auto w-full max-w-[460px]")}
     >
       {accounts.length > 0 ? (
-        <header className="mb-3 flex flex-wrap items-end justify-between gap-3 border-t border-white/7 pt-5">
+        <header
+          ref={headRef}
+          className="mb-3 flex flex-wrap items-end justify-between gap-3 border-t border-white/7 pt-5"
+        >
           <div>
             <h2 className="font-display text-section font-semibold text-bone-50">
               {t("cloudAfk.title")}
@@ -241,7 +282,7 @@ export function CloudSection({
           </Button>
         </div>
       ) : accounts.length > 0 ? (
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+        <ul ref={listRef} className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           <AnimatePresence initial={false} mode="popLayout">
             {accounts.map((account, index) => (
               <CloudCard
