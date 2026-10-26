@@ -715,7 +715,7 @@ pub fn placeholder_problem(
     if let Some(rest) = lead.strip_prefix('/') {
         let word = rest.split(' ').next().unwrap_or("");
         let command = word.to_ascii_lowercase();
-        if has_placeholder(word) || !commands.iter().any(|c| *c == command) {
+        if has_placeholder(word) || !commands.contains(&command) {
             return Some(PlaceholderProblem::of("placeholder_command"));
         }
     }
