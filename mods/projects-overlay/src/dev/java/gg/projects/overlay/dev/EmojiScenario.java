@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -31,6 +32,8 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.metadata.pack.PackFormat;
 import net.minecraft.server.packs.repository.PackRepository;
@@ -63,8 +66,14 @@ public final class EmojiScenario implements ClientModInitializer {
         {"kizgin", "e10b"}, {"havali", "e10c"}, {"sok", "e10d"}, {"uyku", "e10e"}, {"selam", "e10f"},
     };
 
-    private record Step(double after, String name, Consumer<Minecraft> action) {
+    /** A step: its action runs {@code after} seconds after the last one, once {@code ready} holds (at most 30 s more). */
+    private record Step(double after, String name, Consumer<Minecraft> action, Predicate<Minecraft> ready) {
     }
+
+    /** How long a step waits for its {@code ready} beyond its own delay. */
+    private static final double READY_WAIT = 30;
+    /** Ticks the view's far chunks get to load and render before the first picture. */
+    private static final int VIEW_SETTLE_TICKS = 300;
 
     private final List<Step> steps = new ArrayList<>();
     private final JsonObject results = new JsonObject();
@@ -72,6 +81,14 @@ public final class EmojiScenario implements ClientModInitializer {
     private final long runStarted = System.nanoTime();
     private Path out;
     private boolean panel;
+    /**
+     * The owner's screenshot setup (26 Oct): a normal world seen from {@code x,y,z,yaw,pitch}
+     * ({@code -Dprojects.overlay.dev.emoji.view}, the run brings Iris, Complementary and a far render distance), or null:
+     * the flat test world.
+     */
+    private String view;
+    /** The view's time of day in ticks ({@code -Dprojects.overlay.dev.emoji.time}). */
+    private String time;
     private int next;
     private long stepAt = System.nanoTime();
     private int shots;
@@ -86,6 +103,8 @@ public final class EmojiScenario implements ClientModInitializer {
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "emoji-out")).toAbsolutePath();
         panel = "panel".equals(System.getProperty("projects.overlay.dev.emoji"));
+        view = System.getProperty("projects.overlay.dev.emoji.view");
+        time = System.getProperty("projects.overlay.dev.emoji.time", "1000");
         ToastLayer.pauseWhileAway = false;
         script();
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
@@ -93,7 +112,12 @@ public final class EmojiScenario implements ClientModInitializer {
     }
 
     private void step(double wait, String name, Consumer<Minecraft> action) {
-        steps.add(new Step(wait, name, action));
+        steps.add(new Step(wait, name, action, null));
+    }
+
+    /** A step that also waits until the game is done reloading its resources (a pack came or went). */
+    private void stepAfterReload(double wait, String name, Consumer<Minecraft> action) {
+        steps.add(new Step(wait, name, action, mc -> !Compat.overlayShowing(mc)));
     }
 
     private void tick(Minecraft mc) {
@@ -112,7 +136,11 @@ public final class EmojiScenario implements ClientModInitializer {
             return;
         }
         Step s = steps.get(next);
-        if ((System.nanoTime() - stepAt) / 1e9 < s.after()) {
+        double since = (System.nanoTime() - stepAt) / 1e9;
+        if (since < s.after()) {
+            return;
+        }
+        if (s.ready() != null && !s.ready().test(mc) && since < s.after() + READY_WAIT) {
             return;
         }
         event("step", s.name());
@@ -144,13 +172,52 @@ public final class EmojiScenario implements ClientModInitializer {
         if (++worldTicks < 100) {
             return false;
         }
+        if (view != null) {
+            if (worldTicks == 100) {
+                placeView(mc);
+            }
+            // The far chunks around the view load and render (with shaders) before the first picture.
+            if (worldTicks < 100 + VIEW_SETTLE_TICKS) {
+                return false;
+            }
+        }
         results.addProperty("minecraft", Compat.VERSION);
         results.addProperty("guiScale", mc.getWindow().getGuiScale());
         results.addProperty("panel", overlay.panel());
         results.addProperty("emojiOnAtStart", overlay.emojis().on());
         results.addProperty("projectsEmojis", overlay.emojis().projects().emojis().size());
-        mc.player.setXRot(-12f);
+        if (view == null) {
+            mc.player.setXRot(-12f);
+        }
         return true;
+    }
+
+    /**
+     * The view for the pictures: clear weather and a fixed time of day, the player flying at {@code view}. The integrated
+     * server runs the commands with no answer in chat (the pictures show the chat).
+     */
+    private void placeView(Minecraft mc) {
+        String[] v = view.split(",");
+        serverCommands(mc, "gamerule advance_time false", "gamerule advance_weather false", "weather clear",
+            "time set " + time, "tp @p " + String.join(" ", v));
+        if (mc.player != null) {
+            mc.player.getAbilities().flying = true;
+            mc.player.onUpdateAbilities();
+        }
+        event("view", view);
+    }
+
+    private static void serverCommands(Minecraft mc, String... commands) {
+        IntegratedServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            return;
+        }
+        server.executeIfPossible(() -> {
+            CommandSourceStack source = server.createCommandSourceStack().withSuppressedOutput();
+            for (String command : commands) {
+                server.getCommands().performPrefixedCommand(source, command);
+            }
+        });
     }
 
     private static ChatEmojiBar bar() {
@@ -229,8 +296,10 @@ public final class EmojiScenario implements ClientModInitializer {
         step(0.1, "as projects", mc -> {
             ChatEmojiBar.devHost = "play.projects.gg";
             bar().typeForDriver("selam");
-            bar().shortcutForDriver();
         });
+        // A frame later, as a player's Ctrl+E after typing would come: the way this version's keyboard reports it (26.3:
+        // SDL's keycode), through the chat screen's keys.
+        step(0.2, "ctrl+e", mc -> bar().keyForDriver(Compat.emojiShortcutForDriver()));
         step(0.6, "point at a VIP+ emoji", mc -> {
             results.addProperty("pickerOpenAfterShortcut", bar().pickerOpen());
             results.addProperty("pictureBeforePack", pictureShown());
@@ -262,7 +331,8 @@ public final class EmojiScenario implements ClientModInitializer {
             results.addProperty("packWritten", writePack(mc));
             selectPack(mc, true);
         });
-        step(6.0, "chat after the pack", mc -> {
+        stepAfterReload(2.0, "chat after the pack", mc -> {
+            results.addProperty("reloadedWithPack", !Compat.overlayShowing(mc));
             openChat(mc);
         });
         step(0.6, "picker with the pack", mc -> bar().shortcutForDriver());
@@ -277,7 +347,10 @@ public final class EmojiScenario implements ClientModInitializer {
             PanelInput.clearPointer();
             selectPack(mc, false);
         });
-        step(6.0, "chat after the pack went", EmojiScenario::openChat);
+        stepAfterReload(2.0, "chat after the pack went", mc -> {
+            results.addProperty("reloadedWithoutPack", !Compat.overlayShowing(mc));
+            openChat(mc);
+        });
         step(0.6, "picker after the pack went", mc -> bar().shortcutForDriver());
         step(0.6, "shot pack gone", mc -> {
             results.addProperty("pictureAfterPack", pictureShown());
@@ -481,17 +554,19 @@ public final class EmojiScenario implements ClientModInitializer {
     }
 
     private void openWorld(Minecraft mc) {
-        if (mc.getLevelSource().levelExists(WORLD)) {
-            event("world", "open");
-            mc.createWorldOpenFlows().openWorld(WORLD, () -> Compat.setScreen(mc, new TitleScreen()));
+        // A view gets a normal world of its own (real terrain); the checks keep the flat one.
+        String world = view != null ? WORLD + "-view" : WORLD;
+        if (mc.getLevelSource().levelExists(world)) {
+            event("world", "open " + world);
+            mc.createWorldOpenFlows().openWorld(world, () -> Compat.setScreen(mc, new TitleScreen()));
             return;
         }
-        event("world", "create");
+        event("world", "create " + world);
         LevelSettings settings = new LevelSettings("CHAT-EMOJI", GameType.CREATIVE,
             new LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, false), true,
             WorldDataConfiguration.DEFAULT);
-        mc.createWorldOpenFlows().createFreshLevel(WORLD, settings, new WorldOptions(20261026L, false, false),
-            DevCompat.flatWorld(), new TitleScreen());
+        mc.createWorldOpenFlows().createFreshLevel(world, settings, new WorldOptions(20261026L, view != null, false),
+            view != null ? DevCompat.normalWorld() : DevCompat.flatWorld(), new TitleScreen());
     }
 
     private void shot(Minecraft mc, String name) {

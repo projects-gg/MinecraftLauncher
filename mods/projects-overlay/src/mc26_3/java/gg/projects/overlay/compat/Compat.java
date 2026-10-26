@@ -52,6 +52,11 @@ public final class Compat {
         return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("mac") ? "⌘E" : "Ctrl+E";
     }
 
+    /** Ctrl+E as this version's keyboard reports it: SDL's scancode, its keycode ("e") and Control. */
+    public static KeyEvent emojiShortcutForDriver() {
+        return new KeyEvent(InputConstants.KEY_E, 'e', InputConstants.MOD_CONTROL);
+    }
+
     /** The screen on top, or null in the game. */
     public static Screen screen(Minecraft mc) {
         return mc.gui.screen();

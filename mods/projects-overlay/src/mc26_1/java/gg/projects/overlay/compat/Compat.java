@@ -48,6 +48,11 @@ public final class Compat {
         return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("mac") ? "⌘E" : "Ctrl+E";
     }
 
+    /** Ctrl+E as this version's keyboard reports it (the development scenario presses it). */
+    public static KeyEvent emojiShortcutForDriver() {
+        return new KeyEvent(InputConstants.KEY_E, 0, InputConstants.MOD_CONTROL);
+    }
+
     /** The screen on top, or null in the game. */
     public static Screen screen(Minecraft mc) {
         return mc.screen;
