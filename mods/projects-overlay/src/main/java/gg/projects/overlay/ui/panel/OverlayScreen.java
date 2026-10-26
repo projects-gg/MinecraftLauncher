@@ -290,8 +290,11 @@ public final class OverlayScreen extends Screen {
         picker = new StickerPicker(this::sendSticker);
         picker.visible = false;
         languageRevision = Texts.language().revision();
+        // "Kısayol": both keys of the Projects category in the game's Controls (the overlay's and the emoji picker's).
+        Runnable controls = () -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options));
         settingsList = new SettingsList(overlay::settings, overlay::updateSettings,
-            List.of(overlay.key().shortcut(() -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)))),
+            List.of(overlay.key().shortcut("settings.key.toggle", controls),
+                overlay.emojiKey().shortcut("settings.key.emoji", controls)),
             Texts.language().managed() ? overlay.languages() : null,
             // CHAT-EMOJI: the launcher's emoji picker switch, once the launcher has spoken of it.
             overlay.emojis().heard() ? overlay.emojiSwitch() : null);

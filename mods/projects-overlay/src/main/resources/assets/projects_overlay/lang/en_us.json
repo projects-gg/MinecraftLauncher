@@ -1,6 +1,7 @@
 {
   "key.category.projects_overlay.main": "Projects",
   "key.projects_overlay.toggle": "Open and close the overlay",
+  "key.projects_overlay.emoji": "Open and close the emoji picker",
   "projects_overlay.panel.title": "Projects",
   "projects_overlay.panel.back": "Back",
   "projects_overlay.panel.tabs": "Section",
@@ -250,6 +251,7 @@
   "projects_overlay.settings.reduce_motion.hint": "The panel and notifications appear without sliding, and stickers stay still.",
   "projects_overlay.settings.key": "Shortcut",
   "projects_overlay.settings.key.toggle": "Open and close the overlay",
+  "projects_overlay.settings.key.emoji": "Open and close the emoji picker",
   "projects_overlay.settings.key.change": "Change",
   "projects_overlay.settings.key.none": "Not set",
   "projects_overlay.settings.reset": "Restore defaults",

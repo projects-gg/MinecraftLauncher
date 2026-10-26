@@ -1,6 +1,7 @@
 {
   "key.category.projects_overlay.main": "Projects",
   "key.projects_overlay.toggle": "Arayüzü aç ve kapat",
+  "key.projects_overlay.emoji": "Emoji seçiciyi aç ve kapat",
   "projects_overlay.panel.title": "Projects",
   "projects_overlay.panel.back": "Geri",
   "projects_overlay.panel.tabs": "Bölüm",
@@ -250,6 +251,7 @@
   "projects_overlay.settings.reduce_motion.hint": "Panel ve bildirimler kaymadan belirir, çıkartmalar hareket etmez.",
   "projects_overlay.settings.key": "Kısayol",
   "projects_overlay.settings.key.toggle": "Arayüzü aç ve kapat",
+  "projects_overlay.settings.key.emoji": "Emoji seçiciyi aç ve kapat",
   "projects_overlay.settings.key.change": "Değiştir",
   "projects_overlay.settings.key.none": "Atanmamış",
   "projects_overlay.settings.reset": "Varsayılana dön",
