@@ -1,22 +1,23 @@
 // BETA-GATE: the beta update channel is for the Ar-Ge team (Settings → Güncellemeler). One line
 // under "Güncelleme kanalı" with its action right after it; a quiet toast when an update look
-// moved the launcher back to Kararlı. Short, sentence case; "Ar-Ge üyeliği" as ProBot's role is
-// named ("Ar-Ge Üyesi").
+// moved the launcher back to Kararlı. Short, sentence case. What is checked is the Discord role
+// ("Discord'daki Ar-Ge rolü": where it lives, Discord's own word).
 export const trBetaGate = {
   // While the answer is out (only when it takes a moment).
-  checking: "Ar-Ge üyeliğine bakılıyor",
+  checking: "Discord'daki Ar-Ge rolüne bakılıyor",
   notMember: "Beta, Ar-Ge ekibine özel.",
   // Opens the application page in the browser.
   apply: "Ekibe başvur",
-  // Followed by the action and a full stop: "… Ekipteysen Discord ile giriş yap.".
+  // Followed by the action and a full stop: "… Ekipteysen Discord ile giriş yap." (the friends
+  // panel's own words for its sign-in).
   signIn: "Beta, Ar-Ge ekibine özel. Ekipteysen",
   signInAction: "Discord ile giriş yap",
-  unknown: "Ar-Ge üyeliğine şu an bakılamadı.",
+  unknown: "Discord'daki Ar-Ge rolüne şu an bakılamadı.",
   retry: "Tekrar dene",
   // The toasts after an update look moved the launcher back to Kararlı (it keeps its version). They
-  // only tell (what to do stays in Settings' line), and only players who picked Beta see them, so
-  // "Kararlı" needs no "kanal" (on Home that read as a Discord channel). Two lines at most.
-  movedNotMember: "Beta, Ar-Ge ekibine özel; artık Kararlı'dasın.",
-  movedSignIn: "Ar-Ge ekibindeysen Discord ile giriş yap; şimdilik Kararlı'dasın.",
-  movedUnknown: "Ar-Ge üyeliğine bakılamadı; şimdilik Kararlı'dasın.",
+  // only tell, what to do stays in Settings' line; "Güncelleme kanalın … oldu" as "Grafik ayarı …
+  // oldu" says it. "şimdilik" only where the launcher comes back by itself (after a sign-in).
+  movedNotMember: "Beta, Ar-Ge ekibine özel. Güncelleme kanalın Kararlı oldu.",
+  movedSignIn: "Ar-Ge ekibindeysen Discord ile giriş yap. Güncelleme kanalın şimdilik Kararlı.",
+  movedUnknown: "Discord'daki Ar-Ge rolüne bakılamadı. Güncelleme kanalın Kararlı oldu.",
 };

@@ -86,6 +86,7 @@ export const useBetaGate = create<BetaGateState>()((set, get) => ({
       return true;
     }
     set({ asking: false, refusal: access });
+    if (access.verdict === "signIn") askAgainOnSignIn();
     return false;
   },
   clear() {
@@ -93,6 +94,35 @@ export const useBetaGate = create<BetaGateState>()((set, get) => ({
     set({ asking: false, refusal: null });
   },
 }));
+
+let watchingSignIn = false;
+
+/**
+ * After a "sign in first" answer: the moment the friends feature signs in, ask again, so the line
+ * never keeps asking for a sign-in that already happened (Beta on a yes, and a look at its
+ * updates). Only a change into "signed in" counts: a session refused while signed in never loops.
+ * The friends store loads on demand, as it does for "Discord ile giriş yap".
+ */
+function askAgainOnSignIn() {
+  if (watchingSignIn) return;
+  watchingSignIn = true;
+  void import("@/features/social/store").then(({ useSocialUi }) => {
+    const stop = useSocialUi.subscribe((state, previous) => {
+      if (state.view.auth !== "signedIn" || previous.view.auth === "signedIn") return;
+      stop();
+      watchingSignIn = false;
+      if (useBetaGate.getState().refusal?.verdict !== "signIn") return;
+      void useBetaGate
+        .getState()
+        .join()
+        .then(async (allowed) => {
+          if (!allowed) return;
+          const { useUpdate } = await import("@/stores/update");
+          void useUpdate.getState().check();
+        });
+    });
+  });
+}
 
 /**
  * The toast when an update look moved the launcher back to Kararlı. It only tells (toasts are for
@@ -117,6 +147,7 @@ export async function keepBeta(): Promise<UpdateChannel> {
   if (access === null || access.verdict === "allowed") return "beta";
   usePrefs.getState().set("updateChannel", "stable");
   useBetaGate.setState({ refusal: access });
+  if (access.verdict === "signIn") askAgainOnSignIn();
   if (useBetaGate.getState().rowsShown === 0) movedToast(access);
   return "stable";
 }

@@ -25,6 +25,25 @@ vi.mock("@pl/ui", () => ({
   }),
 }));
 vi.mock("@/lib/i18n", () => ({ default: { t: (key: string) => key } }));
+const check = vi.fn();
+vi.mock("@/stores/update", () => ({ useUpdate: { getState: () => ({ check }) } }));
+// The friends store as the watcher sees it: subscribe, and a way to change who is signed in.
+type Social = { view: { auth: string } };
+const socialListeners = new Set<(state: Social, previous: Social) => void>();
+let social: Social = { view: { auth: "signedOut" } };
+vi.mock("@/features/social/store", () => ({
+  useSocialUi: {
+    subscribe: (listener: (state: Social, previous: Social) => void) => {
+      socialListeners.add(listener);
+      return () => socialListeners.delete(listener);
+    },
+  },
+}));
+function socialAuth(auth: string) {
+  const previous = social;
+  social = { view: { auth } };
+  for (const listener of [...socialListeners]) listener(social, previous);
+}
 
 const { keepBeta, useBetaGate } = await import("./beta-gate");
 
@@ -39,6 +58,11 @@ beforeEach(() => {
   prefs.set.mockClear();
   prefs.updateChannel = "stable";
   useBetaGate.setState({ asking: false, refusal: null, rowsShown: 0 });
+  // A watcher left by an earlier test signs in and stops (no refusal now: it asks nothing).
+  socialAuth("signedOut");
+  socialAuth("signedIn");
+  socialAuth("signedOut");
+  check.mockReset();
 });
 
 describe("join", () => {
@@ -79,6 +103,24 @@ describe("join", () => {
     expect(await first).toBe(false);
     expect(prefs.updateChannel).toBe("stable");
     expect(useBetaGate.getState()).toMatchObject({ asking: false, refusal: null });
+  });
+
+  it("asks again by itself once the friends feature signs in", async () => {
+    updateBetaJoin.mockResolvedValue(ok("signIn"));
+    expect(await useBetaGate.getState().join()).toBe(false);
+    await vi.waitFor(() => expect(socialListeners.size).toBe(1));
+    updateBetaJoin.mockResolvedValue(ok("allowed"));
+    // Still signing in: nothing yet.
+    socialAuth("signingIn");
+    expect(updateBetaJoin).toHaveBeenCalledTimes(1);
+    socialAuth("signedIn");
+    await vi.waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+    expect(updateBetaJoin).toHaveBeenCalledTimes(2);
+    expect(prefs.updateChannel).toBe("beta");
+    expect(socialListeners.size).toBe(0);
+    // Signed in all along afterwards (no change into "signed in"): never asked again.
+    socialAuth("signedIn");
+    expect(updateBetaJoin).toHaveBeenCalledTimes(2);
   });
 
   it("cannot ask when the command itself fails", async () => {
