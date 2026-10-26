@@ -1,8 +1,10 @@
 //! Settings files a mod gets when a ready-made set puts it in place (MODHUB2).
 //!
 //! Some mods ship defaults that do not suit the official pack's instances or the Projects
-//! server: Litematica opens its menu with M, Simple Voice Chat's microphone mute in the pack, and
-//! MaLiLib opens its settings with A then C, the pack's zoom key. `data/mod-configs.json` lists a
+//! server: Litematica opens its menu with M, Simple Voice Chat's microphone mute in the pack,
+//! MaLiLib opens its settings with A then C, the pack's zoom key, and Chest Tracker draws the title
+//! of a menu opened at a block above that block, which on the Projects server is the menu's
+//! picture (resource pack glyphs). `data/mod-configs.json` lists a
 //! settings file per mod holding only the values that matter. [`seed_mod_configs`] writes it
 //! while no file is at its path and never touches one that is: the player's later changes and
 //! the mod's own file always win. The mod keeps its own defaults for the rest and writes its full
@@ -136,6 +138,8 @@ mod tests {
 
     const LITEMATICA: &str = "bEpr0Arc";
     const MALILIB: &str = "GcWjdA9I";
+    /// Chest Tracker (Unofficial port), the only Chest Tracker with files for 26.x.
+    const CHEST_TRACKER: &str = "VC2NohMN";
 
     /// The official pack's default key bindings (as in `keys.rs`): name, key, when it acts.
     const PACK_KEYS: &str = include_str!("../../testdata/key-bindings/projects-26.1.2.tsv");
@@ -178,7 +182,12 @@ mod tests {
         let mut paths = BTreeSet::new();
         for file in mod_configs() {
             assert!(settings_path(&file.path).is_some(), "{}", file.path);
-            assert!(file.path.ends_with(".json"), "{}", file.path);
+            // Written as plain JSON, which is JSON5 too (YACL's files).
+            assert!(
+                file.path.ends_with(".json") || file.path.ends_with(".json5"),
+                "{}",
+                file.path
+            );
             assert!(file.json.is_object(), "{}", file.path);
             assert!(
                 paths.insert(file.path.to_ascii_lowercase()),
@@ -258,6 +267,39 @@ mod tests {
         let file = file_of(MALILIB);
         assert_eq!(file.path, "config/malilib.json");
         assert_eq!(file.json["Generic"]["openGuiConfigs"], json!(""));
+    }
+
+    #[test]
+    fn chest_tracker_draws_no_container_names() {
+        // The Projects server's menus draw their pictures with resource pack glyphs in the title:
+        // with names on, a menu opened at a block left its picture hanging above that block.
+        let file = file_of(CHEST_TRACKER);
+        assert_eq!(file.path, "config/chesttracker.json5");
+        assert_eq!(
+            file.json,
+            json!({ "debug": { "disableContainerNames": true } })
+        );
+    }
+
+    #[test]
+    fn chest_tracker_menu_key_is_free_in_play() {
+        // Chest Tracker opens its menu with the key below Esc (GLFW's grave accent) and keeps it;
+        // its bundled Where Is It searches with Y only in inventory screens.
+        assert!(!keys_in_play().contains("key.keyboard.grave.accent"));
+    }
+
+    #[tokio::test]
+    async fn chest_tracker_gets_a_file_its_json5_reader_takes() {
+        let dir = tempfile::tempdir().unwrap();
+        let written = seed_mod_configs(dir.path(), &[CHEST_TRACKER.to_owned()])
+            .await
+            .unwrap();
+        assert_eq!(written, ["config/chesttracker.json5"]);
+        let bytes = std::fs::read(dir.path().join("config").join("chesttracker.json5")).unwrap();
+        // Plain JSON (no comments, no trailing commas) is JSON5 as well.
+        let on_disk: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(on_disk["debug"]["disableContainerNames"], json!(true));
+        assert!(!dir.path().join("config").join("litematica.json").exists());
     }
 
     #[test]

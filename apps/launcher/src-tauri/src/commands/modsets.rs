@@ -802,7 +802,8 @@ async fn settle_packs(game_dir: &Path, report: &SetApplyReport) {
 
 /// After a set put mods in place: their first settings files where none exist yet (MODHUB2,
 /// `pl_mc::instance::mod_configs`: Litematica's easy placement stays off and its keys leave the
-/// voice chat's mute alone). A file already there is never touched; a failure never fails the set.
+/// voice chat's mute alone; Chest Tracker draws no container names, which on the Projects server
+/// are menu pictures). A file already there is never touched; a failure never fails the set.
 async fn seed_mod_settings(game_dir: &Path, report: &SetApplyReport) {
     if report.new_mods.is_empty() {
         return;
