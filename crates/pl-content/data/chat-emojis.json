@@ -269,8 +269,8 @@
       "rank": "VIP",
       "servers": ["Survival", "SMP", "Skyblock"],
       "meaning": {
-        "tr": "İhalelerini gösteren bağlantı",
-        "en": "A link to your auctions"
+        "tr": "İhalelerinin bağlantısını yazar",
+        "en": "Writes a link to your auctions"
       }
     },
     {
@@ -279,8 +279,8 @@
       "rank": "VIP",
       "servers": ["Survival", "SMP"],
       "meaning": {
-        "tr": "Siparişlerini gösteren bağlantı",
-        "en": "A link to your orders"
+        "tr": "Siparişlerinin bağlantısını yazar",
+        "en": "Writes a link to your orders"
       }
     },
     {
@@ -289,8 +289,8 @@
       "rank": "VIP",
       "servers": ["Skyblock"],
       "meaning": {
-        "tr": "Adana gelme komutunu yazdıran bağlantı",
-        "en": "A link that writes the warp to your island"
+        "tr": "Adanın warp bağlantısını yazar",
+        "en": "Writes your island's warp link"
       }
     },
     {
@@ -310,7 +310,7 @@
       "rank": "VIP+",
       "meaning": {
         "tr": "Başarımlarının yüzdesini yazar",
-        "en": "Writes how many advancements you have"
+        "en": "Writes your advancement percentage"
       }
     },
     {
@@ -329,8 +329,8 @@
       "rank": "VIP+",
       "servers": ["Survival"],
       "meaning": {
-        "tr": "Profilini gösteren bağlantı",
-        "en": "A link to your profile"
+        "tr": "Profilinin bağlantısını yazar",
+        "en": "Writes a link to your profile"
       }
     },
     {
@@ -340,8 +340,8 @@
       "rank": "VIP+",
       "servers": ["Survival"],
       "meaning": {
-        "tr": "Hatıralarını gösteren bağlantı",
-        "en": "A link to your memories"
+        "tr": "Hatıralarının bağlantısını yazar",
+        "en": "Writes a link to your memories"
       }
     }
   ]
