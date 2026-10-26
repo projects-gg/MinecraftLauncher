@@ -112,8 +112,8 @@ pub use model::{
     FriendGroups, FriendRequest, FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinMode,
     JoinOutcome, JoinRequest, LastSeen, Limited, LimitedItem, LimitedKey, Limits, LinkCard,
     LinkRule, MAX_FRIEND_GROUPS, MAX_MUTE_SECS, Me, ModNotice, NoticeKind, PLAN_NOTE_MAX,
-    PermissionLevel, PermissionsEdit, Privacy, ProfileUpdate, PublicProfile, Reaction, ReadMark,
-    Relation, ReportReason, RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta,
+    PermissionLevel, PermissionsEdit, Privacy, ProfileMark, ProfileUpdate, PublicProfile, Reaction,
+    ReadMark, Relation, ReportReason, RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta,
     SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS, TEAM_FEATURE_BADGES,
     TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS,
     TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
@@ -128,7 +128,7 @@ pub use presence::{
 };
 pub use protocol::{
     AFK_CAP, BADGES_CAP, CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall,
-    CrewPlan, Game, GameLocation, Invite, LocalStatus, MC_CAP, OnlineStatus, PLANS_CAP,
+    CrewPlan, Game, GameLocation, Invite, LocalStatus, MARKS_CAP, MC_CAP, OnlineStatus, PLANS_CAP,
     PRESENCE_CAPS, PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP,
     STICKERS_CAP, TYPING_CAP, is_projects_host, presence_caps,
 };

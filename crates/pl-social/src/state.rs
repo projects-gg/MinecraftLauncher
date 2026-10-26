@@ -10,10 +10,10 @@ use crate::codes::crew_code;
 use crate::model::{
     BlockedUser, CrewBadge, CrewEntry, CrewMute, DEFAULT_CREW_LIMIT, Friend, FriendGroups,
     FriendRequest, FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinRequest, Limits, Me, ModNotice,
-    NoticeKind, PublicProfile, RequestOutcome, SettingsMeta, TEAM_FEATURE_BADGE_REQUESTS,
-    TEAM_FEATURE_BADGES, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, Team,
-    TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications, TeamRequest, TeamRole,
-    TeamsOverview, crews_of,
+    NoticeKind, ProfileMark, PublicProfile, RequestOutcome, SettingsMeta,
+    TEAM_FEATURE_BADGE_REQUESTS, TEAM_FEATURE_BADGES, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
+    TEAM_FEATURE_PLAN_NOTES, Team, TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications,
+    TeamRequest, TeamRole, TeamsOverview, crews_of,
 };
 use crate::presence::{PresenceEvent, StopReason};
 use crate::protocol::{
@@ -156,11 +156,17 @@ impl SocialState {
             self.add_notice(notice);
         }
         // The player's own entries in the crews' member lists wear what `me` says (TEAM6): a tag
-        // put on here shows on the crew pages at once; so does a new picture (SOC-LAG).
-        let (id, badge) = (me.profile.id.clone(), me.profile.badge.clone());
+        // put on here shows on the crew pages at once; so do their mark (SOC-VERIFY) and a new
+        // picture (SOC-LAG).
+        let (id, badge, mark) = (
+            me.profile.id.clone(),
+            me.profile.badge.clone(),
+            me.profile.mark,
+        );
         let (avatar, hash) = (me.profile.avatar.clone(), me.profile.avatar_hash.clone());
         self.me = Some(me);
         self.set_badge_of(&id, badge.as_ref());
+        self.set_mark_of(&id, mark);
         self.set_picture_of(&id, &avatar, hash.as_deref());
     }
 
@@ -303,6 +309,7 @@ impl SocialState {
                 }
                 if let Some(team) = team {
                     self.badges_from(team);
+                    self.marks_from(team);
                     self.crew_joined(team, joined, now);
                     let mine = self.me.as_ref().map(|me| me.profile.id.as_str());
                     if hides_my_tag && by.as_deref() != mine {
@@ -332,6 +339,7 @@ impl SocialState {
                 }
                 self.set_badge_of(id, badge.as_ref());
             }
+            PresenceEvent::MarkChanged { id, mark } => self.set_mark_of(id, *mark),
             PresenceEvent::TeamRequests {
                 crew,
                 requests,
@@ -1089,6 +1097,7 @@ impl SocialState {
             name: caller.map(|m| m.profile.name().to_owned()),
             avatar: caller.map(|m| m.profile.avatar.clone()),
             avatar_url: caller.and_then(|m| m.profile.discord_avatar_url(128)),
+            mark: caller.and_then(|m| m.profile.mark),
             kind: if open.call.server.is_some() {
                 CallKind::Join
             } else {
@@ -1234,6 +1243,49 @@ impl SocialState {
             for member in entry.team.members.iter_mut().filter(|m| m.profile.id == id) {
                 member.profile.badge = badge.cloned();
             }
+        }
+    }
+
+    /// Someone's mark changed (SOC-VERIFY): it shows wherever they do, the player's own card too
+    /// (friends, crews' members, requests either way, crews' join requests and invites, blocks).
+    fn set_mark_of(&mut self, id: &str, mark: Option<ProfileMark>) {
+        if let Some(me) = self.me.as_mut().filter(|me| me.profile.id == id) {
+            me.profile.mark = mark;
+        }
+        let Some(overview) = &mut self.overview else {
+            return;
+        };
+        let profiles = overview
+            .friends
+            .iter_mut()
+            .map(|f| &mut f.profile)
+            .chain(overview.incoming.iter_mut().map(|r| &mut r.profile))
+            .chain(overview.outgoing.iter_mut().map(|r| &mut r.profile))
+            .chain(overview.blocked.iter_mut().map(|b| &mut b.profile))
+            .chain(overview.team_invites.iter_mut().map(|i| &mut i.from));
+        for profile in profiles.filter(|p| p.id == id) {
+            profile.mark = mark;
+        }
+        for entry in overview.crews.iter_mut().flatten() {
+            for member in entry.team.members.iter_mut().filter(|m| m.profile.id == id) {
+                member.profile.mark = mark;
+            }
+            for request in entry.requests.iter_mut().filter(|r| r.from.id == id) {
+                request.from.mark = mark;
+            }
+        }
+    }
+
+    /// A crew as it is now carries its members' marks as they are now (SOC-VERIFY): those go
+    /// everywhere the members show.
+    fn marks_from(&mut self, team: &Team) {
+        let marks: Vec<(String, Option<ProfileMark>)> = team
+            .members
+            .iter()
+            .map(|member| (member.profile.id.clone(), member.profile.mark))
+            .collect();
+        for (id, mark) in marks {
+            self.set_mark_of(&id, mark);
         }
     }
 
@@ -1653,6 +1705,7 @@ impl SocialState {
                     joined_at: member.joined_at,
                     together_month: 0,
                     badge: self.badge_view(&member.profile),
+                    mark: member.profile.mark,
                 }
             })
             .collect();
@@ -1928,6 +1981,7 @@ impl SocialState {
             name: friend.map(|f| f.profile.name().to_owned()),
             avatar: friend.map(|f| f.profile.avatar.clone()),
             avatar_url: friend.and_then(|f| f.profile.discord_avatar_url(128)),
+            mark: friend.and_then(|f| f.profile.mark),
             at: invite.at,
             server: invite.server.clone(),
             quiet: invite.quiet,
@@ -1964,6 +2018,7 @@ fn friend_view(
             .and_then(|p| p.game.clone()),
         discord_url: profile.discord_profile_url(),
         badge,
+        mark: profile.mark,
     }
 }
 
@@ -2002,6 +2057,7 @@ fn join_request_view(
         username: profile.username,
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
+        mark: profile.mark,
         sent_at: request.sent_at,
         via: via.map(|m| m.profile.id.clone()),
         via_name: via.map(|m| m.profile.name().to_owned()),
@@ -2031,6 +2087,7 @@ fn request_view(request: &FriendRequest) -> RequestView {
         username: profile.username,
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
+        mark: profile.mark,
         sent_at: request.sent_at,
     }
 }
@@ -2053,6 +2110,7 @@ mod tests {
             avatar: "discord".into(),
             avatar_hash: None,
             badge: None,
+            mark: None,
         }
     }
 
@@ -2707,6 +2765,86 @@ mod tests {
         );
         let zeki = crew_view(&state).unwrap().members[2].clone();
         assert_eq!(zeki.state, PresenceState::Launcher);
+    }
+
+    #[test]
+    fn a_mark_shows_wherever_its_player_does_and_follows_live_changes() {
+        let mut state = loaded();
+        state.team_answer(TeamAnswer {
+            team: Some(team(&[
+                ("100000000000000000", "Ben", TeamRole::Founder),
+                ("1", "Ayşe", TeamRole::Member),
+                ("9", "Zeki", TeamRole::Member),
+            ])),
+            invited: vec![],
+        });
+        let mark_of = |state: &SocialState, id: &str| {
+            state
+                .friends()
+                .iter()
+                .find(|f| f.id == id)
+                .and_then(|f| f.mark)
+        };
+        assert_eq!(mark_of(&state, "1"), None);
+        // Ayşe (a friend and crewmate) is verified: her row, her crew entry.
+        state.apply(
+            &PresenceEvent::MarkChanged {
+                id: "1".into(),
+                mark: Some(ProfileMark::Verified),
+            },
+            NOW,
+        );
+        assert_eq!(mark_of(&state, "1"), Some(ProfileMark::Verified));
+        let ayse = crew_view(&state).unwrap().members[1].clone();
+        assert_eq!(ayse.mark, Some(ProfileMark::Verified));
+        // Requests either way carry it too.
+        state.apply(
+            &PresenceEvent::MarkChanged {
+                id: "4".into(),
+                mark: Some(ProfileMark::Admin),
+            },
+            NOW,
+        );
+        assert_eq!(state.incoming()[0].mark, Some(ProfileMark::Admin));
+        assert_eq!(state.outgoing()[0].mark, None);
+        // The player's own mark: their card and their own crew entry.
+        state.apply(
+            &PresenceEvent::MarkChanged {
+                id: "100000000000000000".into(),
+                mark: Some(ProfileMark::Admin),
+            },
+            NOW,
+        );
+        assert_eq!(state.me().unwrap().profile.mark, Some(ProfileMark::Admin));
+        assert!(
+            crew_view(&state)
+                .unwrap()
+                .members
+                .iter()
+                .any(|m| m.me && m.mark == Some(ProfileMark::Admin))
+        );
+        // A crew's message carries its members' marks as they are now: they go everywhere.
+        let mut now = team(&[
+            ("100000000000000000", "Ben", TeamRole::Founder),
+            ("1", "Ayşe", TeamRole::Member),
+            ("9", "Zeki", TeamRole::Member),
+        ]);
+        now.members[2].profile.mark = Some(ProfileMark::Verified);
+        state.apply(
+            &PresenceEvent::TeamChanged {
+                team: Some(now),
+                crew: Some("0123456789abcdef".into()),
+                reason: None,
+                by: None,
+                joined: vec![],
+            },
+            NOW,
+        );
+        // Taken off: the mark goes from every place, Ayşe's too (the crew carries none for her).
+        assert_eq!(mark_of(&state, "1"), None);
+        let view = crew_view(&state).unwrap();
+        assert_eq!(view.members[2].mark, Some(ProfileMark::Verified));
+        assert_eq!(view.members[0].mark, None);
     }
 
     fn crew_call(id: &str, from: &str, kind: CallKind, at: i64, until: i64) -> CrewCall {

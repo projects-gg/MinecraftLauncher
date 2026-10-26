@@ -16,6 +16,7 @@ import { untilText } from "../crew-notify";
 import { openInDiscord } from "../discord-link";
 import { presenceLine } from "../model";
 import { MUTE_PRESETS, muteUntilFor } from "../mute";
+import { PersonMark } from "../person-mark";
 import { PersonContextMenu } from "../person-menu";
 import { SocialAvatar } from "../social-face";
 import { useSocialPrefs, useSocialUi } from "../store";
@@ -222,7 +223,11 @@ export function ChatHeader() {
               {/* The tag they wear (TEAM6): a button of its own, outside the title's words. */}
               {badge && peer ? <BadgeChip badge={badge} wearer={peer.id} mode="button" /> : null}
               <RadixDialog.Title className="flex min-w-0 items-center gap-1.5 truncate text-[15px] leading-tight font-semibold text-bone-50">
-                <span className="truncate">{name}</span>
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="truncate">{name}</span>
+                  {/* Their mark right of the name (SOC-VERIFY), in the title's words. */}
+                  <PersonMark mark={peer?.mark} />
+                </span>
                 {muted ? (
                   <BellSlash
                     size={13}

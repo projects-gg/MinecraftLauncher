@@ -48,7 +48,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
-import type { CrewBadge, SocialTeam } from "@/lib/api/social-types";
+import type { CrewBadge, ProfileMark, SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { attempt } from "./actions";
 import { askFromBadge, openCrewPage, sayJoined, useBadgeRefusals, wearTag } from "./badge-actions";
@@ -73,18 +73,24 @@ import { dayMonth } from "./limits";
 import { openMenuFromKey } from "./menu-key";
 import { badgeMenu, rowsOf } from "./menus";
 import { useSocialMotion } from "./motion";
+import { markedName, PersonMark } from "./person-mark";
 import { useSocialUi } from "./store";
 import { CrewMark, CrewWatermark, type TagSize, TeamTag } from "./team-emblem";
 import { useCrewItems } from "./team-section";
 import { localDay } from "./teams";
 
-/** How a row names someone who wears a tag: "Ayşe, etiket GK" (the chip itself is not read). */
+/**
+ * How a row names someone who wears a tag: "Ayşe, etiket GK" (the chip itself is not read); with a
+ * mark (SOC-VERIFY) "Ayşe, Doğrulanmış hesap, etiket GK" (the row's own name hides the mark's).
+ */
 export function badgeRowLabel(
   name: string,
   badge: CrewBadge | undefined,
   t: (key: string, options?: Record<string, unknown>) => string,
+  mark?: ProfileMark,
 ): string {
-  return badge ? t("team6.rowLabel", { name, tag: badge.tag }) : name;
+  const named = markedName(name, mark, t);
+  return badge ? t("team6.rowLabel", { name: named, tag: badge.tag }) : named;
 }
 
 /** The tag a profile shows: none while the service offers no tags (or Studio turned them off). */
@@ -759,20 +765,27 @@ export function WearToggle({ team }: { team: SocialTeam }) {
 
 // --- a name with its tag -----------------------------------------------------------------------------
 
+/** The mark's size beside each tag size's name (SOC-VERIFY): 12 by chat names, 14 in lists, 16 in a
+ * person card's title. */
+const MARK_SIZES = { sm: 12, md: 14, lg: 16 } as const;
+
 /**
- * `[GK] Ayşe`: a player's name with the tag they wear before it (none while they wear none or the
- * service has no tags), then `children` (a favourite's star, a role's crown). The chip never
- * shrinks; the name truncates. A tag that comes or goes live fades and grows in its place (160 ms;
- * out in 110 ms) and the name glides to where it now starts (200 ms); reduced motion and
- * Performance mode keep the fade and the name simply moves.
+ * `[GK] Ayşe ✓`: a player's name with the tag they wear before it (none while they wear none or the
+ * service has no tags) and their mark right after it (SOC-VERIFY; none without one), then
+ * `children` (a favourite's star, a role's crown). The chip and the mark never shrink; the name
+ * truncates. A tag that comes or goes live fades and grows in its place (160 ms; out in 110 ms) and
+ * the name glides to where it now starts (200 ms), its mark with it; reduced motion and Performance
+ * mode keep the fade and the name simply moves. The mark itself never moves on its own.
  */
 export function BadgedName({
   name,
   badge,
   wearer,
+  mark,
   size = "md",
   chip = "row",
   dim = false,
+  quietMark = false,
   className,
   nameClassName,
   children,
@@ -780,10 +793,14 @@ export function BadgedName({
   name: string;
   badge: CrewBadge | undefined;
   wearer: string;
+  /** Their mark (SOC-VERIFY). */
+  mark?: ProfileMark;
   size?: TagSize;
   chip?: "row" | "button" | "still";
   /** The chip quieter, with a dimmed name (someone offline). */
   dim?: boolean;
+  /** The mark at 70 % beside a name in a quiet colour (a chat sender's line). */
+  quietMark?: boolean;
   className?: string;
   nameClassName?: string;
   children?: ReactNode;
@@ -844,9 +861,21 @@ export function BadgedName({
           </motion.span>
         ) : null}
       </AnimatePresence>
-      <span ref={nameRef} className={cn("min-w-0 truncate", nameClassName)}>
-        {name}
-      </span>
+      {mark ? (
+        // The name and its mark glide as one; the name truncates, the mark stays whole.
+        <span ref={nameRef} className="flex min-w-0 items-center gap-1">
+          <span className={cn("min-w-0 truncate", nameClassName)}>{name}</span>
+          <PersonMark
+            mark={mark}
+            size={MARK_SIZES[size]}
+            className={cn("transition-opacity duration-150", (dim || quietMark) && "opacity-70")}
+          />
+        </span>
+      ) : (
+        <span ref={nameRef} className={cn("min-w-0 truncate", nameClassName)}>
+          {name}
+        </span>
+      )}
       {children}
     </span>
   );

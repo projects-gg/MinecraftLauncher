@@ -8,17 +8,17 @@ use crate::afk::AfkNotice;
 use crate::minecraft::McMessage;
 use crate::model::{
     ChatCaps, ChatDeletion, ChatMessage, ChatReacted, ChatStatus, CrewBadge, CrewMute,
-    FriendGroups, JoinRequest, LastSeen, LinkCard, ModNotice, Privacy, PublicProfile, Reaction,
-    ReadMark, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
+    FriendGroups, JoinRequest, LastSeen, LinkCard, ModNotice, Privacy, ProfileMark, PublicProfile,
+    Reaction, ReadMark, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
 };
 
 /// What this launcher understands on the presence socket (`GET /v1/presence?caps=…`): crew calls
 /// that carry their server and may end with `server` (`callServer`), several crews (`crews`),
 /// crew plans (`plans`, TEAM5), crew tag changes (`badges`, TEAM6), SKIN1's game account link
-/// and Projects skin news (`mc`), Cloud AFK's notices (`afk`, AFKPLUS) and the player's own privacy
-/// switches and picture from their other devices (`profile`, SOC-LAG). Older services ignore the
-/// query, and names they do not know.
-pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges,mc,afk,profile";
+/// and Projects skin news (`mc`), Cloud AFK's notices (`afk`, AFKPLUS), profile mark changes
+/// (`marks`, SOC-VERIFY) and the player's own privacy switches and picture from their other devices
+/// (`profile`, SOC-LAG). Older services ignore the query, and names they do not know.
+pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges,mc,afk,marks,profile";
 
 /// Crew plans (TEAM5): the capability the service names in `hello.caps` when it took it.
 pub const PLANS_CAP: &str = "plans";
@@ -32,6 +32,10 @@ pub const MC_CAP: &str = "mc";
 /// AFKPLUS: Cloud AFK's notices (`afk_notice`) come to this socket instead of the phone; the
 /// launcher answers `afk_seen` once the player saw one.
 pub const AFK_CAP: &str = "afk";
+
+/// SOC-VERIFY: `mark` messages (a friend's, a crewmate's or the player's own mark changed) flow
+/// only when the service named it in `hello.caps`.
+pub const MARKS_CAP: &str = "marks";
 
 /// Crew chat and direct messages (CHAT1): asked for only while the signed content allows chat.
 pub const CHAT_CAP: &str = "chat";
@@ -590,6 +594,14 @@ pub(crate) enum ServerMessage {
         id: String,
         #[serde(default, deserialize_with = "crate::model::readable_badge")]
         badge: Option<CrewBadge>,
+    },
+    /// The mark of a friend, a crewmate or the player changed (SOC-VERIFY, with `marks` in the
+    /// capabilities): replace it wherever they show; None when they have none now (or one this
+    /// version does not know).
+    Mark {
+        id: String,
+        #[serde(default, deserialize_with = "crate::model::readable_mark")]
+        mark: Option<ProfileMark>,
     },
     TeamInvite {
         invite: TeamInvite,
@@ -1239,11 +1251,11 @@ mod tests {
     fn chat_frames_both_ways() {
         assert_eq!(
             presence_caps(false),
-            "callServer,crews,plans,badges,mc,afk,profile"
+            "callServer,crews,plans,badges,mc,afk,marks,profile"
         );
         assert_eq!(
             presence_caps(true),
-            "callServer,crews,plans,badges,mc,afk,profile,chat,replies,stickers,reactions,typing,reads"
+            "callServer,crews,plans,badges,mc,afk,marks,profile,chat,replies,stickers,reactions,typing,reads"
         );
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(
@@ -1402,6 +1414,35 @@ mod tests {
             serde_json::from_str(r#"{"t":"badge","id":"223456789012345678","badge":"GK"}"#)
                 .unwrap();
         assert!(matches!(odd, ServerMessage::Badge { badge: None, .. }));
+        // SOC-VERIFY: a mark, none, and one this version does not know (no mark, still read).
+        let marked: ServerMessage =
+            serde_json::from_str(r#"{"t":"mark","id":"223456789012345678","mark":"verified"}"#)
+                .unwrap();
+        assert!(matches!(
+            marked,
+            ServerMessage::Mark { id, mark: Some(ProfileMark::Verified) } if id == "223456789012345678"
+        ));
+        let admin: ServerMessage =
+            serde_json::from_str(r#"{"t":"mark","id":"223456789012345678","mark":"admin"}"#)
+                .unwrap();
+        assert!(matches!(
+            admin,
+            ServerMessage::Mark {
+                mark: Some(ProfileMark::Admin),
+                ..
+            }
+        ));
+        for raw in [
+            r#"{"t":"mark","id":"223456789012345678","mark":null}"#,
+            r#"{"t":"mark","id":"223456789012345678","mark":"gold"}"#,
+            r#"{"t":"mark","id":"223456789012345678"}"#,
+        ] {
+            let none: ServerMessage = serde_json::from_str(raw).unwrap();
+            assert!(
+                matches!(none, ServerMessage::Mark { mark: None, .. }),
+                "{raw}"
+            );
+        }
         let joined: ServerMessage = serde_json::from_str(
             r#"{"t":"team","crew":"0a1b2c3d4e5f6a7b","by":"123456789012345678",
                 "joined":["223456789012345678"],"team":{"id":"0a1b2c3d4e5f6a7b","name":"Gece",

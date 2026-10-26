@@ -1554,6 +1554,7 @@ pub(crate) mod tests {
             backup: None,
             limited: None,
             badge: None,
+            mark: None,
         }
     }
 
@@ -1576,6 +1577,7 @@ pub(crate) mod tests {
             game,
             discord_url: String::new(),
             badge: None,
+            mark: None,
         }
     }
 
@@ -1620,6 +1622,7 @@ pub(crate) mod tests {
                     joined_at: 0,
                     together_month: 0,
                     badge: None,
+                    mark: None,
                 })
                 .collect(),
             invited: Vec::new(),
@@ -1686,6 +1689,7 @@ pub(crate) mod tests {
                 username: "kotu".into(),
                 avatar: "discord".into(),
                 avatar_url: None,
+                mark: None,
             }],
             invites: vec![InviteView {
                 id: "inv-1".into(),
@@ -1693,6 +1697,7 @@ pub(crate) mod tests {
                 name: Some("Ayşe".into()),
                 avatar: None,
                 avatar_url: None,
+                mark: None,
                 at: 1,
                 server: projects(),
                 quiet: false,
@@ -1720,6 +1725,7 @@ pub(crate) mod tests {
                 name: None,
                 avatar: None,
                 avatar_url: None,
+                mark: None,
                 kind: CallKind::Join,
                 server: projects(),
                 crews: vec!["t1".into()],

@@ -18,6 +18,7 @@ import type { CodeLookup, SocialMe } from "@/lib/api/social-types";
 import { attempt, copyText } from "./actions";
 import { formatCodeInput, normalizeCode } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { NameWithMark } from "./person-mark";
 import { QrCode } from "./qr-code";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
@@ -206,7 +207,11 @@ function ResultCard({
     <div className="flex items-center gap-3.5 rounded-[var(--radius-panel)] bg-white/[0.04] p-3 ring-1 ring-white/8">
       <SocialAvatar source={lookup.profile} size={48} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-semibold text-bone-50">{lookup.profile.name}</p>
+        <NameWithMark
+          name={lookup.profile.name}
+          mark={lookup.profile.mark}
+          className="text-[15px] font-semibold text-bone-50"
+        />
         <p className="truncate text-[12.5px] text-ash-400">@{lookup.profile.username}</p>
         <div className="relative h-5">
           <AnimatePresence mode="popLayout" initial={false}>

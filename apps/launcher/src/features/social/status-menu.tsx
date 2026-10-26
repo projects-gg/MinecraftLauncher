@@ -77,6 +77,7 @@ export function MeCard({ me }: { me: SocialMe }) {
           name={me.name}
           badge={badge}
           wearer={me.id}
+          mark={me.mark}
           chip="button"
           nameClassName="text-[15px] leading-tight font-semibold text-bone-50"
         />
