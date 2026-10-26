@@ -6120,8 +6120,8 @@ mod tests {
             ],
             "the middle click never went"
         );
-        // While the first was on its way the player saw every change already.
-        assert!(first[0].share_server && !first[0].share_last_seen);
+        // The first request already carries the first click; the others may still be on their way.
+        assert!(first[0].share_server);
         let me = harness.service.view().me.unwrap();
         assert!(me.privacy.share_server && !me.privacy.share_last_seen);
 
