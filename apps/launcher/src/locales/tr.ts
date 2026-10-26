@@ -1093,7 +1093,7 @@ export const tr = {
       channel: "Güncelleme kanalı",
       stable: "Kararlı",
       beta: "Beta",
-      betaHelp: "Yeni özellikleri herkesten önce denersin; ara sıra hata görebilirsin.",
+      betaHelp: "Beta'da yeni özellikler önce gelir; ara sıra hata olabilir.",
       autoDownload: "Güncellemeleri arka planda indir",
       check: "Güncellemeleri denetle",
       checking: "Denetleniyor",

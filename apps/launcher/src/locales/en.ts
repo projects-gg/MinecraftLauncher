@@ -1335,7 +1335,7 @@ export const en: DeepPartial<Strings> = {
       channel: "Update channel",
       stable: "Stable",
       beta: "Beta",
-      betaHelp: "Try new features before everyone else; you may run into the odd bug.",
+      betaHelp: "Beta gets new features first; you may run into the odd bug.",
       autoDownload: "Download updates in the background",
       check: "Check for updates",
       checking: "Checking",

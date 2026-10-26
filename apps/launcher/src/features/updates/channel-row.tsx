@@ -85,6 +85,12 @@ export function UpdateChannelRow() {
   const slow = useLasted(asking, SLOW_MS);
   const lineId = useId();
 
+  // While this row is on screen its line says why a look left Beta: no toast says it again.
+  useEffect(() => {
+    useBetaGate.setState((s) => ({ rowsShown: s.rowsShown + 1 }));
+    return () => useBetaGate.setState((s) => ({ rowsShown: s.rowsShown - 1 }));
+  }, []);
+
   const join = async () => {
     // The answer lets this launcher in: a look at the beta channel at once, in the background.
     if (await useBetaGate.getState().join()) void useUpdate.getState().check();
@@ -98,17 +104,16 @@ export function UpdateChannelRow() {
     setPref("updateChannel", "stable");
   };
 
-  // While the answer is out the plate is on Beta, and so is its line (then "bakılıyor" if slow).
+  // While the answer is out the plate is on Beta (then "bakılıyor" if slow). One line in every
+  // state, so the row keeps its height: what Beta is, unless an answer said why not.
   const shownChannel: UpdateChannel = asking ? "beta" : channel;
-  const line: Line | null = asking
+  const line: Line = asking
     ? slow
       ? "checking"
       : "beta"
-    : channel === "beta"
-      ? "beta"
-      : refusal && refusal.verdict !== "allowed"
-        ? refusal.verdict
-        : null;
+    : channel !== "beta" && refusal && refusal.verdict !== "allowed"
+      ? refusal.verdict
+      : "beta";
 
   const sentence: Record<Line, string> = {
     beta: t("settings.updates.betaHelp"),
@@ -148,54 +153,52 @@ export function UpdateChannelRow() {
       title={t("settings.updates.channel")}
       helpId={lineId}
       help={
-        line ? (
-          <>
-            {/* Heard when an answer changes the line: one whole sentence (the sign-in line's
+        <>
+          {/* Heard when an answer changes the line: one whole sentence (the sign-in line's
                 ends in its action's words). */}
-            <span className="sr-only" aria-live="polite" aria-atomic="true">
-              {line === "signIn"
-                ? `${sentence.signIn} ${t("betaGate.signInAction")}.`
-                : sentence[line]}
-            </span>
-            <span className="grid">
-              {LINES.map((kind) => {
-                const shown = kind === line;
-                return (
-                  <span
-                    key={kind}
-                    inert={!shown}
-                    className={cn(
-                      "[grid-area:1/1] whitespace-nowrap transition-opacity",
-                      shown ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
-                    )}
-                  >
-                    {/* Only a check that failed takes the launcher's warning mark: "Beta is for
+          <span className="sr-only" aria-live="polite" aria-atomic="true">
+            {line === "signIn"
+              ? `${sentence.signIn} ${t("betaGate.signInAction")}.`
+              : sentence[line]}
+          </span>
+          <span className="grid">
+            {LINES.map((kind) => {
+              const shown = kind === line;
+              return (
+                <span
+                  key={kind}
+                  inert={!shown}
+                  className={cn(
+                    "[grid-area:1/1] whitespace-nowrap transition-opacity",
+                    shown ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
+                  )}
+                >
+                  {/* Only a check that failed takes the launcher's warning mark: "Beta is for
                         the team" is an invitation, not an error. */}
-                    {kind === "unknown" ? (
-                      <Warning
-                        size={13}
-                        weight="fill"
-                        aria-hidden
-                        className="mr-1.5 inline-block align-[-2px] text-gold-300"
-                      />
-                    ) : null}
-                    <span aria-hidden>{sentence[kind]}</span>
-                    {action(kind, shown)}
-                    {/* The sign-in words finish their sentence. */}
-                    {kind === "signIn" ? <span aria-hidden>.</span> : null}
-                  </span>
-                );
-              })}
-            </span>
-          </>
-        ) : undefined
+                  {kind === "unknown" ? (
+                    <Warning
+                      size={13}
+                      weight="fill"
+                      aria-hidden
+                      className="mr-1.5 inline-block align-[-2px] text-gold-300"
+                    />
+                  ) : null}
+                  <span aria-hidden>{sentence[kind]}</span>
+                  {action(kind, shown)}
+                  {/* The sign-in words finish their sentence. */}
+                  {kind === "signIn" ? <span aria-hidden>.</span> : null}
+                </span>
+              );
+            })}
+          </span>
+        </>
       }
     >
       <Segmented
         value={shownChannel}
         onValueChange={pick}
         label={t("settings.updates.channel")}
-        describedBy={line ? lineId : undefined}
+        describedBy={lineId}
         options={[
           { value: "stable", label: t("settings.updates.stable") },
           { value: "beta", label: t("settings.updates.beta") },

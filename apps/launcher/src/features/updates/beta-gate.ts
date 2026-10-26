@@ -22,6 +22,8 @@ interface BetaGateState {
   asking: boolean;
   /** Why this launcher is not on Beta (the last answer that said no), for Settings' line. */
   refusal: BetaAccess | null;
+  /** Settings' channel rows on screen: while one is, its line says why and no toast repeats it. */
+  rowsShown: number;
   /** Picks Beta when the answer lets this launcher in; true when it did. */
   join: () => Promise<boolean>;
   /** Kararlı was picked: an answer still out changes nothing, and the line goes. */
@@ -74,6 +76,7 @@ let generation = 0;
 export const useBetaGate = create<BetaGateState>()((set, get) => ({
   asking: false,
   refusal: null,
+  rowsShown: 0,
   async join() {
     if (get().asking) return false;
     const mine = ++generation;
@@ -156,7 +159,7 @@ export async function keepBeta(): Promise<UpdateChannel> {
   if (access === null || access.verdict === "allowed") return "beta";
   usePrefs.getState().set("updateChannel", "stable");
   useBetaGate.setState({ refusal: access });
-  movedToast(access);
+  if (useBetaGate.getState().rowsShown === 0) movedToast(access);
   return "stable";
 }
 

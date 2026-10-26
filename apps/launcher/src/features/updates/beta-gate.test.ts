@@ -147,6 +147,17 @@ describe("keepBeta", () => {
     expect(signIn.action.label).toBe("betaGate.signInShort");
   });
 
+  it("leaves the toast to Settings' line while the channel row is on screen", async () => {
+    useBetaGate.setState({ rowsShown: 1 });
+    prefs.updateChannel = "beta";
+    updateBetaKeep.mockResolvedValue(ok("notMember"));
+    expect(await keepBeta()).toBe("stable");
+    expect(useBetaGate.getState().refusal?.verdict).toBe("notMember");
+    expect(toast).not.toHaveBeenCalled();
+    expect(warning).not.toHaveBeenCalled();
+    useBetaGate.setState({ rowsShown: 0 });
+  });
+
   it("stays where it is when the command itself fails", async () => {
     prefs.updateChannel = "beta";
     updateBetaKeep.mockResolvedValue({ status: "error", error: { code: "X", message: "x" } });
