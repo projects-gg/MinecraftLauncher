@@ -1248,13 +1248,13 @@ mod tests {
             }
         })
         .await;
-        let client = client(&server);
+        let social = client(&server);
         assert_eq!(
-            client.beta(Some(&token())).await.unwrap(),
+            social.beta(Some(&token())).await.unwrap(),
             crate::BetaAnswer::Member
         );
         assert_eq!(
-            client.beta(None).await.unwrap(),
+            social.beta(None).await.unwrap(),
             crate::BetaAnswer::SignIn {
                 apply: Url::parse("https://projects.gg/arge").unwrap()
             }
@@ -1262,7 +1262,7 @@ mod tests {
         // A session that ended is nobody signed in.
         let ended = SessionToken::new(format!("pls_{}", "B".repeat(43)));
         assert_eq!(
-            client.beta(Some(&ended)).await.unwrap(),
+            social.beta(Some(&ended)).await.unwrap(),
             crate::BetaAnswer::sign_in()
         );
         let requests = server.requests();
