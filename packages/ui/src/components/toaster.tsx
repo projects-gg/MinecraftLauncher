@@ -19,7 +19,8 @@ export function Toaster() {
           // Not `glass-strong`: see `toast-surface` in styles.css.
           toast:
             "toast-surface flex w-news items-start gap-3 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100",
-          title: "font-semibold text-bone-50",
+          // `text-pretty` (design.md §3, paragraphs): no word left alone on a toast's last line.
+          title: "font-semibold text-pretty text-bone-50",
           description: "mt-0.5 text-ash-300",
           // `pointer-events-auto`: a modal sheet turns pointer events off outside itself, the
           // toasts included; their buttons must still work (the sheet ignores those clicks).
