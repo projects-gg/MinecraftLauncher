@@ -7,15 +7,17 @@ import { useOverlay } from "./store";
 
 /**
  * Keeps the launcher's in-game overlay in step with the page (mounted once, with the friends
- * feature's host): the switch, the friends notification choices its toasts follow (crew calls,
- * crew chat, conversations muted here), the friend list's favourites and "Çevrimiçi olunca
- * bildir" (the game's person menu shows and changes them, OVL-UX2) and reduced motion go to Rust
- * at the start and on every change, since the page may rest while a game runs. Whether the game's
- * mod is connected comes back (`shownInGame`), and so do a switch the crash help turned off and
- * the marks the game's person menu changed.
+ * feature's host): the switch, the chat's emoji picker (CHAT-EMOJI), the friends notification
+ * choices its toasts follow (crew calls, crew chat, conversations muted here), the friend list's
+ * favourites and "Çevrimiçi olunca bildir" (the game's person menu shows and changes them,
+ * OVL-UX2) and reduced motion go to Rust at the start and on every change, since the page may
+ * rest while a game runs. Whether the game's mod is connected comes back (`shownInGame`), and so
+ * do a switch the crash help turned off, the emoji picker switched in the game and the marks the
+ * game's person menu changed.
  */
 export function useOverlaySync() {
   const enabled = usePrefs((s) => s.inGameOverlay);
+  const emoji = usePrefs((s) => s.chatEmoji);
   const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
   const crewChat = useSocialPrefs((s) => s.notifyCrewChat);
   const chatMutes = useSocialPrefs((s) => s.chatMutes);
@@ -29,6 +31,7 @@ export function useOverlaySync() {
     overlayApi
       .configure({
         enabled,
+        emoji,
         reducedMotion,
         notify: {
           crewCalls,
@@ -44,6 +47,7 @@ export function useOverlaySync() {
       });
   }, [
     enabled,
+    emoji,
     crewCalls,
     crewChat,
     chatMutes,
@@ -57,6 +61,7 @@ export function useOverlaySync() {
     const { setConnected } = useOverlay.getState();
     const stopStatus = overlayApi.onStatus((status) => setConnected(status.connected));
     const stopEnabled = overlayApi.onEnabled((on) => usePrefs.getState().set("inGameOverlay", on));
+    const stopEmoji = overlayApi.onEmoji((on) => usePrefs.getState().set("chatEmoji", on));
     // The game's person menu (OVL-UX2): the same marks as the list's star and its menu's row.
     const stopPeople = overlayApi.onPeople((change) => {
       const prefs = useSocialPrefs.getState();
@@ -75,6 +80,7 @@ export function useOverlaySync() {
     return () => {
       stopStatus();
       stopEnabled();
+      stopEmoji();
       stopPeople();
     };
   }, []);

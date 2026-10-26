@@ -21,8 +21,8 @@ use crate::error::{Error, Result};
 use crate::fsutil::sha256_hex;
 use crate::json::to_canonical_json;
 use crate::model::{
-    AfkRelease, DocRef, ItemArt, LauncherConfig, MediaKind, MediaRef, ModSetCatalog, NewsFeed,
-    PackHashes, PackManifest, PackRef, ROOT_INDEX_SCHEMA, RootIndex,
+    AfkRelease, ChatEmojis, DocRef, ItemArt, LauncherConfig, MediaKind, MediaRef, ModSetCatalog,
+    NewsFeed, PackHashes, PackManifest, PackRef, ROOT_INDEX_SCHEMA, RootIndex,
 };
 use crate::path::check_mirror_path;
 use crate::signing::{SignatureFile, SigningKey, sign_index};
@@ -85,6 +85,7 @@ pub struct IndexBuilder {
     afk: Option<AfkRelease>,
     mod_sets: Option<DocRef>,
     item_art: Option<DocRef>,
+    chat_emojis: Option<DocRef>,
     documents: BTreeMap<String, PublishedDoc>,
 }
 
@@ -105,6 +106,7 @@ impl IndexBuilder {
             afk: previous.afk.clone(),
             mod_sets: previous.mod_sets.clone(),
             item_art: previous.item_art.clone(),
+            chat_emojis: previous.chat_emojis.clone(),
             documents: BTreeMap::new(),
         }
     }
@@ -168,6 +170,37 @@ impl IndexBuilder {
         };
         let doc_ref = self.add_document(doc, self.item_art.clone());
         self.item_art = Some(doc_ref.clone());
+        Ok(Some(doc_ref))
+    }
+
+    /// Serializes the chat emojis to `emojis/chat.<sha256>.json`; `None` drops the reference
+    /// (launchers go back to their built-in list). A list without emojis is published as it is:
+    /// no emojis on its hosts. The document must be valid ([`ChatEmojis::validate`]).
+    pub fn set_chat_emojis(&mut self, emojis: Option<&ChatEmojis>) -> Result<Option<DocRef>> {
+        self.set_chat_emojis_with(emojis, |_| {})
+    }
+
+    /// [`Self::set_chat_emojis`] with `edit` applied to the document's JSON (see the module
+    /// documentation).
+    pub fn set_chat_emojis_with(
+        &mut self,
+        emojis: Option<&ChatEmojis>,
+        edit: impl FnOnce(&mut Value),
+    ) -> Result<Option<DocRef>> {
+        let Some(emojis) = emojis else {
+            if let Some(previous) = self.chat_emojis.take() {
+                self.documents.remove(&previous.path);
+            }
+            return Ok(None);
+        };
+        emojis.validate()?;
+        let doc = PublishedDoc::new(String::new(), edited_json(emojis, edit)?);
+        let doc = PublishedDoc {
+            path: chat_emojis_path(&doc.sha256),
+            ..doc
+        };
+        let doc_ref = self.add_document(doc, self.chat_emojis.clone());
+        self.chat_emojis = Some(doc_ref.clone());
         Ok(Some(doc_ref))
     }
 
@@ -333,6 +366,7 @@ impl IndexBuilder {
             afk: self.afk,
             mod_sets: self.mod_sets,
             item_art: self.item_art,
+            chat_emojis: self.chat_emojis,
         };
         index.validate()?;
         let index_bytes = edited_json(&index, edit)?;
@@ -390,6 +424,11 @@ pub fn mod_sets_path(sha256: &str) -> String {
 /// `itemart/items.<sha256>.json`
 pub fn item_art_path(sha256: &str) -> String {
     format!("itemart/items.{sha256}.json")
+}
+
+/// `emojis/chat.<sha256>.json`
+pub fn chat_emojis_path(sha256: &str) -> String {
+    format!("emojis/chat.{sha256}.json")
 }
 
 /// `itemart/atlas-<size>.<sha256>.png`: an icon atlas of the item art.
@@ -626,6 +665,50 @@ mod tests {
         assert!(IndexBuilder::new().set_item_art(Some(&broken)).is_err());
         assert_eq!(item_art_atlas_path(16, "ab"), "itemart/atlas-16.ab.png");
         assert_eq!(item_art_glyph_path("ab"), "itemart/glyph.ab.png");
+    }
+
+    #[test]
+    fn chat_emojis_are_published_as_a_document() {
+        let emojis = ChatEmojis::builtin();
+        let mut builder = IndexBuilder::new();
+        builder.set_config(&sample_config(None)).unwrap();
+        builder.set_news(&sample_news(None)).unwrap();
+        let doc = builder.set_chat_emojis(Some(&emojis)).unwrap().unwrap();
+        assert_eq!(doc.path, chat_emojis_path(&doc.sha256));
+        assert!(doc.path.starts_with("emojis/chat."));
+        let built = builder.build(at("2026-10-15T12:00:00Z")).unwrap();
+        assert_eq!(built.index.chat_emojis.as_ref(), Some(&doc));
+        let uploaded = built
+            .documents
+            .iter()
+            .find(|published| published.path == doc.path)
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<ChatEmojis>(&uploaded.bytes).unwrap(),
+            emojis
+        );
+
+        // Kept by the next publish; an empty list is published (no emojis on its hosts) and only
+        // `None` takes the reference away (launchers go back to their built-in list).
+        let kept = IndexBuilder::from_previous(&built.index)
+            .build(at("2026-10-15T12:01:00Z"))
+            .unwrap();
+        assert_eq!(kept.index.chat_emojis, built.index.chat_emojis);
+        let mut emptied = IndexBuilder::from_previous(&built.index);
+        let empty = emptied
+            .set_chat_emojis(Some(&ChatEmojis::default()))
+            .unwrap();
+        assert!(empty.is_some());
+        let mut cleared = IndexBuilder::from_previous(&built.index);
+        assert_eq!(cleared.set_chat_emojis(None).unwrap(), None);
+        let cleared = cleared.build(at("2026-10-15T12:02:00Z")).unwrap();
+        assert_eq!(cleared.index.chat_emojis, None);
+        assert!(cleared.documents.is_empty());
+
+        // An invalid document is refused.
+        let mut broken = emojis;
+        broken.emojis[0].look = Some("&".into());
+        assert!(IndexBuilder::new().set_chat_emojis(Some(&broken)).is_err());
     }
 
     #[test]

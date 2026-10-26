@@ -104,10 +104,39 @@ public final class Texts {
 
     /**
      * One line in display order (right-to-left names read right), keeping its layout between frames while it
-     * stays on screen unchanged ({@link PreparedLine}).
+     * stays on screen unchanged ({@link PreparedLine}). Its colour emoji are white, so their pictures keep their own
+     * colours ({@link EmojiGlyphs}).
      */
     public static FormattedCharSequence visual(String line) {
-        return PreparedLine.of(net.minecraft.locale.Language.getInstance().getVisualOrder(FormattedText.of(line)));
+        return PreparedLine.of(net.minecraft.locale.Language.getInstance().getVisualOrder(withEmoji(line, Style.EMPTY)));
+    }
+
+    /**
+     * {@code text} in {@code style}, its colour emoji in white ({@link EmojiGlyphs}): a line without any stays one run.
+     * CHAT-EMOJI: the overlay's faces draw the launcher's emoji as pictures, tinted by the line's colour otherwise.
+     */
+    public static FormattedText withEmoji(String text, Style style) {
+        if (!EmojiGlyphs.any(text)) {
+            return FormattedText.of(text, style);
+        }
+        Style white = style.withColor(0xFFFFFF);
+        List<FormattedText> parts = new ArrayList<>();
+        int start = 0;
+        boolean inEmoji = false;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            boolean emoji = EmojiGlyphs.colour(cp);
+            if (emoji != inEmoji && i > start) {
+                parts.add(FormattedText.of(text.substring(start, i), inEmoji ? white : style));
+                start = i;
+            }
+            inEmoji = emoji;
+            i += Character.charCount(cp);
+        }
+        if (start < text.length()) {
+            parts.add(FormattedText.of(text.substring(start), inEmoji ? white : style));
+        }
+        return FormattedText.composite(parts);
     }
 
     /** A link the player may press, where it sits in a wrapped text (line index, x range in GUI pixels). */
@@ -166,7 +195,7 @@ public final class Texts {
                     continue;
                 }
                 if (pos < ls) {
-                    line.append(Component.literal(text.substring(pos, ls)));
+                    line.append(withEmojiComponent(text.substring(pos, ls)));
                 }
                 line.append(Component.literal(text.substring(ls, le)).withStyle(link));
                 spans.add(new LinkSpan(li, font.width(text.substring(s, ls)), font.width(text.substring(s, le)),
@@ -174,11 +203,24 @@ public final class Texts {
                 pos = le;
             }
             if (pos < e) {
-                line.append(Component.literal(text.substring(pos, e)));
+                line.append(withEmojiComponent(text.substring(pos, e)));
             }
             lines.add(PreparedLine.of(net.minecraft.locale.Language.getInstance().getVisualOrder(line)));
         }
         return new Wrapped(lines, spans);
+    }
+
+    /** A piece of a line as the game's text, its colour emoji in white ({@link #withEmoji}). */
+    private static Component withEmojiComponent(String text) {
+        if (!EmojiGlyphs.any(text)) {
+            return Component.literal(text);
+        }
+        MutableComponent out = Component.empty();
+        withEmoji(text, Style.EMPTY).visit((style, part) -> {
+            out.append(Component.literal(part).withStyle(style));
+            return java.util.Optional.empty();
+        }, Style.EMPTY);
+        return out;
     }
 
     private static String rest(List<FormattedText> parts, int from) {

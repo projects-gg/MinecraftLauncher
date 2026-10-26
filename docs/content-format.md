@@ -22,6 +22,7 @@ v1/modsets/modsets.<sha256>.json   ModSetCatalog (ready-made mod sets, optional)
 v1/itemart/items.<sha256>.json     ItemArt (the Projects server's own item looks, optional)
 v1/itemart/atlas-<size>.<sha256>.png   item art icon atlases
 v1/itemart/glyph.<sha256>.png      item art menu glyph pictures
+v1/emojis/chat.<sha256>.json       ChatEmojis (the Projects server's chat emojis, optional)
 v1/files/<sha1>                    files we host for packs (own mods, configs)
 v1/afk/<version>/<platform>.zip    AFK client builds
 v1/releases/<channel>.json         launcher update channel (stable, beta)
@@ -153,6 +154,9 @@ the launcher config: see [News feed (Discord bot)](#news-feed-discord-bot).
 - `itemArt` (optional `DocRef`): the Projects server's own item looks and menu glyphs for the
   cloud inventory views, see [Item art](#item-art). Absent when the team publishes none.
   Clients download it when such a view first needs it, not with every refresh.
+- `chatEmojis` (optional `DocRef`): the chat emojis the in-game overlay's picker offers on the
+  Projects server, see [Chat emojis](#chat-emojis). Absent while the team publishes none:
+  launchers then use their built-in list. Launchers read it with every refresh (it is small).
 - `modSets` (optional `DocRef`): the ready-made mod sets, see [Mod sets](#mod-sets). Absent
   when the team publishes none. Clients download it when they first need it (the "Hazır set"
   choices), not with every refresh, and keep it in the document cache.
@@ -1723,6 +1727,76 @@ it; the index references the document as `itemArt` (`itemart/items.<sha256>.json
 - Limits: at most 8192 items, 4096 glyphs, 128 columns; glyph pictures at most 1024 × 1024 GUI
   pixels, `advance` and `ascent` within ±4096.
 
+## Chat emojis
+
+The in-game overlay's emoji picker (CHAT-EMOJI, 26 Oct 2026) offers, while the game is on the
+Projects server, the codes the server turns into its own symbols, expressions and pictures in chat;
+elsewhere it offers its own unicode set. Studio edits the list ("Sohbet emojileri") and publishes
+it; the index references the document as `chatEmojis` (`emojis/chat.<sha256>.json`). While the
+index has none, launchers use their built-in list (`crates/pl-content/data/chat-emojis.json`,
+`ChatEmojis::builtin`: the server's scripts as of 26 Oct 2026), and so does the overlay mod while it
+has no word from the launcher.
+
+<!-- example: ChatEmojis -->
+```json
+{
+  "schema": 1,
+  "hosts": ["projects.gg"],
+  "emojis": [
+    { "code": ":kalp:", "aliases": ["<3"], "look": "&c❤", "kind": "symbol", "rank": "VIP" },
+    { "code": ":shrug:", "look": "¯\\_(ツ)_/¯", "kind": "text", "rank": "VIP" },
+    {
+      "code": ":hmm:",
+      "look": "&e(・・?)",
+      "glyph": "\ue106",
+      "kind": "pack",
+      "rank": "VIP",
+      "servers": ["Survival"]
+    },
+    {
+      "code": ":ping:",
+      "kind": "shortcut",
+      "rank": "VIP",
+      "meaning": { "tr": "Pingini yazar", "en": "Writes your ping" }
+    }
+  ]
+}
+```
+
+- **Only on the server it belongs to.** `hosts` follows the item art's rule ([Item art](#item-art)):
+  the game's server matches when its host equals an entry or is a subdomain of one; at most 16;
+  Studio starts with `["projects.gg"]`. Elsewhere the picker offers its own unicode set, inserted
+  as plain text.
+- **What the picker inserts** is `code`: 1–32 characters without spaces, control characters, `§`
+  or private use characters. `aliases` (at most 4, same rule) are other codes the server takes
+  for the same thing; the picker finds an emoji by them. Codes and aliases are unique over the
+  whole list, compared without case.
+- **`kind`** is the picker's group: `symbol` (one symbol, the default), `text` (an expression or a
+  short word), `pack` (a picture of the server's resource pack) or `shortcut` (a code the server
+  fills in with the player's own value or a link). Clients show an unknown kind with the symbols.
+- **`look`** is how the server shows the code in chat: text with Minecraft's `&` codes, `&` then a
+  colour (`0`–`9`, `a`–`f`) or a style (`l` bold, `o` italic, `n` underlined, `m` struck through,
+  `r` reset; either case), 1–48 characters shown, without control characters, `§` or private use
+  characters. Required for every kind but `shortcut`. The picker draws it with the game's font
+  and these colours.
+- **`glyph`** (only and always with `pack`): one private use character of the server resource
+  pack's default font. The picker draws it while the game's font has that character (the pack is
+  loaded: a player who declined it, or a server of the network without it, sees `look`, the text
+  the server sends players without the pack), checking again whenever the game's resources reload
+  and after every move between the network's servers.
+- **`rank`** (1–12 characters, as players know it: `VIP`, `VIP+`): the server asks for it; the
+  picker cannot tell the player's rank, so it shows the rank beside the code and still inserts
+  it. **`servers`** (at most 6 names of 1–24 characters, unique without case): the network's
+  servers it works on; empty means all of them.
+- **`meaning`** (required for `shortcut`): what the server writes for it, `tr` and `en`, 1–60
+  characters each, trimmed.
+- At most 256 emojis, in the picker's order within each kind. A client leaves out an entry that
+  breaks a rule (and one that claims a code an earlier entry has) and shows the rest; Studio
+  refuses to publish such a list. A list without emojis is published as it is: no emojis on its
+  hosts. Taking the document out of the index brings back the launchers' built-in list.
+- Studios older than STUDIO3 (`aa95309`) drop the index's `chatEmojis` when they publish: every
+  Studio that publishes must be at that version or later before the list goes out.
+
 ## Launcher release channels
 
 `releases/<channel>.json` is Tauri's static updater JSON plus fields Tauri ignores:
@@ -1773,7 +1847,7 @@ it; the index references the document as `itemArt` (`itemart/items.<sha256>.json
 | Objects | `Cache-Control` |
 | --- | --- |
 | `index.json`, `index.json.sig`, `releases/<channel>.json` | `public, max-age=60` |
-| `config/*`, `news/*`, `modsets/*`, `itemart/*`, `media/*`, `files/*`, `packs/*/*.json`, `afk/*/*`, `releases/<version>/*` | `public, max-age=31536000, immutable` |
+| `config/*`, `news/*`, `modsets/*`, `itemart/*`, `emojis/*`, `media/*`, `files/*`, `packs/*/*.json`, `afk/*/*`, `releases/<version>/*` | `public, max-age=31536000, immutable` |
 | Feed mirrors: `feed.json`, `feed.json.sig` | `public, max-age=60` |
 | Feed mirrors: `media/*` | `public, max-age=31536000, immutable` |
 
@@ -1788,7 +1862,7 @@ primary is down.
 1. Upload new immutable files: media, item art pictures (`itemart/*.png`), `files/<sha1>`, AFK
    builds, release bundles.
 2. Upload the documents: `config/…`, `news/…`, `packs/<id>/<version>.json`, `modsets/…`,
-   `itemart/items.…`.
+   `itemart/items.…`, `emojis/chat.…`.
 3. Check that every new object is readable with the expected size and hash.
 4. Upload `index.json.sig`, then `index.json` last (the commit point). For updates:
    `releases/<version>/…` first, `releases/<channel>.json` last.

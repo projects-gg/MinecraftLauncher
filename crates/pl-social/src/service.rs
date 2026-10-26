@@ -6010,7 +6010,6 @@ mod tests {
     struct Seen {
         body: String,
         share_server: bool,
-        share_last_seen: bool,
         avatar: String,
         crew_avatar: String,
     }
@@ -6049,7 +6048,6 @@ mod tests {
                             seen.lock().unwrap().push(Seen {
                                 body: req.body_text(),
                                 share_server: me.privacy.share_server,
-                                share_last_seen: me.privacy.share_last_seen,
                                 avatar: me.avatar.clone(),
                                 crew_avatar: view
                                     .crews

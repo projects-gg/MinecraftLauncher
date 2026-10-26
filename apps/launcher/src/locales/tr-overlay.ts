@@ -11,6 +11,13 @@ export const trOverlay = {
    * shows it working). `key` is the default shortcut, drawn as a key cap.
    */
   settingHelp: "Mesajlar, arkadaşlar ve ekip çağrıları oyunda {{key}} ile açılır.",
+  /**
+   * CHAT-EMOJI: the chat's emoji picker, right under the overlay's switch, on by default. The same
+   * mod, so the lines that say it will not work (`needs`, `packMissing`, `waits…`) are shared.
+   */
+  emojiSetting: "Sohbette emoji seçici",
+  /** What it gives and how it opens; `key` is its shortcut in the game's chat, drawn as key caps. */
+  emojiHelp: "Sohbet ekranında emojiler tek tıkla eklenir, {{key}} ile de açılır.",
   /** In its place while "Oyun açılınca launcher: Kapansın" is chosen, before `toMinimize`. */
   closeHelp: "Oyun açılınca launcher kapandığı için çalışmaz.",
   /** Sets "Oyun açılınca launcher" back to its default ("Simge durumuna küçülsün"). */

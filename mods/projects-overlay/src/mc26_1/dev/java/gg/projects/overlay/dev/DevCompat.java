@@ -20,4 +20,9 @@ final class DevCompat {
     static Function<HolderLookup.Provider, WorldDimensions> flatWorld() {
         return WorldPresets::createFlatWorldDimensions;
     }
+
+    /** A normal world's dimensions (real terrain for screenshots). */
+    static Function<HolderLookup.Provider, WorldDimensions> normalWorld() {
+        return WorldPresets::createNormalWorldDimensions;
+    }
 }

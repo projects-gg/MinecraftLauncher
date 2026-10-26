@@ -43,6 +43,8 @@ export function Tooltip({
         <RadixTooltip.Content
           side={side}
           sideOffset={6}
+          // Never flush with the window's edge (a tooltip over a control in a corner touched it).
+          collisionPadding={8}
           className="glass-strong pop-motion z-50 rounded-md px-2 py-1 text-[12px] font-medium text-bone-100 shadow-[0_12px_32px_rgb(34_6_6/0.45)]"
         >
           {content}

@@ -39,7 +39,7 @@ import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
 import { HelpSection } from "@/features/help/help-panel";
 import { platformName } from "@/features/home/community-links";
-import { OverlayRow } from "@/features/overlay/settings-row";
+import { EmojiRow, OverlayRow } from "@/features/overlay/settings-row";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
 import { UpdateSettingsAction } from "@/features/updates/update-settings";
@@ -198,6 +198,8 @@ function General() {
       <CloseBehaviorRow />
       {/* Next to the two rows about the launcher during a game: "Kapansın" above is what stops it. */}
       <OverlayRow />
+      {/* The same mod's emoji picker in the game's chat (CHAT-EMOJI), right under its switch. */}
+      <EmojiRow />
       <Row title={t("shotCopy.setting")} help={t("shotCopy.settingHelp")}>
         <Switch
           checked={p.copyScreenshots}

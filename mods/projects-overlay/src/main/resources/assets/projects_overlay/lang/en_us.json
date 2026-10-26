@@ -347,5 +347,15 @@
   "projects_overlay.host.card.in": "In your world: %s",
   "projects_overlay.host.stop.title": "Stop sharing your world?",
   "modmenu.nameTranslation.projects_overlay": "Projects in-game overlay",
-  "modmenu.descriptionTranslation.projects_overlay": "Messages, crew calls and friends from Projects Launcher, inside the game."
+  "modmenu.descriptionTranslation.projects_overlay": "Messages, crew calls and friends from Projects Launcher, inside the game.",
+  "projects_overlay.settings.chat_emoji": "Emoji picker in chat",
+  "projects_overlay.chat_emoji.button": "Emojis",
+  "projects_overlay.chat_emoji.title": "Emojis",
+  "projects_overlay.chat_emoji.recent": "Recently used",
+  "projects_overlay.chat_emoji.symbols": "Symbols",
+  "projects_overlay.chat_emoji.pack": "Projects emojis",
+  "projects_overlay.chat_emoji.text": "Expressions",
+  "projects_overlay.chat_emoji.shortcuts": "Shortcuts",
+  "projects_overlay.chat_emoji.only": "Only on %s",
+  "projects_overlay.chat_emoji.full": "The chat line is full."
 }

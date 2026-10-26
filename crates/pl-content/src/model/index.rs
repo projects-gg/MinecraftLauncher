@@ -48,6 +48,11 @@ pub struct RootIndex {
     /// and menu glyphs for the cloud inventory views. Absent when the team publishes none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_art: Option<DocRef>,
+    /// `emojis/chat.<sha256>.json` ([`crate::ChatEmojis`]): the Projects server's chat emojis for
+    /// the in-game overlay's picker. Absent while the team publishes none: launchers use their
+    /// built-in list ([`crate::ChatEmojis::builtin`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_emojis: Option<DocRef>,
 }
 
 impl RootIndex {
@@ -71,6 +76,9 @@ impl RootIndex {
         if let Some(item_art) = &self.item_art {
             item_art.validate()?;
         }
+        if let Some(chat_emojis) = &self.chat_emojis {
+            chat_emojis.validate()?;
+        }
         match family_problems(&self.packs).into_iter().next() {
             Some(problem) => Err(Error::Invalid(problem.to_string())),
             None => Ok(()),
@@ -81,13 +89,15 @@ impl RootIndex {
         self.packs.iter().find(|pack| pack.id == id)
     }
 
-    /// Every document this index references (config, news, pack manifests, mod sets, item art).
+    /// Every document this index references (config, news, pack manifests, mod sets, item art,
+    /// chat emojis).
     pub fn documents(&self) -> impl Iterator<Item = &DocRef> {
         [&self.config, &self.news]
             .into_iter()
             .chain(self.packs.iter().map(|pack| &pack.manifest))
             .chain(self.mod_sets.iter())
             .chain(self.item_art.iter())
+            .chain(self.chat_emojis.iter())
     }
 
     /// Distinct family ids, in index order.
@@ -640,6 +650,7 @@ mod tests {
             afk: None,
             mod_sets: None,
             item_art: None,
+            chat_emojis: None,
         }
     }
 
@@ -695,6 +706,31 @@ mod tests {
         let back: RootIndex = serde_json::from_value(json).unwrap();
         assert_eq!(back, index);
         index.item_art.as_mut().unwrap().path = "itemart/../x.json".into();
+        assert!(index.validate().is_err());
+    }
+
+    #[test]
+    fn chat_emojis_are_an_optional_document() {
+        let mut index = index(Vec::new());
+        let json = serde_json::to_value(&index).unwrap();
+        assert!(json.get("chatEmojis").is_none(), "old shape kept");
+        index.chat_emojis = Some(DocRef {
+            path: format!("emojis/chat.{}.json", "c".repeat(64)),
+            sha256: "c".repeat(64),
+            size: 10,
+        });
+        index.validate().unwrap();
+        assert_eq!(index.documents().count(), 3);
+        let json = serde_json::to_value(&index).unwrap();
+        assert!(json.get("chatEmojis").is_some());
+        let back: RootIndex = serde_json::from_value(json).unwrap();
+        assert_eq!(back, index);
+        // An index from before the field reads without it.
+        let mut old = serde_json::to_value(&index).unwrap();
+        old.as_object_mut().unwrap().remove("chatEmojis");
+        let old: RootIndex = serde_json::from_value(old).unwrap();
+        assert_eq!(old.chat_emojis, None);
+        index.chat_emojis.as_mut().unwrap().sha256 = "xyz".into();
         assert!(index.validate().is_err());
     }
 

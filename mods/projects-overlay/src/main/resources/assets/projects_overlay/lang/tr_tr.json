@@ -234,7 +234,7 @@
   "projects_overlay.settings.toasts.invite": "Birlikte oyna davetleri",
   "projects_overlay.settings.toasts.info": "Diğer bildirimler",
   "projects_overlay.settings.show_text": "Mesaj metnini göster",
-  "projects_overlay.settings.duration": "Ekranda kalma",
+  "projects_overlay.settings.duration": "Görünme süresi",
   "projects_overlay.settings.duration.short": "Kısa",
   "projects_overlay.settings.duration.normal": "Normal",
   "projects_overlay.settings.duration.long": "Uzun",
@@ -347,5 +347,15 @@
   "projects_overlay.host.card.in": "Dünyanda: %s",
   "projects_overlay.host.stop.title": "Paylaşım kapatılsın mı?",
   "modmenu.nameTranslation.projects_overlay": "Projects oyun içi katman",
-  "modmenu.descriptionTranslation.projects_overlay": "Launcher'daki mesajlar, ekip çağrıları ve arkadaşlar oyunun içinde."
+  "modmenu.descriptionTranslation.projects_overlay": "Launcher'daki mesajlar, ekip çağrıları ve arkadaşlar oyunun içinde.",
+  "projects_overlay.settings.chat_emoji": "Sohbette emoji seçici",
+  "projects_overlay.chat_emoji.button": "Emojiler",
+  "projects_overlay.chat_emoji.title": "Emojiler",
+  "projects_overlay.chat_emoji.recent": "Son kullanılanlar",
+  "projects_overlay.chat_emoji.symbols": "Simgeler",
+  "projects_overlay.chat_emoji.pack": "Projects emojileri",
+  "projects_overlay.chat_emoji.text": "İfadeler",
+  "projects_overlay.chat_emoji.shortcuts": "Kısayollar",
+  "projects_overlay.chat_emoji.only": "Yalnız %s",
+  "projects_overlay.chat_emoji.full": "Sohbet satırı dolu."
 }

@@ -210,6 +210,11 @@ mod doc_examples {
                     let art: ItemArt = serde_json::from_str(json).unwrap();
                     art.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
                 }
+                "ChatEmojis" => {
+                    check::<ChatEmojis>(name, json);
+                    let emojis: ChatEmojis = serde_json::from_str(json).unwrap();
+                    emojis.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
+                }
                 "ModSetStates" => check::<ModSetStates>(name, json),
                 "PackState" => check::<PackState>(name, json),
                 "MediaRef" => check::<MediaRef>(name, json),

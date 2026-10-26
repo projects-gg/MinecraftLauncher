@@ -147,7 +147,8 @@ public final class SettingsStore {
             bool(sounds, "call", d.callSound()),
             number(sounds, "callVolume", d.callVolume()),
             bool(root, "hintSeen", d.hintSeen()),
-            stickers(root, "recentStickers"));
+            stickers(root, "recentStickers"),
+            emojis(root, "recentEmojis"));
     }
 
     static String format(OverlaySettings s) {
@@ -175,6 +176,11 @@ public final class SettingsStore {
             recent.add(sticker);
         }
         root.add("recentStickers", recent);
+        JsonArray emojis = new JsonArray();
+        for (String emoji : s.recentEmojis()) {
+            emojis.add(emoji);
+        }
+        root.add("recentEmojis", emojis);
         return new GsonBuilder().setPrettyPrinting().create().toJson(root) + "\n";
     }
 
@@ -223,6 +229,23 @@ public final class SettingsStore {
         for (JsonElement item : e.getAsJsonArray()) {
             if (item instanceof JsonPrimitive p && p.isString() && OverlayState.stickerRef(p.getAsString())
                 && !out.contains(p.getAsString()) && out.size() < OverlaySettings.RECENT_STICKERS) {
+                out.add(p.getAsString());
+            }
+        }
+        return out;
+    }
+
+    /** What the emoji picker wrote last (a code or a short text, at most 64 characters); anything else is left out. */
+    private static List<String> emojis(JsonObject o, String key) {
+        JsonElement e = o.get(key);
+        if (e == null || !e.isJsonArray()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (JsonElement item : e.getAsJsonArray()) {
+            if (item instanceof JsonPrimitive p && p.isString() && !p.getAsString().isEmpty()
+                && p.getAsString().length() <= 64 && !out.contains(p.getAsString())
+                && out.size() < OverlaySettings.RECENT_EMOJIS) {
                 out.add(p.getAsString());
             }
         }

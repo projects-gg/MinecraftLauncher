@@ -4876,6 +4876,11 @@ export type LaunchSettings = {
 	 */
 	overlay?: boolean | null,
 	/**
+	 *  Settings → Genel "Sohbette emoji seçici" as the page shows it (CHAT-EMOJI): the mod's jar
+	 *  is also there for it alone.
+	 */
+	emoji?: boolean | null,
+	/**
 	 *  The account to play with (its id) instead of the selected one: a game "Bağlan" closes and
 	 *  starts again keeps the account it played with (PLAY-ACCT). An account that is gone falls
 	 *  back to the selected one.
@@ -5960,6 +5965,12 @@ export type OverlayConfig = {
 	notify?: NotifyPrefs,
 	/**  Performance mode or the system's reduced motion: toasts appear in place. */
 	reducedMotion?: boolean,
+	/**
+	 *  "Sohbette emoji seçici" (CHAT-EMOJI, on by default): the chat screen's emoji button. The
+	 *  mod's jar goes into an instance while this or [`Self::enabled`] is on; with this one alone
+	 *  the mod runs the picker only (no panel, key, toasts or pause menu button).
+	 */
+	emoji?: boolean,
 };
 
 /**  What the page shows at its start. */
