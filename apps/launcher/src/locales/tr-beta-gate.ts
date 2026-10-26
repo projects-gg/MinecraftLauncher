@@ -7,17 +7,16 @@ export const trBetaGate = {
   checking: "Ar-Ge üyeliğine bakılıyor",
   notMember: "Beta, Ar-Ge ekibine özel.",
   // Opens the application page in the browser.
-  apply: "Başvur",
+  apply: "Ekibe başvur",
   // Followed by the action and a full stop: "… Ekipteysen Discord ile giriş yap.".
   signIn: "Beta, Ar-Ge ekibine özel. Ekipteysen",
   signInAction: "Discord ile giriş yap",
   unknown: "Ar-Ge üyeliğine şu an bakılamadı.",
   retry: "Tekrar dene",
   // The toasts after an update look moved the launcher back to Kararlı (it keeps its version). They
-  // only tell, what to do stays in Settings' line; "güncellemelerin" so that "kanal" on Home never
-  // reads as a Discord channel.
-  movedNotMember: "Beta, Ar-Ge ekibine özel. Güncellemelerin artık Kararlı kanaldan gelecek.",
-  movedSignIn:
-    "Beta için Discord ile giriş yap. Şimdilik güncellemelerin Kararlı kanaldan gelecek.",
-  movedUnknown: "Ar-Ge üyeliğine bakılamadı. Şimdilik güncellemelerin Kararlı kanaldan gelecek.",
+  // only tell (what to do stays in Settings' line), and only players who picked Beta see them, so
+  // "Kararlı" needs no "kanal" (on Home that read as a Discord channel). Two lines at most.
+  movedNotMember: "Beta, Ar-Ge ekibine özel; artık Kararlı'dasın.",
+  movedSignIn: "Ar-Ge ekibindeysen Discord ile giriş yap; şimdilik Kararlı'dasın.",
+  movedUnknown: "Ar-Ge üyeliğine bakılamadı; şimdilik Kararlı'dasın.",
 };

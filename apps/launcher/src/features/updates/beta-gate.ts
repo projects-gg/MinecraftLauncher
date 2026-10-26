@@ -96,7 +96,7 @@ export const useBetaGate = create<BetaGateState>()((set, get) => ({
 
 /**
  * The toast when an update look moved the launcher back to Kararlı. It only tells (toasts are for
- * news, actions stay inline: Settings' line keeps why with "Başvur", "Discord ile giriş yap" or
+ * news, actions stay inline: Settings' line keeps why with "Ekibe başvur", "Discord ile giriş yap" or
  * "Tekrar dene"), so no second gold button sits over OYNA.
  */
 function movedToast(access: BetaAccess) {

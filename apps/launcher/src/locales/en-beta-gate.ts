@@ -10,7 +10,7 @@ export const enBetaGate = {
   signInAction: "sign in with Discord",
   unknown: "Couldn't check your R&D membership right now.",
   retry: "Try again",
-  movedNotMember: "Beta is for the R&D team. Your updates now come from Stable.",
-  movedSignIn: "Sign in with Discord to use Beta. Until then, your updates come from Stable.",
-  movedUnknown: "Couldn't check your R&D membership. For now, your updates come from Stable.",
+  movedNotMember: "Beta is for the R&D team, so you're on Stable now.",
+  movedSignIn: "If you're on the R&D team, sign in with Discord. You're on Stable for now.",
+  movedUnknown: "Couldn't check your R&D membership, so you're on Stable for now.",
 };
