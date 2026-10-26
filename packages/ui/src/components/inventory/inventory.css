@@ -343,7 +343,9 @@
 }
 /* A slot whose menu is open or whose tooltip was tapped. Keyboard focus has its brackets alone. */
 .pl-inv-cell[data-lit] .pl-inv-hl-back,
-.pl-inv-cell[data-lit] .pl-inv-hl {
+.pl-inv-cell[data-lit] .pl-inv-hl,
+.pl-inv-cell[data-picked] .pl-inv-hl-back,
+.pl-inv-cell[data-picked] .pl-inv-hl {
   opacity: 1;
 }
 
@@ -358,7 +360,8 @@
   pointer-events: none;
   z-index: 1;
 }
-.pl-inv-cell:focus-visible .pl-inv-focus {
+.pl-inv-cell:focus-visible .pl-inv-focus,
+.pl-inv-cell[data-picked] .pl-inv-focus {
   display: block;
 }
 
