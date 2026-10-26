@@ -140,7 +140,6 @@ export function UpdateChannelRow() {
             <span className="grid">
               {LINES.map((kind) => {
                 const shown = kind === line;
-                const refused = kind === "notMember" || kind === "signIn" || kind === "unknown";
                 return (
                   <span
                     key={kind}
@@ -150,8 +149,9 @@ export function UpdateChannelRow() {
                       shown ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
                     )}
                   >
-                    {/* A line that says Beta is closed leads with the launcher's warning mark. */}
-                    {refused ? (
+                    {/* Only a check that failed takes the launcher's warning mark: "Beta is for
+                        the team" is an invitation, not an error. */}
+                    {kind === "unknown" ? (
                       <Warning
                         size={13}
                         weight="fill"
