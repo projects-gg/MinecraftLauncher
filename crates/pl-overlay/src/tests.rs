@@ -1692,3 +1692,136 @@ async fn the_overlay_speaks_the_launchers_language_until_the_player_picks_one() 
     assert!(next.jvm_args().contains(&format!("{}en", crate::LANG_ARG)));
     overlay.stop(ByeReason::LauncherExit).await;
 }
+
+#[tokio::test]
+async fn the_emoji_picker_hears_its_switch_and_the_servers_list() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let seen = statuses(&overlay);
+    let switched = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&switched);
+    overlay.on_emoji(move |on| sink.lock().unwrap().push(on));
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    // Both switches on: neither is named on the command line.
+    assert!(
+        endpoint
+            .jvm_args()
+            .iter()
+            .all(|arg| !arg.starts_with(crate::PANEL_ARG) && !arg.starts_with(crate::EMOJI_ARG))
+    );
+
+    // An older mod hears nothing of the picker: the answer to its first question comes first.
+    let mut old = MockMod::connect_with(&endpoint, &["chat2"]).await;
+    old.next_of("snapshot").await;
+    old.send(json!({"t":"open-conv","conv":"d:f-ayse:me"}))
+        .await;
+    assert_eq!(old.next().await.unwrap()["t"], "history");
+    old.send(json!({"t":"emoji","on":false})).await;
+    drop(old);
+
+    // E3: after the greeting, the switch and the built-in list.
+    let mut game = MockMod::connect_with(&endpoint, &["chat2", "lang", "emoji"]).await;
+    game.next_of("snapshot").await;
+    let emojis = game.next_of("emojis").await;
+    assert_eq!(emojis["on"], true);
+    assert_eq!(emojis["hosts"], json!(["projects.gg"]));
+    let builtin = pl_content::ChatEmojis::builtin();
+    assert_eq!(
+        emojis["emojis"].as_array().unwrap().len(),
+        builtin.emojis.len()
+    );
+    assert!(
+        switched.lock().unwrap().is_empty(),
+        "the older mod changed nothing"
+    );
+
+    // Studio's list arrives with a content refresh: the game hears it once.
+    let mut published = builtin.clone();
+    published.emojis.truncate(2);
+    overlay.set_emojis(published.clone());
+    overlay.set_emojis(published);
+    let emojis = game.next_of("emojis").await;
+    assert_eq!(emojis["emojis"].as_array().unwrap().len(), 2);
+    assert_eq!(emojis["emojis"][0]["code"], ":kalp:");
+
+    // E4: switched off in the game: the launcher keeps it, the game hears it back.
+    game.send(json!({"t":"emoji","on":false})).await;
+    assert_eq!(game.next_of("emojis").await["on"], false);
+    assert_eq!(switched.lock().unwrap().as_slice(), [false]);
+    assert!(!overlay.emoji_enabled());
+    // The page's own switch reaches the game the same way.
+    overlay.configure(OverlayConfig::default());
+    assert_eq!(game.next_of("emojis").await["on"], true);
+    assert_eq!(
+        switched.lock().unwrap().len(),
+        1,
+        "the page's push is not an echo"
+    );
+    overlay.stop(ByeReason::LauncherExit).await;
+    assert_eq!(*seen.lock().unwrap(), [true, false, true, false]);
+}
+
+#[tokio::test]
+async fn a_game_with_the_emoji_picker_alone_hears_only_its_words_and_list() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig {
+        enabled: false,
+        ..OverlayConfig::default()
+    });
+    assert!(overlay.wants_mod());
+    let seen = statuses(&overlay);
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    // E2: the game starts without its panel.
+    assert!(
+        endpoint
+            .jvm_args()
+            .contains(&format!("{}off", crate::PANEL_ARG))
+    );
+    let mut game = MockMod::connect_with(&endpoint, &["lang", "emoji", "panel-off"]).await;
+    assert_eq!(game.next().await.unwrap()["t"], "welcome");
+    assert_eq!(game.next().await.unwrap()["t"], "emojis", "no snapshot");
+    // Nothing of the friends feature: a message makes no toast; the page keeps its notifications.
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::ChatMessage {
+        conv: "d:f-ayse:me".into(),
+        message: Box::new(message("i:31", "f-ayse", false, MessageState::Sent)),
+        name: Some("Ayşe".into()),
+        crew: None,
+    }));
+    game.send(json!({"t":"emoji","on":true})).await;
+    assert_eq!(
+        game.next().await.unwrap()["t"],
+        "emojis",
+        "no toast before it"
+    );
+    assert!(
+        seen.lock().unwrap().is_empty(),
+        "never counted as connected"
+    );
+    assert!(!overlay.connected());
+
+    // The panel switched on during the game changes nothing for it; the picker switched off ends
+    // the session, since nothing is left for the game.
+    overlay.configure(OverlayConfig::default());
+    overlay.configure(OverlayConfig {
+        enabled: false,
+        emoji: false,
+        ..OverlayConfig::default()
+    });
+    assert_eq!(game.next_of("bye").await["reason"], "disabled");
+    assert!(!overlay.wants_mod() && !overlay.active());
+
+    // The picker off and the panel on: the panel's game, told so on its command line.
+    overlay.configure(OverlayConfig {
+        emoji: false,
+        ..OverlayConfig::default()
+    });
+    let next = overlay.start(social, "t").await.unwrap();
+    let args = next.jvm_args();
+    assert!(args.contains(&format!("{}off", crate::EMOJI_ARG)));
+    assert!(!args.iter().any(|arg| arg.starts_with(crate::PANEL_ARG)));
+    overlay.stop(ByeReason::LauncherExit).await;
+}

@@ -10,6 +10,10 @@
     },
     {
       "type": "reference",
+      "id": "projects_overlay:emoji_4"
+    },
+    {
+      "type": "reference",
       "id": "minecraft:include/default"
     },
     {

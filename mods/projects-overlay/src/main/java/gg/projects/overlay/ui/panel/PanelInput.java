@@ -41,15 +41,16 @@ public final class PanelInput {
         pointer = false;
     }
 
-    static boolean pointerSet() {
+    /** The scenario driver's pointer is set (the chat's emoji bar reads it too, CHAT-EMOJI). */
+    public static boolean pointerSet() {
         return pointer;
     }
 
-    static int pointerX() {
+    public static int pointerX() {
         return pointerX;
     }
 
-    static int pointerY() {
+    public static int pointerY() {
         return pointerY;
     }
 }

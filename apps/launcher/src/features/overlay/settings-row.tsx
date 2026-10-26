@@ -8,6 +8,7 @@ import { useInstallOfficial } from "@/features/library/official-ui";
 import { usePlayInstance } from "@/features/settings/graphics-section";
 import { Row } from "@/features/settings/row";
 import { api, type InstanceSummary } from "@/lib/api";
+import { detectOs } from "@/lib/platform";
 import { usePrefs } from "@/stores/prefs";
 import { overlayApi } from "./api";
 import {
@@ -23,6 +24,14 @@ const NO_INSTANCES: InstanceSummary[] = [];
 
 /** The overlay's default shortcut (the player may bind another in the game's Controls). */
 const OVERLAY_KEY = "F7";
+
+/**
+ * The emoji picker's shortcut in the game's chat (CHAT-EMOJI; Discord's): Ctrl+E, ⌘E on macOS,
+ * where the game reads Command as its Control.
+ */
+function emojiKeys(): readonly string[] {
+  return detectOs() === "macos" ? ["⌘", "E"] : ["Ctrl", "E"];
+}
 
 /** Where the key cap goes in the sentence that names the shortcut. */
 const KEY_SLOT = "@@key@@";
@@ -51,7 +60,26 @@ function markRow(from: Element | null, on: boolean) {
 /**
  * Settings → Genel "Oyun içi katman" (OVL2, on by default): the overlay's mod, which the launcher
  * ships and puts in every Fabric instance on a version it supports (OVL-B), and a bridge to it at
- * each game start. Its one place: no mod list shows the mod. The line under it says how it opens;
+ * each game start. Its one place: no mod list shows the mod.
+ */
+export function OverlayRow() {
+  return <ModSwitchRow which="overlay" />;
+}
+
+/**
+ * Settings → Genel "Sohbette emoji seçici" (CHAT-EMOJI, on by default), right under the overlay's
+ * switch: the chat screen's emoji button, which lives in the same mod. The mod goes into an
+ * install for it too; with the overlay off it runs the picker alone, which needs no launcher
+ * during the game, so "Kapansın" is no blocker here. While the overlay's switch is on its line
+ * says what stands in the mod's way (and its action fixes both), so this line keeps its sentence.
+ */
+export function EmojiRow() {
+  return <ModSwitchRow which="emoji" />;
+}
+
+/**
+ * A switch of the overlay's mod (`which`): the overlay or its emoji picker. The line under it says
+ * how it opens;
  * while the switch is on but the overlay cannot work it says why instead, in the same cell, so
  * nothing below moves (`overlayLine`, the most basic blocker first): no install can carry it
  * (LIB1: the player deleted the official pack and has no Fabric install of a supported version),
@@ -62,10 +90,15 @@ function markRow(from: Element | null, on: boolean) {
  * after the game). A line with an action is not the switch's label: a click beside the action
  * does nothing. The shortcut itself is set in the game's Controls.
  */
-export function OverlayRow() {
+function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
   const { t } = useTranslation();
-  const on = usePrefs((s) => s.inGameOverlay);
-  const leaves = usePrefs((s) => s.onGameStart === "close");
+  const overlayOn = usePrefs((s) => s.inGameOverlay);
+  const emojiOn = usePrefs((s) => s.chatEmoji);
+  const on = which === "overlay" ? overlayOn : emojiOn;
+  const prefKey = which === "overlay" ? "inGameOverlay" : "chatEmoji";
+  const title = which === "overlay" ? t("overlay.setting") : t("overlay.emojiSetting");
+  // The picker needs no launcher during the game: "Kapansın" stands in the overlay's way only.
+  const leaves = usePrefs((s) => s.onGameStart === "close") && which === "overlay";
   const set = usePrefs((s) => s.set);
   const selectInstance = usePrefs((s) => s.selectInstance);
   const { data: instances } = useQuery({
@@ -84,7 +117,8 @@ export function OverlayRow() {
   const install = useInstallOfficial();
   const installing = install.isPending;
   const line = overlayLine({
-    on,
+    // The overlay's line above names what stands in the mod's way while it is on.
+    on: which === "overlay" ? on : on && !overlayOn,
     leaves,
     instances,
     official,
@@ -122,8 +156,10 @@ export function OverlayRow() {
   }, [line.kind]);
 
   const range = versionRange(overlay?.versions ?? []);
+  const keys = which === "overlay" ? [OVERLAY_KEY] : emojiKeys();
+  const opensKey = which === "overlay" ? "overlay.settingHelp" : "overlay.emojiHelp";
   const sentence: Record<OverlayLineKind, string> = {
-    opens: t("overlay.settingHelp", { key: OVERLAY_KEY }),
+    opens: t(opensKey, { key: keys.join(which === "overlay" ? "" : "+") }),
     noHome: t("overlay.packMissing"),
     closes: t("overlay.closeHelp"),
     // One need for both: a Fabric install on a version the overlay is made for.
@@ -134,14 +170,18 @@ export function OverlayRow() {
       ? t("overlay.waitsOfficial", { name: shownName })
       : t("overlay.waitsInstall", { name: shownName, target: homeName }),
   };
-  /** The sentence as shown: the shortcut as a key cap. */
+  /** The sentence as shown: the shortcut as key caps, one per key. */
   const shownSentence = (kind: OverlayLineKind): ReactNode => {
     if (kind !== "opens") return sentence[kind];
-    const [before, after] = t("overlay.settingHelp", { key: KEY_SLOT }).split(KEY_SLOT);
+    const [before, after] = t(opensKey, { key: KEY_SLOT }).split(KEY_SLOT);
     return (
       <>
         {before}
-        <Kbd>{OVERLAY_KEY}</Kbd>
+        <span className="inline-flex gap-[3px]">
+          {keys.map((key) => (
+            <Kbd key={key}>{key}</Kbd>
+          ))}
+        </span>
         {after}
       </>
     );
@@ -211,7 +251,7 @@ export function OverlayRow() {
 
   return (
     <Row
-      title={t("overlay.setting")}
+      title={title}
       help={
         <>
           {/* Heard when the switch, the close choice, the pack or the install changes the line;
@@ -263,12 +303,7 @@ export function OverlayRow() {
         </>
       }
     >
-      <Switch
-        checked={on}
-        onCheckedChange={(v) => set("inGameOverlay", v)}
-        label={t("overlay.setting")}
-        hideLabel
-      />
+      <Switch checked={on} onCheckedChange={(v) => set(prefKey, v)} label={title} hideLabel />
     </Row>
   );
 }

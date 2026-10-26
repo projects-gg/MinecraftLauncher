@@ -88,6 +88,7 @@ function storedPrefs(): {
   verifyOnLaunch?: boolean;
   copyScreenshots?: boolean;
   inGameOverlay?: boolean;
+  chatEmoji?: boolean;
   defaultMaxMemoryMb?: number | null;
   defaultJvmArgs?: string;
 } {
@@ -702,6 +703,7 @@ export const tauriApi: LauncherApi = {
           java: options?.java ?? null,
           copyScreenshots: prefs.copyScreenshots ?? false,
           overlay: prefs.inGameOverlay ?? true,
+          emoji: prefs.chatEmoji ?? true,
           account: options?.account?.id ?? null,
         },
         channel,

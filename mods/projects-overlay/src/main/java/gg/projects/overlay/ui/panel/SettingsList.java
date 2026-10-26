@@ -88,6 +88,8 @@ public final class SettingsList extends PanelWidget {
         final Spring thumb = Spring.snappy(0f);
         final Tween on = new Tween(0f);
         Predicate<OverlaySettings> enabledIf;
+        /** A switch kept elsewhere than in the overlay's settings (the launcher's emoji picker): the flip goes here. */
+        java.util.function.Consumer<Boolean> pick;
         boolean placed;
 
         Toggle(String label, Predicate<OverlaySettings> get, Function<OverlaySettings, OverlaySettings> flip) {
@@ -191,6 +193,18 @@ public final class SettingsList extends PanelWidget {
     }
 
     /**
+     * The "Sohbette emoji seçici" row (CHAT-EMOJI): the launcher's switch (its Settings → Genel shows the same one), whether
+     * a flip reaches the launcher now (which keeps it), and the flip. "Varsayılana dön" leaves it alone, as the language.
+     */
+    public interface EmojiSwitch {
+        boolean on();
+
+        boolean editable();
+
+        void set(boolean on);
+    }
+
+    /**
      * A key the game binds that the page offers under "Kısayol" (the overlay key): its row's words, the key's name, and
      * changing it in the game's Controls. "Varsayılana dön" puts it back with the display settings ({@link Defaults}).
      */
@@ -272,22 +286,40 @@ public final class SettingsList extends PanelWidget {
     public SettingsList(Supplier<OverlaySettings> settings,
         java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, List<Shortcut> shortcuts,
         Languages languages) {
+        this(settings, apply, shortcuts, languages, null);
+    }
+
+    /**
+     * {@code emojis}: the chat's emoji picker switch (CHAT-EMOJI), the launcher's, under "Genel" after the language; null
+     * leaves it out.
+     */
+    public SettingsList(Supplier<OverlaySettings> settings,
+        java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, List<Shortcut> shortcuts,
+        Languages languages, EmojiSwitch emojis) {
         super(0, 0, 100, 100, Texts.tr("settings.title"));
         this.settings = settings;
         this.apply = apply;
         this.shortcuts = List.copyOf(shortcuts);
+        if (languages != null || emojis != null) {
+            items.add(new Section(Texts.str("settings.general")));
+        }
         if (languages != null) {
             Language[] all = Language.values();
             String[] names = new String[all.length];
             for (int i = 0; i < all.length; i++) {
                 names[i] = all[i].ownName;
             }
-            items.add(new Section(Texts.str("settings.general")));
             Choice language = new Choice(Texts.str("settings.language"), names, s -> languages.current().ordinal(),
                 null);
             language.pick = i -> languages.pick(all[i]);
             language.enabledIf = languages::editable;
             items.add(language);
+        }
+        if (emojis != null) {
+            Toggle picker = new Toggle(Texts.str("settings.chat_emoji"), s -> emojis.on(), s -> s);
+            picker.pick = emojis::set;
+            picker.enabledIf = s -> emojis.editable();
+            items.add(picker);
         }
         items.add(new Section(Texts.str("settings.notifications")));
         items.add(new Toggle(Texts.str("settings.toasts.message"), OverlaySettings::messageToasts,
@@ -533,7 +565,12 @@ public final class SettingsList extends PanelWidget {
         if (item instanceof Toggle t) {
             boolean on = t.get.test(s);
             if (direction == 0 || (direction > 0) != on) {
-                change(t.flip::apply);
+                if (t.pick != null) {
+                    undoUntil = 0;
+                    t.pick.accept(!on);
+                } else {
+                    change(t.flip::apply);
+                }
             }
         } else if (item instanceof Choice c) {
             int now = c.get.apply(s);

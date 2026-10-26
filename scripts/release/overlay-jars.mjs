@@ -143,7 +143,7 @@ export function describeJar(file, bytes, target) {
 
 /**
  * The files a jar is made of: the build files, main and per-version sources, the stickers, the
- * license text.
+ * chat emoji list it carries (CHAT-EMOJI, the launcher's built-in one), the license text.
  */
 export function sourceFiles(root = ROOT) {
   const mod = join(root, "mods", "projects-overlay");
@@ -168,6 +168,7 @@ export function sourceFiles(root = ROOT) {
   }
   const stickers = join(root, "packages", "stickers", "pl1");
   out.push(join(stickers, "manifest.json"), join(stickers, "overlay", "pl1-atlas.png"));
+  out.push(join(root, "crates", "pl-content", "data", "chat-emojis.json"));
   return out
     .filter((path) => existsSync(path))
     .map((path) => relative(root, path).split(sep).join("/"))

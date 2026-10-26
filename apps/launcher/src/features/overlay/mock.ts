@@ -19,6 +19,7 @@ function connected(): boolean {
 
 let config: OverlayConfig = {
   enabled: true,
+  emoji: true,
   reducedMotion: false,
   notify: {
     crewCalls: true,
@@ -44,6 +45,9 @@ export const mockOverlay: OverlayApi = {
     return () => {};
   },
   onPeople() {
+    return () => {};
+  },
+  onEmoji() {
     return () => {};
   },
 };

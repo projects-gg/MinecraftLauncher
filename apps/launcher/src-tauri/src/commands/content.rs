@@ -245,6 +245,9 @@ pub struct HomeView {
 /// accounts' game versions and whether the friends feature is on.
 pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     APPLIED_SEQUENCE.store(snapshot.index.sequence, Ordering::SeqCst);
+    // The chat emojis for the in-game overlay's picker (CHAT-EMOJI) are read on a task: the next
+    // game start, or the refresh that applied this, hands them over.
+    crate::overlay::content_applied(&snapshot.index);
     crate::commands::social::apply_flag(
         &state.social,
         snapshot.config.features.friends,
@@ -513,6 +516,7 @@ pub async fn content_home(
 ) -> CmdResult<Option<HomeView>> {
     if let Ok(cached) = state.content.load_cached().await {
         apply_snapshot(&state, &cached);
+        crate::overlay::sync_emojis_soon(&app);
         spawn_refresh(app, false);
         let mut view = home_view(&state, &cached).await;
         view.offline = OFFLINE.load(Ordering::SeqCst);
@@ -632,6 +636,8 @@ async fn take_refresh(app: &AppHandle, result: &pl_content::Result<ContentSnapsh
                 && snapshot.index.sequence != APPLIED_SEQUENCE.load(Ordering::SeqCst);
             if fresh {
                 apply_snapshot(&state, snapshot);
+                // A running game hears a newer chat emoji list at once (CHAT-EMOJI).
+                crate::overlay::sync_emojis_soon(app);
                 let _ = state.content.prefetch_media(snapshot).await;
                 let _ = app.emit("content-changed", ());
             }

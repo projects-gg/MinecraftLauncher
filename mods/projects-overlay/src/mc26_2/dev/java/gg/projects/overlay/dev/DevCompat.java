@@ -22,4 +22,10 @@ final class DevCompat {
         return registries -> registries.lookupOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT).value()
             .createWorldDimensions();
     }
+
+    /** A normal world's dimensions (real terrain for screenshots). */
+    static Function<HolderLookup.Provider, WorldDimensions> normalWorld() {
+        return registries -> registries.lookupOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.NORMAL).value()
+            .createWorldDimensions();
+    }
 }

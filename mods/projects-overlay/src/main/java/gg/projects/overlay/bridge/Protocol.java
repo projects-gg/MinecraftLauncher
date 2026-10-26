@@ -50,6 +50,16 @@ public final class Protocol {
     }
 
     public static JsonObject hello(String token, String modVersion, String minecraftVersion, String language) {
+        return hello(token, modVersion, minecraftVersion, language, true);
+    }
+
+    /**
+     * The handshake. With {@code panel} off the mod runs the chat's emoji picker alone (CHAT-EMOJI, E2: started with
+     * {@code -Dprojects.overlay.panel=off}) and says only what that game does: its words follow the launcher, it has the
+     * picker, it has no panel.
+     */
+    public static JsonObject hello(String token, String modVersion, String minecraftVersion, String language,
+        boolean panel) {
         JsonObject o = message("hello");
         o.addProperty("proto", VERSION);
         o.addProperty("token", token);
@@ -57,13 +67,33 @@ public final class Protocol {
         o.addProperty("mc", minecraftVersion);
         o.addProperty("lang", language);
         JsonArray features = new JsonArray();
-        for (String feature : FEATURES) {
-            features.add(feature);
+        if (panel) {
+            for (String feature : FEATURES) {
+                features.add(feature);
+            }
+            features.add(PEOPLE);
+            features.add(PEOPLE2);
         }
-        features.add(PEOPLE);
-        features.add(PEOPLE2);
         features.add(LANG);
+        features.add(EMOJI);
+        if (!panel) {
+            features.add(PANEL_OFF);
+        }
         o.add("features", features);
+        return o;
+    }
+
+    // ---- The chat's emoji picker (CHAT-EMOJI, rows E1-E4 of docs/tasks/ovl2-protocol.md) ---------------------
+
+    /** The picker's feature in {@code hello} (E1): the mod hears {@code emojis} and sends {@link #emoji}. */
+    public static final String EMOJI = "emoji";
+    /** In {@code hello} of a mod that runs the picker alone (E2): no panel, no toasts. */
+    public static final String PANEL_OFF = "panel-off";
+
+    /** The player switched the picker in the overlay's settings (E4); the launcher keeps it and answers {@code emojis}. */
+    public static JsonObject emoji(boolean on) {
+        JsonObject o = message("emoji");
+        o.addProperty("on", on);
         return o;
     }
 

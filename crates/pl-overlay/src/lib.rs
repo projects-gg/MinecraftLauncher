@@ -37,8 +37,8 @@ pub use hub::{
     LANGUAGE_FILE, Overlay, OverlayConfig, OverlayStatus, read_language_pick, write_language_pick,
 };
 pub use server::{
-    BYE_TIMEOUT, Bridge, BridgeEvent, ConnId, Control, Endpoint, LANG_ARG, PORT_ARG, TOKEN_ARG,
-    WORLD_ARG, is_secret_jvm_arg, world_jvm_arg,
+    BYE_TIMEOUT, Bridge, BridgeEvent, ConnId, Control, EMOJI_ARG, Endpoint, LANG_ARG, PANEL_ARG,
+    PORT_ARG, TOKEN_ARG, WORLD_ARG, is_secret_jvm_arg, world_jvm_arg,
 };
 pub use session::{CONNECT_WAIT, ConnectOutcome, PeopleChange, SocialActions};
 pub use token::SessionToken;

@@ -4,11 +4,13 @@ import com.google.gson.JsonObject;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.BridgeConfig;
 import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.chat.ChatEmojiBar;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.connect.Connector;
 import gg.projects.overlay.connect.MinecraftGame;
 import gg.projects.overlay.connect.ServerTarget;
 import gg.projects.overlay.connect.WorldResume;
+import gg.projects.overlay.emoji.EmojiState;
 import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.host.HostGate;
 import gg.projects.overlay.lang.Language;
@@ -54,10 +56,13 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Entry point. Without the launcher's bridge properties (another launcher, or an old Projects Launcher) the
- * mod registers nothing at all: no key, no threads, no HUD layer.
+ * mod registers nothing at all: no key, no threads, no HUD layer. With "Oyun içi katman" off and "Sohbette emoji seçici"
+ * on (CHAT-EMOJI: {@code -Dprojects.overlay.panel=off}) it runs the chat's emoji picker alone ({@link #startPickerOnly}).
  */
-public final class OverlayClient implements ClientModInitializer {
+public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.Host {
     public static final String MOD_ID = "projects_overlay";
+    /** {@code off} while the launcher's overlay switch is off and the jar is there for the emoji picker alone. */
+    public static final String PANEL_PROPERTY = "projects.overlay.panel";
     /** Where "Katıl" goes for a friend on Projects. */
     public static final String PROJECTS_HOST = ServerTarget.PROJECTS_HOST;
     private static final Logger LOG = LoggerFactory.getLogger("Projects Overlay");
@@ -102,6 +107,10 @@ public final class OverlayClient implements ClientModInitializer {
     private long typedAt;
     /** The HUD draws inside the area beside the open panel this frame (render thread). */
     private boolean hudClipped;
+    /** The chat's emoji picker: its switch and the server's emojis (CHAT-EMOJI). */
+    private EmojiState emojis;
+    /** The panel runs (else the emoji picker alone). */
+    private boolean panel = true;
 
     @Override
     public void onInitializeClient() {
@@ -116,6 +125,12 @@ public final class OverlayClient implements ClientModInitializer {
         state = new OverlayState();
         resume = WorldResume.fromSystemProperty();
         settings = new SettingsStore(FabricLoader.getInstance().getGameDir());
+        emojis = new EmojiState(EmojiState.onAtStart(System.getProperty(EmojiState.SWITCH_PROPERTY)));
+        panel = !"off".equalsIgnoreCase(String.valueOf(System.getProperty(PANEL_PROPERTY)).strip());
+        if (!panel) {
+            startPickerOnly(config);
+            return;
+        }
         key = new OverlayKey(KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main")));
         KeyMappingHelper.registerKeyMapping(key);
         toasts = new ToastLayer();
@@ -159,6 +174,8 @@ public final class OverlayClient implements ClientModInitializer {
             if (screen instanceof PauseScreen pause && pause.showsPauseMenu()) {
                 HostPauseButton.attach(this, pause);
             }
+            // The chat's emoji button and its picker (CHAT-EMOJI).
+            ChatEmojiBar.attach(this, screen);
         });
         game = new MinecraftGame(this);
         connector = new Connector(game, frame -> bridge.send(frame));
@@ -212,7 +229,11 @@ public final class OverlayClient implements ClientModInitializer {
             gg.projects.overlay.ui.panel.PausePanelButton.attach(this, screen));
         // A new connection (or the proxy moving the game to another of its servers) starts over; leaving ends the
         // question: its token means nothing anywhere else.
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) -> mc.execute(this::leftServer));
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) -> mc.execute(() -> {
+            leftServer();
+            // A new server (a proxy's move too, Lobi to Survival) may bring its resource pack or take it away.
+            ChatEmojiBar.serverChanged();
+        }));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) -> mc.execute(this::leftServer));
         ClientLifecycleEvents.CLIENT_STARTED.register(mc -> {
             bridge.start();
@@ -226,9 +247,115 @@ public final class OverlayClient implements ClientModInitializer {
         LOG.info("Overlay on; launcher bridge at 127.0.0.1:{}", config.port());
     }
 
+    /**
+     * The launcher's overlay switch is off and its emoji picker on (CHAT-EMOJI, E2): the mod runs the chat's emoji picker
+     * alone, with what the launcher's "Devam et" needs of it (the world opened after the title screen, and its note when the
+     * world is gone). No key, panel, friends' toasts, pause menu button, world sharing or linking; the launcher counts the
+     * game as not connected and tells it only its words and the emojis.
+     */
+    private void startPickerOnly(BridgeConfig config) {
+        toasts = new ToastLayer();
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "toasts"), toasts);
+        ScreenEvents.AFTER_INIT.register((mc, screen, width, height) -> {
+            ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> toasts.extractOverScreen(g));
+            WorldResume waiting = resume;
+            if (waiting != null && screen instanceof TitleScreen) {
+                waiting.titleScreen(WorldResume.frames(), monotonicMs());
+                ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> waiting.titleFrame());
+            }
+            ChatEmojiBar.attach(this, screen);
+        });
+        game = new MinecraftGame(this);
+        ClientTickEvents.END_CLIENT_TICK.register(mc -> {
+            if (resume != null) {
+                resume.tick(game, WorldResume.frames(), monotonicMs());
+                if (resume.pending() == null) {
+                    resume = null;
+                }
+            }
+            Shapes.prepare();
+        });
+        bridge = new BridgeClient(config, version(MOD_ID), version("minecraft"),
+            () -> Texts.language().helloCode(), false, new BridgeClient.Listener() {
+                @Override
+                public void onStatus(BridgeClient.Status status, String reason) {
+                    Minecraft.getInstance().execute(() -> {
+                        state.setStatus(status, reason);
+                        if (status != BridgeClient.Status.ONLINE) {
+                            Texts.language().offline();
+                        }
+                        // Both switches went off during the game: nothing is left for it.
+                        if (status == BridgeClient.Status.ENDED && "disabled".equals(reason)) {
+                            emojis.endedByLauncher();
+                        }
+                    });
+                }
+
+                @Override
+                public void onFrame(JsonObject frame) {
+                    Minecraft.getInstance().execute(() -> handleFrame(frame));
+                }
+            });
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) -> mc.execute(ChatEmojiBar::serverChanged));
+        ClientLifecycleEvents.CLIENT_STARTED.register(mc -> {
+            bridge.start();
+            Shapes.prepare();
+        });
+        ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> {
+            bridge.stop();
+            settings.close();
+        });
+        instance = this;
+        LOG.info("Overlay's chat emoji picker on (the overlay itself is off); launcher bridge at 127.0.0.1:{}",
+            config.port());
+    }
+
     /** The running overlay, or null when the game was not started by Projects Launcher. */
     public static OverlayClient get() {
         return instance;
+    }
+
+    /** The overlay runs its panel (else the chat's emoji picker alone, CHAT-EMOJI). */
+    public boolean panel() {
+        return panel;
+    }
+
+    /** The chat's emoji picker: the launcher's switch and the server's emojis (CHAT-EMOJI). */
+    @Override
+    public EmojiState emojis() {
+        return emojis;
+    }
+
+    @Override
+    public String serverHost() {
+        ServerTarget here = game.currentServer();
+        return here == null ? null : here.host();
+    }
+
+    /**
+     * The settings' "Sohbette emoji seçici" row (CHAT-EMOJI): the launcher's switch, shown in the game too; it takes a flip
+     * while the launcher listens (it keeps it and answers with {@code emojis}).
+     */
+    public SettingsList.EmojiSwitch emojiSwitch() {
+        return new SettingsList.EmojiSwitch() {
+            @Override
+            public boolean on() {
+                return emojis.on();
+            }
+
+            @Override
+            public boolean editable() {
+                return emojis.heard() && state.online();
+            }
+
+            @Override
+            public void set(boolean on) {
+                if (emojis.heard() && bridge.send(Protocol.emoji(on))) {
+                    emojis.switchTo(on);
+                    refreshScreen();
+                }
+            }
+        };
     }
 
     public OverlayState state() {
@@ -321,15 +448,18 @@ public final class OverlayClient implements ClientModInitializer {
         showHostNote(line, null, true, null, "host-failed");
     }
 
+    @Override
     public OverlaySettings settings() {
         return settings.get();
     }
 
+    @Override
     public void updateSettings(UnaryOperator<OverlaySettings> change) {
         settings.set(change.apply(settings.get()));
     }
 
     /** The player's "Animasyonları azalt" or the launcher's "Hareketi azalt". */
+    @Override
     public boolean reducedMotion() {
         return settings.get().reduceMotion() || state.reducedMotion();
     }
@@ -764,6 +894,20 @@ public final class OverlayClient implements ClientModInitializer {
 
     /** Applies a launcher frame on the render thread. Public for the scenario driver, which replays frames. */
     public void handleFrame(JsonObject frame) {
+        // The chat's emoji picker (CHAT-EMOJI, E3): its switch and the server's emojis.
+        if ("emojis".equals(Protocol.type(frame))) {
+            emojis.apply(frame);
+            refreshScreen();
+            return;
+        }
+        if (!panel) {
+            // The picker alone hears only its words (and the reduced-motion choice) besides.
+            if ("welcome".equals(Protocol.type(frame))) {
+                Texts.language().welcome(Protocol.str(frame, "lang", null));
+                state.apply(frame, System.currentTimeMillis());
+            }
+            return;
+        }
         // World sharing's commands (HOST1): opening, closing, sending a guest off.
         if (host.onFrame(frame)) {
             return;

@@ -10,6 +10,7 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use pl_content::ChatEmojis;
 use pl_lang::Lang;
 use pl_social::{
     CallAnswer as SocialAnswer, ChatChangeView, ChatMessageView, ChatPage, ChatRejection,
@@ -23,9 +24,9 @@ use crate::OverlayConfig;
 use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_LANG, FEATURE_LINK,
-    FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_TAGS, FriendAction, FriendRefusal, FromGame,
-    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST, FEATURE_LANG,
+    FEATURE_LINK, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_TAGS, FriendAction,
+    FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -377,6 +378,8 @@ pub(crate) enum Msg {
     Worlds(WorldsShown),
     /// OVL-LANG: the overlay's language now (the player's pick, else the launcher's).
     Language(Lang),
+    /// CHAT-EMOJI: the server's chat emojis now (Studio's list, else the built-in one).
+    Emojis(Arc<ChatEmojis>),
 }
 
 /// The panel sends at most this many messages ...
@@ -429,6 +432,10 @@ pub(crate) type PeopleFn = Arc<dyn Fn(PeopleChange) + Send + Sync>;
 
 /// The player picked the overlay's language in its settings (OVL-LANG): the launcher keeps it.
 pub(crate) type LangFn = Arc<dyn Fn(Lang) + Send + Sync>;
+
+/// The player switched the chat's emoji picker in the overlay's settings (CHAT-EMOJI): the
+/// launcher keeps it.
+pub(crate) type EmojiFn = Arc<dyn Fn(bool) + Send + Sync>;
 
 /// Whom a person menu frame may be about (OVL-UX2): the friend list's people for most rows; crew
 /// chat's senders (a crewmate who is not a friend) for "Engelle", "Rapor et" and "Arkadaş ekle".
@@ -507,6 +514,11 @@ struct Live {
     /// The mod's words follow the launcher (OVL-LANG: `lang` in its hello): its welcome names the
     /// overlay's language and the player picks it there.
     langs: bool,
+    /// The mod has the chat's emoji picker (CHAT-EMOJI: `emoji` in its hello): it hears `emojis`.
+    emojis: bool,
+    /// The mod runs the emoji picker alone (`panel-off` in its hello): no panel, no toasts. It is
+    /// not counted as connected and hears only `welcome` and `emojis`.
+    quiet: bool,
 }
 
 /// The codeless linking permit this session holds (SKIN1-O). It never goes to a log.
@@ -577,6 +589,9 @@ pub(crate) struct Session<S> {
     /// player's pick from the game goes.
     lang: Lang,
     lang_picked: LangFn,
+    /// CHAT-EMOJI: the server's chat emojis, and where the player's switch from the game goes.
+    emojis: Arc<ChatEmojis>,
+    emoji_switched: EmojiFn,
 }
 
 fn now_ms() -> i64 {
@@ -680,6 +695,7 @@ impl<S: SocialActions> Session<S> {
         discord: DiscordFn,
         people: PeopleFn,
         (lang, lang_picked): (Lang, LangFn),
+        (emojis, emoji_switched): (Arc<ChatEmojis>, EmojiFn),
     ) -> Self {
         // The friends feature as it is now; every change after comes as a message.
         let view = Arc::new(social.view());
@@ -716,6 +732,8 @@ impl<S: SocialActions> Session<S> {
             people,
             lang,
             lang_picked,
+            emojis,
+            emoji_switched,
         }
     }
 
@@ -769,7 +787,9 @@ impl<S: SocialActions> Session<S> {
     }
 
     fn set_live(&mut self, live: Option<Live>) {
-        let was = self.live.is_some();
+        // A mod that runs the emoji picker alone shows nothing of the friends feature: the page
+        // keeps its own notifications for it (CHAT-EMOJI).
+        let was = self.live.as_ref().is_some_and(|live| !live.quiet);
         self.live = live;
         if self.live.is_none()
             && let Some(pending) = self.pending_connect.take()
@@ -779,8 +799,9 @@ impl<S: SocialActions> Session<S> {
                 .reply
                 .send(ConnectOutcome::unavailable("no-overlay"));
         }
-        if was != self.live.is_some() {
-            (self.connected)(self.live.is_some());
+        let now = self.live.as_ref().is_some_and(|live| !live.quiet);
+        if was != now {
+            (self.connected)(now);
         }
         if was && self.live.is_none() {
             (self.host)(HostSignal::Gone);
@@ -824,7 +845,13 @@ impl<S: SocialActions> Session<S> {
             .map_or_else(Listener::default, |live| live.listener)
     }
 
-    fn send(&self, frames: Vec<ToGame>) {
+    fn send(&self, mut frames: Vec<ToGame>) {
+        if let Some(live) = &self.live
+            && live.quiet
+        {
+            // The emoji picker alone: its words (the greeting names the language) and its list.
+            frames.retain(|frame| matches!(frame, ToGame::Welcome { .. } | ToGame::Emojis { .. }));
+        }
         if let Some(live) = &self.live
             && !frames.is_empty()
         {
@@ -861,9 +888,13 @@ impl<S: SocialActions> Session<S> {
             Msg::Typing(typing) => self.on_typing(&typing),
             Msg::Config(config) => {
                 // Conversation mutes and the reduced-motion choice show in the panel.
+                let emoji_changed = self.config.emoji != config.emoji;
                 self.config = config;
                 self.set_view(Arc::clone(&self.view));
                 self.refresh();
+                if emoji_changed {
+                    self.send_emojis();
+                }
             }
             Msg::Connect {
                 target,
@@ -884,7 +915,42 @@ impl<S: SocialActions> Session<S> {
                 }
             }
             Msg::Language(lang) => self.set_language(lang),
+            Msg::Emojis(emojis) => {
+                self.emojis = emojis;
+                self.send_emojis();
+            }
         }
+    }
+
+    /// CHAT-EMOJI (E3): the emoji picker's switch and the server's emojis, to a mod that has the
+    /// picker.
+    fn send_emojis(&self) {
+        if self.live.as_ref().is_some_and(|live| live.emojis) {
+            self.send(vec![self.emojis_frame()]);
+        }
+    }
+
+    fn emojis_frame(&self) -> ToGame {
+        ToGame::Emojis {
+            on: self.config.emoji,
+            hosts: self.emojis.hosts.clone(),
+            emojis: self.emojis.emojis.clone(),
+        }
+    }
+
+    /// CHAT-EMOJI (E4): the player switched the emoji picker in the overlay's settings. It holds at
+    /// once (the answer is `emojis` with the switch) and the launcher keeps it. Only from a mod that
+    /// has the picker.
+    fn on_emoji_switch(&mut self, on: bool) {
+        if !self.live.as_ref().is_some_and(|live| live.emojis) {
+            return;
+        }
+        if self.config.emoji != on {
+            tracing::info!(on, "the chat's emoji picker was switched in the game");
+            self.config.emoji = on;
+            (self.emoji_switched)(on);
+        }
+        self.send_emojis();
     }
 
     /// OVL-LANG: the overlay speaks `lang` from now on. A mod whose words follow the launcher is
@@ -1209,6 +1275,7 @@ impl<S: SocialActions> Session<S> {
                         .send(ConnectOutcome::unavailable("no-overlay"));
                 }
                 let hosts = features.iter().any(|f| f == FEATURE_HOST);
+                let emojis = features.iter().any(|f| f == FEATURE_EMOJI);
                 self.set_live(Some(Live {
                     conn,
                     mirror,
@@ -1224,8 +1291,11 @@ impl<S: SocialActions> Session<S> {
                     people: features.iter().any(|f| f == FEATURE_PEOPLE),
                     people2,
                     langs,
+                    emojis,
+                    quiet: features.iter().any(|f| f == FEATURE_PANEL_OFF),
                 }));
                 self.send(frames);
+                self.send_emojis();
                 (self.host)(HostSignal::Connected { hosts });
             }
             BridgeEvent::Frame { conn, frame } => {
@@ -1382,6 +1452,7 @@ impl<S: SocialActions> Session<S> {
             FromGame::CrewInvite { friend, crew } => self.on_crew_invite(friend, &crew),
             FromGame::AddFriend { friend } => self.on_add_friend(friend),
             FromGame::Lang { lang } => self.on_lang_pick(&lang),
+            FromGame::Emoji { on } => self.on_emoji_switch(on),
             FromGame::Hello { .. } | FromGame::Unknown => {}
         }
     }
