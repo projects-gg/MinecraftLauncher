@@ -1,24 +1,17 @@
 {
   "schema": 1,
-  "hosts": [
-    "projects.gg"
-  ],
+  "hosts": ["projects.gg"],
   "emojis": [
     {
       "code": ":kalp:",
-      "aliases": [
-        "<3",
-        "♥"
-      ],
+      "aliases": ["<3", "♥"],
       "look": "&c❤",
       "kind": "symbol",
       "rank": "VIP"
     },
     {
       "code": ":kazma:",
-      "aliases": [
-        ":pickaxe:"
-      ],
+      "aliases": [":pickaxe:"],
       "look": "&e⛏",
       "kind": "symbol",
       "rank": "VIP"
@@ -61,18 +54,14 @@
     },
     {
       "code": ":elmaskilic:",
-      "aliases": [
-        ":diamondsword:"
-      ],
+      "aliases": [":diamondsword:"],
       "look": "&b🗡",
       "kind": "symbol",
       "rank": "VIP+"
     },
     {
       "code": ":netheritkilic:",
-      "aliases": [
-        ":netheritesword:"
-      ],
+      "aliases": [":netheritesword:"],
       "look": "&8🗡",
       "kind": "symbol",
       "rank": "VIP+"
@@ -85,9 +74,7 @@
     },
     {
       "code": ":masa:",
-      "aliases": [
-        ":table:"
-      ],
+      "aliases": [":table:"],
       "look": "(╯°□°)╯︵ ┻━┻",
       "kind": "text",
       "rank": "VIP"
@@ -118,9 +105,7 @@
     },
     {
       "code": ":beslik:",
-      "aliases": [
-        ":highfive:"
-      ],
+      "aliases": [":highfive:"],
       "look": "ヘ( ^o^)ノ＼(^_^ )",
       "kind": "text",
       "rank": "VIP"
@@ -167,9 +152,7 @@
       "glyph": "\ue10f",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":lol:",
@@ -177,9 +160,7 @@
       "glyph": "\ue10a",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":asik:",
@@ -187,9 +168,7 @@
       "glyph": "\ue107",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":havali:",
@@ -197,9 +176,7 @@
       "glyph": "\ue10c",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":zengin:",
@@ -207,9 +184,7 @@
       "glyph": "\ue108",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":hmm:",
@@ -217,9 +192,7 @@
       "glyph": "\ue106",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":sok:",
@@ -227,9 +200,7 @@
       "glyph": "\ue10d",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":agla:",
@@ -237,9 +208,7 @@
       "glyph": "\ue109",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":kizgin:",
@@ -247,9 +216,7 @@
       "glyph": "\ue10b",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":uyku:",
@@ -257,9 +224,7 @@
       "glyph": "\ue10e",
       "kind": "pack",
       "rank": "VIP",
-      "servers": [
-        "Survival"
-      ]
+      "servers": ["Survival"]
     },
     {
       "code": ":ping:",
@@ -290,9 +255,7 @@
     },
     {
       "code": ":discord:",
-      "aliases": [
-        ":dc:"
-      ],
+      "aliases": [":dc:"],
       "kind": "shortcut",
       "rank": "VIP",
       "meaning": {
@@ -304,11 +267,7 @@
       "code": ":ah:",
       "kind": "shortcut",
       "rank": "VIP",
-      "servers": [
-        "Survival",
-        "SMP",
-        "Skyblock"
-      ],
+      "servers": ["Survival", "SMP", "Skyblock"],
       "meaning": {
         "tr": "İhalelerini gösteren bağlantı",
         "en": "A link to your auctions"
@@ -318,10 +277,7 @@
       "code": ":pazar:",
       "kind": "shortcut",
       "rank": "VIP",
-      "servers": [
-        "Survival",
-        "SMP"
-      ],
+      "servers": ["Survival", "SMP"],
       "meaning": {
         "tr": "Siparişlerini gösteren bağlantı",
         "en": "A link to your orders"
@@ -331,9 +287,7 @@
       "code": ":warp:",
       "kind": "shortcut",
       "rank": "VIP",
-      "servers": [
-        "Skyblock"
-      ],
+      "servers": ["Skyblock"],
       "meaning": {
         "tr": "Adana gelme komutunu yazdıran bağlantı",
         "en": "A link that writes the warp to your island"
@@ -343,9 +297,7 @@
       "code": ":prestij:",
       "kind": "shortcut",
       "rank": "VIP",
-      "servers": [
-        "Skyblock"
-      ],
+      "servers": ["Skyblock"],
       "meaning": {
         "tr": "Prestijini yazar",
         "en": "Writes your prestige"
@@ -353,9 +305,7 @@
     },
     {
       "code": ":başarım:",
-      "aliases": [
-        ":basarim:"
-      ],
+      "aliases": [":basarim:"],
       "kind": "shortcut",
       "rank": "VIP+",
       "meaning": {
@@ -367,9 +317,7 @@
       "code": ":kdr:",
       "kind": "shortcut",
       "rank": "VIP+",
-      "servers": [
-        "Survival"
-      ],
+      "servers": ["Survival"],
       "meaning": {
         "tr": "Öldürme ve ölüm oranını yazar",
         "en": "Writes your kill/death ratio"
@@ -379,9 +327,7 @@
       "code": ":profil:",
       "kind": "shortcut",
       "rank": "VIP+",
-      "servers": [
-        "Survival"
-      ],
+      "servers": ["Survival"],
       "meaning": {
         "tr": "Profilini gösteren bağlantı",
         "en": "A link to your profile"
@@ -389,14 +335,10 @@
     },
     {
       "code": ":hatıra:",
-      "aliases": [
-        ":hatira:"
-      ],
+      "aliases": [":hatira:"],
       "kind": "shortcut",
       "rank": "VIP+",
-      "servers": [
-        "Survival"
-      ],
+      "servers": ["Survival"],
       "meaning": {
         "tr": "Hatıralarını gösteren bağlantı",
         "en": "A link to your memories"
