@@ -127,3 +127,8 @@ export async function keepBeta(): Promise<UpdateChannel> {
   movedToast(access);
   return "stable";
 }
+
+// The browser preview has no update looks: its screenshots call this to show the toast.
+if (typeof window !== "undefined" && !isTauri()) {
+  (window as unknown as { __plBetaGate?: object }).__plBetaGate = { keepBeta };
+}
