@@ -433,6 +433,7 @@ export function Select<T extends string>({
   className,
   disabled,
   searchable,
+  placeholder,
 }: {
   value: T;
   onValueChange: (value: T) => void;
@@ -441,6 +442,8 @@ export function Select<T extends string>({
   className?: string;
   disabled?: boolean;
   searchable?: { searchLabel: string; emptyText: string };
+  /** Shown while `value` is "" (nothing chosen yet), in the placeholder grey. */
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -475,10 +478,13 @@ export function Select<T extends string>({
       }}
       disabled={disabled}
     >
-      <RadixSelect.Trigger aria-label={label} className={cn(triggerClass, className)}>
+      <RadixSelect.Trigger
+        aria-label={label}
+        className={cn(triggerClass, "data-[placeholder]:text-ash-500", className)}
+      >
         {/* A long choice is cut with an ellipsis: the trigger keeps its one 34 px line. */}
         <span className="min-w-0 truncate whitespace-nowrap">
-          <RadixSelect.Value />
+          <RadixSelect.Value placeholder={placeholder} />
         </span>
         <RadixSelect.Icon className="shrink-0">
           <CaretDown size={14} className="text-ash-400" />
