@@ -124,9 +124,11 @@ export interface SlotRef {
 /**
  * - `full`: the player moves items (Studio's switch `full`);
  * - `view`: the player looks (switch `view`), with tooltips and the keyboard;
+ * - `pick`: the player chooses one of the account's own items, nothing moves (AFK+'s "Envanterden
+ *   seç");
  * - `static`: a picture for pages that show the feature (no input, nothing live).
  */
-export type InventoryMode = "full" | "view" | "static";
+export type InventoryMode = "full" | "view" | "pick" | "static";
 
 /**
  * A Projects menu's title character (IA-ART's `itemArt` glyphs, docs/content-format.md "Item
