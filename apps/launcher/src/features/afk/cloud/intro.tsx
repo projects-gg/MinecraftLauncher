@@ -103,6 +103,10 @@ export function CloudIntroDialog({
   const { reduce } = useMotionPrefs();
   const offer = useOfferLine(overview);
   const signedOut = overview.session === "signedOut";
+  // With the inventory live (CAFK-FEAT §6.4) the third point names it; the count stays three.
+  const inventoryLive = (overview.features?.inventory ?? "off") !== "off";
+  const inventoryPoint = (point: (typeof POINTS)[number]) =>
+    inventoryLive && point.key === "anywhere";
   const start = () =>
     cloudApi
       .open("start")
@@ -160,9 +164,13 @@ export function CloudIntroDialog({
                 }}
               >
                 <span className="grid size-8 shrink-0 place-items-center rounded-md bg-white/[0.04]">
-                  <ContentIcon kind={point.icon} size={16} />
+                  <ContentIcon kind={inventoryPoint(point) ? "inventory" : point.icon} size={16} />
                 </span>
-                <span className="min-w-0">{t(`cloudAfk.intro.points.${point.key}`)}</span>
+                <span className="min-w-0">
+                  {inventoryPoint(point)
+                    ? t("cloudAfkFeat.intro.anywhere")
+                    : t(`cloudAfk.intro.points.${point.key}`)}
+                </span>
               </motion.li>
             ))}
           </ul>

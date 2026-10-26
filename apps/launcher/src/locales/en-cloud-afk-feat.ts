@@ -44,6 +44,7 @@ export const enCloudAfkFeat = {
     restart: "The inventory turns on at the next connection.",
     reconnect: "Reconnect now",
     version: "The inventory isn't available on this Minecraft version.",
+    unavailable: "The inventory isn't available right now.",
     privacy: "Only you can see your inventory.",
     turnOnFailed: "Couldn't turn on the inventory.",
     fixSettings: "Fix the marked field in the settings first.",

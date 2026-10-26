@@ -4,6 +4,12 @@
 // last word; these checks only answer while typing.
 import type { CloudEditConfig, CloudIssue, CloudRowText } from "@/bindings";
 import type { CloudEdit, CloudEditData } from "./api";
+import {
+  captureCount,
+  type PlaceholderProblem,
+  placeholderNames,
+  placeholderProblem,
+} from "./placeholders";
 import { looksSensitive, withoutLeadingIgnorable } from "./sensitive";
 
 export type Issue = CloudIssue;
@@ -148,10 +154,52 @@ function wordsProblem(words: Words): string | null {
   return words.kind === "sealed" ? null : textProblem(words.text);
 }
 
+/** Studio's placeholder switch and allow list (the overview's `features`); off: braces are text. */
+export interface PlaceholderRules {
+  on: boolean;
+  commands: readonly string[];
+}
+
+/** A plain row's words the placeholder checks read (a row sealed before it is sent is not). */
+function plainWords(words: Words): string | null {
+  if (words.kind !== "plain" || looksSensitive(words.text) || textProblem(words.text)) return null;
+  return words.text;
+}
+
+/**
+ * Why a rule's plain reply fails the placeholder checks while Studio has them on, else null. Such a
+ * reply is not sent (the Worker hands the machine the rule switched off), stored or not.
+ */
+export function replyProblem(
+  rule: Rule,
+  placeholders: PlaceholderRules | undefined,
+): PlaceholderProblem | null {
+  if (!placeholders?.on) return null;
+  const text = plainWords(rule.reply);
+  const pattern = rule.pattern.trim();
+  if (!text || !pattern || pattern.length > MAX_TEXT) return null;
+  return placeholderProblem(
+    { kind: "reply", text, rule: { match: rule.pattern, regex: rule.regex, from: rule.from } },
+    placeholders.commands,
+  );
+}
+
+/** The first part a reply names beyond its pattern's groups ("Bu kalıpta 2. parça yok."). */
+export function missingPart(rule: Rule): number | null {
+  if (rule.reply.kind !== "plain") return null;
+  const groups = rule.regex ? captureCount(rule.pattern) : 0;
+  const part = placeholderNames(rule.reply.text)
+    .filter((name) => name !== "u")
+    .map(Number)
+    .find((n) => n > groups);
+  return part ?? null;
+}
+
 /** Problems found while typing (the backend finds the rest, pattern safety included). */
 export function localIssues(
   draft: Draft,
   limits: { minIntervalSec?: number; minRuleCooldownSec?: number },
+  placeholders?: PlaceholderRules,
 ): Issue[] {
   const issues: Issue[] = [];
   const general = (field: string, problem: string) =>
@@ -215,6 +263,19 @@ export function localIssues(
     const problem = wordsProblem(rule.reply);
     if (problem) row("rules", index, "reply", problem);
   });
+  if (placeholders?.on) {
+    config.commands.forEach((command, index) => {
+      const text = plainWords(command.words);
+      const problem = text
+        ? placeholderProblem({ kind: "command", text }, placeholders.commands)
+        : null;
+      if (problem) row("commands", index, "text", problem.reason);
+    });
+    config.rules.forEach((rule, index) => {
+      const problem = replyProblem(rule, placeholders);
+      if (problem) row("rules", index, "reply", problem.reason);
+    });
+  }
   return issues;
 }
 

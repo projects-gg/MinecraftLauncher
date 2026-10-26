@@ -46,6 +46,7 @@ export const trCloudAfkFeat = {
     restart: "Envanter bir sonraki bağlanmada açılır.",
     reconnect: "Şimdi yeniden bağlan",
     version: "Bu Minecraft sürümünde envanter görünmez.",
+    unavailable: "Envanter şu an kullanılamıyor.",
     privacy: "Envanterini yalnız sen görürsün.",
     turnOnFailed: "Envanter açılamadı.",
     fixSettings: "Önce ayarlarındaki işaretli alanı düzelt.",

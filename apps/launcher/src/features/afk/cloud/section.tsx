@@ -1,17 +1,21 @@
 // 7/24 Bulut on the AFK page, under the desktop accounts. Nothing of it renders unless the service
 // answered and is not off: with the service down the page is exactly what it was. Without a cloud
 // account (or signed out of Friends) it is one quiet intro card; with accounts, their cards. The
-// layers (intro, console, settings, "Buluta taşı", the two-places question) live here too.
+// layers (intro, the account panel, settings, "Buluta taşı", the two-places question) live here
+// too. With a service of the cloud features and two accounts or more, "Seç" chooses several for
+// one action at a time (CAFK-FEAT §3.4).
 import { ArrowSquareOut, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
 import { Button, cn, enter, IconButton, leave } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AfkAccount } from "@/lib/api";
 import { afkFailed } from "../errors";
 import { cloudApi } from "./api";
+import { BulkBar } from "./bulk-bar";
 import { CloudCard } from "./card";
 import { CloudConsole } from "./console";
+import { CopyDialog } from "./copy-dialog";
 import { CloudGuardDialog } from "./guard";
 import { CloudIntroCard, CloudIntroDialog } from "./intro";
 import { CloudMoveDialog } from "./move";
@@ -28,6 +32,13 @@ import {
   useCloudUi,
   useGuardedStart,
 } from "./use-cloud";
+
+/** "Ayarları kopyala": where the settings may come from and where they go, as the caller chose. */
+interface CopyRequest {
+  source: string | null;
+  sources: string[];
+  targets: string[];
+}
 
 export function CloudSection({
   desktop,
@@ -47,7 +58,52 @@ export function CloudSection({
   const guardedStart = useGuardedStart();
   const openPlus = usePlusUi((s) => s.openPanel);
   const [plusIntro, setPlusIntro] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [copy, setCopy] = useState<CopyRequest | null>(null);
+  // "Seç" and "Hepsini seç" swap places: the focus follows from one to the other.
+  const selectRef = useRef<HTMLButtonElement>(null);
+  const allRef = useRef<HTMLButtonElement>(null);
+  const moveFocus = useRef(false);
   const overview = data?.overview;
+  const listed = overview?.session === "signedIn" ? overview.accounts : [];
+  // Several accounts at once: a service of the cloud features, and something to choose among.
+  const bulk = Boolean(overview?.features) && listed.length >= 2;
+
+  // Choosing ends with Escape (when no layer is open), or when bulk management goes.
+  useEffect(() => {
+    if (!selecting) return;
+    if (!bulk) {
+      setSelecting(false);
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector("[role=dialog], [role=menu]")) return;
+      moveFocus.current = true;
+      setSelecting(false);
+      setChosen(new Set());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selecting, bulk]);
+
+  useEffect(() => {
+    if (!moveFocus.current) return;
+    moveFocus.current = false;
+    (selecting ? allRef : selectRef).current?.focus({ preventScroll: true });
+  }, [selecting]);
+
+  // Accounts that went (deleted elsewhere) leave the choice.
+  const listedIds = listed.map((account) => account.id).join("|");
+  useEffect(() => {
+    setChosen((current) => {
+      const ids = new Set(listedIds.split("|"));
+      const next = new Set([...current].filter((id) => ids.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [listedIds]);
+
   if (!overview?.available) return null;
 
   const lang = i18n.language === "en" ? "en" : "tr";
@@ -76,6 +132,24 @@ export function CloudSection({
     cloudApi
       .open("plusBuy", id)
       .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
+  const chosenAccounts = accounts.filter((account) => chosen.has(account.id));
+  const choose = (id: string, on: boolean) =>
+    setChosen((current) => {
+      const next = new Set(current);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const allChosen = accounts.length > 0 && chosenAccounts.length === accounts.length;
+  const stopChoosing = () => {
+    moveFocus.current = true;
+    setSelecting(false);
+    setChosen(new Set());
+  };
+  const startChoosing = () => {
+    moveFocus.current = true;
+    setSelecting(true);
+  };
 
   return (
     <section
@@ -95,6 +169,29 @@ export function CloudSection({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {bulk ? (
+              selecting ? (
+                <>
+                  <Button
+                    ref={allRef}
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setChosen(allChosen ? new Set() : new Set(accounts.map((a) => a.id)))
+                    }
+                  >
+                    {t("cloudAfkFeat.bulk.selectAll")}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={stopChoosing}>
+                    {t("cloudAfkFeat.bulk.cancel")}
+                  </Button>
+                </>
+              ) : (
+                <Button ref={selectRef} size="sm" variant="ghost" onClick={startChoosing}>
+                  {t("cloudAfkFeat.bulk.select")}
+                </Button>
+              )
+            ) : null}
             <IconButton
               label={t("cloudAfk.refresh")}
               icon={<ArrowsClockwise size={16} />}
@@ -163,6 +260,26 @@ export function CloudSection({
                     ? () => void upgrade(account.id)
                     : undefined
                 }
+                onInventory={
+                  (account.features?.inventory?.mode ?? "off") !== "off" && account.host
+                    ? () => ui.openConsole(account.id, "inventory")
+                    : undefined
+                }
+                onCopy={
+                  bulk
+                    ? () =>
+                        setCopy({
+                          source: account.id,
+                          sources: [account.id],
+                          targets: chosenAccounts
+                            .map((one) => one.id)
+                            .filter((id) => id !== account.id),
+                        })
+                    : undefined
+                }
+                selecting={selecting}
+                selected={chosen.has(account.id)}
+                onSelect={(on) => choose(account.id, on)}
               />
             ))}
           </AnimatePresence>
@@ -188,10 +305,39 @@ export function CloudSection({
           <PlusPanel />
         </>
       ) : null}
+      {bulk && selecting ? (
+        <BulkBar
+          open={selecting}
+          chosen={chosenAccounts}
+          desktop={desktop}
+          onCopy={() =>
+            setCopy({
+              source: chosenAccounts[0]?.id ?? null,
+              sources: chosenAccounts.map((one) => one.id),
+              targets: chosenAccounts.slice(1).map((one) => one.id),
+            })
+          }
+        />
+      ) : null}
+      {bulk ? (
+        <CopyDialog
+          open={copy !== null}
+          accounts={accounts}
+          sources={accounts.filter((account) => copy?.sources.includes(account.id))}
+          initialSource={copy?.source ?? null}
+          initialTargets={copy?.targets ?? []}
+          onClose={() => setCopy(null)}
+        />
+      ) : null}
       <CloudConsole
         account={consoleAccount}
         skewMs={skewMs}
         onStart={(account) => void guardedStart(account, desktop)}
+        onRestart={(account) => void restart(account)}
+        onOpenSettings={(id) => {
+          ui.openConsole(null);
+          ui.openSettings(id);
+        }}
         onClose={() => ui.openConsole(null)}
       />
       <CloudSettingsSheet account={settingsAccount} onClose={() => ui.openSettings(null)} />
