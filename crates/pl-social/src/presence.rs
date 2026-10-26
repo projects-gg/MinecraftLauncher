@@ -46,7 +46,7 @@ use crate::minecraft::McMessage;
 use crate::model::{
     ChatBody, ChatCaps, ChatDeletion, ChatMessage, ChatQuota, ChatReacted, ChatRejection,
     ChatStatus, CrewBadge, CrewMute, FriendGroups, JoinRequest, LimitedKey, LinkCard, LinkRule,
-    ModNotice, ProfileMark, PublicProfile, Reaction, ReadMark, StatusMode, Team, TeamExit,
+    ModNotice, Privacy, ProfileMark, PublicProfile, Reaction, ReadMark, StatusMode, Team, TeamExit,
     TeamInvite, TeamNotifications,
 };
 use crate::protocol::{
@@ -303,6 +303,13 @@ pub enum PresenceEvent {
     QueuedInvites(Vec<Invite>),
     /// Your status mode changed on another device.
     StatusChanged(StatusMode),
+    /// Your privacy switches or picture changed, on one of your devices (SOC-LAG; only on a
+    /// connection the service took `profile` on): what they are now.
+    ProfileChanged {
+        privacy: Privacy,
+        avatar: Option<String>,
+        avatar_hash: Option<String>,
+    },
     /// The connection dropped; the task reconnects after `retry_in`.
     Disconnected {
         retry_in: Duration,
@@ -1619,6 +1626,15 @@ async fn on_text(
         ServerMessage::Invite { invite } => PresenceEvent::Invite(invite),
         ServerMessage::Invites { invites } => PresenceEvent::QueuedInvites(invites),
         ServerMessage::Status { status } => PresenceEvent::StatusChanged(status),
+        ServerMessage::Profile {
+            privacy,
+            avatar,
+            avatar_hash,
+        } => PresenceEvent::ProfileChanged {
+            privacy,
+            avatar,
+            avatar_hash,
+        },
         ServerMessage::Team {
             team,
             crew,
@@ -2151,7 +2167,7 @@ mod tests {
             );
             // What this launcher understands rides on the address (older services ignore it).
             assert!(headers.iter().any(|(k, v)| k == ":uri"
-                && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks"));
+                && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile"));
         }
         send_json(&mut server, hello()).await;
         match handle.next_event().await.unwrap() {
@@ -2696,7 +2712,7 @@ mod tests {
         let mut server = accept(&listener, None, seen.clone()).await.unwrap();
         // Plans are asked for on every connection (older services ignore it).
         assert!(seen.lock().unwrap().iter().any(|(k, v)| k == ":uri"
-            && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks"));
+            && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile"));
         let mut greeting = hello();
         greeting["caps"] = serde_json::json!(["callServer", "crews", "plans"]);
         greeting["now"] = serde_json::json!(1_792_521_300);
@@ -3078,7 +3094,7 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|(k, v)| k == ":uri"
-                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,chat,replies,stickers,reactions,typing,reads"),
+                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,chat,replies,stickers,reactions,typing,reads"),
             "chat and its extras are asked for"
         );
         // A service from before CHAT2 takes chat alone.
