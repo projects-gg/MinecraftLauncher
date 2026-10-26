@@ -94,6 +94,7 @@ function profile(v: ProfileView): SocialProfile {
     username: v.username,
     avatar: v.avatar,
     avatarUrl: opt(v.avatarUrl),
+    mark: opt(v.mark),
   };
 }
 
@@ -129,6 +130,7 @@ function friend(v: FriendView): Friend {
     game: game(v.game),
     discordUrl: v.discordUrl,
     badge: badge(v.badge),
+    mark: opt(v.mark),
   };
 }
 
@@ -143,6 +145,7 @@ function invite(v: InviteView): SocialInvite {
     name: opt(v.name),
     avatar: opt(v.avatar),
     avatarUrl: opt(v.avatarUrl),
+    mark: opt(v.mark),
     at: v.at,
     server: game(v.server),
     quiet: v.quiet,
@@ -178,6 +181,7 @@ function me(v: MeView): SocialMe {
         }
       : undefined,
     badge: badge(v.badge),
+    mark: opt(v.mark),
   };
 }
 
@@ -316,6 +320,7 @@ function teamMember(v: TeamMemberView): TeamMember {
     joinedAt: v.joinedAt,
     togetherMonth: v.togetherMonth,
     badge: badge(v.badge),
+    mark: opt(v.mark),
   };
 }
 
@@ -448,6 +453,7 @@ function call(v: CrewCallView): CrewCall {
     name: opt(v.name),
     avatar: opt(v.avatar),
     avatarUrl: opt(v.avatarUrl),
+    mark: opt(v.mark),
     kind: v.kind,
     server: game(v.server),
     crews: v.crews,

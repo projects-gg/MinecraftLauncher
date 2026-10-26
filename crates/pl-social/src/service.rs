@@ -37,13 +37,14 @@ use crate::history::{Change, Conversation, Entry, History, crew_conversation};
 use crate::links::{find_links, first_link};
 use crate::minecraft::{McSignal, McSink};
 use crate::model::{
-    ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMuteEdit, EditFeatures, FIRST_EMBLEMS,
-    FriendGroup, FriendGroups, JoinMode, JoinOutcome, LimitedKey, LinkRule, MAX_FRIEND_GROUPS,
-    ProfileUpdate, ReportReason, RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition,
-    StatusMode, TEAM_FEATURE_BADGE_REQUESTS, TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS,
-    TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
-    TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS,
-    TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup, TeamNotificationsEdit, TeamRole,
+    ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMute, CrewMuteEdit, EditFeatures,
+    FIRST_EMBLEMS, FriendGroup, FriendGroups, JoinMode, JoinOutcome, LimitedKey, LinkRule,
+    MAX_FRIEND_GROUPS, Me, ProfileUpdate, ReportReason, RequestOutcome, SessionInfo, SettingsMeta,
+    SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS, TEAM_FEATURE_BADGES,
+    TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK,
+    TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS,
+    TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup, TeamNotifications,
+    TeamNotificationsEdit, TeamRole,
 };
 use crate::presence::{ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, StopReason};
 use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer, is_projects_host};
@@ -122,6 +123,9 @@ struct Inner {
     core: Mutex<Core>,
     /// One link card is asked at a time (the service's rule per socket, CHAT2).
     cards_turn: tokio::sync::Mutex<()>,
+    /// The player's profile changes go to the service one at a time, in the order they were made,
+    /// so its answers come back in that order too (SOC-LAG).
+    profile_turn: tokio::sync::Mutex<()>,
     /// World sessions (HOST1): who hears them, what the connection took.
     worlds: crate::world::WorldsHub,
     /// SKIN1's listener for `mc` messages and reconnects (`crate::minecraft`).
@@ -217,6 +221,66 @@ struct Core {
     together: TogetherLog,
     /// World sessions may run (signed config `features.worlds`, HOST1). Survives sign-outs.
     worlds_enabled: bool,
+    /// The player's own profile changes on their way to the service, oldest first (SOC-LAG): the
+    /// view shows them until the service answers.
+    profile_pending: Vec<PendingProfile>,
+    profile_seq: u64,
+}
+
+/// A change of the player's picture, status or privacy switches the service has not answered yet.
+#[derive(Debug)]
+struct PendingProfile {
+    id: u64,
+    /// The sign-in it belongs to: a change of an earlier one never shows.
+    generation: u64,
+    update: ProfileUpdate,
+}
+
+impl Core {
+    /// The player's profile as shown: the service's, with their own changes on the way applied
+    /// (SOC-LAG). The view and everything that follows the player's switches (sending
+    /// "yazıyor…", showing "Görüldü", where a call may start) read this one.
+    fn shown_me(&self) -> Option<Me> {
+        let mut me = self.state.me()?.clone();
+        for pending in self
+            .profile_pending
+            .iter()
+            .filter(|pending| pending.generation == self.generation)
+        {
+            let update = &pending.update;
+            if let Some(avatar) = &update.avatar {
+                me.profile.avatar.clone_from(avatar);
+                me.profile.avatar_hash = if avatar == "discord" {
+                    me.discord_avatar_hash.clone()
+                } else {
+                    None
+                };
+            }
+            if let Some(status) = update.status {
+                me.status = status;
+            }
+            if let Some(share) = update.share_server {
+                me.privacy.share_server = share;
+            }
+            if let Some(share) = update.share_last_seen {
+                me.privacy.share_last_seen = share;
+            }
+            if let Some(share) = update.share_read {
+                me.privacy.share_read = Some(share);
+            }
+            if let Some(share) = update.share_typing {
+                me.privacy.share_typing = Some(share);
+            }
+        }
+        Some(me)
+    }
+
+    /// A picture change of the player's is on its way (their crew pages show it already).
+    fn picture_pending(&self) -> bool {
+        self.profile_pending
+            .iter()
+            .any(|pending| pending.generation == self.generation && pending.update.avatar.is_some())
+    }
 }
 
 impl SocialService {
@@ -237,6 +301,7 @@ impl SocialService {
                 runtime,
                 core: Mutex::new(Core::default()),
                 cards_turn: tokio::sync::Mutex::new(()),
+                profile_turn: tokio::sync::Mutex::new(()),
                 worlds: crate::world::WorldsHub::default(),
                 mc: Mutex::new(None),
             }),
@@ -1063,12 +1128,53 @@ impl SocialService {
     }
 
     /// Picture, status mode or privacy switches (CHAT2: "Görüldü bilgisi", "Yazıyor bilgisi").
+    ///
+    /// Shown at once (SOC-LAG): the view takes the change before the service answers (it used to
+    /// wait for the answer). Changes go one at a time in the order they were made; the service's
+    /// answer replaces what was shown, and a refusal takes the change back (the error says why).
     pub async fn update_profile(&self, update: ProfileUpdate) -> Result<()> {
-        let (me, generation) = self
+        let id = {
+            let mut core = self.lock();
+            if core.auth != AuthPhase::SignedIn || core.session.is_none() {
+                return Err(SocialError::Unauthorized);
+            }
+            core.profile_seq += 1;
+            let id = core.profile_seq;
+            let generation = core.generation;
+            core.profile_pending.push(PendingProfile {
+                id,
+                generation,
+                update: update.clone(),
+            });
+            id
+        };
+        self.emit_view();
+        let turn = self.inner.profile_turn.lock().await;
+        // Rapid clicks: a newer change of the same switches, still waiting, carries the player's
+        // latest choice, so this one need not go (a switch clicked five times saves at most twice).
+        if superseded(&self.lock().profile_pending, id) {
+            self.lock()
+                .profile_pending
+                .retain(|pending| pending.id != id);
+            drop(turn);
+            self.emit_view();
+            return Ok(());
+        }
+        let result = self
             .call(|session| async move { session.update_profile(&update).await })
-            .await?;
-        self.update(generation, |core| core.state.set_me(me));
-        Ok(())
+            .await;
+        {
+            let mut core = self.lock();
+            core.profile_pending.retain(|pending| pending.id != id);
+            if let Ok((me, answered)) = &result
+                && *answered == core.generation
+            {
+                core.state.set_me(me.clone());
+            }
+        }
+        drop(turn);
+        self.emit_view();
+        result.map(|_| ())
     }
 
     // --- friend categories ----------------------------------------------------------------
@@ -1793,8 +1899,9 @@ impl SocialService {
     // --- crew notifications ("Sessize al") -----------------------------------------------------
 
     /// Changes the player's crew notification settings on a service that keeps them (`mute`):
-    /// "Sessize al" until a time or until unmuted, "Sesi aç", crew calls on or off. The answer
-    /// reaches the view; the player's other devices hear it through the socket.
+    /// "Sessize al" until a time or until unmuted, "Sesi aç", crew calls on or off. Shown at once
+    /// (SOC-LAG); the answer settles it, a refusal puts the old settings back. The player's other
+    /// devices hear it through the socket.
     pub async fn set_crew_notifications(&self, edit: TeamNotificationsEdit) -> Result<()> {
         {
             let core = self.lock();
@@ -1809,18 +1916,39 @@ impl SocialService {
         if edit.is_empty() {
             return Ok(());
         }
-        let (settings, generation) = self
+        let (before, shown, generation) = {
+            let mut core = self.lock();
+            let before = core.state.team_notifications().unwrap_or_default();
+            let shown = notifications_after(before, &edit);
+            core.state.set_team_notifications(shown);
+            (before, shown, core.generation)
+        };
+        self.emit_view();
+        match self
             .call(|session| async move { session.set_team_notifications(&edit).await })
-            .await?;
-        self.update(generation, |core| {
-            core.state.set_team_notifications(settings)
-        });
-        Ok(())
+            .await
+        {
+            Ok((settings, answered)) => {
+                self.update(answered, |core| {
+                    core.state.set_team_notifications(settings);
+                });
+                Ok(())
+            }
+            Err(error) => {
+                // Back as it was, unless something newer came meanwhile (another device).
+                self.update(generation, |core| {
+                    if core.state.team_notifications() == Some(shown) {
+                        core.state.set_team_notifications(before);
+                    }
+                });
+                Err(error)
+            }
+        }
     }
 
     /// "Sessize al" for one of the player's crews (until a time, or until unmuted) or "Sesi aç",
-    /// on a service with several crews. The answer reaches the view; the player's other devices
-    /// hear it through the socket.
+    /// on a service with several crews. Shown at once (SOC-LAG); the answer settles it, a refusal
+    /// puts the old mute back. The player's other devices hear it through the socket.
     pub async fn set_crew_mute(&self, team: &str, edit: CrewMuteEdit) -> Result<()> {
         {
             let core = self.lock();
@@ -1836,11 +1964,37 @@ impl SocialService {
         }
         let team = self.crew_id(team)?;
         let id = team.clone();
-        let (mute, generation) = self
+        let shown = CrewMute {
+            muted: edit.muted,
+            mute_until: edit.mute_until.filter(|_| edit.muted),
+        };
+        let (before, generation) = {
+            let mut core = self.lock();
+            let before = core.state.crew(&id).map(|entry| entry.notifications);
+            core.state.set_crew_mute(&id, shown);
+            (before, core.generation)
+        };
+        self.emit_view();
+        match self
             .call(|session| async move { session.set_crew_mute(&team, &edit).await })
-            .await?;
-        self.update(generation, |core| core.state.set_crew_mute(&id, mute));
-        Ok(())
+            .await
+        {
+            Ok((mute, answered)) => {
+                self.update(answered, |core| core.state.set_crew_mute(&id, mute));
+                Ok(())
+            }
+            Err(error) => {
+                // Back as it was, unless something newer came meanwhile (another device).
+                self.update(generation, |core| {
+                    if let Some(before) = before
+                        && core.state.crew(&id).map(|entry| entry.notifications) == Some(shown)
+                    {
+                        core.state.set_crew_mute(&id, before);
+                    }
+                });
+                Err(error)
+            }
+        }
     }
 
     // --- crew calls ("Ekibi çağır") ---------------------------------------------------------
@@ -1872,7 +2026,7 @@ impl SocialService {
         let control = self.crew_presence()?;
         let (place, named) = {
             let core = self.lock();
-            let share = core.state.me().is_some_and(|me| me.privacy.share_server);
+            let share = core.shown_me().is_some_and(|me| me.privacy.share_server);
             let place = CallPlace::of(&core.activity, share);
             // Only crews of the player's, each once; none named calls the primary one. Crews
             // that all went away meanwhile call nobody else instead.
@@ -2569,13 +2723,13 @@ impl SocialService {
         {
             return;
         }
-        let Some(me) = core.state.me() else {
+        let Some(me) = core.shown_me() else {
             return;
         };
         if me.status == StatusMode::Invisible || !me.privacy.shares_typing() {
             return;
         }
-        let me = me.profile.id.clone();
+        let me = me.profile.id;
         if !conversation_writable(&core.state, conv) || !someone_online(&core.state, conv, &me) {
             return;
         }
@@ -3588,7 +3742,7 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
         }
         // Someone writes (CHAT2): only while the player shares and sees it; never their own.
         PresenceEvent::ChatTyping { conv, by } => {
-            let me = core.state.me();
+            let me = core.shown_me();
             let shown = offered(core).is_some_and(|extras| extras.typing)
                 && me.is_some_and(|me| me.privacy.shares_typing() && me.profile.id != *by)
                 && Conversation::parse(conv).is_some();
@@ -3619,7 +3773,7 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
         return outcome;
     }
     // Marks of the friend's show only while the player shares (and so sees) them.
-    let sees_marks = core.state.me().is_some_and(|me| me.privacy.shares_read());
+    let sees_marks = core.shown_me().is_some_and(|me| me.privacy.shares_read());
     let mut changes: Vec<Change> = Vec::new();
     let mut news: Option<ChatMessage> = None;
     if let Some(history) = core.history.as_mut() {
@@ -3730,7 +3884,7 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
     }
     let status = core.chat_status.clone()?;
     let me = core.state.me()?.profile.id.clone();
-    let sees_marks = core.state.me().is_some_and(|me| me.privacy.shares_read());
+    let sees_marks = core.shown_me().is_some_and(|me| me.privacy.shares_read());
     let extras = status.offered();
     let skew = core.chat_skew_ms;
     let friends = core.state.friends();
@@ -3874,6 +4028,50 @@ fn unix_now_ms() -> i64 {
         })
 }
 
+/// The switches a profile change sets, one bit each.
+fn profile_fields(update: &ProfileUpdate) -> u8 {
+    u8::from(update.avatar.is_some())
+        | (u8::from(update.status.is_some()) << 1)
+        | (u8::from(update.share_server.is_some()) << 2)
+        | (u8::from(update.share_last_seen.is_some()) << 3)
+        | (u8::from(update.share_read.is_some()) << 4)
+        | (u8::from(update.share_typing.is_some()) << 5)
+        | (u8::from(update.badge.is_some()) << 6)
+}
+
+/// Every switch the waiting change `id` sets is set again by newer changes of the same sign-in
+/// that wait behind it (SOC-LAG): the newest choice is the one to send.
+fn superseded(pending: &[PendingProfile], id: u64) -> bool {
+    let Some(at) = pending.iter().position(|pending| pending.id == id) else {
+        return false;
+    };
+    let mine = &pending[at];
+    let later = pending[at + 1..]
+        .iter()
+        .filter(|pending| pending.generation == mine.generation)
+        .fold(0, |fields, pending| {
+            fields | profile_fields(&pending.update)
+        });
+    let own = profile_fields(&mine.update);
+    own != 0 && own & !later == 0
+}
+
+/// What the player's crew notification settings become once the service takes `edit` (shown
+/// before it answers, SOC-LAG): a mute without an end lasts until unmuted, unmuting ends any.
+fn notifications_after(
+    mut settings: TeamNotifications,
+    edit: &TeamNotificationsEdit,
+) -> TeamNotifications {
+    if let Some(calls) = edit.calls {
+        settings.calls = calls;
+    }
+    if let Some(muted) = edit.muted {
+        settings.muted = muted;
+        settings.mute_until = edit.mute_until.filter(|_| muted);
+    }
+    settings
+}
+
 fn build_view(core: &mut Core) -> SocialView {
     let now = unix_now();
     let share = match (core.state.me(), core.client.as_ref()) {
@@ -3892,7 +4090,9 @@ fn build_view(core: &mut Core) -> SocialView {
     });
     let teams = core.teams && core.state.teams_supported();
     let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
-    let share_server = core.state.me().is_some_and(|me| me.privacy.share_server);
+    // The player's own changes on their way show already (SOC-LAG).
+    let shown_me = core.shown_me();
+    let share_server = shown_me.as_ref().is_some_and(|me| me.privacy.share_server);
     // Crew tags (TEAM6) belong to crews: none shows while crews are off here.
     let mut friends = core.state.friends();
     if !teams {
@@ -3906,6 +4106,19 @@ fn build_view(core: &mut Core) -> SocialView {
     } else {
         Vec::new()
     };
+    // A new picture on its way shows on the player's own crew pages too.
+    if core.picture_pending()
+        && let Some(me) = shown_me.as_ref()
+    {
+        for member in crews
+            .iter_mut()
+            .flat_map(|crew| crew.members.iter_mut())
+            .filter(|member| member.me)
+        {
+            member.avatar.clone_from(&me.profile.avatar);
+            member.avatar_url = me.profile.discord_avatar_url(128);
+        }
+    }
     // Invite links as this service shares them (`<service>/e/XXXX-XXXX-XXXX`).
     if let Some(client) = core.client.as_ref() {
         for crew in &mut crews {
@@ -3935,7 +4148,7 @@ fn build_view(core: &mut Core) -> SocialView {
         enabled: core.url.is_some(),
         auth: core.auth,
         connection: core.state.connection(),
-        me: core.state.me().map(|me| me_view(me, share, my_badge)),
+        me: shown_me.as_ref().map(|me| me_view(me, share, my_badge)),
         loaded: core.state.loaded(),
         friends,
         incoming: core.state.incoming(),
@@ -5789,6 +6002,259 @@ mod tests {
         assert_eq!(
             harness.service.view().me.unwrap().backup.unwrap().device,
             "Ev PC"
+        );
+    }
+
+    /// What the player saw while a profile change was on its way (SOC-LAG).
+    #[derive(Debug, Clone)]
+    struct Seen {
+        body: String,
+        share_server: bool,
+        share_last_seen: bool,
+        avatar: String,
+        crew_avatar: String,
+    }
+
+    /// SOC-LAG: a switch shows at once (before the service answers); changes go one at a time in
+    /// the order they were made; a change a newer one makes again never goes; a refusal takes the
+    /// change back, also on the player's own crew pages.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn profile_changes_show_at_once_go_in_order_and_a_refusal_goes_back() {
+        let slot: Arc<Mutex<Option<SocialService>>> = Arc::new(Mutex::new(None));
+        let seen = Arc::new(Mutex::new(Vec::<Seen>::new()));
+        let in_flight = Arc::new(AtomicUsize::new(0));
+        let most = Arc::new(AtomicUsize::new(0));
+        let stored: Arc<Mutex<serde_json::Value>> =
+            Arc::new(Mutex::new(serde_json::from_str(ME).unwrap()));
+        let server = MockServer::start({
+            let (slot, seen, in_flight, most, stored) = (
+                slot.clone(),
+                seen.clone(),
+                in_flight.clone(),
+                most.clone(),
+                stored.clone(),
+            );
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => {
+                            MockReply::json(200, &stored.lock().unwrap().to_string())
+                        }
+                        ("GET", "/v1/friends") => MockReply::json(200, &friends_with_crews()),
+                        ("PATCH", "/v1/me") => {
+                            let now = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+                            most.fetch_max(now, Ordering::SeqCst);
+                            let view = slot.lock().unwrap().clone().unwrap().view();
+                            let me = view.me.unwrap();
+                            seen.lock().unwrap().push(Seen {
+                                body: req.body_text(),
+                                share_server: me.privacy.share_server,
+                                share_last_seen: me.privacy.share_last_seen,
+                                avatar: me.avatar.clone(),
+                                crew_avatar: view
+                                    .crews
+                                    .iter()
+                                    .flat_map(|crew| crew.members.iter())
+                                    .find(|member| member.me)
+                                    .map(|member| member.avatar.clone())
+                                    .unwrap_or_default(),
+                            });
+                            std::thread::sleep(Duration::from_millis(60));
+                            in_flight.fetch_sub(1, Ordering::SeqCst);
+                            let body = req.json();
+                            if body["avatar"] == "preset:owl" {
+                                return MockReply::json(
+                                    429,
+                                    r#"{"error":{"code":"rate_limited","message":"x"}}"#,
+                                )
+                                .with_header("Retry-After", "60");
+                            }
+                            let mut me = stored.lock().unwrap();
+                            for key in ["shareServer", "shareLastSeen"] {
+                                if let Some(value) = body.get(key) {
+                                    me["privacy"][key] = value.clone();
+                                }
+                            }
+                            if let Some(avatar) = body.get("avatar") {
+                                me["avatar"] = avatar.clone();
+                            }
+                            MockReply::json(200, &me.to_string())
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        *slot.lock().unwrap() = Some(harness.service.clone());
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        harness
+            .until("friends and crews", |view| {
+                view.loaded && !view.crews.is_empty()
+            })
+            .await;
+
+        // Rapid clicks on one switch, then another switch.
+        let service = &harness.service;
+        let (a, b, c, d) = tokio::join!(
+            service.update_profile(ProfileUpdate::default().share_server(true)),
+            service.update_profile(ProfileUpdate::default().share_server(false)),
+            service.update_profile(ProfileUpdate::default().share_server(true)),
+            service.update_profile(ProfileUpdate::default().share_last_seen(false)),
+        );
+        assert!(a.is_ok() && b.is_ok() && c.is_ok() && d.is_ok());
+        assert_eq!(most.load(Ordering::SeqCst), 1, "one at a time");
+        let first = seen.lock().unwrap().clone();
+        assert_eq!(
+            first.iter().map(|s| s.body.as_str()).collect::<Vec<_>>(),
+            vec![
+                r#"{"shareServer":true}"#,
+                r#"{"shareServer":true}"#,
+                r#"{"shareLastSeen":false}"#
+            ],
+            "the middle click never went"
+        );
+        // The first request already carries the first click; the others may still be on their way.
+        assert!(first[0].share_server);
+        let me = harness.service.view().me.unwrap();
+        assert!(me.privacy.share_server && !me.privacy.share_last_seen);
+
+        // Refused: the picture shows while it is on its way, then the old one comes back.
+        seen.lock().unwrap().clear();
+        let refused = harness
+            .service
+            .update_profile(ProfileUpdate {
+                avatar: Some("preset:owl".into()),
+                ..ProfileUpdate::default()
+            })
+            .await;
+        assert!(matches!(refused, Err(SocialError::RateLimited { .. })));
+        let during = seen.lock().unwrap()[0].clone();
+        assert_eq!(
+            (during.avatar.as_str(), during.crew_avatar.as_str()),
+            ("preset:owl", "preset:owl")
+        );
+        let view = harness.service.view();
+        assert_eq!(view.me.as_ref().unwrap().avatar, "discord");
+        let own = |view: &SocialView| {
+            view.crews
+                .iter()
+                .flat_map(|crew| crew.members.iter())
+                .filter(|member| member.me)
+                .map(|member| member.avatar.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(own(&view), vec!["discord", "discord"]);
+        // Taken: the answer keeps it, on the crew pages too.
+        harness
+            .service
+            .update_profile(ProfileUpdate {
+                avatar: Some("preset:fox".into()),
+                ..ProfileUpdate::default()
+            })
+            .await
+            .unwrap();
+        let view = harness.service.view();
+        assert_eq!(view.me.as_ref().unwrap().avatar, "preset:fox");
+        assert_eq!(own(&view), vec!["preset:fox", "preset:fox"]);
+    }
+
+    /// SOC-LAG: "Sessize al" shows at once; a refusal puts the old settings back.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn crew_mutes_show_at_once_and_a_refusal_puts_them_back() {
+        let slot: Arc<Mutex<Option<SocialService>>> = Arc::new(Mutex::new(None));
+        let seen = Arc::new(Mutex::new(Vec::<bool>::new()));
+        let server = MockServer::start({
+            let (slot, seen) = (slot.clone(), seen.clone());
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => MockReply::json(200, ME),
+                        ("GET", "/v1/friends") => MockReply::json(200, &friends_with_crews()),
+                        ("PATCH", "/v1/teams/notifications") => {
+                            let view = slot.lock().unwrap().clone().unwrap().view();
+                            seen.lock()
+                                .unwrap()
+                                .push(view.crew_notifications.is_some_and(|n| n.muted));
+                            MockReply::json(
+                                503,
+                                r#"{"error":{"code":"unavailable","message":"x"}}"#,
+                            )
+                        }
+                        ("PATCH", "/v1/teams/fedcba9876543210/notifications") => {
+                            let view = slot.lock().unwrap().clone().unwrap().view();
+                            seen.lock().unwrap().push(
+                                view.crews
+                                    .iter()
+                                    .find(|crew| crew.id == "fedcba9876543210")
+                                    .is_some_and(|crew| crew.notifications.muted),
+                            );
+                            MockReply::json(200, r#"{"muted":true,"muteUntil":null}"#)
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        *slot.lock().unwrap() = Some(harness.service.clone());
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        harness
+            .until("friends and crews", |view| {
+                view.loaded && view.crew_notifications.is_some()
+            })
+            .await;
+        let refused = harness
+            .service
+            .set_crew_notifications(TeamNotificationsEdit {
+                muted: Some(true),
+                ..TeamNotificationsEdit::default()
+            })
+            .await;
+        assert!(refused.is_err());
+        assert!(
+            harness
+                .service
+                .view()
+                .crew_notifications
+                .is_some_and(|n| !n.muted),
+            "back as it was"
+        );
+        harness
+            .service
+            .set_crew_mute(
+                "fedcba9876543210",
+                CrewMuteEdit {
+                    muted: true,
+                    mute_until: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![true, true],
+            "shown while on their way"
+        );
+        assert!(
+            harness
+                .service
+                .view()
+                .crews
+                .iter()
+                .any(|crew| crew.id == "fedcba9876543210" && crew.notifications.muted)
         );
     }
 }

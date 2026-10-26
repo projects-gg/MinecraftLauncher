@@ -18,6 +18,7 @@ import { type CallWhere, callerIn, callSentenceOf, callWhere, callWhereLine } fr
 import { joinCall, PROJECTS, useThere } from "./join-dialog";
 import { callMenu, rowsOf } from "./menus";
 import { pop, swap, useSocialMotion } from "./motion";
+import { MarkedSentence } from "./person-mark";
 import { usePeopleItems } from "./person-menu";
 import { type JoinTarget, joinTarget } from "./play-together";
 import { SocialAvatar, SocialFace } from "./social-face";
@@ -236,7 +237,11 @@ export function CallStrip({ call, team }: { call: CrewCall; team: SocialTeam }) 
             <SocialAvatar source={caller} size={36} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[14px] font-semibold text-bone-50">
-                {callSentenceOf(call, crews, t, true)}
+                <MarkedSentence
+                  text={(name) => callSentenceOf(call, crews, t, true, name)}
+                  name={caller.name || t("teams.call.someone")}
+                  mark={caller.mark}
+                />
               </span>
               <WhereLine call={call} />
             </span>
@@ -310,7 +315,11 @@ export function CallRow({ call, team }: { call: CrewCall; team: SocialTeam }) {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-semibold text-bone-50">
-              {callSentenceOf(call, crews, t)}
+              <MarkedSentence
+                text={(name) => callSentenceOf(call, crews, t, false, name)}
+                name={caller.name || t("teams.call.someone")}
+                mark={caller.mark}
+              />
             </span>
             <WhereLine call={call} />
           </span>
@@ -353,11 +362,17 @@ function CallToast({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] leading-snug font-semibold text-bone-50">
-            {joined
-              ? where.kind === "server"
-                ? t("crews.call.arrivedAt", { name, host: where.host })
-                : t("teams.call.arrived", { name })
-              : callSentenceOf(live, crews, t)}
+            <MarkedSentence
+              text={(who) =>
+                joined
+                  ? where.kind === "server"
+                    ? t("crews.call.arrivedAt", { name: who, host: where.host })
+                    : t("teams.call.arrived", { name: who })
+                  : callSentenceOf(live, crews, t, false, who)
+              }
+              name={name}
+              mark={caller.mark}
+            />
           </p>
           <WhereLine call={live} />
         </div>

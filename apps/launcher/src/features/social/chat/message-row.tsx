@@ -550,6 +550,7 @@ function MessageRowView({
                 name={sender.name}
                 badge={sender.badge}
                 wearer={message.from}
+                mark={sender.mark}
                 className="mb-1 ml-1 max-w-full text-[12px] font-semibold text-ash-300"
               />
             </PersonContextMenu>

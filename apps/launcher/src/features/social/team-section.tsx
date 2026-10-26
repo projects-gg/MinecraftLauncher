@@ -42,6 +42,7 @@ import { canAddCrew } from "./crews";
 import { openMenuFromKey } from "./menu-key";
 import { rowsOf, type TeamAction, teamMenu, without } from "./menus";
 import { pop, swap, useSocialMotion } from "./motion";
+import { MarkedSentence } from "./person-mark";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
 import { crewRights, teammates, teammatesOnline } from "./teams";
@@ -402,7 +403,12 @@ export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
           {/* Who asked, without when (SMALL10): beside three controls in the 440 px panel the time
               cut the line, and a crew invite does not go stale as a game invite does. */}
           <span className="block truncate text-[12.5px] text-ash-300">
-            {t("teams.invitedBy", { name: invite.from.name })}
+            <MarkedSentence
+              text={(name) => t("teams.invitedBy", { name })}
+              name={invite.from.name}
+              mark={invite.from.mark}
+              size={12}
+            />
           </span>
         </span>
         <Tooltip content={t("crews.limit", { count: limit })} disabled={!full}>

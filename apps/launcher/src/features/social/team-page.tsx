@@ -91,6 +91,7 @@ import { dayMonth, limitOf, opensIn } from "./limits";
 import { openMenuFromKey } from "./menu-key";
 import { type Leaving, leavingOf } from "./menus";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
+import { NameWithMark } from "./person-mark";
 import { PersonContextMenu } from "./person-menu";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { type CrewPane, useSocialUi } from "./store";
@@ -869,6 +870,7 @@ function MeRow({ member }: { member: TeamMember }) {
         name={member.name}
         badge={badge}
         wearer={member.id}
+        mark={member.mark}
         className="flex-1"
         nameClassName="text-[14px] font-semibold text-bone-50"
       >
@@ -981,8 +983,12 @@ function InviteFriends({ team }: { team: SocialTeam }) {
               <PersonContextMenu key={friend.id} person={friend} place={{ from: "team" }}>
                 <li className="group/invite flex items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-1 pl-2 transition-colors duration-150 hover:bg-white/[0.035] has-[[data-state=open]]:bg-white/[0.05]">
                   <SocialAvatar source={friend} size={32} state={friend.state} dnd={friend.dnd} />
-                  <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-bone-100">
-                    {friend.name}
+                  <span className="min-w-0 flex-1">
+                    <NameWithMark
+                      name={friend.name}
+                      mark={friend.mark}
+                      className="text-[13.5px] font-semibold text-bone-100"
+                    />
                   </span>
                   <Button
                     size="sm"

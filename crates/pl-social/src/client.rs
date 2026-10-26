@@ -1731,7 +1731,7 @@ mod tests {
         let client = SocialClient::new(SocialConfig::production("ProjectsLauncher/test")).unwrap();
         assert_eq!(
             client.presence_url().as_str(),
-            "wss://social.projects.gg/v1/presence?caps=callServer,crews,plans,badges,mc,afk"
+            "wss://social.projects.gg/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile"
         );
         assert_eq!(
             client.friend_share_link("abcdefgh").unwrap().as_str(),
@@ -1748,7 +1748,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             local.presence_url().as_str(),
-            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews,plans,badges,mc,afk"
+            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile"
         );
     }
 }

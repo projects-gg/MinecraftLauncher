@@ -18,6 +18,7 @@ import { formatRelative } from "@/lib/format";
 import { attempt } from "./actions";
 import { answersRequests, stillWaits, waitingRequests } from "./crew-joining";
 import { enter, glide, leave, rise, useSocialMotion } from "./motion";
+import { NameWithMark } from "./person-mark";
 import { usePersonItems } from "./person-menu";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
@@ -69,9 +70,11 @@ function RequestRow({ team, request }: { team: SocialTeam; request: JoinRequest 
         <div className="flex items-center gap-3">
           <SocialAvatar source={request} size={32} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13.5px] font-semibold text-bone-50">
-              {request.name}
-            </span>
+            <NameWithMark
+              name={request.name}
+              mark={request.mark}
+              className="text-[13.5px] font-semibold text-bone-50"
+            />
             {/* Under the name, the member whose tag it came through (TEAM6), then when. */}
             {viaName ? (
               <span className="flex min-w-0 items-center gap-1 text-[12px] text-ash-300">

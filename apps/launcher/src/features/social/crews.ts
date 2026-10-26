@@ -100,10 +100,17 @@ export function callerIn(call: CrewCall, crews: readonly Pick<SocialTeam, "membe
         name: member.name,
         avatar: member.avatar,
         avatarUrl: member.avatarUrl,
+        mark: member.mark,
       };
     }
   }
-  return { id: call.from, name: call.name ?? "", avatar: call.avatar, avatarUrl: call.avatarUrl };
+  return {
+    id: call.from,
+    name: call.name ?? "",
+    avatar: call.avatar,
+    avatarUrl: call.avatarUrl,
+    mark: call.mark,
+  };
 }
 
 /**
@@ -116,8 +123,10 @@ export function callSentenceOf(
   crews: readonly SocialTeam[],
   t: TFunction,
   inCrew = false,
+  /** The caller's name in its place (SOC-VERIFY: a slot the caller's mark follows). */
+  as?: string,
 ): string {
-  const name = callerIn(call, crews).name || t("teams.call.someone");
+  const name = as ?? (callerIn(call, crews).name || t("teams.call.someone"));
   const named = crewsOfCall(call, crews);
   const [first, second] = named;
   if (inCrew || crews.length < 2 || !first) return t("teams.call.theirs", { name });

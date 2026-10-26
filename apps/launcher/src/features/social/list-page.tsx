@@ -82,6 +82,7 @@ import { canJoinInvite, joinInvite } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { groupFriends, presenceLine } from "./model";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
+import { NameWithMark } from "./person-mark";
 import { PersonContextMenu, PersonMoreButton, usePeopleItems } from "./person-menu";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -196,9 +197,11 @@ function RequestRow({ request }: { request: FriendRequest }) {
       <div className="flex items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-1.5 pl-2">
         <SocialAvatar source={request} size={36} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-semibold text-bone-50">
-            {request.name}
-          </span>
+          <NameWithMark
+            name={request.name}
+            mark={request.mark}
+            className="text-[14px] font-semibold text-bone-50"
+          />
           <span className="block truncate text-[12.5px] text-ash-400">
             {t("social.list.wantsToAdd")}
           </span>
@@ -233,9 +236,11 @@ function SentRow({ request }: { request: FriendRequest }) {
       <div className="flex items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-1.5 pl-2">
         <SocialAvatar source={request} size={36} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-semibold text-bone-100">
-            {request.name}
-          </span>
+          <NameWithMark
+            name={request.name}
+            mark={request.mark}
+            className="text-[14px] font-semibold text-bone-100"
+          />
           <span className="block truncate text-[12.5px] text-ash-400">
             {t("social.list.waiting")}
           </span>
@@ -299,7 +304,11 @@ function InviteRow({ invite }: { invite: SocialInvite }) {
           size={36}
         />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-semibold text-bone-50">{name}</span>
+          <NameWithMark
+            name={name}
+            mark={invite.name ? invite.mark : undefined}
+            className="text-[14px] font-semibold text-bone-50"
+          />
           <span className="block truncate text-[12.5px] text-ash-300">
             {t("social.list.invitedYou")}, {ago(invite.at)}
           </span>
@@ -426,6 +435,7 @@ function FriendGhost({ friend }: { friend: Friend }) {
           name={friend.name}
           badge={friend.badge}
           wearer={friend.id}
+          mark={friend.mark}
           chip="still"
           nameClassName="text-[14px] font-semibold text-bone-50"
         />

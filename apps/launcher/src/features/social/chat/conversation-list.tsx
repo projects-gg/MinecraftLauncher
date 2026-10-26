@@ -127,7 +127,7 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
   const typingNow = extras.typing && writing && !conversation.failed;
   const badge = useShownBadge(face.person?.badge);
   const label = [
-    badgeRowLabel(name, badge, t),
+    badgeRowLabel(name, badge, t, face.person?.mark),
     unread ? t("chat.list.unread", { count: conversation.unread }) : null,
     preview,
   ]
@@ -167,6 +167,7 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
             name={name}
             badge={face.person?.badge}
             wearer={face.person?.id ?? ""}
+            mark={face.person?.mark}
             nameClassName={cn(
               "text-[14px]",
               unread ? "font-semibold text-bone-50" : "font-medium text-bone-100",

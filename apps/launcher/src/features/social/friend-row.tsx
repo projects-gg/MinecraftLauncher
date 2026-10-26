@@ -256,6 +256,7 @@ function FriendCard({
             name={friend.name}
             badge={friend.badge}
             wearer={friend.id}
+            mark={friend.mark}
             size="lg"
             chip="button"
             className="gap-2"
@@ -601,7 +602,7 @@ export function FriendRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${badgeRowLabel(friend.name, badge, t)}, ${line}`}
+              aria-label={`${badgeRowLabel(friend.name, badge, t, friend.mark)}, ${line}`}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
             >
               <SocialAvatar source={friend} size={36} state={friend.state} dnd={friend.dnd} />
@@ -610,6 +611,7 @@ export function FriendRow({
                   name={friend.name}
                   badge={friend.badge}
                   wearer={friend.id}
+                  mark={friend.mark}
                   dim={friend.state === "offline"}
                   nameClassName={cn(
                     "text-[14px] font-semibold",

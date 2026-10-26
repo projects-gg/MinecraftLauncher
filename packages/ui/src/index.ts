@@ -63,6 +63,7 @@ export { Switch } from "./components/switch";
 export { type TabItem, TabPanel, Tabs } from "./components/tabs";
 export { Toaster, toast } from "./components/toaster";
 export { isCut, OverflowTooltip, Tooltip, TooltipProvider } from "./components/tooltip";
+export { type MarkKind, type MarkSize, VerifiedMark } from "./components/verified-mark";
 export {
   EntranceGate,
   GatedMotion,

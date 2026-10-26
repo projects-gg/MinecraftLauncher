@@ -27,6 +27,12 @@ export interface SocialGame {
   host?: string;
 }
 
+/**
+ * A mark Projects' staff gave someone in Studio (SOC-VERIFY): `verified` ("Doğrulanmış hesap",
+ * blue) or `admin` ("Projects yöneticisi", red), right of the name wherever they show.
+ */
+export type ProfileMark = "verified" | "admin";
+
 /** Someone shown with name and picture. */
 export interface SocialProfile {
   id: string;
@@ -36,6 +42,8 @@ export interface SocialProfile {
   avatar: string;
   /** Discord picture when `avatar` is `discord`. */
   avatarUrl?: string;
+  /** Their mark (SOC-VERIFY); none without one and from a service without marks. */
+  mark?: ProfileMark;
 }
 
 /**
@@ -86,6 +94,8 @@ export interface SocialInvite {
   name?: string;
   avatar?: string;
   avatarUrl?: string;
+  /** Their mark (SOC-VERIFY), from the friend list. */
+  mark?: ProfileMark;
   /** Unix seconds. */
   at: number;
   server?: SocialGame;
@@ -732,6 +742,8 @@ export interface CrewCall {
   name?: string;
   avatar?: string;
   avatarUrl?: string;
+  /** The caller's mark (SOC-VERIFY), from the crew list. */
+  mark?: ProfileMark;
   /** `join`: "Geliyorum" can join the caller on `server`; `ready`: "Hazır mısın?" (a call from
    * before CALL1: an answer, nothing to join). */
   kind: "join" | "ready";

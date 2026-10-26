@@ -58,6 +58,7 @@ import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { crewmatesOnProjects, type HomeHint, homeStrip, isJoinable, playingPeople } from "./model";
 import { enter, leave, useSocialMotion } from "./motion";
+import { MarkedSentence, markedName } from "./person-mark";
 import { type PersonPlace, type PersonRef, usePeopleItems } from "./person-menu";
 import { type FaceSource, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -202,9 +203,10 @@ function PlayingLine() {
   if (!first) return null;
   const others = shown.length - 1;
   const where = onProjects.length ? "projects" : "playing";
+  const named = markedName(first.name, first.mark, t);
   const text = others
-    ? t(`social.home.${where}With`, { name: first.name, count: others })
-    : t(`social.home.${where}Alone`, { name: first.name });
+    ? t(`social.home.${where}With`, { name: named, count: others })
+    : t(`social.home.${where}Alone`, { name: named });
 
   return (
     <>
@@ -234,7 +236,18 @@ function PlayingLine() {
           className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2.5 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
         >
           <Faces sources={shown} />
-          <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+          <span className="truncate text-[13.5px] font-medium text-bone-50">
+            {/* The first friend's mark right after their name (SOC-VERIFY). */}
+            <MarkedSentence
+              text={(name) =>
+                others
+                  ? t(`social.home.${where}With`, { name, count: others })
+                  : t(`social.home.${where}Alone`, { name })
+              }
+              name={first.name}
+              mark={first.mark}
+            />
+          </span>
         </button>
       </LineMenu>
       {onProjects.length ? <JoinButton glyph /> : null}
@@ -253,10 +266,11 @@ function CallLine() {
   const setCrewTab = useSocialUi((s) => s.setCrewTab);
   const call = unansweredCall(view.calls, now, closed);
   if (!call) return null;
-  const text = callSentenceOf(call, view.crews, t);
   const joins = callWhere(call).kind !== "ready";
   const crew = crewsOfCall(call, view.crews)[0];
   const caller = callerIn(call, view.crews);
+  const callerName = caller.name || t("teams.call.someone");
+  const text = callSentenceOf(call, view.crews, t, false, markedName(callerName, caller.mark, t));
   const open = (from?: HTMLElement | null) => {
     openPanel({ page: "team", from });
     setCrewTab(crew?.id ?? null);
@@ -297,7 +311,13 @@ function CallLine() {
               <MegaphoneSimple size={9} weight="fill" aria-hidden />
             </span>
           </span>
-          <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+          <span className="truncate text-[13.5px] font-medium text-bone-50">
+            <MarkedSentence
+              text={(name) => callSentenceOf(call, view.crews, t, false, name)}
+              name={callerName}
+              mark={caller.mark}
+            />
+          </span>
         </button>
       </LineMenu>
       <button

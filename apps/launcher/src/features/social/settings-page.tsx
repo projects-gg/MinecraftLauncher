@@ -8,7 +8,7 @@ import { Desktop, SignOut, Trash } from "@phosphor-icons/react";
 import { Button, Dialog, Select, Skeleton, Switch } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce, useAccounts } from "@/features/accounts/use-accounts";
 import { AvatarPicker } from "@/features/avatars/avatar-picker";
@@ -22,8 +22,10 @@ import { tagChoices } from "./badges";
 import { CrewNotifyGroup } from "./crew-notify";
 import { dayMonth, limitOf } from "./limits";
 import { rise, useSocialMotion } from "./motion";
+import { NameWithMark } from "./person-mark";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
+import { useSwitchNow } from "./switch-now";
 
 const SESSIONS_KEY = ["social-sessions"] as const;
 
@@ -102,21 +104,19 @@ function PictureSection({ me }: { me: SocialMe }) {
 
 /**
  * "Birlikte oynanan süre": on or off (off deletes what was kept), and "Süreleri sil", asked once in
- * place. The switch moves at once and settles with the launcher's answer.
+ * place. The switch moves at the click and follows the launcher's view once it shows the same.
  */
 function TogetherSetting() {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const kept = useSocialUi((s) => s.view.together);
-  const [pending, setPending] = useState<boolean | null>(null);
+  const save = useCallback((next: boolean) => attempt(() => api.social.setTogether(next)), []);
+  const [on, change] = useSwitchNow(kept, save);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
-  const on = pending ?? kept;
-  const toggle = async (next: boolean) => {
-    setPending(next);
+  const toggle = (next: boolean) => {
     setAsking(false);
-    await attempt(() => api.social.setTogether(next));
-    setPending(null);
+    change(next);
   };
   const clear = async () => {
     setBusy(true);
@@ -129,7 +129,7 @@ function TogetherSetting() {
     <div>
       <Switch
         checked={on}
-        onCheckedChange={(next) => void toggle(next)}
+        onCheckedChange={toggle}
         label={t("crewWave2.together.setting")}
         description={t("crewWave2.together.settingNote")}
       />
@@ -209,15 +209,37 @@ function TagSetting() {
 /** "Yok" in the tag picker (Radix selects take no empty value). */
 const NO_TAG = "none";
 
+type PrivacyKey = "shareServer" | "shareLastSeen" | "shareRead" | "shareTyping";
+
+/** One privacy switch: it turns at the click, the launcher sends it (SOC-LAG). */
+function PrivacySwitch({
+  field,
+  kept,
+  label,
+  description,
+}: {
+  field: PrivacyKey;
+  kept: boolean;
+  label: string;
+  description?: string;
+}) {
+  const save = useCallback(
+    (on: boolean) => {
+      const patch: Partial<Record<PrivacyKey, boolean>> = {};
+      patch[field] = on;
+      return attempt(() => api.social.setPrivacy(patch));
+    },
+    [field],
+  );
+  const [checked, change] = useSwitchNow(kept, save);
+  return (
+    <Switch checked={checked} onCheckedChange={change} label={label} description={description} />
+  );
+}
+
 function PrivacySection({ me }: { me: SocialMe }) {
   const { t } = useTranslation();
   const crews = useSocialUi((s) => s.view.teams);
-  const set = (change: {
-    shareServer?: boolean;
-    shareLastSeen?: boolean;
-    shareRead?: boolean;
-    shareTyping?: boolean;
-  }) => void attempt(() => api.social.setPrivacy(change));
   // CHAT2: "Görüldü bilgisi" and "Yazıyor bilgisi", both ways (off: neither shown nor seen),
   // while the service has them.
   const extras = useSocialUi((s) => s.view.chat?.extras);
@@ -228,28 +250,28 @@ function PrivacySection({ me }: { me: SocialMe }) {
     <Section title={t("social.settings.privacy")}>
       <div className="space-y-3.5">
         <TagSetting />
-        <Switch
-          checked={me.privacy.shareServer}
-          onCheckedChange={(shareServer) => set({ shareServer })}
+        <PrivacySwitch
+          field="shareServer"
+          kept={me.privacy.shareServer}
           label={t("social.settings.shareServer")}
         />
-        <Switch
-          checked={me.privacy.shareLastSeen}
-          onCheckedChange={(shareLastSeen) => set({ shareLastSeen })}
+        <PrivacySwitch
+          field="shareLastSeen"
+          kept={me.privacy.shareLastSeen}
           label={t("social.settings.shareLastSeen")}
         />
         {extras && me.privacy.shareRead !== undefined ? (
-          <Switch
-            checked={me.privacy.shareRead}
-            onCheckedChange={(shareRead) => set({ shareRead })}
+          <PrivacySwitch
+            field="shareRead"
+            kept={me.privacy.shareRead}
             label={t("chat2.privacy.seen")}
             description={bothShares ? undefined : t("chat2.privacy.note")}
           />
         ) : null}
         {extras && me.privacy.shareTyping !== undefined ? (
-          <Switch
-            checked={me.privacy.shareTyping}
-            onCheckedChange={(shareTyping) => set({ shareTyping })}
+          <PrivacySwitch
+            field="shareTyping"
+            kept={me.privacy.shareTyping}
             label={t("chat2.privacy.typing")}
             description={t(bothShares ? "chat2.privacy.both" : "chat2.privacy.note")}
           />
@@ -476,7 +498,13 @@ function BlockedSection() {
           {blocked.map((user) => (
             <div key={user.id} className="flex items-center gap-3 py-2">
               <SocialAvatar source={user} size={32} />
-              <span className="min-w-0 flex-1 truncate text-[14px] text-bone-100">{user.name}</span>
+              <span className="min-w-0 flex-1">
+                <NameWithMark
+                  name={user.name}
+                  mark={user.mark}
+                  className="text-[14px] text-bone-100"
+                />
+              </span>
               <Button
                 size="sm"
                 variant="ghost"

@@ -3,11 +3,13 @@
 // oyna" slot (× "Daveti gizle": it leaves Home only). "Katıl" says where the join is in place
 // (parts.tsx); while it is under way the × keeps its place but waits, so nothing beside it moves.
 // A right click (Shift+F10, the menu key) offers the row's own actions under the ×'s own name,
-// then the friend's rows without a second "Katıl" (FIX2, SMALL10).
+// then the friend's rows without a second "Katıl" (FIX2, SMALL10). The friend's mark (SOC-VERIFY)
+// follows their name, taken from the friend list: the invite itself does not carry it.
 import { Play, X } from "@phosphor-icons/react";
 import { ContextMenu, IconButton, type MenuItem } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import { openMenuFromKey } from "@/features/social/menu-key";
+import { MarkedSentence, markedName, NameWithMark } from "@/features/social/person-mark";
 import { usePeopleItems } from "@/features/social/person-menu";
 import { SocialAvatar } from "@/features/social/social-face";
 import { useSocialUi } from "@/features/social/store";
@@ -19,6 +21,11 @@ import { useHostUi } from "./store";
 
 /** The friend's own "Katıl" is the row's: their rows follow without it. */
 const SKIP_JOIN = ["joinWorld"] as const;
+
+/** The inviting friend's mark (SOC-VERIFY), from the friend list. */
+function useFriendMark(id: string) {
+  return useSocialUi((s) => s.view.friends.find((friend) => friend.id === id)?.mark);
+}
 
 function useInviteItems(invite: WorldInvite, where: "panel" | "home"): Array<MenuItem | null> {
   const { t } = useTranslation();
@@ -85,6 +92,7 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
   // press from fixed, so their line stays calm; a refused join reads as an error.
   const failed = inviteFailureKey(invite.join);
   const calm = retryWithCopy(invite.join);
+  const mark = useFriendMark(invite.from);
   return (
     <ContextMenu items={items}>
       <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
@@ -94,9 +102,11 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
           state="playing"
         />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-semibold text-bone-50">
-            {invite.name}
-          </span>
+          <NameWithMark
+            name={invite.name}
+            mark={mark}
+            className="text-[14px] font-semibold text-bone-50"
+          />
           <span className="flex items-center gap-2 text-[12.5px] text-ash-300">
             {failed ? (
               <span className={calm ? "truncate" : "truncate text-flare-300"}>
@@ -137,11 +147,14 @@ export function HomeWorldLine({ invite }: { invite: WorldInvite }) {
   const items = useInviteItems(invite, "home");
   const openPanel = useSocialUi((s) => s.openPanel);
   const closeHome = useHostUi((s) => s.closeHome);
+  const mark = useFriendMark(invite.from);
   // After missing mods the line says why its button copies the install (Home has no row below
   // the name for it, and the toast that said it may be long gone when the player comes back).
-  const text = retryWithCopy(invite.join)
-    ? t("small9.join.homeMissingMods", { name: invite.name })
-    : t("host.invite.title", { name: invite.name });
+  const sentence = (name: string) =>
+    retryWithCopy(invite.join)
+      ? t("small9.join.homeMissingMods", { name })
+      : t("host.invite.title", { name });
+  const text = sentence(markedName(invite.name, mark, t));
   return (
     <>
       <ContextMenu items={items}>
@@ -168,7 +181,9 @@ export function HomeWorldLine({ invite }: { invite: WorldInvite }) {
             size={26}
             round
           />
-          <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+          <span className="truncate text-[13.5px] font-medium text-bone-50">
+            <MarkedSentence text={sentence} name={invite.name} mark={mark} />
+          </span>
         </button>
       </ContextMenu>
       <WorldJoinButton invite={invite} glyph />
