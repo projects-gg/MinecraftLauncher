@@ -548,7 +548,7 @@ pub(crate) enum ServerMessage {
         /// Every plan of the player's crews they see (only with `plans` in the capabilities).
         #[serde(default, deserialize_with = "readable_plans_opt")]
         plans: Option<Vec<CrewPlan>>,
-        /// World sessions (HOST1): Studio's switch and the guest limit (only with `worlds` in
+        /// World sessions (HOST1): Studio's switch and the guest limit (only with `worlds2` in
         /// the capabilities).
         #[serde(default)]
         worlds: Option<crate::world::WorldsStatus>,
@@ -754,7 +754,7 @@ pub(crate) enum ServerMessage {
     Notice {
         notice: ModNotice,
     },
-    /// World sessions (HOST1, `crate::world`; only with `worlds` in the capabilities): a friend's
+    /// World sessions (HOST1, `crate::world`; only with `worlds2` in the capabilities): a friend's
     /// invite, `quiet` on do-not-disturb.
     WorldInvite {
         invite: crate::world::WorldInvite,
