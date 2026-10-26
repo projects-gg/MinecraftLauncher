@@ -120,6 +120,8 @@ describe("keepBeta", () => {
     updateBetaKeep.mockResolvedValue(ok("signIn"));
     expect(await keepBeta()).toBe("stable");
     expect(toast.mock.calls[0]?.[0]).toBe("betaGate.movedSignIn");
+    const signIn = toast.mock.calls[0]?.[1] as { action: { label: string } };
+    expect(signIn.action.label).toBe("betaGate.signInShort");
   });
 
   it("stays where it is when the command itself fails", async () => {

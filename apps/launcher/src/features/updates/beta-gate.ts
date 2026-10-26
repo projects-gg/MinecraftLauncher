@@ -102,7 +102,8 @@ function movedToast(access: BetaAccess) {
   } else if (access.verdict === "signIn") {
     toast(t("betaGate.movedSignIn"), {
       action: {
-        label: t("betaGate.signInAction"),
+        // The toast is narrow and its sentence already names Discord.
+        label: t("betaGate.signInShort"),
         onClick: () =>
           void import("@/features/social/store").then(({ useSocialUi }) =>
             useSocialUi.getState().openPanel(),

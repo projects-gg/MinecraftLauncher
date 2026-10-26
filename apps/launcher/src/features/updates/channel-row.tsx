@@ -3,7 +3,7 @@
 // lets the launcher in; otherwise it glides back to Kararlı and one line under the title says why,
 // with what to do (apply to the team, sign in, try again). The lines take turns in one grid cell,
 // as the overlay's do, so changing between them never moves the rows below.
-import { Warning } from "@phosphor-icons/react";
+import { ArrowSquareOut, Warning } from "@phosphor-icons/react";
 import { cn, Segmented } from "@pl/ui";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,14 +34,22 @@ function useLasted(on: boolean, ms: number): boolean {
   return on && lasted;
 }
 
-/** A line's action: gold words right after its sentence, as the overlay's lines carry theirs. */
+/**
+ * A line's action: gold words right after its sentence, as the overlay's lines carry theirs.
+ * `joined`: the words finish the sentence ("… Ekipteysen Discord ile giriş yap"), so a word space
+ * leads them; `external`: they open the browser, so they carry the launcher's external-link mark.
+ */
 function LineAction({
   shown,
   onPress,
+  joined,
+  external,
   children,
 }: {
   shown: boolean;
   onPress: () => void;
+  joined?: boolean;
+  external?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -50,11 +58,20 @@ function LineAction({
       tabIndex={shown ? undefined : -1}
       onClick={onPress}
       className={cn(
-        "relative ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]",
+        "relative cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]",
+        joined ? "ml-1" : "ml-1.5",
         shown && "hit-area",
       )}
     >
       {children}
+      {external ? (
+        <ArrowSquareOut
+          size={12}
+          weight="bold"
+          aria-hidden
+          className="ml-1 inline-block align-[-1px]"
+        />
+      ) : null}
     </button>
   );
 }
@@ -104,14 +121,14 @@ export function UpdateChannelRow() {
   const action = (kind: Line, shown: boolean): ReactNode => {
     if (kind === "notMember" && apply) {
       return (
-        <LineAction shown={shown} onPress={() => openWebLink(apply)}>
+        <LineAction shown={shown} external onPress={() => openWebLink(apply)}>
           {t("betaGate.apply")}
         </LineAction>
       );
     }
     if (kind === "signIn") {
       return (
-        <LineAction shown={shown} onPress={() => useSocialUi.getState().openPanel()}>
+        <LineAction shown={shown} joined onPress={() => useSocialUi.getState().openPanel()}>
           {t("betaGate.signInAction")}
         </LineAction>
       );
@@ -133,9 +150,12 @@ export function UpdateChannelRow() {
       help={
         line ? (
           <>
-            {/* Heard when an answer changes the line. */}
-            <span className="sr-only" aria-live="polite">
-              {sentence[line]}
+            {/* Heard when an answer changes the line: one whole sentence (the sign-in line's
+                ends in its action's words). */}
+            <span className="sr-only" aria-live="polite" aria-atomic="true">
+              {line === "signIn"
+                ? `${sentence.signIn} ${t("betaGate.signInAction")}`
+                : sentence[line]}
             </span>
             <span className="grid">
               {LINES.map((kind) => {
