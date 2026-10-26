@@ -27,6 +27,7 @@ import { enNewsColumn } from "./en-news-column";
 import { enOverlay } from "./en-overlay";
 import { enOverview } from "./en-overview";
 import { enPlacement } from "./en-placement";
+import { enPlayAcct } from "./en-play-acct";
 import { enPlayOpen } from "./en-play-open";
 import { enPlayTogether } from "./en-play-together";
 import { enPrepare } from "./en-prepare";
@@ -303,6 +304,7 @@ export const en: DeepPartial<Strings> = {
   afkPlus: enAfkPlus,
   newsColumn: enNewsColumn,
   worldEntry: enWorldEntry,
+  playAcct: enPlayAcct,
   nav: {
     home: "Home",
     library: "Library",

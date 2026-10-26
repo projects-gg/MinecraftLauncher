@@ -26,6 +26,17 @@ impl UserType {
     }
 }
 
+/// The launcher account a game was started with: its id in the account list and the name it plays
+/// as (a username account renamed meanwhile still plays with the old name). The launcher says
+/// "Oyunda" for this account alone (PLAY-ACCT); the game knows it from its start to its end, also
+/// across a launcher restart ([`crate::launch::DetachedGame`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GameAccount {
+    pub id: String,
+    pub name: String,
+}
+
 /// Identity passed to the game. `Debug` never prints the access token.
 #[derive(Clone, PartialEq, Eq)]
 pub struct LaunchIdentity {

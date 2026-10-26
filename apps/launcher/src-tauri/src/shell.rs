@@ -517,6 +517,12 @@ fn tray_tooltip(activity: pl_afk::AfkActivity, lang: pl_lang::Lang) -> String {
     format!("{title}\n{line}")
 }
 
+/// The selected account's game runs (PLAY-ACCT): the tray's "Oyna" says "Oyunda" and does
+/// nothing, as OYNA does. Another account's "Oyna" stays: it asks to close the other game first.
+/// The page tells when this changes ([`set_tray_in_game`]).
+#[cfg(desktop)]
+static TRAY_IN_GAME: AtomicBool = AtomicBool::new(false);
+
 /// The tray menu in the interface's language (rebuilt when it changes, [`retitle_tray`]).
 #[cfg(desktop)]
 fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
@@ -527,11 +533,16 @@ fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
 
     let open = lang.pick("Projects Launcher'ı aç", "Open Projects Launcher");
     let open = MenuItem::with_id(manager, "open", open, true, None::<&str>)?;
+    let in_game = TRAY_IN_GAME.load(Ordering::Relaxed);
     let play = MenuItem::with_id(
         manager,
         "play",
-        lang.pick("Oyna", "Play"),
-        true,
+        if in_game {
+            lang.pick("Oyunda", "Playing")
+        } else {
+            lang.pick("Oyna", "Play")
+        },
+        !in_game,
         None::<&str>,
     )?;
     let afk = lang.pick("AFK hesapları", "AFK accounts");
@@ -546,6 +557,23 @@ fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
 /// tooltip follow. Waits for the main thread, so it must not run on it.
 #[cfg(desktop)]
 pub fn retitle_tray(app: &AppHandle) {
+    rebuild_tray_menu(app);
+    refresh_afk_tray(app);
+}
+
+/// The selected account's game started or ended, or another account was selected while a game
+/// runs (`commands::app::app_tray_in_game`): the tray's "Oyna" follows. Waits for the main thread,
+/// so it must not run on it.
+#[cfg(desktop)]
+pub fn set_tray_in_game(app: &AppHandle, in_game: bool) {
+    if TRAY_IN_GAME.swap(in_game, Ordering::Relaxed) != in_game {
+        rebuild_tray_menu(app);
+    }
+}
+
+/// The tray menu again, as [`tray_menu`] builds it now.
+#[cfg(desktop)]
+fn rebuild_tray_menu(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         match tray_menu(app, pl_lang::Lang::current()) {
             Ok(menu) => {
@@ -556,7 +584,6 @@ pub fn retitle_tray(app: &AppHandle) {
             Err(error) => tracing::debug!(%error, "tray menu not rebuilt"),
         }
     }
-    refresh_afk_tray(app);
 }
 
 /// "Start with the computer": a login item that starts the launcher with `--minimized`. A debug

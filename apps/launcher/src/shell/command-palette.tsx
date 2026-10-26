@@ -47,6 +47,7 @@ import { AccountFace } from "@/features/accounts/account-face";
 import { sortAccounts } from "@/features/accounts/account-order";
 import { type CenterFocus, useAccountsUi } from "@/features/accounts/store";
 import { ACCOUNTS_KEY, switchAccount } from "@/features/accounts/use-accounts";
+import { useOwnLaunchKind } from "@/features/accounts/use-own-launch";
 import { runAfk } from "@/features/afk/errors";
 import { showError } from "@/features/content/jobs";
 import { useHostUi } from "@/features/host/store";
@@ -149,7 +150,8 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const open = useUi((s) => s.paletteOpen);
   const setOpen = useUi((s) => s.setPaletteOpen);
   const play = useLaunch((s) => s.play);
-  const phaseKind = useLaunch((s) => s.phase.kind);
+  // The command bar's view: another account's game leaves this account's OYNA free (PLAY-ACCT).
+  const phaseKind = useOwnLaunchKind();
   const launchId = useLaunch((s) => s.instanceId);
   const selectedId = usePrefs((s) => s.selectedInstanceId);
   const selectInstance = usePrefs((s) => s.selectInstance);

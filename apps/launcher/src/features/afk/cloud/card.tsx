@@ -34,13 +34,23 @@ import { type CloudAccount, cloudApi } from "./api";
 import { AI_TONE, useAiSentence } from "./plus/rail";
 import { plusAi } from "./plus/types";
 import { CloudStateLine } from "./state-line";
-import { type CloudPrimary, cloudPrimary, isInGame, serverLabel, timeLeft } from "./status";
+import {
+  type CloudPrimary,
+  cloudPrimary,
+  endsSoon,
+  isInGame,
+  serverLabel,
+  timeLeft,
+} from "./status";
 
 const glide: Transition = { type: "spring", stiffness: 420, damping: 36, mass: 0.9 };
 const REST = "translateY(0px) scale(1)";
 const ORDER: CloudPrimary[] = ["start", "stop", "renew"];
 
-/** The paid time, with "Süreyi uzat" beside it once renewal opens (the site renews). */
+/**
+ * The paid time, gold in its last week (as on the site), with "Süreyi uzat" beside it while renewal
+ * is open, which is at any time unless Studio keeps it to the last days (the site renews).
+ */
 function TimeRow({ account, skewMs }: { account: CloudAccount; skewMs: number }) {
   const { t } = useTranslation();
   const now = Date.now() + skewMs;
@@ -51,10 +61,7 @@ function TimeRow({ account, skewMs }: { account: CloudAccount; skewMs: number })
   return (
     <p className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 pl-[23px] text-[12px]">
       <span
-        className={cn(
-          "tabular-nums",
-          account.renewal.open && !account.expired ? "text-gold-200" : "text-ash-300",
-        )}
+        className={cn("tabular-nums", endsSoon(account, now) ? "text-gold-200" : "text-ash-300")}
       >
         {timeLeft(account, now, t)}
       </span>

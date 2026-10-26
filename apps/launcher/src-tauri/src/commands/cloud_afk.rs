@@ -666,15 +666,13 @@ impl From<CloudError> for CmdError {
                     (
                         "BULUT-ENGEL",
                         match reason {
+                            // "Girilemeyen sunucular", never "engellenen" (owner, 25 Oct).
                             Some(reason) => lang.pick(
-                                format!("Bu sunucuya giriş engelli: {reason}"),
-                                format!("This server is blocked: {reason}"),
+                                format!("Bu sunucuya girilemiyor: {reason}"),
+                                format!("Can't join this server: {reason}"),
                             ),
-                            None => pick(
-                                "Bu sunucuya giriş engelli.",
-                                "This server is blocked.",
-                            )
-                            .into(),
+                            None => pick("Bu sunucuya girilemiyor.", "Can't join this server.")
+                                .into(),
                         },
                     )
                 }

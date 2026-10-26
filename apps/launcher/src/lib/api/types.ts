@@ -296,9 +296,10 @@ export type LaunchEvent =
   | { type: "launching" }
   /**
    * The game process started; its window is not on screen yet ("Açılıyor"). `firstStart`: the
-   * first start with this version and loader, which takes longer.
+   * first start with this version and loader, which takes longer. `account`: the account it plays
+   * with ("Oyunda" for that account alone, PLAY-ACCT).
    */
-  | { type: "started"; pid: number | null; firstStart: boolean }
+  | { type: "started"; pid: number | null; firstStart: boolean; account: GameAccount }
   /** The game's window is on screen ("Oyunda"); once, never after the exit. */
   | { type: "windowShown" }
   | { type: "exited"; code: number | null; runtimeSecs: number }
@@ -379,6 +380,20 @@ export interface LaunchOptions {
   quickPlay?: QuickPlayTarget;
   /** The answer to the Java question of the previous attempt ("Kur ve oyna", "Yine de dene"). */
   java?: JavaChoice;
+  /**
+   * Play with this account instead of the selected one: a game "Bağlan" closes and starts again
+   * keeps the account it played with (PLAY-ACCT).
+   */
+  account?: GameAccount;
+}
+
+/**
+ * The account a game plays with: its id in the account list and the name it plays as (a username
+ * account renamed meanwhile still plays with the old one). Mirrors pl-mc `GameAccount`.
+ */
+export interface GameAccount {
+  id: string;
+  name: string;
 }
 
 /** Where "Devam et" goes: the world or server the instance played last. */

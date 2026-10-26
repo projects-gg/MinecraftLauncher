@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSelectedAccountId } from "@/features/accounts/use-own-launch";
 import { ContentBrowser } from "@/features/content/content-browser";
 import { ExportDialog } from "@/features/content/export-dialog";
 import { ModCenter } from "@/features/modcenter/mod-center";
@@ -21,6 +22,7 @@ import { formatDuration, formatRelative } from "@/lib/format";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { settingsChanged, useDrafts } from "@/stores/drafts";
 import { isOpening, useLaunch } from "@/stores/launch";
+import { launchOwner } from "@/stores/launch-owner";
 import { usePrefs } from "@/stores/prefs";
 import { type InstanceTab, instanceTab, type ModsSection } from "./instance-tab";
 import { OverviewTab } from "./overview/overview-tab";
@@ -57,9 +59,12 @@ export function InstancePage() {
   });
   const selectInstance = usePrefs((s) => s.selectInstance);
   const play = useLaunch((s) => s.play);
-  // Hazırlanıyor (files), Açılıyor (until the game's window is on screen), Oyunda.
+  // Hazırlanıyor (files), Açılıyor (until the game's window is on screen), Oyunda: for the
+  // selected account's own game (PLAY-ACCT); another account's game leaves its "Oyna" pressable.
+  const selectedAccount = useSelectedAccountId();
   const launchKind = useLaunch((s) => {
-    if (s.instanceId !== instanceId || s.phase.kind === "error") return "idle";
+    if (s.instanceId !== instanceId) return "idle";
+    if (launchOwner(s.phase, s.account, selectedAccount) !== "mine") return "idle";
     if (s.phase.kind === "working") return "preparing";
     return isOpening(s.phase) ? "opening" : s.phase.kind;
   });

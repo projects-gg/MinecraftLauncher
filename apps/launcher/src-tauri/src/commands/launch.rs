@@ -16,8 +16,8 @@ use pl_mc::install::{
 };
 use pl_mc::instance::Instance;
 use pl_mc::launch::{
-    GameEvent, GameProcess, LaunchIdentity, QuickPlay, SpawnOptions, UserType, WorldEntry,
-    build_launch_command,
+    GameAccount, GameEvent, GameProcess, LaunchIdentity, QuickPlay, SpawnOptions, UserType,
+    WorldEntry, build_launch_command,
 };
 use pl_mc::loaders::LoaderKind;
 use pl_net::{CancellationToken, VerifyMode};
@@ -102,6 +102,8 @@ pub enum LaunchEventView {
         /// The first start with this version and loader: it takes longer (the loader prepares
         /// its caches, the computer reads every new file once).
         first_start: bool,
+        /// The account it plays with: "Oyunda" for that account alone (PLAY-ACCT).
+        account: GameAccount,
     },
     /// The game's window is on screen ("Oyunda"); sent once, never after the exit.
     WindowShown,
@@ -193,6 +195,11 @@ pub struct LaunchSettings {
     /// is also there for it alone.
     #[serde(default)]
     pub emoji: Option<bool>,
+    /// The account to play with (its id) instead of the selected one: a game "Bağlan" closes and
+    /// starts again keeps the account it played with (PLAY-ACCT). An account that is gone falls
+    /// back to the selected one.
+    #[serde(default)]
+    pub account: Option<String>,
 }
 
 /// One line of the running game's log, emitted as the `game-log` event.
@@ -1057,17 +1064,26 @@ async fn prepare_and_spawn(
     // or a mod change asked for meanwhile waits for it and is then refused, instead of moving
     // `mods/` and `config/` under a game about to start with the old version.
 
-    // 3. Account: refresh the Microsoft session; offline play keeps working with the cached one.
-    let account = state.auth.active_account().ok_or_else(|| {
-        CmdError::new(
-            "HESAP-YOK",
-            pick(
-                "Oynamak için önce bir hesap ekle (Ayarlar > Hesaplar).",
-                "Add an account first to play (Settings > Accounts).",
-            ),
-            "no active account",
-        )
-    })?;
+    // 3. Account: the one the launch names (a game "Bağlan" starts again keeps its account), else
+    //    the selected one. Refresh the Microsoft session; offline play keeps working with the
+    //    cached one.
+    let named = settings
+        .account
+        .as_deref()
+        .and_then(|id| uuid::Uuid::parse_str(id).ok())
+        .and_then(|id| state.auth.account(id));
+    let account = named
+        .or_else(|| state.auth.active_account())
+        .ok_or_else(|| {
+            CmdError::new(
+                "HESAP-YOK",
+                pick(
+                    "Oynamak için önce bir hesap ekle (Ayarlar > Hesaplar).",
+                    "Add an account first to play (Settings > Accounts).",
+                ),
+                "no active account",
+            )
+        })?;
     let identity = match state.auth.prepare_launch(account.id, cancel).await {
         Ok(identity) => identity,
         Err(_) if cancel.is_cancelled() => return Err(cancelled()),
@@ -1079,6 +1095,11 @@ async fn prepare_and_spawn(
         Err(e) => return Err(e.into()),
     };
     checkpoint(cancel)?;
+    // Who is in game from the start on: the account center's id and the name the game plays as.
+    let game_account = GameAccount {
+        id: account.id.to_string(),
+        name: identity.name.clone(),
+    };
     let identity = LaunchIdentity {
         name: identity.name,
         uuid: identity.uuid,
@@ -1216,10 +1237,15 @@ async fn prepare_and_spawn(
         crate::commands::social::GamePresence::new(&state.social, options.quick_play.as_ref());
     // A friend's world that turned the game away for missing mods says so in the log (HOST1).
     let log_worlds = state.worlds.clone();
+    let started_account = game_account.clone();
     let on_game: pl_mc::launch::GameEventFn = Arc::new(move |event| {
         game_presence.on_event(&event);
         let view = match event {
-            GameEvent::Started { pid } => Some(LaunchEventView::Started { pid, first_start }),
+            GameEvent::Started { pid } => Some(LaunchEventView::Started {
+                pid,
+                first_start,
+                account: started_account.clone(),
+            }),
             GameEvent::WindowShown => Some(LaunchEventView::WindowShown),
             // Sent after the exit, once the suspects are found in the mods folder.
             GameEvent::Crashed(_) => None,
@@ -1272,6 +1298,7 @@ async fn prepare_and_spawn(
         instance_id: instance.id.clone(),
         process: Arc::clone(&process),
         adopted: false,
+        account: Some(game_account),
     });
     state.worlds.game_started(&instance.id, host_token);
     crate::commands::cleanup::status_changed(app);
@@ -1476,6 +1503,9 @@ pub struct AdoptedGameView {
     pub instance_id: String,
     /// When its window showed (Unix milliseconds); the session time counts from there.
     pub since_ms: i64,
+    /// The account it plays with; none when an older launcher left it running (it then counts as
+    /// every account's).
+    pub account: Option<GameAccount>,
 }
 
 /// Payload of [`ADOPTED_GAME_EXITED`].
@@ -1513,6 +1543,7 @@ pub(crate) fn detach_running(state: &AppState) {
             .shown_at()
             .map(pl_mc::launch::detached::unix_ms),
         game_dir,
+        account: game.account.clone(),
     };
     match note.save(&state.root) {
         Ok(()) => tracing::info!(
@@ -1569,6 +1600,7 @@ pub fn adopt_detached(app: &AppHandle) {
         instance_id: note.instance_id.clone(),
         process: Arc::clone(&process),
         adopted: true,
+        account: note.account.clone(),
     });
     tracing::info!(instance = %note.instance_id, pid, "the game the last start left running is followed again");
     crate::commands::cleanup::status_changed(app);
@@ -1637,5 +1669,6 @@ pub fn game_adopted(state: State<'_, AppState>) -> Option<AdoptedGameView> {
     Some(AdoptedGameView {
         instance_id: game.instance_id.clone(),
         since_ms: pl_mc::launch::detached::unix_ms(since),
+        account: game.account.clone(),
     })
 }

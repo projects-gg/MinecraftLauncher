@@ -5,10 +5,16 @@ import type { LaunchEvent } from "@/lib/api";
 const launch = vi.fn(async (..._args: unknown[]) => {});
 const cancelLaunch = vi.fn(async () => {});
 const confirm = vi.fn(async () => true);
+/** The account list as the backend has it: the first one is selected unless a test says. */
+const accounts = vi.fn(async () => [
+  { id: "a1", username: "EjderAvcisi", kind: "offline", active: true },
+  { id: "a2", username: "KorAtesi_", kind: "microsoft", active: false },
+]);
 vi.mock("@/lib/api", () => ({
   api: {
     launch: (...args: unknown[]) => launch(...args),
     cancelLaunch: () => cancelLaunch(),
+    accounts: () => accounts(),
   },
 }));
 vi.mock("@/features/accounts/afk-guard", () => ({
@@ -38,6 +44,10 @@ vi.mock("./prefs", () => ({
 }));
 
 const { isOpening, useLaunch } = await import("./launch");
+const { useGameSwitch } = await import("@/features/game-switch/store");
+
+/** The account the tests' games play with. */
+const EJDER = { id: "a1", name: "EjderAvcisi" };
 
 /** Starts a launch whose backend events the test sends. */
 async function startLaunch(): Promise<(event: LaunchEvent) => void> {
@@ -93,7 +103,7 @@ describe("the game opening (PLAY1)", () => {
     const send = await startLaunch();
     send({ type: "launching" });
     expect(isOpening(useLaunch.getState().phase)).toBe(true);
-    send({ type: "started", pid: 42, firstStart: true });
+    send({ type: "started", pid: 42, firstStart: true, account: EJDER });
     const opening = useLaunch.getState().phase;
     expect(opening).toMatchObject({ kind: "running", shown: false, firstStart: true });
     expect(isOpening(opening)).toBe(true);
@@ -107,14 +117,14 @@ describe("the game opening (PLAY1)", () => {
 
   it("goes back to OYNA when the game closes before its window", async () => {
     const send = await startLaunch();
-    send({ type: "started", pid: 42, firstStart: false });
+    send({ type: "started", pid: 42, firstStart: false, account: EJDER });
     send({ type: "exited", code: 1, runtimeSecs: 3 });
     expect(useLaunch.getState().phase.kind).toBe("idle");
   });
 
   it("closes a game that opens on İptal; the next launch waits for its exit", async () => {
     const send = await startLaunch();
-    send({ type: "started", pid: 42, firstStart: false });
+    send({ type: "started", pid: 42, firstStart: false, account: EJDER });
     await useLaunch.getState().cancel();
     expect(cancelLaunch).toHaveBeenCalledTimes(1);
     expect(useLaunch.getState().phase.kind).toBe("idle");
@@ -131,7 +141,7 @@ describe("the game opening (PLAY1)", () => {
 
   it("never closes a game whose window is on screen", async () => {
     const send = await startLaunch();
-    send({ type: "started", pid: 42, firstStart: false });
+    send({ type: "started", pid: 42, firstStart: false, account: EJDER });
     send({ type: "windowShown" });
     await useLaunch.getState().cancel();
     expect(cancelLaunch).not.toHaveBeenCalled();
@@ -140,7 +150,7 @@ describe("the game opening (PLAY1)", () => {
 
   it("follows a game whose window came before İptal could close it", async () => {
     const send = await startLaunch();
-    send({ type: "started", pid: 42, firstStart: false });
+    send({ type: "started", pid: 42, firstStart: false, account: EJDER });
     await useLaunch.getState().cancel();
     send({ type: "windowShown" });
     expect(useLaunch.getState().phase).toMatchObject({ kind: "running", shown: true });
@@ -162,5 +172,103 @@ describe('"Devam et" into a world from the main menu (OVL-FIX)', () => {
     expect(shown.mock.calls[0]?.[1]).toMatchObject({ description: "worldEntry.fromTitleWhy" });
     send({ type: "launching" });
     expect(isOpening(useLaunch.getState().phase)).toBe(true);
+  });
+});
+
+describe("OYNA for the account in game alone (PLAY-ACCT)", () => {
+  /** Selects `id` the way the account switcher does (the backend's list). */
+  function select(id: string) {
+    accounts.mockImplementation(async () => [
+      { id: "a1", username: "EjderAvcisi", kind: "offline", active: id === "a1" },
+      { id: "a2", username: "KorAtesi_", kind: "microsoft", active: id === "a2" },
+    ]);
+  }
+
+  /** EjderAvcisi's game of "projects" on screen. */
+  async function playing() {
+    const send = await startLaunch();
+    send({ type: "started", pid: 42, firstStart: false, account: EJDER });
+    send({ type: "windowShown" });
+    return send;
+  }
+
+  beforeEach(() => {
+    launch.mockClear();
+    select("a1");
+    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null, account: null });
+    useGameSwitch.setState({ request: null, step: null, sides: null });
+  });
+
+  it("keeps the account the game plays with, from its start", async () => {
+    const send = await startLaunch();
+    expect(useLaunch.getState().account).toBeNull();
+    send({ type: "started", pid: 42, firstStart: false, account: EJDER });
+    expect(useLaunch.getState().account).toEqual(EJDER);
+  });
+
+  it("asks before closing another account's game, and starts nothing yet", async () => {
+    await playing();
+    select("a2");
+    await useLaunch.getState().play("projects");
+    expect(launch).toHaveBeenCalledTimes(1);
+    expect(useGameSwitch.getState().request).toMatchObject({
+      instanceId: "projects",
+      account: { id: "a2", name: "KorAtesi_" },
+      // Another account's own bar: its selection stays as it is.
+      restore: null,
+    });
+  });
+
+  it("asks once for a double press", async () => {
+    await playing();
+    select("a2");
+    await Promise.all([
+      useLaunch.getState().play("projects"),
+      useLaunch.getState().play("projects"),
+    ]);
+    const first = useGameSwitch.getState().request;
+    await useLaunch.getState().play("fabric");
+    // The question on screen stays the first one.
+    expect(useGameSwitch.getState().request).toBe(first);
+    expect(launch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing for the account whose game it is", async () => {
+    await playing();
+    await useLaunch.getState().play("projects");
+    expect(useGameSwitch.getState().request).toBeNull();
+    expect(launch).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks before another installation starts for the same account, and keeps the bar's game", async () => {
+    await playing();
+    await useLaunch.getState().play("fabric");
+    expect(useGameSwitch.getState().request).toMatchObject({
+      instanceId: "fabric",
+      account: EJDER,
+      restore: "projects",
+    });
+  });
+
+  it("starts a game that ended while the account was being read", async () => {
+    const send = await playing();
+    select("a2");
+    let release: () => void = () => {};
+    accounts.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve([
+              { id: "a1", username: "EjderAvcisi", kind: "offline", active: false },
+              { id: "a2", username: "KorAtesi_", kind: "microsoft", active: true },
+            ]);
+        }),
+    );
+    const pressed = useLaunch.getState().play("projects");
+    send({ type: "exited", code: 0, runtimeSecs: 60 });
+    release();
+    await pressed;
+    expect(useGameSwitch.getState().request).toBeNull();
+    expect(launch).toHaveBeenCalledTimes(2);
   });
 });

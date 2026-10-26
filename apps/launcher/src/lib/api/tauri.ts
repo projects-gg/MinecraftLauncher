@@ -324,7 +324,7 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
     case "exited":
       return { type: "exited", code: e.code, runtimeSecs: e.runtimeSecs };
     case "started":
-      return { type: "started", pid: e.pid, firstStart: e.firstStart };
+      return { type: "started", pid: e.pid, firstStart: e.firstStart, account: e.account };
     case "modsNotice":
       return {
         type: "modsNotice",
@@ -622,6 +622,9 @@ export const tauriApi: LauncherApi = {
   async setLanguage(lang, pick) {
     await commands.appSetLanguage(lang, pick);
   },
+  async setTrayInGame(inGame) {
+    await commands.appTrayInGame(inGame);
+  },
   async legacyScan() {
     return ok(commands.legacyScan());
   },
@@ -701,6 +704,7 @@ export const tauriApi: LauncherApi = {
           copyScreenshots: prefs.copyScreenshots ?? false,
           overlay: prefs.inGameOverlay ?? true,
           emoji: prefs.chatEmoji ?? true,
+          account: options?.account?.id ?? null,
         },
         channel,
       ),
