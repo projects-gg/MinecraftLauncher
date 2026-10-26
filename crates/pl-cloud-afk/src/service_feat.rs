@@ -123,7 +123,7 @@ impl CloudService {
     }
 
     /// "İndir": the masked log of `range` up to `now`, oldest first, as the contract's `.txt`
-    /// (`lang` `en` for English kind names).
+    /// (`lang` `en` for English kind names). None: no line in that range (no empty file).
     pub async fn console_download(
         &self,
         token: &Bearer,
@@ -131,7 +131,7 @@ impl CloudService {
         range: CloudLogRange,
         lang: &str,
         now: i64,
-    ) -> Result<String> {
+    ) -> Result<Option<String>> {
         let mut lines: Vec<CloudConsoleLine> = Vec::new();
         let mut query = LogQuery {
             from: Some(range.from(now)),
@@ -148,7 +148,7 @@ impl CloudService {
                 _ => break,
             }
         }
-        Ok(console_text(&lines, lang))
+        Ok((!lines.is_empty()).then(|| console_text(&lines, lang)))
     }
 
     /// The source of "Ayarları kopyala": its secret rows this computer has no words for.

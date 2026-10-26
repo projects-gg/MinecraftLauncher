@@ -787,6 +787,24 @@ async fn connected(
     sink: &LiveSink,
     backoff: &mut Duration,
 ) -> Outcome {
+    // What came while the socket opened: the watchers are followed, and a move made meanwhile is
+    // answered as not sent, never sent late against a state it was not made for.
+    loop {
+        match commands.try_recv() {
+            Ok(Command::Watch { acct, streams }) => {
+                watched.insert(acct, streams);
+            }
+            Ok(Command::Unwatch(acct)) => {
+                watched.remove(&acct);
+            }
+            Ok(Command::InvOp { id, .. }) => sink(unsent(id)),
+            Err(mpsc::error::TryRecvError::Empty) => break,
+            Err(mpsc::error::TryRecvError::Disconnected) => return Outcome::Done,
+        }
+    }
+    if watched.is_empty() {
+        return Outcome::Done;
+    }
     for (acct, streams) in watched.iter() {
         let frame = watch_streams_frame(acct, streams.ai, streams.inv.then_some(true));
         if !send_text(socket, frame).await {
