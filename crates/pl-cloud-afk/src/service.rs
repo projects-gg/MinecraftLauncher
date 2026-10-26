@@ -22,6 +22,7 @@ use crate::config::{
 };
 use crate::copies::{Copies, RowCopies};
 use crate::error::{CloudError, Result};
+use crate::feat::{CloudFeatures, PlaceholderRules};
 use crate::live::{LiveHub, LiveSink};
 use crate::migrate::{CloudMovePlan, MoveContext, plan};
 use crate::model::{
@@ -76,6 +77,9 @@ pub struct CloudOverview {
     pub plus: Option<PlusOffer>,
     /// With a session: whether this player may buy AFK+ (an invite list, a restriction).
     pub plus_me: Option<MePlus>,
+    /// Studio's switches of the cloud features (CAFK-FEAT); None from a service before them, which
+    /// shows none of them (bulk management included).
+    pub features: Option<CloudFeatures>,
 }
 
 impl CloudOverview {
@@ -97,6 +101,7 @@ impl CloudOverview {
             now: 0,
             plus: None,
             plus_me: None,
+            features: None,
         }
     }
 }
@@ -247,7 +252,7 @@ impl CloudService {
     }
 
     /// The offer, cached (`force`: read it again now, "Tekrar dene").
-    async fn offer(&self, force: bool) -> Option<Offer> {
+    pub(crate) async fn offer(&self, force: bool) -> Option<Offer> {
         if !force && let Some(cached) = self.inner.offer.lock().fresh(OFFER_FRESH, OFFER_FAILED) {
             return cached;
         }
@@ -283,7 +288,7 @@ impl CloudService {
         }
     }
 
-    async fn vault_key(&self) -> Result<VaultKey> {
+    pub(crate) async fn vault_key(&self) -> Result<VaultKey> {
         if let Some(Some(key)) = self.inner.vault.lock().fresh(VAULT_FRESH, Duration::ZERO) {
             return Ok(key);
         }
@@ -292,7 +297,7 @@ impl CloudService {
         Ok(key)
     }
 
-    async fn owner(&self, token: &Bearer) -> Result<String> {
+    pub(crate) async fn owner(&self, token: &Bearer) -> Result<String> {
         if let Some(owner) = self.inner.known.lock().owner.clone() {
             return Ok(owner);
         }
@@ -317,7 +322,7 @@ impl CloudService {
         self.fresh_account(token, id).await
     }
 
-    async fn fresh_account(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
+    pub(crate) async fn fresh_account(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
         let account = self.inner.client.account(token, id).await?;
         self.remember(&account);
         Ok(account)
@@ -346,6 +351,7 @@ impl CloudService {
             renewal_window_days: offer.renewal_window_days,
             limits: offer.limits.clone(),
             plus: offer.plus.clone(),
+            features: offer.features.as_ref().map(CloudFeatures::from),
             ..CloudOverview::hidden()
         };
         let Some(token) = token else {
@@ -492,13 +498,13 @@ impl CloudService {
         })
     }
 
-    async fn load_copies(&self, owner: &str, id: &str) -> Result<RowCopies> {
+    pub(crate) async fn load_copies(&self, owner: &str, id: &str) -> Result<RowCopies> {
         let copies = self.inner.copies.clone();
         let (owner, id) = (owner.to_owned(), id.to_owned());
         blocking(move || copies.load(&owner, &id)).await?
     }
 
-    async fn save_copies(&self, owner: &str, id: &str, rows: RowCopies) {
+    pub(crate) async fn save_copies(&self, owner: &str, id: &str, rows: RowCopies) {
         let copies = self.inner.copies.clone();
         let (owner, id) = (owner.to_owned(), id.to_owned());
         match blocking(move || copies.save(&owner, &id, &rows)).await {
@@ -541,11 +547,9 @@ impl CloudService {
             return Ok(CloudSaveOutcome::Conflict { account: current });
         }
         let owner = self.owner(token).await?;
-        let limits = self
-            .offer(false)
-            .await
-            .map(|offer| offer.limits)
-            .unwrap_or_default();
+        let offer = self.offer(false).await;
+        let placeholders = PlaceholderRules::of(offer.as_ref().and_then(|o| o.features.as_ref()));
+        let limits = offer.map(|offer| offer.limits).unwrap_or_default();
         let server = edit
             .server
             .clone()
@@ -578,6 +582,7 @@ impl CloudService {
             match build(
                 &config,
                 &limits,
+                &placeholders,
                 &ctx,
                 &before,
                 &fingerprints(&current.config),

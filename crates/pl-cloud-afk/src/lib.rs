@@ -19,6 +19,10 @@
 //! - [`plan`]: a desktop AFK account in the cloud's form, with what stays on the desktop.
 //! - AFK+ (the AI tier, README "AFK+"): its objects ([`PlusConfig`], [`PlusAi`], …), the checks
 //!   before a write ([`check_config`]), the routes, and the panel's calls ([`PlusPanelView`]).
+//! - The cloud features (README "Features", CAFK-FEAT phase 1): Studio's switches
+//!   ([`CloudFeatures`], [`CloudAccountFeatures`]), the live inventory ([`CloudInvItem`],
+//!   [`check_inv_op`]), the console's kinds, strip and download ([`CloudBars`], [`console_text`]),
+//!   and the placeholders of auto-replies ([`placeholder_problem`], [`strict_value`], [`try_reply`]).
 //!
 //! Nothing polls: the gate is read when the AFK page opens (cached a minute), the accounts with it
 //! and after an action, and the socket runs only while a console is on screen.
@@ -27,6 +31,7 @@ mod client;
 mod config;
 mod copies;
 mod error;
+mod feat;
 mod live;
 mod migrate;
 mod model;
@@ -34,6 +39,7 @@ mod plus;
 mod seal;
 mod server;
 mod service;
+mod service_feat;
 mod service_plus;
 mod text;
 mod tls;
@@ -41,10 +47,19 @@ mod tls;
 pub use client::{Bearer, CloudClient, CloudConfig, LogQuery, PRODUCTION_URL, api_url};
 pub use config::{
     BuildError, Built, CloudEditCommand, CloudEditConfig, CloudEditRule, CloudIssue, CloudRowText,
-    SealContext, build, copies_after, edit_config, fingerprints, validate,
+    SealContext, build, copies_after, edit_config, fingerprints, validate, validate_with,
 };
 pub use copies::{Copies, RowCopies, RowCopy};
 pub use error::{CloudError, Result};
+pub use feat::{
+    CloudAccountFeatures, CloudBarText, CloudBars, CloudBossBar, CloudFeatures, CloudInvDurability,
+    CloudInvEnchant, CloudInvError, CloudInvInside, CloudInvInsideStack, CloudInvItem,
+    CloudInventoryFeature, CloudInventorySetting, CloudLogRange, CloudReplyTry, CloudTitleBar,
+    CloudWinOpen, DEFAULT_PLACEHOLDER_COMMANDS, OfferFeatures, PLACEHOLDER_VALUE_MAX,
+    PlaceholderProblem, PlaceholderRow, PlaceholderRules, RuleLine, RuleRun, check_inv_op,
+    console_file_name, console_text, has_placeholder, is_console_file_name, is_inv_op_id,
+    line_kind, placeholder_names, placeholder_problem, run_rule, strict_value, try_reply,
+};
 pub use live::{CloudLiveEvent, CloudLiveStatus, LiveHub, LiveSink};
 pub use migrate::{
     CloudAdjusted, CloudDropped, CloudDroppedKind, CloudMovePlan, MoveContext, plan,
@@ -80,6 +95,7 @@ pub use server::{CloudAddressProblem, check_port, normalize, normalize_host, sam
 pub use service::{
     CloudEdit, CloudEditView, CloudOverview, CloudSaveOutcome, CloudService, CloudSession,
 };
+pub use service_feat::{CloudCopyOutcome, CloudCopyRow, CloudCopySecret, CloudCopySource};
 pub use service_plus::{PlusPanelView, PlusSaveOutcome};
 pub use text::{
     CloudTextProblem, MAX_TEXT_UNITS, check_text, check_text_utf16, is_leading_ignorable,

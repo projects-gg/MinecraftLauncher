@@ -22,6 +22,9 @@ sha2 = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
 parking_lot = { workspace = true }
+# "Dene" runs a rule's pattern as the launcher reads it (pl-afk's syntax), and the strict value
+# class of rule placeholders.
+regex = { workspace = true }
 # UI-facing views are exported to TypeScript by the launcher (tauri-specta).
 specta = { workspace = true }
 # Seals (pl1) and reveals (rv1): HPKE (RFC 9180) base mode, DHKEM(P-256, HKDF-SHA256) +
