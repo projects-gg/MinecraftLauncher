@@ -31,6 +31,8 @@ export function Toaster() {
           // or red text shouts).
           error: "[&_[data-icon]]:text-flare-400",
           success: "[&_[data-icon]]:text-jade-400",
+          // Something that could not be done now (BETA-GATE: "couldn't check"), as inline warnings mark it.
+          warning: "[&_[data-icon]]:text-gold-300",
         },
       }}
     />
