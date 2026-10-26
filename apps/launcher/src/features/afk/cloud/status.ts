@@ -224,6 +224,17 @@ export function timeLeft(account: CloudAccount, nowMs: number, t: TFunction): st
   return t("cloudAfk.time.minutesLeft", { count: Math.max(1, Math.ceil(left / 60)) });
 }
 
+/** The paid time's last week, as afk.projects.gg counts it. */
+export const ENDING_SOON_SECS = 7 * 86_400;
+
+/**
+ * The time left reads gold in its last week, as on the site: renewal is open at any time now, so
+ * an open renewal alone no longer says the time is running out.
+ */
+export function endsSoon(account: CloudAccount, nowMs: number): boolean {
+  return !account.expired && account.expiresAt - nowMs / 1000 <= ENDING_SOON_SECS;
+}
+
 /** "60.00" → "60 TL", "59.90" → "59,90 TL" (in English "59.90 TL"). */
 export function formatPrice(priceTl: string): string {
   const value = Number(priceTl);

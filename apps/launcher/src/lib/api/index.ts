@@ -149,6 +149,8 @@ export interface LauncherApi {
    * start: AFK accounts that start automatically connect before the page names the language.
    */
   setLanguage(lang: Lang, pick: Lang | null): Promise<void>;
+  /** Whether the selected account is in game: the tray's "Oyna" reads "Oyunda" meanwhile. */
+  setTrayInGame(inGame: boolean): Promise<void>;
   legacyScan(): Promise<LegacyScan>;
   legacyImport(request: LegacyImportRequest): Promise<LegacyImportReport>;
   officialStatus(): Promise<OfficialStatus>;

@@ -5,18 +5,26 @@ import { create } from "zustand";
 import { commands } from "@/bindings";
 import { confirmAfkBeforePlay } from "@/features/accounts/afk-guard";
 import { launchErrorCode } from "@/features/disk/launch-error";
+import { askGameSwitch } from "@/features/game-switch/store";
 import { useJavaPrompt } from "@/features/java/prompt-store";
 import { announceShotNotCopied } from "@/features/library/shot-copy";
 import { announceModsNotice, announceVersionDropped } from "@/features/modcenter/notices";
 import { announceModWarnings, useModFlow } from "@/features/modhealth/flow";
 import { loadNotes } from "@/features/updates/notes";
-import { api, type LaunchEvent, type LaunchOptions, type LaunchStage } from "@/lib/api";
+import {
+  api,
+  type GameAccount,
+  type LaunchEvent,
+  type LaunchOptions,
+  type LaunchStage,
+} from "@/lib/api";
 import { notifyWhenAway } from "@/lib/attention";
 import i18n from "@/lib/i18n";
 import { setPageDuty } from "@/lib/page-duties";
 import { isTauri } from "@/lib/platform";
 import { playSound } from "@/lib/sound";
 import { refreshWindowAway } from "@/lib/window-away";
+import { gameStage, launchOwner, planPlay } from "./launch-owner";
 import { usePrefs } from "./prefs";
 
 export type LaunchPhase =
@@ -69,6 +77,12 @@ export interface NewScreenshots {
 interface LaunchState {
   instanceId: string | null;
   phase: LaunchPhase;
+  /**
+   * The account the game plays with (PLAY-ACCT), from its start on: OYNA says "Oyunda" for this
+   * account alone (stores/launch-owner.ts). None while its files are prepared (it starts with the
+   * account selected then), and for a game an older launcher left running.
+   */
+  account: GameAccount | null;
   offline: boolean;
   crash: CrashInfo | null;
   /** Changelog of the official pack update applied by the last launch, when opened. */
@@ -155,6 +169,7 @@ export function followAdoptedGame(onEnded: (instanceId: string) => void): () => 
     adopted = game.instanceId;
     useLaunch.setState({
       instanceId: game.instanceId,
+      account: game.account ?? null,
       phase: { kind: "running", since: game.sinceMs, shown: true, firstStart: false },
     });
   });
@@ -185,6 +200,50 @@ let launchRun = 0;
 let starting = false;
 /** The launch whose game the bar follows: started (or its window showed) and not exited yet. */
 let gameRun = 0;
+/** "Oyna" while a game runs: the selected account is being read (a second press waits for it). */
+let switching = false;
+
+/** The selected account as the game would play with it (`undefined`: not known now). */
+async function selectedAccount(): Promise<GameAccount | null | undefined> {
+  try {
+    const active = (await api.accounts()).find((a) => a.active);
+    return active ? { id: active.id, name: active.username } : null;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * "Oyna" while a game is prepared, opens or runs (PLAY-ACCT). The selected account's own game of
+ * this instance: nothing more (OYNA says so). Another account's game, or another instance's: one
+ * game at a time, so the question first ("Kapat ve oyna", features/game-switch); its answer closes
+ * the game the way its own close button does and starts this one.
+ */
+async function playWhileBusy(instanceId: string, options: LaunchOptions | undefined) {
+  if (switching) return;
+  switching = true;
+  let selected: GameAccount | null | undefined;
+  try {
+    selected = await selectedAccount();
+  } finally {
+    switching = false;
+  }
+  const launch = useLaunch.getState();
+  const id = selected === undefined ? undefined : (selected?.id ?? null);
+  const plan = planPlay(launch, instanceId, id);
+  // The game ended meanwhile: this press starts it.
+  if (plan === "play") return launch.play(instanceId, options);
+  if (plan === "nothing") return;
+  // "Vazgeç" takes the selection back to the game this account has on, as it always did.
+  const mine = launchOwner(launch.phase, launch.account, id) === "mine";
+  askGameSwitch({
+    instanceId,
+    options,
+    account: selected ?? null,
+    restore: mine ? launch.instanceId : null,
+  });
+}
+
 /**
  * A game that "İptal" closed while it opened is still exiting. The backend runs one game at a
  * time, so the next launch waits for that exit (at most `CLOSE_WAIT_MS`).
@@ -216,19 +275,15 @@ const gameEvents = new Set<LaunchEvent["type"]>([
 export const useLaunch = create<LaunchState>()((set, get) => ({
   instanceId: null,
   phase: { kind: "idle" },
+  account: null,
   offline: false,
   crash: null,
   packNotes: null,
   newShots: null,
   async play(instanceId, options) {
-    const { phase, instanceId: current } = get();
-    if (phase.kind === "working" || phase.kind === "launching" || phase.kind === "running") {
-      // One game at a time. Another instance's "Oyna" says so (instead of doing nothing) and the
-      // selection its caller made goes back to the game that is on, which the bar still shows.
-      if (current && current !== instanceId) {
-        toast(i18n.t("play.oneAtATime"));
-        usePrefs.getState().selectInstance(current);
-      }
+    // One game at a time: while one is prepared, opens or runs, "Oyna" asks first.
+    if (gameStage(get().phase) !== null) {
+      await playWhileBusy(instanceId, options);
       return;
     }
     if (starting) return;
@@ -249,6 +304,8 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
     const run = launchRun;
     set({
       instanceId,
+      // Known from the start when the launch names it (a game "Bağlan" starts again).
+      account: options?.account ?? null,
       offline: false,
       crash: null,
       phase: {
@@ -265,6 +322,8 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
     let unseenNotes: PackNotes | null = null;
     // Announced once the window is back, after the game closed.
     let shots: Omit<NewScreenshots, "at"> | null = null;
+    // The account this launch's game plays with, once it started (PLAY-ACCT).
+    let gameAccount: GameAccount | null = options?.account ?? null;
     // A long first install: a player who went elsewhere hears when it is over.
     const startedAt = Date.now();
     const tellIfAway = (title: string, body: string) =>
@@ -287,6 +346,8 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
     };
     const onEvent = (event: LaunchEvent) => {
       if (event.type === "exited") settleClosing(run);
+      // Kept even for a cancelled launch: its game may still come on screen (`windowShown`).
+      if (event.type === "started") gameAccount = event.account;
       if (run !== launchRun && run !== gameRun && !gameEvents.has(event.type)) return;
       switch (event.type) {
         case "progress":
@@ -306,6 +367,7 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           if (run !== launchRun) break;
           gameRun = run;
           set({
+            account: gameAccount,
             phase: {
               kind: "running",
               since: Date.now(),
@@ -320,6 +382,7 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           gameRun = run;
           set({
             instanceId,
+            account: gameAccount,
             phase: { kind: "running", since: Date.now(), shown: true, firstStart: false },
           });
           playSound("success");

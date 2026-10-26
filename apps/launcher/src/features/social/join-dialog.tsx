@@ -19,7 +19,7 @@ import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { announce } from "@/features/accounts/use-accounts";
 import { startFriendWorld } from "@/features/host/launch";
-import { api } from "@/lib/api";
+import { api, type GameAccount } from "@/lib/api";
 import type { SocialInvite } from "@/lib/api/social-types";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
@@ -69,6 +69,8 @@ interface Flow {
   target: JoinTarget;
   /** The instance the game ran (it starts again where it can go). */
   running: string | null;
+  /** The account it played with: it starts again with it, whichever is selected (PLAY-ACCT). */
+  account: GameAccount | null;
   /** The step's own timer (its time limit). */
   timer?: number;
   unsubscribe: () => void;
@@ -174,16 +176,24 @@ export function canJoinInvite(invite: SocialInvite): boolean {
   return joinTarget(invite.server) !== null;
 }
 
-/** Starts the game into `target`: with the instance that ran, where it can go (`running`). */
-async function start(target: JoinTarget, running: string | null) {
+/**
+ * Starts the game into `target`: with the instance that ran, where it can go (`running`), and the
+ * account it played with (`account`; none: the selected one).
+ */
+async function start(
+  target: JoinTarget,
+  running: string | null,
+  account: GameAccount | null = null,
+) {
+  const as = account ?? undefined;
   if (target.kind === "world") {
-    startFriendWorld(target);
+    startFriendWorld(target, as);
     return;
   }
   const instances = running ? await api.instances().catch(() => []) : [];
   const prefer = restartInstance(target, running, instances) ?? undefined;
-  if (target.kind === "projects") await joinProjects(prefer);
-  else await joinServer(target, prefer);
+  if (target.kind === "projects") await joinProjects(prefer, as);
+  else await joinServer(target, prefer, as);
 }
 
 /** One step on the way after "Bağlan": the answers, the timers and the game's end lead here. */
@@ -192,7 +202,7 @@ function step(id: number, event: CloseEvent) {
   if (!flow || flow.id !== id || !current?.closing) return;
   const next = closeNext(current.closing, event);
   if (next === current.closing) return;
-  const { target, running } = flow;
+  const { target, running, account } = flow;
   if (next === "connected" || next === "start") {
     closeAsk();
     announce(
@@ -200,7 +210,7 @@ function step(id: number, event: CloseEvent) {
         ? i18n.t("host.connect.connecting")
         : i18n.t("fix2.connect.connecting", { server: targetName(target) }),
     );
-    if (next === "start") void start(target, running);
+    if (next === "start") void start(target, running, account);
     return;
   }
   useJoinAsk.setState({ ask: { ...current, closing: next } });
@@ -273,7 +283,13 @@ function connect(current: Ask) {
       step(id, { type: "exited" });
     }
   });
-  flow = { id, target: current.target, running: launch.instanceId, unsubscribe };
+  flow = {
+    id,
+    target: current.target,
+    running: launch.instanceId,
+    account: launch.account,
+    unsubscribe,
+  };
   const first: CloseStep =
     game === "opening"
       ? { kind: "stopping" }

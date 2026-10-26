@@ -7,7 +7,13 @@ const launch = vi.fn(async (..._args: unknown[]) => {});
 const commands = {
   launcherLeaveForGame: vi.fn(async () => {}),
   windowBringForward: vi.fn(async () => {}),
-  gameAdopted: vi.fn(async (): Promise<{ instanceId: string; sinceMs: number } | null> => null),
+  gameAdopted: vi.fn(
+    async (): Promise<{
+      instanceId: string;
+      sinceMs: number;
+      account?: { id: string; name: string } | null;
+    } | null> => null,
+  ),
 };
 const win = {
   isVisible: vi.fn(async () => true),
@@ -64,7 +70,12 @@ async function playUntilShown(): Promise<(event: LaunchEvent) => void> {
   });
   await useLaunch.getState().play("projects");
   if (!send) throw new Error("the launch did not start");
-  send({ type: "started", pid: 42, firstStart: false });
+  send({
+    type: "started",
+    pid: 42,
+    firstStart: false,
+    account: { id: "a1", name: "EjderAvcisi" },
+  });
   send({ type: "windowShown" });
   return send;
 }
@@ -149,6 +160,20 @@ describe("a game an earlier start left running", () => {
     expect(useLaunch.getState().phase.kind).toBe("idle");
     expect(ended).toHaveBeenCalledWith("projects");
     stop();
+  });
+
+  it("keeps the account it plays with (PLAY-ACCT); one from an older launcher has none", async () => {
+    const account = { id: "a1", name: "EjderAvcisi" };
+    commands.gameAdopted.mockResolvedValueOnce({ instanceId: "projects", sinceMs: 1_000, account });
+    const stop = followAdoptedGame(vi.fn());
+    await vi.waitFor(() => expect(useLaunch.getState().account).toEqual(account));
+    stop();
+    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null, account: null });
+    commands.gameAdopted.mockResolvedValueOnce({ instanceId: "projects", sinceMs: 1_000 });
+    const again = followAdoptedGame(vi.fn());
+    await vi.waitFor(() => expect(useLaunch.getState().phase.kind).toBe("running"));
+    expect(useLaunch.getState().account).toBeNull();
+    again();
   });
 
   it("changes nothing when no game was left running", async () => {

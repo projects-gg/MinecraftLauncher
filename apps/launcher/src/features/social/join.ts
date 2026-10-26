@@ -5,7 +5,7 @@
 // the official instance nothing makes it again here: "Resmî paketi kur" is offered (LIB1).
 import { showError } from "@/features/content/jobs";
 import { officialOrOffer } from "@/features/library/official";
-import { api } from "@/lib/api";
+import { api, type GameAccount } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
@@ -33,11 +33,12 @@ function failed(error: unknown) {
 
 /**
  * Every "Katıl" to projects.gg (event card, friends list, invites). `prefer`: the instance a game
- * closed for "Bağlan" ran (FIX2), when it joins projects.gg by itself.
+ * closed for "Bağlan" ran (FIX2), when it joins projects.gg by itself; `account`: the account it
+ * played with, which it starts again with (PLAY-ACCT).
  */
-export async function joinProjects(prefer?: string): Promise<void> {
+export async function joinProjects(prefer?: string, account?: GameAccount): Promise<void> {
   try {
-    await join(prefer);
+    await join(prefer, account);
   } catch (error) {
     failed(error);
   }
@@ -47,11 +48,13 @@ export async function joinProjects(prefer?: string): Promise<void> {
  * "Katıl" on an invite from another server: the instance OYNA would start (the selected one, else
  * the Projects instance), straight into that server whatever the auto-join setting says. A server
  * joins on every version (`--server` before 1.20); the AFK question of a same-name account comes
- * with the launch, as for OYNA. `prefer`: the instance a game closed for "Bağlan" ran (FIX2).
+ * with the launch, as for OYNA. `prefer`: the instance a game closed for "Bağlan" ran (FIX2);
+ * `account`: the account it played with (PLAY-ACCT).
  */
 export async function joinServer(
   address: { host: string; port: number | null },
   prefer?: string,
+  account?: GameAccount,
 ): Promise<void> {
   try {
     const launch = useLaunch.getState();
@@ -67,13 +70,14 @@ export async function joinServer(
     await launch.play(id, {
       autoJoin: false,
       quickPlay: { kind: "multiplayer", host: address.host, port: address.port },
+      account,
     });
   } catch (error) {
     failed(error);
   }
 }
 
-async function join(prefer?: string): Promise<void> {
+async function join(prefer?: string, account?: GameAccount): Promise<void> {
   const launch = useLaunch.getState();
   if (gameBusy(launch.phase.kind)) return;
   const instances = await api.instances();
@@ -84,5 +88,5 @@ async function join(prefer?: string): Promise<void> {
     (await officialOrOffer({ kind: "join" }));
   if (!target) return;
   usePrefs.getState().selectInstance(target.id);
-  await launch.play(target.id, { autoJoin: true });
+  await launch.play(target.id, { autoJoin: true, account });
 }
