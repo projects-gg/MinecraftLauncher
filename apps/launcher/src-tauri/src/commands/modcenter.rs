@@ -655,6 +655,12 @@ pub(crate) async fn apply_selection(
             pack_error(error)
         }
     })?;
+    // A mod switched on here gets its first settings now, before the next launch.
+    crate::commands::modsets::seed_mod_settings(
+        &game_dir,
+        &plan.placed_mods(&manifest.projects.items),
+    )
+    .await;
     tracing::info!(
         instance = %instance_id,
         summary = %plan.summary().describe_tr(),

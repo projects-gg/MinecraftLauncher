@@ -1316,6 +1316,17 @@ read never stop a sync or a launch either; they are left alone and reported. A p
 no file but changes the state (new choices, new version, adopted changes) is still applied, so
 choices are never lost.
 
+Mod settings (not part of the format). When a sync puts a mod item in place (a file downloaded
+where there was none, or a disabled copy renamed back; not an update) and that mod's settings
+file does not exist yet, the desktop launcher writes it right after the sync, before any launch,
+with the few values the server and the pack need (`crates/pl-mc/data/mod-configs.json`, keyed by
+the item's Modrinth project, else its id; for example Chest Tracker's container names off,
+because the server's menus draw their pictures with resource pack glyphs in the title and
+Chest Tracker would draw that title above the block a menu was opened at). A file that exists
+is never touched (the player's, the mod's own, or one the pack itself installs). The Android app
+does not write these files: a pack that must reach it with a setting carries the settings file
+itself (`ifMissing`).
+
 Dry run ("Uygula"): planning with the pending selection gives the counts per category to add,
 update and remove, the bytes to download and the bytes to delete; nothing changes on disk
 until the plan is applied. An item's old file replaced by its new one counts as an update.
@@ -1542,13 +1553,10 @@ What a set does in an instance:
   the pack's instances do (the sets bring the pack's WI Zoom and Gamma Utils, whose own keys
   clash with the game's), and the mod check offers the same one-tap fix for an older file.
 - **Settings.** Not part of the format: the catalog carries no settings files. When a set puts a
-  mod in place (a file added, or a disabled copy renamed back) and that mod's settings file does
-  not exist yet, the desktop launcher writes it with the few values the server and the official
-  pack need (`crates/pl-mc/data/mod-configs.json`: Litematica's easy placement off, its keys clear
-  of the voice chat's mute; MaLiLib's settings key clear of the zoom key; Chest Tracker's container
-  names off, since the server's menus draw their pictures with resource pack glyphs in the title and
-  Chest Tracker would draw that title above the block a menu was opened at). A file that exists is
-  never touched, so the player's later changes and the mod's own file always win.
+  mod in place, the desktop launcher writes the mod's first settings file as for the pack's own
+  mods ([Mod settings](#sync-semantics-and-pack-state): Litematica's easy placement off, its keys
+  clear of the voice chat's mute; MaLiLib's settings key clear of the zoom key). A file that
+  exists is never touched, so the player's later changes and the mod's own file always win.
 - **Old versions.** Sets carry Modrinth files (and the content tree's own) only, for the
   versions the server supports with Fabric or NeoForge. 1.8.9 with Forge and OptiFine is out of scope: OptiFine may not be
   redistributed and has no Modrinth files.

@@ -1,4 +1,5 @@
-//! Settings files a mod gets when a ready-made set puts it in place (MODHUB2).
+//! Settings files a mod gets when the official pack or a ready-made set puts it in place
+//! (MODHUB2, CHEST-TRACKER).
 //!
 //! Some mods ship defaults that do not suit the official pack's instances or the Projects
 //! server: Litematica opens its menu with M, Simple Voice Chat's microphone mute in the pack,
@@ -10,8 +11,8 @@
 //! the mod's own file always win. The mod keeps its own defaults for the rest and writes its full
 //! file itself.
 //!
-//! The caller holds the instance's lock and the game is not running (a set is never installed
-//! while it runs), so nothing else writes these files meanwhile.
+//! The caller holds the instance's lock and the game is not running (a pack or a set is never
+//! synced while it runs), so nothing else writes these files meanwhile.
 
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
