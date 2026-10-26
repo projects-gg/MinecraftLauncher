@@ -455,6 +455,10 @@ public final class EmojiScenario implements ClientModInitializer {
         step(0.5, "open the panel", mc -> OverlayClient.get().togglePanel());
         step(0.4, "settings", mc -> need(mc).showPage(OverlayScreen.Page.SETTINGS));
         step(0.6, "shot settings", mc -> shot(mc, "settings-emoji-row"));
+        // "Kısayol": both keys of the Projects category (F7 and the emoji picker's F9) with their bound keys.
+        step(0.1, "to the keys", mc -> need(mc).settings().scrollToEnd());
+        // (The steps after it go back up with Home, which brings the first row into view.)
+        step(0.6, "shot keys", mc -> shot(mc, "settings-keys"));
         // "Sohbette emoji seçici" from the keys: Home (Dil), Down, Enter.
         step(0.1, "switch it off", mc -> {
             PanelInput.clearPointer();
