@@ -13,5 +13,5 @@ export const enBetaGate = {
   movedNotMember: "You're not on the R&D team, so you're on Stable now.",
   movedSignIn: "You're not signed in with Discord, so you're on Stable for now.",
   signInShort: "Sign in",
-  movedUnknown: "Couldn't check your R&D membership, so you're on Stable for now.",
+  movedUnknown: "Couldn't check your R&D membership, so you're on Stable.",
 };

@@ -19,5 +19,6 @@ export const trBetaGate = {
   movedSignIn: "Discord ile giriş yapmadığın için şimdilik Kararlı kanaldasın.",
   // The sign-in toast's button (the toast is narrow; its sentence names Discord).
   signInShort: "Giriş yap",
-  movedUnknown: "Ar-Ge üyeliğine bakılamadığı için şimdilik Kararlı kanaldasın.",
+  // With the warning mark and "Tekrar dene" beside it (the button says it is for now).
+  movedUnknown: "Ar-Ge üyeliğine bakılamadığı için Kararlı kanaldasın.",
 };
