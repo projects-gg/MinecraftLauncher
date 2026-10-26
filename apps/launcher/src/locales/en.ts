@@ -2,6 +2,7 @@ import { enAfkAlerts } from "./en-afk-alerts";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enAfkPlus } from "./en-afkplus";
+import { enBetaGate } from "./en-beta-gate";
 import { enChat } from "./en-chat";
 import { enChat2 } from "./en-chat2";
 import { enCloudAfk } from "./en-cloud-afk";
@@ -68,6 +69,7 @@ export const en: DeepPartial<Strings> = {
   overview: enOverview,
   libraryDrop: enLibraryDrop,
   updates: enUpdates,
+  betaGate: enBetaGate,
   shortcuts: enShortcuts,
   prepare: enPrepare,
   social: {
