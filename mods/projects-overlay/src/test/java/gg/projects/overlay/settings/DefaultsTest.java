@@ -17,8 +17,18 @@ class DefaultsTest {
     /** A key as options.txt keeps it, with a log of what was bound. */
     private static final class FakeKey implements Defaults.Key {
         static final String DEFAULT = "key.keyboard.f7";
-        String saved = DEFAULT;
+        final String byDefault;
+        String saved;
         final List<String> bound = new ArrayList<>();
+
+        FakeKey() {
+            this(DEFAULT);
+        }
+
+        FakeKey(String byDefault) {
+            this.byDefault = byDefault;
+            this.saved = byDefault;
+        }
 
         @Override
         public String saved() {
@@ -27,14 +37,33 @@ class DefaultsTest {
 
         @Override
         public boolean isDefault() {
-            return DEFAULT.equals(saved);
+            return byDefault.equals(saved);
         }
 
         @Override
         public void bind(String to) {
-            saved = to == null ? DEFAULT : to;
+            saved = to == null ? byDefault : to;
             bound.add(saved);
         }
+    }
+
+    @Test
+    void bothProjectsKeysGoBackAndComeBackTogether() {
+        // CHAT-EMOJI: the overlay key (F7) and the emoji picker's (F9) under "Kısayol", rebound in Controls.
+        FakeKey overlay = new FakeKey();
+        FakeKey emoji = new FakeKey("key.keyboard.f9");
+        List<Defaults.Key> keys = List.of(overlay, emoji);
+        assertTrue(Defaults.all(settings.get(), keys));
+        emoji.saved = "key.keyboard.f10";
+        assertFalse(Defaults.all(settings.get(), keys));
+        Defaults.Undo undo = Defaults.reset(settings.get(), apply, keys);
+        assertEquals("key.keyboard.f9", emoji.saved);
+        assertTrue(overlay.bound.isEmpty());
+        assertTrue(Defaults.all(settings.get(), keys));
+        Defaults.undo(undo, apply, keys);
+        assertEquals("key.keyboard.f10", emoji.saved);
+        assertEquals(FakeKey.DEFAULT, overlay.saved);
+        assertTrue(overlay.bound.isEmpty());
     }
 
     private final AtomicReference<OverlaySettings> settings = new AtomicReference<>(OverlaySettings.DEFAULTS);

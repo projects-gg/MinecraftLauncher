@@ -31,9 +31,9 @@ import org.joml.Matrix3x2fStack;
  *
  * <p>It never takes the chat line's focus: letters still go to the line (and close the picker, the player is writing
  * again), so Enter is the picker's only after the arrows picked something. A press on the button opens it with a 150 ms
- * fade and a 4 px rise (a fade only with reduced motion); Ctrl+E, used many times a day, opens it at once. Nothing about
- * it runs while it is closed. Sizes are GUI pixels, so it is as legible at GUI 1 as at 4, scrolling when the screen is
- * short.
+ * fade and a 4 px rise (a fade only with reduced motion); its key (F9 by default), used many times a day, opens it at
+ * once. Nothing about it runs while it is closed. Sizes are GUI pixels, so it is as legible at GUI 1 as at 4, scrolling
+ * when the screen is short.
  */
 final class EmojiPicker {
     static final int PAD = 5;

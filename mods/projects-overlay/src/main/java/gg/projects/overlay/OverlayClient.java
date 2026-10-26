@@ -78,6 +78,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private static volatile OverlayClient instance;
 
     private OverlayKey key;
+    /** The chat emoji picker's key (F9 by default; CHAT-EMOJI), in both modes. */
+    private EmojiKey emojiKey;
     private OverlayState state;
     private BridgeClient bridge;
     private SettingsStore settings;
@@ -127,11 +129,15 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         settings = new SettingsStore(FabricLoader.getInstance().getGameDir());
         emojis = new EmojiState(EmojiState.onAtStart(System.getProperty(EmojiState.SWITCH_PROPERTY)));
         panel = !"off".equalsIgnoreCase(String.valueOf(System.getProperty(PANEL_PROPERTY)).strip());
+        // One "Projects" category in the game's Controls for both keys; the emoji picker's is there in both modes.
+        KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"));
+        emojiKey = new EmojiKey(category);
+        KeyMappingHelper.registerKeyMapping(emojiKey);
         if (!panel) {
             startPickerOnly(config);
             return;
         }
-        key = new OverlayKey(KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main")));
+        key = new OverlayKey(category);
         KeyMappingHelper.registerKeyMapping(key);
         toasts = new ToastLayer();
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "toasts"), toasts);
@@ -267,6 +273,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         });
         game = new MinecraftGame(this);
         ClientTickEvents.END_CLIENT_TICK.register(mc -> {
+            emojiKeyTick(mc);
             if (resume != null) {
                 resume.tick(game, WorldResume.frames(), monotonicMs());
                 if (resume.pending() == null) {
@@ -330,6 +337,26 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     public String serverHost() {
         ServerTarget here = game.currentServer();
         return here == null ? null : here.host();
+    }
+
+    /** The chat emoji picker's key (F9 by default), in the game's Controls under "Projects" (CHAT-EMOJI). */
+    @Override
+    public EmojiKey emojiKey() {
+        return emojiKey;
+    }
+
+    /**
+     * The emoji key in the game with no screen open (CHAT-EMOJI): the chat opens the way T opens it (the game's own
+     * checks for a chat that is off), with the picker open. On the chat screen the bar takes the key itself.
+     */
+    private void emojiKeyTick(Minecraft mc) {
+        while (emojiKey.consumeClick()) {
+            if (Compat.screen(mc) == null && mc.player != null && emojis.on()) {
+                // The chat's first frame opens the picker (a chat the game keeps closed lets the wish lapse).
+                ChatEmojiBar.openPickerOnNextChat();
+                Compat.openChat(mc);
+            }
+        }
     }
 
     /**
@@ -489,6 +516,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         while (key.consumeClick()) {
             togglePanel();
         }
+        emojiKeyTick(mc);
         boolean hasLevel = mc.level != null;
         if (hadLevel && !hasLevel) {
             toasts.reset();

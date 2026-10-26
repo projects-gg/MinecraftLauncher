@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.SharedConstants;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -297,9 +298,13 @@ public final class EmojiScenario implements ClientModInitializer {
             ChatEmojiBar.devHost = "play.projects.gg";
             bar().typeForDriver("selam");
         });
-        // A frame later, as a player's Ctrl+E after typing would come: the way this version's keyboard reports it (26.3:
-        // SDL's keycode), through the chat screen's keys.
-        step(0.2, "ctrl+e", mc -> bar().keyForDriver(Compat.emojiShortcutForDriver()));
+        // A frame later, as keys after typing come, through the chat screen's keys: Ctrl+E (the old shortcut, the way this
+        // version's keyboard reports it) does nothing; the picker's key (F9) opens it.
+        step(0.2, "ctrl+e", mc -> bar().keyForDriver(DevCompat.ctrlE()));
+        step(0.3, "f9 in the chat", mc -> {
+            results.addProperty("pickerOpenAfterCtrlE", bar().pickerOpen());
+            bar().keyForDriver(new KeyEvent(InputConstants.KEY_F9, 0, 0));
+        });
         step(0.6, "point at a VIP+ emoji", mc -> {
             results.addProperty("pickerOpenAfterShortcut", bar().pickerOpen());
             results.addProperty("pictureBeforePack", pictureShown());
@@ -395,6 +400,44 @@ public final class EmojiScenario implements ClientModInitializer {
             Compat.setScreen(mc, null);
             mc.options.guiScale().set(2);
             mc.resizeGui();
+        });
+        // The picker's key in the game (no screen open), the way the game delivers it: a click on whatever mapping is
+        // bound to that key. The chat opens with the picker.
+        step(0.4, "f9 in the game", mc -> {
+            ChatEmojiBar.devHost = "play.projects.gg";
+            KeyMapping.click(Compat.KEYBOARD.getOrCreate(InputConstants.KEY_F9));
+        });
+        step(0.6, "shot f9 in the game", mc -> {
+            results.addProperty("chatAfterF9InGame", Compat.screen(mc) instanceof ChatScreen);
+            results.addProperty("pickerAfterF9InGame", Compat.screen(mc) instanceof ChatScreen && bar().pickerOpen());
+            shot(mc, "f9-in-game");
+            Compat.setScreen(mc, null);
+        });
+        // Rebound in Controls (as its screen binds a key): the tooltip names the new key, the new key works, F9 no more.
+        step(0.3, "rebind to f10", mc -> {
+            OverlayClient.get().emojiKey().setKey(Compat.KEYBOARD.getOrCreate(InputConstants.KEY_F10));
+            KeyMapping.resetMapping();
+            openChat(mc);
+        });
+        step(0.6, "point at the button again", mc -> pointAt(buttonBox()));
+        step(0.8, "shot rebound tooltip", mc -> {
+            results.addProperty("tipKeyAfterRebind", bar().tipKeyForDriver());
+            shot(mc, "button-tip-rebound");
+            PanelInput.clearPointer();
+            Compat.setScreen(mc, null);
+        });
+        step(0.3, "old key in the game", mc -> KeyMapping.click(Compat.KEYBOARD.getOrCreate(InputConstants.KEY_F9)));
+        step(0.5, "new key in the game", mc -> {
+            results.addProperty("chatAfterOldKey", Compat.screen(mc) instanceof ChatScreen);
+            Compat.setScreen(mc, null);
+            KeyMapping.click(Compat.KEYBOARD.getOrCreate(InputConstants.KEY_F10));
+        });
+        step(0.6, "back to f9", mc -> {
+            results.addProperty("pickerAfterNewKey", Compat.screen(mc) instanceof ChatScreen && bar().pickerOpen());
+            Compat.setScreen(mc, null);
+            OverlayClient.get().emojiKey().bind(null);
+            ChatEmojiBar.devHost = null;
+            results.addProperty("keyAtEnd", OverlayClient.get().emojiKey().keyName());
         });
         // The launcher's switch off during the game: the button goes; back on.
         step(0.2, "launcher switch off", mc -> devCmd("emojis-off"));
