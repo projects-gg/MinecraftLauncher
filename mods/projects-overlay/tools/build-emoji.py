@@ -35,7 +35,8 @@ CACHE = Path(sys.argv[2])
 ASSETS = Path(sys.argv[3])
 VERSION = "2.051"
 URL = "https://raw.githubusercontent.com/googlefonts/noto-emoji/v{v}/png/128/emoji_u{name}.png"
-LICENSE_URL = "https://raw.githubusercontent.com/googlefonts/noto-emoji/v{v}/LICENSE"
+# The images' licence (noto-emoji's own LICENSE file is the fonts' OFL, which does not cover png/).
+LICENSE_URL = "https://www.apache.org/licenses/LICENSE-2.0.txt"
 # The emoji's height in GUI pixels: a little under the faces' line, as a capital with its ascent.
 HEIGHT = 8
 ASCENT = 7
@@ -156,7 +157,7 @@ def main():
     lines = [f"{a:x}-{b:x}" if a != b else f"{a:x}" for a, b in ranges]
     (fonts / "emoji_chars.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     notice = textures / "emoji-LICENSE.txt"
-    license_text = fetch(LICENSE_URL.format(v=VERSION), CACHE / "LICENSE").decode("utf-8")
+    license_text = fetch(LICENSE_URL, CACHE / "LICENSE-2.0.txt").decode("utf-8").replace("\r\n", "\n")
     notice.write_text(
         f"The pictures in emoji_16.png, emoji_24.png and emoji_32.png are Noto Color Emoji {VERSION}'s PNG images\n"
         "(https://github.com/googlefonts/noto-emoji, png/128), Copyright Google Inc., resized and placed in one\n"
