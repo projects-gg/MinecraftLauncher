@@ -348,6 +348,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::updates::update_apply,
             commands::updates::app_restart,
             commands::updates::update_restart_info,
+            commands::updates::update_beta_join,
+            commands::updates::update_beta_keep,
             // official pack & desktop shell
             commands::official::official_status,
             commands::official::official_instance_ensure,

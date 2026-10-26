@@ -154,6 +154,27 @@ pub async fn update_check(
     })
 }
 
+/// BETA-GATE (`pl_social::beta`): where the launcher keeps when beta last let it in.
+fn beta_record(state: &AppState) -> pl_social::BetaRecordFile {
+    pl_social::BetaRecordFile::new(state.root.join(pl_social::BETA_RECORD_FILE))
+}
+
+/// BETA-GATE: the player picked "Beta" in Settings → Güncellemeler. `allowed`: switch to it;
+/// otherwise why not (not on the Ar-Ge team, sign in first, cannot ask now) and the page to apply.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_beta_join(state: State<'_, AppState>) -> CmdResult<pl_social::BetaAccess> {
+    Ok(state.social.beta_join(&beta_record(&state)).await)
+}
+
+/// BETA-GATE: before an update look on the beta channel: `allowed` stays on it; otherwise the
+/// launcher goes back to the stable channel (it never installs an older version) and says why.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_beta_keep(state: State<'_, AppState>) -> CmdResult<pl_social::BetaAccess> {
+    Ok(state.social.beta_keep(&beta_record(&state)).await)
+}
+
 /// Download the update of `channel` in the background (signature verified by the updater) and
 /// keep it ready; `update_apply` installs it. Progress streams over `on_progress`.
 #[tauri::command]
