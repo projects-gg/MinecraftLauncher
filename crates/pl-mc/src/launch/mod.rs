@@ -25,7 +25,7 @@ pub use crash::{
     find_crash_report, find_jvm_error_log, is_failure,
 };
 pub use detached::{DETACHED_FILE, DetachedGame};
-pub use identity::{LaunchIdentity, UserType, is_valid_offline_name, offline_uuid};
+pub use identity::{GameAccount, LaunchIdentity, UserType, is_valid_offline_name, offline_uuid};
 pub use log::{Log4jParser, LogLevel, LogLine, guess_level, parse_event, parse_plain_line};
 pub use process::{
     GameEvent, GameEventFn, GameExit, GameProcess, LOADING_GRACE, MAX_LOG_BYTES, MAX_TAIL_LINES,

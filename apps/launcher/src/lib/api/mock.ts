@@ -7,7 +7,7 @@ import coverSpawn from "@/assets/art/news-spawn-city.webp";
 import coverWinter from "@/assets/art/news-winter.webp";
 import { newsHighlights } from "@/lib/news";
 import type { LauncherApi } from "./index";
-import { mockAccountName, mockAccounts } from "./mock-accounts";
+import { mockAccountName, mockAccounts, mockMarkUsed } from "./mock-accounts";
 import { mockAfk } from "./mock-afk";
 import { createMockCleanup } from "./mock-cleanup";
 import { mockCloseGame, mockKillGame, mockSession } from "./mock-connect";
@@ -1167,11 +1167,21 @@ export const mockApi: LauncherApi = {
     // Preview switch (mock-world-entry.ts): "Devam et" into a world opens on the main menu.
     const fromTitle = mockWorldFromTitle(options);
     if (fromTitle) onEvent(fromTitle);
+    // The account the game plays with: the one the launch names, else the selected one (PLAY-ACCT).
+    const selected = (await mockAccounts.accounts()).find((a) => a.active);
+    const account =
+      options?.account ?? (selected ? { id: selected.id, name: selected.username } : null);
+    if (account) mockMarkUsed(account.id);
     onEvent({ type: "launching" });
     await delay(1600);
     // Preview switches (mock-opening.ts): how long the game's window takes, a first start.
     const opening = mockOpening();
-    onEvent({ type: "started", pid: 4242, firstStart: opening.firstStart });
+    onEvent({
+      type: "started",
+      pid: 4242,
+      firstStart: opening.firstStart,
+      account: account ?? { id: "", name: "" },
+    });
     if (instance) instance.state = "ready";
     const crash = mockCrashScenario();
     if (crash) {
@@ -1205,6 +1215,7 @@ export const mockApi: LauncherApi = {
   async updatePresence() {},
   async setPresenceEnabled() {},
   async setLanguage() {},
+  async setTrayInGame() {},
   async legacyScan() {
     // `?legacy=noWorlds`: an old launcher without worlds; `?legacy=empty`: none of the kinds the
     // welcome lists (its sentence names only what was found); `?legacy=none`: no old launcher.

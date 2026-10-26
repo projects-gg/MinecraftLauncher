@@ -2,6 +2,7 @@
 // aç"), or into a friend's world through the launcher's own way to it on this computer ("Katıl").
 // Both go through OYNA's launch, so its progress, the Java question and the crash help work as for
 // any start. Neither waits for the game to end.
+import type { GameAccount } from "@/lib/api";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 
@@ -21,13 +22,20 @@ export function startOwnWorld(instanceId: string, folder: string): boolean {
   return true;
 }
 
-/** The game starts with the install the join prepared, straight into the friend's world. */
-export function startFriendWorld(target: { instance: string; port: number }): boolean {
+/**
+ * The game starts with the install the join prepared, straight into the friend's world. `account`:
+ * a game closed for it starts again with the account it played with (PLAY-ACCT).
+ */
+export function startFriendWorld(
+  target: { instance: string; port: number },
+  account?: GameAccount,
+): boolean {
   if (busy()) return false;
   usePrefs.getState().selectInstance(target.instance);
   void useLaunch.getState().play(target.instance, {
     autoJoin: false,
     quickPlay: { kind: "multiplayer", host: "127.0.0.1", port: target.port },
+    account,
   });
   return true;
 }
