@@ -10,30 +10,12 @@ import { useTranslation } from "react-i18next";
 import { Check } from "@/features/settings/cleanup/check";
 import { AfkHead } from "../afk-head";
 import { type CloudAccount, type CloudCopySecret, type CloudCopySource, cloudApi } from "./api";
+import { commandOf, lineOf, rowName } from "./bulk";
 import { useBulkToast } from "./bulk-bar";
 import { serverLabel } from "./status";
 import { storeAccount } from "./use-cloud";
 
 type SecretMode = "same" | "each";
-
-/** `/login ******` → `/login`. */
-const rowName = (preview: string) => preview.replace(/\s*\*+$/, "") || preview;
-
-/** The command a secret row keeps in view (`/login` of `/login ******`), else "". */
-const commandOf = (preview: string) => {
-  const name = rowName(preview);
-  return name !== preview && name.startsWith("/") ? name : "";
-};
-
-/**
- * The row a target gets: its command and the typed words (the field asks for the password only),
- * or a whole command when one was typed.
- */
-const lineOf = (preview: string, text: string) => {
-  const words = text.trim();
-  const command = commandOf(preview);
-  return !command || words.startsWith("/") ? words : `${command} ${words}`;
-};
 
 export function CopyDialog({
   open,

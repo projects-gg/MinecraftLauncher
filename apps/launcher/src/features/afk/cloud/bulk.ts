@@ -56,6 +56,27 @@ export function tally(results: Array<{ ok: boolean; code?: string | null }>): Bu
   return { done, failed, reason };
 }
 
+/** `/login ******` → `/login` (a secret row's preview without its hidden words). */
+export function rowName(preview: string): string {
+  return preview.replace(/\s*\*+$/, "") || preview;
+}
+
+/** The command a secret row keeps in view (`/login` of `/login ******`), else "". */
+export function commandOf(preview: string): string {
+  const name = rowName(preview);
+  return name !== preview && name.startsWith("/") ? name : "";
+}
+
+/**
+ * What a copied secret row becomes for a target: its command and the typed words (the field asks
+ * for the password only), or a whole command when one was typed.
+ */
+export function lineOf(preview: string, text: string): string {
+  const words = text.trim();
+  const command = commandOf(preview);
+  return !command || words.startsWith("/") ? words : `${command} ${words}`;
+}
+
 /** What an action needs to know of an account. */
 interface BulkTarget {
   desired: string;
