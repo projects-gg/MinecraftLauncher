@@ -205,8 +205,11 @@ export function EmptyState({
       {illustration ? (
         <img src={illustration} alt="" className="mb-3 size-28 object-contain" draggable={false} />
       ) : icon ? (
+        // `data-empty-icon`: an app's own look for it (Studio draws the icon alone, without the
+        // tile: docs/design.md §9).
         <span
           aria-hidden
+          data-empty-icon=""
           className="chamfer mb-4 flex size-14 items-center justify-center bg-obsidian-800 text-gold-400/85 [--cut:8px]"
         >
           {icon}
