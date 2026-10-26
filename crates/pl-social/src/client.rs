@@ -211,6 +211,25 @@ impl SocialClient {
         crate::codes::crew_link_url(&self.inner.base, link)
     }
 
+    /// BETA-GATE (`GET /v1/beta`): whether this launcher may take the beta update channel; `token`
+    /// is the friends session, when someone is signed in. A service from before BETA-GATE answers
+    /// `404`: no gate, open. A session that ended (`401`) is nobody signed in. Other failures are
+    /// errors (the caller treats them as "cannot tell").
+    pub async fn beta(&self, token: Option<&SessionToken>) -> Result<crate::BetaAnswer> {
+        let reply = self.send(Method::GET, "v1/beta", token, None, &[]).await?;
+        match reply.status {
+            404 => Ok(crate::BetaAnswer::Open),
+            401 => Ok(crate::BetaAnswer::sign_in()),
+            _ if !reply.is_success() => Err(reply.error()),
+            _ => crate::beta::answer_of(&reply.body).map_err(|error| {
+                SocialError::Protocol(format!(
+                    "invalid beta answer (HTTP {}): {error}",
+                    reply.status
+                ))
+            }),
+        }
+    }
+
     /// Cheap availability probe (no database access on the service).
     pub async fn health(&self) -> Result<()> {
         let reply = self.send(Method::GET, "v1/health", None, None, &[]).await?;
@@ -1208,6 +1227,66 @@ mod tests {
             Err(SocialError::InvalidInput(_))
         ));
         assert_eq!(server.requests().len(), before);
+    }
+
+    #[tokio::test]
+    async fn asks_about_the_beta_channel_with_or_without_a_session() {
+        let server = MockServer::start(|req| {
+            match req.header("authorization") {
+                // The session of a player on the team.
+                Some(bearer) if bearer.ends_with(&"A".repeat(43)) => MockReply::json(
+                    200,
+                    r#"{"gate":true,"access":"member","apply":"https://projects.gg/basvuru"}"#,
+                ),
+                Some(_) => {
+                    MockReply::json(401, r#"{"error":{"code":"unauthorized","message":"x"}}"#)
+                }
+                None => MockReply::json(
+                    200,
+                    r#"{"gate":true,"access":"signin","apply":"https://projects.gg/arge"}"#,
+                ),
+            }
+        })
+        .await;
+        let client = client(&server);
+        assert_eq!(
+            client.beta(Some(&token())).await.unwrap(),
+            crate::BetaAnswer::Member
+        );
+        assert_eq!(
+            client.beta(None).await.unwrap(),
+            crate::BetaAnswer::SignIn {
+                apply: Url::parse("https://projects.gg/arge").unwrap()
+            }
+        );
+        // A session that ended is nobody signed in.
+        let ended = SessionToken::new(format!("pls_{}", "B".repeat(43)));
+        assert_eq!(
+            client.beta(Some(&ended)).await.unwrap(),
+            crate::BetaAnswer::sign_in()
+        );
+        let requests = server.requests();
+        assert!(
+            requests
+                .iter()
+                .all(|r| r.method == "GET" && r.path == "/v1/beta")
+        );
+        assert_eq!(requests[1].header("authorization"), None);
+
+        // A service from before BETA-GATE has no gate; one that is down is an error.
+        let old = MockServer::start(|_| {
+            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+        })
+        .await;
+        assert_eq!(
+            client(&old).beta(None).await.unwrap(),
+            crate::BetaAnswer::Open
+        );
+        let down = MockServer::start(|_| {
+            MockReply::json(503, r#"{"error":{"code":"unavailable","message":"x"}}"#)
+        })
+        .await;
+        assert!(client(&down).beta(None).await.is_err());
     }
 
     const TEAM: &str = r#"{"team":{"id":"0123456789abcdef","name":"Gece Kartalları","tag":"GKR",

@@ -45,6 +45,7 @@
 mod afk;
 mod auth;
 mod backoff;
+mod beta;
 mod cards;
 mod chat;
 mod client;
@@ -75,6 +76,10 @@ mod testutil;
 pub use afk::{AfkItemName, AfkNotice};
 pub use auth::{AUTH_DONE_LINK, LoginAttempt, SessionToken, SignedIn, auth_code_from_deep_link};
 pub use backoff::{Backoff, BackoffPolicy};
+pub use beta::{
+    BETA_APPLY_URL, BETA_GRACE_SECS, BETA_RECORD_FILE, BetaAccess, BetaAnswer, BetaRecordFile,
+    BetaVerdict, decide_join, decide_keep,
+};
 pub use cards::{CARDS_MAX_BYTES, StoredCard};
 pub use chat::{
     CARD_WINDOW_MS, CHAT_LINES_MAX, CHAT_TEXT_MAX, DELETE_WINDOW_MS, EDIT_WINDOW_MS,
