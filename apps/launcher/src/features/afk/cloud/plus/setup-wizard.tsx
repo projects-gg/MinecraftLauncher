@@ -1,7 +1,8 @@
-// The first setup of an AFK+ account, in four short steps (afkplus.md §8.1): where it works and
-// what it does after a trade, how it talks, what it may spend (a buy budget, or "Şimdilik alım
-// yapmasın"), and a first rule in the player's own words (can be skipped). "Başlat" saves it all
-// and switches the assistant on. A morph dialog: the panel glides to each step's size while the
+// The first setup of an AFK+ account, in four short steps (afkplus.md §8.1, afkplus-free.md §7.2):
+// where it works (and who makes the trades there) and what it does after a trade, how it talks, what
+// it may spend (a buy budget, or "Şimdilik alım yapmasın"; the assistant never tells anyone either),
+// and a first order in the player's own words (can be skipped). "Başlat" saves it all and switches
+// the assistant on. A morph dialog: the panel glides to each step's size while the
 // step slides in from the side it comes from; "Daha sonra" (or the close button) leaves it for later.
 import {
   Button,
@@ -22,18 +23,9 @@ import { afkFailed, isFriendly } from "../../errors";
 import type { CloudAccount } from "../api";
 import type { PlusConfig, PlusPanel } from "./api";
 import { AmountField } from "./fields";
-import { TypedRule } from "./lists-section";
-import {
-  limitProblems,
-  maxDealOf,
-  PLUS_LIMITS,
-  type PlusLimits,
-  PRESETS,
-  personaTextProblem,
-  putRule,
-} from "./model";
-import { type RuleDraft, RuleEditor } from "./rule-editor";
-import { usePlusInstantSave, usePlusSave } from "./use-plus";
+import { limitProblems, PLUS_LIMITS, type PlusLimits, PRESETS, personaTextProblem } from "./model";
+import { OrderStarter } from "./orders-section";
+import { usePlusSave } from "./use-plus";
 import { formatAmount } from "./words";
 
 type Step = "mode" | "assistant" | "limits" | "list";
@@ -100,8 +92,8 @@ function ModeStep({
   onChange: (parts: Partial<Choices>) => void;
 }) {
   const { t, i18n } = useTranslation();
-  const profile = panel.settings.profile;
-  const name = profile ? (i18n.language === "en" ? profile.name.en : profile.name.tr) : null;
+  const server = panel.settings.server;
+  const name = server.name ? (i18n.language === "en" ? server.name.en : server.name.tr) : null;
   const rows = account.config.commands.filter((command) => !command.secret && command.text);
   return (
     <div>
@@ -114,10 +106,16 @@ function ModeStep({
         <div className="min-w-0">
           <p className="text-[12px] text-ash-400">{t("afkPlus.setup.mode.mode")}</p>
           <p className="truncate text-[14px] font-medium text-bone-50">
-            {name ?? t("afkPlus.setup.mode.noMode")}
+            {name ?? t("afkPlus.setup.mode.generic")}
           </p>
         </div>
       </div>
+      {/* Where the bot does not trade itself (or AFK+ does not run), it is said once, here. */}
+      {!server.on ? (
+        <p className="mt-2 text-[12.5px] text-gold-200">{t("afkPlus.server.off")}</p>
+      ) : server.trade === "owner" ? (
+        <p className="mt-2 text-[12.5px] text-ash-300">{t("afkPlus.server.owner")}</p>
+      ) : null}
       <div className="mt-4 flex flex-col gap-1.5">
         <span className="text-[13px] font-medium text-bone-100">
           {t("afkPlus.settings.returnRow")}
@@ -301,6 +299,7 @@ function LimitsStep({
           onCheckedChange={(notNow) => onChange({ notNow })}
         />
       </div>
+      <p className="mt-3 text-[12.5px] text-ash-300">{t("afkPlus.setup.limits.secret")}</p>
     </div>
   );
 }
@@ -348,17 +347,15 @@ export function PlusSetupWizard({
   const { t } = useTranslation();
   const { reduce } = useMotionPrefs();
   const save = usePlusSave(account.id);
-  const instant = usePlusInstantSave(account.id);
   const [step, setStep] = useState<Step>("mode");
   const [direction, setDirection] = useState<1 | -1>(1);
   const [choices, setChoices] = useState<Choices | null>(null);
   const [tried, setTried] = useState<Step | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const [rule, setRule] = useState<RuleDraft | null>(null);
   const [added, setAdded] = useState(false);
   const current = choices ?? (panel ? choicesOf(panel.settings.config) : null);
-  const maxDeal = maxDealOf(panel?.catalog);
+  const maxDeal = panel?.settings.server.money.maxDeal ?? PLUS_LIMITS.maxDeal;
   const index = STEPS.indexOf(step);
 
   const change = (parts: Partial<Choices>) => {
@@ -449,76 +446,71 @@ export function PlusSetupWizard({
   );
 
   return (
-    <>
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => !nextOpen && !busy && onLater()}
-        title={t("afkPlus.setup.title")}
-        closeLabel={t("afkPlus.setup.later")}
-        width={540}
-        morph
-        dismissible={!busy}
-        dismissOnOutsideClick={false}
-        footer={footer}
-      >
-        {current && panel ? (
-          <AnimatePresence mode="popLayout" initial={false} custom={direction}>
-            <motion.div key={step} {...stepMotion(reduce, direction)}>
-              {step === "mode" ? (
-                <ModeStep account={account} panel={panel} choices={current} onChange={change} />
-              ) : step === "assistant" ? (
-                <AssistantStep
-                  choices={current}
-                  onChange={change}
-                  showProblems={tried === "assistant"}
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && !busy && onLater()}
+      title={t("afkPlus.setup.title")}
+      closeLabel={t("afkPlus.setup.later")}
+      width={540}
+      morph
+      dismissible={!busy}
+      dismissOnOutsideClick={false}
+      footer={footer}
+    >
+      {current && panel ? (
+        <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+          <motion.div key={step} {...stepMotion(reduce, direction)}>
+            {step === "mode" ? (
+              <ModeStep account={account} panel={panel} choices={current} onChange={change} />
+            ) : step === "assistant" ? (
+              <AssistantStep
+                choices={current}
+                onChange={change}
+                showProblems={tried === "assistant"}
+              />
+            ) : step === "limits" ? (
+              <LimitsStep
+                choices={current}
+                onChange={change}
+                showProblems={tried === "limits"}
+                maxDeal={maxDeal}
+              />
+            ) : (
+              <div>
+                <StepHead
+                  title={t("afkPlus.setup.list.title")}
+                  lede={t("afkPlus.setup.list.lede")}
                 />
-              ) : step === "limits" ? (
-                <LimitsStep
-                  choices={current}
-                  onChange={change}
-                  showProblems={tried === "limits"}
-                  maxDeal={maxDeal}
+                <OrderStarter
+                  account={account}
+                  panel={panel}
+                  // The limits of step 3 are saved with "Başlat": the first order is asked against
+                  // them, not the stored ones.
+                  limits={
+                    current
+                      ? {
+                          perDealMax: current.notNow ? null : current.perDealMax,
+                          totalBudget: current.notNow ? null : current.totalBudget,
+                        }
+                      : undefined
+                  }
+                  onSaved={() => setAdded(true)}
                 />
-              ) : (
-                <div>
-                  <StepHead
-                    title={t("afkPlus.setup.list.title")}
-                    lede={t("afkPlus.setup.list.lede")}
-                  />
-                  <TypedRule
-                    account={account}
-                    panel={panel}
-                    onAdded={() => setAdded(true)}
-                    onPick={(picked) => setRule(picked)}
-                  />
-                  {added ? (
-                    <p role="status" className="mt-2 text-[12.5px] text-jade-400">
-                      {t("afkPlus.setup.list.added")}
-                    </p>
-                  ) : null}
-                </div>
-              )}
-              {failure ? (
-                <p role="alert" className="mt-3 text-[12.5px] text-flare-300">
-                  {failure}
-                </p>
-              ) : null}
-            </motion.div>
-          </AnimatePresence>
-        ) : null}
-      </Dialog>
-      <RuleEditor
-        open={rule !== null}
-        initial={rule}
-        catalog={panel?.catalog ?? null}
-        isNew
-        saving={false}
-        onSave={(picked) => {
-          setRule(null);
-          void instant((latest) => putRule(latest, picked)).then((done) => done && setAdded(true));
-        }}
-        onClose={() => setRule(null)}
-      />
-    </>
+                {added ? (
+                  <p role="status" className="mt-2 text-[12.5px] text-jade-400">
+                    {t("afkPlus.setup.list.added")}
+                  </p>
+                ) : null}
+              </div>
+            )}
+            {failure ? (
+              <p role="alert" className="mt-3 text-[12.5px] text-flare-300">
+                {failure}
+              </p>
+            ) : null}
+          </motion.div>
+        </AnimatePresence>
+      ) : null}
+    </Dialog>
   );
 }
