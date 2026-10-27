@@ -167,6 +167,16 @@ export function MessageText({ text, links }: { text: string; links: readonly Fou
                       event.preventDefault();
                       open();
                     }}
+                    // The middle button opens it the same way (a browser would open a new tab;
+                    // the webview refuses new windows, so it did nothing).
+                    onMouseDown={(event) => {
+                      if (event.button === 1) event.preventDefault();
+                    }}
+                    onAuxClick={(event) => {
+                      if (event.button !== 1) return;
+                      event.preventDefault();
+                      open();
+                    }}
                     className="cursor-pointer text-bone-50 underline decoration-bone-100/45 underline-offset-[3px] transition-[text-decoration-color,color] duration-150 hover:decoration-bone-50 focus-visible:rounded-[2px] focus-visible:outline-2 focus-visible:outline-gold-300"
                   >
                     {piece.text}

@@ -147,6 +147,14 @@ interface SocialUi {
   chatFrom: SocialPage;
   /** Opens a conversation: a friend's on the chat page, a crew's on its crew page. */
   openChat: (conv: string, options?: { from?: SocialPage }) => void;
+  /**
+   * The conversation `openChat` opened to be written in (a row, "Mesaj", a toast's "Yanıtla"): its
+   * field takes the focus once it shows (CHAT-PROD). A crew's "Sohbet" tab picked by hand leaves
+   * the focus on the tab.
+   */
+  chatFocus: string | null;
+  /** The conversation on screen takes the focus asked for it (true once). */
+  takeChatFocus: (conv: string) => boolean;
   /** "Rapor et" is open about this. */
   report: ReportRequest | null;
   openReport: (request: ReportRequest) => void;
@@ -274,13 +282,19 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
       // A crew's chat lives on its crew page.
       if (!s.open) s.openPanel({ page: "team" });
       else s.goTo("team");
-      set({ crewTab: conv.slice(2), crewPane: "chat" });
+      set({ crewTab: conv.slice(2), crewPane: "chat", chatFocus: conv });
       return;
     }
     const from = options?.from ?? (s.open && s.page !== "chat" ? s.page : "list");
     if (!s.open) s.openPanel({ page: "chat" });
     else s.goTo("chat");
-    set({ chatConv: conv, chatFrom: from });
+    set({ chatConv: conv, chatFrom: from, chatFocus: conv });
+  },
+  chatFocus: null,
+  takeChatFocus: (conv) => {
+    if (get().chatFocus !== conv) return false;
+    set({ chatFocus: null });
+    return true;
   },
   report: null,
   openReport: (report) => set({ report }),

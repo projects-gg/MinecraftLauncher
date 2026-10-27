@@ -347,7 +347,10 @@ export function ChatPage() {
     });
   };
   return (
+    // A conversation opened over another one (a toast's "Yanıtla") starts afresh: its own unread
+    // line, place and newest message.
     <Conversation
+      key={conv}
       conv={conv}
       crew={false}
       people={people}

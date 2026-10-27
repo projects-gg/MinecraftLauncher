@@ -1441,7 +1441,14 @@ export function TeamPage() {
   return (
     <div ref={root} className={fill ? "flex h-full min-h-0 flex-col" : undefined}>
       {rail ? <CrewRail crews={crews} shown={shownKey} canAdd={canAdd} limit={limit} /> : null}
-      <AnimatePresence mode="popLayout" initial={false} custom={side.side}>
+      {/* Not `presenceAffectsLayout`: with it every snapshot drew every motion of the crew
+          page again, its chat's rows too (CHAT-PROD). */}
+      <AnimatePresence
+        mode="popLayout"
+        initial={false}
+        custom={side.side}
+        presenceAffectsLayout={false}
+      >
         <motion.div
           key={shown === NEW_CREW_TAB ? "none" : `team:${shown.id}`}
           role={rail ? "tabpanel" : undefined}
