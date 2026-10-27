@@ -88,6 +88,12 @@ export const itemDataFails = param("itemdata") === "fail";
 export const auditScenario = param("audit");
 /** `&typed=off`: typed orders are switched off. */
 export const typedOrders = param("typed") !== "off";
+/**
+ * `&topup=on`: AFK+ extra credits on sale (the rail's "Kontör al"); `&topup=bought`: also the
+ * windows used up and a bought pack paying (cloud-afk README "AFK+ extra credits").
+ */
+export const topupScenario = param("topup");
+const boughtPaying = topupScenario === "bought";
 
 export const nowSecs = () => Math.floor(Date.now() / 1000);
 /** When the 5-hour window renews: one moment for the state line, the bar and the notice. */
@@ -128,6 +134,19 @@ export function mockOffer(): PlusOffer | null {
       watch: false,
     },
     servers: { any: true, verified: ["play.projects.gg"] },
+    topup:
+      topupScenario === "on" || boughtPaying
+        ? {
+            sales: true,
+            packs: [
+              { priceTl: "10.00", credits: 14_500 },
+              { priceTl: "25.00", credits: 36_400 },
+              { priceTl: "50.00", credits: 72_800 },
+            ],
+            refundWindowHours: 336,
+            maxBalance: 1_000_000,
+          }
+        : null,
   };
 }
 
@@ -171,13 +190,14 @@ export function mockAi(): PlusAi {
     // A used-up allowance stops only the AI: approvals go on (cloud-afk README, "Stops and pauses").
     pendingApprovals: plusScenario === "setup" ? 0 : plusScenario === "maintenance" ? 1 : 4,
     quota: {
-      pct5: paused ? 100 : 40,
-      pctWeek: paused ? 64 : 12,
+      pct5: paused || boughtPaying ? 100 : 40,
+      pctWeek: paused || boughtPaying ? 64 : 12,
       w5hResetAt: W5H_RESET_AT,
       weekResetAt: nextMonday(now),
       exhaustedUntil: paused ? W5H_RESET_AT : null,
       // Used up means the gift is gone too (it is spent before the AI stops).
-      giftsLeft: paused ? 0 : 3_000,
+      giftsLeft: paused || boughtPaying ? 0 : 3_000,
+      boughtLeft: boughtPaying ? 12_300 : 0,
     },
     asOf: null,
     // The completed buys since the last reset (`mockReceipts`: 36.000 + 16.400).
@@ -607,7 +627,8 @@ export function mockSettings(config: PlusConfig, aiRev: number): PlusSettings {
 
 export function mockQuota(): PlusQuota {
   const now = nowSecs();
-  const paused = plusScenario === "paused";
+  // A bought pack pays once the windows are used up (the AI goes on).
+  const paused = plusScenario === "paused" || boughtPaying;
   return {
     w5h: {
       used: paused ? 5_000 : 2_000,
@@ -616,10 +637,14 @@ export function mockQuota(): PlusQuota {
     },
     week: { used: paused ? 12_800 : 2_400, cap: 20_000, resetAt: nextMonday(now) },
     gifts: paused ? [] : [{ id: "g1", remaining: 3_000, expiresAt: now + 6 * DAY }],
+    bought: boughtPaying
+      ? { remaining: 12_300, packs: [{ id: "gr_0P8Y9A0BUY01", remaining: 12_300 }] }
+      : { remaining: 0, packs: [] },
     promo: null,
     frozen: false,
-    // The ledger's room counts the windows and the gifts: (3,000 + 3,000) at 25 credits a reply.
-    estReplies: paused ? 0 : 240,
+    // The ledger's room counts the windows, the gifts and bought packs: (3,000 + 3,000) at 25
+    // credits a reply; a bought pack's 12,300 at 20.
+    estReplies: boughtPaying ? 615 : paused ? 0 : 240,
     pct5: paused ? 100 : 40,
     pctWeek: paused ? 64 : 12,
     asOf: now,

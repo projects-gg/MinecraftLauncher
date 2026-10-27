@@ -170,6 +170,10 @@ export const enAfkPlus = {
     giftSomeUntil_one: "About {{count}} of them from a gift, valid until {{day}}",
     giftSomeUntil_other: "About {{count}} of them from a gift, valid until {{day}}",
     frozen: "Staff froze your AI credits.",
+    bought_one: "About {{n}} of them from the AI credits you bought",
+    bought_other: "About {{n}} of them from the AI credits you bought",
+    boughtInUse: "Now using the AI credits you bought.",
+    buy: "Buy AI credits",
     asOf: "Last known at {{time}}",
     saver:
       "Your AI credits are low: the assistant skips small talk and stops watching chat for sales; deals go on.",
@@ -965,6 +969,7 @@ export const enAfkPlus = {
     quotaFullUntil: "You're out of AI credits; they reset {{when}}.",
     quota80: "Most of your AI credits are used.",
     giftEnding: "Your gift AI credits end soon.",
+    boughtInUse: "You're out of AI credits; your bought ones are in use now.",
     incident: "Inappropriate messages came; that player gets no replies now.",
     summary: "{{pms}} and {{deals}} today.",
     summaryPms_one: "{{count}} message",
