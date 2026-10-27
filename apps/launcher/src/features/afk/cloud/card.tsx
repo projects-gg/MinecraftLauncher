@@ -16,7 +16,6 @@ import {
   CaretRight,
   ChatsCircle,
   Cloud,
-  CloudArrowUp,
   Copy,
   Desktop,
   DotsThreeVertical,
@@ -432,7 +431,7 @@ export function CloudCard({
       ? [
           {
             label: move.label,
-            icon: move.toHere ? <Desktop size={16} /> : <CloudArrowUp size={16} />,
+            icon: move.toHere ? <Desktop size={16} /> : <Cloud size={16} />,
             onSelect: () => void move.run(),
           },
         ]
