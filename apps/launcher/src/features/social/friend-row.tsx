@@ -29,6 +29,7 @@ import {
   type MenuItem,
   returnFocusAfterKeys,
   Select,
+  swallowDismissClick,
   Tooltip,
 } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -485,6 +486,7 @@ function MoreMenu({ onPick }: { onPick: (action: "remove" | "block" | "report") 
         {open ? (
           <DropdownMenu.Portal forceMount>
             <DropdownMenu.Content
+              onPointerDownOutside={swallowDismissClick}
               onCloseAutoFocus={returnFocusAfterKeys}
               forceMount
               asChild
@@ -648,6 +650,7 @@ export function FriendRow({
             {open ? (
               <Popover.Portal forceMount>
                 <Popover.Content
+                  onPointerDownOutside={swallowDismissClick}
                   forceMount
                   asChild
                   side="left"

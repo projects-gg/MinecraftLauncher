@@ -53,7 +53,8 @@ export const enCloudAfkFeat = {
   },
   settings: {
     inventory: "Inventory view",
-    inventoryHelp: "Takes effect at the next connection.",
+    inventoryHelp:
+      "When on, you see the account's inventory in the launcher. It turns on at the next connection.",
     legacyRules:
       "Your replies still match the old way. Save the settings once to match the server's chat format.",
     chips: {
@@ -68,7 +69,7 @@ export const enCloudAfkFeat = {
     tryMatches: "Matches. Reply: {{text}}",
     tryNoMatch: "No match.",
     tryNoReply: "Matches, but no reply goes out for it.",
-    tryPattern: "Fix the pattern first.",
+    tryPattern: "Fix the rule's phrase first.",
     silenced: "This reply isn't being sent right now.",
     issues: {
       placeholder_row: "Placeholders work only in replies.",

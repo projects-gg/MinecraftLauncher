@@ -25,6 +25,50 @@ export const SECTIONS = [
 
 export type SectionId = (typeof SECTIONS)[number];
 
+/**
+ * The panel's rail (SHEET-UX): the nine features in five sections, by what the player asks (where
+ * it connects, what it types, what it does in the game, how it answers, what it records).
+ */
+export const GROUPS = ["connection", "commands", "game", "replies", "log"] as const;
+
+export type GroupId = (typeof GROUPS)[number];
+
+export const GROUP_OF: Record<SectionId, GroupId> = {
+  server: "connection",
+  relog: "connection",
+  login: "commands",
+  scheduler: "commands",
+  antiAfk: "game",
+  eat: "game",
+  respond: "replies",
+  alerts: "log",
+  chatLog: "log",
+};
+
+/** The page's fields each section edits (every field belongs to one). */
+const GROUP_FIELDS: Record<GroupId, Array<keyof SettingsPage>> = {
+  connection: [
+    "serverHost",
+    "serverPort",
+    "minecraftVersion",
+    "autoStart",
+    "allowResourcePacks",
+    "autoRelog",
+  ],
+  commands: ["loginCommands", "scheduler"],
+  game: ["antiAfk", "autoEat"],
+  replies: ["autoRespond"],
+  log: ["alerts", "chatLog"],
+};
+
+/** The sections holding edits that saving would change. */
+export function unsavedGroups(draft: Draft, baseline: Draft): Set<GroupId> {
+  const now = JSON.parse(comparable(draft)) as Record<string, unknown>;
+  const saved = JSON.parse(comparable(baseline)) as Record<string, unknown>;
+  const differs = (field: string) => JSON.stringify(now[field]) !== JSON.stringify(saved[field]);
+  return new Set(GROUPS.filter((group) => GROUP_FIELDS[group].some(differs)));
+}
+
 /** Number ranges (form.rs): the backend clamps into these, the sheet asks for them. */
 export const LIMITS = {
   port: { min: 0, max: 65535, integer: true },
@@ -337,30 +381,6 @@ export function fromServerIssues(issues: ValidationIssue[], draft: Draft): Issue
       ? patternIssue(row.key, problem)
       : { section: "respond", field: "respond.list", code: PATTERN_CODES[problem] };
   });
-}
-
-/** Whether a section's feature is on (`null` for the server section, which has no switch). */
-export function sectionEnabled(page: SettingsPage, section: SectionId): boolean | null {
-  switch (section) {
-    case "server":
-      return null;
-    case "login":
-      return page.loginCommands.enabled;
-    case "scheduler":
-      return page.scheduler.enabled;
-    case "antiAfk":
-      return page.antiAfk.enabled;
-    case "relog":
-      return page.autoRelog.enabled;
-    case "eat":
-      return page.autoEat.enabled;
-    case "respond":
-      return page.autoRespond.enabled;
-    case "chatLog":
-      return page.chatLog.enabled;
-    case "alerts":
-      return page.alerts.enabled;
-  }
 }
 
 /** True when `text` starts with a command whose arguments are a password (`/login hunter2`). */

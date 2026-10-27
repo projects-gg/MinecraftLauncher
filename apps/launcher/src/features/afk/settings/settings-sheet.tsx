@@ -1,94 +1,59 @@
-// Per-account AFK settings in a side sheet: a section rail, one section at a time, inline
-// validation, and a footer that knows about unsaved changes and running sessions.
+// Per-account desktop AFK settings in the shared settings panel (SHEET-UX): five sections in a rail,
+// inline validation, and the change bar docked under the section while something is unsaved. A
+// press outside, Esc or the close button closes the panel at any time; the edits wait as a draft.
 import {
   ArrowsClockwise,
   BellSimple,
   ChatCircleText,
-  Clock,
   Copy,
-  ForkKnife,
   Globe,
-  Key,
-  Notebook,
+  type Icon,
+  Keyboard,
   PersonSimpleWalk,
-  WarningCircle,
-  X,
 } from "@phosphor-icons/react";
-import {
-  Button,
-  Dialog as ConfirmDialog,
-  cn,
-  EntranceGate,
-  focusPanel,
-  focusTabQuietly,
-  GatedMotion,
-  IconButton,
-  Skeleton,
-  scrimMotion,
-  sheetMotion,
-  toast,
-  useInteractionMotion,
-} from "@pl/ui";
+import { Button, toast } from "@pl/ui";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence } from "motion/react";
-import { Dialog, Tabs } from "radix-ui";
 import { type ComponentType, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { copyErrorDetails } from "@/features/content/jobs";
 import { useDebounced } from "@/features/content/use-content";
 import { type AfkAccount, type AfkSettingsView, api } from "@/lib/api";
-import { AfkHead } from "../afk-head";
+import { PlusChangeDock } from "../cloud/plus/change-dock";
 import { afkFailed, isFriendly, runAfk } from "../errors";
-import { useIssueText } from "./controls";
-import { LoginSection, RespondSection, SchedulerSection } from "./list-sections";
+import { SectionTitle, useIssueText } from "./controls";
+import { draftKey, type HeldDraft, rebaseDraft, remindKept, useAfkDrafts } from "./drafts";
+import { CommandsSection, RepliesSection } from "./list-sections";
 import {
   type Draft,
   fromDraft,
   fromServerIssues,
+  GROUP_OF,
+  GROUPS,
+  type GroupId,
   type Issue,
   isDirty,
   patternIssue,
-  SECTIONS,
-  type SectionId,
-  sectionEnabled,
   toDraft,
+  unsavedGroups,
   validate,
 } from "./model";
-import {
-  AlertsSection,
-  AntiAfkSection,
-  ChatLogSection,
-  EatSection,
-  RelogSection,
-  type SectionProps,
-  ServerSection,
-} from "./sections";
+import { PanelBody, PanelSkeleton, SettingsPanel } from "./panel";
+import { ConnectionSection, GameSection, LogSection, type SectionProps } from "./sections";
 
-const ICONS: Record<
-  SectionId,
-  ComponentType<{ size?: number; weight?: "regular" | "duotone"; className?: string }>
-> = {
-  server: Globe,
-  login: Key,
-  scheduler: Clock,
-  antiAfk: PersonSimpleWalk,
-  relog: ArrowsClockwise,
-  eat: ForkKnife,
-  respond: ChatCircleText,
-  chatLog: Notebook,
-  alerts: BellSimple,
+const ICONS: Record<GroupId, Icon> = {
+  connection: Globe,
+  commands: Keyboard,
+  game: PersonSimpleWalk,
+  replies: ChatCircleText,
+  log: BellSimple,
 };
 
-const BODIES: Record<SectionId, ComponentType<SectionProps>> = {
-  server: ServerSection,
-  login: LoginSection,
-  scheduler: SchedulerSection,
-  antiAfk: AntiAfkSection,
-  relog: RelogSection,
-  eat: EatSection,
-  respond: RespondSection,
-  chatLog: ChatLogSection,
-  alerts: AlertsSection,
+const BODIES: Record<GroupId, ComponentType<SectionProps>> = {
+  connection: ConnectionSection,
+  commands: CommandsSection,
+  game: GameSection,
+  replies: RepliesSection,
+  log: LogSection,
 };
 
 /** A client runs with the saved settings of its start: new ones apply after a reconnect. */
@@ -122,9 +87,9 @@ function StaleBanner({ account }: { account: AfkAccount }) {
   const reconnect = useAfkReconnect();
   if (!account.settingsChanged || !isActive(account)) return null;
   return (
-    <div className="mb-5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/10 py-2.5 pr-2.5 pl-4 ring-1 ring-gold-400/25">
-      <ArrowsClockwise size={18} className="shrink-0 text-gold-300" aria-hidden />
-      <p className="min-w-0 flex-1 text-[13px] text-gold-200">{t("afkSettings.stale")}</p>
+    <div className="mb-4 flex items-center gap-3 rounded-[var(--radius-panel)] bg-white/[0.035] py-2.5 pr-2.5 pl-3.5 ring-1 ring-white/7">
+      <ArrowsClockwise size={17} className="shrink-0 text-gold-300" aria-hidden />
+      <p className="min-w-0 flex-1 text-[13px] text-bone-100">{t("afkSettings.stale")}</p>
       <Button
         size="sm"
         variant="secondary"
@@ -210,54 +175,58 @@ function usePatternIssues(draft: Draft): Issue[] {
   return issues;
 }
 
-function SheetSkeleton() {
-  return (
-    <div className="flex min-h-0 flex-1">
-      <div className="w-[208px] shrink-0 space-y-2 border-r border-white/7 p-3">
-        {SECTIONS.map((s) => (
-          <Skeleton key={s} className="h-9" />
-        ))}
-      </div>
-      <div className="flex-1 space-y-4 p-7">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-4 w-80" />
-        <Skeleton className="h-10 w-full max-w-[520px]" />
-        <Skeleton className="h-10 w-full max-w-[520px]" />
-        <Skeleton className="h-10 w-72" />
-      </div>
-    </div>
-  );
-}
-
 type SaveMode = "save" | "reconnect";
 
 function Editor({
   account,
   view,
-  onDirtyChange,
-  onDone,
-  onCancel,
+  onSaved,
 }: {
   account: AfkAccount;
   view: AfkSettingsView;
-  onDirtyChange: (dirty: boolean) => void;
-  onDone: () => void;
-  onCancel: () => void;
+  /** Saved: the stored settings are read again (the editor then starts from them). */
+  onSaved: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const issueText = useIssueText();
+  const slot = draftKey("desktop", account.id);
+  const hold = useAfkDrafts((s) => s.hold);
   const baseline = useMemo(() => toDraft(view.settings), [view.settings]);
-  const [draft, setDraftState] = useState<Draft>(baseline);
-  const [section, setSection] = useState<SectionId>("server");
+  // Edits left when the panel last closed come back over what is stored now.
+  const [draft, setDraftState] = useState<Draft>(() => {
+    const held = useAfkDrafts.getState().held[slot] as HeldDraft<Draft> | undefined;
+    return held ? rebaseDraft(held.draft, held.base, baseline) : baseline;
+  });
+  const [section, setSection] = useState<GroupId>(
+    () => GROUPS.find((group) => unsavedGroups(draft, baseline).has(group)) ?? "connection",
+  );
   const [submitted, setSubmitted] = useState(false);
   const [serverIssues, setServerIssues] = useState<Issue[]>([]);
   const [saveError, setSaveError] = useState<Failure | null>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const [dock, setDock] = useState<HTMLElement | null>(null);
+  const scroller = useRef<HTMLDivElement | null>(null);
+  // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
+  // buttons wait, then the edits give way to the stored settings and the bar slides away (the
+  // editor stays: no section rises in again).
+  const saved = useRef(false);
+  const [settling, setSettling] = useState(false);
   const active = isActive(account);
 
+  // Runs when a save comes back as the stored settings.
+  useEffect(() => {
+    if (!saved.current) return;
+    saved.current = false;
+    setDraftState(baseline);
+    setSubmitted(false);
+    setServerIssues([]);
+    setSaveError(null);
+  }, [baseline]);
+
   const dirty = isDirty(draft, baseline);
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  useEffect(() => {
+    if (!saved.current) hold(slot, dirty ? { draft, base: baseline } : null);
+  }, [hold, slot, dirty, draft, baseline]);
 
   const setDraft = (update: (d: Draft) => Draft) => {
     setDraftState(update);
@@ -273,12 +242,12 @@ function Editor({
   }, [draft, submitted, serverIssues, patternIssues]);
 
   const errorFor = (field: string) => issueText(issues.find((i) => i.field === field));
-  const sectionHasIssue = (id: SectionId) => issues.some((i) => i.section === id);
   const openFolder = () => runAfk(api.afkOpenFolder(account.id), t("afk.openFolderFailed"));
+  const unsaved = unsavedGroups(draft, baseline);
 
-  const goTo = (id: SectionId) => {
+  const goTo = (id: GroupId) => {
     setSection(id);
-    contentRef.current?.scrollTo({ top: 0 });
+    scroller.current?.scrollTo({ top: 0 });
   };
 
   const save = useMutation({
@@ -287,29 +256,33 @@ function Editor({
       if (result.status === "invalid") {
         const found = fromServerIssues(result.issues, draft);
         setServerIssues(found);
-        if (found[0]) goTo(found[0].section);
+        if (found[0]) goTo(GROUP_OF[found[0].section]);
         return;
       }
-      // The sheet closes; the next open loads the stored (normalized) settings again.
+      saved.current = true;
+      setSettling(true);
+      hold(slot, null);
       void queryClient.invalidateQueries({ queryKey: ["afk"] });
-      const saved = t("afkSettings.saved", { name: account.nickname });
+      const done = t("afkSettings.saved", { name: account.nickname });
       if (result.reconnectNeeded && mode === "reconnect") {
         runAfk(api.afkReconnect(account.id), t("afkSettings.reconnectFailed"));
-        toast.success(saved, { description: t("afkSettings.savedReconnecting") });
+        toast.success(done, { description: t("afkSettings.savedReconnecting") });
       } else if (result.reconnectNeeded) {
-        toast.success(saved, {
+        toast.success(done, {
           description: t("afkSettings.savedReconnect"),
           duration: 10_000,
           action: {
             label: t("afkSettings.reconnect"),
-            // The sheet is closed by then, so no component-bound mutation here.
             onClick: () => runAfk(api.afkReconnect(account.id), t("afkSettings.reconnectFailed")),
           },
         });
       } else {
-        toast.success(saved);
+        toast.success(done);
       }
-      onDone();
+      void onSaved().finally(() => {
+        saved.current = false;
+        setSettling(false);
+      });
     },
     onError: (error) => setSaveError(failure(error, t("afkSettings.saveFailed"))),
   });
@@ -318,17 +291,25 @@ function Editor({
     setSubmitted(true);
     const found = [...validate(draft), ...patternIssues];
     if (found.length) {
-      const here = found.some((i) => i.section === section);
-      if (!here && found[0]) goTo(found[0].section);
+      const here = found.some((i) => GROUP_OF[i.section] === section);
+      if (!here && found[0]) goTo(GROUP_OF[found[0].section]);
       return;
     }
     save.mutate(mode);
   };
 
+  const discard = () => {
+    hold(slot, null);
+    setDraftState(baseline);
+    setSubmitted(false);
+    setServerIssues([]);
+    setSaveError(null);
+  };
+
   // Ctrl+S saves (without the reconnect: the safe choice for a shortcut).
   const shortcut = useRef(() => {});
   shortcut.current = () => {
-    if (dirty && !save.isPending) submit("save");
+    if (dirty && !save.isPending && !settling) submit("save");
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -345,128 +326,89 @@ function Editor({
   const pending = save.isPending ? save.variables : null;
   // On a running account the main action applies the settings right away.
   const mainMode: SaveMode = active ? "reconnect" : "save";
+  const Body = BODIES[section];
+
+  const bar = (
+    <PlusChangeDock
+      dock={dock}
+      open={dirty || Boolean(saveError) || blocking}
+      label={t("afkPanel.barLabel")}
+    >
+      <div className="min-w-0 flex-1 text-[13px]">
+        {saveError ? (
+          <div className="flex items-center gap-2">
+            <p role="alert" className="min-w-0 text-flare-400">
+              {saveError.message}
+            </p>
+            <CopyDetails error={saveError.error} />
+          </div>
+        ) : blocking ? (
+          <p role="alert" className="text-pretty text-flare-400">
+            {t("afkSettings.fixErrors")}
+          </p>
+        ) : (
+          <p className="text-pretty text-ash-300">{t("afkSettings.dirty")}</p>
+        )}
+      </div>
+      <Button variant="ghost" onClick={discard} disabled={save.isPending || settling || !dirty}>
+        {t("afkSettings.cancel")}
+      </Button>
+      {/* While the bar says to fix the marked fields first, saving waits (SHEET-UX). */}
+      {active ? (
+        <Button
+          variant="secondary"
+          onClick={() => submit("save")}
+          disabled={!dirty || blocking || save.isPending || settling}
+        >
+          {pending === "save" ? t("afkSettings.saving") : t("afkPanel.saveOnly")}
+        </Button>
+      ) : null}
+      <Button
+        variant="primary"
+        onClick={() => submit(mainMode)}
+        disabled={!dirty || blocking || save.isPending || settling}
+      >
+        {pending === mainMode
+          ? t("afkSettings.saving")
+          : active
+            ? t("afkSettings.saveReconnect")
+            : t("afkSettings.save")}
+      </Button>
+    </PlusChangeDock>
+  );
 
   return (
-    <>
-      <Tabs.Root
-        value={section}
-        onValueChange={(v) => goTo(v as SectionId)}
-        orientation="vertical"
-        className="flex min-h-0 flex-1"
-      >
-        <Tabs.List
-          aria-label={t("afkSettings.sectionsLabel")}
-          className="flex w-[208px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-white/7 p-3"
-        >
-          {SECTIONS.map((id) => {
-            const Icon = ICONS[id];
-            const on = id === section;
-            const enabled = sectionEnabled(draft.page, id);
-            const problem = sectionHasIssue(id);
-            return (
-              <Tabs.Trigger
-                key={id}
-                value={id}
-                onMouseDown={focusTabQuietly}
-                className={cn(
-                  "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none",
-                  on
-                    ? "bg-white/8 text-bone-50"
-                    : "text-ash-300 hover:bg-white/5 hover:text-bone-50",
-                )}
-              >
-                <Icon
-                  size={17}
-                  weight={on ? "duotone" : "regular"}
-                  className={cn("shrink-0", on && "text-gold-300")}
-                />
-                <span className="min-w-0 flex-1 truncate">{t(`afkSettings.sections.${id}`)}</span>
-                {problem ? (
-                  <WarningCircle
-                    size={16}
-                    weight="fill"
-                    className="shrink-0 text-flare-400"
-                    aria-label={t("afkSettings.sectionHasErrors")}
-                  />
-                ) : enabled === null ? null : (
-                  <span
-                    className={cn(
-                      "shrink-0 text-[11.5px]",
-                      enabled ? "text-bone-100/80" : "text-ash-400",
-                    )}
-                  >
-                    {enabled ? t("afkSettings.on") : t("afkSettings.off")}
-                  </span>
-                )}
-              </Tabs.Trigger>
-            );
-          })}
-        </Tabs.List>
-        <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-7 pt-6 pb-8">
-          <StaleBanner account={account} />
-          {SECTIONS.map((id) => {
-            const Body = BODIES[id];
-            return (
-              <Tabs.Content key={id} value={id} className="max-w-[680px] outline-none">
-                <Body
-                  draft={draft}
-                  setDraft={setDraft}
-                  errorFor={errorFor}
-                  view={view}
-                  onOpenFolder={openFolder}
-                />
-              </Tabs.Content>
-            );
-          })}
-        </div>
-      </Tabs.Root>
-
-      <footer className="flex items-center gap-3 border-t border-white/8 bg-obsidian-950/40 px-5 py-3.5">
-        <div className="min-w-0 flex-1 text-[12.5px]">
-          {saveError ? (
-            <div className="flex items-center gap-2">
-              <p role="alert" className="min-w-0 text-flare-400">
-                {saveError.message}
-              </p>
-              <CopyDetails error={saveError.error} />
-            </div>
-          ) : blocking ? (
-            <p role="alert" className="text-flare-400">
-              {t("afkSettings.fixErrors")}
-            </p>
-          ) : dirty ? (
-            <p className="text-gold-200">{t("afkSettings.dirty")}</p>
-          ) : null}
-        </div>
-        <Button variant="ghost" onClick={onCancel} disabled={save.isPending}>
-          {dirty ? t("afkSettings.cancel") : t("afkSettings.close")}
-        </Button>
-        {active ? (
-          <Button
-            variant="secondary"
-            onClick={() => submit("save")}
-            disabled={!dirty || save.isPending}
-          >
-            {pending === "save" ? t("afkSettings.saving") : t("afkSettings.save")}
-          </Button>
-        ) : null}
-        <Button
-          variant="primary"
-          onClick={() => submit(mainMode)}
-          disabled={!dirty || save.isPending}
-        >
-          {pending === mainMode
-            ? t("afkSettings.saving")
-            : active
-              ? t("afkSettings.saveReconnect")
-              : t("afkSettings.save")}
-        </Button>
-      </footer>
-    </>
+    <PanelBody
+      label={t("afkSettings.sectionsLabel")}
+      section={section}
+      onSection={goTo}
+      scrollerRef={(element) => {
+        scroller.current = element;
+      }}
+      dockRef={setDock}
+      bar={bar}
+      sections={GROUPS.map((id) => ({
+        id,
+        label: t(`afkPanel.sections.${id}`),
+        icon: ICONS[id],
+        unsaved: unsaved.has(id),
+        problem: issues.some((i) => GROUP_OF[i.section] === id),
+      }))}
+    >
+      <StaleBanner account={account} />
+      <SectionTitle title={t(`afkPanel.sections.${section}`)} />
+      <Body
+        draft={draft}
+        setDraft={setDraft}
+        errorFor={errorFor}
+        view={view}
+        onOpenFolder={openFolder}
+      />
+    </PanelBody>
   );
 }
 
-/** The settings sheet of one AFK account. Closing with unsaved changes asks first. */
+/** The settings panel of one desktop AFK account. */
 export function AfkSettingsSheet({
   account,
   onClose,
@@ -475,13 +417,11 @@ export function AfkSettingsSheet({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const animate = useInteractionMotion();
   const open = Boolean(account);
-  // Both belong to one account: switching accounts never inherits them.
-  const dirtyRef = useRef<{ id: string; dirty: boolean } | null>(null);
-  const [confirmFor, setConfirmFor] = useState<string | null>(null);
-  const confirmOpen = open && confirmFor === account?.id;
-  const setConfirmOpen = (next: boolean) => setConfirmFor(next ? (account?.id ?? null) : null);
+  const close = () => {
+    if (account) remindKept(t, draftKey("desktop", account.id), account.nickname);
+    onClose();
+  };
   const {
     data: view,
     error: loadError,
@@ -496,112 +436,25 @@ export function AfkSettingsSheet({
     refetchOnWindowFocus: false,
   });
 
-  const close = () => {
-    dirtyRef.current = null;
-    setConfirmFor(null);
-    onClose();
-  };
-  const requestClose = () => {
-    const dirty = dirtyRef.current;
-    if (account && dirty?.id === account.id && dirty.dirty) setConfirmOpen(true);
-    else close();
-  };
-
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => !next && requestClose()}>
-      <AnimatePresence>
-        {open && account ? (
-          <EntranceGate key="sheet">
-            <Dialog.Portal forceMount>
-              <Dialog.Overlay asChild forceMount>
-                <GatedMotion.div
-                  // One layer below the shared Dialog, so its confirmation dims the sheet too.
-                  className="fixed inset-0 z-30 bg-obsidian-950/55"
-                  {...scrimMotion(!animate)}
-                />
-              </Dialog.Overlay>
-              <Dialog.Content
-                asChild
-                forceMount
-                aria-describedby={undefined}
-                // The panel takes the focus, not the close button (its tooltip would pop open).
-                onOpenAutoFocus={(event) => {
-                  event.preventDefault();
-                  focusPanel(event.currentTarget as HTMLElement);
-                }}
-                // A form saved as a whole: a stray click beside the panel never closes it (Esc
-                // and the close button still do, asking first when something changed).
-                onPointerDownOutside={(event) => event.preventDefault()}
-                onInteractOutside={(event) => event.preventDefault()}
-              >
-                <GatedMotion.aside
-                  tabIndex={-1}
-                  className="glass-strong fixed top-0 right-0 bottom-0 z-40 flex w-[min(940px,94vw)] flex-col shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"
-                  {...sheetMotion(!animate)}
-                >
-                  <header className="flex items-center gap-3.5 border-b border-white/8 px-5 py-4">
-                    <AfkHead nickname={account.nickname} size={36} />
-                    <div className="min-w-0 flex-1">
-                      <Dialog.Title className="truncate font-display text-[18px] font-semibold text-bone-50">
-                        {t("afkSettings.title", { name: account.nickname })}
-                      </Dialog.Title>
-                      <p className="truncate text-[12.5px] text-ash-400" data-selectable>
-                        {account.server}
-                      </p>
-                    </div>
-                    <IconButton
-                      label={t("common.close")}
-                      icon={<X size={18} />}
-                      size="sm"
-                      onClick={requestClose}
-                    />
-                  </header>
-
-                  {view ? (
-                    <Editor
-                      key={account.id}
-                      account={account}
-                      view={view}
-                      onDirtyChange={(dirty) => {
-                        dirtyRef.current = { id: account.id, dirty };
-                      }}
-                      onDone={close}
-                      onCancel={close}
-                    />
-                  ) : loadError ? (
-                    <LoadFailed
-                      failed={failure(loadError, t("afkSettings.loadFailedHint"))}
-                      retrying={isFetching}
-                      onRetry={() => void refetch()}
-                    />
-                  ) : (
-                    <SheetSkeleton />
-                  )}
-
-                  <ConfirmDialog
-                    open={confirmOpen}
-                    onOpenChange={setConfirmOpen}
-                    title={t("afkSettings.discard.title")}
-                    description={t("afkSettings.discard.body")}
-                    closeLabel={t("common.close")}
-                    width={440}
-                    footer={
-                      <>
-                        <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-                          {t("afkSettings.discard.keep")}
-                        </Button>
-                        <Button variant="danger" onClick={close}>
-                          {t("afkSettings.discard.confirm")}
-                        </Button>
-                      </>
-                    }
-                  />
-                </GatedMotion.aside>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </EntranceGate>
-        ) : null}
-      </AnimatePresence>
-    </Dialog.Root>
+    <SettingsPanel
+      open={open}
+      onClose={close}
+      nickname={account?.nickname ?? ""}
+      title={t("afkSettings.title", { name: account?.nickname ?? "" })}
+      server={account?.server ?? ""}
+    >
+      {account && view ? (
+        <Editor key={account.id} account={account} view={view} onSaved={() => refetch()} />
+      ) : loadError ? (
+        <LoadFailed
+          failed={failure(loadError, t("afkSettings.loadFailedHint"))}
+          retrying={isFetching}
+          onRetry={() => void refetch()}
+        />
+      ) : (
+        <PanelSkeleton rows={GROUPS.length} />
+      )}
+    </SettingsPanel>
   );
 }

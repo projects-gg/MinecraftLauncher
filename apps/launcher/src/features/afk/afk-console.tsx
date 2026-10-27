@@ -10,6 +10,7 @@ import {
   Switch,
   scrimMotion,
   sheetMotion,
+  sheetOutside,
   useInteractionMotion,
   useMotionPrefs,
 } from "@pl/ui";
@@ -190,6 +191,8 @@ export function AfkConsole({
                 asChild
                 forceMount
                 aria-describedby={undefined}
+                // A press outside closes the console, but never a toast's button.
+                {...sheetOutside}
                 // Start in the command line, not on the close button (its tooltip would pop open).
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();

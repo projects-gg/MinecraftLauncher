@@ -5,6 +5,7 @@ import {
   easeOutExpo,
   exitOf,
   Skeleton,
+  swallowDismissClick,
   useInteractionMotion,
   usePerf,
 } from "@pl/ui";
@@ -298,6 +299,7 @@ function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () =
       {/* Solid with the glass's edge, not glass: it lies over the patch notes' words, which showed
           through beside its name. No drop shadow: opening upward, it would dim its own link. */}
       <Popover.Content
+        onPointerDownOutside={swallowDismissClick}
         side="top"
         align="center"
         sideOffset={4}

@@ -18,7 +18,9 @@ import {
   scrimMotion,
   scrollBehavior,
   sheetMotion,
+  sheetOutside,
   springSnappy,
+  swallowDismissClick,
   useInteractionMotion,
 } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
@@ -159,6 +161,7 @@ function DragHandle({
         {menuOpen ? (
           <DropdownMenu.Portal forceMount>
             <DropdownMenu.Content
+              onPointerDownOutside={swallowDismissClick}
               onCloseAutoFocus={returnFocusAfterKeys}
               forceMount
               asChild
@@ -728,17 +731,8 @@ export function AccountCenterSheet() {
                     event.preventDefault();
                   }
                 }}
-                // The undo toast lives outside the sheet: using it must not close the sheet.
-                onPointerDownOutside={(event) => {
-                  if ((event.target as Element | null)?.closest?.("[data-sonner-toaster]")) {
-                    event.preventDefault();
-                  }
-                }}
-                onFocusOutside={(event) => {
-                  if ((event.target as Element | null)?.closest?.("[data-sonner-toaster]")) {
-                    event.preventDefault();
-                  }
-                }}
+                // A press outside closes it; the undo toast does not.
+                {...sheetOutside}
               >
                 <GatedMotion.aside
                   className="glass-strong fixed top-0 right-0 bottom-0 z-40 flex w-[min(480px,94vw)] flex-col shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"

@@ -1,4 +1,4 @@
-import { Button, focusPanel } from "@pl/ui";
+import { Button, focusPanel, swallowDismissClick } from "@pl/ui";
 import { Popover } from "radix-ui";
 import { type ReactNode, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,14 +19,15 @@ export function InstallConfirm({ from, children }: { from: AskFrom; children: Re
   if (asking && asking.count !== count) setCount(asking.count);
 
   // A press on the control itself is not "outside": the control closes the popover (a toggle).
+  const onAnchor = (event: { detail: { originalEvent: Event } }) => {
+    const target = event.detail.originalEvent.target;
+    return target instanceof Element && Boolean(target.closest(`[data-update-anchor="${from}"]`));
+  };
   const onInteractOutside = (event: {
     detail: { originalEvent: Event };
     preventDefault(): void;
   }) => {
-    const target = event.detail.originalEvent.target;
-    if (target instanceof Element && target.closest(`[data-update-anchor="${from}"]`)) {
-      event.preventDefault();
-    }
+    if (onAnchor(event)) event.preventDefault();
   };
 
   return (
@@ -53,6 +54,10 @@ export function InstallConfirm({ from, children }: { from: AskFrom; children: Re
             if (panel.current) focusPanel(panel.current);
           }}
           onInteractOutside={onInteractOutside}
+          // Any other press outside answers "Sonra" and does nothing else.
+          onPointerDownOutside={(event) => {
+            if (!onAnchor(event)) swallowDismissClick(event);
+          }}
           className="glass-strong pop-motion z-50 w-[280px] rounded-[var(--radius-panel)] p-3.5 shadow-[0_24px_60px_rgb(34_6_6/0.55)] outline-none"
         >
           <p className="text-[13px] leading-snug text-bone-100">

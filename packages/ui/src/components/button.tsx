@@ -134,6 +134,9 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
           "hit-area relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-ash-300",
           "transition-[background-color,color,transform,scale,opacity] duration-150 ease-out",
           "hover:bg-white/7 hover:text-bone-100 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-45",
+          // The "⋯" that opened a menu stays lit while it is open, so the menu reads as its own
+          // even where it opens beside it over the next card (SHEET-UX).
+          "data-[state=open]:bg-white/8 data-[state=open]:text-bone-100",
           size === "sm" ? "size-8" : "size-[32px]",
           active && "bg-white/8 text-gold-300",
           className,

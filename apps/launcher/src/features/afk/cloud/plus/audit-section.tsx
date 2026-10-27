@@ -411,6 +411,8 @@ export function AuditSection({
             <div className="flex flex-col gap-2.5">
               <AnimatePresence initial={false}>{pending.map(card)}</AnimatePresence>
             </div>
+            {/* Once under what waits for the player: the assistant's deals and finds (27 Oct 2026). */}
+            <p className="mt-2 text-[12px] text-ash-400">{t("afkPlus.aiNote")}</p>
           </motion.section>
         ) : null}
         {closed.length ? (
@@ -508,7 +510,12 @@ export function AuditSection({
                 {t("afkPlus.audit.older")}
               </Button>
             ) : null}
-            <p className="text-[12px] text-ash-400">{t("afkPlus.audit.kept")}</p>
+            <p className="text-[12px] text-ash-400">
+              {/* The AI note once a page: under what waits when something does. */}
+              {pending.length
+                ? t("afkPlus.audit.kept")
+                : `${t("afkPlus.audit.kept")} ${t("afkPlus.aiNote")}`}
+            </p>
           </div>
         )}
       </motion.section>

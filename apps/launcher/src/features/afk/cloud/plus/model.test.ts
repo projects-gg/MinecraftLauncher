@@ -8,7 +8,9 @@ import {
   editDraft,
   giftReplies,
   limitProblems,
+  PREFIX_DEFAULT,
   personaTextProblem,
+  prefixProblem,
   readTime,
   settingsPart,
   tradeNoteKey,
@@ -22,7 +24,15 @@ function config(parts: Partial<PlusConfig> = {}): PlusConfig {
     enabled: true,
     mode: "projects-smp",
     lang: "auto",
-    persona: { preset: "friendly", intro: "", status: "", statusPreset: null, smallTalk: true },
+    persona: {
+      preset: "friendly",
+      intro: "",
+      status: "",
+      statusPreset: null,
+      smallTalk: false,
+      playerTalk: false,
+      prefix: { on: false, text: "[AFK+]" },
+    },
     replies: { scope: "trade", away: true, saveAt: 80 },
     authority: "ask",
     allow: { buy: true, sell: true },
@@ -86,6 +96,33 @@ function ai(parts: Partial<PlusAi>): PlusAi {
     ...parts,
   };
 }
+
+describe("the tag before the assistant's lines (afkplus-config-v2.json's tag cases)", () => {
+  it("says what the service says, or leaves it to the service", () => {
+    const cases: Array<[string, string, string[], string | null]> = [
+      ["a tag is cleaned", "  [Ejder   Bot]  ", [], null],
+      ["a tag that is off is still checked", "[Yetkili]", [], "staff"],
+      ["a tag posing as staff in digits", "[4dm1n]", [], "staff"],
+      ["a tag posing as staff in camel case", "[ModBot]", [], "staff"],
+      ["a tag posing as the system with spaces", "[S i s t e m]", [], "staff"],
+      ["a tag posing as the server", "(Sunucu)", [], "staff"],
+      ["a tag with a colour code", "&a[Bot]", [], "form"],
+      ["a tag with a look-alike letter", "[Аdmin]", [], "form"],
+      ["a tag in angle brackets", "<Bot>", [], "form"],
+      ["a tag over 16 characters", "[Ejderin Botu Burada]", [], "length"],
+      ["an empty tag", "   ", [], "empty"],
+      // Links and apps are the service's.
+      ["a tag naming another app", "[Discord]", [], null],
+      ["a tag naming a friend", "[kaan_07]", ["Kaan_07"], "name"],
+      ["a tag naming a blocked player", "Spammer1:", ["Spammer1"], "name"],
+    ];
+    for (const [name, text, names, want] of cases) {
+      expect(prefixProblem(text, names), name).toBe(want);
+    }
+    expect(prefixProblem(PREFIX_DEFAULT.text)).toBeNull();
+    expect(PREFIX_DEFAULT).toEqual({ on: false, text: "[AFK+]" });
+  });
+});
 
 describe("AFK+ limits and fields", () => {
   it("need both limits to buy", () => {

@@ -1,11 +1,12 @@
 // Under an auto-reply, while the account may use placeholders (CAFK-FEAT §3.3): chips that put the
 // sender's name (`{u}`) and the pattern's parts (`{1}`…) where the caret is, and "Dene", which runs
 // the rule against a sample message on this computer and shows what the bot would send.
-import { Flask, Plus } from "@phosphor-icons/react";
+import { Flask } from "@phosphor-icons/react";
 import { Button, cn, enter, Input, leave } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { InsertChip } from "../settings/controls";
 import { type CloudReplyTry, cloudApi, type TryRule } from "./api";
 import { placeholderChips, placeholderNames } from "./placeholders";
 
@@ -60,33 +61,20 @@ export function ReplyTools({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-1.5">
+        {/* Nothing to add to a server line's reply (it has no sender): no empty "Yanıta ekle". */}
         <fieldset
           aria-label={t("cloudAfkFeat.settings.chips.label")}
-          className="flex min-w-0 flex-wrap items-center gap-1.5"
+          className={cn("flex min-w-0 flex-wrap items-center gap-1.5", !chips.length && "hidden")}
         >
           <span aria-hidden className="mr-0.5 text-[12px] text-ash-400">
             {t("cloudAfkFeat.settings.chips.label")}
           </span>
           {chips.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => onInsert(`{${name}}`)}
-              className="group relative isolate inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 px-2 text-[12px] font-semibold whitespace-nowrap text-bone-100 transition-[transform,scale] duration-150 ease-out [--cut:4px] focus-visible:outline-none active:scale-[0.97]"
-            >
-              <span
-                aria-hidden
-                className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
-              />
-              <span
-                aria-hidden
-                className="chamfer absolute inset-0 -z-10 bg-white/7 transition-colors duration-150 group-hover:bg-white/12"
-              />
-              <Plus size={11} weight="bold" aria-hidden className="text-ash-300" />
+            <InsertChip key={name} onClick={() => onInsert(`{${name}}`)}>
               {name === "u"
                 ? t("cloudAfkFeat.settings.chips.sender")
                 : t("cloudAfkFeat.settings.chips.part", { n: name })}
-            </button>
+            </InsertChip>
           ))}
         </fieldset>
         <Button
@@ -110,7 +98,8 @@ export function ReplyTools({
       <AnimatePresence initial={false}>
         {trying ? (
           <motion.div key="try" className="flex flex-col gap-1.5" {...fade}>
-            <label htmlFor={sampleId} className="sr-only">
+            {/* Named over the field: once typed in, a bare field said nothing (SHEET-UX). */}
+            <label htmlFor={sampleId} className="text-[12px] font-medium text-ash-300">
               {t("cloudAfkFeat.settings.trySample")}
             </label>
             <Input

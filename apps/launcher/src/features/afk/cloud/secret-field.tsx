@@ -1,15 +1,16 @@
 // The words of a command or a reply. Three looks:
 // - plain words: a field, with a lock that makes them secret (a password command is secret at once);
 // - a secret this computer has (sealed here, kept in the keychain, or typed now): a hidden field
-//   with an eye that shows it on this computer only, and a quiet "Bu bilgisayarda saklı";
+//   with an eye that shows it on this computer only, and a quiet "Bulutta şifreli, bu bilgisayarda da saklı.";
 // - a secret only the cloud can show (sealed on the site or another computer): its preview, with
 //   "Göster" (the machine sends it sealed to a one-time key; shown for a few seconds, never kept)
 //   and "Değiştir" (type it again).
 import { Eye, EyeSlash, LockSimple, LockSimpleOpen } from "@phosphor-icons/react";
 import { Button, cn, enter, IconButton, Input, leave, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { type Ref, useEffect, useRef, useState } from "react";
+import { type Ref, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TokenField, type TokenSet } from "../settings/controls";
 import { cloudApi } from "./api";
 import { looksSensitive } from "./sensitive";
 import { typed, type Words } from "./settings-model";
@@ -30,6 +31,7 @@ function Stored({
   onChange,
   error,
   label,
+  mono,
 }: {
   preview: string;
   accountId: string;
@@ -37,6 +39,7 @@ function Stored({
   onChange: () => void;
   error: string | null;
   label: string;
+  mono: boolean;
 }) {
   const { t } = useTranslation();
   const { reduce } = useMotionPrefs();
@@ -82,13 +85,16 @@ function Stored({
           )}
         >
           <span className="sr-only">{label}</span>
-          <LockSimple size={15} weight="fill" className="shrink-0 text-gold-300" aria-hidden />
+          <LockSimple size={15} weight="fill" className="shrink-0 text-ash-300" aria-hidden />
           <span className="grid min-w-0 flex-1">
             <AnimatePresence initial={false}>
               {shown ? (
                 <motion.span
                   key="shown"
-                  className="truncate font-mono text-[13px] text-bone-50 [grid-area:1/1]"
+                  className={cn(
+                    "truncate text-bone-50 [grid-area:1/1]",
+                    mono ? "font-mono text-[13px]" : "text-[13.5px]",
+                  )}
                   data-selectable
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1, transition: enter(0.18) }}
@@ -105,7 +111,14 @@ function Stored({
                   exit={{ opacity: 0, transition: leave(0.14) }}
                 >
                   {name ? (
-                    <span className="truncate font-mono text-[13px] text-bone-100">{name}</span>
+                    <span
+                      className={cn(
+                        "truncate text-bone-100",
+                        mono ? "font-mono text-[13px]" : "text-[13.5px]",
+                      )}
+                    >
+                      {name}
+                    </span>
                   ) : null}
                   <span aria-hidden className="font-mono text-[13px] tracking-widest text-ash-400">
                     ••••••
@@ -161,6 +174,10 @@ export function WordsField({
   error,
   autoFocus,
   inputRef,
+  id,
+  showLabel = false,
+  mono = true,
+  tokens,
 }: {
   words: Words;
   onChange: (words: Words) => void;
@@ -172,27 +189,51 @@ export function WordsField({
   autoFocus?: boolean;
   /** The words' field (a reply's placeholder chips type where its caret is). */
   inputRef?: Ref<HTMLInputElement>;
+  id?: string;
+  /** The label above the field (a rule's "Yanıt"), else only its accessible name. */
+  showLabel?: boolean;
+  /** Commands look like what is typed into the game; a reply is a sentence (SHEET-UX). */
+  mono?: boolean;
+  /** A reply's placeholders, shown by name as chips (`TokenField`). */
+  tokens?: TokenSet;
 }) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   // "Değiştir" on a stored secret: what to go back to with "Vazgeç".
   const replaced = useRef<Words | null>(null);
   const [focusNext, setFocusNext] = useState(false);
+  const generated = useId();
+  const fieldId = id ?? generated;
+  const heading = showLabel ? (
+    words.kind === "sealed" ? (
+      <p aria-hidden className="mb-1.5 text-[13px] font-medium text-bone-100">
+        {label}
+      </p>
+    ) : (
+      <label htmlFor={fieldId} className="mb-1.5 block text-[13px] font-medium text-bone-100">
+        {label}
+      </label>
+    )
+  ) : null;
 
   if (words.kind === "sealed") {
     return (
-      <Stored
-        preview={words.preview}
-        accountId={accountId}
-        rowId={rowId}
-        label={label}
-        error={error}
-        onChange={() => {
-          replaced.current = words;
-          setFocusNext(true);
-          onChange({ kind: "secret", text: "", kept: false });
-        }}
-      />
+      <div className="min-w-0 flex-1">
+        {heading}
+        <Stored
+          preview={words.preview}
+          accountId={accountId}
+          rowId={rowId}
+          label={label}
+          error={error}
+          mono={mono}
+          onChange={() => {
+            replaced.current = words;
+            setFocusNext(true);
+            onChange({ kind: "secret", text: "", kept: false });
+          }}
+        />
+      </div>
     );
   }
 
@@ -201,32 +242,46 @@ export function WordsField({
   const kept = words.kind === "secret" && words.kept;
   return (
     <div className="min-w-0 flex-1">
+      {heading}
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
-          {secret ? (
-            <LockSimple
-              size={15}
-              weight="fill"
-              aria-hidden
-              className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-gold-300"
+          {tokens && !secret ? (
+            // A reply's placeholders stay chips with their names, typing included.
+            <TokenField
+              id={fieldId}
+              label={showLabel ? undefined : label}
+              value={words.text}
+              tokens={tokens}
+              placeholder={placeholder}
+              invalid={Boolean(error)}
+              inputRef={inputRef}
+              autoFocus={autoFocus || focusNext}
+              autoComplete="off"
+              onChange={(text) => onChange(typed(words, text))}
             />
-          ) : null}
-          <Input
-            ref={inputRef}
-            aria-label={label}
-            value={words.text}
-            placeholder={replaced.current ? t("cloudAfk.settings.secret.newValue") : placeholder}
-            type={secret && !visible ? "password" : "text"}
-            maxLength={256}
-            spellCheck={false}
-            autoComplete={secret ? "new-password" : "off"}
-            data-1p-ignore=""
-            data-lpignore="true"
-            invalid={Boolean(error)}
-            autoFocus={autoFocus || focusNext}
-            onChange={(event) => onChange(typed(words, event.target.value))}
-            className={cn("h-9 font-mono text-[13px]", secret && "pl-9", secret && "pr-10")}
-          />
+          ) : (
+            <Input
+              ref={inputRef}
+              id={fieldId}
+              aria-label={showLabel ? undefined : label}
+              value={words.text}
+              placeholder={replaced.current ? t("cloudAfk.settings.secret.newValue") : placeholder}
+              type={secret && !visible ? "password" : "text"}
+              maxLength={256}
+              spellCheck={false}
+              autoComplete={secret ? "new-password" : "off"}
+              data-1p-ignore=""
+              data-lpignore="true"
+              invalid={Boolean(error)}
+              autoFocus={autoFocus || focusNext}
+              onChange={(event) => onChange(typed(words, event.target.value))}
+              className={cn(
+                "h-9",
+                mono ? "font-mono text-[13px]" : "text-[13.5px]",
+                secret && "pr-10",
+              )}
+            />
+          )}
           {secret ? (
             <IconButton
               label={
@@ -252,14 +307,13 @@ export function WordsField({
             {t("cloudAfk.settings.secret.undoChange")}
           </Button>
         ) : (
-          <IconButton
-            label={t("cloudAfk.settings.secret.mark")}
-            icon={secret ? <LockSimple size={16} weight="fill" /> : <LockSimpleOpen size={16} />}
-            size="sm"
+          // In words, as on the site: an unnamed padlock beside every line said nothing. Pressed
+          // while the line is secret (a password command stays so); no gold, it is not the action.
+          <button
+            type="button"
             aria-pressed={secret}
-            // A password command stays secret.
             disabled={forced && secret}
-            className={cn(secret && "text-gold-300")}
+            title={t("cloudAfk.settings.secret.markHelp")}
             onClick={() =>
               onChange(
                 secret
@@ -267,7 +321,20 @@ export function WordsField({
                   : { kind: "secret", text: words.text, kept: false },
               )
             }
-          />
+            className={cn(
+              "chamfer inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[12.5px] font-medium transition-[background-color,color,transform,scale] duration-150 [--cut:5px] outline-none focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] disabled:cursor-default disabled:active:scale-100",
+              secret
+                ? "bg-white/12 text-bone-50"
+                : "bg-white/5 text-ash-300 hover:bg-white/9 hover:text-bone-100",
+            )}
+          >
+            {secret ? (
+              <LockSimple size={14} weight="fill" aria-hidden />
+            ) : (
+              <LockSimpleOpen size={14} aria-hidden />
+            )}
+            {secret ? t("cloudAfk.settings.secret.mark") : t("afkPanel.makeSecret")}
+          </button>
         )}
       </div>
       {error ? (

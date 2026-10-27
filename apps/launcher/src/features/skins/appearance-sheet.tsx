@@ -28,6 +28,7 @@ import {
   SwapLabel,
   scrimMotion,
   sheetMotion,
+  sheetOutside,
   toast,
   useInteractionMotion,
   useMotionPrefs,
@@ -1078,18 +1079,8 @@ function AppearanceSheetPanel({
                   event.preventDefault();
                   focusPanel(event.currentTarget as HTMLElement);
                 }}
-                // Toasts live outside the sheet: "Geri al" or "Ayrıntıları kopyala" there must not
-                // close it.
-                onPointerDownOutside={(event) => {
-                  if ((event.target as Element | null)?.closest?.("[data-sonner-toaster]")) {
-                    event.preventDefault();
-                  }
-                }}
-                onFocusOutside={(event) => {
-                  if ((event.target as Element | null)?.closest?.("[data-sonner-toaster]")) {
-                    event.preventDefault();
-                  }
-                }}
+                // A press outside closes it; "Geri al" or "Ayrıntıları kopyala" on a toast does not.
+                {...sheetOutside}
               >
                 <GatedMotion.aside
                   tabIndex={-1}

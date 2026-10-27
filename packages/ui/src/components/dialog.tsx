@@ -4,6 +4,7 @@ import { Dialog as RadixDialog } from "radix-ui";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { EntranceGate, GatedMotion } from "../entrance";
 import { focusPanel } from "../input-modality";
+import { onToast } from "../layer-dismiss";
 import { cn } from "../lib/cn";
 import { dialogMotion, easeOutExpo, scrimMotion } from "../motion";
 import { IconButton } from "./button";
@@ -95,8 +96,7 @@ export function Dialog({
   };
   const blockOutside = (event: Event) => {
     // A toast's button (an error's "Ayrıntıları kopyala", "Geri al") is not a click away.
-    const onToast = (event.target as Element | null)?.closest?.("[data-sonner-toaster]");
-    if (!dismissible || !dismissOnOutsideClick || onToast) event.preventDefault();
+    if (!dismissible || !dismissOnOutsideClick || onToast(event.target)) event.preventDefault();
   };
   const position = morph ? ("position" as const) : false;
   const reduce = useReducedMotion() ?? false;

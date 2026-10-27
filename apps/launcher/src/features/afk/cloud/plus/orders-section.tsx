@@ -718,7 +718,9 @@ function OrderCard({
         ) : null}
       </AnimatePresence>
 
-      <div className="mt-3 flex justify-end gap-2">
+      {/* The card is the assistant's reading of the player's words: it can be wrong (27 Oct 2026). */}
+      <p className="mt-3 text-[12px] text-ash-400">{t("afkPlus.aiNote")}</p>
+      <div className="mt-2 flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onDiscard}>
           {t("afkPlus.card.discard")}
         </Button>

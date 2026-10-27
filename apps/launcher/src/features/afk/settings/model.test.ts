@@ -3,13 +3,17 @@ import type { SettingsPage } from "@/lib/api";
 import {
   fromDraft,
   fromServerIssues,
+  GROUP_OF,
+  GROUPS,
   isDirty,
   isSecretLine,
   isValidHost,
   newRule,
   newTask,
+  SECTIONS,
   splitHostPort,
   toDraft,
+  unsavedGroups,
   validate,
 } from "./model";
 
@@ -212,4 +216,34 @@ it("recognizes password commands like the console does", () => {
   expect(isSecretLine("/login", sensitive)).toBe(false);
   expect(isSecretLine("/list", sensitive)).toBe(false);
   expect(isSecretLine("merhaba /login x", sensitive)).toBe(false);
+});
+
+describe("the panel's sections (SHEET-UX)", () => {
+  it("puts every feature in one of five sections, each holding something", () => {
+    expect(Object.keys(GROUP_OF).sort()).toEqual([...SECTIONS].sort());
+    for (const group of GROUPS) expect(Object.values(GROUP_OF)).toContain(group);
+  });
+
+  it("marks only the sections whose fields would change on save", () => {
+    const base = toDraft(page());
+    expect(unsavedGroups(base, base).size).toBe(0);
+    const host = {
+      ...base,
+      page: { ...base.page, serverHost: "mc.madenciler.net", serverPort: 25570 },
+    };
+    expect([...unsavedGroups(host, base)]).toEqual(["connection"]);
+    const eat = { ...base, page: { ...base.page, autoEat: { enabled: true, threshold: 6 } } };
+    expect([...unsavedGroups(eat, base)]).toEqual(["game"]);
+    const login = {
+      ...base,
+      login: [...base.login, { key: "x", kind: "text" as const, text: "/spawn" }],
+    };
+    expect([...unsavedGroups(login, base)]).toEqual(["commands"]);
+  });
+
+  it("ignores what saving would not change (spaces around the host)", () => {
+    const base = toDraft(page());
+    const spaced = { ...base, page: { ...base.page, serverHost: "  " } };
+    expect(unsavedGroups(spaced, base).size).toBe(0);
+  });
 });

@@ -43,8 +43,11 @@ import {
   PLUS_LIMITS,
   type PlusLimits,
   type PlusWindow,
+  PREFIX_DEFAULT,
+  PREFIX_MAX,
   PRESETS,
   personaTextProblem,
+  prefixProblem,
   type SettingsPart,
   STATUS_PRESETS,
   sortedDays,
@@ -192,12 +195,54 @@ function PersonaText({
 
 // --- Asistan ----------------------------------------------------------------------------------------
 
+/** The tag before the assistant's lines (27 Oct 2026): the player's own, under its switch. */
+function TagField({
+  value,
+  line,
+  onChange,
+}: {
+  value: string;
+  line: string | null;
+  onChange: (value: string) => void;
+}) {
+  const { t } = useTranslation();
+  const id = useId();
+  // One step in under its switch: the field belongs to that row (the AFK sheets' rule).
+  return (
+    <div className="flex flex-col gap-1.5 pb-2.5 pl-5">
+      <input
+        id={id}
+        value={value}
+        maxLength={PREFIX_MAX + 4}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={PREFIX_DEFAULT.text}
+        aria-label={t("afkPlus.settings.prefixLabel")}
+        aria-invalid={line ? true : undefined}
+        aria-describedby={line ? `${id}-line` : undefined}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(
+          inputClass,
+          "h-[34px] max-w-[220px] px-3",
+          line && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
+        )}
+      />
+      {line ? (
+        <p id={`${id}-line`} role="alert" className="text-[12px] leading-[17px] text-flare-300">
+          {line}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function AssistantGroup({
   shown,
   set,
   panel,
   submitted,
   saver,
+  serverIssues,
   aside,
 }: {
   shown: SettingsPart;
@@ -205,6 +250,7 @@ function AssistantGroup({
   panel: PlusPanel;
   submitted: boolean;
   saver: boolean;
+  serverIssues: ReadonlySet<string>;
   aside?: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -217,6 +263,20 @@ function AssistantGroup({
   const statusProblem = personaTextProblem(persona.status, PLUS_LIMITS.statusMax);
   const setPersona = (parts: Partial<SettingsPart["persona"]>) =>
     set((s) => ({ ...s, persona: { ...s.persona, ...parts } }));
+  // The tag (27 Oct 2026): the player's choice, off by default. The service checks its text also
+  // while it is off, so a bad text switched off goes back to the saved one.
+  const tag = persona.prefix;
+  const tagProblem = prefixProblem(tag.text, [
+    ...shown.who.friends,
+    ...panel.settings.config.blocked,
+  ]);
+  const tagEdited = tag.text !== savedPersona.prefix.text || tag.on !== savedPersona.prefix.on;
+  const tagLine =
+    tagProblem && (submitted || (tagProblem !== "empty" && tagEdited))
+      ? t(`afkPlus.settings.prefixErrors.${tagProblem}`, { max: PREFIX_MAX })
+      : serverIssues.has("persona.prefix.text")
+        ? t("afkPlus.settings.prefixErrors.words")
+        : null;
   return (
     <Group id="assistant" title={t("afkPlus.settings.groups.assistant")} aside={aside}>
       <Labeled label={t("afkPlus.settings.persona")}>
@@ -230,15 +290,46 @@ function AssistantGroup({
           }))}
           className="self-start"
         />
-        {/* What a reply sounds like: the bot's own line, its mark first (every bot line has it). */}
+        {/* What a reply sounds like, as it would write it: the tag first only while it is on, the
+            player's words while "Oyuncu gibi konuşsun" is. */}
         <p className="mt-1 flex items-baseline gap-2 text-[12px] text-ash-400">
           <span className="shrink-0">{t("afkPlus.settings.sample")}</span>
           <span className="rounded-[10px] bg-obsidian-700/70 px-2.5 py-1 text-[13px] text-bone-50 ring-1 ring-white/8 ring-inset">
-            <span className="font-semibold text-gold-200">[AFK+]</span>{" "}
-            {t(`afkPlus.settings.samples.${preset}`)}
+            {tag.on && tag.text.trim() && !tagProblem ? (
+              <>
+                <span className="font-semibold text-gold-200">{tag.text.trim()}</span>{" "}
+              </>
+            ) : null}
+            {t(`afkPlus.settings.${persona.playerTalk ? "samplesPlayer" : "samples"}.${preset}`)}
           </span>
         </p>
       </Labeled>
+      <ToggleRow
+        title={t("afkPlus.settings.playerTalk")}
+        help={t("afkPlus.settings.playerTalkHelp")}
+        checked={persona.playerTalk}
+        onCheckedChange={(playerTalk) => setPersona({ playerTalk })}
+      />
+      <ToggleRow
+        title={t("afkPlus.settings.prefix")}
+        checked={tag.on}
+        onCheckedChange={(on) =>
+          setPersona({
+            prefix: { on, text: on || !tagProblem ? tag.text : savedPersona.prefix.text },
+          })
+        }
+      />
+      {tag.on ? (
+        <TagField
+          value={tag.text}
+          line={tagLine}
+          onChange={(text) => setPersona({ prefix: { on: true, text } })}
+        />
+      ) : tagLine ? (
+        <p role="alert" className="pb-2.5 text-[12px] text-flare-300">
+          {tagLine}
+        </p>
+      ) : null}
       <PersonaText
         label={t("afkPlus.settings.intro")}
         value={persona.intro}
@@ -264,11 +355,11 @@ function AssistantGroup({
           className="max-w-[300px]"
         />
       </Labeled>
+      {/* Small talk said as its opposite, on by default (27 Oct 2026). */}
       <ToggleRow
-        title={t("afkPlus.settings.smallTalk")}
-        help={t("afkPlus.settings.smallTalkHelp")}
-        checked={persona.smallTalk}
-        onCheckedChange={(smallTalk) => setPersona({ smallTalk })}
+        title={t("afkPlus.settings.offTopic")}
+        checked={!persona.smallTalk}
+        onCheckedChange={(onTopic) => setPersona({ smallTalk: !onTopic })}
       />
       <ToggleRow
         title={t("afkPlus.settings.away")}
@@ -1346,11 +1437,12 @@ function NotifyGroup() {
 // --- The section ---------------------------------------------------------------------------------------
 
 /** Every problem the launcher can see before sending, so "Kaydet" never sends what will be refused. */
-function hasProblems(shown: SettingsPart, maxDeal: number): boolean {
+function hasProblems(shown: SettingsPart, maxDeal: number, blocked: readonly string[]): boolean {
   const limits = limitProblems(shown.limits, maxDeal);
   return (
     Object.keys(limits).length > 0 ||
     personaTextProblem(shown.persona.intro, PLUS_LIMITS.introMax) !== null ||
+    prefixProblem(shown.persona.prefix.text, [...shown.who.friends, ...blocked]) !== null ||
     (shown.persona.statusPreset === null &&
       personaTextProblem(shown.persona.status, PLUS_LIMITS.statusMax) !== null) ||
     (shown.schedule.on && shown.schedule.windows.some((w) => windowProblems(w).length > 0)) ||
@@ -1394,7 +1486,7 @@ export function SettingsSection({
   const submit = async () => {
     if (!draft || saving) return;
     setSubmitted(true);
-    if (hasProblems(shown, maxDeal)) return;
+    if (hasProblems(shown, maxDeal, panel.settings.config.blocked)) return;
     setSaving(true);
     try {
       const sent = draft;
@@ -1441,7 +1533,19 @@ export function SettingsSection({
     setFocusGroup(null);
   }, [focusGroup, setFocusGroup]);
 
-  const blocking = submitted && hasProblems(shown, maxDeal);
+  // A problem the form shows blocks the save at once (the AFK sheets' rule, SHEET-UX decision 27):
+  // after "Kaydet", or while an edited tag reads wrong (its line shows as it is typed).
+  const savedTag = panel.settings.config.persona.prefix;
+  const tagProblem = prefixProblem(shown.persona.prefix.text, [
+    ...shown.who.friends,
+    ...panel.settings.config.blocked,
+  ]);
+  const tagShown =
+    tagProblem !== null &&
+    tagProblem !== "empty" &&
+    (shown.persona.prefix.text !== savedTag.text || shown.persona.prefix.on !== savedTag.on);
+  const blocking =
+    (submitted && hasProblems(shown, maxDeal, panel.settings.config.blocked)) || tagShown;
   const props = { shown, set, panel, submitted };
 
   return (
@@ -1463,7 +1567,7 @@ export function SettingsSection({
             ) : null
           }
         />
-        <AssistantGroup {...props} saver={features.saver} />
+        <AssistantGroup {...props} saver={features.saver} serverIssues={serverIssues} />
         {features.schedule ? <HoursGroup {...props} account={account} /> : null}
         <LimitsGroup {...props} account={account} serverIssues={serverIssues} />
         <FindGroup {...props} />
@@ -1501,7 +1605,7 @@ export function SettingsSection({
         >
           {t("afkPlus.settings.discard")}
         </Button>
-        <Button variant="primary" disabled={saving} onClick={() => void submit()}>
+        <Button variant="primary" disabled={saving || blocking} onClick={() => void submit()}>
           {saving ? t("afkPlus.settings.saving") : t("afkPlus.settings.save")}
         </Button>
       </PlusChangeDock>

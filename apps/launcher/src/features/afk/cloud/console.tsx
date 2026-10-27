@@ -18,6 +18,7 @@ import {
   leave,
   scrimMotion,
   sheetMotion,
+  sheetOutside,
   TabPanel,
   Tabs,
   useInteractionMotion,
@@ -599,6 +600,8 @@ export function CloudConsole({
                 asChild
                 forceMount
                 aria-describedby={undefined}
+                // A press outside closes the panel, but never a toast's button.
+                {...sheetOutside}
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
                   const sheet = event.currentTarget as HTMLElement;
