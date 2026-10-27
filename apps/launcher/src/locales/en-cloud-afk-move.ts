@@ -37,6 +37,12 @@ export const enCloudAfkMove = {
     go: "Go to your main account",
     follow: "Follow your main account",
   },
+  walk: {
+    go: "Go to",
+    follow: "Follow",
+    main: "Your main account",
+    notInGame: "Not in game",
+  },
   own: {
     goNamed: "Go to {{name}}",
     followNamed: "Follow {{name}}",

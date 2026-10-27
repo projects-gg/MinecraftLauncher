@@ -7,19 +7,18 @@
 import {
   ArrowDown,
   ArrowLeft,
+  ArrowLineDown,
   ArrowLineUp,
   ArrowRight,
   ArrowUp,
   Crosshair,
   HandPalm,
   type Icon,
-  PersonSimpleWalk,
-  UserFocus,
 } from "@phosphor-icons/react";
-import { Button, ContentIcon, cn, EmptyState, enter, Input, leave, Switch } from "@pl/ui";
+import { Button, ContentIcon, cn, EmptyState, enter, Input, leave } from "@pl/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Fragment,
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
@@ -31,7 +30,8 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { CloudAccount } from "../api";
+import type { CloudAccount, CloudPageData } from "../api";
+import { CLOUD_KEY } from "../use-cloud";
 import { createHold } from "./hold";
 import {
   coordinate,
@@ -112,8 +112,8 @@ function Quiet({ text, action }: { text: string; action?: ReactNode }) {
 }
 
 /**
- * One chamfered pad button: its arrow over its word, its key in the corner. The jump is the wide bar
- * under the four, its arrow beside its word, as the space bar sits under W, A, S and D.
+ * One chamfered pad button: its arrow over its word, its key in the corner; the jump is the wide bar,
+ * its arrow beside its word. "Eğil" stays pressed in while it sneaks (the held key's gold edge).
  */
 function PadButton({
   icon: Glyph,
@@ -122,6 +122,7 @@ function PadButton({
   keyShortcut,
   wide,
   held,
+  pressed,
   disabled,
   onPointerDown,
   onPointerUp,
@@ -136,6 +137,8 @@ function PadButton({
   keyShortcut?: string;
   wide?: boolean;
   held?: boolean;
+  /** A key that stays on (sneaking): `aria-pressed`. */
+  pressed?: boolean;
   disabled?: boolean;
   onPointerDown?: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerUp?: (event: PointerEvent<HTMLButtonElement>) => void;
@@ -149,7 +152,9 @@ function PadButton({
       data-pad=""
       aria-label={label}
       aria-keyshortcuts={keyShortcut ?? keyLabel}
+      aria-pressed={pressed}
       data-held={held ? "" : undefined}
+      data-on={pressed ? "" : undefined}
       disabled={disabled}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
@@ -171,17 +176,17 @@ function PadButton({
       />
       <span
         aria-hidden
-        className="chamfer absolute inset-0 -z-10 bg-white/12 transition-colors duration-150 group-hover:bg-white/20 group-data-[held]:bg-gold-500/70"
+        className="chamfer absolute inset-0 -z-10 bg-white/12 transition-colors duration-150 group-hover:bg-white/20 group-data-[held]:bg-gold-500/70 group-data-[on]:bg-gold-500/70"
       />
       <span
         aria-hidden
-        className="chamfer absolute inset-px -z-10 bg-obsidian-800/85 transition-colors duration-150 group-hover:bg-obsidian-700/90 group-data-[held]:bg-[color-mix(in_oklab,var(--color-gold-500)_16%,var(--color-obsidian-800))]"
+        className="chamfer absolute inset-px -z-10 bg-obsidian-800/85 transition-colors duration-150 group-hover:bg-obsidian-700/90 group-data-[held]:bg-[color-mix(in_oklab,var(--color-gold-500)_16%,var(--color-obsidian-800))] group-data-[on]:bg-[color-mix(in_oklab,var(--color-gold-500)_16%,var(--color-obsidian-800))]"
       />
       <Glyph
         size={wide ? 18 : 20}
         weight="bold"
         aria-hidden
-        className="text-bone-100 transition-colors duration-150 group-data-[held]:text-gold-300"
+        className="text-bone-100 transition-colors duration-150 group-data-[held]:text-gold-300 group-data-[on]:text-gold-300"
       />
       <span className="text-[12px] leading-none font-medium text-ash-300 transition-colors duration-150 group-hover:text-bone-100">
         {label}
@@ -189,10 +194,7 @@ function PadButton({
       {keyLabel ? (
         <span
           aria-hidden
-          className={cn(
-            "absolute text-[11px] leading-none font-semibold text-ash-400",
-            wide ? "top-1/2 right-3 -translate-y-1/2" : "top-1.5 right-2",
-          )}
+          className="absolute top-1.5 right-2 text-[11px] leading-none font-semibold text-ash-400"
         >
           {keyLabel}
         </span>
@@ -202,54 +204,57 @@ function PadButton({
 }
 
 /**
- * A walk the service allows, on a secondary button's quiet plate: its icon and its words, then the
- * main account's name (another account's name is in its own words).
+ * One of the player's accounts the service names: its name (and what it is to the player, or why
+ * its walks wait), then its two walks in the contract's short words.
  */
-function WalkRow({
-  icon: Glyph,
-  label,
+function WalkAccount({
   name,
+  note,
+  goLabel,
+  followLabel,
   disabled,
-  onClick,
+  onGo,
+  onFollow,
 }: {
-  icon: Icon;
-  label: string;
-  name?: string;
+  name: string;
+  note?: string | null;
+  /** The buttons' accessible names: their words with whom they walk to. */
+  goLabel: string;
+  followLabel: string;
   disabled?: boolean;
-  onClick: () => void;
+  onGo: () => void;
+  onFollow: () => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <button
-      type="button"
-      aria-label={name ? `${label}, ${name}` : undefined}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "group relative isolate flex h-[32px] w-full min-w-0 cursor-pointer items-center gap-2.5 px-3 text-left select-none [--cut:6px]",
-        "transition-[transform,scale,opacity] duration-150 ease-out active:scale-[0.985] focus-visible:outline-none",
-        "disabled:pointer-events-none disabled:opacity-45",
-      )}
-    >
-      <span
-        aria-hidden
-        className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
-      />
-      <span
-        aria-hidden
-        className="chamfer absolute inset-0 -z-10 bg-white/12 transition-colors duration-150 group-hover:bg-white/20"
-      />
-      <span
-        aria-hidden
-        className="chamfer absolute inset-px -z-10 bg-obsidian-800/85 transition-colors duration-150 group-hover:bg-obsidian-700/90"
-      />
-      <Glyph
-        size={16}
-        aria-hidden
-        className="shrink-0 text-ash-300 transition-colors duration-150 group-hover:text-gold-300"
-      />
-      <span className="min-w-0 truncate text-[13px] font-medium text-bone-100">{label}</span>
-      {name ? <span className="min-w-0 truncate text-[12.5px] text-ash-400">{name}</span> : null}
-    </button>
+    <li className="flex min-h-11 items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <p title={name} className="truncate text-[13px] leading-5 font-medium text-bone-100">
+          {name}
+        </p>
+        {note ? <p className="truncate text-[12px] leading-4 text-ash-400">{note}</p> : null}
+      </div>
+      <div className="flex shrink-0 gap-1.5">
+        <Button
+          size="sm"
+          variant="secondary"
+          aria-label={goLabel}
+          disabled={disabled}
+          onClick={onGo}
+        >
+          {t("cloudAfkMove.walk.go")}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          aria-label={followLabel}
+          disabled={disabled}
+          onClick={onFollow}
+        >
+          {t("cloudAfkMove.walk.follow")}
+        </Button>
+      </div>
+    </li>
   );
 }
 
@@ -272,6 +277,14 @@ export function MovementPanel({
   const { t, i18n } = useTranslation();
   const lang = i18n.language === "en" ? "en" : "tr";
   const { state, send } = useCloudMovement(account, active, link);
+  // The player's other accounts from the page's own list (no new request): one that is not in game
+  // cannot be walked to, so its walks wait and say why.
+  const queryClient = useQueryClient();
+  const listed = queryClient.getQueryData<CloudPageData>(CLOUD_KEY)?.overview.accounts ?? [];
+  const ownInGame = (name: string) => {
+    const other = listed.find((a) => a.name.toLowerCase() === name.toLowerCase());
+    return other ? other.live.state === "running" : true;
+  };
   const keyLabels = useKeyLabels(lang);
   const follow = account.features?.movement?.follow;
   const main = follow?.main ?? null;
@@ -493,7 +506,7 @@ export function MovementPanel({
     ? t("cloudAfkMove.facing", { dir: t(`cloudAfkMove.directions.${facingKey(pos.facing)}`) })
     : "";
   const figure = (axis: "x" | "y" | "z") => (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div className="flex min-w-[4.5rem] flex-col gap-1">
       <span className="text-[12px] leading-none font-medium text-ash-400">
         {axis.toUpperCase()}
       </span>
@@ -517,7 +530,7 @@ export function MovementPanel({
         aria-label={t("cloudAfkMove.position")}
         className="flex items-center gap-6 rounded-[var(--radius-panel)] bg-white/[0.03] px-4 py-3 ring-1 ring-white/7"
       >
-        <div className="grid flex-1 grid-cols-3 gap-4">
+        <div className="flex flex-1 items-end gap-9">
           {figure("x")}
           {figure("y")}
           {figure("z")}
@@ -577,16 +590,25 @@ export function MovementPanel({
           locked && "opacity-55",
         )}
       >
-        <div className="flex flex-col items-center gap-4">
+        {/* Its top on the heading's letters beside it. */}
+        <div className="pt-1.5">
           <fieldset
             aria-label={t("cloudAfkMove.pad.label")}
-            className="m-0 grid min-w-0 grid-cols-[repeat(3,60px)] grid-rows-[56px_56px_40px] gap-1.5 border-0 p-0"
+            className="m-0 grid min-w-0 grid-cols-[repeat(3,60px)] grid-rows-[56px_56px_44px] gap-1.5 border-0 p-0"
           >
-            {/* The keys' own shape: W over A, S, D, and the space bar under them. */}
+            {/* The keys' own shape: W over A, S, D; under them Shift's place (sneak) and the space bar. */}
             {direction("forward", ArrowUp, "col-start-2 row-start-1")}
             {direction("left", ArrowLeft, "col-start-1 row-start-2")}
             {direction("back", ArrowDown, "col-start-2 row-start-2")}
             {direction("right", ArrowRight, "col-start-3 row-start-2")}
+            <PadButton
+              icon={ArrowLineDown}
+              label={t("cloudAfkMove.pad.sneak")}
+              pressed={Boolean(move?.sneak)}
+              disabled={!ok}
+              className="col-start-1 row-start-3"
+              onClick={() => void act({ action: "sneak", on: !move?.sneak })}
+            />
             <PadButton
               wide
               icon={ArrowLineUp}
@@ -594,16 +616,10 @@ export function MovementPanel({
               keyLabel={t("cloudAfkMove.pad.space")}
               keyShortcut="Space"
               disabled={!ok}
-              className="col-span-3 row-start-3"
+              className="col-span-2 col-start-2 row-start-3"
               onClick={() => void act({ action: "jump" })}
             />
           </fieldset>
-          <Switch
-            label={t("cloudAfkMove.pad.sneak")}
-            checked={Boolean(move?.sneak)}
-            disabled={!ok}
-            onCheckedChange={(on) => void act({ action: "sneak", on })}
-          />
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
@@ -659,42 +675,34 @@ export function MovementPanel({
           </form>
 
           {main || own.length ? (
-            <div className="flex flex-col gap-1.5 border-t border-white/7 pt-4">
+            <ul className="flex flex-col gap-1 border-t border-white/7 pt-3">
               {main ? (
-                <>
-                  <WalkRow
-                    icon={UserFocus}
-                    label={t("cloudAfkMove.main.go")}
-                    name={main}
-                    disabled={!ok}
-                    onClick={() => void act({ action: "approach", name: main }, main)}
-                  />
-                  <WalkRow
-                    icon={PersonSimpleWalk}
-                    label={t("cloudAfkMove.main.follow")}
-                    name={main}
-                    disabled={!ok}
-                    onClick={() => void act({ action: "follow", name: main }, main)}
-                  />
-                </>
+                <WalkAccount
+                  name={main}
+                  note={t("cloudAfkMove.walk.main")}
+                  goLabel={t("cloudAfkMove.main.go")}
+                  followLabel={t("cloudAfkMove.main.follow")}
+                  disabled={!ok}
+                  onGo={() => void act({ action: "approach", name: main }, main)}
+                  onFollow={() => void act({ action: "follow", name: main }, main)}
+                />
               ) : null}
-              {own.map((name) => (
-                <Fragment key={name}>
-                  <WalkRow
-                    icon={UserFocus}
-                    label={t("cloudAfkMove.own.goNamed", { name })}
-                    disabled={!ok}
-                    onClick={() => void act({ action: "approach", name }, name)}
+              {own.map((name) => {
+                const waiting = !ownInGame(name);
+                return (
+                  <WalkAccount
+                    key={name}
+                    name={name}
+                    note={waiting ? t("cloudAfkMove.walk.notInGame") : null}
+                    goLabel={t("cloudAfkMove.own.goNamed", { name })}
+                    followLabel={t("cloudAfkMove.own.followNamed", { name })}
+                    disabled={!ok || waiting}
+                    onGo={() => void act({ action: "approach", name }, name)}
+                    onFollow={() => void act({ action: "follow", name }, name)}
                   />
-                  <WalkRow
-                    icon={PersonSimpleWalk}
-                    label={t("cloudAfkMove.own.followNamed", { name })}
-                    disabled={!ok}
-                    onClick={() => void act({ action: "follow", name }, name)}
-                  />
-                </Fragment>
-              ))}
-            </div>
+                );
+              })}
+            </ul>
           ) : null}
         </div>
       </div>

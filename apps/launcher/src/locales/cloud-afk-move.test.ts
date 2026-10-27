@@ -56,6 +56,11 @@ describe("movement texts", () => {
       "Zıpla",
       "Eğil",
     ]);
+    expect([trCloudAfkMove.walk.go, trCloudAfkMove.walk.follow]).toEqual([
+      "Yanına git",
+      "Takip et",
+    ]);
+    expect([enCloudAfkMove.walk.go, enCloudAfkMove.walk.follow]).toEqual(["Go to", "Follow"]);
     expect(trCloudAfkMove.main.go).toBe("Ana hesabının yanına git");
     expect(trCloudAfkMove.main.follow).toBe("Ana hesabını takip et");
     expect(trCloudAfkMove.far).toBe("En çok 256 blok uzağa gidebilir.");
