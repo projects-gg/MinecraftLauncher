@@ -29,7 +29,7 @@ const stops: Record<string, { code: string; message: () => string; details: stri
     code: "DISK-DOLU",
     message: () =>
       pick(
-        `Diskte yeterli yer yok. Oyun için 1,2${nb}GB gerekiyor, 300${nb}MB boş.`,
+        `Diskte yeterli yer${nb}yok. Oyun için 1,2${nb}GB gerekiyor, 300${nb}MB boş.`,
         `There isn't enough space on the disk. The game needs 1.2${nb}GB, but only 300${nb}MB is free.`,
       ),
     details:

@@ -6132,6 +6132,7 @@ mod tests {
     struct Seen {
         body: String,
         share_server: bool,
+        share_last_seen: bool,
         avatar: String,
         crew_avatar: String,
     }
@@ -6165,11 +6166,26 @@ mod tests {
                         ("PATCH", "/v1/me") => {
                             let now = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
                             most.fetch_max(now, Ordering::SeqCst);
-                            let view = slot.lock().unwrap().clone().unwrap().view();
+                            let service = slot.lock().unwrap().clone().unwrap();
+                            // The four clicks are made in one go, but the first request can
+                            // arrive between two of them (the client writes it on a worker
+                            // thread): look once the last click (last seen off) shows.
+                            let until = std::time::Instant::now() + Duration::from_secs(5);
+                            let mut view = service.view();
+                            while view
+                                .me
+                                .as_ref()
+                                .is_some_and(|me| me.privacy.share_last_seen)
+                                && std::time::Instant::now() < until
+                            {
+                                std::thread::sleep(Duration::from_millis(2));
+                                view = service.view();
+                            }
                             let me = view.me.unwrap();
                             seen.lock().unwrap().push(Seen {
                                 body: req.body_text(),
                                 share_server: me.privacy.share_server,
+                                share_last_seen: me.privacy.share_last_seen,
                                 avatar: me.avatar.clone(),
                                 crew_avatar: view
                                     .crews
@@ -6240,8 +6256,9 @@ mod tests {
             ],
             "the middle click never went"
         );
-        // The first request already carries the first click; the others may still be on their way.
-        assert!(first[0].share_server);
+        // While the first was on its way the player saw every click already (the switch clicked
+        // three times shows its last value).
+        assert!(first[0].share_server && !first[0].share_last_seen);
         let me = harness.service.view().me.unwrap();
         assert!(me.privacy.share_server && !me.privacy.share_last_seen);
 

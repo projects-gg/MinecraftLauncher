@@ -142,30 +142,34 @@ describe("members", () => {
     expect(rosterOrder(led).map((m) => m.id)).toEqual(["2", "1", "5"]);
   });
 
-  it("groups the crew page by where everyone is, leader and moderators first", () => {
+  it("groups the crew page's teammates by where they are, leader and moderators first", () => {
     const crew = {
       members: [
         member("1", "Ben", { me: true, role: "founder" }),
-        member("2", "Zeki", { state: "launcher" }),
+        member("2", "Zeki", { state: "launcher", role: "founder" }),
         member("3", "Ayşe", { state: "launcher", moderator: true }),
+        member("8", "Ali", { state: "launcher" }),
         member("4", "Bora", { state: "playing", game: { where: "projects" } }),
         member("5", "Can", { state: "playing", game: { where: "singleplayer" } }),
         member("6", "Deniz", { state: "playing", game: { where: "projects" }, blocked: true }),
         member("7", "Ece"),
       ],
     };
-    const groups = rosterGroups(crew, { state: "launcher" });
+    const groups = rosterGroups(crew);
+    // The player is in none: their own row sits above the groups.
     expect(groups.map((g) => [g.where, g.members.map((m) => m.id)])).toEqual([
       ["projects", ["4"]],
       ["playing", ["5"]],
-      ["launcher", ["1", "3", "2"]],
+      ["launcher", ["2", "3", "8"]],
       ["offline", ["6", "7"]],
     ]);
-    // The player's own place is what this launcher tells friends.
-    const me = crew.members[0] as TeamMember;
-    expect(whereabouts(me, { state: "playing", host: "play.projects.gg" })).toBe("projects");
-    expect(whereabouts(me, { state: "playing", host: "mc.example.net" })).toBe("playing");
-    expect(whereabouts(me, { state: "singleplayer" })).toBe("playing");
+    // So the groups online add up to the card's "N çevrimiçi" (SMALL12: 4 over 3 + 2).
+    const online = groups
+      .filter((g) => g.where !== "offline")
+      .reduce((sum, g) => sum + g.members.length, 0);
+    expect(online).toBe(teammatesOnline(crew));
+    // Someone blocked shows offline, as everywhere.
+    expect(whereabouts(crew.members[6] as TeamMember)).toBe("offline");
   });
 });
 

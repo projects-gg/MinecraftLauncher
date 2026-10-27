@@ -2,10 +2,12 @@
    app looks right offline. The latin subsets are our builds of fontsource's files with one added
    kerning pair, "r" + "ı", and in Tektur a longer stem on "Y" (packages/ui/scripts/
    build-text-fonts.py, FONTLOG.txt): at our sizes the arm of "r" ran into the stem of "ı"
-   ("Ayarları" read "Ayarlan") and Tektur's "Y" read "V" ("Yama" as "Vama"). The other subsets are
-   fontsource's own, from the same version (a launcher test keeps the two in step). Where two
-   subsets share a character the face declared last wins, so latin comes last, as in fontsource:
-   "ı" (U+0131) comes from latin, beside "r"; "ğ", "ş", "İ" from latin-ext. */
+   ("Ayarları" read "Ayarlan") and Tektur's "Y" read "V" ("Yama" as "Vama"). Tektur's pair fades
+   out from 17 to 22 px through an optical size axis the browser sets from the font size itself (in
+   titles +80 set the "ı" apart). The other subsets are fontsource's own, from the same version (a
+   launcher test keeps the two in step). Where two subsets share a character the face declared last
+   wins, so latin comes last, as in fontsource: "ı" (U+0131) comes from latin, beside "r"; "ğ", "ş",
+   "İ" from latin-ext. */
 
 @font-face {
   font-family: "Tektur Variable";

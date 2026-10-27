@@ -27,7 +27,17 @@ Changes (25 Oct 2026, Projects)
   source's.
 - Nothing else changed: every other glyph, metric and kerning value is the source's.
 - The version strings (name IDs 3 and 5) end in "Projects build: r + dotless i kerning" (Figtree)
-  and "Projects build: r + dotless i kerning, longer Y stem" (Tektur).
+  and "Projects build: r + dotless i kerning fading with optical size, longer Y stem" (Tektur).
+
+Changes (27 Oct 2026, Projects)
+-------------------------------
+- Tektur only: the "r" + dotless "ı" pair fades out over display sizes. At 22 px and up
+  antialiasing no longer closes the arm's gap, and +80 set the "ı" 3-5 px apart in titles. The
+  font gains an optical size axis ("opsz", 6 to 22, default 12, name "Optical size" in fvar and
+  STAT) that moves nothing but this pair: +80 up to 17, then linearly less, 0 from 22 (one region
+  on the axis in GDEF's variation store). Every existing variation region ignores the new axis;
+  outlines, advances and the font's own kerning are unchanged at every weight and size. Browsers
+  set opsz from the CSS font size by themselves (font-optical-sizing: auto).
 
 The families keep their names (no Reserved Font Name). The other subsets the launcher loads
 (latin-ext and, for Tektur, Cyrillic, Greek and Vietnamese) are fontsource's files, unchanged.
@@ -36,3 +46,5 @@ Build
 -----
 packages/ui/scripts/build-text-fonts.py (fontTools 4.67, brotli) from the installed fontsource
 packages; it writes the two files and fonts.json. Run it again after upgrading either package.
+Another fontTools or brotli release can write the same font with other bytes (the 27 Oct build
+kept Figtree's file of 25 Oct: its tables decode alike).

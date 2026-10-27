@@ -1,6 +1,7 @@
 # Builds the latin subsets of the launcher's text faces, Figtree and Tektur (both OFL-1.1, no
-# Reserved Font Name), from the fontsource packages with one kerning pair added, "r" + dotless "ı",
-# and in Tektur a longer stem on "Y" (below, Y_SHOULDERS).
+# Reserved Font Name), from the fontsource packages with one kerning pair added, "r" + dotless "ı"
+# (in Tektur fading out over display sizes: PAIR_FADE), and in Tektur a longer stem on "Y" (below,
+# Y_SHOULDERS).
 #
 # Turkish writes "rı" in most plurals and possessives ("Ayarları", "Arkadaşlarında"). The arm of
 # "r" ends 0.07-0.09 em before the next stem, neither font kerns the pair, and antialiasing closes
@@ -21,6 +22,9 @@ from pathlib import Path
 
 from fontTools.otlLib.builder import buildLookup, buildPairPosGlyphsSubtable, buildValue
 from fontTools.ttLib import TTFont
+from fontTools.ttLib.tables import otTables as ot
+from fontTools.ttLib.tables._f_v_a_r import Axis
+from fontTools.varLib.builder import buildVarData, buildVarDevTable, buildVarRegion
 
 UI = Path(__file__).resolve().parent.parent
 OUT = UI / "src" / "fonts"
@@ -32,6 +36,12 @@ PAIRS = {
     "figtree": {("r", "dotlessi"): 70},
     "tektur": {("r", "dotlessi"): 80},
 }
+# Tektur's pair fades out in display sizes (SMALL12): at 22 px and up antialiasing no longer closes
+# the arm's gap, and +80 set the "ı" 3-5 px apart in titles ("Kurallar ı"). So Tektur gets an
+# optical size axis ("opsz", 6-22, default 12) that moves nothing but its pairs: their full value up
+# to 17 px, none from 22 px, in steps between. Browsers set opsz from the CSS font size themselves
+# (`font-optical-sizing: auto`, the default), so no page changes. Figtree's text sizes stop at 17 px.
+PAIR_FADE = {"tektur": {"axis": (6, 12, 22), "full": 17, "none": 22}}
 # Tektur's capital Y meets its stem low: the shoulders sit at 0.21 em, so at 13-17 px the stem is
 # two or three pixels under a wide V and "Yama notları" read "Vama notları". The four shoulder
 # points move up to these heights at the light end of the weight axis (400) and the heavy end
@@ -41,7 +51,7 @@ PAIRS = {
 Y_SHOULDERS = {"tektur": (270, 370)}
 MARKS = {
     "figtree": "Projects build: r + dotless i kerning",
-    "tektur": "Projects build: r + dotless i kerning, longer Y stem",
+    "tektur": "Projects build: r + dotless i kerning fading with optical size, longer Y stem",
 }
 
 
@@ -49,13 +59,79 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def add_pairs(font: TTFont, pairs: dict[tuple[str, str], int]) -> None:
-    """One pair-positioning lookup at the end of every "kern" feature (after the font's own)."""
+def add_opsz_axis(font: TTFont, low: int, default: int, high: int) -> None:
+    """Appends an optical size axis that moves nothing yet: every named instance sits at its
+    default, and every existing variation region (glyphs, advances, kerning) ignores it."""
+    # gvar reads fvar's axis count when it decompiles: everything is read before the axis comes.
+    font.ensureDecompiled()
+    fvar = font["fvar"]
+    assert all(axis.axisTag != "opsz" for axis in fvar.axes), "opsz already there"
+    assert "avar" not in font and "MVAR" not in font and "cvar" not in font, "more tables to extend"
+    name_id = font["name"].addMultilingualName(
+        {"en": "Optical size"}, ttFont=font, mac=False, minNameID=256
+    )
+    axis = Axis()
+    axis.axisTag = "opsz"
+    axis.minValue, axis.defaultValue, axis.maxValue = float(low), float(default), float(high)
+    axis.flags = 0
+    axis.axisNameID = name_id
+    fvar.axes.append(axis)
+    for instance in fvar.instances:
+        instance.coordinates["opsz"] = float(default)
+    # gvar's tuples name their axes (one left out does not matter); the item variation stores
+    # list every axis per region: the new one is neutral there (start = peak = end = 0).
+    for tag in ("GDEF", "HVAR"):
+        regions = font[tag].table.VarStore.VarRegionList
+        for region in regions.Region:
+            neutral = ot.VarRegionAxis()
+            neutral.StartCoord = neutral.PeakCoord = neutral.EndCoord = 0.0
+            region.VarRegionAxis.append(neutral)
+        regions.RegionAxisCount = len(fvar.axes)
+    stat = font["STAT"].table
+    record = ot.AxisRecord()
+    record.AxisTag = "opsz"
+    record.AxisNameID = name_id
+    record.AxisOrdering = len(stat.DesignAxisRecord.Axis)
+    stat.DesignAxisRecord.Axis.append(record)
+    stat.DesignAxisCount = len(stat.DesignAxisRecord.Axis)
+
+
+def fade_devices(font: TTFont, values: list[int], fade: dict) -> list[ot.Device]:
+    """Variation devices that take each value away between the "full" and "none" optical sizes:
+    linearly, nothing below "full"; the axis ends at "none", so larger sizes stay at 0. One new
+    region on the opsz axis and one delta set per value, in GDEF's variation store."""
+    low, default, high = fade["axis"]
+    assert fade["none"] == high and default < fade["full"] < high
+    start = (fade["full"] - default) / (high - default)
+    axis_tags = [axis.axisTag for axis in font["fvar"].axes]
+    store = font["GDEF"].table.VarStore
+    regions = store.VarRegionList
+    regions.Region.append(buildVarRegion({"opsz": (start, 1.0, 1.0)}, axis_tags))
+    regions.RegionCount = len(regions.Region)
+    deltas = [[-value] for value in values]
+    store.VarData.append(buildVarData([regions.RegionCount - 1], deltas, optimize=False))
+    store.VarDataCount = len(store.VarData)
+    outer = store.VarDataCount - 1
+    return [buildVarDevTable((outer << 16) | inner) for inner in range(len(values))]
+
+
+def add_pairs(font: TTFont, pairs: dict[tuple[str, str], int], fade: dict | None = None) -> None:
+    """One pair-positioning lookup at the end of every "kern" feature (after the font's own),
+    fading out over an optical size axis when `fade` says so."""
     gpos = font["GPOS"].table
     glyphs = font.getReverseGlyphMap()
     for first, second in pairs:
         assert first in glyphs and second in glyphs, f"missing glyph {first} or {second}"
-    table = {pair: (buildValue({"XAdvance": value}), None) for pair, value in pairs.items()}
+    if fade:
+        add_opsz_axis(font, *fade["axis"])
+        devices = fade_devices(font, list(pairs.values()), fade)
+        values = [
+            buildValue({"XAdvance": value, "XAdvDevice": device})
+            for value, device in zip(pairs.values(), devices)
+        ]
+    else:
+        values = [buildValue({"XAdvance": value}) for value in pairs.values()]
+    table = {pair: (value, None) for pair, value in zip(pairs, values)}
     lookup = buildLookup([buildPairPosGlyphsSubtable(table, glyphs)])
     gpos.LookupList.Lookup.append(lookup)
     gpos.LookupList.LookupCount = len(gpos.LookupList.Lookup)
@@ -120,7 +196,7 @@ def main() -> None:
         source = package / "files" / f"{family}-latin-wght-normal.woff2"
         # recalcTimestamp off: the same sources build the same bytes (fonts.json pins the hashes).
         font = TTFont(source, recalcTimestamp=False)
-        add_pairs(font, pairs)
+        add_pairs(font, pairs, PAIR_FADE.get(family))
         if family in Y_SHOULDERS:
             raise_y_shoulders(font, *Y_SHOULDERS[family])
         mark_version(font, MARKS[family])
@@ -134,7 +210,18 @@ def main() -> None:
             "file": target.name,
             "sha256": sha256(target),
             "pairs": {f"{a} {b}": value for (a, b), value in pairs.items()},
-            # An object, not a list: Biome keeps it as written, so the file needs no formatting pass.
+            # Objects, not lists: Biome keeps them as written, so the file needs no formatting pass.
+            **(
+                {
+                    "pairFade": {
+                        "opszAxis": "-".join(str(v) for v in PAIR_FADE[family]["axis"]),
+                        "fullTo": PAIR_FADE[family]["full"],
+                        "noneFrom": PAIR_FADE[family]["none"],
+                    }
+                }
+                if family in PAIR_FADE
+                else {}
+            ),
             **(
                 {"yShoulders": dict(zip(("wght400", "wght900"), Y_SHOULDERS[family]))}
                 if family in Y_SHOULDERS
