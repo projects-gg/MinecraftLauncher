@@ -191,7 +191,7 @@ export const trTeams = {
     sent: "Ekibin çağrıldı",
     active: "Ekibinde açık bir çağrı var.",
     mine: "Çağrın sürüyor",
-    theirs: "{{name}} ekibi çağırıyor",
+    theirs: "{{name}} ekibini çağırıyor",
     someone: "Bir ekip arkadaşın",
     ready: "Hazır mısın?",
     left: "{{count}} dk",
