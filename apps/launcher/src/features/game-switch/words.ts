@@ -77,21 +77,24 @@ const AGAIN = "playAgain";
 /**
  * One more game (PLAY-AGAIN), one shape whatever the reason: the title asks, the body says why
  * and what may happen (the selected account `name` in game already, and that the same name on one
- * server pushes one out; the memory short: one sentence after them), "Yine de aç" answers. Another
- * account's games only: asked only when the memory is short.
+ * server pushes one out), "Yine de aç" answers. The memory short is a second worry, so it is its
+ * own line (`note`) under them (third look: run together, the two read as one long warning);
+ * another account's games only: asked only when the memory is short, and then it is the body.
  */
 export function oneMoreWords(
   kind: Exclude<SwitchKind, "stop">,
   memoryShort: boolean,
   name: string | null = null,
-): { title: Line; body: Line[]; confirm: Line } {
-  const same: Line[] =
-    kind === "again"
-      ? [
-          name ? [`${AGAIN}.sameName`, { name }] : [`${AGAIN}.sameNameUnknown`],
-          [`${AGAIN}.sameServer`],
-        ]
-      : [];
-  const memory: Line[] = memoryShort ? [[`${AGAIN}.memory`]] : [];
-  return { title: [`${AGAIN}.title`], body: [...same, ...memory], confirm: [`${AGAIN}.confirm`] };
+): { title: Line; body: Line[]; note: Line | null; confirm: Line } {
+  const title: Line = [`${AGAIN}.title`];
+  const confirm: Line = [`${AGAIN}.confirm`];
+  const memory: Line = [`${AGAIN}.memory`];
+  if (kind !== "again") {
+    return { title, body: memoryShort ? [memory] : [], note: null, confirm };
+  }
+  const same: Line[] = [
+    name ? [`${AGAIN}.sameName`, { name }] : [`${AGAIN}.sameNameUnknown`],
+    [`${AGAIN}.sameServer`],
+  ];
+  return { title, body: same, note: memoryShort ? memory : null, confirm };
 }

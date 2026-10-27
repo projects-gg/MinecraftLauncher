@@ -82,13 +82,11 @@ export function ResumeButton({
   const [broken, setBroken] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const busy = useWorldBusy(instance, target);
-  // One word at every width ("Kullanımda"); whose game has it shows under the pointer.
+  // Where the world is, in the label's place ("Başka oyunda açık"; third look: "Kullanımda" told a
+  // player nothing); whose game has it under the pointer when that is one account.
   const reason = busy.open ? t("playAgain.worldBusy") : null;
-  const whose = busy.open
-    ? busy.account
-      ? t("playAgain.worldBusyName", { name: busy.account })
-      : t("playAgain.worldBusyOther")
-    : undefined;
+  const whose =
+    busy.open && busy.account ? t("playAgain.worldBusyName", { name: busy.account }) : undefined;
   const button = (
     <button
       type="button"
@@ -104,8 +102,8 @@ export function ResumeButton({
         void play(instance.id, { quickPlay: target.quickPlay });
       }}
       aria-label={
-        whose
-          ? t("playAgain.worldBusyAria", { world: target.name, reason: whose })
+        reason
+          ? t("playAgain.worldBusyAria", { world: target.name, reason: whose ?? reason })
           : t("resume.aria", { name: target.name })
       }
       // The cap counts the hover plate's negative margin: `max-w-full` clamped the button 8 px
@@ -118,7 +116,7 @@ export function ResumeButton({
       <span
         className={cn(
           "relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-head)] bg-obsidian-800 ring-1 ring-white/10 transition-opacity duration-200 ease-out",
-          reason && "opacity-45",
+          reason && "opacity-35",
         )}
       >
         {target.iconUrl && !broken ? (
@@ -151,7 +149,8 @@ export function ResumeButton({
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span
             key={reason ?? "resume"}
-            className="block truncate text-[12px] text-ash-400"
+            // While the world is open elsewhere the reason is the news and the title steps back.
+            className={cn("block truncate text-[12px]", reason ? "text-ash-300" : "text-ash-400")}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: { duration: 0.18, ease: easeOutExpo } }}
             exit={{ opacity: 0, transition: { duration: 0.1, ease: easeOutExpo } }}
@@ -162,7 +161,7 @@ export function ResumeButton({
         <span
           className={cn(
             "block truncate text-[13.5px] font-semibold transition-colors duration-200 ease-out",
-            reason ? "text-ash-300" : "text-bone-50",
+            reason ? "text-ash-400" : "text-bone-50",
           )}
         >
           {target.name}

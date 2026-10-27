@@ -9,12 +9,12 @@ export const trPlayAgain = {
   /** The owner's words with the name: the selected account is in game already, and what that means. */
   sameName: "{{name}} zaten oyunda.",
   sameNameUnknown: "Bu adla oyun zaten açık.",
-  sameServer: "İkisi aynı sunucuya girerse biri atılır.",
-  /** Before any extra game, when the computer's free memory would not hold it. */
+  sameServer: "İki oyun aynı sunucuya girerse biri atılır.",
+  /** Before any extra game, when the computer's free memory would not hold it (its own line). */
   memory: "Bilgisayarında boş bellek az, oyunlar takılabilir.",
   confirm: "Yine de aç",
-  /** OYNA while it says "Oyunda": under the pointer it says what a press does. */
-  runningHover: "Bir oyun daha",
+  /** OYNA while it says "Oyunda": under the pointer it says what a press does (a verb: third look). */
+  runningHover: "Bir oyun daha aç",
   /** OYNA's name for screen readers while it says "Oyunda": what a press does. */
   runningAria: "Oyunda, bir oyun daha aç",
   /** The command bar's quiet line while other accounts play and the selected one does not. */
@@ -23,24 +23,21 @@ export const trPlayAgain = {
   othersMany: "{{total}} hesap oyunda",
   /** The same as the bar shows it: the name (or the count) over "Oyunda", as the account menu. */
   othersCount: "{{total}} hesap",
-  /** "Devam et" while its world is open in a game (one word at every width), and under the pointer
-   * whose game has it, or that it is another one. */
-  worldBusy: "Kullanımda",
+  /** "Devam et" while its world is open in a game: where it is (in its label's place), and under
+   * the pointer whose game has it when that is one account. */
+  worldBusy: "Başka oyunda açık",
   worldBusyName: "{{name}} bu dünyada",
-  worldBusyOther: "Başka bir oyunda açık",
   worldBusyAria: "{{world}}: {{reason}}",
   /** A world's "Oyna" while the world is open in a game (said before any question). */
   worldOpen: "Bu dünya diğer oyunda açık.",
   /** "Bağlan" with several games on screen: which one closes (its account; no suffix on it). */
-  restartBodyAccount:
-    "{{name}} hesabının oyunu kapanacak ve {{server}} sunucusuna bağlanarak yeniden açılacak.",
-  restartWorldAccount:
-    "{{name}} hesabının oyunu kapanacak ve arkadaşının dünyasına bağlanarak yeniden açılacak.",
-  /** Over the server's address in "Bağlan": what it is for. */
-  addressHint: "Oyunun içinden de girebilirsin:",
+  restartBodyAccount: "{{name}} hesabının oyunu kapanıp {{server}} sunucusunda yeniden açılır.",
+  restartWorldAccount: "{{name}} hesabının oyunu kapanıp arkadaşının dünyasında yeniden açılır.",
+  /** Over the server's address in "Bağlan": what to do with it. */
+  addressHint: "Ya da oyunda bu adrese bağlan:",
   /** "Bağlan" while a game closes, when several are on screen: whose. */
   closingTitleAccount: "{{name}} hesabının oyunu kapanıyor",
-  overdueTitleAccount: "{{name}} hesabının oyunu kapanmadı",
+  overdueTitleAccount: "{{name}} hesabının oyunu henüz kapanmadı",
   forcingTitleAccount: "{{name}} hesabının oyunu kapatılıyor",
   /** "Bağlan"'s answer when the game on screen closes first, and the way out while it closes. */
   closeAndConnect: "Kapat ve bağlan",

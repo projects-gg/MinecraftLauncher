@@ -399,7 +399,9 @@ function othersWords(
 /**
  * The bar's quiet "who is in game" (PLAY-AGAIN): their faces, the name (or the count) over
  * "Oyunda". The names come under the pointer in the app's tooltip: always while the bar counts
- * them ("2 hesap"), a single name only when it is cut (repeating the words on screen is noise).
+ * them ("2 hesap"), a single name only when it is cut or hidden (repeating the words on screen is
+ * noise). In a narrow bar (1024 px) the name gives way to the faces (third look: two cut names side
+ * by side, "Ejderha A…" and "EjderAvci…", read as one thing twice), so "Devam et" keeps its world.
  */
 function OthersInGame({
   sentence,
@@ -421,7 +423,10 @@ function OthersInGame({
     <span
       aria-hidden
       className="flex min-w-0 items-center gap-2.5"
-      onPointerEnter={() => setCut(isCut(whoRef.current))}
+      onPointerEnter={() => {
+        const line = whoRef.current;
+        setCut(isCut(line) || (line !== null && line.getClientRects().length === 0));
+      }}
     >
       {faces.length > 0 ? (
         <span className="flex shrink-0 -space-x-2">
@@ -436,7 +441,13 @@ function OthersInGame({
         </span>
       ) : null}
       <span className="min-w-0 leading-tight">
-        <span ref={whoRef} className="block truncate text-[13px] text-ash-300">
+        <span
+          ref={whoRef}
+          className={cn(
+            "block truncate text-[13px] text-ash-300",
+            faces.length > 0 && "@max-[560px]/bar:hidden",
+          )}
+        >
           {who}
         </span>
         <span className="block text-[12px] text-jade-400">{t("playAcct.inGame")}</span>
@@ -490,7 +501,7 @@ function StatusArea({
         ) : (
           <motion.div
             key="rest"
-            className="flex min-w-0 items-center justify-between gap-6"
+            className="@container/bar flex min-w-0 items-center justify-between gap-6"
             {...swapIn(reduce)}
           >
             <div className="flex min-w-0 items-center gap-4">

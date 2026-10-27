@@ -69,18 +69,20 @@ export function GameSwitchDialog() {
   if (!shown) return null;
 
   const { kind } = shown.request;
-  const words =
+  const words: { title: Line; body: Line[]; note: Line | null; confirm: Line | null } | null =
     kind === "stop"
       ? shown.stepping && shown.sides
-        ? { ...stepWords(shown.sides), confirm: null }
+        ? { ...stepWords(shown.sides), note: null, confirm: null }
         : shown.sides
-          ? questionWords(shown.sides)
+          ? { ...questionWords(shown.sides), note: null }
           : null
       : oneMoreWords(kind, Boolean(shown.request.memoryShort), shown.request.account?.name ?? null);
   if (!words) return null;
   const title = say(t, words.title);
-  // The reasons read as one paragraph (second look: two lines read as two separate notes).
+  // The reasons of one worry read as one paragraph (second look: a line each read as separate
+  // notes); a second worry (the memory short) is its own line under it (third look).
   const body = words.body.map((line) => say(t, line)).join(" ");
+  const note = words.note ? say(t, words.note) : null;
   const asking = !shown.stepping;
   const footer =
     asking && words.confirm ? (
@@ -109,7 +111,12 @@ export function GameSwitchDialog() {
         if (!next) cancelSwitch();
       }}
       title={title}
-      description={<span className="text-pretty">{body}</span>}
+      description={
+        <>
+          <span className="block text-pretty">{body}</span>
+          {note ? <span className="mt-1.5 block text-pretty">{note}</span> : null}
+        </>
+      }
       closeLabel={t("common.close")}
       width={460}
       morph

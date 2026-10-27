@@ -27,7 +27,8 @@ export interface PlayButtonLabels {
   runningAction?: string;
   /**
    * What "Oyunda" says under the pointer (or the keyboard's focus) when a press does something
-   * ("Bir oyun daha"): the state's word alone did not say what a click does (second look).
+   * ("Bir oyun daha aç"): the state's word alone did not say what a click does (second look), and
+   * without a verb it read as "one more round" (third look).
    */
   runningHover?: string;
   /**
@@ -491,8 +492,9 @@ export function PlayButton({
                 key === "cancel" && "text-flare-400",
                 key === "percent" && "text-bone-50 tabular-nums",
                 key === "opening" && "text-gold-ink",
-                state.kind === "running" && "text-jade-400",
-                key === "runningHover" && "text-[16px]",
+                key === "running" && "text-jade-400",
+                // What a press does is an action: the face's bone, not the state's jade (§2).
+                key === "runningHover" && "text-[16px] text-bone-100",
                 state.kind === "unavailable" && "text-[14px] text-ash-300",
               )}
             >
