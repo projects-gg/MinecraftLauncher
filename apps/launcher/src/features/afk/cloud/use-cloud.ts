@@ -88,7 +88,7 @@ type GuardRequest =
   | { where: "here"; desktop: AfkAccount; cloud: CloudAccount };
 
 /** The account panel's tabs (the inventory's only while the service offers it). */
-export type PanelTab = "console" | "inventory";
+export type PanelTab = "console" | "inventory" | "movement";
 
 interface CloudUi {
   consoleId: string | null;

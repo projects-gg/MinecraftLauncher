@@ -51,6 +51,8 @@ import {
 import { ConsoleStrip } from "./console-strip";
 import { ConsoleTools } from "./console-tools";
 import { InventoryPanel, useInventoryArt } from "./inventory/inventory-panel";
+import { MovementPanel } from "./movement/movement-panel";
+import { movementShown } from "./movement/use-cloud-movement";
 import { looksSensitive } from "./sensitive";
 import { issueKey, textProblem } from "./settings-model";
 import { CloudStateLine } from "./state-line";
@@ -184,9 +186,13 @@ export function CloudConsole({
   const host = account?.host ?? null;
   const kinds = Boolean(account?.features?.consoleKinds);
   const [inventoryGone, setInventoryGone] = useState(false);
+  const [movementGone, setMovementGone] = useState(false);
   const inventory =
     (account?.features?.inventory?.mode ?? "off") !== "off" && Boolean(host) && !inventoryGone;
-  const shownTab: PanelTab = inventory ? tab : "console";
+  const movement = movementShown(account) && !movementGone;
+  const tabbed = inventory || movement;
+  const shownTab: PanelTab =
+    (tab === "inventory" && inventory) || (tab === "movement" && movement) ? tab : "console";
   const [lines, setLines] = useState<Line[]>([]);
   const [status, setStatus] = useState<LinkStatus>("connecting");
   const [hostOnline, setHostOnline] = useState(true);
@@ -209,6 +215,7 @@ export function CloudConsole({
   accountRef.current = account;
   const art = useInventoryArt(account);
   const inventoryUnavailable = useCallback(() => setInventoryGone(true), []);
+  const movementUnavailable = useCallback(() => setMovementGone(true), []);
 
   // Another account (or a fresh open) starts empty, at its newest line.
   // biome-ignore lint/correctness/useExhaustiveDependencies: resets when the account changes
@@ -226,6 +233,7 @@ export function CloudConsole({
     setQuery("");
     setBars(null);
     setInventoryGone(false);
+    setMovementGone(false);
     atEnd.current = true;
   }, [id]);
 
@@ -594,7 +602,12 @@ export function CloudConsole({
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
                   const sheet = event.currentTarget as HTMLElement;
-                  (sheet.querySelector<HTMLElement>("input:not(:disabled)") ?? sheet).focus({
+                  // Opened on Hareket: the panel itself, so W, A, S, D walk at once.
+                  (
+                    sheet.querySelector<HTMLElement>("[data-movement-panel]") ??
+                    sheet.querySelector<HTMLElement>("input:not(:disabled)") ??
+                    sheet
+                  ).focus({
                     preventScroll: true,
                   });
                 }}
@@ -615,7 +628,7 @@ export function CloudConsole({
                     <AfkHead nickname={account.name} size={36} />
                     <div className="min-w-0 flex-1">
                       <Dialog.Title className="truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
-                        {inventory
+                        {tabbed
                           ? account.name
                           : t("cloudAfk.console.title", { name: account.name })}
                       </Dialog.Title>
@@ -634,32 +647,55 @@ export function CloudConsole({
                       setAttempt((n) => n + 1);
                     }}
                   />
-                  {inventory ? (
+                  {tabbed ? (
                     <Tabs
                       value={shownTab}
                       onValueChange={setTab}
                       label={t("cloudAfkFeat.tabs.label")}
                       items={[
                         { value: "console", label: t("cloudAfkFeat.tabs.console") },
-                        { value: "inventory", label: t("cloudAfkFeat.tabs.inventory") },
+                        ...(inventory
+                          ? [
+                              {
+                                value: "inventory" as const,
+                                label: t("cloudAfkFeat.tabs.inventory"),
+                              },
+                            ]
+                          : []),
+                        ...(movement
+                          ? [{ value: "movement" as const, label: t("cloudAfkMove.tab") }]
+                          : []),
                       ]}
                       className="[&>[role=tablist]]:px-3.5"
                     >
                       <TabPanel value="console" className="flex flex-col overflow-hidden pt-1">
                         {consoleBody}
                       </TabPanel>
-                      <TabPanel value="inventory" className="px-5 pt-5">
-                        <InventoryPanel
-                          account={account}
-                          active={shownTab === "inventory"}
-                          link={attempt}
-                          art={art.art}
-                          titleGlyph={art.titleGlyph}
-                          onReconnect={() => onRestart(account)}
-                          onOpenSettings={() => onOpenSettings(account.id)}
-                          onUnavailable={inventoryUnavailable}
-                        />
-                      </TabPanel>
+                      {inventory ? (
+                        <TabPanel value="inventory" className="px-5 pt-5">
+                          <InventoryPanel
+                            account={account}
+                            active={shownTab === "inventory"}
+                            link={attempt}
+                            art={art.art}
+                            titleGlyph={art.titleGlyph}
+                            onReconnect={() => onRestart(account)}
+                            onOpenSettings={() => onOpenSettings(account.id)}
+                            onUnavailable={inventoryUnavailable}
+                          />
+                        </TabPanel>
+                      ) : null}
+                      {movement ? (
+                        <TabPanel value="movement" className="px-5 pt-5">
+                          <MovementPanel
+                            account={account}
+                            active={shownTab === "movement"}
+                            link={attempt}
+                            onReconnect={() => onRestart(account)}
+                            onUnavailable={movementUnavailable}
+                          />
+                        </TabPanel>
+                      ) : null}
                     </Tabs>
                   ) : (
                     consoleBody

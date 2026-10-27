@@ -18,6 +18,10 @@
 //! The inventory (README "Inventory", CAFK-FEAT): a view on screen watches with `inv: true` and
 //! stops it with `inv: false` (no new console snapshot); its moves go out as `invop` frames and
 //! come back as `invres`, both on the same socket. The status strip (`bars`) comes with the console.
+//!
+//! Movement (README "Movement"): the "Hareket" panel on screen watches with `move: true` (`movst`
+//! and `pos` stream) and stops it with `move: false`; its operations go out as `move` frames and
+//! come back as `movres`. Inventory and movement may stream together.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -43,6 +47,7 @@ use crate::feat::{
     CloudBarText, CloudBars, CloudBossBar, CloudInvError, CloudInvItem, CloudTitleBar, CloudWinOpen,
 };
 use crate::model::{CloudConsoleLine, CloudLiveState};
+use crate::movement::{CloudBlock, CloudMovementError, CloudMovementState, CloudPos};
 use crate::plus::{PlusAi, PlusApproval, PlusFeedItem};
 use crate::tls;
 
@@ -151,6 +156,22 @@ pub enum CloudLiveEvent {
     /// A watched account's status strip: the action bar, a title and the boss bars (never in the
     /// log).
     Bars { acct: String, bars: CloudBars },
+    /// Movement (watched with `move`): whether the account can move now and what it does (also
+    /// once right after the watch, then on change).
+    MovementState {
+        acct: String,
+        state: CloudMovementState,
+    },
+    /// Where a watched account stands and looks: after the watch, then on change, at most once a
+    /// second, only while it can move.
+    Pos { acct: String, pos: CloudPos },
+    /// The answer to an operation this launcher sent (`id` its own): `ok` means the account started
+    /// it; what happens shows in the frames that follow.
+    MovementResult {
+        id: String,
+        ok: bool,
+        error: Option<CloudMovementError>,
+    },
 }
 
 pub type LiveSink = Arc<dyn Fn(CloudLiveEvent) + Send + Sync>;
@@ -167,33 +188,42 @@ enum Command {
         id: String,
         frame: String,
     },
+    /// A movement operation (`move` frame, its `id`) for the account's machine.
+    MovementOp {
+        id: String,
+        frame: String,
+    },
 }
 
 /// What a socket streams of a watched account besides its console: the AI (the AFK+ panel), the
-/// inventory (a view on screen).
+/// inventory (a view on screen), movement (the "Hareket" panel on screen).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Streams {
     ai: bool,
     inv: bool,
+    movement: bool,
 }
 
-/// Who watches an account: its console, the AFK+ panel, an inventory view, or several.
+/// Who watches an account: its console, the AFK+ panel, an inventory view, the movement panel, or
+/// several.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Want {
     console: bool,
     ai: bool,
     inv: bool,
+    movement: bool,
 }
 
 impl Want {
     fn any(self) -> bool {
-        self.console || self.ai || self.inv
+        self.console || self.ai || self.inv || self.movement
     }
 
     fn streams(self) -> Streams {
         Streams {
             ai: self.ai,
             inv: self.inv,
+            movement: self.movement,
         }
     }
 }
@@ -250,6 +280,12 @@ impl LiveHub {
     /// An inventory view is on screen: streams `acct`'s inventory too (`inv: true`).
     pub fn watch_inventory(&self, url: Url, token: Bearer, host: &str, acct: &str) {
         self.start(url, token, host, acct, |want| want.inv = true);
+    }
+
+    /// The movement panel is on screen: streams `acct`'s movement state and position too
+    /// (`move: true`).
+    pub fn watch_movement(&self, url: Url, token: Bearer, host: &str, acct: &str) {
+        self.start(url, token, host, acct, |want| want.movement = true);
     }
 
     fn start(&self, url: Url, token: Bearer, host: &str, acct: &str, change: fn(&mut Want)) {
@@ -317,6 +353,11 @@ impl LiveHub {
         self.stop(acct, |want| want.inv = false);
     }
 
+    /// The movement panel left the screen (`move: false`, or the socket closes with it).
+    pub fn unwatch_movement(&self, acct: &str) {
+        self.stop(acct, |want| want.movement = false);
+    }
+
     /// Sends a move (`op`, the app's `InvOp`, shape already checked) for `acct` with the app's own
     /// `id`; its answer comes back as [`CloudLiveEvent::InvResult`]. False when no socket streams
     /// that account's inventory (the caller answers `host_offline`).
@@ -337,6 +378,26 @@ impl LiveHub {
             })
     }
 
+    /// Sends a movement operation (`op`, the app's `MoveOp`, shape already checked) for `acct`
+    /// with the app's own `id`; its answer comes back as [`CloudLiveEvent::MovementResult`].
+    /// False when no socket streams that account's movement (the caller answers `host_offline`).
+    pub fn movement_op(&self, acct: &str, id: &str, op: &serde_json::Value) -> bool {
+        let frame =
+            serde_json::json!({ "t": "move", "acct": acct, "id": id, "op": op }).to_string();
+        let hosts = self.hub.hosts.lock();
+        hosts
+            .values()
+            .find(|task| task.watched.get(acct).is_some_and(|want| want.movement))
+            .is_some_and(|task| {
+                task.commands
+                    .send(Command::MovementOp {
+                        id: id.to_owned(),
+                        frame,
+                    })
+                    .is_ok()
+            })
+    }
+
     fn stop(&self, acct: &str, change: fn(&mut Want)) {
         let mut hosts = self.hub.hosts.lock();
         let mut emptied = None;
@@ -350,7 +411,7 @@ impl LiveHub {
                 continue;
             }
             if want.any() {
-                // Still watched, now without its AI or its inventory (or the other way round).
+                // Still watched, now without its AI, its inventory or its movement (or with).
                 let _ = task.commands.send(Command::Watch {
                     acct: acct.to_owned(),
                     streams: want.streams(),
@@ -588,6 +649,48 @@ enum Incoming {
         #[serde(default)]
         boss: Vec<CloudBossBar>,
     },
+    Movst {
+        acct: String,
+        #[serde(default)]
+        state: String,
+        #[serde(default)]
+        reason: Option<String>,
+        #[serde(default)]
+        doing: Option<String>,
+        #[serde(default)]
+        to: Option<CloudBlock>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        until: Option<i64>,
+        #[serde(default)]
+        ended: Option<String>,
+        #[serde(default)]
+        sneak: Option<bool>,
+        #[serde(default)]
+        lock: Option<String>,
+    },
+    Pos {
+        acct: String,
+        #[serde(default)]
+        x: i64,
+        #[serde(default)]
+        y: i64,
+        #[serde(default)]
+        z: i64,
+        #[serde(default)]
+        dim: String,
+        #[serde(default)]
+        facing: String,
+    },
+    Movres {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        ok: bool,
+        #[serde(default)]
+        error: Option<CloudMovementError>,
+    },
     Bye,
     Pong,
     #[serde(other)]
@@ -654,6 +757,53 @@ impl Incoming {
                     boss,
                 },
             },
+            Self::Movst {
+                acct,
+                state,
+                reason,
+                doing,
+                to,
+                name,
+                until,
+                ended,
+                sneak,
+                lock,
+            } => CloudLiveEvent::MovementState {
+                acct,
+                state: CloudMovementState {
+                    state,
+                    reason,
+                    doing,
+                    to,
+                    name,
+                    until,
+                    ended,
+                    sneak,
+                    lock,
+                },
+            },
+            Self::Pos {
+                acct,
+                x,
+                y,
+                z,
+                dim,
+                facing,
+            } => CloudLiveEvent::Pos {
+                acct,
+                pos: CloudPos {
+                    x,
+                    y,
+                    z,
+                    dim,
+                    facing,
+                },
+            },
+            Self::Movres { id, ok, error } => CloudLiveEvent::MovementResult {
+                id,
+                ok: ok && error.is_none(),
+                error,
+            },
             _ => return None,
         })
     }
@@ -665,6 +815,15 @@ fn unsent(id: String) -> CloudLiveEvent {
         id,
         ok: false,
         error: Some(CloudInvError::new("host_offline")),
+    }
+}
+
+/// A movement operation that could not go out (the machine's socket is away).
+fn movement_unsent(id: String) -> CloudLiveEvent {
+    CloudLiveEvent::MovementResult {
+        id,
+        ok: false,
+        error: Some(CloudMovementError::new("host_offline")),
     }
 }
 
@@ -685,12 +844,12 @@ fn watch_frame(t: &str, acct: &str) -> String {
 /// `watch`, with `ai: true` for the AFK+ panel.
 #[cfg(test)]
 fn watch_ai_frame(acct: &str, ai: bool) -> String {
-    watch_streams_frame(acct, ai, None)
+    watch_streams_frame(acct, ai, None, None)
 }
 
-/// `watch` with `ai: true` for the AFK+ panel, and `inv` when the inventory stream starts
-/// (`true`) or stops (`false`; left out, it stays as it was).
-fn watch_streams_frame(acct: &str, ai: bool, inv: Option<bool>) -> String {
+/// `watch` with `ai: true` for the AFK+ panel, `inv` when the inventory stream starts (`true`)
+/// or stops (`false`), and `move` the same for movement (left out, a stream stays as it was).
+fn watch_streams_frame(acct: &str, ai: bool, inv: Option<bool>, movement: Option<bool>) -> String {
     let mut frame = serde_json::json!({ "t": "watch", "acct": acct });
     if ai {
         frame["ai"] = serde_json::Value::Bool(true);
@@ -698,7 +857,20 @@ fn watch_streams_frame(acct: &str, ai: bool, inv: Option<bool>) -> String {
     if let Some(inv) = inv {
         frame["inv"] = serde_json::Value::Bool(inv);
     }
+    if let Some(movement) = movement {
+        frame["move"] = serde_json::Value::Bool(movement);
+    }
     frame.to_string()
+}
+
+/// The streams a new subscription asks for (only those that are on).
+fn first_watch_frame(acct: &str, streams: Streams) -> String {
+    watch_streams_frame(
+        acct,
+        streams.ai,
+        streams.inv.then_some(true),
+        streams.movement.then_some(true),
+    )
 }
 
 /// One machine's socket until nobody watches or it must not reopen.
@@ -773,6 +945,7 @@ async fn run(
                     }
                     // Never queued for later: a move made now must not land in a later state.
                     Some(Command::InvOp { id, .. }) => sink(unsent(id)),
+                    Some(Command::MovementOp { id, .. }) => sink(movement_unsent(id)),
                 },
             }
         }
@@ -798,6 +971,7 @@ async fn connected(
                 watched.remove(&acct);
             }
             Ok(Command::InvOp { id, .. }) => sink(unsent(id)),
+            Ok(Command::MovementOp { id, .. }) => sink(movement_unsent(id)),
             Err(mpsc::error::TryRecvError::Empty) => break,
             Err(mpsc::error::TryRecvError::Disconnected) => return Outcome::Done,
         }
@@ -806,7 +980,7 @@ async fn connected(
         return Outcome::Done;
     }
     for (acct, streams) in watched.iter() {
-        let frame = watch_streams_frame(acct, streams.ai, streams.inv.then_some(true));
+        let frame = first_watch_frame(acct, *streams);
         if !send_text(socket, frame).await {
             return Outcome::Retry(Duration::ZERO);
         }
@@ -876,23 +1050,22 @@ async fn connected(
                     let sent = match before {
                         Some(same) if same == streams => true,
                         // The AI's stream ends only with the subscription: watch again without it
-                        // (the inventory's comes back with the new subscription).
+                        // (the inventory's and movement's come back with the new subscription).
                         Some(old) if old.ai && !streams.ai => {
-                            let again =
-                                watch_streams_frame(&acct, false, streams.inv.then_some(true));
+                            let again = first_watch_frame(&acct, streams);
                             send_text(socket, watch_frame("unwatch", &acct)).await
                                 && send_text(socket, again).await
                         }
-                        // The inventory's stream starts or stops on the same subscription.
+                        // The inventory's and movement's streams start or stop on the same
+                        // subscription.
                         Some(old) => {
                             let inv = (old.inv != streams.inv).then_some(streams.inv);
-                            send_text(socket, watch_streams_frame(&acct, streams.ai, inv)).await
-                        }
-                        None => {
-                            let frame =
-                                watch_streams_frame(&acct, streams.ai, streams.inv.then_some(true));
+                            let movement =
+                                (old.movement != streams.movement).then_some(streams.movement);
+                            let frame = watch_streams_frame(&acct, streams.ai, inv, movement);
                             send_text(socket, frame).await
                         }
+                        None => send_text(socket, first_watch_frame(&acct, streams)).await,
                     };
                     if !sent {
                         return Outcome::Retry(Duration::ZERO);
@@ -901,6 +1074,12 @@ async fn connected(
                 Some(Command::InvOp { id, frame }) => {
                     if !send_text(socket, frame).await {
                         sink(unsent(id));
+                        return Outcome::Retry(Duration::ZERO);
+                    }
+                }
+                Some(Command::MovementOp { id, frame }) => {
+                    if !send_text(socket, frame).await {
+                        sink(movement_unsent(id));
                         return Outcome::Retry(Duration::ZERO);
                     }
                 }
@@ -1263,7 +1442,10 @@ mod tests {
         hub.watch_inventory(url, Bearer::new("pls_test"), "kz1", "a_1");
         // Both came while the socket opened: its first frame asks for both.
         let frames = heard(&sent, 1).await;
-        assert_eq!(frames[0], watch_streams_frame("a_1", false, Some(true)));
+        assert_eq!(
+            frames[0],
+            watch_streams_frame("a_1", false, Some(true), None)
+        );
         assert!(hub.inv_op("a_1", "m1", &snapshot));
         let frames = heard(&sent, 2).await;
         let op: serde_json::Value = serde_json::from_str(&frames[1]).unwrap();
@@ -1274,7 +1456,10 @@ mod tests {
         // The view leaves, the console stays: the stream stops on the same subscription.
         hub.unwatch_inventory("a_1");
         let frames = heard(&sent, 3).await;
-        assert_eq!(frames[2], watch_streams_frame("a_1", false, Some(false)));
+        assert_eq!(
+            frames[2],
+            watch_streams_frame("a_1", false, Some(false), None)
+        );
         assert!(!hub.inv_op("a_1", "m2", &snapshot));
         assert!(hub.is_watching());
         hub.unwatch("a_1");
@@ -1285,6 +1470,114 @@ mod tests {
         while let Ok(event) = events.try_recv() {
             assert!(!matches!(event, CloudLiveEvent::InvResult { .. }));
         }
+    }
+
+    #[test]
+    fn reads_the_movement_frames() {
+        let event = |text: &str| {
+            serde_json::from_str::<Incoming>(text)
+                .unwrap()
+                .feature_event()
+                .unwrap()
+        };
+        assert_eq!(
+            event(
+                r#"{"t":"movst","acct":"a_1","state":"ok","doing":"goto","to":{"x":120,"y":64,"z":-40},"until":1793000120,"sneak":false}"#
+            ),
+            CloudLiveEvent::MovementState {
+                acct: "a_1".into(),
+                state: CloudMovementState {
+                    state: "ok".into(),
+                    doing: Some("goto".into()),
+                    to: Some(CloudBlock {
+                        x: 120,
+                        y: 64,
+                        z: -40
+                    }),
+                    until: Some(1_793_000_120),
+                    sneak: Some(false),
+                    ..CloudMovementState::default()
+                },
+            }
+        );
+        let CloudLiveEvent::MovementState { state, .. } =
+            event(r#"{"t":"movst","acct":"a_1","state":"off","reason":"restart"}"#)
+        else {
+            panic!("not a movement state");
+        };
+        assert_eq!(
+            (state.state.as_str(), state.reason.as_deref()),
+            ("off", Some("restart"))
+        );
+        assert_eq!(
+            event(
+                r#"{"t":"pos","acct":"a_1","x":-3,"y":70,"z":12,"dim":"minecraft:overworld","facing":"north"}"#
+            ),
+            CloudLiveEvent::Pos {
+                acct: "a_1".into(),
+                pos: CloudPos {
+                    x: -3,
+                    y: 70,
+                    z: 12,
+                    dim: "minecraft:overworld".into(),
+                    facing: "north".into(),
+                },
+            }
+        );
+        assert_eq!(
+            event(r#"{"t":"movres","id":"m3","ok":true}"#),
+            CloudLiveEvent::MovementResult {
+                id: "m3".into(),
+                ok: true,
+                error: None,
+            }
+        );
+        let CloudLiveEvent::MovementResult { ok, error, .. } =
+            event(r#"{"t":"movres","id":"m4","error":{"code":"loop","retryAfter":240}}"#)
+        else {
+            panic!("not an answer");
+        };
+        assert!(!ok);
+        assert_eq!(error.unwrap().retry_after, Some(240));
+    }
+
+    #[tokio::test]
+    async fn movement_streams_beside_the_inventory_and_operations_go_out() {
+        let sent = Arc::new(StdMutex::new(Vec::new()));
+        let url = fake_service(sent.clone()).await;
+        let sink: LiveSink = Arc::new(|_| {});
+        let hub = LiveHub::new(Handle::current(), "test", sink);
+        let step = serde_json::json!({ "action": "step", "dir": "forward", "n": 1 });
+        assert!(!hub.movement_op("a_1", "m0", &step), "nothing streams it");
+        hub.watch_movement(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 1).await;
+        assert_eq!(
+            frames[0],
+            watch_streams_frame("a_1", false, None, Some(true))
+        );
+        hub.watch_inventory(url, Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 2).await;
+        assert_eq!(
+            frames[1],
+            watch_streams_frame("a_1", false, Some(true), None)
+        );
+        assert!(hub.movement_op("a_1", "m1", &step));
+        let frames = heard(&sent, 3).await;
+        let op: serde_json::Value = serde_json::from_str(&frames[2]).unwrap();
+        assert_eq!(
+            op,
+            serde_json::json!({"t": "move", "acct": "a_1", "id": "m1", "op": step})
+        );
+        // The panel leaves, the inventory stays: movement stops on the same subscription.
+        hub.unwatch_movement("a_1");
+        let frames = heard(&sent, 4).await;
+        assert_eq!(
+            frames[3],
+            watch_streams_frame("a_1", false, None, Some(false))
+        );
+        assert!(!hub.movement_op("a_1", "m2", &step));
+        hub.unwatch_inventory("a_1");
+        assert!(!hub.is_watching());
     }
 
     #[test]
