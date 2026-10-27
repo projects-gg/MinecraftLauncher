@@ -3,11 +3,12 @@
 // fits); the page below shows one crew, sliding in from the side its mark sits on. Without a crew
 // (or on "Ekip kur ya da katıl"): invites to crews, "Ekip kur" (crew-editor: name, tag, motto and
 // look, with a live preview) and "Kodla katıl" (a code, then what it leads to); at the crew limit,
-// one line instead. In a crew: its card (the mark, name, tag, motto, size and founding day, a
-// month's or a year's anniversary that day, the emblem's faint watermark) whose strip shows who is
-// online with "Ekibi çağır" (this crew; "Birden çok ekibi çağır" beside it with several), or the
-// call that is on; where a call cannot start yet (CALL1) one line under the button says why. Then
-// the members grouped by where they are ("Projects'te 4", with "Katıl"); friends to invite; the
+// one line instead. In a crew: its card (the mark, name, tag, motto, size and founding day, which
+// says a month's or a year's anniversary that day) whose strip shows which teammates are online
+// with "Ekibi çağır" (this crew; "Birden çok ekibi çağır" beside it with several), or the call
+// that is on; where a call cannot start yet (CALL1) one line under the button says why. Then the
+// player's own row and the teammates grouped by where they are ("Projects'te 4", with "Katıl"; the
+// groups add up to the strip's count, SMALL12); friends to invite; the
 // crew code; the leader's "Yetkiler"; leaving. Every irreversible step asks once, in place, with
 // one sentence; nothing else asks. With chat (CHAT1) the crew has "Ekip" and "Sohbet" (its chat,
 // filling the panel); a crew whose name moderators reset says so on top while it stays locked
@@ -32,7 +33,6 @@ import {
   PencilSimple,
   ShieldWarning,
   SignOut,
-  Sparkle,
   Trash,
   UserPlus,
   UsersThree,
@@ -95,7 +95,7 @@ import { NameWithMark } from "./person-mark";
 import { PersonContextMenu } from "./person-menu";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { type CrewPane, useSocialUi } from "./store";
-import { CrewMark, CrewWatermark, TeamTag } from "./team-emblem";
+import { CrewMark, TeamTag } from "./team-emblem";
 import { RoleBadge, TeamMemberRow } from "./team-member";
 import { TeamInviteRow, useCrewItems } from "./team-section";
 import {
@@ -777,7 +777,6 @@ function CrewCard({
   const items = useCrewItems(team, { onOpen: false, sideways: true });
   return (
     <div className="relative">
-      <CrewWatermark look={team} />
       <ContextMenu items={items}>
         <div className="relative flex items-start gap-3.5">
           <CrewMark look={team} size={64} />
@@ -800,14 +799,25 @@ function CrewCard({
                 <UsersThree size={14} aria-hidden />
                 {t("teams.membersOf", { count: team.members.length, limit: team.limit })}
               </span>
+              {/* On the day of a month's or a year's anniversary the founding date says so, in the
+                  line's own words, a shade brighter (SMALL12: a gold line with a sparkle was a
+                  second loud thing on the card). */}
               {founded ? (
-                <span className="inline-flex items-center gap-1">
+                <span
+                  className={cn("inline-flex items-center gap-1", anniversary && "text-bone-100")}
+                >
                   <CalendarBlank size={14} aria-hidden />
-                  {t("teams.card.founded", {
-                    date: dateTimeFormat({ day: "numeric", month: "long", year: "numeric" }).format(
-                      founded,
-                    ),
-                  })}
+                  {anniversary
+                    ? "years" in anniversary
+                      ? t("teams.card.yearsToday", { count: anniversary.years })
+                      : t("teams.card.monthsToday", { count: anniversary.months })
+                    : t("teams.card.founded", {
+                        date: dateTimeFormat({
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        }).format(founded),
+                      })}
                 </span>
               ) : null}
               {together ? (
@@ -832,14 +842,6 @@ function CrewCard({
                 ) : null}
               </AnimatePresence>
             </p>
-            {anniversary ? (
-              <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-gold-300">
-                <Sparkle size={14} weight="fill" aria-hidden />
-                {"years" in anniversary
-                  ? t("teams.card.yearsToday", { count: anniversary.years })
-                  : t("teams.card.monthsToday", { count: anniversary.months })}
-              </p>
-            ) : null}
           </div>
           {canEdit ? (
             <IconButton
@@ -886,16 +888,19 @@ type RosterItem =
   | { key: string; kind: "member"; member: TeamMember };
 
 /**
- * Everyone, grouped by where they are; inside a group the leader, the moderators, then names. One
- * list, so someone who joins Projects glides into its group instead of vanishing and reappearing.
+ * The player's own row, then the teammates grouped by where they are; inside a group the leader,
+ * the moderators, then names. The groups count teammates only, as the card's strip does (SMALL12).
+ * One list, so someone who joins Projects glides into its group instead of vanishing and
+ * reappearing.
  */
 function CrewRoster({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
   const { reduce, layout } = useSocialMotion();
-  const activity = useSocialUi((s) => s.view.activity);
-  const items = useMemo<RosterItem[]>(
-    () =>
-      rosterGroups(team, activity).flatMap(({ where, members }) => [
+  const items = useMemo<RosterItem[]>(() => {
+    const me = team.members.find((member) => member.me);
+    return [
+      ...(me ? [{ key: `m:${me.id}`, kind: "member" as const, member: me }] : []),
+      ...rosterGroups(team).flatMap(({ where, members }) => [
         {
           key: `g:${where}`,
           kind: "group" as const,
@@ -904,8 +909,8 @@ function CrewRoster({ team }: { team: SocialTeam }) {
         },
         ...members.map((member) => ({ key: `m:${member.id}`, kind: "member" as const, member })),
       ]),
-    [team, activity, t],
-  );
+    ];
+  }, [team, t]);
   return (
     <ul aria-label={team.name} className="relative flex flex-col">
       <AnimatePresence initial={false} mode="popLayout">
