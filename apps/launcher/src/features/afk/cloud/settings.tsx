@@ -253,7 +253,8 @@ function Editor({
   }, []);
 
   const props = { draft, setDraft, view, issues: shown, features };
-  const blocking = submitted && issues.length > 0;
+  // A mark on screen holds the save (a refused password's or a held row's never: see `held`).
+  const blocking = issues.length > 0;
   // Stopped on a password the server refused: saving alone left the stop in place, so the main
   // button starts it too ("Yalnız kaydet" beside it, as on a running desktop account).
   const startAfter = stoppedOnPassword(account);
@@ -385,9 +386,12 @@ function Editor({
 /** The settings panel of one cloud account. */
 export function CloudSettingsSheet({
   account,
+  twin = false,
   onClose,
 }: {
   account: CloudAccount | undefined;
+  /** This computer has the same account: the title says these are the cloud's (AFK-CLEAR). */
+  twin?: boolean;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -421,7 +425,11 @@ export function CloudSettingsSheet({
       open={open}
       onClose={close}
       nickname={account?.name ?? ""}
-      title={t("cloudAfk.settings.title", { name: account?.name ?? "" })}
+      title={
+        twin
+          ? t("afkClear.twin.cloudTitle", { name: account?.name ?? "" })
+          : t("cloudAfk.settings.title", { name: account?.name ?? "" })
+      }
       server={account ? serverLabel(account.server) : ""}
     >
       {account && view ? (

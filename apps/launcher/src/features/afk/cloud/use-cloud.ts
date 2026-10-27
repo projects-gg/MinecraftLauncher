@@ -86,7 +86,9 @@ function activeHere(account: AfkAccount): boolean {
 
 type GuardRequest =
   | { where: "cloud"; desktop: AfkAccount; cloud: CloudAccount }
-  | { where: "here"; desktop: AfkAccount; cloud: CloudAccount };
+  | { where: "here"; desktop: AfkAccount; cloud: CloudAccount }
+  /** "Bu bilgisayarda çalıştır" while the account runs in the cloud (AFK-CLEAR). */
+  | { where: "move"; desktop: AfkAccount; cloud: CloudAccount };
 
 /** The account panel's tabs (the inventory's only while the service offers it). */
 export type PanelTab = "console" | "inventory" | "movement";
@@ -193,15 +195,19 @@ export function useConnectAll() {
 }
 
 /**
- * "Bu bilgisayarda çalıştır" on the card of an account in both places: the cloud one stops if it
- * runs, then this computer connects. The button says it, so nothing asks (AFK-CLEAR).
+ * "Bu bilgisayarda çalıştır" on the card of an account in both places: this computer connects. While
+ * the cloud one runs it asks first (the move dialog: it stops in the cloud, its time keeps running,
+ * it leaves the game when this computer does), then the cloud one stops (AFK-CLEAR).
  */
 export function useRunHere() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   return async (cloud: CloudAccount, here: AfkAccount) => {
+    if (runsInCloud(cloud)) {
+      useCloudUi.getState().setGuard({ where: "move", desktop: here, cloud });
+      return;
+    }
     try {
-      if (runsInCloud(cloud)) storeAccount(queryClient, await cloudApi.stop(cloud.id));
       await api.afkConnect(here.id);
       toast.success(t("cloudAfk.location.toHere", { name: here.nickname }));
     } catch (error) {

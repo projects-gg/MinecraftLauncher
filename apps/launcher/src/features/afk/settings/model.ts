@@ -275,7 +275,13 @@ export function validate(draft: Draft): Issue[] {
   checkNumber(login.delaySeconds, LIMITS.loginDelay, "login", "login.delay", out);
   for (const row of draft.login) {
     if (row.kind === "replace" && !row.args.trim())
-      out.push({ section: "login", field: `login.${row.key}`, code: "secretEmpty" });
+      // Shown once a save is tried: "Değiştir" alone is not a mistake yet.
+      out.push({
+        section: "login",
+        field: `login.${row.key}`,
+        code: "secretEmpty",
+        structural: true,
+      });
   }
   const hasCommand = draft.login.some((row) => row.kind !== "text" || row.text.trim());
   if (login.enabled && !hasCommand)

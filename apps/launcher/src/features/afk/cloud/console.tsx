@@ -572,7 +572,7 @@ export function CloudConsole({
                 animate={{ opacity: 1, transition: enter(0.15) }}
                 exit={{ opacity: 0, transition: leave(0.1) }}
               >
-                {sendError ?? t("cloudAfk.console.sealed")}
+                {sendError ?? t("afkClear.secret.consoleNote")}
               </motion.p>
             ) : null}
           </AnimatePresence>

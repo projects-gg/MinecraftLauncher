@@ -47,3 +47,18 @@ export function twinPlace(cloud: CloudAccount, here: AfkAccount): TwinPlace {
   const failedHere = here.state.kind === "error" || here.state.kind === "clientFailed";
   return failedHere && !cloud.hold && !cloud.expired ? "here" : "cloud";
 }
+
+/**
+ * The accounts in both places whose card speaks for this computer now: they list under "Bu
+ * bilgisayarda" with the accounts only this computer has (the 7/24 Bulut list counts them).
+ */
+export function twinsHere(
+  data: CloudPageData | undefined,
+  desktop: readonly AfkAccount[],
+): Array<{ cloud: CloudAccount; here: AfkAccount }> {
+  if (!data?.overview.available || data.overview.session !== "signedIn") return [];
+  return data.overview.accounts.flatMap((cloud) => {
+    const here = hereCopy(data, cloud.id, desktop);
+    return here && twinPlace(cloud, here) === "here" ? [{ cloud, here }] : [];
+  });
+}

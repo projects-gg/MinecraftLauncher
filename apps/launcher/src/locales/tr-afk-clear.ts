@@ -12,21 +12,33 @@ export const trAfkClear = {
   savedStarting: "Hesap başlatılıyor.",
   /** A desktop account the server turned away for good, as the cloud cards say it. */
   stoppedBecause: "Durdu: {{reason}}",
-  /** The first list once the player has 7/24 Bulut accounts too. */
+  /** This computer's list (over it the page title, under it 7/24 Bulut). */
   here: {
     title: "Bu bilgisayarda",
     none: "Hesap yok",
+    /** Only accounts in both places, none running here (their cards are in 7/24 Bulut). */
+    noneRunning: "Şu an burada çalışan hesap yok",
+  },
+  /** The 7/24 Bulut list's count while some of its accounts run on this computer (listed there). */
+  cloud: {
+    countHere: "{{count}} bulut hesabı, {{here}} tanesi bu bilgisayarda",
+    countOnlineHere:
+      "{{count}} bulut hesabı, {{online}} tanesi oyunda, {{here}} tanesi bu bilgisayarda",
   },
   /** An account in both places: its 7/24 Bulut card is its only one. */
   twin: {
     /** Moves it: the other place stops first. */
     runHere: "Bu bilgisayarda çalıştır",
     runInCloud: "Bulutta çalıştır",
-    /** The state line, the place first ("Bu bilgisayarda oyunda, 1 sa 5 dk"). */
-    hereState: "Bu bilgisayarda {{state}}",
-    cloudState: "Bulutta {{state}}",
+    /** Asked while the account runs in the cloud (what the move leaves behind). */
+    moveTitle: "{{name}} bu bilgisayarda çalışsın mı?",
+    moveBody:
+      "Bulutta durur, süresi işlemeye devam eder. Bu bilgisayar ya da launcher kapanınca oyundan çıkar.",
     hereSettings: "Bu bilgisayardaki ayarlar",
     cloudSettings: "Buluttaki ayarlar",
+    /** The settings panel's title: which of the two it is. */
+    hereTitle: "{{name}} bu bilgisayardaki ayarları",
+    cloudTitle: "{{name}} bulut ayarları",
     removeHere: "Bu bilgisayardan kaldır",
     removeTitle: "{{name}} bu bilgisayardan kaldırılsın mı?",
     removeBody:
@@ -38,5 +50,7 @@ export const trAfkClear = {
     hide: "Gizle",
     kept: "{{command}} şifresi kayıtlı",
     newFor: "{{command}} için yeni şifre",
+    /** Under a console's field while a password line is typed (both consoles). */
+    consoleNote: "Şifre konsolda gizli kalır.",
   },
 };

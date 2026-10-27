@@ -114,7 +114,7 @@ describe("reconnect countdown", () => {
       attempt: 3,
       nextAttemptAt: new Date(at + 11_000).toISOString(),
     };
-    expect(stateText(third, at, t)).toBe("Yeniden bağlanıyor, 11 sn");
+    expect(stateText(third, at, t)).toBe("Yeniden bağlanacak, 11 sn");
   });
 
   it("never guesses a number before the backend knows when", () => {

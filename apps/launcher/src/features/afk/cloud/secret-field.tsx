@@ -7,7 +7,7 @@
 // - a secret only the cloud can show (sealed on the site or another computer): the kept field, with
 //   "Göster" (the machine sends it sealed to a one-time key; shown for a few seconds, never kept)
 //   and "Değiştir" (type it again).
-import { Eye, EyeSlash, LockSimple, LockSimpleOpen, PencilSimple } from "@phosphor-icons/react";
+import { LockSimple, LockSimpleOpen, PencilSimple } from "@phosphor-icons/react";
 import { Button, cn, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
 import { type Ref, useEffect, useId, useRef, useState } from "react";
@@ -35,7 +35,6 @@ function Stored({
   onChange,
   error,
   label,
-  mono,
 }: {
   preview: string;
   accountId: string;
@@ -43,7 +42,6 @@ function Stored({
   onChange: () => void;
   error: string | null;
   label: string;
-  mono: boolean;
 }) {
   const { t } = useTranslation();
   const { reduce } = useMotionPrefs();
@@ -85,8 +83,11 @@ function Stored({
         label={label}
         prefix={name || null}
         invalid={Boolean(error)}
-        mono={mono}
         shown={shown ? reveal.text : null}
+        eye={{
+          busy: reveal.state === "loading",
+          onToggle: () => (shown ? setReveal({ state: "idle" }) : void show()),
+        }}
         overlay={
           // How long the words stay: a hairline that empties (transform only; still under
           // reduced motion, where it simply goes with the words).
@@ -103,15 +104,6 @@ function Stored({
           ) : null
         }
       >
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={shown ? <EyeSlash size={15} /> : <Eye size={15} />}
-          disabled={reveal.state === "loading"}
-          onClick={() => (shown ? setReveal({ state: "idle" }) : void show())}
-        >
-          {shown ? t("cloudAfk.settings.secret.hide") : t("cloudAfk.settings.secret.show")}
-        </Button>
         <Button size="sm" variant="ghost" icon={<PencilSimple size={14} />} onClick={onChange}>
           {t("cloudAfk.settings.secret.change")}
         </Button>
@@ -187,7 +179,6 @@ export function WordsField({
           rowId={rowId}
           label={label}
           error={error}
-          mono={mono}
           onChange={() => {
             replaced.current = words;
             setFocusNext(true);

@@ -341,7 +341,8 @@ function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const blocking = submitted && issues.length > 0;
+  // A mark on screen holds the save (the refused password's never: saving is its fix).
+  const blocking = issues.length > 0;
   const pending = save.isPending ? save.variables : null;
   // On a running account the main action applies the settings right away; on one stopped on its
   // password it connects again (saving alone left the stop in place).
@@ -433,9 +434,12 @@ function Editor({
 /** The settings panel of one desktop AFK account. */
 export function AfkSettingsSheet({
   account,
+  twin = false,
   onClose,
 }: {
   account: AfkAccount | undefined;
+  /** The same account is a 7/24 Bulut account too: the title says these are this computer's. */
+  twin?: boolean;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -463,7 +467,11 @@ export function AfkSettingsSheet({
       open={open}
       onClose={close}
       nickname={account?.nickname ?? ""}
-      title={t("afkSettings.title", { name: account?.nickname ?? "" })}
+      title={
+        twin
+          ? t("afkClear.twin.hereTitle", { name: account?.nickname ?? "" })
+          : t("afkSettings.title", { name: account?.nickname ?? "" })
+      }
       server={account?.server ?? ""}
     >
       {account && view ? (

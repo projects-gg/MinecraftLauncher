@@ -610,7 +610,7 @@ export function CloudCard({
           <div className="mt-3 flex min-h-5 items-center gap-3">
             {local ? (
               <>
-                <StateLine state={local.state} where="here" className="flex-1" />
+                <StateLine state={local.state} className="flex-1" />
                 <LiveStats account={local} />
               </>
             ) : (
@@ -620,7 +620,6 @@ export function CloudCard({
                 className="flex-1"
                 // "Şifreyi düzelt" says what the hint would ("Ayarlar'da giriş şifresini düzelt").
                 showHint={action !== "fixPassword"}
-                where={here ? "cloud" : undefined}
               />
             )}
           </div>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AfkAccount, AfkState } from "@/lib/api";
 import type { CloudAccount, CloudPageData } from "./api";
-import { foldedIds, hereCopy, twinPlace } from "./twins";
+import { foldedIds, hereCopy, twinPlace, twinsHere } from "./twins";
 
 const NOW = 1_800_000_000;
 
@@ -57,6 +57,17 @@ describe("twins", () => {
     expect(hereCopy(both, "c2", list)).toBeNull();
     // A twin whose desktop account is gone.
     expect(hereCopy(both, "c1", [desktop("d2")])).toBeNull();
+  });
+
+  it("lists under this computer an account whose copy here is busy", () => {
+    const busy: AfkState = { kind: "connected", since: new Date(0).toISOString() };
+    const desk = [desktop("d1", busy), desktop("d2")];
+    expect(twinsHere(both, desk).map((twin) => [twin.cloud.id, twin.here.id])).toEqual([
+      ["c1", "d1"],
+    ]);
+    // Idle here, or the service down: the cloud list keeps it.
+    expect(twinsHere(both, [desktop("d1")])).toEqual([]);
+    expect(twinsHere(undefined, desk)).toEqual([]);
   });
 
   it("speaks for this computer while its copy is busy or failed there last", () => {

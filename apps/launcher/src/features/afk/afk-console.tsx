@@ -289,41 +289,62 @@ export function AfkConsole({
                     </AnimatePresence>
                   </div>
                   <form
-                    className="flex gap-2 border-t border-white/8 p-4"
+                    className="flex flex-col gap-2 border-t border-white/8 p-4"
                     onSubmit={(e) => {
                       e.preventDefault();
                       send();
                     }}
                   >
-                    {/* A password command turns secret as it is typed: the AFK surfaces' one
+                    <div className="flex gap-2">
+                      {/* A password command turns secret as it is typed: the AFK surfaces' one
                         look for secret lines (secret.tsx). */}
-                    <SecretField
-                      aria-label={t("afk.consoleInput")}
-                      placeholder={live ? t("afk.consoleInput") : t("afk.consoleOffline")}
-                      value={line}
-                      secret={live && looksSensitive(line)}
-                      mono={live}
-                      disabled={!live}
-                      onChange={setLine}
-                      onKeyDown={onKeyDown}
-                      // The shared disabled look, a little brighter: the placeholder says why.
-                      className="h-[34px] disabled:opacity-60"
-                    />
-                    {live ? (
-                      <IconButton
-                        label={t("afk.send")}
-                        icon={<PaperPlaneRight size={18} weight="fill" />}
-                        type="submit"
-                        className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink"
+                      <SecretField
+                        aria-label={t("afk.consoleInput")}
+                        placeholder={live ? t("afk.consoleInput") : t("afk.consoleOffline")}
+                        value={line}
+                        secret={live && looksSensitive(line)}
+                        mono={live}
+                        disabled={!live}
+                        onChange={setLine}
+                        onKeyDown={onKeyDown}
+                        // The shared disabled look, a little brighter: the placeholder says why.
+                        className="h-[34px] disabled:opacity-60"
                       />
-                    ) : (
-                      // Bağla; İptal while its client is fetched; Tekrar dene after it could not be.
-                      <AfkPrimaryAction
-                        account={account}
-                        size="md"
-                        onFixPassword={onFixPassword ? () => onFixPassword(account.id) : undefined}
-                      />
-                    )}
+                      {live ? (
+                        <IconButton
+                          label={t("afk.send")}
+                          icon={<PaperPlaneRight size={18} weight="fill" />}
+                          type="submit"
+                          className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink"
+                        />
+                      ) : (
+                        // Bağla; İptal while its client is fetched; Tekrar dene after it could not be.
+                        <AfkPrimaryAction
+                          account={account}
+                          size="md"
+                          onFixPassword={
+                            onFixPassword ? () => onFixPassword(account.id) : undefined
+                          }
+                        />
+                      )}
+                    </div>
+                    {/* One reserved line, as in the 7/24 Bulut console: the note fades in place. */}
+                    <div className="grid min-h-[18px]">
+                      <AnimatePresence initial={false}>
+                        {live && looksSensitive(line) ? (
+                          <motion.p
+                            key="secret"
+                            role="status"
+                            className="[grid-area:1/1] text-[12.5px] leading-[18px] text-ash-400"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1, transition: enter(0.15) }}
+                            exit={{ opacity: 0, transition: leave(0.1) }}
+                          >
+                            {t("afkClear.secret.consoleNote")}
+                          </motion.p>
+                        ) : null}
+                      </AnimatePresence>
+                    </div>
                   </form>
                 </GatedMotion.aside>
               </Dialog.Content>

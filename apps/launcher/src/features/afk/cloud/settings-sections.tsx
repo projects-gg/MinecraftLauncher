@@ -578,7 +578,11 @@ function CommandRow({
                   onChange({ ...command, every: { min, max: command.every?.max ?? min } })
                 }
               />
-              <span className="text-ash-400">–</span>
+              {/* "300 sn ile 600 sn arası", as the desktop panel's waits (a bare dash did not say
+                  it is a random wait between the two; AFK-CLEAR). */}
+              <span aria-hidden className="text-[13px] text-ash-300">
+                {t("afkPanel.rangeJoin")}
+              </span>
               <NumberField
                 label={t("cloudAfk.settings.commands.everyMax")}
                 hideLabel
@@ -589,6 +593,11 @@ function CommandRow({
                   onChange({ ...command, every: { min: command.every?.min ?? max, max } })
                 }
               />
+              {t("afkPanel.rangeAfter") ? (
+                <span aria-hidden className="text-[13px] text-ash-300">
+                  {t("afkPanel.rangeAfter")}
+                </span>
+              ) : null}
             </div>
           ) : on === "daily" ? (
             <Times
