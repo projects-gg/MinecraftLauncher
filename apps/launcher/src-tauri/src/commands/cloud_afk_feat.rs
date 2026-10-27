@@ -54,7 +54,7 @@ pub fn cloud_afk_inv_op(
 }
 
 /// The movement panel is on screen: the account's movement state and position stream as
-/// `cloud-afk-live` events (`moveState`, `pos`).
+/// `cloud-afk-live` events (`movementState`, `pos`).
 #[tauri::command]
 #[specta::specta]
 pub async fn cloud_afk_movement_watch(
