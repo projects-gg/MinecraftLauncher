@@ -167,7 +167,7 @@ pub fn default_kick_messages_in(lang: Lang) -> Vec<String> {
             "Too Many people",
         ],
     };
-    lines.iter().map(|line| (*line).to_owned()).collect()
+    lines.iter().copied().map(str::to_owned).collect()
 }
 
 /// Kick messages of a new account, in the launcher's language ([`Lang::current`]).

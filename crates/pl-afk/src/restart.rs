@@ -1064,7 +1064,11 @@ mod tests {
         ] {
             assert!(kick_filter_allows(&own, kick, Some(message)), "{message}");
         }
-        assert!(!kick_filter_allows(&own, kick, Some("Server is restarting")));
+        assert!(!kick_filter_allows(
+            &own,
+            kick,
+            Some("Server is restarting")
+        ));
         // An untouched list in either language catches the other's lines too.
         for lang in [Lang::Tr, Lang::En] {
             let defaults = AutoRelogOptions {
@@ -1072,10 +1076,21 @@ mod tests {
                 kick_messages: default_kick_messages_in(lang),
                 ..AutoRelogOptions::default()
             };
-            for message in ["Server is full!", "Sunucu dolu!", "SUNUCU YENİDEN BAŞLATILIYOR"] {
-                assert!(kick_filter_allows(&defaults, kick, Some(message)), "{lang:?} {message}");
+            for message in [
+                "Server is full!",
+                "Sunucu dolu!",
+                "SUNUCU YENİDEN BAŞLATILIYOR",
+            ] {
+                assert!(
+                    kick_filter_allows(&defaults, kick, Some(message)),
+                    "{lang:?} {message}"
+                );
             }
-            assert!(!kick_filter_allows(&defaults, kick, Some("Spam yüzünden atıldınız")));
+            assert!(!kick_filter_allows(
+                &defaults,
+                kick,
+                Some("Spam yüzünden atıldınız")
+            ));
         }
     }
 
