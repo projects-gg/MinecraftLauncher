@@ -11,14 +11,14 @@
 // - `chatEmpty`: chat on, no conversations yet;
 // - `chatMuted`: moderators muted the player's chat for a day; `chatOff`: the service turned chat
 //   off (what this computer holds stays readable); `chatMailbox`: messages reach only those online.
-// - `chatTombstones` (FIX2): deleted messages of every kind in Ayşe's conversation and the crew's,
-//   which Ayşe leads here (the player's, the sender's, the leader's, a moderator's, Projects'
-//   moderators', an account that is gone); `chatDeleteLive`: Ayşe deletes her newest message
+// - `chatTombstones` (FIX2): deleted messages of every kind in GeceKurdu_'s conversation and the crew's,
+//   which GeceKurdu_ leads here (the player's, the sender's, the leader's, a moderator's, Projects'
+//   moderators', an account that is gone); `chatDeleteLive`: GeceKurdu_ deletes her newest message
 //   shortly after start, then Projects' moderators one in the crew (`&deleteAt=<ms>`).
 // - `chat2` (CHAT2): the extras on (`&chat2=1` in any other scenario; `&extras=replies,stickers`
 //   keeps only those, `&extras=none` a service with none of them on): replies, reactions, a
-//   sticker, links with their cards, "Görüldü" under the player's message to KorAteşi;
-//   `chat2Live`: Ayşe writes ("yazıyor…") and sends a sticker, then reacts, a crewmate writes too.
+//   sticker, links with their cards, "Görüldü" under the player's message to KorAtesi;
+//   `chat2Live`: GeceKurdu_ writes ("yazıyor…") and sends a sticker, then reacts, a crewmate writes too.
 // Long histories (CHAT-PROD): `&crewHistory=<n>` puts n older lines in the crew's chat (84 by
 // default), `&crewUnread=<n>` leaves the last n of it unread (3 by default).
 // A message with "hata" or "fail" in it does not go (`&sendFails=<reason>` fails every one with
@@ -95,7 +95,7 @@ function previewCard(url: string): ChatCard {
         "Bedwars'ta 1'e 4 kazandık: son raunt",
         "We won a 1v4 in Bedwars: the last round",
       ),
-      author: "KorAteşi",
+      author: "KorAtesi",
       image: picture("#3f0a0a", "#c9741a", "1v4"),
       w: 320,
       h: 180,
@@ -239,7 +239,7 @@ const CREW_LINES: ReadonlyArray<readonly [string, string]> = [
   ["Haftaya PvP antrenmanı yapalım mı?", "PvP practice next week?"],
   ["Olur, ben hazırım", "Sure, I'm ready"],
   ["Bugün gelemem, yarın varım", "Can't make it today, tomorrow I'm in"],
-  ["Ekip kodunu Bora'ya da attım", "I sent the crew code to Bora too"],
+  ["Ekip kodunu KizilEjder'ya da attım", "I sent the crew code to KizilEjder too"],
 ];
 const CREW_SPEAKERS = ["701", "702", "302", "703", "301", ME, "306"];
 
@@ -275,7 +275,7 @@ export function mockChat(host: ChatHost) {
   ): ChatMessage {
     const mine = from === ME;
     // The preview crew is led by the player: they may delete any of its messages for a week (not
-    // in `chatTombstones`, where Ayşe leads it).
+    // in `chatTombstones`, where GeceKurdu_ leads it).
     const deletes = mine || (conv === CREW_CONV && host.scenario !== "chatTombstones");
     return {
       key: `i:${at}`,
@@ -307,7 +307,7 @@ export function mockChat(host: ChatHost) {
       message(
         ayse,
         "301",
-        pick("Süper, KorAteşi de geliyormuş", "Great, KorAteşi is coming too"),
+        pick("Süper, KorAtesi de geliyormuş", "Great, KorAtesi is coming too"),
         yesterday + 3 * MINUTE,
       ),
       message(
@@ -408,7 +408,7 @@ export function mockChat(host: ChatHost) {
     }
 
     if (host.scenario === "chatTombstones") {
-      // Ayşe's conversation: hers, the player's, and one Projects' moderators took away.
+      // GeceKurdu_'s conversation: hers, the player's, and one Projects' moderators took away.
       const dm = threads.get(ayse) ?? [];
       threads.set(
         ayse,
@@ -422,7 +422,7 @@ export function mockChat(host: ChatHost) {
                 : m,
         ),
       );
-      // The crew's newest: the leader's (Ayşe) deletion and a moderator's (KorAteşi) of others'
+      // The crew's newest: the leader's (GeceKurdu_) deletion and a moderator's (KorAtesi) of others'
       // messages, the player's and a sender's of their own, and one of an account that is gone.
       const tail = crew.length;
       const by: Record<number, string> = {
@@ -520,7 +520,7 @@ export function mockChat(host: ChatHost) {
         ...(lobby ? [lobby] : []),
       ].sort((a, b) => (a.id ?? 0) - (b.id ?? 0)),
     );
-    // KorAteşi saw the player's last message (no answer yet): "Görüldü" under it.
+    // KorAtesi saw the player's last message (no answer yet): "Görüldü" under it.
     const kor = direct("302");
     const korMine = (threads.get(kor) ?? []).filter((m) => m.mine).at(-1);
     if (korMine?.id !== undefined) peerReads.set(kor, korMine.id);
@@ -786,8 +786,8 @@ export function mockChat(host: ChatHost) {
       return;
     }
     if (host.scenario === "chat2Live") {
-      // Ayşe and two crewmates write: a frame every 3 s, as a writer's launcher sends them,
-      // until Ayşe's sticker comes (`chatAt` ms after the start; the crew stops then too).
+      // GeceKurdu_ and two crewmates write: a frame every 3 s, as a writer's launcher sends them,
+      // until GeceKurdu_'s sticker comes (`chatAt` ms after the start; the crew stops then too).
       const at = Number(host.param("chatAt")) || 9000;
       const ayse = direct("301");
       const write = () => {

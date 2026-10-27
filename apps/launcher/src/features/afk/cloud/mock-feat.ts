@@ -77,20 +77,20 @@ const KIND_LINES: Kind[] = [
   ["n", "sys", "[AuthMe] Başarıyla giriş yaptın."],
   ["s", "sys", "/warp maden"],
   ["n", "sys", "Maden bölgesine ışınlandın."],
-  ["n", "chat", "Ayşe » selam millet", "Ayşe"],
-  ["n", "pm", "✉ »» Mert: Madenci07 akşam pvp var mı", "Mert"],
-  ["n", "chat", "Kerem » Madenci07 maden açık mı", "Kerem"],
+  ["n", "chat", "GeceKurdu_ » selam millet", "GeceKurdu_"],
+  ["n", "pm", "✉ »» ElmasKazma: Madenci07 akşam pvp var mı", "ElmasKazma"],
+  ["n", "chat", "SessizOkcu » Madenci07 maden açık mı", "SessizOkcu"],
   ["n", "title", "Hoş geldin"],
   ["n", "cli", "[Envanter] Menü açıldı: Kitler"],
   ["n", "sys", "[Duyuru] Etkinlik 21:00'de başlıyor!"],
   ["e", "err", "Sunucuyla bağlantı bir an yavaşladı."],
-  ["n", "chat", "Ece » biri pazara gelsin", "Ece"],
+  ["n", "chat", "Lavci_42 » biri pazara gelsin", "Lavci_42"],
 ];
 
 const LIVE_LINES: Kind[] = [
-  ["n", "chat", "Ayşe » biri pazara gelsin", "Ayşe"],
+  ["n", "chat", "GeceKurdu_ » biri pazara gelsin", "GeceKurdu_"],
   ["n", "sys", "[Duyuru] Haftalık sıralama yenilendi."],
-  ["n", "pm", "✉ »» Kerem: hoş geldin Madenci07", "Kerem"],
+  ["n", "pm", "✉ »» SessizOkcu: hoş geldin Madenci07", "SessizOkcu"],
   ["n", "sys", "[Projects] 15 dakika AFK ödülü: 120 altın."],
 ];
 

@@ -103,8 +103,8 @@ function searchParam(key: string): string | null {
 }
 
 /**
- * `&marks=1` (SOC-VERIFY): some people carry a mark, Ayşe and Zeynep the verified one, KorAteşi the
- * admin one, the request from Yiğit and two crewmates the verified one; `&marks=me` the player's own
+ * `&marks=1` (SOC-VERIFY): some people carry a mark, GeceKurdu_ and ZumrutKilic the verified one, KorAtesi the
+ * admin one, the request from YildizTozu and two crewmates the verified one; `&marks=me` the player's own
  * admin mark too.
  */
 const MARKS: Record<string, ProfileMark> = {
@@ -180,8 +180,8 @@ function friendsBase(): Friend[] {
   return [
     {
       id: "301",
-      name: "Ayşe",
-      username: "aysekaya",
+      name: "GeceKurdu_",
+      username: "gecekurdu_",
       avatar: "preset:fox",
       state: "playing",
       dnd: false,
@@ -191,7 +191,7 @@ function friendsBase(): Friend[] {
     },
     {
       id: "302",
-      name: "KorAteşi",
+      name: "KorAtesi",
       username: "koratesi",
       avatar: "discord",
       avatarUrl: discord(2),
@@ -203,8 +203,8 @@ function friendsBase(): Friend[] {
     },
     {
       id: "303",
-      name: "Mert",
-      username: "mert.yildiz",
+      name: "ElmasKazma",
+      username: "elmaskazma",
       avatar: "preset:knight",
       state: "playing",
       dnd: false,
@@ -214,8 +214,8 @@ function friendsBase(): Friend[] {
     },
     {
       id: "304",
-      name: "Deniz",
-      username: "denizz",
+      name: "PixelAvci",
+      username: "pixelavci",
       avatar: "preset:wizard",
       state: "playing",
       dnd: false,
@@ -224,8 +224,8 @@ function friendsBase(): Friend[] {
     },
     {
       id: "305",
-      name: "Elif Su",
-      username: "elifsu",
+      name: "NetherKral",
+      username: "netherkral",
       avatar: "preset:axolotl",
       state: "launcher",
       dnd: false,
@@ -233,8 +233,8 @@ function friendsBase(): Friend[] {
     },
     {
       id: "306",
-      name: "Bora",
-      username: "bora_mc",
+      name: "KizilEjder",
+      username: "kizilejder",
       avatar: "discord",
       avatarUrl: discord(0),
       state: "offline",
@@ -244,8 +244,8 @@ function friendsBase(): Friend[] {
     },
     {
       id: "307",
-      name: "Zeynep",
-      username: "zeyno",
+      name: "ZumrutKilic",
+      username: "zumrutkilic",
       avatar: "preset:wolf",
       state: "offline",
       dnd: false,
@@ -254,8 +254,8 @@ function friendsBase(): Friend[] {
     },
     {
       id: "308",
-      name: "Can Ejder",
-      username: "canejder",
+      name: "EnderYolcu",
+      username: "enderyolcu",
       avatar: "preset:ember-dragon",
       state: "offline",
       dnd: false,
@@ -264,8 +264,8 @@ function friendsBase(): Friend[] {
     },
     {
       id: "309",
-      name: "Selin",
-      username: "selin.ak",
+      name: "Obsidyen77",
+      username: "obsidyen77",
       avatar: "discord",
       state: "offline",
       dnd: false,
@@ -346,7 +346,7 @@ const PREVIEW_LOOK: CrewLook = OLD_CREWS
   ? { emblem: "shield", color: "gold", frame: "cut" }
   : { emblem: "controller", color: "teal", frame: "banner" };
 
-/** "Gece Kartalları", led by the player (or by Ayşe in `teamMember` and `teamModerator`). */
+/** "Gece Kartalları", led by the player (or by GeceKurdu_ in `teamMember` and `teamModerator`). */
 function previewTeam(founder: boolean, moderator = false): SocialTeam {
   const friends = friendsList();
   const byId = (id: string) => friends.find((f) => f.id === id);
@@ -375,7 +375,7 @@ function previewTeam(founder: boolean, moderator = false): SocialTeam {
     members: [
       teamMember(undefined, {
         id: "100",
-        name: "EjderAvcısı",
+        name: "EjderAvcisi",
         avatar: "preset:golden-dragon",
         me: true,
         role: founder ? "founder" : "member",
@@ -383,23 +383,27 @@ function previewTeam(founder: boolean, moderator = false): SocialTeam {
         state: "launcher",
         joinedAt: now() - 86_400 * 21,
       }),
-      teamMember(byId("301"), { id: "301", name: "Ayşe", role: founder ? "member" : "founder" }),
-      teamMember(byId("302"), { id: "302", name: "KorAteşi", moderator: !OLD_CREWS }),
+      teamMember(byId("301"), {
+        id: "301",
+        name: "GeceKurdu_",
+        role: founder ? "member" : "founder",
+      }),
+      teamMember(byId("302"), { id: "302", name: "KorAtesi", moderator: !OLD_CREWS }),
       teamMember(undefined, {
         id: "701",
-        name: "Yusuf",
+        name: "MaviElmas",
         avatar: "preset:knight",
         state: "playing",
         game: { where: "projects", host: "play.projects.gg" },
       }),
       teamMember(undefined, {
         id: "702",
-        name: "Melis",
+        name: "DemirGolem_",
         avatar: "preset:axolotl",
         state: "launcher",
       }),
-      teamMember(byId("306"), { id: "306", name: "Bora" }),
-      teamMember(undefined, { id: "703", name: "Arda", avatar: "preset:wolf" }),
+      teamMember(byId("306"), { id: "306", name: "KizilEjder" }),
+      teamMember(undefined, { id: "703", name: "TasDevi", avatar: "preset:wolf" }),
     ],
     invited: ["305"],
     limit: 30,
@@ -411,7 +415,7 @@ function previewTeam(founder: boolean, moderator = false): SocialTeam {
 }
 
 /** The `crews` previews: "Gece Kartalları" (the player leads it), "Skyblock Ustaları" and "PvP
- * Kulübü" (muted on its own until unmuted), with Ayşe in all three and two more on Projects. */
+ * Kulübü" (muted on its own until unmuted), with GeceKurdu_ in all three and two more on Projects. */
 function previewCrews(): SocialTeam[] {
   const gkr = previewTeam(true);
   const me = gkr.members.find((m) => m.me);
@@ -451,15 +455,25 @@ function previewCrews(): SocialTeam[] {
       [
         teamMember(undefined, {
           id: "801",
-          name: "Deniz",
+          name: "PixelAvci",
           avatar: "preset:wizard",
           ...onProjects,
           role: "founder",
         }),
         ...(ayse ? [ayse] : []),
         ...(me ? [me] : []),
-        teamMember(undefined, { id: "802", name: "Selin", avatar: "preset:fox", ...onProjects }),
-        teamMember(undefined, { id: "803", name: "Can", avatar: "preset:wolf", state: "launcher" }),
+        teamMember(undefined, {
+          id: "802",
+          name: "Obsidyen77",
+          avatar: "preset:fox",
+          ...onProjects,
+        }),
+        teamMember(undefined, {
+          id: "803",
+          name: "AlevYagmuru",
+          avatar: "preset:wolf",
+          state: "launcher",
+        }),
       ],
     ),
     crew(
@@ -473,7 +487,12 @@ function previewCrews(): SocialTeam[] {
         motto: "",
       },
       [
-        teamMember(undefined, { id: "804", name: "Efe", avatar: "preset:knight", role: "founder" }),
+        teamMember(undefined, {
+          id: "804",
+          name: "KaranlikPvP",
+          avatar: "preset:knight",
+          role: "founder",
+        }),
         ...(me ? [me] : []),
         ...(ayse ? [ayse] : []),
       ],
@@ -491,20 +510,20 @@ const teamInvite = (): TeamInvite => ({
   frame: OLD_CREWS ? "cut" : "hex",
   motto: OLD_CREWS ? "" : pick("Adadan adaya", "Island to island"),
   members: 6,
-  from: { id: "303", name: "Mert", username: "mert.yildiz", avatar: "preset:knight" },
+  from: { id: "303", name: "ElmasKazma", username: "elmaskazma", avatar: "preset:knight" },
   sentAt: now() - 1_800,
 });
 
-/** A crew call: Ayşe's from projects.gg (`join`), KorAteşi's from another server (`other`),
- * Melis's from the launcher (`ready`, before CALL1), or the player's own with a few answers
+/** A crew call: GeceKurdu_'s from projects.gg (`join`), KorAtesi's from another server (`other`),
+ * DemirGolem_'s from the launcher (`ready`, before CALL1), or the player's own with a few answers
  * (`mine`). Twenty minutes, a few already gone. */
 function previewCall(kind: "join" | "other" | "ready" | "mine", crews: string[] = []): CrewCall {
   const started = now() - 180;
   const who = {
-    mine: { from: "100", name: "EjderAvcısı", avatar: "preset:golden-dragon" },
-    join: { from: "301", name: "Ayşe", avatar: "preset:fox" },
-    other: { from: "302", name: "KorAteşi", avatar: "discord", avatarUrl: discord(2) },
-    ready: { from: "702", name: "Melis", avatar: "preset:axolotl" },
+    mine: { from: "100", name: "EjderAvcisi", avatar: "preset:golden-dragon" },
+    join: { from: "301", name: "GeceKurdu_", avatar: "preset:fox" },
+    other: { from: "302", name: "KorAtesi", avatar: "discord", avatarUrl: discord(2) },
+    ready: { from: "702", name: "DemirGolem_", avatar: "preset:axolotl" },
   }[kind];
   return {
     id: `call-${kind}`,
@@ -542,7 +561,7 @@ function initial(): SocialSnapshot {
     loaded: true,
     me: {
       id: "100",
-      name: "EjderAvcısı",
+      name: "EjderAvcisi",
       username: "ejderavcisi",
       avatar: "preset:golden-dragon",
       discordAvatarUrl: discord(1),
@@ -558,8 +577,8 @@ function initial(): SocialSnapshot {
     incoming: [
       {
         id: "401",
-        name: "Yiğit",
-        username: "yigitmc",
+        name: "YildizTozu",
+        username: "yildiztozu",
         avatar: "preset:baby-dragon",
         sentAt: now() - 600,
         ...markOf("401"),
@@ -568,8 +587,8 @@ function initial(): SocialSnapshot {
     outgoing: [
       {
         id: "402",
-        name: "Ece",
-        username: "ece.tr",
+        name: "Lavci_42",
+        username: "lavci_42",
         avatar: "discord",
         avatarUrl: discord(4),
         sentAt: now() - 7200,
@@ -580,7 +599,7 @@ function initial(): SocialSnapshot {
       {
         id: "i-quiet",
         from: "302",
-        name: "KorAteşi",
+        name: "KorAtesi",
         avatar: "discord",
         avatarUrl: discord(2),
         ...markOf("302"),
@@ -642,10 +661,10 @@ function initial(): SocialSnapshot {
     crewLimit: previewLimit(),
     ...extra,
   });
-  // Chat previews (mock-chat.ts): the player leads the crew, so its chat is there too (Ayşe leads
+  // Chat previews (mock-chat.ts): the player leads the crew, so its chat is there too (GeceKurdu_ leads
   // it in `chatTombstones`, whose crew chat shows her deletion).
   if (CHAT_SCENARIOS.includes(name)) return crewed([previewTeam(name !== "chatTombstones")]);
-  // The second wave's (mock-crew-wave2.ts): led by the player, or by Ayşe in `crewPlans`.
+  // The second wave's (mock-crew-wave2.ts): led by the player, or by GeceKurdu_ in `crewPlans`.
   if (WAVE2_SCENARIOS.includes(name)) {
     return crewed([previewTeam(!name.startsWith("crewPlan"))]);
   }
@@ -921,7 +940,7 @@ if (typeof window !== "undefined") {
           ? {
               id: "i-live",
               from: "301",
-              name: "Ayşe",
+              name: "GeceKurdu_",
               avatar: "preset:fox",
               at: now(),
               server: { where: "projects", host: "play.projects.gg" },
@@ -930,7 +949,7 @@ if (typeof window !== "undefined") {
           : {
               id: "i-live",
               from: "304",
-              name: "Deniz",
+              name: "PixelAvci",
               avatar: "preset:wizard",
               at: now(),
               server: { where: "other", host: "survival.example.net" },
@@ -1083,8 +1102,18 @@ const badges = badgesApi(badgesContext());
 const APPROVING = new Set(["fedcba9876543210"]);
 
 const people: Record<string, CodeLookup["profile"]> = {
-  "PRJ-4F8A-2KQX": { id: "601", name: "Kerem", username: "keremtr", avatar: "preset:lantern" },
-  "PRJ-9WQ2-XM4C": { id: "305", name: "Elif Su", username: "elifsu", avatar: "preset:axolotl" },
+  "PRJ-4F8A-2KQX": {
+    id: "601",
+    name: "SessizOkcu",
+    username: "sessizokcu",
+    avatar: "preset:lantern",
+  },
+  "PRJ-9WQ2-XM4C": {
+    id: "305",
+    name: "NetherKral",
+    username: "netherkral",
+    avatar: "preset:axolotl",
+  },
 };
 
 export const mockSocial: SocialApi = {
