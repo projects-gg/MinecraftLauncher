@@ -3,6 +3,9 @@ import {
   aiState,
   applyDraft,
   blockedNameProblem,
+  boughtInUse,
+  boughtLeft,
+  boughtReplies,
   canSpend,
   configChanges,
   editDraft,
@@ -283,7 +286,13 @@ describe("the AI's state", () => {
       canStop: true,
     });
     // The full window is named when the brief says which.
-    const brief = { w5hResetAt: null, weekResetAt: 1, exhaustedUntil: null, giftsLeft: 0 };
+    const brief = {
+      w5hResetAt: null,
+      weekResetAt: 1,
+      exhaustedUntil: null,
+      giftsLeft: 0,
+      boughtLeft: 0,
+    };
     expect(
       aiState(
         ai({
@@ -327,23 +336,46 @@ describe("the AI's state", () => {
     );
   });
 
+  const quota = (windowsLeft: number, gift: number, estReplies: number, bought = 0): PlusQuota => ({
+    w5h: { used: 5_000 - windowsLeft, cap: 5_000, resetAt: null },
+    week: { used: 0, cap: 20_000, resetAt: 1 },
+    gifts: gift ? [{ id: "g1", remaining: gift, expiresAt: null }] : [],
+    bought: { remaining: bought, packs: bought ? [{ id: "gr_b1", remaining: bought }] : [] },
+    promo: null,
+    frozen: false,
+    estReplies,
+    pct5: 0,
+    pctWeek: 0,
+    asOf: 1,
+  });
+
   it("counts the gifts' share of the replies left (the room holds both)", () => {
-    const quota = (windowsLeft: number, gift: number, estReplies: number): PlusQuota => ({
-      w5h: { used: 5_000 - windowsLeft, cap: 5_000, resetAt: null },
-      week: { used: 0, cap: 20_000, resetAt: 1 },
-      gifts: gift ? [{ id: "g1", remaining: gift, expiresAt: null }] : [],
-      promo: null,
-      frozen: false,
-      estReplies,
-      pct5: 0,
-      pctWeek: 0,
-      asOf: 1,
-    });
     // 3,000 of the windows and 3,000 of a gift at 25 a reply: 240 left, 120 of them the gift's.
     expect(giftReplies(quota(3_000, 3_000, 240))).toBe(120);
     // The windows used up: every reply left is the gift's.
     expect(giftReplies(quota(0, 3_000, 120))).toBe(120);
     expect(giftReplies(quota(3_000, 0, 120))).toBe(0);
     expect(giftReplies(quota(0, 0, 0))).toBe(0);
+    // Bought credits are room too: 3,000 + 3,000 gift + 6,000 bought over 480 replies.
+    expect(giftReplies(quota(3_000, 3_000, 480, 6_000))).toBe(120);
+  });
+
+  it("counts the bought credits' share of the replies left (AFK+ extra credits)", () => {
+    // 3,000 + 3,000 gift + 6,000 bought over 480 replies: half of them the bought credits'.
+    expect(boughtReplies(quota(3_000, 3_000, 480, 6_000))).toBe(240);
+    // The windows and the gifts used up: every reply left is the bought credits'.
+    expect(boughtReplies(quota(0, 0, 400, 8_000))).toBe(400);
+    expect(boughtReplies(quota(3_000, 0, 120))).toBe(0);
+    expect(boughtReplies(quota(0, 0, 0, 8_000))).toBe(0);
+  });
+
+  it("says when bought credits pay (AFK+ extra credits)", () => {
+    expect(boughtLeft(quota(0, 0, 400, 8_000))).toBe(8_000);
+    expect(boughtInUse(quota(0, 0, 400, 8_000))).toBe(true);
+    // The windows or a gift still pay first.
+    expect(boughtInUse(quota(500, 0, 400, 8_000))).toBe(false);
+    expect(boughtInUse(quota(0, 100, 400, 8_000))).toBe(false);
+    expect(boughtInUse({ ...quota(0, 0, 400, 8_000), frozen: true })).toBe(false);
+    expect(boughtInUse(quota(0, 0, 0))).toBe(false);
   });
 });

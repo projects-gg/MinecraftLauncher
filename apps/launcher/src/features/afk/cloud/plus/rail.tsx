@@ -2,15 +2,17 @@
 // one sentence with its one control (Durdur / Başlat), the sections with what waits in them (gold
 // figures, no badges), and the AI allowance: two bars, when each renews, about how many replies
 // are left. The bars move only when a number changes.
-import { Play, Stop } from "@phosphor-icons/react";
+import { ArrowSquareOut, Play, Stop } from "@phosphor-icons/react";
 import { Button, cn, enter, leave, toast, usePressGuard } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { formatPercent } from "@/lib/format";
+import { formatCount, formatPercent } from "@/lib/format";
+import { afkFailed } from "../../errors";
 import type { CloudAccount } from "../api";
+import { cloudApi } from "../api";
 import type { PlusQuota } from "./api";
-import { aiState, giftReplies, tradeNoteKey } from "./model";
+import { aiState, boughtInUse, boughtReplies, giftReplies, tradeNoteKey } from "./model";
 import { atPhrase, clockText, dayText, untilPhrase } from "./time";
 import { plusAi } from "./types";
 import {
@@ -18,6 +20,7 @@ import {
   type PlusSection,
   usePlusControl,
   usePlusFeatures,
+  usePlusTopupOpen,
 } from "./use-plus";
 import { currentLang, trWith } from "./words";
 
@@ -290,9 +293,23 @@ function giftLine(quota: PlusQuota, t: TFunction, lang: "tr" | "en"): string | n
   });
 }
 
-function QuotaBlock({ quota, saverAt }: { quota: PlusQuota; saverAt: number | null }) {
+function QuotaBlock({
+  quota,
+  saverAt,
+  account,
+}: {
+  quota: PlusQuota;
+  saverAt: number | null;
+  account: CloudAccount;
+}) {
   const { t } = useTranslation();
   const lang = currentLang();
+  // AFK+ extra credits (cloud-afk README "AFK+ extra credits"): how many of the replies the bought
+  // credits pay for, in the gift's words; once the windows and the gifts are spent they pay for all
+  // of them, and the line says they are in use now (the site's same lines).
+  const boughtNow = boughtInUse(quota);
+  const fromBought = !quota.frozen && quota.estReplies > 0 ? boughtReplies(quota) : 0;
+  const canBuy = usePlusTopupOpen() && account.tier === "plus" && !quota.frozen;
   // Only under the replies line: a frozen or used-up allowance has no "of them".
   const gift = !quota.frozen && quota.estReplies > 0 ? giftLine(quota, t, lang) : null;
   const stale = Date.now() / 1000 - quota.asOf > 90;
@@ -313,6 +330,13 @@ function QuotaBlock({ quota, saverAt }: { quota: PlusQuota; saverAt: number | nu
           </p>
         ) : null}
         {gift ? <p className="-mt-0.5 text-[12px] text-ash-300 tabular-nums">{gift}</p> : null}
+        {boughtNow ? (
+          <p className="-mt-0.5 text-[12px] text-bone-100">{t("afkPlus.quota.boughtInUse")}</p>
+        ) : fromBought > 0 ? (
+          <p className="-mt-0.5 text-[12px] text-ash-300 tabular-nums">
+            {t("afkPlus.quota.bought", { count: fromBought, n: formatCount(fromBought) })}
+          </p>
+        ) : null}
         {/* A promotion is news, not an action: plain words, no gold. */}
         {quota.promo ? (
           <p className="text-bone-100">
@@ -326,6 +350,23 @@ function QuotaBlock({ quota, saverAt }: { quota: PlusQuota; saverAt: number | nu
           </p>
         ) : null}
       </div>
+      {/* Buying happens on afk.projects.gg: the account's AFK+ tab with the packs open. */}
+      {canBuy ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          // The site opens: the open-in-browser mark after the words, as "afk.projects.gg'de aç".
+          iconRight={<ArrowSquareOut size={14} weight="bold" />}
+          className="self-start"
+          onClick={() =>
+            void cloudApi
+              .open("plusTopup", account.id)
+              .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")))
+          }
+        >
+          {t("afkPlus.quota.buy")}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -377,7 +418,7 @@ export function PlusRail({
           <h3 className="mb-3 font-display text-[14px] font-semibold text-bone-50">
             {t("afkPlus.quota.title")}
           </h3>
-          <QuotaBlock quota={quota} saverAt={saverAt} />
+          <QuotaBlock quota={quota} saverAt={saverAt} account={account} />
         </section>
       ) : null}
     </aside>

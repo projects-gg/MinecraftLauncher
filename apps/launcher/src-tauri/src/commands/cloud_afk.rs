@@ -453,6 +453,9 @@ pub enum CloudPage {
     PlusBuy,
     /// The AFK+ tab of `account` on the site (what the launcher leaves to the site: plan changes).
     PlusAccount,
+    /// The same tab with the extra credits' packs open ("Kontör al"; cloud-afk README "AFK+ extra
+    /// credits"): buying happens on the site.
+    PlusTopup,
 }
 
 /// Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there.
@@ -478,13 +481,15 @@ pub fn cloud_afk_open(
         (CloudPage::Renew, Some(id)) => format!("satin-al?hesap={id}"),
         (CloudPage::Account, Some(id)) => format!("hesap/{id}"),
         (CloudPage::Accounts, _)
-        | (CloudPage::Renew | CloudPage::Account | CloudPage::PlusAccount, None) => {
-            "hesaplar".to_owned()
-        }
+        | (
+            CloudPage::Renew | CloudPage::Account | CloudPage::PlusAccount | CloudPage::PlusTopup,
+            None,
+        ) => "hesaplar".to_owned(),
         (CloudPage::Plus, _) => "afk-plus".to_owned(),
         (CloudPage::PlusBuy, Some(id)) => format!("satin-al?hesap={id}&tier=plus"),
         (CloudPage::PlusBuy, None) => "satin-al?tier=plus".to_owned(),
         (CloudPage::PlusAccount, Some(id)) => format!("hesap/{id}/afk-plus"),
+        (CloudPage::PlusTopup, Some(id)) => format!("hesap/{id}/afk-plus?ek-kontor=1"),
     };
     let url = client.site_url(&path);
     app.opener()
