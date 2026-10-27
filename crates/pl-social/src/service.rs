@@ -5225,9 +5225,14 @@ mod tests {
                         ),
                         ("POST", "/v1/teams/join") => MockReply::json(
                             202,
-                            r#"{"request":{"team":{"id":"9999aaaabbbbcccc","name":"Skyblock",
-                                "tag":"SKY","emblem":"castle","members":6,"join":"approval"},
-                                "sentAt":1792519000}}"#,
+                            // Sent a minute ago: a fixed date ran out of a join request's 7 days
+                            // (27 Oct 2026) and the view rightly dropped it.
+                            &format!(
+                                r#"{{"request":{{"team":{{"id":"9999aaaabbbbcccc","name":"Skyblock",
+                                "tag":"SKY","emblem":"castle","members":6,"join":"approval"}},
+                                "sentAt":{}}}}}"#,
+                                unix_now() - 60
+                            ),
                         ),
                         ("DELETE", "/v1/teams/requests/fedcba9876543210") => MockReply::empty(204),
                         ("POST", path) if path.ends_with("/accept") => MockReply::json(
@@ -5506,9 +5511,13 @@ mod tests {
                         ),
                         ("POST", "/v1/teams/9999aaaabbbbcccc/requests") => MockReply::json(
                             202,
-                            r#"{"request":{"team":{"id":"9999aaaabbbbcccc","name":"Skyblock",
-                                "tag":"SKY","emblem":"castle","members":6,"join":"open"},
-                                "sentAt":1792519000}}"#,
+                            // Sent a minute ago (a fixed date runs out of the 7 days).
+                            &format!(
+                                r#"{{"request":{{"team":{{"id":"9999aaaabbbbcccc","name":"Skyblock",
+                                "tag":"SKY","emblem":"castle","members":6,"join":"open"}},
+                                "sentAt":{}}}}}"#,
+                                unix_now() - 60
+                            ),
                         ),
                         ("POST", "/v1/teams/aaaabbbbccccdddd/requests") => MockReply::json(
                             422,
