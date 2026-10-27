@@ -5,6 +5,7 @@
 //! shape lives in [`crate::legacy`]. Login commands are deliberately *not* part of the model: they
 //! may contain passwords and live in the OS keychain (see [`crate::store::AccountStore`]).
 
+use pl_lang::Lang;
 use serde::{Deserialize, Serialize};
 
 /// Server used when an account leaves its host empty.
@@ -147,17 +148,53 @@ pub struct AutoRelogOptions {
     pub kick_messages: Vec<String>,
 }
 
-/// Kick messages of a new account.
+/// Kick messages of a new account in `lang`: what servers say when a connection drops, they
+/// restart or they are full. MCC writes the servers' translated texts in the launcher's language
+/// ([`crate::build_config_in`]), so a Turkish player's list is Turkish. The English list is the
+/// legacy one, kept word for word: stored lists are recognised by it ([`is_default_kick_messages`]).
+pub fn default_kick_messages_in(lang: Lang) -> Vec<String> {
+    let lines: &[&str] = match lang {
+        Lang::Tr => &[
+            "Bağlantı koptu",
+            "Sunucu yeniden başlatılıyor",
+            "Sunucu dolu",
+            "Çok fazla oyuncu",
+        ],
+        Lang::En => &[
+            "Connection has been lost",
+            "Server is restarting",
+            "Server is full",
+            "Too Many people",
+        ],
+    };
+    lines.iter().map(|line| (*line).to_owned()).collect()
+}
+
+/// Kick messages of a new account, in the launcher's language ([`Lang::current`]).
 pub fn default_kick_messages() -> Vec<String> {
-    [
-        "Connection has been lost",
-        "Server is restarting",
-        "Server is full",
-        "Too Many people",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
+    default_kick_messages_in(Lang::current())
+}
+
+/// A list nobody edited: the default list of either language (spaces around the lines aside).
+pub fn is_default_kick_messages(list: &[String]) -> bool {
+    let lines: Vec<&str> = list
+        .iter()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .collect();
+    [Lang::Tr, Lang::En]
+        .into_iter()
+        .any(|lang| default_kick_messages_in(lang) == lines)
+}
+
+/// The list as the player reads it in `lang`: an untouched default list is that language's, so it
+/// follows a language change; a list the player wrote stays as written.
+pub fn kick_messages_in(list: &[String], lang: Lang) -> Vec<String> {
+    if is_default_kick_messages(list) {
+        default_kick_messages_in(lang)
+    } else {
+        list.to_vec()
+    }
 }
 
 impl Default for AutoRelogOptions {
@@ -353,6 +390,53 @@ mod tests {
         assert!(is_safe_account_id(&id));
         assert!(!is_safe_account_id("../evil"));
         assert!(!is_safe_account_id(""));
+    }
+
+    #[test]
+    fn default_kick_messages_follow_the_language() {
+        let turkish = default_kick_messages_in(Lang::Tr);
+        let english = default_kick_messages_in(Lang::En);
+        assert_eq!(turkish.len(), english.len());
+        assert!(turkish.contains(&"Sunucu yeniden başlatılıyor".to_owned()));
+        // The legacy list, word for word (stored accounts carry it).
+        assert_eq!(
+            english,
+            [
+                "Connection has been lost",
+                "Server is restarting",
+                "Server is full",
+                "Too Many people"
+            ]
+        );
+        assert!(is_default_kick_messages(&turkish));
+        assert!(is_default_kick_messages(&english));
+        // Spaces and an empty line typed by the form do not make it the player's own list.
+        let spaced: Vec<String> = english
+            .iter()
+            .map(|line| format!(" {line} "))
+            .chain([String::new()])
+            .collect();
+        assert!(is_default_kick_messages(&spaced));
+    }
+
+    #[test]
+    fn an_untouched_list_reads_in_the_players_language() {
+        let english = default_kick_messages_in(Lang::En);
+        assert_eq!(
+            kick_messages_in(&english, Lang::Tr),
+            default_kick_messages_in(Lang::Tr)
+        );
+        assert_eq!(
+            kick_messages_in(&default_kick_messages_in(Lang::Tr), Lang::En),
+            english
+        );
+        // One line changed, one removed or added: the player's list, as written.
+        let mut own = english.clone();
+        own[1] = "Restart".into();
+        assert_eq!(kick_messages_in(&own, Lang::Tr), own);
+        let shorter = english[..3].to_vec();
+        assert_eq!(kick_messages_in(&shorter, Lang::Tr), shorter);
+        assert!(kick_messages_in(&[], Lang::Tr).is_empty());
     }
 
     #[test]
