@@ -58,8 +58,9 @@ const REST = "translateY(0px) scale(1)";
 const ORDER: CloudPrimary[] = ["start", "stop", "renew"];
 
 /**
- * The paid time, gold in its last week (as on the site), with "Süreyi uzat" beside it while renewal
- * is open, which is at any time unless Studio keeps it to the last days (the site renews).
+ * The paid time, brighter in its last week, with "Süreyi uzat" beside it while renewal is open,
+ * which is at any time unless Studio keeps it to the last days (the site renews). Gold is the
+ * link's: a gold time beside a gold link read as one more link (SHEET-UX).
  */
 function TimeRow({ account, skewMs }: { account: CloudAccount; skewMs: number }) {
   const { t } = useTranslation();
@@ -71,7 +72,10 @@ function TimeRow({ account, skewMs }: { account: CloudAccount; skewMs: number })
   return (
     <p className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 pl-[23px] text-[12px]">
       <span
-        className={cn("tabular-nums", endsSoon(account, now) ? "text-gold-200" : "text-ash-300")}
+        className={cn(
+          "tabular-nums",
+          endsSoon(account, now) ? "font-semibold text-bone-50" : "text-ash-300",
+        )}
       >
         {timeLeft(account, now, t)}
       </span>
@@ -349,7 +353,7 @@ export function CloudCard({
       }}
       className="flex"
     >
-      <ContextMenu items={items}>
+      <ContextMenu items={items} title={account.name}>
         {/* While choosing, a press on the card (not on its buttons) toggles it. */}
         {/* biome-ignore lint/a11y/noStaticElementInteractions: the box is the control; the card only widens its target */}
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: the box takes the keyboard */}
@@ -419,8 +423,10 @@ export function CloudCard({
                   />
                 }
                 items={items}
-                // Turned upwards it sat under the "⋯" of the card above (FEAT-L).
+                // Turned upwards it sat under the "⋯" of the card above (FEAT-L); opened beside it,
+                // it can sit over the next card, so its top says whose it is (SHEET-UX).
                 besideWhenNoRoom
+                title={account.name}
               />
             )}
           </div>

@@ -3,9 +3,9 @@
 // feature led by its switch, and folds that show a feature's fields only while its switch is on
 // (they fade in place and the rows below glide, never a height animation; docs/design.md §5).
 import { Info, WarningCircle } from "@phosphor-icons/react";
-import { cn, easeOutExpo, enter, leave, Switch, useMotionPrefs } from "@pl/ui";
+import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatCount } from "@/lib/format";
 import { joinAddress, splitAddress } from "../address";
@@ -48,7 +48,10 @@ export function SectionTitle({ title, aside }: { title: string; aside?: ReactNod
   );
 }
 
-/** One feature: its lead row and the rows under it. Blocks part with a hairline. */
+/**
+ * One feature: its lead row and the rows under it. Blocks part with a hairline and a little more
+ * room than rows do, so a block reads as a group and not as one more row.
+ */
 export function Block({ children, className }: { children: ReactNode; className?: string }) {
   const glide = useGlide();
   return (
@@ -56,7 +59,7 @@ export function Block({ children, className }: { children: ReactNode; className?
       {...glide}
       // The first block follows the section's title: no hairline above it.
       className={cn(
-        "relative border-t border-white/8 pt-1 first-of-type:border-t-0 first-of-type:pt-0",
+        "relative mt-2 border-t border-white/9 pt-2 first-of-type:mt-0 first-of-type:border-t-0 first-of-type:pt-0",
         className,
       )}
     >
@@ -66,19 +69,11 @@ export function Block({ children, className }: { children: ReactNode; className?
 }
 
 /**
- * A feature's fields, only while its switch is on: they fade in place (popped out of the flow as
- * they leave) and every row below glides. `nested`: the fields of a row inside the block (not of
- * the block's own switch) stand in a step, so they read as that row's.
+ * A switch's own fields, only while it is on: they stand a step in (so they read as that switch's,
+ * the block's lead or a row inside it), fade in place (popped out of the flow as they leave) and
+ * every row below glides.
  */
-export function Fold({
-  open,
-  nested = false,
-  children,
-}: {
-  open: boolean;
-  nested?: boolean;
-  children: ReactNode;
-}) {
+export function Fold({ open, children }: { open: boolean; children: ReactNode }) {
   const glide = useGlide();
   return (
     <AnimatePresence initial={false} mode="popLayout">
@@ -86,7 +81,7 @@ export function Fold({
         <motion.div
           key="fold"
           {...glide}
-          className={nested ? "pl-5" : undefined}
+          className="pl-5"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: enter(0.22) }}
           exit={{ opacity: 0, transition: leave(0.16) }}
@@ -183,7 +178,7 @@ export function WideRow({
 
 /**
  * Title and help on the left, switch on the right. `lead`: the block's own switch (its feature's
- * name, a step larger, no hairline above).
+ * name two steps larger than a row's, no hairline above).
  */
 export function ToggleRow({
   title,
@@ -209,19 +204,20 @@ export function ToggleRow({
         // `switch-row`: the switch lifts while the pointer is on the title too (`hovered:`).
         "switch-row flex items-center justify-between gap-6",
         lead ? "py-3.5" : cn(rowLine, "py-3"),
-        disabled && "opacity-55",
       )}
     >
       <div className="min-w-0">
-        {/* The title is the switch's label: a click on it toggles too (the help may hold links). */}
+        {/* The title is the switch's label: a click on it toggles too (the help may hold links).
+            A switch that cannot be used dims with its title; its help stays readable, since it
+            often says why. */}
         <label
           htmlFor={id}
           className={cn(
             "block",
             lead
-              ? "text-[14.5px] font-semibold text-bone-50"
+              ? "text-[15.5px] leading-snug font-semibold text-bone-50"
               : "text-[13.5px] font-medium text-bone-100",
-            disabled ? "cursor-default" : "cursor-pointer",
+            disabled ? "cursor-default opacity-55" : "cursor-pointer",
           )}
         >
           {title}
@@ -473,6 +469,92 @@ export function AddressField({
       ) : help ? (
         <div className="text-[12.5px] text-ash-400">{help}</div>
       ) : null}
+    </div>
+  );
+}
+
+/** A quiet way under a field, underlined so it reads as an action (afk.projects.gg's look). */
+export function TextAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="cursor-pointer self-start rounded-sm text-left text-[12.5px] font-medium text-ash-300 underline decoration-white/25 underline-offset-[3px] transition-colors duration-150 outline-none hover:text-bone-100 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * An auto-reply rule's trigger, desktop and 7/24 Bulut, as on afk.projects.gg: a plain phrase by
+ * default ("Mesajda geçen söz"). A pattern written by hand is the one advanced way ("Kalıbı kendim
+ * yazacağım"), monospace with its one line of help; "Düz söze dön" goes back. The owner, 25 Oct:
+ * players have no technical knowledge, so a "Düzenli ifade" switch in every rule gave way to this.
+ */
+export function TriggerField({
+  id,
+  value,
+  regex,
+  onChange,
+  placeholder,
+  error,
+  maxLength,
+  autoFocus,
+}: {
+  id: string;
+  value: string;
+  regex: boolean;
+  /** The trigger's words and whether they are a pattern. */
+  onChange: (value: string, regex: boolean) => void;
+  placeholder: string;
+  error: string | null;
+  maxLength: number;
+  autoFocus?: boolean;
+}) {
+  const { t } = useTranslation();
+  // The pattern given up for a plain phrase comes back with "Kalıbı kendim yazacağım" (this visit).
+  const kept = useRef<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const helpId = useId();
+  const switchWay = () => {
+    if (regex) {
+      kept.current = value;
+      onChange("", false);
+    } else {
+      onChange(kept.current ?? value, true);
+      kept.current = null;
+    }
+    requestAnimationFrame(() => input.current?.focus());
+  };
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={id} className="text-[13px] font-medium text-bone-100">
+        {regex ? t("afkPanel.rule.pattern") : t("afkPanel.rule.match")}
+      </label>
+      <Input
+        ref={input}
+        id={id}
+        value={value}
+        placeholder={regex ? t("afkPanel.rule.patternPlaceholder") : placeholder}
+        spellCheck={false}
+        autoComplete="off"
+        maxLength={maxLength}
+        invalid={Boolean(error)}
+        autoFocus={autoFocus}
+        aria-describedby={regex ? helpId : undefined}
+        onChange={(event) => onChange(event.target.value, regex)}
+        className={cn("h-9", regex && "font-mono text-[13px]")}
+      />
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      {regex ? (
+        <p id={helpId} className="text-[12px] leading-snug text-ash-400">
+          {t("afkPanel.rule.patternHelp")}
+        </p>
+      ) : null}
+      <TextAction onClick={switchWay}>
+        {regex ? t("afkPanel.rule.toPlain") : t("afkPanel.rule.writeMyself")}
+      </TextAction>
     </div>
   );
 }

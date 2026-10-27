@@ -3,7 +3,7 @@
 // are the list sections in list-sections.tsx. Each feature is a block led by its switch, its fields
 // folded away while it is off.
 import { ArrowCounterClockwise } from "@phosphor-icons/react";
-import { Button, Input, Select, Slider } from "@pl/ui";
+import { Button, Input, Segmented, Select, Slider } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import type { AfkSettingsView, ChatLogFilter, SettingsPage } from "@/lib/api";
 import {
@@ -149,6 +149,35 @@ function RelogBlock({ draft, setDraft, errorFor }: SectionProps) {
         onCheckedChange={(v) => page.patch("autoRelog", { enabled: v })}
       />
       <Fold open={r.enabled}>
+        {/* Which drops bring it back: a choice of two, not a second switch that sounded like the
+            first ("Her kopuşta yeniden bağlan" under "Otomatik yeniden bağlan"; SHEET-UX). */}
+        <SettingRow title={t("afkSettings.relog.when")}>
+          <Segmented<"any" | "listed">
+            value={r.ignoreKickMessage ? "any" : "listed"}
+            onValueChange={(v) => page.patch("autoRelog", { ignoreKickMessage: v === "any" })}
+            label={t("afkSettings.relog.when")}
+            options={[
+              { value: "any", label: t("afkSettings.relog.whenAny") },
+              { value: "listed", label: t("afkSettings.relog.whenListed") },
+            ]}
+          />
+        </SettingRow>
+        <Fold open={!r.ignoreKickMessage}>
+          <WideRow>
+            <LinesField
+              label={t("afkSettings.relog.kickMessages")}
+              help={t("afkSettings.relog.kickMessagesHelp")}
+              value={r.kickMessages}
+              onChange={(v) => page.patch("autoRelog", { kickMessages: v })}
+              rows={5}
+            />
+            {noKickMessages ? (
+              <Hint tone="warn" className="mt-2">
+                {t("afkSettings.relog.kickEmpty")}
+              </Hint>
+            ) : null}
+          </WideRow>
+        </Fold>
         <RangeRow
           title={t("afkSettings.relog.delay")}
           errors={[errorFor("relog.min"), errorFor("relog.max")]}
@@ -175,7 +204,7 @@ function RelogBlock({ draft, setDraft, errorFor }: SectionProps) {
           checked={unlimited}
           onCheckedChange={(v) => page.patch("autoRelog", { retries: v ? -1 : DEFAULT_RETRIES })}
         />
-        <Fold nested open={!unlimited}>
+        <Fold open={!unlimited}>
           <SettingRow title={t("afkSettings.relog.retries")} error={errorFor("relog.retries")}>
             <NumberField
               label={t("afkSettings.relog.retries")}
@@ -185,28 +214,6 @@ function RelogBlock({ draft, setDraft, errorFor }: SectionProps) {
               invalid={Boolean(errorFor("relog.retries"))}
             />
           </SettingRow>
-        </Fold>
-        <ToggleRow
-          title={t("afkSettings.relog.ignoreKick")}
-          help={t("afkSettings.relog.ignoreKickHelp")}
-          checked={r.ignoreKickMessage}
-          onCheckedChange={(v) => page.patch("autoRelog", { ignoreKickMessage: v })}
-        />
-        <Fold nested open={!r.ignoreKickMessage}>
-          <WideRow>
-            <LinesField
-              label={t("afkSettings.relog.kickMessages")}
-              help={t("afkSettings.relog.kickMessagesHelp")}
-              value={r.kickMessages}
-              onChange={(v) => page.patch("autoRelog", { kickMessages: v })}
-              rows={5}
-            />
-            {noKickMessages ? (
-              <Hint tone="warn" className="mt-2">
-                {t("afkSettings.relog.kickEmpty")}
-              </Hint>
-            ) : null}
-          </WideRow>
         </Fold>
       </Fold>
     </Block>
@@ -285,7 +292,7 @@ function AntiAfkBlock({ draft, setDraft, errorFor }: SectionProps) {
           checked={a.useTerrainHandling}
           onCheckedChange={(v) => page.patch("antiAfk", { useTerrainHandling: v })}
         />
-        <Fold nested open={a.useTerrainHandling}>
+        <Fold open={a.useTerrainHandling}>
           <SettingRow
             title={t("afkSettings.antiAfk.walkRange")}
             error={errorFor("antiAfk.walkRange")}

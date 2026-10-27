@@ -343,21 +343,22 @@ function Editor({
             <CopyDetails error={saveError.error} />
           </div>
         ) : blocking ? (
-          <p role="alert" className="text-flare-400">
+          <p role="alert" className="text-pretty text-flare-400">
             {t("afkSettings.fixErrors")}
           </p>
         ) : (
-          <p className="text-ash-300">{t("afkSettings.dirty")}</p>
+          <p className="text-pretty text-ash-300">{t("afkSettings.dirty")}</p>
         )}
       </div>
       <Button variant="ghost" onClick={discard} disabled={save.isPending || settling || !dirty}>
         {t("afkSettings.cancel")}
       </Button>
+      {/* While the bar says to fix the marked fields first, saving waits (SHEET-UX). */}
       {active ? (
         <Button
           variant="secondary"
           onClick={() => submit("save")}
-          disabled={!dirty || save.isPending || settling}
+          disabled={!dirty || blocking || save.isPending || settling}
         >
           {pending === "save" ? t("afkSettings.saving") : t("afkPanel.saveOnly")}
         </Button>
@@ -365,7 +366,7 @@ function Editor({
       <Button
         variant="primary"
         onClick={() => submit(mainMode)}
-        disabled={!dirty || save.isPending || settling}
+        disabled={!dirty || blocking || save.isPending || settling}
       >
         {pending === mainMode
           ? t("afkSettings.saving")

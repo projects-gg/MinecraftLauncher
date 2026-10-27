@@ -70,7 +70,7 @@ export const trCloudAfkFeat = {
     tryMatches: "Eşleşir. Yanıt: {{text}}",
     tryNoMatch: "Eşleşmez.",
     tryNoReply: "Eşleşir, ama bu mesaja yanıt gitmez.",
-    tryPattern: "Önce aranan sözü düzelt.",
+    tryPattern: "Önce kuralın sözünü düzelt.",
     silenced: "Bu yanıt şu an gönderilmiyor.",
     issues: {
       placeholder_row: "Yer tutucu yalnız yanıtlarda kullanılabilir.",

@@ -26,6 +26,7 @@ import {
   RangeRow,
   SettingRow,
   ToggleRow,
+  TriggerField,
   WideRow,
 } from "../settings/controls";
 import type { CloudEditData } from "./api";
@@ -65,8 +66,21 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
   const { t } = useTranslation();
   return (issue: Issue | undefined): string | null => {
     if (!issue) return null;
-    // A stop for a wrong password, marked on the login line (SHEET-UX).
-    if (issue.problem === "wrongPassword") return t("afkPanel.wrongPassword");
+    // A stop for a wrong password, marked on the login line (SHEET-UX). A line kept in the cloud
+    // opens with "Değiştir" first: its masked field with a padlock read as locked.
+    if (issue.problem === "wrongPassword") {
+      const words =
+        issue.index === null
+          ? undefined
+          : issue.place === "commands"
+            ? draft?.config.commands[issue.index]?.words
+            : issue.place === "rules"
+              ? draft?.config.rules[issue.index]?.reply
+              : undefined;
+      return t(
+        words?.kind === "sealed" ? "afkPanel.wrongPasswordSealed" : "afkPanel.wrongPassword",
+      );
+    }
     if (issue.problem.startsWith("placeholder_")) {
       const rule =
         issue.place === "rules" && issue.index !== null
@@ -655,8 +669,7 @@ function RuleRow({
   const { t } = useTranslation();
   const issueText = useIssueText(part.view, part.draft);
   const at = (field: string) => issueText(issueAt(part.issues, "rules", index, field));
-  const regexId = useId();
-  const ownerId = useId();
+  const ids = useId();
   const replyRef = useRef<HTMLInputElement>(null);
   const reply = rule.reply;
   // Placeholders: chips and "Dene" while this account may use them. With Studio's switch on, a
@@ -691,39 +704,29 @@ function RuleRow({
     value,
     label: t(`cloudAfk.settings.replies.sources.${value}`),
   }));
+  // "Yalnız bana yanıt versin" says whose name it listens to, or why it cannot yet (as the site).
+  const owner = part.draft.config.owner.trim();
+  const ownerHelp =
+    rule.from === "server"
+      ? t("cloudAfk.settings.issues.ownerServer")
+      : owner
+        ? t("afkPanel.rule.ownerOnlyHelp", { name: owner })
+        : t("afkPanel.rule.ownerFirst");
+  const ownerLocked = rule.from === "server" || (!owner && !rule.ownerOnly);
+  const tokenName = (token: string) =>
+    token === "u"
+      ? t("cloudAfkFeat.settings.chips.sender")
+      : t("cloudAfkFeat.settings.chips.part", { n: token });
   return (
-    <li className={cn(rowPanel, "flex flex-col gap-2.5 p-3", !rule.enabled && "opacity-70")}>
-      <div className="flex items-center gap-2">
-        <Switch
-          checked={rule.enabled}
-          onCheckedChange={(enabled) => onChange({ ...rule, enabled })}
-          label={t("cloudAfk.settings.replies.use")}
-          hideLabel
-        />
-        <Input
-          aria-label={t("cloudAfk.settings.replies.match")}
-          value={rule.pattern}
-          placeholder={t("cloudAfk.settings.replies.matchPlaceholder")}
-          spellCheck={false}
-          autoComplete="off"
-          maxLength={256}
-          invalid={Boolean(at("match"))}
-          autoFocus={focus}
-          onChange={(e) => onChange({ ...rule, pattern: e.target.value })}
-          className={cn("h-9 min-w-0 flex-1 text-[13px]", rule.regex && "font-mono")}
-        />
+    <li className={cn(rowPanel, "flex flex-col px-3.5 pt-2")}>
+      {/* The rule's own switch in words, on the card's right edge as every switch of the panel,
+          with its delete button: three unnamed switches in a row read alike (SHEET-UX). */}
+      <div className="switch-row flex items-center gap-3 py-1">
         <label
-          htmlFor={regexId}
-          className="switch-row flex shrink-0 cursor-pointer items-center gap-2 text-[12.5px] text-ash-300"
+          htmlFor={`${ids}-use`}
+          className="min-w-0 flex-1 cursor-pointer text-[13.5px] font-semibold text-bone-50"
         >
-          <Switch
-            id={regexId}
-            checked={rule.regex}
-            onCheckedChange={(regex) => onChange({ ...rule, regex })}
-            label={t("cloudAfk.settings.replies.regex")}
-            hideLabel
-          />
-          {t("cloudAfk.settings.replies.regex")}
+          {t("cloudAfk.settings.replies.use")}
         </label>
         <IconButton
           label={t("cloudAfk.settings.replies.remove")}
@@ -731,73 +734,113 @@ function RuleRow({
           size="sm"
           onClick={onRemove}
         />
-      </div>
-      {at("match") ? <ErrorText>{at("match")}</ErrorText> : null}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[12.5px] text-ash-300">{t("cloudAfk.settings.replies.from")}</span>
-          <Select
-            value={(SOURCES as readonly string[]).includes(rule.from) ? rule.from : "any"}
-            onValueChange={(from) => onChange({ ...rule, from })}
-            options={sources}
-            label={t("cloudAfk.settings.replies.from")}
-            className="w-[170px]"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[12.5px] text-ash-300">
-            {t("cloudAfk.settings.replies.cooldown")}
-          </span>
-          <NumberField
-            label={t("cloudAfk.settings.replies.cooldown")}
-            hideLabel
-            value={rule.cooldown}
-            unit={t("cloudAfk.settings.seconds")}
-            className="w-[104px]"
-            onChange={(cooldown) => onChange({ ...rule, cooldown })}
-          />
-        </div>
-        <label
-          htmlFor={ownerId}
-          className="switch-row flex cursor-pointer items-center gap-2 text-[12.5px] text-ash-300"
-        >
-          <Switch
-            id={ownerId}
-            checked={rule.ownerOnly}
-            onCheckedChange={(ownerOnly) => onChange({ ...rule, ownerOnly })}
-            label={t("cloudAfk.settings.replies.ownerOnly")}
-            hideLabel
-          />
-          {t("cloudAfk.settings.replies.ownerOnly")}
-        </label>
-      </div>
-      {at("cooldown") || at("ownerOnly") ? (
-        <ErrorText>{at("cooldown") ?? at("ownerOnly")}</ErrorText>
-      ) : null}
-      <WordsField
-        words={rule.reply}
-        onChange={(next) => onChange({ ...rule, reply: next })}
-        accountId={part.view.account.id}
-        rowId={rule.id}
-        label={t("cloudAfk.settings.replies.reply")}
-        placeholder={t("cloudAfk.settings.replies.replyPlaceholder")}
-        error={at("reply")}
-        inputRef={replyRef}
-      />
-      {placeholders && reply.kind === "plain" ? (
-        <ReplyTools
-          rule={{ pattern: rule.pattern, regex: rule.regex, from: rule.from, reply: reply.text }}
-          sender={part.draft.config.owner || t("cloudAfkFeat.settings.sampleSender")}
-          blocked={problemText}
-          onInsert={insert}
+        <Switch
+          id={`${ids}-use`}
+          checked={rule.enabled}
+          onCheckedChange={(enabled) => onChange({ ...rule, enabled })}
+          label={t("cloudAfk.settings.replies.use")}
+          hideLabel
         />
-      ) : null}
-      {silenced ? (
-        <p className="flex items-center gap-1.5 text-[12.5px] text-ash-300">
-          <Info size={14} aria-hidden className="shrink-0 text-ash-400" />
-          {t("cloudAfkFeat.settings.silenced")}
-        </p>
-      ) : null}
+      </div>
+      {/* A rule that is off stays readable, a step quieter; its switch above stays as it is. */}
+      <div
+        className={cn(
+          "flex flex-col transition-opacity duration-150",
+          !rule.enabled && "opacity-60",
+        )}
+      >
+        {/* "When a message says this" beside "reply with this". */}
+        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start gap-x-4 pt-2">
+          <TriggerField
+            id={`${ids}-match`}
+            value={rule.pattern}
+            regex={rule.regex}
+            onChange={(pattern, regex) => onChange({ ...rule, pattern, regex })}
+            placeholder={t("cloudAfk.settings.replies.matchPlaceholder")}
+            error={at("match")}
+            maxLength={256}
+            autoFocus={focus}
+          />
+          <div className="flex min-w-0 flex-col gap-2">
+            <WordsField
+              id={`${ids}-reply`}
+              showLabel
+              mono={false}
+              tokenName={placeholders ? tokenName : undefined}
+              words={rule.reply}
+              onChange={(next) => onChange({ ...rule, reply: next })}
+              accountId={part.view.account.id}
+              rowId={rule.id}
+              label={t("cloudAfk.settings.replies.reply")}
+              placeholder={t("cloudAfk.settings.replies.replyPlaceholder")}
+              error={at("reply")}
+              inputRef={replyRef}
+            />
+            {placeholders && reply.kind === "plain" ? (
+              <ReplyTools
+                rule={{
+                  pattern: rule.pattern,
+                  regex: rule.regex,
+                  from: rule.from,
+                  reply: reply.text,
+                }}
+                sender={part.draft.config.owner || t("cloudAfkFeat.settings.sampleSender")}
+                blocked={problemText}
+                onInsert={insert}
+              />
+            ) : null}
+            {silenced ? (
+              <p className="flex items-center gap-1.5 text-[12.5px] text-ash-300">
+                <Info size={14} aria-hidden className="shrink-0 text-ash-400" />
+                {t("cloudAfkFeat.settings.silenced")}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/6 pt-3 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-ash-300">{t("cloudAfk.settings.replies.from")}</span>
+            <Select
+              value={(SOURCES as readonly string[]).includes(rule.from) ? rule.from : "any"}
+              // Server lines come from no player: "Yalnız bana" goes off with them (as the site).
+              onValueChange={(from) =>
+                onChange({ ...rule, from, ownerOnly: from === "server" ? false : rule.ownerOnly })
+              }
+              options={sources}
+              label={t("cloudAfk.settings.replies.from")}
+              className="w-[170px]"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-ash-300">{t("afkPanel.rule.cooldown")}</span>
+            <NumberField
+              label={t("afkPanel.rule.cooldown")}
+              hideLabel
+              value={rule.cooldown}
+              unit={t("cloudAfk.settings.seconds")}
+              className="w-[104px]"
+              onChange={(cooldown) => onChange({ ...rule, cooldown })}
+            />
+          </div>
+        </div>
+        {at("cooldown") ? (
+          <div className="-mt-1.5 pb-3">
+            <ErrorText>{at("cooldown")}</ErrorText>
+          </div>
+        ) : null}
+        <ToggleRow
+          title={t("afkPanel.rule.ownerOnly")}
+          help={ownerHelp}
+          checked={rule.ownerOnly}
+          disabled={ownerLocked}
+          onCheckedChange={(ownerOnly) => onChange({ ...rule, ownerOnly })}
+        />
+        {at("ownerOnly") ? (
+          <div className="-mt-1.5 pb-3">
+            <ErrorText>{at("ownerOnly")}</ErrorText>
+          </div>
+        ) : null}
+      </div>
     </li>
   );
 }

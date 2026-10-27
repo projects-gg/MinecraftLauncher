@@ -16,8 +16,11 @@ export const trAfkPanel = {
   settingsUnsaved: "Ayarlar, kaydedilmemiş değişiklik var",
   /** The change bar's region. */
   barLabel: "Kaydedilmemiş değişiklikler",
-  /** Under the one address field ("mc.sunucu.net:25570"), when the port is out of range. */
-  portRange: "İki noktadan sonraki sayı 1 ile 65535 arasında olmalı.",
+  /**
+   * Under the one address field ("mc.sunucu.net:25570"), when the port is out of range. The colon
+   * by its name and its sign: "iki nokta" alone read as the address's dots.
+   */
+  portRange: "İki nokta üst üsteden (:) sonraki sayı 1 ile 65535 arasında olmalı.",
   /** A scheduled task's "every 300–600 sn". */
   interval: "Aralık",
   /** A running desktop account's plain save, beside "Kaydet ve yeniden bağlan". */
@@ -29,4 +32,25 @@ export const trAfkPanel = {
   },
   /** Under a cloud account's login line after the machine stopped it for a wrong password. */
   wrongPassword: "Sunucu bu şifreyi kabul etmedi. Doğrusunu yaz.",
+  /** The same while the line is kept in the cloud: its field opens with "Değiştir". */
+  wrongPasswordSealed: 'Sunucu bu şifreyi kabul etmedi. "Değiştir"e bas, doğrusunu yaz.',
+  /**
+   * An auto-reply rule's card, desktop and 7/24 Bulut, in the site's words (afk.projects.gg): a
+   * plain phrase by default, a pattern only on the way for those who know it.
+   */
+  rule: {
+    match: "Mesajda geçen söz",
+    pattern: "Özel kalıp",
+    patternPlaceholder: "(?i)^!davet \\w+$",
+    patternHelp: "Düzenli ifade. Büyük küçük harf fark etmesin diye başına (?i) yaz.",
+    writeMyself: "Kalıbı kendim yazacağım",
+    toPlain: "Düz söze dön",
+    cooldown: "İki yanıt arası",
+    ownerOnly: "Yalnız bana yanıt versin",
+    /** The cloud: the player's own name from above the rules. */
+    ownerOnlyHelp: "Yalnız {{name}} yazınca çalışır.",
+    ownerFirst: "Önce yukarıda oynadığın hesabın adını yaz.",
+    /** The desktop: the client takes the launcher's account as its owner. */
+    ownerDesktop: "Yalnız launcher'da oynadığın hesap yazınca çalışır.",
+  },
 };

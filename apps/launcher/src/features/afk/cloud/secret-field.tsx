@@ -8,9 +8,10 @@
 import { Eye, EyeSlash, LockSimple, LockSimpleOpen } from "@phosphor-icons/react";
 import { Button, cn, enter, IconButton, Input, leave, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { type Ref, useEffect, useRef, useState } from "react";
+import { type Ref, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cloudApi } from "./api";
+import { hasPlaceholder } from "./placeholders";
 import { looksSensitive } from "./sensitive";
 import { typed, type Words } from "./settings-model";
 
@@ -30,6 +31,7 @@ function Stored({
   onChange,
   error,
   label,
+  mono,
 }: {
   preview: string;
   accountId: string;
@@ -37,6 +39,7 @@ function Stored({
   onChange: () => void;
   error: string | null;
   label: string;
+  mono: boolean;
 }) {
   const { t } = useTranslation();
   const { reduce } = useMotionPrefs();
@@ -88,7 +91,10 @@ function Stored({
               {shown ? (
                 <motion.span
                   key="shown"
-                  className="truncate font-mono text-[13px] text-bone-50 [grid-area:1/1]"
+                  className={cn(
+                    "truncate text-bone-50 [grid-area:1/1]",
+                    mono ? "font-mono text-[13px]" : "text-[13.5px]",
+                  )}
                   data-selectable
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1, transition: enter(0.18) }}
@@ -105,7 +111,14 @@ function Stored({
                   exit={{ opacity: 0, transition: leave(0.14) }}
                 >
                   {name ? (
-                    <span className="truncate font-mono text-[13px] text-bone-100">{name}</span>
+                    <span
+                      className={cn(
+                        "truncate text-bone-100",
+                        mono ? "font-mono text-[13px]" : "text-[13.5px]",
+                      )}
+                    >
+                      {name}
+                    </span>
                   ) : null}
                   <span aria-hidden className="font-mono text-[13px] tracking-widest text-ash-400">
                     ••••••
@@ -151,6 +164,39 @@ function Stored({
   );
 }
 
+/**
+ * A reply's placeholders as chips with their names ("Yazanın adı", "1. parça") while the field is
+ * not being typed in; typing shows the words as they are sent (`{u}`), so the caret, copy and paste
+ * stay plain text. Over the field, as wide as its words: the field's own text is hidden meanwhile.
+ */
+function TokenView({ text, name }: { text: string; name: (token: string) => string }) {
+  const pieces = text.split(/(\{(?:u|[1-9])\})/);
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-0 flex items-center overflow-hidden px-3"
+    >
+      <span className="block min-w-0 truncate text-[13.5px] leading-5 whitespace-pre text-bone-50">
+        {pieces.map((piece, i) => {
+          const token = /^\{(u|[1-9])\}$/.exec(piece)?.[1];
+          return token ? (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: the pieces of one text, in order
+              key={i}
+              className="relative isolate mx-px inline-flex h-5 items-center px-1.5 align-top text-[12px] font-semibold text-bone-50 [--cut:3px]"
+            >
+              <span aria-hidden className="chamfer absolute inset-0 -z-10 bg-white/12" />
+              {name(token)}
+            </span>
+          ) : (
+            piece
+          );
+        })}
+      </span>
+    </span>
+  );
+}
+
 export function WordsField({
   words,
   onChange,
@@ -161,6 +207,10 @@ export function WordsField({
   error,
   autoFocus,
   inputRef,
+  id,
+  showLabel = false,
+  mono = true,
+  tokenName,
 }: {
   words: Words;
   onChange: (words: Words) => void;
@@ -172,35 +222,62 @@ export function WordsField({
   autoFocus?: boolean;
   /** The words' field (a reply's placeholder chips type where its caret is). */
   inputRef?: Ref<HTMLInputElement>;
+  id?: string;
+  /** The label above the field (a rule's "Yanıt"), else only its accessible name. */
+  showLabel?: boolean;
+  /** Commands look like what is typed into the game; a reply is a sentence (SHEET-UX). */
+  mono?: boolean;
+  /** A reply's placeholders: their names, shown as chips while the field is not typed in. */
+  tokenName?: (token: string) => string;
 }) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
+  const [typing, setTyping] = useState(false);
   // "Değiştir" on a stored secret: what to go back to with "Vazgeç".
   const replaced = useRef<Words | null>(null);
   const [focusNext, setFocusNext] = useState(false);
+  const generated = useId();
+  const fieldId = id ?? generated;
+  const heading = showLabel ? (
+    words.kind === "sealed" ? (
+      <p aria-hidden className="mb-1.5 text-[13px] font-medium text-bone-100">
+        {label}
+      </p>
+    ) : (
+      <label htmlFor={fieldId} className="mb-1.5 block text-[13px] font-medium text-bone-100">
+        {label}
+      </label>
+    )
+  ) : null;
 
   if (words.kind === "sealed") {
     return (
-      <Stored
-        preview={words.preview}
-        accountId={accountId}
-        rowId={rowId}
-        label={label}
-        error={error}
-        onChange={() => {
-          replaced.current = words;
-          setFocusNext(true);
-          onChange({ kind: "secret", text: "", kept: false });
-        }}
-      />
+      <div className="min-w-0 flex-1">
+        {heading}
+        <Stored
+          preview={words.preview}
+          accountId={accountId}
+          rowId={rowId}
+          label={label}
+          error={error}
+          mono={mono}
+          onChange={() => {
+            replaced.current = words;
+            setFocusNext(true);
+            onChange({ kind: "secret", text: "", kept: false });
+          }}
+        />
+      </div>
     );
   }
 
   const secret = words.kind === "secret";
   const forced = looksSensitive(words.text);
   const kept = words.kind === "secret" && words.kept;
+  const chips = Boolean(tokenName) && !secret && !typing && hasPlaceholder(words.text);
   return (
     <div className="min-w-0 flex-1">
+      {heading}
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
           {secret ? (
@@ -213,7 +290,8 @@ export function WordsField({
           ) : null}
           <Input
             ref={inputRef}
-            aria-label={label}
+            id={fieldId}
+            aria-label={showLabel ? undefined : label}
             value={words.text}
             placeholder={replaced.current ? t("cloudAfk.settings.secret.newValue") : placeholder}
             type={secret && !visible ? "password" : "text"}
@@ -224,9 +302,18 @@ export function WordsField({
             data-lpignore="true"
             invalid={Boolean(error)}
             autoFocus={autoFocus || focusNext}
+            onFocus={() => setTyping(true)}
+            onBlur={() => setTyping(false)}
             onChange={(event) => onChange(typed(words, event.target.value))}
-            className={cn("h-9 font-mono text-[13px]", secret && "pl-9", secret && "pr-10")}
+            className={cn(
+              "h-9",
+              mono ? "font-mono text-[13px]" : "text-[13.5px]",
+              secret && "pl-9",
+              secret && "pr-10",
+              chips && "text-transparent",
+            )}
           />
+          {chips && tokenName ? <TokenView text={words.text} name={tokenName} /> : null}
           {secret ? (
             <IconButton
               label={

@@ -292,13 +292,13 @@ function Editor({
             </Button>
           </div>
         ) : blocking ? (
-          <p role="alert" className="text-flare-400">
+          <p role="alert" className="text-pretty text-flare-400">
             {serverChanges(draft, view) && issues.some((i) => i.problem === "reseal")
               ? t("cloudAfk.settings.resealTitle")
               : t("cloudAfk.settings.fixFirst")}
           </p>
         ) : dirty ? (
-          <p className="text-ash-300">{t("cloudAfk.settings.dirty")}</p>
+          <p className="text-pretty text-ash-300">{t("cloudAfk.settings.dirty")}</p>
         ) : null}
       </div>
       {dirty ? (
@@ -306,10 +306,11 @@ function Editor({
           {t("cloudAfk.settings.cancel")}
         </Button>
       ) : null}
+      {/* While the bar says to fix the marked fields first, saving waits (SHEET-UX). */}
       <Button
         variant="primary"
         onClick={() => void save()}
-        disabled={!savable || saving || settling}
+        disabled={!savable || blocking || saving || settling}
       >
         {label}
       </Button>

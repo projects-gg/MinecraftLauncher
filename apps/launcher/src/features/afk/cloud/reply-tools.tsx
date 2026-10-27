@@ -60,9 +60,10 @@ export function ReplyTools({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-1.5">
+        {/* Nothing to add to a server line's reply (it has no sender): no empty "Yanıta ekle". */}
         <fieldset
           aria-label={t("cloudAfkFeat.settings.chips.label")}
-          className="flex min-w-0 flex-wrap items-center gap-1.5"
+          className={cn("flex min-w-0 flex-wrap items-center gap-1.5", !chips.length && "hidden")}
         >
           <span aria-hidden className="mr-0.5 text-[12px] text-ash-400">
             {t("cloudAfkFeat.settings.chips.label")}

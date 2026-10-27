@@ -68,7 +68,7 @@ export const enCloudAfkFeat = {
     tryMatches: "Matches. Reply: {{text}}",
     tryNoMatch: "No match.",
     tryNoReply: "Matches, but no reply goes out for it.",
-    tryPattern: "Fix the pattern first.",
+    tryPattern: "Fix the rule's phrase first.",
     silenced: "This reply isn't being sent right now.",
     issues: {
       placeholder_row: "Placeholders work only in replies.",

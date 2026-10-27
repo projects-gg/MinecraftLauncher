@@ -21,6 +21,7 @@ import {
   NumberField,
   SettingRow,
   ToggleRow,
+  TriggerField,
   WideRow,
 } from "./controls";
 import {
@@ -504,24 +505,18 @@ function RuleCard({
   const replyError = errorFor(`rule.${rule.key}.reply`);
   const cooldownError = errorFor(`rule.${rule.key}.cooldown`);
   return (
-    <li className={cn(rowPanel, "p-3.5")}>
+    <li className={cn(rowPanel, "px-3.5 pt-3.5 pb-0.5")}>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-start gap-3">
-        <Field
-          label={t("afkSettings.respond.pattern")}
-          htmlFor={id("pattern")}
+        {/* A plain phrase; a pattern is the advanced way under it (SHEET-UX). */}
+        <TriggerField
+          id={id("pattern")}
+          value={rule.pattern}
+          regex={rule.isRegex}
+          onChange={(pattern, isRegex) => set({ pattern, isRegex })}
+          placeholder={t("afkSettings.respond.patternPlaceholder")}
           error={patternError}
-        >
-          <Input
-            id={id("pattern")}
-            value={rule.pattern}
-            placeholder={t("afkSettings.respond.patternPlaceholder")}
-            spellCheck={false}
-            maxLength={MAX_PATTERN_CHARS}
-            invalid={Boolean(patternError)}
-            className={cn("h-9", rule.isRegex && "font-mono text-[13px]")}
-            onChange={(e) => set({ pattern: e.target.value })}
-          />
-        </Field>
+          maxLength={MAX_PATTERN_CHARS}
+        />
         {/* What "$u" does is said once, under the list. */}
         <Field label={t("afkSettings.respond.reply")} htmlFor={id("reply")} error={replyError}>
           <Input
@@ -571,34 +566,29 @@ function RuleCard({
         </Field>
         <span className="w-8" />
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-3">
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] text-ash-300">{t("afkSettings.respond.cooldown")}</span>
-          <NumberField
-            label={t("afkSettings.respond.cooldown")}
-            value={rule.cooldownSeconds}
-            onChange={(v) => set({ cooldownSeconds: v })}
-            limit={LIMITS.cooldown}
-            unit={t("afkSettings.seconds")}
-            invalid={Boolean(cooldownError)}
-          />
-        </div>
-        <Switch
-          checked={rule.ownersOnly}
-          onCheckedChange={(v) => set({ ownersOnly: v })}
-          label={t("afkSettings.respond.ownersOnly")}
-        />
-        <Switch
-          checked={rule.isRegex}
-          onCheckedChange={(v) => set({ isRegex: v })}
-          label={t("afkSettings.respond.regex")}
+      <div className="mt-3 flex items-center gap-2 pb-3">
+        <span className="text-[13px] text-ash-300">{t("afkPanel.rule.cooldown")}</span>
+        <NumberField
+          label={t("afkPanel.rule.cooldown")}
+          value={rule.cooldownSeconds}
+          onChange={(v) => set({ cooldownSeconds: v })}
+          limit={LIMITS.cooldown}
+          unit={t("afkSettings.seconds")}
+          invalid={Boolean(cooldownError)}
         />
       </div>
       {cooldownError ? (
-        <div className="mt-1.5">
+        <div className="-mt-1.5 pb-3">
           <ErrorText>{cooldownError}</ErrorText>
         </div>
       ) : null}
+      {/* On the card's right edge, as every switch of the panel. */}
+      <ToggleRow
+        title={t("afkPanel.rule.ownerOnly")}
+        help={t("afkPanel.rule.ownerDesktop")}
+        checked={rule.ownersOnly}
+        onCheckedChange={(v) => set({ ownersOnly: v })}
+      />
     </li>
   );
 }
