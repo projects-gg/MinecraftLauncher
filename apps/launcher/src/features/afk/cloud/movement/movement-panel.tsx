@@ -611,7 +611,7 @@ export function MovementPanel({
   const figure = (axis: "x" | "y" | "z") => (
     <span className="flex items-baseline gap-1.5">
       <span className="text-[12px] font-medium text-ash-400">{axis.toUpperCase()}</span>
-      <span className="min-w-[4ch] text-right font-display text-[17px] font-semibold text-bone-50 tabular-nums">
+      <span className="min-w-[4ch] font-display text-[17px] font-semibold text-bone-50 tabular-nums">
         {pos ? pos[axis] : ""}
       </span>
     </span>
