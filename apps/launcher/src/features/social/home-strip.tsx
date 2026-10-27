@@ -332,7 +332,11 @@ function CallLine() {
         onClick={() => void answerCall(call, "yes")}
         className="group flex shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
       >
-        <ActionLook icon={joins ? <Play size={12} weight="fill" aria-hidden /> : null}>
+        <ActionLook
+          icon={
+            joins ? <Play size={12} weight="fill" className="text-gold-300" aria-hidden /> : null
+          }
+        >
           {t("teams.call.yes")}
         </ActionLook>
       </button>

@@ -1082,7 +1082,7 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
           {!plans.length && !forming ? (
             <motion.li
               key="none"
-              className="px-1 text-[13px] text-ash-400"
+              className="text-[13px] text-ash-400"
               layout={layout ? "position" : false}
               transition={{ layout: glide }}
               {...rise(reduce, 0, 0.2)}
