@@ -411,11 +411,12 @@ export function PlayButton({
             transition={face}
           />
           {/* "Oyunda" that takes a press (PLAY-AGAIN): a faint jade wash from the top under the
-              pointer or the keyboard's focus (opacity only). */}
+              pointer or the keyboard's focus (opacity only, so it fades under reduced motion too:
+              design.md §5). */}
           {pressableRunning ? (
             <span
               aria-hidden
-              className="absolute inset-0 bg-[linear-gradient(180deg,rgb(95_203_142/0.22),rgb(95_203_142/0.05)_70%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
+              className="absolute inset-0 bg-[linear-gradient(180deg,rgb(95_203_142/0.22),rgb(95_203_142/0.05)_70%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
             />
           ) : null}
           {/* Ready: the gold face. */}
