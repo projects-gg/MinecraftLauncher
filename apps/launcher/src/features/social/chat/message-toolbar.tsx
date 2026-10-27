@@ -70,6 +70,8 @@ export function MessageToolbar({
       className={cn(
         // 88 px wide at most (three 28 px buttons): the 92 px the column leaves, with 4 px between.
         "absolute top-px z-10 flex items-center rounded-[var(--radius-panel)] bg-obsidian-850 p-0.5 shadow-[0_10px_30px_rgb(34_6_6/0.5)] ring-1 ring-white/10",
+        // Its own size at any text size (CHAT-PROD): a control, not the message's words.
+        "[zoom:calc(1/var(--chat-zoom,1))]",
         mine ? "right-full mr-1 translate-x-[3px]" : "left-full ml-1 -translate-x-[3px]",
         // Shown while the pointer is on the message, the keyboard in it, or one of its layers open.
         "pointer-events-none opacity-0 transition-[opacity,translate] duration-150 ease-out motion-reduce:translate-x-0 motion-reduce:transition-opacity",

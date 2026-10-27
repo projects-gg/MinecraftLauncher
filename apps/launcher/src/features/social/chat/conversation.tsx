@@ -195,8 +195,7 @@ export interface ConversationProps {
 /** The empty state keeps its own size whatever the text size: its pixel icon stays on whole
  * pixels. */
 function Unzoomed({ children }: { children: ReactNode }) {
-  const size = useChatTextSize((s) => s.size);
-  return <div style={{ zoom: 1 / zoomOf(size) }}>{children}</div>;
+  return <div className="[zoom:calc(1/var(--chat-zoom,1))]">{children}</div>;
 }
 
 /** The day over a row, when it starts one. */
@@ -532,6 +531,8 @@ export function Conversation({
       const anchor = atBottom.current ? null : middleRow(element);
       zoom.current = next;
       element.style.zoom = next === 1 ? "" : String(next);
+      // What keeps its own size inside (the toolbar, the empty state) reads the zoom from here.
+      element.style.setProperty("--chat-zoom", String(next));
       if (atBottom.current) element.scrollTop = newestTop(element, content.current);
       else if (anchor) keepRow(element, anchor, next);
       before.current = { ...before.current, height: element.scrollHeight, top: element.scrollTop };

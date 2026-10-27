@@ -565,12 +565,16 @@ function MessageRowView({
           </span>
         )}
         {/* The column leaves the toolbar's width free beside the bubble (92 px; with the
-            face's 32 px for the others' messages): the toolbar never lies over anything. */}
+            face's 32 px for the others' messages): the toolbar never lies over anything. The
+            toolbar keeps its size at any text size (CHAT-PROD), so its 92 px are on-screen pixels
+            (`--chat-zoom`: the list's zoom) and a bigger text keeps its lines long. */}
         <div
           ref={content}
           className={cn(
             "relative flex min-w-0 flex-col",
-            mine ? "max-w-[calc(100%-92px)] items-end" : "max-w-[calc(100%-124px)] items-start",
+            mine
+              ? "max-w-[calc(100%_-_92px_/_var(--chat-zoom,1))] items-end"
+              : "max-w-[calc(100%_-_92px_/_var(--chat-zoom,1)_-_32px)] items-start",
           )}
         >
           {place.crew && !mine && place.first ? (

@@ -2,8 +2,8 @@
 // its text size (CHAT-PROD). It shows at once with the new size (keys pressed many times in a row
 // never animate), stays while the pointer or the keyboard is on it, and fades away (opacity only)
 // a moment after the last change. "Sıfırla" takes the size back to 100 % (Ctrl+0 does the same);
-// at 100 % it keeps its place unseen, so the plate never changes width under the pointer. Screen
-// readers hear the size from the conversation (announce), not from here.
+// at 100 % it stays, dimmed, so the plate keeps its width and its balance. Screen readers hear the
+// size from the conversation (announce), not from here.
 import { Button } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -69,9 +69,7 @@ export function ZoomHud({ ref, onReset }: { ref: Ref<ZoomHudHandle>; onReset: ()
             variant="ghost"
             className="h-[28px] px-2.5"
             aria-label={t("chatProd.zoom.resetLabel")}
-            tabIndex={resettable ? undefined : -1}
-            aria-hidden={resettable ? undefined : true}
-            style={resettable ? undefined : { visibility: "hidden" }}
+            disabled={!resettable}
             onClick={onReset}
           >
             {t("chatProd.zoom.reset")}
