@@ -7,14 +7,12 @@
 import {
   ArrowDown,
   ArrowLeft,
-  ArrowLineDown,
-  ArrowLineUp,
   ArrowRight,
   ArrowUp,
-  Crosshair,
   HandPalm,
   type Icon,
   LockSimple,
+  MapPin,
 } from "@phosphor-icons/react";
 import { Button, ContentIcon, cn, EmptyState, enter, Input, leave } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
@@ -131,7 +129,7 @@ function PadButton({
   onClick,
   className,
 }: {
-  icon: Icon;
+  icon?: Icon;
   label: string;
   keyLabel?: string;
   /** `aria-keyshortcuts` when the key's name is not its printed letter (Space). */
@@ -183,13 +181,22 @@ function PadButton({
         aria-hidden
         className="chamfer absolute inset-px -z-10 bg-obsidian-800/85 transition-colors duration-150 group-hover:bg-obsidian-700/90 group-data-[held]:bg-[color-mix(in_oklab,var(--color-gold-500)_16%,var(--color-obsidian-800))] group-data-[on]:bg-[color-mix(in_oklab,var(--color-gold-500)_16%,var(--color-obsidian-800))]"
       />
-      <Glyph
-        size={wide ? 18 : 20}
-        weight="bold"
-        aria-hidden
-        className="text-bone-100 transition-colors duration-150 group-data-[held]:text-gold-300 group-data-[on]:text-gold-300"
-      />
-      <span className="text-[12px] leading-none font-medium text-ash-300 transition-colors duration-150 group-hover:text-bone-100">
+      {Glyph ? (
+        <Glyph
+          size={wide ? 18 : 20}
+          weight="bold"
+          aria-hidden
+          className="text-bone-100 transition-colors duration-150 group-data-[held]:text-gold-300 group-data-[on]:text-gold-300"
+        />
+      ) : null}
+      <span
+        className={cn(
+          "leading-none font-medium transition-colors duration-150 group-hover:text-bone-100",
+          Glyph
+            ? "text-[12px] text-ash-300"
+            : "text-[13px] text-bone-100 group-data-[on]:text-gold-200",
+        )}
+      >
         {label}
       </span>
       {keyLabel ? (
@@ -293,7 +300,7 @@ function WalkAccount({
   return (
     <li className="flex min-h-11 items-center gap-3">
       <div className="min-w-0 flex-1">
-        <p title={name} className="truncate text-[13px] leading-5 font-medium text-bone-100">
+        <p title={name} className="truncate text-[13px] leading-5 text-bone-100">
           {name}
         </p>
         {note ? <p className="truncate text-[12px] leading-4 text-ash-400">{note}</p> : null}
@@ -363,6 +370,7 @@ export function MovementPanel({
   // Typed axes only: an empty field means "where it stands now" (its placeholder, the live figure).
   const [coords, setCoords] = useState({ x: "", y: "", z: "" });
   const [invalid, setInvalid] = useState<Set<"x" | "y" | "z">>(new Set());
+  const [tooFar, setTooFar] = useState(false);
   const askedName = useRef<string | null>(null);
   const coordId = useId();
   const refusalTimer = useRef<number | null>(null);
@@ -408,7 +416,12 @@ export function MovementPanel({
     async (op: MoveOp, name?: string) => {
       if (name) askedName.current = name;
       const result = await send(op);
-      if (result.ok) return;
+      if (result.ok) {
+        if (refusalTimer.current !== null) window.clearTimeout(refusalTimer.current);
+        setRefusal(null);
+        setRefusedWalk(null);
+        return;
+      }
       const text = words(refusalKey(result.error, name ?? askedName.current, main));
       const walk =
         op.action === "approach" || op.action === "follow"
@@ -547,11 +560,12 @@ export function MovementPanel({
     if (bad.size || parsed.x === null || parsed.y === null || parsed.z === null) return;
     const to = { x: parsed.x, y: parsed.y, z: parsed.z };
     if (pos && distance(pos, to) > GOTO_MAX_BLOCKS) {
-      // The typed target stays marked until it changes (the line's words go after 4 s).
+      // The typed target stays marked, and said beside its fields, until it changes.
       setInvalid(new Set((["x", "y", "z"] as const).filter((axis) => coords[axis].trim() !== "")));
-      refuse(t("cloudAfkMove.far"));
+      setTooFar(true);
       return;
     }
+    setTooFar(false);
     void act({ action: "goto", ...to });
   };
 
@@ -646,7 +660,7 @@ export function MovementPanel({
           last walk ended, else that it stands; "Dur" at its end while it walks. Words cross-fade in
           place. */}
       <div className="flex min-h-8 items-center gap-3">
-        <div aria-live="polite" className="grid min-w-0 flex-1">
+        <div aria-live="polite" className="grid min-w-0">
           <AnimatePresence initial={false}>
             {line ? (
               <motion.p
@@ -697,7 +711,7 @@ export function MovementPanel({
         inert={locked}
         className={cn(
           "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-6 transition-opacity duration-150",
-          locked && "opacity-55",
+          locked && "opacity-45",
         )}
       >
         {/* Its top on the heading's letters beside it. */}
@@ -712,7 +726,6 @@ export function MovementPanel({
             {direction("back", ArrowDown, "col-start-2 row-start-2")}
             {direction("right", ArrowRight, "col-start-3 row-start-2")}
             <PadButton
-              icon={ArrowLineDown}
               label={t("cloudAfkMove.pad.sneak")}
               pressed={Boolean(move?.sneak)}
               disabled={!ok}
@@ -721,7 +734,6 @@ export function MovementPanel({
             />
             <PadButton
               wide
-              icon={ArrowLineUp}
               label={t("cloudAfkMove.pad.jump")}
               keyLabel={t("cloudAfkMove.pad.space")}
               keyShortcut="Space"
@@ -741,9 +753,16 @@ export function MovementPanel({
               go();
             }}
           >
-            <span className="text-[13px] font-medium text-bone-100">
-              {t("cloudAfkMove.goto.title")}
-            </span>
+            <div className="flex min-w-0 items-baseline justify-between gap-3">
+              <span className="shrink-0 text-[13px] font-medium text-bone-100">
+                {t("cloudAfkMove.goto.title")}
+              </span>
+              {tooFar ? (
+                <span role="alert" className="truncate text-[12px] text-flare-400">
+                  {t("cloudAfkMove.far")}
+                </span>
+              ) : null}
+            </div>
             <div className="flex items-end gap-2">
               {(["x", "y", "z"] as const).map((axis) => (
                 <div key={axis} className="flex min-w-0 flex-1 flex-col gap-1">
@@ -765,6 +784,7 @@ export function MovementPanel({
                     invalid={invalid.has(axis)}
                     onChange={(event) => {
                       setCoords((c) => ({ ...c, [axis]: event.target.value }));
+                      setTooFar(false);
                       if (invalid.has(axis))
                         setInvalid((s) => new Set([...s].filter((a) => a !== axis)));
                     }}
@@ -776,7 +796,7 @@ export function MovementPanel({
                 type="submit"
                 size="md"
                 variant="secondary"
-                icon={<Crosshair size={15} />}
+                icon={<MapPin size={15} />}
                 disabled={!ok || nowhere}
               >
                 {t("cloudAfkMove.goto.go")}
@@ -785,42 +805,47 @@ export function MovementPanel({
           </form>
 
           {main || own.length ? (
-            <ul className="flex flex-col gap-1 border-t border-white/7 pt-3">
-              {main ? (
-                <WalkAccount
-                  name={main}
-                  note={t("cloudAfkMove.walk.main")}
-                  goLabel={t("cloudAfkMove.main.go")}
-                  followLabel={t("cloudAfkMove.main.follow")}
-                  going={walkingTo("approach", main)}
-                  following={walkingTo("follow", main)}
-                  refused={refusedOf(main)}
-                  disabled={!ok}
-                  onGo={() => void act({ action: "approach", name: main }, main)}
-                  onFollow={() => void act({ action: "follow", name: main }, main)}
-                  onStop={stopWalk}
-                />
-              ) : null}
-              {own.map((name) => {
-                const waiting = !ownInGame(name);
-                return (
+            <div className="flex flex-col gap-1 border-t border-white/7 pt-3">
+              <span className="text-[13px] font-medium text-bone-100">
+                {t("cloudAfkMove.walk.title")}
+              </span>
+              <ul className="flex flex-col gap-1">
+                {main ? (
                   <WalkAccount
-                    key={name}
-                    name={name}
-                    note={waiting ? t("cloudAfkMove.walk.notInGame") : null}
-                    goLabel={t("cloudAfkMove.own.goNamed", { name })}
-                    followLabel={t("cloudAfkMove.own.followNamed", { name })}
-                    going={walkingTo("approach", name)}
-                    following={walkingTo("follow", name)}
-                    refused={refusedOf(name)}
-                    disabled={!ok || waiting}
-                    onGo={() => void act({ action: "approach", name }, name)}
-                    onFollow={() => void act({ action: "follow", name }, name)}
+                    name={main}
+                    note={t("cloudAfkMove.walk.main")}
+                    goLabel={t("cloudAfkMove.main.go")}
+                    followLabel={t("cloudAfkMove.main.follow")}
+                    going={walkingTo("approach", main)}
+                    following={walkingTo("follow", main)}
+                    refused={refusedOf(main)}
+                    disabled={!ok}
+                    onGo={() => void act({ action: "approach", name: main }, main)}
+                    onFollow={() => void act({ action: "follow", name: main }, main)}
                     onStop={stopWalk}
                   />
-                );
-              })}
-            </ul>
+                ) : null}
+                {own.map((name) => {
+                  const waiting = !ownInGame(name);
+                  return (
+                    <WalkAccount
+                      key={name}
+                      name={name}
+                      note={waiting ? t("cloudAfkMove.walk.notInGame") : null}
+                      goLabel={t("cloudAfkMove.own.goNamed", { name })}
+                      followLabel={t("cloudAfkMove.own.followNamed", { name })}
+                      going={walkingTo("approach", name)}
+                      following={walkingTo("follow", name)}
+                      refused={refusedOf(name)}
+                      disabled={!ok || waiting}
+                      onGo={() => void act({ action: "approach", name }, name)}
+                      onFollow={() => void act({ action: "follow", name }, name)}
+                      onStop={stopWalk}
+                    />
+                  );
+                })}
+              </ul>
+            </div>
           ) : null}
         </div>
       </div>

@@ -41,6 +41,7 @@ export const trCloudAfkMove = {
   // The contract's short words of a walk (with the account's name beside them), and what the
   // account is to the player or why its walks wait.
   walk: {
+    title: "Hesapların",
     go: "Yanına git",
     follow: "Takip et",
     main: "Ana hesabın",

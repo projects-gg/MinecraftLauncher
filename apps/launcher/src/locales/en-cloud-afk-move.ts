@@ -38,6 +38,7 @@ export const enCloudAfkMove = {
     follow: "Follow your main account",
   },
   walk: {
+    title: "Your accounts",
     go: "Go to",
     follow: "Follow",
     main: "Your main account",
