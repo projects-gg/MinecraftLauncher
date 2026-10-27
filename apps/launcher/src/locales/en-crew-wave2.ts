@@ -52,6 +52,7 @@ export const enCrewWave2: typeof trCrewWave2 = {
   admit: "Can manage requests and the link",
   plans: {
     title: "Plans",
+    none: "No plans yet.",
     make: "Make a plan",
     today: "Today {{time}}",
     tomorrow: "Tomorrow {{time}}",

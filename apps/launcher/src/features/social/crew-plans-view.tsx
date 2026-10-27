@@ -1078,6 +1078,18 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
               />
             </motion.li>
           ) : null}
+          {/* Empty, the title alone read as a list that failed to load (SMALL12). */}
+          {!plans.length && !forming ? (
+            <motion.li
+              key="none"
+              className="px-1 text-[13px] text-ash-400"
+              layout={layout ? "position" : false}
+              transition={{ layout: glide }}
+              {...rise(reduce, 0, 0.2)}
+            >
+              {t("crewWave2.plans.none")}
+            </motion.li>
+          ) : null}
           {plans.map((plan) => (
             <motion.li
               key={plan.id}

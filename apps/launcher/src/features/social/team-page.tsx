@@ -804,7 +804,7 @@ function CrewCard({
                   second loud thing on the card). */}
               {founded ? (
                 <span
-                  className={cn("inline-flex items-center gap-1", anniversary && "text-bone-100")}
+                  className={cn("inline-flex items-center gap-1", anniversary && "text-ash-300")}
                 >
                   <CalendarBlank size={14} aria-hidden />
                   {anniversary

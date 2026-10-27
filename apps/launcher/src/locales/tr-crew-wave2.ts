@@ -51,6 +51,7 @@ export const trCrewWave2 = {
   admit: "İstekleri ve bağlantıyı yönetebilir",
   plans: {
     title: "Planlar",
+    none: "Henüz plan yok.",
     make: "Plan yap",
     today: "Bugün {{time}}",
     tomorrow: "Yarın {{time}}",
