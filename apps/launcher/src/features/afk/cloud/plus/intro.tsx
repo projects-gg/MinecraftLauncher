@@ -173,6 +173,14 @@ export function PlusIntroDialog({
         </ol>
         <p className="text-[13px] text-bone-100">{t("afkPlus.intro.outcome")}</p>
         <p className="text-[12.5px] text-ash-300">{t("afkPlus.intro.promise")}</p>
+        {/* Where it works, said where the player decides (the site's buy page says the same). */}
+        <p className="text-[12.5px] text-ash-300">
+          {t(
+            plusOffer(overview)?.features.anyServer
+              ? "afkPlus.intro.anyServer"
+              : "afkPlus.intro.projectsOnly",
+          )}
+        </p>
         {signedOut ? (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ash-300">
             <span>{t("cloudAfk.intro.signIn")}</span>

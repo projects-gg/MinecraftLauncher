@@ -208,6 +208,35 @@ impl CloudClient {
         &self.inner.user_agent
     }
 
+    /// A plain GET of a public file (AFK+'s item data on our CDN): the bytes, or None (also past
+    /// `max` bytes: what it says it is is never trusted for the size).
+    pub(crate) async fn fetch_public(&self, url: &str, max: usize) -> Option<Vec<u8>> {
+        let mut response = self
+            .inner
+            .http
+            .get(url)
+            .timeout(self.inner.timeout)
+            .header(reqwest::header::USER_AGENT, &self.inner.user_agent)
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success()
+            || response
+                .content_length()
+                .is_some_and(|length| length > u64::try_from(max).unwrap_or(u64::MAX))
+        {
+            return None;
+        }
+        let mut out = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if out.len() + chunk.len() > max {
+                return None;
+            }
+            out.extend_from_slice(&chunk);
+        }
+        Some(out)
+    }
+
     /// A page of the site, on the API's origin (`https://afk.projects.gg/<path>`).
     pub fn site_url(&self, path: &str) -> Url {
         let mut root = self.inner.base.clone();

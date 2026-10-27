@@ -1,7 +1,8 @@
 // AFK+: what the panel asks of the backend (commands/cloud_afk_plus.rs over pl-cloud-afk). Nothing
 // polls: the panel reads when it opens and after an action; while it is on screen its account is
-// watched with `ai` and the AI's state, feed and approvals arrive as `cloud-afk-live` events (the
-// console's stream, `cloudApi.onLive`). Browser previews use the mock (mock.ts).
+// watched with `ai` and the AI's state, new audit log entries, the orders' progress and approvals
+// arrive as `cloud-afk-live` events (the console's stream, `cloudApi.onLive`). Browser previews
+// use the mock (mock.ts).
 import { type CmdError, commands } from "@/bindings";
 import { CommandError } from "@/lib/api/tauri";
 import { isTauri } from "@/lib/platform";
@@ -11,18 +12,25 @@ import type {
   PlusAction,
   PlusAnswerOutcome,
   PlusApproval,
-  PlusCatalog,
+  PlusAuditEntry,
+  PlusAuditOutcome,
+  PlusCheckOutcome,
   PlusConfig,
   PlusControlAnswer,
-  PlusDealPage,
-  PlusDealSummary,
   PlusExport,
-  PlusFeedPage,
   PlusHistory,
   PlusInboxPage,
+  PlusItemData,
+  PlusNewCustomItem,
+  PlusNewOrder,
+  PlusOrderOutcome,
+  PlusOrderPatch,
+  PlusOrderSettings,
   PlusPanelView,
-  PlusParseOutcome,
+  PlusPickOutcome,
   PlusQuota,
+  PlusReceiptPage,
+  PlusReceiptSummary,
   PlusReplyOutcome,
   PlusSaveOutcome,
   PlusSettings,
@@ -34,18 +42,50 @@ import type {
 export type * from "./types";
 export type PlusPanel = PlusPanelView;
 
+/** What "Envanterden seç" sends: the slot as the live inventory shows it and the item there. */
+export interface PickTarget {
+  slot: number;
+  item: string;
+  cmd: number | null;
+  model: string | null;
+}
+
 export interface PlusApi {
-  /** The panel's first look: settings, the mode's catalog, the quota and the approvals. */
+  /** The panel's first look: settings (with the server, Studio's rules, the orders' states), the quota and the approvals. */
   panel(id: string): Promise<PlusPanel>;
   /** The settings as stored now ("Son halini yükle"). */
   settings(id: string): Promise<PlusSettings>;
-  catalog(mode: string): Promise<PlusCatalog | null>;
+  /** The game's item data for a Minecraft version (the account's), or null when it cannot be had now. */
+  itemData(minecraft: string | null): Promise<PlusItemData | null>;
   save(id: string, rev: number, config: PlusConfig): Promise<PlusSaveOutcome>;
   /** "Bu hale dön": the revision `rev` becomes the next (`current`: the one on screen). */
   restore(id: string, rev: number, current: number): Promise<PlusSaveOutcome>;
   control(id: string, action: PlusAction, name?: string): Promise<PlusControlAnswer>;
-  feed(id: string, after: string | null): Promise<PlusFeedPage>;
-  deals(id: string, after: string | null): Promise<PlusDealPage>;
+  /** "Kontrol et": the card, or why not. */
+  check(id: string, text: string): Promise<PlusCheckOutcome>;
+  createOrder(
+    id: string,
+    order: PlusNewOrder,
+    customItems: PlusNewCustomItem[],
+    settings: PlusOrderSettings,
+  ): Promise<PlusOrderOutcome>;
+  patchOrder(id: string, order: string, patch: PlusOrderPatch): Promise<PlusOrderOutcome>;
+  deleteOrder(id: string, order: string): Promise<PlusOrderOutcome>;
+  pick(id: string, target: PickTarget): Promise<PlusPickOutcome>;
+  /** A page of the audit log (`after`: newer than the last kept, `before`: older). */
+  audit(
+    id: string,
+    before: number | null,
+    after: number | null,
+    group: string | null,
+  ): Promise<PlusAuditOutcome>;
+  /** What this computer kept of the audit log, newest first. */
+  auditKept(id: string): Promise<PlusAuditEntry[]>;
+  /** Keeps entries the live stream brought. */
+  auditKeep(id: string, items: PlusAuditEntry[]): Promise<void>;
+  /** Drops the audit logs kept for accounts not named. */
+  auditPrune(keep: string[]): Promise<void>;
+  receipts(id: string, before: string | null): Promise<PlusReceiptPage>;
   approvals(id: string): Promise<PlusApproval[]>;
   answer(
     id: string,
@@ -59,9 +99,8 @@ export interface PlusApi {
   reply(id: string, name: string, text: string): Promise<PlusReplyOutcome>;
   read(id: string, name: string, upTo: number): Promise<void>;
   handBack(id: string, name: string): Promise<void>;
-  parse(id: string, text: string): Promise<PlusParseOutcome>;
   history(id: string): Promise<PlusHistory>;
-  summary(id: string, from: number | null, to: number | null): Promise<PlusDealSummary>;
+  summary(id: string, from: number | null, to: number | null): Promise<PlusReceiptSummary>;
   report(week: string | null): Promise<PlusWeeklyReport>;
   /** "Tabloyu indir": a CSV in the Downloads folder; its file name. */
   exportTable(
@@ -89,15 +128,36 @@ async function ok<T>(promise: Promise<Res<T>>): Promise<Wire<T>> {
   return result.data as Wire<T>;
 }
 
+/** A command's answer kept as the bindings type it (optional fields stay optional). */
+async function raw<T>(promise: Promise<Res<T>>): Promise<T> {
+  const result = await promise;
+  if (result.status === "error") throw new CommandError(result.error);
+  return result.data;
+}
+
 const tauriPlusApi: PlusApi = {
   panel: (id) => ok(commands.cloudAfkPlusPanel(id)),
   settings: (id) => ok(commands.cloudAfkPlusSettings(id)),
-  catalog: (mode) => ok(commands.cloudAfkPlusCatalog(mode)),
+  itemData: (minecraft) => ok(commands.cloudAfkPlusItemData(minecraft)),
   save: (id, rev, config) => ok(commands.cloudAfkPlusSave(id, rev, config)),
   restore: (id, rev, current) => ok(commands.cloudAfkPlusRestore(id, rev, current)),
   control: (id, action, name) => ok(commands.cloudAfkPlusControl(id, action, name ?? null)),
-  feed: (id, after) => ok(commands.cloudAfkPlusFeed(id, after)),
-  deals: (id, after) => ok(commands.cloudAfkPlusDeals(id, after)),
+  check: (id, text) => raw(commands.cloudAfkPlusCheck(id, text)),
+  createOrder: (id, order, customItems, settings) =>
+    ok(commands.cloudAfkPlusOrderCreate(id, order, customItems, settings)),
+  patchOrder: (id, order, patch) => ok(commands.cloudAfkPlusOrderPatch(id, order, patch)),
+  deleteOrder: (id, order) => ok(commands.cloudAfkPlusOrderDelete(id, order)),
+  pick: (id, target) =>
+    ok(commands.cloudAfkPlusPick(id, target.slot, target.item, target.cmd, target.model)),
+  audit: (id, before, after, group) => raw(commands.cloudAfkPlusAudit(id, before, after, group)),
+  auditKept: (id) => raw(commands.cloudAfkPlusAuditKept(id)),
+  auditKeep: async (id, items) => {
+    await raw(commands.cloudAfkPlusAuditKeep(id, items));
+  },
+  auditPrune: async (keep) => {
+    await raw(commands.cloudAfkPlusAuditPrune(keep));
+  },
+  receipts: (id, before) => ok(commands.cloudAfkPlusReceipts(id, before)),
   approvals: (id) => ok(commands.cloudAfkPlusApprovals(id)),
   answer: (id, approval, approve, maxPrice) =>
     ok(commands.cloudAfkPlusAnswer(id, approval, approve, maxPrice)),
@@ -111,7 +171,6 @@ const tauriPlusApi: PlusApi = {
   handBack: async (id, name) => {
     await ok(commands.cloudAfkPlusHandBack(id, name));
   },
-  parse: (id, text) => ok(commands.cloudAfkPlusParse(id, text)),
   history: (id) => ok(commands.cloudAfkPlusHistory(id)),
   summary: (id, from, to) => ok(commands.cloudAfkPlusSummary(id, from, to)),
   report: (week) => ok(commands.cloudAfkPlusReport(week)),

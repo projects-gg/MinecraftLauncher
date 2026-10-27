@@ -126,8 +126,9 @@ pub async fn cloud_afk_overview(
 ) -> CmdResult<CloudPageView> {
     let cloud = service(&app, &state);
     if state.social.is_signed_out() {
-        // The contract: the keychain copies go with a sign-out.
+        // The contract: the keychain copies go with a sign-out (and the AFK+ logs kept here).
         cloud.forget().await;
+        crate::commands::cloud_afk_plus::forget_kept(&app, &state).await;
     }
     let token = state
         .social
@@ -502,6 +503,7 @@ pub fn cloud_afk_open(
 /// keychain, the console sockets close.
 pub async fn signed_out(app: &AppHandle, state: &AppState) {
     service(app, state).forget().await;
+    crate::commands::cloud_afk_plus::forget_kept(app, state).await;
 }
 
 fn text_problem_message(reason: &str) -> &'static str {

@@ -155,7 +155,7 @@ function PrimaryButton({
  */
 function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => void }) {
   const { t } = useTranslation();
-  const sentence = useAiSentence(account);
+  const sentence = useAiSentence(account, true);
   // The row has room for the state only: its first clause ("Kontörün bitti"); the rest ("13:07'de
   // yenilenir") is in the panel's rail and the row's tooltip, never cut mid-word.
   const brief = sentence.text.split("; ")[0] ?? sentence.text;

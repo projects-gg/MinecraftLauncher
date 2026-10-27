@@ -485,33 +485,66 @@ export const commands = {
 	 */
 	cloudAfkCopySettings: (source: string, targets: string[], withServer: boolean, secrets: CloudCopySecret[]) => typedError<CloudCopyResult_Serialize[], CmdError>(__TAURI_INVOKE("cloud_afk_copy_settings", { source, targets, withServer, secrets })),
 	/**
-	 *  The panel's first look at an account: its settings, the mode's catalog, the quota and the
-	 *  approvals (the last two wait while the account's machine is away).
+	 *  The panel's first look at an account: its settings, the quota and the approvals (the last two
+	 *  wait while the account's machine is away).
 	 */
-	cloudAfkPlusPanel: (id: string) => typedError<PlusPanelView, CmdError>(__TAURI_INVOKE("cloud_afk_plus_panel", { id })),
+	cloudAfkPlusPanel: (id: string) => typedError<PlusPanelView_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_panel", { id })),
 	/**  The settings as stored now (after a conflict, "Son halini yükle"). */
-	cloudAfkPlusSettings: (id: string) => typedError<PlusSettings, CmdError>(__TAURI_INVOKE("cloud_afk_plus_settings", { id })),
-	/**  A game mode's catalog (no session needed; kept an hour). None when it cannot be had now. */
-	cloudAfkPlusCatalog: (mode: string) => typedError<{
-	mode?: string,
-	name?: CloudLocalized,
-	items?: PlusCatalogItem[],
-	enchantments?: PlusEnchantment[],
-	money?: PlusMoney,
-	limits?: PlusCatalogLimits,
-	adTemplates?: PlusAdTemplate[],
-} | null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_catalog", { mode })),
-	/**  Saves the settings (`rev`: the revision the panel started from). */
-	cloudAfkPlusSave: (id: string, rev: number, config: PlusConfig) => typedError<PlusSaveOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_save", { id, rev, config })),
+	cloudAfkPlusSettings: (id: string) => typedError<PlusSettings_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_settings", { id })),
+	/**
+	 *  The game's item data for a Minecraft version (the account's; none: the newest), checked and
+	 *  cached. None when it cannot be had now (the order form offers to try again).
+	 */
+	cloudAfkPlusItemData: (minecraft: string | null) => typedError<{
+	/**  The version whose file this is (the account's own, or the nearest the CDN has). */
+	minecraft: string,
+	/**  The file's text, its SHA-256 checked. */
+	text: string,
+} | null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_item_data", { minecraft })),
+	/**
+	 *  Saves the settings (`rev`: the revision the panel started from). The orders and custom items
+	 *  are not sent: they have their own routes.
+	 */
+	cloudAfkPlusSave: (id: string, rev: number, config: PlusConfig_Deserialize) => typedError<PlusSaveOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_save", { id, rev, config })),
 	/**  "Bu hale dön": the saved revision `rev` becomes the next one (`current`: the one on screen). */
-	cloudAfkPlusRestore: (id: string, rev: number, current: number) => typedError<PlusSaveOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_restore", { id, rev, current })),
+	cloudAfkPlusRestore: (id: string, rev: number, current: number) => typedError<PlusSaveOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_restore", { id, rev, current })),
 	/**  The AI's switch, a player blocked, unblocked or forgotten, the spent total reset. */
 	cloudAfkPlusControl: (id: string, action: PlusAction, name: string | null) => typedError<PlusControlAnswer, CmdError>(__TAURI_INVOKE("cloud_afk_plus_control", { id, action, name })),
-	/**  Older feed lines (the socket brings the latest while the panel is open). */
-	cloudAfkPlusFeed: (id: string, after: string | null) => typedError<PlusFeedPage, CmdError>(__TAURI_INVOKE("cloud_afk_plus_feed", { id, after })),
-	cloudAfkPlusDeals: (id: string, after: string | null) => typedError<PlusDealPage, CmdError>(__TAURI_INVOKE("cloud_afk_plus_deals", { id, after })),
+	/**  "Kontrol et": the player's words become an order's card (nothing is stored). */
+	cloudAfkPlusCheck: (id: string, text: string) => typedError<PlusCheckOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_check", { id, text })),
+	/**
+	 *  "Kaydet" of an order's card or form (or "Geri al" of a deleted one): the order, the new custom
+	 *  items it names and a chip's settings change, in one write.
+	 */
+	cloudAfkPlusOrderCreate: (id: string, order: PlusNewOrder_Deserialize, customItems: PlusNewCustomItem_Deserialize[], settings: PlusOrderSettings_Deserialize) => typedError<PlusOrderOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_order_create", { id, order, customItems, settings })),
+	/**  An order's change: "Düzenle", "Durdur", "Sürdür", "Süreyi uzat". */
+	cloudAfkPlusOrderPatch: (id: string, order: string, patch: PlusOrderPatch) => typedError<PlusOrderOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_order_patch", { id, order, patch })),
+	/**  "Sil": at once, or once the order's trade ended. */
+	cloudAfkPlusOrderDelete: (id: string, order: string) => typedError<PlusOrderOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_order_delete", { id, order })),
+	/**
+	 *  "Envanterden seç": the item in a slot of the bot's inventory (5-45, as the live inventory
+	 *  shows it), its id and look as the view showed them.
+	 */
+	cloudAfkPlusPick: (id: string, slot: number, item: string, cmd: number | null, model: string | null) => typedError<PlusPickOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_pick", { id, slot, item, cmd, model })),
+	/**
+	 *  A page of the audit log ("Akış"): `after` the newest entries past the last one kept, `before`
+	 *  older ones; `group` `deals`, `messages` or `warnings`. While the machine cannot be asked, what
+	 *  this computer kept.
+	 */
+	cloudAfkPlusAudit: (id: string, before: number | null, after: number | null, group: string | null) => typedError<PlusAuditOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_audit", { id, before, after, group })),
+	/**  What this computer kept of an account's audit log, newest first (the panel's first frame). */
+	cloudAfkPlusAuditKept: (id: string) => typedError<PlusAuditEntry_Serialize[], CmdError>(__TAURI_INVOKE("cloud_afk_plus_audit_kept", { id })),
+	/**  Keeps entries the live stream brought. */
+	cloudAfkPlusAuditKeep: (id: string, items: PlusAuditEntry_Deserialize[]) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_audit_keep", { id, items })),
+	/**  Drops the audit logs kept for accounts that are not AFK+ any more (`keep`: those that are). */
+	cloudAfkPlusAuditPrune: (keep: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_audit_prune", { keep })),
+	/**  Completed deals (receipts, 90 days), newest first. */
+	cloudAfkPlusReceipts: (id: string, before: string | null) => typedError<PlusReceiptPage, CmdError>(__TAURI_INVOKE("cloud_afk_plus_receipts", { id, before })),
 	cloudAfkPlusApprovals: (id: string) => typedError<PlusApproval[], CmdError>(__TAURI_INVOKE("cloud_afk_plus_approvals", { id })),
-	/**  "Onayla", "Reddet", or "Fiyatı düşür" (`approve` with `max_price` below the deal's price). */
+	/**
+	 *  "Onayla", "Reddet", "Fiyatı düşür" (`approve` with `max_price` below the deal's price), "Takas
+	 *  oldu" / "Olmadı" (a handoff), "Evet, bu" / "Hayır" (a first sight).
+	 */
 	cloudAfkPlusAnswer: (id: string, approval: string, approve: boolean, maxPrice: number | null) => typedError<PlusAnswerOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_answer", { id, approval, approve, maxPrice })),
 	cloudAfkPlusQuota: (id: string) => typedError<PlusQuota, CmdError>(__TAURI_INVOKE("cloud_afk_plus_quota", { id })),
 	/**  "Mesajlar" (QoL Q1): the conversations of the last 7 days (live from the machine). */
@@ -522,19 +555,18 @@ export const commands = {
 	cloudAfkPlusRead: (id: string, name: string, upTo: number) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_read", { id, name, upTo })),
 	/**  "Şimdi devret": the assistant answers in this conversation again. */
 	cloudAfkPlusHandBack: (id: string, name: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_hand_back", { id, name })),
-	cloudAfkPlusParse: (id: string, text: string) => typedError<PlusParseOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_parse", { id, text })),
 	/**  "Ayar geçmişi" (QoL Q7), newest first. */
-	cloudAfkPlusHistory: (id: string) => typedError<PlusHistory, CmdError>(__TAURI_INVOKE("cloud_afk_plus_history", { id })),
+	cloudAfkPlusHistory: (id: string) => typedError<PlusHistory_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_history", { id })),
 	/**  The trade summary (QoL Q4) of `from..to` (Unix seconds; none: the last 30 days). */
-	cloudAfkPlusSummary: (id: string, from: number | null, to: number | null) => typedError<PlusDealSummary, CmdError>(__TAURI_INVOKE("cloud_afk_plus_summary", { id, from, to })),
+	cloudAfkPlusSummary: (id: string, from: number | null, to: number | null) => typedError<PlusReceiptSummary, CmdError>(__TAURI_INVOKE("cloud_afk_plus_summary", { id, from, to })),
 	/**
 	 *  The weekly report (QoL Q4) of every AFK+ account of the player; `week` `YYYY-Www` (none: the
 	 *  last whole week).
 	 */
 	cloudAfkPlusReport: (week: string | null) => typedError<PlusWeeklyReport, CmdError>(__TAURI_INVOKE("cloud_afk_plus_report", { week })),
 	/**
-	 *  "Tabloyu indir": the range's deals as a CSV table in the Downloads folder (Turkish headers with
-	 *  `;` as Turkish Excel reads them, or English with `,`; UTF-8 with a byte order mark).
+	 *  "Tabloyu indir": the range's receipts as a CSV table in the Downloads folder (Turkish headers
+	 *  with `;` as Turkish Excel reads them, or English with `,`; UTF-8 with a byte order mark).
 	 */
 	cloudAfkPlusExport: (id: string, name: string, from: number | null, to: number | null) => typedError<PlusExport, CmdError>(__TAURI_INVOKE("cloud_afk_plus_export", { id, name, from, to })),
 	/**  "Klasörde göster" for a table "Tabloyu indir" saved (only such a file, in Downloads). */
@@ -547,7 +579,10 @@ export const commands = {
 	 *  friends service keeps it from the phone.
 	 */
 	cloudAfkNoticeSeen: (id: string) => __TAURI_INVOKE<void>("cloud_afk_notice_seen", { id }),
-	/**  The AFK+ panel is on screen: the AI's state, feed and approvals stream as `cloud-afk-live`. */
+	/**
+	 *  The AFK+ panel is on screen: the AI's state, audit log entries, orders' progress and approvals
+	 *  stream as `cloud-afk-live`.
+	 */
 	cloudAfkPlusWatch: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_watch", { id })),
 	/**  The panel left the screen (closed, the window hidden). */
 	cloudAfkPlusUnwatch: (id: string) => __TAURI_INVOKE<void>("cloud_afk_plus_unwatch", { id }),
@@ -2911,75 +2946,153 @@ export type CloudLimits = {
 };
 
 /**  What the socket tells the launcher. */
-export type CloudLiveEvent = 
+export type CloudLiveEvent = CloudLiveEvent_Serialize | CloudLiveEvent_Deserialize;
+
+/**  What the socket tells the launcher. */
+export type CloudLiveEvent_Deserialize = 
 /**  The socket of `host` is open; whether its machine is connected now. */
-{ kind: "hello"; host: string; online: boolean } | 
+({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  A watched account's live state changed (also once right after `watch`). */
-{ kind: "state"; acct: string; live: CloudLiveState } | 
+({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  Masked console lines of a watched account. `snapshot`: the recent lines right after
  *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
  */
-{ kind: "lines"; acct: string; lines: CloudConsoleLine[]; skipped: number; snapshot: boolean } | 
+({ kind: "lines"; acct: string; lines: CloudConsoleLine[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
 /**  The machine connected or went away. */
-{ kind: "machine"; host: string; online: boolean } | 
+({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The service said no to something: `not_found` (not the player's account there),
  *  `rate_limited`, `host_offline`, `bad_request`.
  */
-{ kind: "problem"; acct: string | null; code: string } | { kind: "status"; host: string; status: CloudLiveStatus } | 
+({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wseq?: never } | 
 /**  AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`). */
-{ kind: "ai"; acct: string; ai: PlusAi | null } | 
+({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
- *  AFK+: feed items in batches at least 2 s apart; `snapshot`: the latest 20 right after
- *  `watch`.
+ *  AFK+: new audit log entries, in batches at least 2 s apart (the backlog is read on
+ *  demand, from the last entry kept).
  */
-{ kind: "feed"; acct: string; items: PlusFeedItem[]; snapshot: boolean } | 
+({ kind: "audit"; acct: string; items: PlusAuditEntry_Deserialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**  AFK+: orders whose progress or live state changed (clients derive the status). */
+({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  AFK+: an approval came, was answered, expired or closed. */
-{ kind: "approval"; acct: string; approval: PlusApproval } | 
+({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again. */
-{ kind: "messages"; acct: string; count: number; at: number } | 
+({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The inventory (watched with `inv`): whether it shows now (`state` `ok`, or `off` with
  *  `reason` `not_running`, `setting`, `restart`, `version` or `service`); `lock: "trade"`
  *  while an AFK+ trade holds it (the view stays live, moves wait).
  */
-{ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null } | 
+({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
 /**
  *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
  *  non-empty slot; `snap`: the first frame after a watch.
  */
-{ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem | null; items: CloudInvItem[]; snap: boolean } | 
+({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem | null; items: CloudInvItem[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
  *  names this opening (every move names the one the player sees).
  */
-{ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem[]; closed: boolean } | 
+({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
 /**
  *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
  *  sent it on; what the server did shows in the frames that follow.
  */
-{ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null } | 
+({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  A watched account's status strip: the action bar, a title and the boss bars (never in the
  *  log).
  */
-{ kind: "bars"; acct: string; bars: CloudBars } | 
+({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  Movement (watched with `move`): whether the account can move now and what it does (also
  *  once right after the watch, then on change).
  */
-{ kind: "movementState"; acct: string; state: CloudMovementState } | 
+({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
 /**
  *  Where a watched account stands and looks: after the watch, then on change, at most once a
  *  second, only while it can move.
  */
-{ kind: "pos"; acct: string; pos: CloudPos } | 
+({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The answer to an operation this launcher sent (`id` its own): `ok` means the account started
  *  it; what happens shows in the frames that follow.
  */
-{ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null };
+({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never };
+
+/**  What the socket tells the launcher. */
+export type CloudLiveEvent_Serialize = 
+/**  The socket of `host` is open; whether its machine is connected now. */
+({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**  A watched account's live state changed (also once right after `watch`). */
+({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  Masked console lines of a watched account. `snapshot`: the recent lines right after
+ *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
+ */
+({ kind: "lines"; acct: string; lines: CloudConsoleLine[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
+/**  The machine connected or went away. */
+({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  The service said no to something: `not_found` (not the player's account there),
+ *  `rate_limited`, `host_offline`, `bad_request`.
+ */
+({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wseq?: never } | 
+/**  AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`). */
+({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  AFK+: new audit log entries, in batches at least 2 s apart (the backlog is read on
+ *  demand, from the last entry kept).
+ */
+({ kind: "audit"; acct: string; items: PlusAuditEntry_Serialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**  AFK+: orders whose progress or live state changed (clients derive the status). */
+({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**  AFK+: an approval came, was answered, expired or closed. */
+({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**  AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again. */
+({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  The inventory (watched with `inv`): whether it shows now (`state` `ok`, or `off` with
+ *  `reason` `not_running`, `setting`, `restart`, `version` or `service`); `lock: "trade"`
+ *  while an AFK+ trade holds it (the view stays live, moves wait).
+ */
+({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
+/**
+ *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
+ *  non-empty slot; `snap`: the first frame after a watch.
+ */
+({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem | null; items: CloudInvItem[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
+ *  names this opening (every move names the one the player sees).
+ */
+({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
+/**
+ *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
+ *  sent it on; what the server did shows in the frames that follow.
+ */
+({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  A watched account's status strip: the action bar, a title and the boss bars (never in the
+ *  log).
+ */
+({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  Movement (watched with `move`): whether the account can move now and what it does (also
+ *  once right after the watch, then on change).
+ */
+({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
+/**
+ *  Where a watched account stands and looks: after the watch, then on change, at most once a
+ *  second, only while it can move.
+ */
+({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  The answer to an operation this launcher sent (`id` its own): `ok` means the account started
+ *  it; what happens shows in the frames that follow.
+ */
+({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never };
 
 /**
  *  What the machine says about the account now. `state` is one of `unknown`, `stopped`, `queued`,
@@ -6397,13 +6510,18 @@ export type PlusAi = {
 	quota?: PlusQuotaBrief | null,
 	/**  Set when this is the machine's last snapshot, not a live answer. */
 	asOf?: number | null,
-	/**  What the assistant spent (CAFK-W5): only with a live machine answer. */
+	/**  What the assistant spent: only with a live machine answer. */
 	spent?: PlusSpent | null,
 	/**
 	 *  "Mesajlar" (QoL Q1): the latest message the assistant left to the owner since they last
 	 *  opened the conversations; only in the player's own views.
 	 */
 	newMessages?: PlusNewMessages | null,
+};
+
+export type PlusAllow = {
+	buy?: boolean,
+	sell?: boolean,
 };
 
 /**  The two quota windows' caps (credits) per plan. */
@@ -6419,15 +6537,26 @@ export type PlusAnswerOutcome =
 /**  It was no longer waiting (answered elsewhere, expired, the deal gone): `state` says how. */
 { kind: "closed"; state: string };
 
-/**  A deal waiting for the player's OK (`state` `pending`), or one of the last 24 hours' answers. */
+/**
+ *  Something waiting for the player (`state` `pending`), or one of the last 24 hours' answers.
+ *  `kind`: `deal` (OK the bot's deal), `handoff` ("Takas sende": the player makes the trade, open
+ *  24 hours) or `confirm_item` ("Bu eşya aradığın … mi?").
+ */
 export type PlusApproval = {
 	id?: string,
 	acct?: string,
+	kind?: string,
+	/**  The order it is for. */
+	order?: string | null,
+	/**  `confirm_item`: the custom item asked about, as the order's item or its payment. */
+	custom?: PlusApprovalCustom | null,
 	deal?: PlusApprovalDeal,
 	/**  In-game name. */
 	counterpart?: string,
-	/**  `above`, `new_counterpart`, `always`, `price_unusual`, `budget`, `daily`. */
+	/**  `deal`: `above`, `new_counterpart`, `authority`, `price_unusual`, `budget`, `daily`. */
 	why?: string[],
+	/**  `confirm_item`: the item in the window (plain text: the counterpart's words). */
+	seen?: PlusSeenItem | null,
 	createdAt?: number,
 	expiresAt?: number,
 	/**  `pending`, `approved`, `rejected`, `expired`, `closed`. */
@@ -6438,14 +6567,127 @@ export type PlusApproval = {
 	closed?: string | null,
 };
 
+export type PlusApprovalCustom = {
+	k?: string,
+	/**  `item` or `pay`. */
+	field?: string,
+};
+
 export type PlusApprovalDeal = {
 	/**  `buy` or `sell`. */
 	side?: string,
 	item?: string,
 	qty?: number,
+	/**  Money, or the paying item's count. */
 	price?: number,
-	currency?: string,
+	/**  `money` or the paying item. */
+	pay?: string,
 };
+
+/**
+ *  A step of the audit log ("Akış"): every step the assistant took and how it ended, from the
+ *  machine (7 days), never from D1. Clients write the lines. `k`: `pm_in`, `reply`, `owner_msg`,
+ *  `offer`, `counter`, `agree`, `ask_owner`, `owner_ok`, `owner_no`, `owner_timeout`,
+ *  `trade_start`, `trade_done`, `trade_fail`, `handoff`, `handoff_done`, `handoff_no`, `cancel`,
+ *  `refuse`, `found`, `confirm_item`, `order_done`, `order_expired`, `paused`, `resumed`, `quota`,
+ *  `gate` (kept as text).
+ */
+export type PlusAuditEntry = PlusAuditEntry_Serialize | PlusAuditEntry_Deserialize;
+
+/**
+ *  A step of the audit log ("Akış"): every step the assistant took and how it ended, from the
+ *  machine (7 days), never from D1. Clients write the lines. `k`: `pm_in`, `reply`, `owner_msg`,
+ *  `offer`, `counter`, `agree`, `ask_owner`, `owner_ok`, `owner_no`, `owner_timeout`,
+ *  `trade_start`, `trade_done`, `trade_fail`, `handoff`, `handoff_done`, `handoff_no`, `cancel`,
+ *  `refuse`, `found`, `confirm_item`, `order_done`, `order_expired`, `paused`, `resumed`, `quota`,
+ *  `gate` (kept as text).
+ */
+export type PlusAuditEntry_Deserialize = {
+	/**  The account's sequence: the AFK+ day number × 1,000,000 + a counter. */
+	s?: number,
+	/**  Unix milliseconds. */
+	t?: number,
+	k?: string,
+	/**  The counterpart's in-game name. */
+	w?: string | null,
+	/**  The order. */
+	o?: string | null,
+	/**  The item. */
+	i?: string | null,
+	q?: number | null,
+	p?: number | null,
+	/**  What the price counts: `money` or the paying item. */
+	u?: string | null,
+	/**  Why it was refused, cancelled, failed or skipped. */
+	r?: string | null,
+	/**  Text, masked (`pm_in`, `reply`, `owner_msg` only). */
+	x?: string | null,
+	/**  Unsuitable: shown folded ("Göster"). */
+	h?: boolean | null,
+	/**  The approval it opened or closed. */
+	a?: string | null,
+};
+
+/**
+ *  A step of the audit log ("Akış"): every step the assistant took and how it ended, from the
+ *  machine (7 days), never from D1. Clients write the lines. `k`: `pm_in`, `reply`, `owner_msg`,
+ *  `offer`, `counter`, `agree`, `ask_owner`, `owner_ok`, `owner_no`, `owner_timeout`,
+ *  `trade_start`, `trade_done`, `trade_fail`, `handoff`, `handoff_done`, `handoff_no`, `cancel`,
+ *  `refuse`, `found`, `confirm_item`, `order_done`, `order_expired`, `paused`, `resumed`, `quota`,
+ *  `gate` (kept as text).
+ */
+export type PlusAuditEntry_Serialize = {
+	/**  The account's sequence: the AFK+ day number × 1,000,000 + a counter. */
+	s: number,
+	/**  Unix milliseconds. */
+	t: number,
+	k: string,
+	/**  The counterpart's in-game name. */
+	w?: string | null,
+	/**  The order. */
+	o?: string | null,
+	/**  The item. */
+	i?: string | null,
+	q?: number | null,
+	p?: number | null,
+	/**  What the price counts: `money` or the paying item. */
+	u?: string | null,
+	/**  Why it was refused, cancelled, failed or skipped. */
+	r?: string | null,
+	/**  Text, masked (`pm_in`, `reply`, `owner_msg` only). */
+	x?: string | null,
+	/**  Unsuitable: shown folded ("Göster"). */
+	h?: boolean | null,
+	/**  The approval it opened or closed. */
+	a?: string | null,
+};
+
+/**  A page of the audit log. */
+export type PlusAuditOutcome = PlusAuditOutcome_Serialize | PlusAuditOutcome_Deserialize;
+
+/**  A page of the audit log. */
+export type PlusAuditOutcome_Deserialize = 
+/**
+ *  From the machine (and kept here): newest first; `more` when older ones are left; `from`
+ *  the oldest AFK+ day it keeps.
+ */
+({ kind: "page"; items: PlusAuditEntry_Deserialize[]; more: boolean; from: number | null }) & { retry_after?: never } | 
+/**  The machine cannot be asked: what this computer kept, newest first. */
+({ kind: "kept"; items: PlusAuditEntry_Deserialize[] }) & { from?: never; more?: never; retry_after?: never } | 
+/**  Studio switched the audit log off. */
+({ kind: "off" }) & { from?: never; items?: never; more?: never; retry_after?: never } | ({ kind: "limited"; retry_after: number | null }) & { from?: never; items?: never; more?: never };
+
+/**  A page of the audit log. */
+export type PlusAuditOutcome_Serialize = 
+/**
+ *  From the machine (and kept here): newest first; `more` when older ones are left; `from`
+ *  the oldest AFK+ day it keeps.
+ */
+({ kind: "page"; items: PlusAuditEntry_Serialize[]; more: boolean; from: number | null }) & { retry_after?: never } | 
+/**  The machine cannot be asked: what this computer kept, newest first. */
+({ kind: "kept"; items: PlusAuditEntry_Serialize[] }) & { from?: never; more?: never; retry_after?: never } | 
+/**  Studio switched the audit log off. */
+({ kind: "off" }) & { from?: never; items?: never; more?: never; retry_after?: never } | ({ kind: "limited"; retry_after: number | null }) & { from?: never; items?: never; more?: never };
 
 /**  Messages held back last week, by kind (no content). */
 export type PlusBlockedCounts = {
@@ -6453,28 +6695,6 @@ export type PlusBlockedCounts = {
 	rmt?: number,
 	unsafe?: number,
 	fake?: number,
-};
-
-/**  A buy row ("Alınacak"). */
-export type PlusBuyRow = {
-	/**  `^[a-z0-9]{1,8}$`, unique across buy and sell. */
-	id?: string,
-	/**  A catalog id of the mode's profile. */
-	item?: string,
-	req?: PlusRequirements,
-	qty?: number,
-	/**  `each` or `total`: whether target and max are per item or for `qty` items. */
-	unit?: string,
-	target?: number,
-	/**  Never exceeded. */
-	max?: number,
-	/**  `patient`, `balanced`, `quick`. */
-	style?: string,
-	/**  `auto`, `above` (over `limits.approvalAbove`), `always`. */
-	approval?: string,
-	dailyQty?: number,
-	notify?: boolean,
-	enabled?: boolean,
 };
 
 /**
@@ -6487,51 +6707,65 @@ export type PlusCanBuy = {
 	until?: number | null,
 };
 
-/**  `GET /plus/catalog?mode=`: what a game mode trades, and its money's limits. */
-export type PlusCatalog = {
-	mode?: string,
-	name?: CloudLocalized,
-	items?: PlusCatalogItem[],
-	enchantments?: PlusEnchantment[],
-	money?: PlusMoney,
-	limits?: PlusCatalogLimits,
-	adTemplates?: PlusAdTemplate[],
-};
-
-export type PlusCatalogItem = {
-	/**  `minecraft:elytra`, or a profile's own item (`custom:spawner:zombie`). */
-	id?: string,
-	tr?: string,
-	en?: string,
-	/**  The picture's key (the item's `minecraft:` path). */
-	sprite?: string,
-	stack?: number,
-	damageable?: boolean,
-};
-
-export type PlusCatalogLimits = {
-	listMax?: number,
-	/**  `[lowest, highest]` minutes. */
-	approvalTimeoutMin?: number[],
-};
+/**  How "Kontrol et" ended. */
+export type PlusCheckOutcome = 
+/**
+ *  The card: the service's answer (`{draft, questions, notes, left}`) as JSON text, so the
+ *  panel answers its questions on exactly what the service wrote.
+ */
+{ kind: "draft"; answer: string } | 
+/**
+ *  The rules or the agent said no: `length`, `link`, `command`, `personal`, `unsafe`,
+ *  `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`.
+ */
+{ kind: "rejected"; reason: string; rule: string | null } | 
+/**  `rate` (a fourth check within a minute) or `daily` (the AFK+ day's checks used). */
+{ kind: "limited"; reason: string; retry_after: number | null } | 
+/**  The machine's AI cannot read it now: `agent`, `paused`, `off`, `budget`, `timeout`. */
+{ kind: "unavailable"; reason: string } | 
+/**  The account's machine is not connected now. */
+{ kind: "offline" } | 
+/**  Studio switched typed orders off. */
+{ kind: "off" };
 
 /**
- *  The player's AFK+ settings of one account, written whole with `PUT /plus` and `If-Match`.
- *  Values with a closed set (`lang`, `persona.preset`, a row's `unit`, `style`, `approval`, …) are
- *  kept as text, so a value a newer service adds round-trips unchanged.
+ *  The player's AFK+ settings of one account. `PUT /plus` writes everything but the orders and
+ *  custom items (a settings screen never sends them back); orders go one at a time with the order
+ *  routes. Values with a closed set (`lang`, `authority`, an order's `style`, …) are kept as text,
+ *  so a value a newer service adds round-trips unchanged.
  */
-export type PlusConfig = {
+export type PlusConfig = PlusConfig_Serialize | PlusConfig_Deserialize;
+
+/**
+ *  The player's AFK+ settings of one account. `PUT /plus` writes everything but the orders and
+ *  custom items (a settings screen never sends them back); orders go one at a time with the order
+ *  routes. Values with a closed set (`lang`, `authority`, an order's `style`, …) are kept as text,
+ *  so a value a newer service adds round-trips unchanged.
+ */
+export type PlusConfig_Deserialize = {
 	v?: number,
 	/**  The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only. */
 	enabled?: boolean,
-	/**  A server profile open for the account's server (`projects-smp`). */
+	/**  A server profile open for the account's server (`projects-smp`), or `generic`. */
 	mode?: string,
 	/**  `auto` (English to players who write English, else Turkish), `tr`, `en`. */
 	lang?: string,
 	persona?: PlusPersona,
 	replies?: PlusReplies,
-	buy?: PlusBuyRow[],
-	sell?: PlusSellRow[],
+	/**
+	 *  "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+	 *  waits for the owner's OK; the default), `deal` (closes within the limits).
+	 */
+	authority?: string,
+	/**  "Alış", "Satış": an order of a side switched off waits. */
+	allow?: PlusAllow,
+	/**  What deals may be paid with: `money`, `items`, `both`. */
+	pay?: string,
+	/**  "Kimlerle". */
+	who?: PlusWho,
+	/**  At most `limits.orderStore` kept, `limits.orderMax` active. */
+	orders?: PlusOrder[],
+	customItems?: PlusCustomItem_Deserialize[],
 	limits?: PlusLimits,
 	discovery?: PlusDiscovery,
 	trade?: PlusTradeSettings,
@@ -6545,40 +6779,92 @@ export type PlusConfig = {
 	pauseUntil?: number | null,
 };
 
+/**
+ *  The player's AFK+ settings of one account. `PUT /plus` writes everything but the orders and
+ *  custom items (a settings screen never sends them back); orders go one at a time with the order
+ *  routes. Values with a closed set (`lang`, `authority`, an order's `style`, …) are kept as text,
+ *  so a value a newer service adds round-trips unchanged.
+ */
+export type PlusConfig_Serialize = {
+	v: number,
+	/**  The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only. */
+	enabled: boolean,
+	/**  A server profile open for the account's server (`projects-smp`), or `generic`. */
+	mode: string,
+	/**  `auto` (English to players who write English, else Turkish), `tr`, `en`. */
+	lang: string,
+	persona: PlusPersona,
+	replies: PlusReplies,
+	/**
+	 *  "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+	 *  waits for the owner's OK; the default), `deal` (closes within the limits).
+	 */
+	authority: string,
+	/**  "Alış", "Satış": an order of a side switched off waits. */
+	allow: PlusAllow,
+	/**  What deals may be paid with: `money`, `items`, `both`. */
+	pay: string,
+	/**  "Kimlerle". */
+	who: PlusWho,
+	/**  At most `limits.orderStore` kept, `limits.orderMax` active. */
+	orders: PlusOrder[],
+	customItems: PlusCustomItem_Serialize[],
+	limits: PlusLimits,
+	discovery: PlusDiscovery,
+	trade: PlusTradeSettings,
+	/**  "HH:MM" Turkey time: the daily summary. */
+	summaryAt: string,
+	/**  In-game names the bot never answers (at most 100). */
+	blocked: string[],
+	/**  Working hours, Turkey time (QoL Q3). */
+	schedule: PlusSchedule,
+	/**  A break until then (QoL Q3). */
+	pauseUntil: number | null,
+};
+
 /**  `POST /plus/control`: the AI's state after it, and the settings' revision. */
 export type PlusControlAnswer = {
 	ai?: PlusAi | null,
 	aiRev?: number,
 };
 
-/**  A finished deal (D1, 90 days). */
-export type PlusDeal = {
-	id?: string,
-	side?: string,
-	item?: string,
-	qty?: number,
-	price?: number,
-	currency?: string,
-	counterpart?: string,
-	/**  `completed`, `failed`, `cancelled`, `review`. */
-	status?: string,
-	reason?: string | null,
-	/**  `auto` or `approved`. */
-	approval?: string,
+/**  An item a server made (ItemsAdder, …), known only by its fingerprint. */
+export type PlusCustomItem = PlusCustomItem_Serialize | PlusCustomItem_Deserialize;
+
+/**  An item a server made (ItemsAdder, …), known only by its fingerprint. */
+export type PlusCustomItem_Deserialize = {
+	/**  `^c[0-9a-z]{1,4}$`, chosen by the client that adds it. */
+	k?: string,
+	/**  The player's name for it (1-32 code points, the persona text rule). */
+	name?: string,
+	/**  Its material once seen (`minecraft:paper`). */
+	base?: string | null,
+	/**  The identity fingerprint (32 hex); None: waits for its first sight. */
+	fp?: string | null,
+	/**  How ItemSprite draws it (IA-ART's overlay). */
+	look?: PlusLook_Deserialize | null,
+	/**  `inv`, `text`, `seen`. */
+	from?: string,
+	/**  Added (Unix seconds). */
 	at?: number,
 };
 
-export type PlusDealPage = {
-	deals?: PlusDeal[],
-	next?: string | null,
-};
-
-/**  The trade summary of a range (Q4): completed deals by side, item and currency. */
-export type PlusDealSummary = {
-	from?: number,
-	to?: number,
-	items?: PlusItemSummary[],
-	totals?: PlusTotals[],
+/**  An item a server made (ItemsAdder, …), known only by its fingerprint. */
+export type PlusCustomItem_Serialize = {
+	/**  `^c[0-9a-z]{1,4}$`, chosen by the client that adds it. */
+	k: string,
+	/**  The player's name for it (1-32 code points, the persona text rule). */
+	name: string,
+	/**  Its material once seen (`minecraft:paper`). */
+	base: string | null,
+	/**  The identity fingerprint (32 hex); None: waits for its first sight. */
+	fp: string | null,
+	/**  How ItemSprite draws it (IA-ART's overlay). */
+	look: PlusLook_Serialize | null,
+	/**  `inv`, `text`, `seen`. */
+	from: string,
+	/**  Added (Unix seconds). */
+	at: number,
 };
 
 export type PlusDiscovery = {
@@ -6588,27 +6874,28 @@ export type PlusDiscovery = {
 	adTemplate?: string,
 };
 
-export type PlusEnchantment = {
-	id?: string,
-	tr?: string,
-	en?: string,
-	max?: number,
-};
-
 /**  A table written to the player's Downloads folder. */
 export type PlusExport = {
 	fileName: string,
 };
 
 /**
- *  `Offer.plus.features` (README "AFK+ player API" → QoL v1): what to show. A switch an older
- *  service does not name reads as off.
+ *  `Offer.plus.features` (README "AFK+ player API"): what to show. A switch an older service
+ *  does not name reads as off.
  */
 export type PlusFeatures = {
 	/**  "Mesajlar" (Q1). */
 	inbox?: boolean,
-	/**  "Yazarak ekle" (Q2). */
-	parse?: boolean,
+	/**  Typed orders ("Kontrol et"). */
+	orders?: boolean,
+	/**  The audit log ("Akış"). */
+	audit?: boolean,
+	/**  Custom items: "Envanterden seç", fingerprints, first sight. */
+	customItems?: boolean,
+	/**  Paying with items (swaps). */
+	itemPay?: boolean,
+	/**  AFK+ on servers other than Projects. */
+	anyServer?: boolean,
 	/**  "Çalışma saatleri", breaks and ready statuses (Q3). */
 	schedule?: boolean,
 	/**  The weekly report and the trade history (Q4). */
@@ -6622,54 +6909,50 @@ export type PlusFeatures = {
 	watch?: boolean,
 };
 
-/**
- *  One line of the live feed. `kind`: `pm_in`, `pm_out`, `offer`, `counter`, `deal`, `approval`,
- *  `approval_answer`, `trade_started`, `trade_done`, `trade_failed`, `trade_cancelled`, `found`,
- *  `suspicious`, `ai_stopped`, `ai_resumed`, `summary`, `review` (kept as text).
- */
-export type PlusFeedItem = {
-	/**  A ULID: time order. */
-	id?: string,
-	at?: number,
-	kind?: string,
-	/**  In-game name (the owner's own bot's messages show real names). */
-	counterpart?: string | null,
-	/**  `pm_in`, `pm_out`: the masked text. */
-	text?: string | null,
-	item?: string | null,
-	qty?: number | null,
-	price?: number | null,
-	currency?: string | null,
-	/**  A code the launcher words in one short sentence. */
-	reason?: string | null,
-};
-
-/**  A page of the feed, newest first; `next` continues further back. */
-export type PlusFeedPage = {
-	items?: PlusFeedItem[],
-	next?: string | null,
-};
-
 export type PlusGift = {
 	id?: string,
 	remaining?: number,
 	expiresAt?: number | null,
 };
 
-export type PlusHistory = {
-	/**  Newest first. */
-	entries?: PlusHistoryEntry[],
+export type PlusHistory = PlusHistory_Serialize | PlusHistory_Deserialize;
+
+/**
+ *  A saved revision of the settings (Q7). `by`: `site`, `launcher`, `phone`, `restore`, `studio`,
+ *  `confirm`, `player` (kept as text).
+ */
+export type PlusHistoryEntry = PlusHistoryEntry_Serialize | PlusHistoryEntry_Deserialize;
+
+/**
+ *  A saved revision of the settings (Q7). `by`: `site`, `launcher`, `phone`, `restore`, `studio`,
+ *  `confirm`, `player` (kept as text).
+ */
+export type PlusHistoryEntry_Deserialize = {
+	aiRev?: number,
+	at?: number,
+	by?: string,
+	config?: PlusConfig_Deserialize,
 };
 
 /**
  *  A saved revision of the settings (Q7). `by`: `site`, `launcher`, `phone`, `restore`, `studio`,
- *  `player` (kept as text).
+ *  `confirm`, `player` (kept as text).
  */
-export type PlusHistoryEntry = {
-	aiRev?: number,
-	at?: number,
-	by?: string,
-	config?: PlusConfig,
+export type PlusHistoryEntry_Serialize = {
+	aiRev: number,
+	at: number,
+	by: string,
+	config: PlusConfig_Serialize,
+};
+
+export type PlusHistory_Deserialize = {
+	/**  Newest first. */
+	entries?: PlusHistoryEntry_Deserialize[],
+};
+
+export type PlusHistory_Serialize = {
+	/**  Newest first. */
+	entries: PlusHistoryEntry_Serialize[],
 };
 
 export type PlusInboxLast = {
@@ -6703,11 +6986,11 @@ export type PlusInboxThread = {
 };
 
 /**
- *  One problem of a config, where the contract names it: `field` a path (`buy[2].max`,
+ *  One problem of a config, where the contract names it: `field` a path (`orders[2].limit`,
  *  `limits.approvalAbove`, `persona.intro`, `schedule.windows[0].from`), `reason` the contract's
- *  (`range`, `order`, `id`, `item`, `limits`, `name`, `text`, `limit_rows`, `mode`, `row`,
- *  `missing`, `type`, `unknown`), `problem` the text rule's word with `text` (`length`, `marker`,
- *  `link`, `phone`, …).
+ *  (`range`, `order`, `id`, `item`, `limits`, `name`, `text`, `limit_rows`, `limit_orders`,
+ *  `mode`, `row`, `missing`, `type`, `unknown`, `pay`, `same`, `req`, `feature`, `until`,
+ *  `blocked`, `fp`), `problem` the text rule's word with `text` (`length`, `marker`, `link`, …).
  */
 export type PlusIssue = {
 	field: string,
@@ -6715,10 +6998,20 @@ export type PlusIssue = {
 	problem: string | null,
 };
 
+/**  One version's item data as the page reads it (`@pl/ui/items` `itemDataFromText`). */
+export type PlusItemData = {
+	/**  The version whose file this is (the account's own, or the nearest the CDN has). */
+	minecraft: string,
+	/**  The file's text, its SHA-256 checked. */
+	text: string,
+};
+
 export type PlusItemSummary = {
 	side?: string,
 	item?: string,
-	currency?: string,
+	/**  `money` or the paying item. */
+	pay?: string,
+	currency?: string | null,
 	deals?: number,
 	qty?: number,
 	total?: number,
@@ -6744,7 +7037,7 @@ export type PlusJudgeState = {
 
 /**
  *  Spending limits ("Harcama"). None: no limit, or for `per_deal_max` and `total_budget` no
- *  spending authority at all (buy rows then only notify).
+ *  spending authority at all.
  */
 export type PlusLimits = {
 	perDealMax?: number | null,
@@ -6757,15 +7050,100 @@ export type PlusLimits = {
 	approvalTimeoutMin?: number,
 };
 
-export type PlusMoney = {
-	currency?: string,
-	maxDeal?: number,
+/**  A custom item's picture keys: at least one of the two. */
+export type PlusLook = PlusLook_Serialize | PlusLook_Deserialize;
+
+/**  A custom item's picture keys: at least one of the two. */
+export type PlusLook_Deserialize = {
+	cmd?: number | null,
+	model?: string | null,
+};
+
+/**  A custom item's picture keys: at least one of the two. */
+export type PlusLook_Serialize = {
+	cmd?: number | null,
+	model?: string | null,
+};
+
+/**  A new custom item an order names, as the POST takes it (without `at`). */
+export type PlusNewCustomItem = PlusNewCustomItem_Serialize | PlusNewCustomItem_Deserialize;
+
+/**  A new custom item an order names, as the POST takes it (without `at`). */
+export type PlusNewCustomItem_Deserialize = {
+	k: string,
+	name: string,
+	base: string | null,
+	fp: string | null,
+	look: PlusLook_Deserialize | null,
+	from: string,
+};
+
+/**  A new custom item an order names, as the POST takes it (without `at`). */
+export type PlusNewCustomItem_Serialize = {
+	k: string,
+	name: string,
+	base: string | null,
+	fp: string | null,
+	look: PlusLook_Serialize | null,
+	from: string,
 };
 
 /**  `AiView.newMessages`: that conversation's unread lines, and when the message came. */
 export type PlusNewMessages = {
 	count?: number,
 	at?: number,
+};
+
+/**
+ *  A new order as `POST …/plus/orders` takes it: without `id` and `at` (the Worker makes them),
+ *  or with both to put a deleted order back ("Geri al").
+ */
+export type PlusNewOrder = PlusNewOrder_Serialize | PlusNewOrder_Deserialize;
+
+/**
+ *  A new order as `POST …/plus/orders` takes it: without `id` and `at` (the Worker makes them),
+ *  or with both to put a deleted order back ("Geri al").
+ */
+export type PlusNewOrder_Deserialize = {
+	id: string | null,
+	at: number | null,
+	on: boolean,
+	side: string,
+	item: string,
+	qty: number,
+	req: PlusReq | null,
+	pay: string,
+	unit: string,
+	target: number,
+	limit: number,
+	style: string,
+	trade: string,
+	until: number,
+	note: string,
+	src: string,
+};
+
+/**
+ *  A new order as `POST …/plus/orders` takes it: without `id` and `at` (the Worker makes them),
+ *  or with both to put a deleted order back ("Geri al").
+ */
+export type PlusNewOrder_Serialize = {
+	id?: string | null,
+	at?: number | null,
+	on: boolean,
+	side: string,
+	item: string,
+	qty: number,
+	req: PlusReq | null,
+	pay: string,
+	unit: string,
+	target: number,
+	limit: number,
+	style: string,
+	trade: string,
+	until: number,
+	note: string,
+	src: string,
 };
 
 /**  `Offer.plus`: AFK+ as sold now. Null (None) while `plusMode` is `off`: then nothing of AFK+ shows. */
@@ -6779,53 +7157,172 @@ export type PlusOffer = {
 	refundWindowHours?: number,
 	termsVersion?: number,
 	allowance?: PlusAllowance,
-	/**  Studio's QoL switches: a feature that is off is not shown. */
+	/**  Studio's switches: a feature that is off is not shown. */
 	features?: PlusFeatures,
+	/**
+	 *  Where AFK+ runs: `any` (Studio's `features.anyServer`), `verified` the server keys where the
+	 *  bot trades itself (elsewhere it agrees and the player makes the trade).
+	 */
+	servers?: PlusOfferServers,
+};
+
+export type PlusOfferServers = {
+	any?: boolean,
+	verified?: string[],
+};
+
+/**
+ *  A trade order ("sipariş"): one kind of item, a quantity in all, a term. Its status and
+ *  progress are never stored ([`PlusOrderView`]).
+ */
+export type PlusOrder = {
+	/**  `^[a-z0-9]{1,8}$`, unique in the document (the Worker makes it). */
+	id?: string,
+	/**  False: paused ("Durdur"). */
+	on?: boolean,
+	/**  `buy` (the bot gets the item) or `sell` (the bot gives it). */
+	side?: string,
+	/**  What changes hands: `minecraft:<path>` or `custom:<k>`. */
+	item?: string,
+	/**  In all, 1-9999: the order is done when its progress reaches it. */
+	qty?: number,
+	/**
+	 *  Conditions of what the bot receives (the item when buying, the paying item when selling for
+	 *  one); None exactly when selling for money.
+	 */
+	req?: PlusReq | null,
+	/**  `money`, or the paying item's reference (a swap). */
+	pay?: string,
+	/**  `each` or `total`: whether target and limit are per item or for the whole quantity. */
+	unit?: string,
+	/**  The hoped price (money, or the paying item's count). */
+	target?: number,
+	/**  Buying the most, selling the least; never passed. */
+	limit?: number,
+	/**  `patient`, `balanced`, `quick`. */
+	style?: string,
+	/**  `auto` (the assistant trades where the server's profile lets it) or `owner`. */
+	trade?: string,
+	/**  Unix seconds: the order expires then. */
+	until?: number,
+	/**  A typed order's words, cleaned and masked: shown to the player only. */
+	note?: string,
+	/**  `text`, `form`, `inv`. */
+	src?: string,
+	/**  Created (Unix seconds). */
+	at?: number,
+};
+
+/**  An order's progress and live state as `aiord` brings them (`OrderView` without its status). */
+export type PlusOrderLive = {
+	got?: number,
+	/**  When `got` last grew (Unix seconds; 0: never). */
+	at?: number,
+	/**  `waiting_ok`, `your_trade`, `trading`, `haggling`, or none. */
+	live?: string | null,
+};
+
+/**  How an order write ended (a new order, a change, a pause, a delete). */
+export type PlusOrderOutcome = PlusOrderOutcome_Serialize | PlusOrderOutcome_Deserialize;
+
+/**  How an order write ended (a new order, a change, a pause, a delete). */
+export type PlusOrderOutcome_Deserialize = 
+/**
+ *  Stored: the settings with it; `order` the stored order (none for a delete); `deferred` a
+ *  delete that waits for the order's trade to end.
+ */
+({ kind: "saved"; settings: PlusSettings_Deserialize; order: PlusOrder | null; deferred: boolean }) & { daily?: never; issues?: never; retry_after?: never } | 
+/**  Refused: where (`order.limit`, `customItem.name`, `orders` with `limit_orders`). */
+({ kind: "invalid"; issues: PlusIssue[] }) & { daily?: never; deferred?: never; order?: never; retry_after?: never; settings?: never } | 
+/**  The order is gone (deleted elsewhere). */
+({ kind: "gone" }) & { daily?: never; deferred?: never; issues?: never; order?: never; retry_after?: never; settings?: never } | 
+/**  Too many writes: `daily` the AFK+ day's 100. */
+({ kind: "limited"; daily: boolean; retry_after: number | null }) & { deferred?: never; issues?: never; order?: never; settings?: never };
+
+/**  How an order write ended (a new order, a change, a pause, a delete). */
+export type PlusOrderOutcome_Serialize = 
+/**
+ *  Stored: the settings with it; `order` the stored order (none for a delete); `deferred` a
+ *  delete that waits for the order's trade to end.
+ */
+({ kind: "saved"; settings: PlusSettings_Serialize; order: PlusOrder | null; deferred: boolean }) & { daily?: never; issues?: never; retry_after?: never } | 
+/**  Refused: where (`order.limit`, `customItem.name`, `orders` with `limit_orders`). */
+({ kind: "invalid"; issues: PlusIssue[] }) & { daily?: never; deferred?: never; order?: never; retry_after?: never; settings?: never } | 
+/**  The order is gone (deleted elsewhere). */
+({ kind: "gone" }) & { daily?: never; deferred?: never; issues?: never; order?: never; retry_after?: never; settings?: never } | 
+/**  Too many writes: `daily` the AFK+ day's 100. */
+({ kind: "limited"; daily: boolean; retry_after: number | null }) & { deferred?: never; issues?: never; order?: never; settings?: never };
+
+/**
+ *  `PATCH …/plus/orders/:oid`: the fields that change ("Süreyi uzat" is `extend`); a field left
+ *  out stays as stored. `no_req` sends `req: null` (an order now sold for money has no conditions).
+ */
+export type PlusOrderPatch = {
+	on?: boolean | null,
+	qty?: number | null,
+	req?: PlusReq | null,
+	noReq?: boolean,
+	pay?: string | null,
+	unit?: string | null,
+	target?: number | null,
+	limit?: number | null,
+	style?: string | null,
+	trade?: string | null,
+	until?: number | null,
+	extend?: boolean,
+};
+
+/**  A chip's settings change saved with the order in the same write (`pay`; the single-buy cap). */
+export type PlusOrderSettings = PlusOrderSettings_Serialize | PlusOrderSettings_Deserialize;
+
+/**  A chip's settings change saved with the order in the same write (`pay`; the single-buy cap). */
+export type PlusOrderSettings_Deserialize = {
+	pay: string | null,
+	perDealMax: number | null,
+};
+
+/**  A chip's settings change saved with the order in the same write (`pay`; the single-buy cap). */
+export type PlusOrderSettings_Serialize = {
+	pay?: string | null,
+	perDealMax?: number | null,
+};
+
+/**
+ *  An order's state: `got` its progress, `at` when it last grew (0: never), `live` the machine's
+ *  state of it (`waiting_ok`, `your_trade`, `trading`, `haggling`) and `status` the first of those,
+ *  `done`, `expired`, `paused`, `side_off` that holds, else `looking`.
+ */
+export type PlusOrderView = {
+	status?: string,
+	got?: number,
+	at?: number,
+	live?: string | null,
 };
 
 /**  The AFK+ panel's first look at an account. */
-export type PlusPanelView = {
-	settings: PlusSettings,
-	/**
-	 *  The mode's catalog (item names, enchantments, the money's limits); None when the service
-	 *  does not offer that mode now.
-	 */
-	catalog: PlusCatalog | null,
+export type PlusPanelView = PlusPanelView_Serialize | PlusPanelView_Deserialize;
+
+/**  The AFK+ panel's first look at an account. */
+export type PlusPanelView_Deserialize = {
+	settings: PlusSettings_Deserialize,
 	/**  None while the account's machine cannot be asked (`machine_away`). */
 	quota: PlusQuota | null,
 	/**  Pending ones first, then the last 24 hours' answers. */
 	approvals: PlusApproval[],
-	/**  The account's machine is not connected now: the quota, the feed and "Mesajlar" wait. */
+	/**  The account's machine is not connected now: the quota, the log and "Mesajlar" wait. */
 	machineAway: boolean,
 };
 
-/**
- *  "Yazarak ekle" (Q2): a rule's draft, never stored by itself. `item` None with 2-5 `candidates`
- *  when the item is unclear.
- */
-export type PlusParseDraft = {
-	side?: string,
-	item?: string | null,
-	candidates?: string[],
-	qty?: number,
-	unit?: string,
-	target?: number | null,
-	/**  Buy rows. */
-	max?: number | null,
-	/**  Sell rows. */
-	min?: number | null,
-	style?: string,
-	approval?: string,
+/**  The AFK+ panel's first look at an account. */
+export type PlusPanelView_Serialize = {
+	settings: PlusSettings_Serialize,
+	/**  None while the account's machine cannot be asked (`machine_away`). */
+	quota: PlusQuota | null,
+	/**  Pending ones first, then the last 24 hours' answers. */
+	approvals: PlusApproval[],
+	/**  The account's machine is not connected now: the quota, the log and "Mesajlar" wait. */
+	machineAway: boolean,
 };
-
-/**  How "Kural oluştur" (QoL Q2) ended. */
-export type PlusParseOutcome = { kind: "draft"; draft: PlusParseDraft; issues: string[] } | 
-/**  Nothing could be read: `no_item`, `no_amount`, `many_items` or `unsafe`. */
-{ kind: "failed"; reason: string } | 
-/**  The day's typed rules are used up (`daily`), or too many in an hour. */
-{ kind: "limited"; daily: boolean } | 
-/**  The account's machine is not connected now. */
-{ kind: "offline" };
 
 export type PlusPersona = {
 	/**  `friendly`, `brief`, `polite`, `playful`. */
@@ -6839,10 +7336,61 @@ export type PlusPersona = {
 	smallTalk?: boolean,
 };
 
-export type PlusProfile = {
-	id?: string,
-	name?: CloudLocalized,
-	trade?: boolean,
+/**
+ *  `POST …/plus/items/pick`: a plain vanilla item gives its id and its enchantments and
+ *  durability as suggested conditions (`reference` + `req`); any other a custom item.
+ */
+export type PlusPick = PlusPick_Serialize | PlusPick_Deserialize;
+
+/**  How "Envanterden seç" ended. */
+export type PlusPickOutcome = PlusPickOutcome_Serialize | PlusPickOutcome_Deserialize;
+
+/**  How "Envanterden seç" ended. */
+export type PlusPickOutcome_Deserialize = ({ kind: "picked"; pick: PlusPick_Deserialize }) & { reason?: never; retry_after?: never } | 
+/**  `empty`, `stale`, `unparsed`, `container`, `not_in_game`, `inventory_off`, `custom_off`. */
+({ kind: "failed"; reason: string }) & { pick?: never; retry_after?: never } | ({ kind: "offline" }) & { pick?: never; reason?: never; retry_after?: never } | ({ kind: "limited"; retry_after: number | null }) & { pick?: never; reason?: never };
+
+/**  How "Envanterden seç" ended. */
+export type PlusPickOutcome_Serialize = ({ kind: "picked"; pick: PlusPick_Serialize }) & { reason?: never; retry_after?: never } | 
+/**  `empty`, `stale`, `unparsed`, `container`, `not_in_game`, `inventory_off`, `custom_off`. */
+({ kind: "failed"; reason: string }) & { pick?: never; retry_after?: never } | ({ kind: "offline" }) & { pick?: never; reason?: never; retry_after?: never } | ({ kind: "limited"; retry_after: number | null }) & { pick?: never; reason?: never };
+
+/**
+ *  `POST …/plus/items/pick`: a plain vanilla item gives its id and its enchantments and
+ *  durability as suggested conditions (`reference` + `req`); any other a custom item.
+ */
+export type PlusPick_Deserialize = {
+	ref?: string | null,
+	req?: PlusReq | null,
+	custom?: PlusPickedCustom_Deserialize | null,
+};
+
+/**
+ *  `POST …/plus/items/pick`: a plain vanilla item gives its id and its enchantments and
+ *  durability as suggested conditions (`reference` + `req`); any other a custom item.
+ */
+export type PlusPick_Serialize = {
+	ref: string | null,
+	req: PlusReq | null,
+	custom: PlusPickedCustom_Serialize | null,
+};
+
+export type PlusPickedCustom = PlusPickedCustom_Serialize | PlusPickedCustom_Deserialize;
+
+export type PlusPickedCustom_Deserialize = {
+	/**  The item's shown name, cleaned; None for an item without one ("Adsız eşya"). */
+	name?: string | null,
+	base?: string,
+	fp?: string,
+	look?: PlusLook_Deserialize | null,
+};
+
+export type PlusPickedCustom_Serialize = {
+	/**  The item's shown name, cleaned; None for an item without one ("Adsız eşya"). */
+	name: string | null,
+	base: string,
+	fp: string,
+	look: PlusLook_Serialize | null,
 };
 
 /**  A promotion's multiplier (100-500 %), its words and its end. */
@@ -6852,7 +7400,7 @@ export type PlusPromo = {
 	until?: number,
 };
 
-/**  `GET /accounts/:id/plus/quota` (`QuotaView`). */
+/**  `GET /accounts/:id/plus/quota` (`QuotaView`). Players see the unit as "kontör" ("AI credits"). */
 export type PlusQuota = {
 	w5h?: PlusQuotaWindow,
 	week?: PlusQuotaWindow,
@@ -6860,7 +7408,7 @@ export type PlusQuota = {
 	gifts?: PlusGift[],
 	promo?: PlusPromo | null,
 	frozen?: boolean,
-	/**  "Yaklaşık N yanıt kaldı". */
+	/**  "Yaklaşık N yanıt kaldı" (gifts included). */
 	estReplies?: number,
 	pct5?: number,
 	pctWeek?: number,
@@ -6886,6 +7434,43 @@ export type PlusQuotaWindow = {
 	resetAt?: number | null,
 };
 
+/**  A completed deal (and an unclear trade under review): D1, 90 days. */
+export type PlusReceipt = {
+	/**  Unix milliseconds; with the account, its key. */
+	at?: number,
+	/**  None: a deal from before orders. */
+	order?: string | null,
+	side?: string,
+	item?: string,
+	qty?: number,
+	/**  Money, or the paying item's count. */
+	price?: number,
+	/**  `money` or the paying item. */
+	pay?: string,
+	/**  The money's key (the label of `server.money` is written when they match); None for items. */
+	currency?: string | null,
+	counterpart?: string,
+	/**  `auto`, `approved`, `owner` (the player reported the trade). */
+	approval?: string,
+	/**  Waiting for staff: does not count as progress. */
+	review?: boolean,
+	/**  The order's bound for the deal's quantity. */
+	limit?: number | null,
+};
+
+export type PlusReceiptPage = {
+	receipts?: PlusReceipt[],
+	next?: string | null,
+};
+
+/**  The trade summary of a range (Q4): receipts by side, item and what paid. */
+export type PlusReceiptSummary = {
+	from?: number,
+	to?: number,
+	items?: PlusItemSummary[],
+	totals?: PlusTotals[],
+};
+
 export type PlusReplies = {
 	/**  `all`, `trade`, `off`. */
 	scope?: string,
@@ -6909,12 +7494,15 @@ export type PlusReplyOutcome = { kind: "sent"; line: PlusInboxLine } |
 /**  The account's machine is not connected now. */
 { kind: "offline" };
 
-/**  What a bought item must be: enchantments (id → lowest level), durability, an anvil name, curses. */
-export type PlusRequirements = {
+/**  What the bot must receive: enchantments (id → lowest level), durability, an anvil name, curses. */
+export type PlusReq = {
 	ench?: { [key in string]: number },
-	minDurabilityPct?: number,
-	allowCustomName?: boolean,
-	allowCurses?: boolean,
+	/**  Lowest durability %, 0-100 (0 for an item that does not wear out). */
+	dur?: number,
+	/**  An anvil name is fine. */
+	named?: boolean,
+	/**  A curse is fine. */
+	cursed?: boolean,
 };
 
 export type PlusRestriction = {
@@ -6923,49 +7511,146 @@ export type PlusRestriction = {
 	reason?: string,
 };
 
-/**  How a save (or "Bu hale dön") ended. Problems are worded where they are. */
-export type PlusSaveOutcome = { kind: "saved"; settings: PlusSettings } | 
+/**  The Studio limits a client checks by before it sends (`PlusRules`). */
+export type PlusRules = {
+	orderMax?: number,
+	orderStore?: number,
+	customItemsMax?: number,
+	orderDaysDefault?: number,
+	orderDaysMax?: number,
+	/**  A buy order's most a day, in stacks of its item. */
+	buyStacksPerDay?: number,
+	checksPerDay?: number,
+	/**  The typed checks left today, when the machine said. */
+	checksLeft?: number | null,
+	friendsMax?: number,
+	noteMax?: number,
+	textMax?: number,
+	/**  `[lowest, highest]` minutes. */
+	approvalTimeoutMin?: number[],
+	features?: PlusRulesFeatures,
+};
+
+/**  `rules.features`: the order switches (a missing one reads as on, the service refuses in words). */
+export type PlusRulesFeatures = {
+	orders?: boolean,
+	audit?: boolean,
+	customItems?: boolean,
+	itemPay?: boolean,
+};
+
+/**  How a settings save (or "Bu hale dön") ended. Problems are worded where they are. */
+export type PlusSaveOutcome = PlusSaveOutcome_Serialize | PlusSaveOutcome_Deserialize;
+
+/**  How a settings save (or "Bu hale dön") ended. Problems are worded where they are. */
+export type PlusSaveOutcome_Deserialize = ({ kind: "saved"; settings: PlusSettings_Deserialize }) & { issues?: never } | 
 /**  Something the service would refuse, found here or said by it. */
-{ kind: "invalid"; issues: PlusIssue[] } | 
+({ kind: "invalid"; issues: PlusIssue[] }) & { settings?: never } | 
 /**  The settings changed elsewhere since the panel read them: their newer state. */
-{ kind: "conflict"; settings: PlusSettings };
+({ kind: "conflict"; settings: PlusSettings_Deserialize }) & { issues?: never };
+
+/**  How a settings save (or "Bu hale dön") ended. Problems are worded where they are. */
+export type PlusSaveOutcome_Serialize = ({ kind: "saved"; settings: PlusSettings_Serialize }) & { issues?: never } | 
+/**  Something the service would refuse, found here or said by it. */
+({ kind: "invalid"; issues: PlusIssue[] }) & { settings?: never } | 
+/**  The settings changed elsewhere since the panel read them: their newer state. */
+({ kind: "conflict"; settings: PlusSettings_Serialize }) & { issues?: never };
 
 export type PlusSchedule = {
 	on?: boolean,
 	windows?: PlusWindow[],
 };
 
-/**  A sell row ("Satılacak"). */
-export type PlusSellRow = {
+export type PlusSeenItem = {
 	id?: string,
-	item?: string,
-	qty?: number,
-	unit?: string,
-	target?: number,
-	/**  Never undercut. */
-	min?: number,
-	style?: string,
-	approval?: string,
-	dailyQty?: number,
-	enabled?: boolean,
+	cmd?: number | null,
+	model?: string | null,
+	name?: string | null,
+	/**  Up to 4 lines of 80, plain and masked. */
+	lore?: string[],
 };
 
-/**  `GET /accounts/:id/plus`. */
-export type PlusSettings = {
-	config?: PlusConfig,
-	/**  The revision (`If-Match` of the next write). */
-	aiRev?: number,
-	judge?: PlusJudge,
-	/**  The mode's profile: its name and whether it trades now. None for an unknown mode. */
-	profile?: PlusProfile | null,
-	/**  What the assistant spent (CAFK-W5); None when the machine cannot say now. */
-	spent?: PlusSpent | null,
+/**  How AFK+ works on the account's server (`PlusServer`). */
+export type PlusServer = {
+	/**
+	 *  `verified` (a Studio profile with a trade part: the bot trades), `profile` (a Studio profile
+	 *  without one), `generic` (the built-in one).
+	 */
+	kind?: string,
+	/**  The profile in use (`projects-smp`, `generic`). */
+	mode?: string,
+	/**  The mode's name; None for the generic profile. */
+	name?: CloudLocalized | null,
+	/**  Who makes the trades of orders with `trade: "auto"`: `bot` or `owner`. */
+	trade?: string,
+	money?: PlusServerMoney,
+	/**  The account's Minecraft version (its item data); None: the item data's default. */
+	mc?: string | null,
+	/**  The mode's ad templates (none for the generic profile). */
+	ads?: PlusAdTemplate[],
+	/**  False: AFK+ does not run here (`ai.reason` `server`). */
+	on?: boolean,
 };
 
 /**
- *  What the assistant spent in the game's money: `total` since the player last reset it (against
- *  `limits.totalBudget`), `today` this AFK+ day (04:00 to 04:00 Turkey time, against
- *  `limits.dailySpendMax`).
+ *  The game mode's money: `label` the name to write after amounts ("Coin"); None: bare amounts and
+ *  once "Oyundaki parayla".
+ */
+export type PlusServerMoney = {
+	label?: CloudLocalized | null,
+	maxDeal?: number,
+	/**  The money's key (receipts carry it). */
+	currency?: string,
+};
+
+/**
+ *  `GET /accounts/:id/plus`: the settings, how AFK+ works on the account's server, Studio's limits
+ *  and each order's state.
+ */
+export type PlusSettings = PlusSettings_Serialize | PlusSettings_Deserialize;
+
+/**
+ *  `GET /accounts/:id/plus`: the settings, how AFK+ works on the account's server, Studio's limits
+ *  and each order's state.
+ */
+export type PlusSettings_Deserialize = {
+	config?: PlusConfig_Deserialize,
+	/**  The revision (`If-Match` of the next write). */
+	aiRev?: number,
+	judge?: PlusJudge,
+	server?: PlusServer,
+	rules?: PlusRules,
+	/**  Each order's progress and live state, by order id. */
+	orders?: { [key in string]: PlusOrderView },
+	/**  What the assistant spent; None when the machine cannot say now. */
+	spent?: PlusSpent | null,
+	/**  The orders' states come from the machine's last snapshot of then. */
+	asOf?: number | null,
+};
+
+/**
+ *  `GET /accounts/:id/plus`: the settings, how AFK+ works on the account's server, Studio's limits
+ *  and each order's state.
+ */
+export type PlusSettings_Serialize = {
+	config: PlusConfig_Serialize,
+	/**  The revision (`If-Match` of the next write). */
+	aiRev: number,
+	judge: PlusJudge,
+	server: PlusServer,
+	rules: PlusRules,
+	/**  Each order's progress and live state, by order id. */
+	orders: { [key in string]: PlusOrderView },
+	/**  What the assistant spent; None when the machine cannot say now. */
+	spent: PlusSpent | null,
+	/**  The orders' states come from the machine's last snapshot of then. */
+	asOf: number | null,
+};
+
+/**
+ *  What the assistant spent on its own buys in the game's money: `total` since the player last
+ *  reset it (against `limits.totalBudget`), `today` this AFK+ day (04:00 to 04:00 Turkey time,
+ *  against `limits.dailySpendMax`). A trade the owner made is the owner's money and never counts.
  */
 export type PlusSpent = {
 	total?: number,
@@ -6981,7 +7666,7 @@ export type PlusThreadPage = {
 };
 
 export type PlusTotals = {
-	currency?: string,
+	currency?: string | null,
 	buys?: number,
 	sells?: number,
 	spent?: number,
@@ -6995,11 +7680,13 @@ export type PlusTradeSettings = {
 
 /**
  *  `AiView.trade`: `on: false` with `off: "mode"` (the bot is not in the profile's game mode) or
- *  `"profile"` (the mode's profile is not enabled); `buy: "notify"` without spending authority.
+ *  `"profile"` (the mode's profile is not enabled); `by` who makes the trades of orders with
+ *  `trade: "auto"` (`bot` or `owner`); `buy: "notify"` without spending authority.
  */
 export type PlusTradeState = {
 	on?: boolean,
 	off?: string | null,
+	by?: string,
 	buy?: string,
 };
 
@@ -7012,9 +7699,9 @@ export type PlusWeeklyAccount = {
 	sold?: number,
 	spent?: number,
 	earned?: number,
-	/**  Buys: the rows' limits minus what was paid ("Alımlarda tasarruf"). */
+	/**  Buys: the limits minus what was paid. */
 	belowLimit?: number,
-	/**  Sales: what came above the rows' floors ("Satışta fazladan"). */
+	/**  Sales: what came above the floors. */
 	aboveFloor?: number,
 	blocked?: PlusBlockedCounts,
 	allowancePct?: number,
@@ -7028,6 +7715,12 @@ export type PlusWeeklyReport = {
 	from?: number,
 	to?: number,
 	accounts?: PlusWeeklyAccount[],
+};
+
+/**  "Kimlerle": `all`, or `friends` (only the in-game names in `friends`, at most 50). */
+export type PlusWho = {
+	mode?: string,
+	friends?: string[],
 };
 
 /**
