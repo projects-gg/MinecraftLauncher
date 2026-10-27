@@ -184,8 +184,8 @@ function Editor({
 }: {
   account: AfkAccount;
   view: AfkSettingsView;
-  /** Saved: the panel reads the stored settings again and starts from them. */
-  onSaved: () => void;
+  /** Saved: the stored settings are read again (the editor then starts from them). */
+  onSaved: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -206,9 +206,22 @@ function Editor({
   const [saveError, setSaveError] = useState<Failure | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
-  // After a save the panel starts again from the stored settings: nothing is held meanwhile.
+  // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
+  // buttons wait, then the edits give way to the stored settings and the bar slides away (the
+  // editor stays: no section rises in again).
   const saved = useRef(false);
+  const [settling, setSettling] = useState(false);
   const active = isActive(account);
+
+  // Runs when a save comes back as the stored settings.
+  useEffect(() => {
+    if (!saved.current) return;
+    saved.current = false;
+    setDraftState(baseline);
+    setSubmitted(false);
+    setServerIssues([]);
+    setSaveError(null);
+  }, [baseline]);
 
   const dirty = isDirty(draft, baseline);
   useEffect(() => {
@@ -247,6 +260,7 @@ function Editor({
         return;
       }
       saved.current = true;
+      setSettling(true);
       hold(slot, null);
       void queryClient.invalidateQueries({ queryKey: ["afk"] });
       const done = t("afkSettings.saved", { name: account.nickname });
@@ -265,7 +279,10 @@ function Editor({
       } else {
         toast.success(done);
       }
-      onSaved();
+      void onSaved().finally(() => {
+        saved.current = false;
+        setSettling(false);
+      });
     },
     onError: (error) => setSaveError(failure(error, t("afkSettings.saveFailed"))),
   });
@@ -292,7 +309,7 @@ function Editor({
   // Ctrl+S saves (without the reconnect: the safe choice for a shortcut).
   const shortcut = useRef(() => {});
   shortcut.current = () => {
-    if (dirty && !save.isPending) submit("save");
+    if (dirty && !save.isPending && !settling) submit("save");
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -333,14 +350,14 @@ function Editor({
           <p className="text-ash-300">{t("afkSettings.dirty")}</p>
         )}
       </div>
-      <Button variant="ghost" onClick={discard} disabled={save.isPending || !dirty}>
+      <Button variant="ghost" onClick={discard} disabled={save.isPending || settling || !dirty}>
         {t("afkSettings.cancel")}
       </Button>
       {active ? (
         <Button
           variant="secondary"
           onClick={() => submit("save")}
-          disabled={!dirty || save.isPending}
+          disabled={!dirty || save.isPending || settling}
         >
           {pending === "save" ? t("afkSettings.saving") : t("afkSettings.save")}
         </Button>
@@ -348,7 +365,7 @@ function Editor({
       <Button
         variant="primary"
         onClick={() => submit(mainMode)}
-        disabled={!dirty || save.isPending}
+        disabled={!dirty || save.isPending || settling}
       >
         {pending === mainMode
           ? t("afkSettings.saving")
@@ -400,8 +417,6 @@ export function AfkSettingsSheet({
 }) {
   const { t } = useTranslation();
   const open = Boolean(account);
-  // Bumped once a save was read back, so the editor starts from the stored settings.
-  const [generation, setGeneration] = useState(0);
   const {
     data: view,
     error: loadError,
@@ -425,12 +440,7 @@ export function AfkSettingsSheet({
       server={account?.server ?? ""}
     >
       {account && view ? (
-        <Editor
-          key={`${account.id}-${generation}`}
-          account={account}
-          view={view}
-          onSaved={() => void refetch().then(() => setGeneration((n) => n + 1))}
-        />
+        <Editor key={account.id} account={account} view={view} onSaved={() => refetch()} />
       ) : loadError ? (
         <LoadFailed
           failed={failure(loadError, t("afkSettings.loadFailedHint"))}

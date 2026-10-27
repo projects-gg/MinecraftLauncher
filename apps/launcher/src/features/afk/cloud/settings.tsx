@@ -64,8 +64,8 @@ function Editor({
   view: CloudEditData;
   /** Reads the stored settings again (after a conflict); the edits stay on top of them. */
   onReload: () => void;
-  /** Saved: the panel reads the stored settings again and starts from them. */
-  onSaved: () => void;
+  /** Saved: the stored settings are read again (the editor then starts from them). */
+  onSaved: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -91,8 +91,11 @@ function Editor({
   const [saving, setSaving] = useState(false);
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
-  // After a save the panel starts again from the stored settings: nothing is held meanwhile.
+  // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
+  // button waits, then the edits give way to the stored settings and the bar slides away (the
+  // editor stays: no section rises in again).
   const saved = useRef(false);
+  const [settling, setSettling] = useState(false);
   // Studio's placeholder switch: its checks answer while typing too (the backend checks again).
   const features = useCloudPage().data?.overview.features ?? null;
   const rules = useMemo(
@@ -102,6 +105,17 @@ function Editor({
     }),
     [features],
   );
+
+  // Runs when a save comes back as the stored settings.
+  useEffect(() => {
+    if (!saved.current) return;
+    saved.current = false;
+    setDraftState(baseline);
+    setSubmitted(false);
+    setServerIssues([]);
+    setFailure(null);
+    setConflict(false);
+  }, [baseline]);
 
   const dirty = isDirty(draft, baseline);
   // "Ayarları bir kez kaydet" (old rules): saving is worth it even with nothing changed.
@@ -158,11 +172,15 @@ function Editor({
       const result = await cloudApi.save(account.id, toEdit(draft, baseline, view));
       if (result.kind === "saved") {
         saved.current = true;
+        setSettling(true);
         hold(slot, null);
         storeAccount(queryClient, result.account);
         void queryClient.invalidateQueries({ queryKey: CLOUD_KEY });
         toast.success(t("cloudAfk.settings.saved", { name: result.account.name }));
-        onSaved();
+        void onSaved().finally(() => {
+          saved.current = false;
+          setSettling(false);
+        });
       } else if (result.kind === "invalid") {
         setServerIssues(result.issues);
         const first = result.issues[0];
@@ -192,7 +210,7 @@ function Editor({
   // Ctrl+S saves, as in the desktop settings.
   const shortcut = useRef(() => {});
   shortcut.current = () => {
-    if (savable && !saving) void save();
+    if (savable && !saving && !settling) void save();
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -267,11 +285,15 @@ function Editor({
         ) : null}
       </div>
       {dirty ? (
-        <Button variant="ghost" onClick={discard} disabled={saving}>
+        <Button variant="ghost" onClick={discard} disabled={saving || settling}>
           {t("cloudAfk.settings.cancel")}
         </Button>
       ) : null}
-      <Button variant="primary" onClick={() => void save()} disabled={!savable || saving}>
+      <Button
+        variant="primary"
+        onClick={() => void save()}
+        disabled={!savable || saving || settling}
+      >
         {label}
       </Button>
     </PlusChangeDock>
@@ -354,10 +376,10 @@ export function CloudSettingsSheet({
     >
       {account && view ? (
         <Editor
-          key={`${account.id}-${generation}-${view.account.rev}`}
+          key={`${account.id}-${generation}`}
           view={view}
           onReload={reload}
-          onSaved={reload}
+          onSaved={() => refetch()}
         />
       ) : loadError ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
