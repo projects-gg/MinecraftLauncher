@@ -41,9 +41,10 @@ export const trPlayAgain = {
   closingTitleAccount: "{{name}} hesabının oyunu kapanıyor",
   overdueTitleAccount: "{{name}} hesabının oyunu henüz kapanmadı",
   forcingTitleAccount: "{{name}} hesabının oyunu kapatılıyor",
-  /** "Bağlan"'s answer when the game on screen closes first, and the way out while it closes. */
+  /** "Bağlan"'s answer when the game on screen closes first, and the way out while it closes (the
+   * game closes anyway; what the press changes is the reopening, fifth look). */
   closeAndConnect: "Kapat ve bağlan",
-  stopConnecting: "Bağlanmaktan vazgeç",
+  stopConnecting: "Yeniden açılmasın",
   /** "Bağlan" when the game did not close in time: the way out that leaves it as it is. */
   keepOpen: "Oyunu açık bırak",
   /** A game crashed while another game is on screen: the notification that brings the help. */

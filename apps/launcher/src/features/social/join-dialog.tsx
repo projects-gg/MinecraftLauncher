@@ -543,8 +543,10 @@ export function JoinDialog() {
   const closingName = gameCount > 1 ? (own().game?.account?.name ?? null) : null;
   const { title, body } = words(t, shown, closingName);
   const closing = shown.closing?.kind;
-  // A move in game, a stopping start and an end the player asked for run to their end.
-  const settled = closing === "inGame" || closing === "forcing" || closing === "stopping";
+  // A move in game, a stopping start and an end the player asked for run to their end; while the
+  // game closes the named button is the one way out (fifth look: an unnamed × beside it left the
+  // game's fate unsaid), so the × shows only while "Bağlan" asks.
+  const dismissible = closing === undefined;
   // "Vazgeç" stays on the left: after "Bağlan" nothing comes where the pointer pressed.
   const cancel = (
     <Button variant="ghost" className="mr-auto" onClick={closeAsk}>
@@ -596,7 +598,7 @@ export function JoinDialog() {
       closeLabel={t("common.close")}
       width={460}
       morph
-      dismissible={!settled}
+      dismissible={dismissible}
       footer={footer}
     >
       {closing === undefined ? (

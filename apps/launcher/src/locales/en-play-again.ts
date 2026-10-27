@@ -14,7 +14,7 @@ export const enPlayAgain = {
   othersTwo: "{{first}} and {{second}} are playing",
   othersMany: "{{total}} accounts are playing",
   othersCount: "{{total}} accounts",
-  worldBusy: "Open in another game",
+  worldBusy: "In another game",
   worldBusyName: "{{name}} is in this world",
   worldBusyAria: "{{world}}: {{reason}}",
   worldOpen: "This world is open in your other game.",
@@ -25,7 +25,7 @@ export const enPlayAgain = {
   overdueTitleAccount: "{{name}}'s game hasn't closed yet",
   forcingTitleAccount: "Ending {{name}}'s game",
   closeAndConnect: "Close and connect",
-  stopConnecting: "Don't connect",
+  stopConnecting: "Don't reopen",
   keepOpen: "Leave it running",
   crashBody: "Click to see what happened.",
 };

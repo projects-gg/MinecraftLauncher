@@ -400,9 +400,10 @@ function othersWords(
  * The bar's quiet "who is in game" (PLAY-AGAIN): their faces, the name (or the count) over
  * "Oyunda". The names come under the pointer in the app's tooltip: always while the bar counts
  * them ("2 hesap"), a single name only when it is cut (repeating the words on screen is noise). In
- * a narrow bar (1024 px) the faces give way and the name is the last thing cut: a bare "Oyunda"
- * beside OYNA read as the selected account in game (fourth look), and "Devam et" keeps its world
- * whole while this line gives (third look: two cut names side by side read as one thing twice).
+ * a narrow bar (1024 px) the face and a name stay and the name is cut: a bare "Oyunda" beside OYNA
+ * read as the selected account in game (fourth look), a name without its face as a world (fifth
+ * look); "Devam et" keeps its world whole while this line gives (third look: two cut names side by
+ * side read as one thing twice).
  */
 function OthersInGame({
   sentence,
@@ -427,7 +428,7 @@ function OthersInGame({
       onPointerEnter={() => setCut(isCut(whoRef.current))}
     >
       {faces.length > 0 ? (
-        <span className="flex shrink-0 -space-x-2 @max-[560px]/bar:hidden">
+        <span className="flex shrink-0 -space-x-2">
           {faces.map((account) => (
             <AccountFace
               key={account.id}
