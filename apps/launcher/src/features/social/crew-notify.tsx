@@ -9,7 +9,16 @@
 // its own (its bell, its menu), and Settings mutes all of them at once ("Hepsini sessize al"); a
 // crew's bell then says so too, with "Sesi aç" for all.
 import { Bell, BellSlash, CaretDown } from "@phosphor-icons/react";
-import { Button, cn, easeOutExpo, IconButton, Menu, type MenuItem, Switch } from "@pl/ui";
+import {
+  Button,
+  cn,
+  easeOutExpo,
+  IconButton,
+  Menu,
+  type MenuItem,
+  Switch,
+  swallowDismissClick,
+} from "@pl/ui";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
@@ -361,6 +370,7 @@ export function CrewNotifyButton({ crew }: { crew?: string }) {
         {open ? (
           <Popover.Portal forceMount>
             <Popover.Content
+              onPointerDownOutside={swallowDismissClick}
               forceMount
               asChild
               side="bottom"

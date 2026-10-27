@@ -1,92 +1,114 @@
-// A cloud account's settings in a side sheet, as the desktop AFK settings: Genel, Komutlar and
-// Otomatik yanıt in tabs, problems where they are, and a footer that knows about unsaved changes.
-// Secret rows show their words when this computer sealed them (the keychain copy), else "Göster"
-// asks the account's machine. Saving restarts a running account with the new settings; a server
-// change seals the secrets this computer has again and asks for the others.
-import { Copy, X } from "@phosphor-icons/react";
+// A cloud account's settings in the shared settings panel (SHEET-UX), as the desktop AFK settings:
+// Bağlantı, Komutlar, Oyun içi and Otomatik yanıt in the rail, problems where they are, and the
+// change bar docked under the section while something is unsaved. Secret rows show their words
+// when this computer sealed them (the keychain copy), else "Göster" asks the account's machine.
+// Saving restarts a running account with the new settings; a server change seals the secrets this
+// computer has again and asks for the others. A press outside, Esc or the close button closes the
+// panel at any time; the edits wait as a draft.
 import {
-  Button,
-  Dialog as ConfirmDialog,
-  EntranceGate,
-  focusPanel,
-  GatedMotion,
-  IconButton,
-  Skeleton,
-  scrimMotion,
-  sheetMotion,
-  TabPanel,
-  Tabs,
-  toast,
-  useInteractionMotion,
-} from "@pl/ui";
+  ChatCircleText,
+  Copy,
+  Globe,
+  type Icon,
+  Keyboard,
+  PersonSimpleWalk,
+} from "@phosphor-icons/react";
+import { Button, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence } from "motion/react";
-import { Dialog } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { copyErrorDetails } from "@/features/content/jobs";
-import { AfkHead } from "../afk-head";
 import { isFriendly } from "../errors";
+import { SectionTitle } from "../settings/controls";
+import {
+  draftKey,
+  type HeldDraft,
+  rebaseDraft,
+  remindKept,
+  useAfkDrafts,
+} from "../settings/drafts";
+import { PanelBody, PanelSkeleton, SettingsPanel } from "../settings/panel";
 import { type CloudAccount, type CloudEditData, cloudApi } from "./api";
+import { PlusChangeDock } from "./plus/change-dock";
 import {
   type Draft,
   heldIssue,
   type Issue,
   isDirty,
   localIssues,
+  loginPart,
+  PARTS,
+  type Part,
+  partOf,
+  passwordIssue,
   serverChanges,
   toDraft,
   toEdit,
+  unsavedParts,
 } from "./settings-model";
-import { CommandsPart, GeneralPart, RepliesPart } from "./settings-sections";
+import {
+  CommandsPart,
+  ConnectionPart,
+  commandLimit,
+  GamePart,
+  RepliesPart,
+  ruleLimit,
+} from "./settings-sections";
 import { isCloudActive, serverLabel } from "./status";
 import { CLOUD_KEY, storeAccount, useCloudPage } from "./use-cloud";
 
-type Part = "general" | "commands" | "replies";
-const PARTS: Part[] = ["general", "commands", "replies"];
-
-const partOf = (issue: Issue): Part =>
-  issue.place === "commands" ? "commands" : issue.place === "rules" ? "replies" : "general";
-
-function SheetSkeleton() {
-  return (
-    <div className="flex-1 space-y-4 px-7 pt-6">
-      <Skeleton className="h-6 w-48" />
-      <Skeleton className="h-10 w-full max-w-[520px]" />
-      <Skeleton className="h-10 w-full max-w-[520px]" />
-      <Skeleton className="h-10 w-72" />
-    </div>
-  );
-}
+const ICONS: Record<Part, Icon> = {
+  connection: Globe,
+  commands: Keyboard,
+  game: PersonSimpleWalk,
+  replies: ChatCircleText,
+};
 
 function Editor({
   view,
-  onDirtyChange,
-  onDone,
-  onCancel,
   onReload,
+  onSaved,
 }: {
   view: CloudEditData;
-  onDirtyChange: (dirty: boolean) => void;
-  onDone: () => void;
-  onCancel: () => void;
+  /** Reads the stored settings again (after a conflict); the edits stay on top of them. */
   onReload: () => void;
+  /** Saved: the stored settings are read again (the editor then starts from them). */
+  onSaved: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const account = view.account;
+  const slot = draftKey("cloud", account.id);
+  const hold = useAfkDrafts((s) => s.hold);
   const baseline = useMemo(() => toDraft(view), [view]);
-  const [draft, setDraftState] = useState<Draft>(baseline);
-  // A stop that names a row opens the sheet on it.
+  // Edits left when the panel last closed come back over what is stored now.
+  const [draft, setDraftState] = useState<Draft>(() => {
+    const held = useAfkDrafts.getState().held[slot] as HeldDraft<Draft> | undefined;
+    return held ? rebaseDraft(held.draft, held.base, baseline) : baseline;
+  });
+  // A stop that names a row opens the panel on it, a wrong password where the login line is; else
+  // where edits wait; else Bağlantı.
   const [part, setPart] = useState<Part>(() => {
-    const held = heldIssue(view, baseline);
-    return held ? partOf(held) : "general";
+    const stopped = heldIssue(view, draft);
+    if (stopped) return partOf(stopped);
+    return (
+      loginPart(view, draft) ??
+      PARTS.find((p) => unsavedParts(draft, baseline).has(p)) ??
+      "connection"
+    );
   });
   const [submitted, setSubmitted] = useState(false);
   const [serverIssues, setServerIssues] = useState<Issue[]>([]);
   const [failure, setFailure] = useState<{ message: string; error: unknown } | null>(null);
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
-  const account = view.account;
+  const [dock, setDock] = useState<HTMLElement | null>(null);
+  const scroller = useRef<HTMLDivElement | null>(null);
+  // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
+  // button waits, then the edits give way to the stored settings and the bar slides away (the
+  // editor stays: no section rises in again).
+  const saved = useRef(false);
+  const [settling, setSettling] = useState(false);
   // Studio's placeholder switch: its checks answer while typing too (the backend checks again).
   const features = useCloudPage().data?.overview.features ?? null;
   const rules = useMemo(
@@ -97,10 +119,23 @@ function Editor({
     [features],
   );
 
+  // Runs when a save comes back as the stored settings.
+  useEffect(() => {
+    if (!saved.current) return;
+    saved.current = false;
+    setDraftState(baseline);
+    setSubmitted(false);
+    setServerIssues([]);
+    setFailure(null);
+    setConflict(false);
+  }, [baseline]);
+
   const dirty = isDirty(draft, baseline);
   // "Ayarları bir kez kaydet" (old rules): saving is worth it even with nothing changed.
-  const savable = dirty || Boolean(view.account.features?.legacyRules);
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  const savable = dirty || Boolean(account.features?.legacyRules);
+  useEffect(() => {
+    if (!saved.current) hold(slot, dirty ? { draft, base: baseline } : null);
+  }, [hold, slot, dirty, draft, baseline]);
 
   const setDraft = (update: (d: Draft) => Draft) => {
     setDraftState(update);
@@ -127,30 +162,46 @@ function Editor({
       : [];
     return [...own, ...reseal, ...serverIssues];
   }, [draft, submitted, serverIssues, view, rules]);
-  // Shown with the rest, never blocking: see heldIssue.
-  const held = heldIssue(view, draft);
+  // Shown with the rest, never blocking: see heldIssue and passwordIssue.
+  const held = heldIssue(view, draft) ?? passwordIssue(view, draft);
   const shown = held ? [...issues, held] : issues;
+  const unsaved = unsavedParts(draft, baseline);
+
+  const goTo = (next: Part) => {
+    setPart(next);
+    scroller.current?.scrollTo({ top: 0 });
+  };
 
   const save = async () => {
     setSubmitted(true);
     const found = [...localIssues(draft, view.limits, rules), ...issues];
     if (found.length) {
       const first = found[0];
-      if (first && !found.some((i) => partOf(i) === part)) setPart(partOf(first));
+      if (first && !found.some((i) => partOf(i) === part)) goTo(partOf(first));
       return;
     }
     setSaving(true);
     try {
       const result = await cloudApi.save(account.id, toEdit(draft, baseline, view));
       if (result.kind === "saved") {
+        saved.current = true;
+        setSettling(true);
+        hold(slot, null);
         storeAccount(queryClient, result.account);
         void queryClient.invalidateQueries({ queryKey: CLOUD_KEY });
-        toast.success(t("cloudAfk.settings.saved", { name: result.account.name }));
-        onDone();
+        // A running account restarts with what was saved: the toast says so, as the desktop's does.
+        toast.success(
+          t("cloudAfk.settings.saved", { name: result.account.name }),
+          isCloudActive(account) ? { description: t("afkSettings.savedReconnecting") } : undefined,
+        );
+        void onSaved().finally(() => {
+          saved.current = false;
+          setSettling(false);
+        });
       } else if (result.kind === "invalid") {
         setServerIssues(result.issues);
         const first = result.issues[0];
-        if (first) setPart(partOf(first));
+        if (first) goTo(partOf(first));
       } else {
         storeAccount(queryClient, result.account);
         setConflict(true);
@@ -165,10 +216,18 @@ function Editor({
     }
   };
 
+  const discard = () => {
+    hold(slot, null);
+    setDraftState(baseline);
+    setSubmitted(false);
+    setServerIssues([]);
+    setFailure(null);
+  };
+
   // Ctrl+S saves, as in the desktop settings.
   const shortcut = useRef(() => {});
   shortcut.current = () => {
-    if (savable && !saving) void save();
+    if (savable && !saving && !settling) void save();
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -181,112 +240,121 @@ function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const partDirty = (p: Part) =>
-    p === "general"
-      ? JSON.stringify([
-          draft.name,
-          draft.host,
-          draft.port,
-          draft.version,
-          draft.lang,
-          draft.config.antiAfk,
-          draft.config.owner,
-          draft.config.inventory,
-          draft.config.movement,
-        ]) !==
-        JSON.stringify([
-          baseline.name,
-          baseline.host,
-          baseline.port,
-          baseline.version,
-          baseline.lang,
-          baseline.config.antiAfk,
-          baseline.config.owner,
-          baseline.config.inventory,
-          baseline.config.movement,
-        ])
-      : p === "commands"
-        ? JSON.stringify(draft.config.commands) !== JSON.stringify(baseline.config.commands)
-        : JSON.stringify(draft.config.rules) !== JSON.stringify(baseline.config.rules);
-
   const props = { draft, setDraft, view, issues: shown, features };
   const blocking = submitted && issues.length > 0;
-  return (
-    <>
-      <div className="flex min-h-0 flex-1 flex-col px-6 pt-2">
-        <Tabs
-          value={part}
-          onValueChange={setPart}
-          label={t("cloudAfk.settings.title", { name: account.name })}
-          items={PARTS.map((value) => ({
-            value,
-            label: t(`cloudAfk.settings.sections.${value}`),
-            marker: partDirty(value) ? t("cloudAfk.settings.dirty") : undefined,
-          }))}
-        >
-          <TabPanel value="general" className="pb-8">
-            <GeneralPart {...props} />
-          </TabPanel>
-          <TabPanel value="commands" className="pb-8">
-            <CommandsPart {...props} />
-          </TabPanel>
-          <TabPanel value="replies" className="pb-8">
-            <RepliesPart {...props} />
-          </TabPanel>
-        </Tabs>
-      </div>
+  // A running account restarts with what is saved: the button says so (no sentence in gold).
+  const label = saving
+    ? t("cloudAfk.settings.saving")
+    : isCloudActive(account)
+      ? t("afkSettings.saveReconnect")
+      : t("cloudAfk.settings.save");
+  const count =
+    part === "commands"
+      ? t("cloudAfk.settings.commands.count", {
+          count: draft.config.commands.length,
+          max: commandLimit(view),
+        })
+      : part === "replies"
+        ? t("cloudAfk.settings.replies.count", {
+            count: draft.config.rules.length,
+            max: ruleLimit(view),
+          })
+        : null;
 
-      <footer className="flex items-center gap-3 border-t border-white/8 bg-obsidian-950/40 px-5 py-3.5">
-        <div className="min-w-0 flex-1 text-[12.5px]">
-          {conflict ? (
-            <div className="flex items-center gap-2">
-              <p role="alert" className="min-w-0 text-flare-400">
-                {t("cloudAfk.settings.conflict")}
-              </p>
-              <Button size="sm" variant="ghost" onClick={onReload}>
-                {t("cloudAfk.settings.loadLatest")}
-              </Button>
-            </div>
-          ) : failure ? (
-            <div className="flex items-center gap-2">
-              <p role="alert" className="min-w-0 text-flare-400">
-                {failure.message}
-              </p>
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<Copy size={14} />}
-                onClick={() => void copyErrorDetails(failure.error)}
-              >
-                {t("common.copyDetails")}
-              </Button>
-            </div>
-          ) : blocking ? (
-            <p role="alert" className="text-flare-400">
-              {serverChanges(draft, view) && issues.some((i) => i.problem === "reseal")
-                ? t("cloudAfk.settings.resealTitle")
-                : t("cloudAfk.settings.fixFirst")}
+  const bar = (
+    <PlusChangeDock
+      dock={dock}
+      open={savable || conflict || Boolean(failure) || blocking}
+      label={t("afkPanel.barLabel")}
+    >
+      <div className="min-w-0 flex-1 text-[13px]">
+        {conflict ? (
+          <div className="flex items-center gap-2">
+            <p role="alert" className="min-w-0 text-flare-400">
+              {t("cloudAfk.settings.conflict")}
             </p>
-          ) : dirty ? (
-            <p className="text-gold-200">
-              {isCloudActive(account)
-                ? t("cloudAfk.settings.restartNote")
-                : t("cloudAfk.settings.dirty")}
+            <Button size="sm" variant="ghost" onClick={onReload}>
+              {t("cloudAfk.settings.loadLatest")}
+            </Button>
+          </div>
+        ) : failure ? (
+          <div className="flex items-center gap-2">
+            <p role="alert" className="min-w-0 text-flare-400">
+              {failure.message}
             </p>
-          ) : null}
-        </div>
-        <Button variant="ghost" onClick={onCancel} disabled={saving}>
-          {dirty ? t("cloudAfk.settings.cancel") : t("cloudAfk.settings.close")}
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Copy size={14} />}
+              onClick={() => void copyErrorDetails(failure.error)}
+            >
+              {t("common.copyDetails")}
+            </Button>
+          </div>
+        ) : blocking ? (
+          <p role="alert" className="text-pretty text-flare-400">
+            {serverChanges(draft, view) && issues.some((i) => i.problem === "reseal")
+              ? t("cloudAfk.settings.resealTitle")
+              : t("cloudAfk.settings.fixFirst")}
+          </p>
+        ) : dirty ? (
+          <p className="text-pretty text-ash-300">{t("cloudAfk.settings.dirty")}</p>
+        ) : null}
+      </div>
+      {dirty ? (
+        <Button variant="ghost" onClick={discard} disabled={saving || settling}>
+          {t("cloudAfk.settings.cancel")}
         </Button>
-        <Button variant="primary" onClick={() => void save()} disabled={!savable || saving}>
-          {saving ? t("cloudAfk.settings.saving") : t("cloudAfk.settings.save")}
-        </Button>
-      </footer>
-    </>
+      ) : null}
+      {/* While the bar says to fix the marked fields first, saving waits (SHEET-UX). */}
+      <Button
+        variant="primary"
+        onClick={() => void save()}
+        disabled={!savable || blocking || saving || settling}
+      >
+        {label}
+      </Button>
+    </PlusChangeDock>
+  );
+
+  return (
+    <PanelBody
+      label={t("cloudAfk.settings.title", { name: account.name })}
+      section={part}
+      onSection={goTo}
+      scrollerRef={(element) => {
+        scroller.current = element;
+      }}
+      dockRef={setDock}
+      bar={bar}
+      sections={PARTS.map((id) => ({
+        id,
+        label: t(`afkPanel.sections.${id}`),
+        icon: ICONS[id],
+        unsaved: unsaved.has(id),
+        problem: shown.some((i) => partOf(i) === id),
+      }))}
+    >
+      <SectionTitle
+        title={t(`afkPanel.sections.${part}`)}
+        aside={
+          count ? <span className="text-[12.5px] text-ash-400 tabular-nums">{count}</span> : null
+        }
+      />
+      {part === "connection" ? (
+        <ConnectionPart {...props} />
+      ) : part === "commands" ? (
+        <CommandsPart {...props} />
+      ) : part === "game" ? (
+        <GamePart {...props} />
+      ) : (
+        <RepliesPart {...props} />
+      )}
+    </PanelBody>
   );
 }
 
-/** The settings sheet of one cloud account. Closing with unsaved changes asks first. */
+/** The settings panel of one cloud account. */
 export function CloudSettingsSheet({
   account,
   onClose,
@@ -295,12 +363,13 @@ export function CloudSettingsSheet({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const animate = useInteractionMotion();
   const open = Boolean(account);
-  const dirtyRef = useRef<{ id: string; dirty: boolean } | null>(null);
-  const [confirmFor, setConfirmFor] = useState<string | null>(null);
+  const close = () => {
+    if (account) remindKept(t, draftKey("cloud", account.id), account.name);
+    onClose();
+  };
+  // Bumped once the stored settings were read again (after a save or a conflict).
   const [generation, setGeneration] = useState(0);
-  const confirmOpen = open && confirmFor === account?.id;
   const {
     data: view,
     error: loadError,
@@ -315,125 +384,42 @@ export function CloudSettingsSheet({
     refetchOnWindowFocus: false,
     retry: false,
   });
-
-  const close = () => {
-    dirtyRef.current = null;
-    setConfirmFor(null);
-    onClose();
-  };
-  const requestClose = () => {
-    const dirty = dirtyRef.current;
-    if (account && dirty?.id === account.id && dirty.dirty) setConfirmFor(account.id);
-    else close();
-  };
   const reload = () => {
     void refetch().then(() => setGeneration((n) => n + 1));
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => !next && requestClose()}>
-      <AnimatePresence>
-        {open && account ? (
-          <EntranceGate key="sheet">
-            <Dialog.Portal forceMount>
-              <Dialog.Overlay asChild forceMount>
-                <GatedMotion.div
-                  className="fixed inset-0 z-30 bg-obsidian-950/55"
-                  {...scrimMotion(!animate)}
-                />
-              </Dialog.Overlay>
-              <Dialog.Content
-                asChild
-                forceMount
-                aria-describedby={undefined}
-                onOpenAutoFocus={(event) => {
-                  event.preventDefault();
-                  focusPanel(event.currentTarget as HTMLElement);
-                }}
-                // A form saved as a whole: a stray click beside the panel never closes it.
-                onPointerDownOutside={(event) => event.preventDefault()}
-                onInteractOutside={(event) => event.preventDefault()}
-              >
-                <GatedMotion.aside
-                  tabIndex={-1}
-                  className="glass-strong fixed top-0 right-0 bottom-0 z-40 flex w-[min(780px,94vw)] flex-col shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"
-                  {...sheetMotion(!animate)}
-                >
-                  <header className="flex items-center gap-3.5 border-b border-white/8 px-5 py-4">
-                    <AfkHead nickname={account.name} size={36} />
-                    <div className="min-w-0 flex-1">
-                      <Dialog.Title className="truncate font-display text-[18px] font-semibold text-bone-50">
-                        {t("cloudAfk.settings.title", { name: account.name })}
-                      </Dialog.Title>
-                      <p className="truncate text-[12.5px] text-ash-400" data-selectable>
-                        {serverLabel(account.server)}
-                      </p>
-                    </div>
-                    <IconButton
-                      label={t("common.close")}
-                      icon={<X size={18} />}
-                      size="sm"
-                      onClick={requestClose}
-                    />
-                  </header>
-
-                  {view ? (
-                    <Editor
-                      key={`${account.id}-${generation}-${view.account.rev}`}
-                      view={view}
-                      onDirtyChange={(dirty) => {
-                        dirtyRef.current = { id: account.id, dirty };
-                      }}
-                      onDone={close}
-                      onCancel={requestClose}
-                      onReload={reload}
-                    />
-                  ) : loadError ? (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
-                      <p className="font-display text-lg font-semibold text-bone-50">
-                        {t("cloudAfk.settings.loadFailed")}
-                      </p>
-                      {isFriendly(loadError) ? (
-                        <p className="max-w-[46ch] text-[13px] text-ash-400">{loadError.message}</p>
-                      ) : null}
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() => void refetch()}
-                          disabled={isFetching}
-                        >
-                          {t("common.retry")}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <SheetSkeleton />
-                  )}
-
-                  <ConfirmDialog
-                    open={confirmOpen}
-                    onOpenChange={(next) => setConfirmFor(next ? (account.id ?? null) : null)}
-                    title={t("cloudAfk.settings.discard.title")}
-                    description={t("cloudAfk.settings.discard.body")}
-                    closeLabel={t("common.close")}
-                    width={440}
-                    footer={
-                      <>
-                        <Button variant="ghost" onClick={() => setConfirmFor(null)}>
-                          {t("cloudAfk.settings.discard.keep")}
-                        </Button>
-                        <Button variant="danger" onClick={close}>
-                          {t("cloudAfk.settings.discard.confirm")}
-                        </Button>
-                      </>
-                    }
-                  />
-                </GatedMotion.aside>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </EntranceGate>
-        ) : null}
-      </AnimatePresence>
-    </Dialog.Root>
+    <SettingsPanel
+      open={open}
+      onClose={close}
+      nickname={account?.name ?? ""}
+      title={t("cloudAfk.settings.title", { name: account?.name ?? "" })}
+      server={account ? serverLabel(account.server) : ""}
+    >
+      {account && view ? (
+        <Editor
+          key={`${account.id}-${generation}`}
+          view={view}
+          onReload={reload}
+          onSaved={() => refetch()}
+        />
+      ) : loadError ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
+          <p className="font-display text-lg font-semibold text-bone-50">
+            {t("cloudAfk.settings.loadFailed")}
+          </p>
+          {isFriendly(loadError) ? (
+            <p className="max-w-[46ch] text-[13px] text-ash-400">{loadError.message}</p>
+          ) : null}
+          <div className="mt-3 flex gap-2">
+            <Button variant="secondary" onClick={() => void refetch()} disabled={isFetching}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <PanelSkeleton rows={PARTS.length} />
+      )}
+    </SettingsPanel>
   );
 }

@@ -3342,7 +3342,12 @@ export type CloudPage =
 /**  Upgrading `account` to AFK+, or buying a new AFK+ account without one. */
 "plusBuy" | 
 /**  The AFK+ tab of `account` on the site (what the launcher leaves to the site: plan changes). */
-"plusAccount";
+"plusAccount" | 
+/**
+ *  The same tab with the extra credits' packs open ("Kontör al"; cloud-afk README "AFK+ extra
+ *  credits"): buying happens on the site.
+ */
+"plusTopup";
 
 export type CloudPageView = CloudPageView_Serialize | CloudPageView_Deserialize;
 
@@ -6697,6 +6702,12 @@ export type PlusBlockedCounts = {
 	fake?: number,
 };
 
+/**  The bought packs with credits left and their sum (cloud-afk README "AFK+ extra credits"). */
+export type PlusBought = {
+	remaining?: number,
+	packs?: PlusPack[],
+};
+
 /**
  *  `{ok: true}` or `{ok: false, reason, until?}` (`plus_off`, `sales_closed`, `plus_invite_only`,
  *  `plus_restricted`, `plus_account_limit`, `plus_sold_out`; kept as text).
@@ -7164,11 +7175,25 @@ export type PlusOffer = {
 	 *  bot trades itself (elsewhere it agrees and the player makes the trade).
 	 */
 	servers?: PlusOfferServers,
+	/**
+	 *  AFK+ extra credits ("Ek kontör"): the packs on sale; None while Studio has them off. The
+	 *  launcher only shows that they exist: buying happens on afk.projects.gg.
+	 */
+	topup?: PlusOfferTopup | null,
 };
 
 export type PlusOfferServers = {
 	any?: boolean,
 	verified?: string[],
+};
+
+/**  `Offer.plus.topup` (cloud-afk README "AFK+ extra credits"). */
+export type PlusOfferTopup = {
+	/**  Packs can be bought now. */
+	sales?: boolean,
+	packs?: PlusTopupPack[],
+	refundWindowHours?: number,
+	maxBalance?: number,
 };
 
 /**
@@ -7299,6 +7324,11 @@ export type PlusOrderView = {
 	live?: string | null,
 };
 
+export type PlusPack = {
+	id?: string,
+	remaining?: number,
+};
+
 /**  The AFK+ panel's first look at an account. */
 export type PlusPanelView = PlusPanelView_Serialize | PlusPanelView_Deserialize;
 
@@ -7421,9 +7451,14 @@ export type PlusQuota = {
 	week?: PlusQuotaWindow,
 	/**  In spending order. */
 	gifts?: PlusGift[],
+	/**
+	 *  Bought packs with credits left, oldest first (AFK+ extra credits): spent after the windows
+	 *  and every gift.
+	 */
+	bought?: PlusBought,
 	promo?: PlusPromo | null,
 	frozen?: boolean,
-	/**  "Yaklaşık N yanıt kaldı" (gifts included). */
+	/**  "Yaklaşık N yanıt kaldı" (gifts and bought credits included). */
 	estReplies?: number,
 	pct5?: number,
 	pctWeek?: number,
@@ -7440,6 +7475,8 @@ export type PlusQuotaBrief = {
 	exhaustedUntil?: number | null,
 	/**  Credits of unexpired gifts. */
 	giftsLeft?: number,
+	/**  Bought credits left (AFK+ extra credits); 0 from an older service. */
+	boughtLeft?: number,
 };
 
 /**  One window: `reset_at` is None for a 5-hour window that is not open yet ("İlk kullanımda başlar"). */
@@ -7678,6 +7715,11 @@ export type PlusThreadPage = {
 	/**  The player wrote within 24 hours: the owner may answer. */
 	canReply?: boolean,
 	next?: string | null,
+};
+
+export type PlusTopupPack = {
+	priceTl?: string,
+	credits?: number,
 };
 
 export type PlusTotals = {

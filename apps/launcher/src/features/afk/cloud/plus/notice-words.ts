@@ -126,6 +126,8 @@ export function noticeWords(notice: AfkNotice, t: TFunction, lang: Lang): Notice
       }
       if (data.which === "80") return at(t("afkPlus.notices.quota80"), { panel: "feed" });
       if (data.which === "gift") return at(t("afkPlus.notices.giftEnding"), { panel: "feed" });
+      // AFK+ extra credits: the windows are full and the bought credits pay now (no surprise).
+      if (data.which === "bought") return at(t("afkPlus.notices.boughtInUse"), { panel: "feed" });
       return null;
     }
     case "incident":

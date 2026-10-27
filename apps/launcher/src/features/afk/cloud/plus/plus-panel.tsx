@@ -15,6 +15,7 @@ import {
   Skeleton,
   scrimMotion,
   sheetMotion,
+  sheetOutside,
   useInteractionMotion,
 } from "@pl/ui";
 import { AnimatePresence } from "motion/react";
@@ -315,6 +316,9 @@ export function PlusPanel() {
                 asChild
                 forceMount
                 aria-describedby={undefined}
+                // A press outside closes the panel (its "Ayarlar" edits wait); a toast's button,
+                // such as an approval's, does not (SHEET-UX).
+                {...sheetOutside}
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
                   focusPanel(event.currentTarget as HTMLElement);

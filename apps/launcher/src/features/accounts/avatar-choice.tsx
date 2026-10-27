@@ -2,7 +2,7 @@
 // picker. A pick applies at once (the face cross-fades in the card behind the popover); the
 // popover lingers a moment so the brackets can land on the new picture, then closes.
 import { PencilSimple } from "@phosphor-icons/react";
-import { EntranceGate, easeOutExpo, GatedMotion, PlayerHead } from "@pl/ui";
+import { EntranceGate, easeOutExpo, GatedMotion, PlayerHead, swallowDismissClick } from "@pl/ui";
 import { AnimatePresence, useReducedMotion } from "motion/react";
 import { Popover } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
@@ -72,6 +72,7 @@ export function AvatarChoiceButton({
           <EntranceGate key="picker">
             <Popover.Portal forceMount>
               <Popover.Content
+                onPointerDownOutside={swallowDismissClick}
                 forceMount
                 asChild
                 side="bottom"
