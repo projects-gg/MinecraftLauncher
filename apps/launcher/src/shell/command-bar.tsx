@@ -569,7 +569,9 @@ function StatusArea({
                   onCheckedChange={setAutoJoin}
                   label={t("play.autoJoin")}
                   description={selected.autoJoin}
-                  className="shrink-0"
+                  // A narrow bar (1024 px): its words take two lines and the address goes (it is in
+                  // the instance's settings), so "who is in game" keeps a whole name (sixth look).
+                  className="shrink-0 @max-[560px]/bar:max-w-[172px] @max-[560px]/bar:[&_label>span+span]:hidden"
                 />
               ) : null}
             </div>

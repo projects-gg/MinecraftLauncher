@@ -64,7 +64,7 @@ export const enFix2: typeof trFix2 = {
     saving: "Saving your world.",
     closingBody: "Once the game closes, it reopens on the {{server}} server.",
     overdueTitle: "The game hasn't closed yet",
-    overdueBody: "If you force it to close, unsaved singleplayer progress may be lost.",
+    overdueBody: "If you force it to close, unsaved progress in your world may be lost.",
     wait: "Keep waiting",
     force: "Force close",
     forcingTitle: "Closing the game",

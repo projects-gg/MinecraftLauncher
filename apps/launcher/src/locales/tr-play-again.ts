@@ -27,7 +27,7 @@ export const trPlayAgain = {
   othersCount: "{{total}} hesap",
   /** "Devam et" while its world is open in a game: where it is (in its label's place), and under
    * the pointer whose game has it when that is one account. */
-  worldBusy: "Başka oyunda açık",
+  worldBusy: "Başka bir oyunda açık",
   worldBusyName: "{{name}} bu dünyada",
   worldBusyAria: "{{world}}: {{reason}}",
   /** A world's "Oyna" while the world is open in a game (said before any question). */

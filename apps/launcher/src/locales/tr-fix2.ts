@@ -74,7 +74,7 @@ export const trFix2 = {
     saving: "Dünyan kaydediliyor.",
     closingBody: "Kapanınca {{server}} sunucusunda yeniden açılacak.",
     overdueTitle: "Oyun henüz kapanmadı",
-    overdueBody: "Zorla kapatırsan tek oyunculu dünyadaki kaydedilmemiş ilerlemen kaybolabilir.",
+    overdueBody: "Zorla kapatırsan dünyandaki kaydedilmemiş ilerleme kaybolabilir.",
     wait: "Beklemeye devam et",
     force: "Zorla kapat",
     forcingTitle: "Oyun kapatılıyor",

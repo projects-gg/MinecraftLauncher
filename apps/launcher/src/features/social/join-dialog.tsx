@@ -432,9 +432,10 @@ function words(t: TFunction, shown: Ask, closingName: string | null) {
     };
   }
   if (closing === "overdue") {
+    // What a force costs, then what still follows (sixth look: the reopening went unsaid here).
     return {
       title: closeTitle(t, "overdueTitle", closingName),
-      body: t("fix2.connect.overdueBody"),
+      body: `${t("fix2.connect.overdueBody")} ${t("fix2.connect.closingBody", { server })}`,
     };
   }
   if (closing === "forcing") {
@@ -483,7 +484,7 @@ function worldWords(t: TFunction, shown: Ask, closingName: string | null) {
   if (closing === "overdue") {
     return {
       title: closeTitle(t, "overdueTitle", closingName),
-      body: t("fix2.connect.overdueBody"),
+      body: `${t("fix2.connect.overdueBody")} ${t("host.connect.closingBody")}`,
     };
   }
   if (closing === "forcing") {
@@ -569,8 +570,9 @@ export function JoinDialog() {
         </Button>
       </>
     ) : closing === "closing" ? (
-      // The game closes either way: this only leaves the server for later.
-      <Button variant="ghost" className="mr-auto" onClick={closeAsk}>
+      // The game closes either way: this only leaves the server for later. The one button of the
+      // step, so it looks like one (sixth look: alone, ghost text read as a caption).
+      <Button variant="secondary" className="mr-auto" onClick={closeAsk}>
         {t("playAgain.stopConnecting")}
       </Button>
     ) : closing === "overdue" ? (
