@@ -28,6 +28,7 @@ export const trCloudAfkMove = {
     right: "Sağa",
     jump: "Zıpla",
     sneak: "Eğil",
+    space: "Boşluk",
   },
   goto: {
     title: "Koordinata git",
@@ -38,8 +39,6 @@ export const trCloudAfkMove = {
     follow: "Ana hesabını takip et",
   },
   own: {
-    go: "Yanına git",
-    follow: "Takip et",
     goNamed: "{{name}} hesabının yanına git",
     followNamed: "{{name}} hesabını takip et",
   },

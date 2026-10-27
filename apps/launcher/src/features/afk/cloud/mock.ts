@@ -125,7 +125,7 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
   });
   return {
     v: 1,
-    owner: "KasaBekcisi",
+    owner: "EjderAvcisi",
     antiAfk: { enabled: true, delayMin: 60, delayMax: 90 },
     commands:
       rows === "full"
@@ -509,7 +509,7 @@ function plan(name: string, server: string): CloudMovePlan {
     serverProblem: null,
     version: "26.3",
     config: {
-      owner: "KasaBekcisi",
+      owner: "EjderAvcisi",
       antiAfk: { enabled: true, delayMin: 60, delayMax: 90 },
       commands: [
         {

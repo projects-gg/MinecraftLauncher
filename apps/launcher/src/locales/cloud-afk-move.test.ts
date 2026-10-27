@@ -47,7 +47,8 @@ describe("movement texts", () => {
       "Açıkken hesap yürüyebilir; düşebilir ya da ölebilir.",
     );
     expect(enCloudAfkMove.setting.line).toBe("When on, the account can walk; it may fall or die.");
-    expect(Object.values(trCloudAfkMove.pad).slice(1)).toEqual([
+    const { forward, back, left, right, jump, sneak } = trCloudAfkMove.pad;
+    expect([forward, back, left, right, jump, sneak]).toEqual([
       "İleri",
       "Geri",
       "Sola",

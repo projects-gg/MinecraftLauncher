@@ -27,6 +27,7 @@ export const enCloudAfkMove = {
     right: "Right",
     jump: "Jump",
     sneak: "Sneak",
+    space: "Space",
   },
   goto: {
     title: "Go to coordinates",
@@ -37,8 +38,6 @@ export const enCloudAfkMove = {
     follow: "Follow your main account",
   },
   own: {
-    go: "Go to",
-    follow: "Follow",
     goNamed: "Go to {{name}}",
     followNamed: "Follow {{name}}",
   },

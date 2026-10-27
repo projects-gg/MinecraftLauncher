@@ -11,9 +11,9 @@ import {
   ArrowRight,
   ArrowUp,
   Crosshair,
+  HandPalm,
   type Icon,
   PersonSimpleWalk,
-  Stop,
   UserFocus,
 } from "@phosphor-icons/react";
 import { Button, ContentIcon, cn, EmptyState, enter, Input, leave, Switch } from "@pl/ui";
@@ -111,11 +111,16 @@ function Quiet({ text, action }: { text: string; action?: ReactNode }) {
   );
 }
 
-/** One chamfered direction button: its arrow over its word, its key in the corner. */
+/**
+ * One chamfered pad button: its arrow over its word, its key in the corner. The jump is the wide bar
+ * under the four, its arrow beside its word, as the space bar sits under W, A, S and D.
+ */
 function PadButton({
   icon: Glyph,
   label,
   keyLabel,
+  keyShortcut,
+  wide,
   held,
   disabled,
   onPointerDown,
@@ -127,6 +132,9 @@ function PadButton({
   icon: Icon;
   label: string;
   keyLabel?: string;
+  /** `aria-keyshortcuts` when the key's name is not its printed letter (Space). */
+  keyShortcut?: string;
+  wide?: boolean;
   held?: boolean;
   disabled?: boolean;
   onPointerDown?: (event: PointerEvent<HTMLButtonElement>) => void;
@@ -138,8 +146,9 @@ function PadButton({
   return (
     <button
       type="button"
+      data-pad=""
       aria-label={label}
-      aria-keyshortcuts={keyLabel}
+      aria-keyshortcuts={keyShortcut ?? keyLabel}
       data-held={held ? "" : undefined}
       disabled={disabled}
       onPointerDown={onPointerDown}
@@ -149,7 +158,8 @@ function PadButton({
       onClick={onClick}
       onContextMenu={(event) => event.preventDefault()}
       className={cn(
-        "group relative isolate flex cursor-pointer touch-none flex-col items-center justify-center gap-1.5 select-none [--cut:8px]",
+        "group relative isolate flex cursor-pointer touch-none items-center justify-center select-none [--cut:8px]",
+        wide ? "flex-row gap-2" : "flex-col gap-1.5",
         "transition-[transform,scale,opacity] duration-150 ease-out active:scale-[0.97] data-[held]:scale-[0.97]",
         "focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45",
         className,
@@ -168,7 +178,7 @@ function PadButton({
         className="chamfer absolute inset-px -z-10 bg-obsidian-800/85 transition-colors duration-150 group-hover:bg-obsidian-700/90 group-data-[held]:bg-[color-mix(in_oklab,var(--color-gold-500)_16%,var(--color-obsidian-800))]"
       />
       <Glyph
-        size={20}
+        size={wide ? 18 : 20}
         weight="bold"
         aria-hidden
         className="text-bone-100 transition-colors duration-150 group-data-[held]:text-gold-300"
@@ -179,7 +189,10 @@ function PadButton({
       {keyLabel ? (
         <span
           aria-hidden
-          className="absolute top-1.5 right-2 text-[11px] leading-none font-semibold text-ash-400"
+          className={cn(
+            "absolute text-[11px] leading-none font-semibold text-ash-400",
+            wide ? "top-1/2 right-3 -translate-y-1/2" : "top-1.5 right-2",
+          )}
         >
           {keyLabel}
         </span>
@@ -188,42 +201,54 @@ function PadButton({
   );
 }
 
-/** A walk the service allows: the icon, the words, and the name it goes to. */
+/**
+ * A walk the service allows, on a secondary button's quiet plate: its icon and its words, then the
+ * main account's name (another account's name is in its own words).
+ */
 function WalkRow({
   icon: Glyph,
   label,
   name,
-  ariaLabel,
   disabled,
   onClick,
 }: {
   icon: Icon;
   label: string;
   name?: string;
-  /** What a screen reader hears, when the words and the name read better as one sentence. */
-  ariaLabel?: string;
   disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      aria-label={ariaLabel ?? (name ? `${label}, ${name}` : label)}
+      aria-label={name ? `${label}, ${name}` : undefined}
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "group flex h-9 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left outline-none",
-        "transition-[background-color,transform,scale,opacity] duration-150 ease-out hover:bg-white/6 active:scale-[0.985]",
-        "focus-visible:ring-2 focus-visible:ring-gold-300 disabled:pointer-events-none disabled:opacity-45",
+        "group relative isolate flex h-[32px] w-full min-w-0 cursor-pointer items-center gap-2.5 px-3 text-left select-none [--cut:6px]",
+        "transition-[transform,scale,opacity] duration-150 ease-out active:scale-[0.985] focus-visible:outline-none",
+        "disabled:pointer-events-none disabled:opacity-45",
       )}
     >
+      <span
+        aria-hidden
+        className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
+      />
+      <span
+        aria-hidden
+        className="chamfer absolute inset-0 -z-10 bg-white/12 transition-colors duration-150 group-hover:bg-white/20"
+      />
+      <span
+        aria-hidden
+        className="chamfer absolute inset-px -z-10 bg-obsidian-800/85 transition-colors duration-150 group-hover:bg-obsidian-700/90"
+      />
       <Glyph
-        size={17}
+        size={16}
         aria-hidden
         className="shrink-0 text-ash-300 transition-colors duration-150 group-hover:text-gold-300"
       />
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-bone-100">{label}</span>
-      {name ? <span className="shrink-0 text-[12.5px] text-ash-400">{name}</span> : null}
+      <span className="min-w-0 truncate text-[13px] font-medium text-bone-100">{label}</span>
+      {name ? <span className="min-w-0 truncate text-[12.5px] text-ash-400">{name}</span> : null}
     </button>
   );
 }
@@ -352,9 +377,22 @@ export function MovementPanel({
     }
   }, [locked]);
 
+  // Space is the pad's own key on the panel and its buttons (a jump, as in the game); anywhere else
+  // in the panel it does what it always does.
+  const padKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    return target === event.currentTarget || target.closest("[data-pad]") !== null;
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.code === "Space") {
+      if (!padKey(event)) return;
+      event.preventDefault();
+      if (!event.repeat && ok && !locked) void act({ action: "jump" });
+      return;
+    }
     const dir = KEYS[event.code];
-    if (!dir || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (!dir) return;
     const target = event.target as HTMLElement;
     if (target.closest("input, textarea, select, [contenteditable=true]")) return;
     event.preventDefault();
@@ -362,6 +400,11 @@ export function MovementPanel({
     press(dir);
   };
   const onKeyUp = (event: KeyboardEvent<HTMLDivElement>) => {
+    // A focused pad button never clicks on Space's release: the key-down jumped already.
+    if (event.code === "Space") {
+      if (padKey(event)) event.preventDefault();
+      return;
+    }
     const dir = KEYS[event.code];
     if (dir) release(dir);
   };
@@ -404,6 +447,8 @@ export function MovementPanel({
     if (bad.size || parsed.x === null || parsed.y === null || parsed.z === null) return;
     const to = { x: parsed.x, y: parsed.y, z: parsed.z };
     if (pos && distance(pos, to) > GOTO_MAX_BLOCKS) {
+      // The typed target stays marked until it changes (the line's words go after 4 s).
+      setInvalid(new Set((["x", "y", "z"] as const).filter((axis) => coords[axis].trim() !== "")));
       refuse(t("cloudAfkMove.far"));
       return;
     }
@@ -507,7 +552,7 @@ export function MovementPanel({
         <Button
           size="sm"
           variant="secondary"
-          icon={<Stop size={14} weight="fill" />}
+          icon={<HandPalm size={15} weight="bold" />}
           onClick={() => {
             cancel();
             void act({ action: "stop" });
@@ -535,19 +580,23 @@ export function MovementPanel({
         <div className="flex flex-col items-center gap-4">
           <fieldset
             aria-label={t("cloudAfkMove.pad.label")}
-            className="m-0 grid min-w-0 grid-cols-[repeat(3,60px)] grid-rows-[repeat(3,56px)] gap-1.5 border-0 p-0"
+            className="m-0 grid min-w-0 grid-cols-[repeat(3,60px)] grid-rows-[56px_56px_40px] gap-1.5 border-0 p-0"
           >
+            {/* The keys' own shape: W over A, S, D, and the space bar under them. */}
             {direction("forward", ArrowUp, "col-start-2 row-start-1")}
             {direction("left", ArrowLeft, "col-start-1 row-start-2")}
+            {direction("back", ArrowDown, "col-start-2 row-start-2")}
+            {direction("right", ArrowRight, "col-start-3 row-start-2")}
             <PadButton
+              wide
               icon={ArrowLineUp}
               label={t("cloudAfkMove.pad.jump")}
+              keyLabel={t("cloudAfkMove.pad.space")}
+              keyShortcut="Space"
               disabled={!ok}
-              className="col-start-2 row-start-2"
+              className="col-span-3 row-start-3"
               onClick={() => void act({ action: "jump" })}
             />
-            {direction("right", ArrowRight, "col-start-3 row-start-2")}
-            {direction("back", ArrowDown, "col-start-2 row-start-3")}
           </fieldset>
           <Switch
             label={t("cloudAfkMove.pad.sneak")}
@@ -610,7 +659,7 @@ export function MovementPanel({
           </form>
 
           {main || own.length ? (
-            <div className="-mx-2.5 flex flex-col">
+            <div className="flex flex-col gap-1.5 border-t border-white/7 pt-4">
               {main ? (
                 <>
                   <WalkRow
@@ -633,17 +682,13 @@ export function MovementPanel({
                 <Fragment key={name}>
                   <WalkRow
                     icon={UserFocus}
-                    label={t("cloudAfkMove.own.go")}
-                    name={name}
-                    ariaLabel={t("cloudAfkMove.own.goNamed", { name })}
+                    label={t("cloudAfkMove.own.goNamed", { name })}
                     disabled={!ok}
                     onClick={() => void act({ action: "approach", name }, name)}
                   />
                   <WalkRow
                     icon={PersonSimpleWalk}
-                    label={t("cloudAfkMove.own.follow")}
-                    name={name}
-                    ariaLabel={t("cloudAfkMove.own.followNamed", { name })}
+                    label={t("cloudAfkMove.own.followNamed", { name })}
                     disabled={!ok}
                     onClick={() => void act({ action: "follow", name }, name)}
                   />
