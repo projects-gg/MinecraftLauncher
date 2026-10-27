@@ -38,7 +38,7 @@ export const enChat = {
     cleared: "History cleared",
     mute: "Mute",
     unmute: "Unmute",
-    newest: "Newest messages",
+    newest: "Jump to latest",
     menu: "Message options",
     conversation: "Conversation options",
   },

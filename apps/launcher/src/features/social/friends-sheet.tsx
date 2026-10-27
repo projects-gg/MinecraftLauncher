@@ -165,7 +165,9 @@ export function FriendsSheet() {
 
   return (
     <Dialog.Root open={open && view.enabled} onOpenChange={(next) => !next && close()}>
-      <AnimatePresence>
+      {/* Not `presenceAffectsLayout` (here and for the pages): with it every snapshot of the
+          friends service drew every motion in the panel again, a long chat's rows too (CHAT-PROD). */}
+      <AnimatePresence presenceAffectsLayout={false}>
         {open && view.enabled ? (
           <EntranceGate key="sheet">
             <Dialog.Portal forceMount>
@@ -218,7 +220,12 @@ export function FriendsSheet() {
                           fill ? "overflow-y-hidden" : "overflow-y-auto",
                         )}
                       >
-                        <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+                        <AnimatePresence
+                          mode="popLayout"
+                          initial={false}
+                          custom={direction}
+                          presenceAffectsLayout={false}
+                        >
                           <motion.div
                             key={shown}
                             custom={direction}
