@@ -385,7 +385,12 @@ function afkState(v: AfkAccountView): AfkState {
     case "reconnecting":
       return { kind: "reconnecting", attempt: s.attempt, nextAttemptAt: s.nextAttemptAt };
     case "error":
-      return { kind: "error", ...failureText(s.reason, (key) => i18n.t(key)) };
+      return {
+        kind: "error",
+        ...failureText(s.reason, (key) => i18n.t(key)),
+        // A password the server refused sends the card to the settings ("Şifreyi düzelt").
+        ...(s.reason.kind === "refused" ? { cause: s.reason.cause } : {}),
+      };
     default:
       return { kind: s.state };
   }

@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{
     AfkAccount, AlertsOptions, AntiAfkOptions, AutoEatOptions, AutoRelogOptions, AutoRespondMatch,
-    DEFAULT_TASK_NAME, ScheduledTask, SchedulerOptions,
+    DEFAULT_TASK_NAME, ScheduledTask, SchedulerOptions, kick_messages_in,
 };
 use crate::pattern::{PatternProblem, check_pattern};
 use crate::util::eq_ignore_case;
@@ -338,6 +338,8 @@ impl AccountSettings {
                 delay_min: relog_delay(relog.delay_min, 5.0),
                 delay_max: relog_delay(relog.delay_max, 10.0),
                 retries: form_retries(relog.retries),
+                // An untouched default list reads in the player's language.
+                kick_messages: kick_messages_in(&relog.kick_messages, pl_lang::Lang::current()),
                 ..relog.clone()
             },
             auto_eat: AutoEatOptions {

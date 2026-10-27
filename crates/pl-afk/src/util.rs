@@ -48,11 +48,6 @@ pub(crate) fn find_ignore_case(
     })
 }
 
-/// `haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0`.
-pub(crate) fn contains_ignore_case(haystack: &str, needle: &str) -> bool {
-    find_ignore_case(haystack, needle, 0).is_some()
-}
-
 /// MCC's `ChatBot.GetVerbatim`: drops Minecraft `§x` formatting codes.
 pub(crate) fn strip_color_codes(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -149,10 +144,7 @@ mod tests {
         let (start, end) = find_ignore_case(text, "/login ŞIFRE", 0).unwrap();
         assert_eq!(&text[start..end], "/LOGIN şifre");
         assert!(find_ignore_case(text, "", 0).is_none());
-        assert!(contains_ignore_case(
-            "Server is RESTARTING now",
-            "restarting"
-        ));
+        assert!(find_ignore_case("Server is RESTARTING now", "restarting", 0).is_some());
     }
 
     #[test]

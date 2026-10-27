@@ -110,7 +110,7 @@ export function slotKey(scope: string | null | undefined, max?: number | null): 
   return max && max > 1 ? { key: "maxAccounts", values: { max } } : { key: "oneAccount" };
 }
 
-/** "Ana hesabın yakında değil." or, for another own account, "{name} yakında değil." */
+/** "Ana hesabın yakınında değil." or, for another own account, "{name} yakınında değil." */
 function notNear(name: string | null | undefined, main: string | null | undefined): WordKey {
   return !name || name.toLowerCase() === (main ?? "").toLowerCase()
     ? { key: "notNear" }

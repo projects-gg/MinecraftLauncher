@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AfkState } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
+import { shortReason } from "./watch";
 
 /**
  * The bars for a state. They sweep only while a connection is being made (its client fetched
@@ -34,6 +35,11 @@ export function stateSignal(state: AfkState): SignalState {
 export function failedText(state: AfkState, t: TFunction): string | null {
   switch (state.kind) {
     case "error":
+      // A refusal stopped it for good: "Durdu: Giriş şifresi yanlış", as on the 7/24 Bulut cards;
+      // the server's own words stay in the tooltip and the console.
+      if (state.cause && !state.standalone) {
+        return t("afkClear.stoppedBecause", { reason: shortReason(state.reason) });
+      }
       return state.standalone ? state.reason : `${t("afk.states.error")}: ${state.reason}`;
     case "clientFailed":
       return t(`afkConnect.problem.${state.problem}.title`);
@@ -138,8 +144,9 @@ export function StateLine({
   return (
     <p
       className={cn("flex min-w-0 items-center gap-2 text-[12.5px]", className)}
-      // A long disconnect reason is cut in the line; the whole of it stays one hover away.
-      title={failed ? text : undefined}
+      // A long disconnect reason is cut in the line; the whole of it (the server's own words
+      // too) stays one hover away.
+      title={failed ? (state.kind === "error" && state.cause ? state.reason : text) : undefined}
     >
       <SignalBars state={stateSignal(state)} />
       <span className={cn("truncate", failed ? "text-flare-400" : "text-ash-300")}>{text}</span>

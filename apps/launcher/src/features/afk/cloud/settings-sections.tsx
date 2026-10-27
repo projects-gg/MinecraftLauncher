@@ -67,8 +67,8 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
   const { t } = useTranslation();
   return (issue: Issue | undefined): string | null => {
     if (!issue) return null;
-    // A stop for a wrong password, marked on the login line (SHEET-UX). A line kept in the cloud
-    // opens with "Değiştir" first: its masked field with a padlock read as locked.
+    // A stop for a wrong password, marked on the login line (SHEET-UX). A stored line (kept in the
+    // cloud, or here too: both read-only, AFK-CLEAR) opens with "Değiştir" first.
     if (issue.problem === "wrongPassword") {
       const words =
         issue.index === null
@@ -78,9 +78,8 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
             : issue.place === "rules"
               ? draft?.config.rules[issue.index]?.reply
               : undefined;
-      return t(
-        words?.kind === "sealed" ? "afkPanel.wrongPasswordSealed" : "afkPanel.wrongPassword",
-      );
+      const stored = words?.kind === "sealed" || (words?.kind === "secret" && words.kept);
+      return t(stored ? "afkPanel.wrongPasswordSealed" : "afkPanel.wrongPassword");
     }
     if (issue.problem.startsWith("placeholder_")) {
       const rule =
@@ -391,6 +390,8 @@ export function ConnectionPart({ draft, setDraft, view, issues }: PartProps) {
       </SettingRow>
       <SettingRow title={t("cloudAfk.settings.lang")}>
         <Segmented
+          // A quiet plate, as in the desktop panel: gold stays the save button's.
+          className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
           value={draft.lang === "en" ? "en" : "tr"}
           onValueChange={(lang) => setDraft((d) => ({ ...d, lang }))}
           label={t("cloudAfk.settings.lang")}
@@ -578,7 +579,11 @@ function CommandRow({
                   onChange({ ...command, every: { min, max: command.every?.max ?? min } })
                 }
               />
-              <span className="text-ash-400">–</span>
+              {/* "300 sn ile 600 sn arası", as the desktop panel's waits (a bare dash did not say
+                  it is a random wait between the two; AFK-CLEAR). */}
+              <span aria-hidden className="text-[13px] text-ash-300">
+                {t("afkPanel.rangeJoin")}
+              </span>
               <NumberField
                 label={t("cloudAfk.settings.commands.everyMax")}
                 hideLabel
@@ -589,6 +594,11 @@ function CommandRow({
                   onChange({ ...command, every: { min: command.every?.min ?? max, max } })
                 }
               />
+              {t("afkPanel.rangeAfter") ? (
+                <span aria-hidden className="text-[13px] text-ash-300">
+                  {t("afkPanel.rangeAfter")}
+                </span>
+              ) : null}
             </div>
           ) : on === "daily" ? (
             <Times

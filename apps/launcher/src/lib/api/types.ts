@@ -1,6 +1,6 @@
 // UI-facing data shapes. They mirror the Rust crates' specta types; once a command is wired
 // through tauri-specta, the generated type in `bindings.ts` replaces the one here.
-import type { QuickPlay } from "@/bindings";
+import type { KickCause, QuickPlay } from "@/bindings";
 import type { JavaChoice, JavaPrompt } from "./java-types";
 import type { ModsNotice } from "./modcenter-types";
 import type { CrashKind, CrashSuspect, MemoryAdvice, ModCheck } from "./modhealth-types";
@@ -614,8 +614,11 @@ export type AfkState =
    */
   | { kind: "reconnecting"; attempt: number; nextAttemptAt: string | null }
   | { kind: "stopping" }
-  /** `standalone`: the reason says it all, without "Bağlantı kesildi" before it. */
-  | { kind: "error"; reason: string; standalone?: boolean };
+  /**
+   * `standalone`: the reason says it all, without "Bağlantı kesildi" before it. `cause`: the server
+   * turned the account away for good (a ban, a password it refused, ...).
+   */
+  | { kind: "error"; reason: string; standalone?: boolean; cause?: KickCause };
 
 export interface AfkAccount {
   id: string;

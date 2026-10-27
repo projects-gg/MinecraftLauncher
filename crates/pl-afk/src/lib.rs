@@ -72,7 +72,8 @@ pub use model::{
     AUTO_MINECRAFT_VERSION, AfkAccount, AfkSettings, AlertsOptions, AntiAfkOptions, AutoEatOptions,
     AutoRelogOptions, AutoRespondMatch, AutoRespondOptions, ChatLogOptions,
     DEFAULT_MINECRAFT_VERSION, DEFAULT_SERVER_HOST, DEFAULT_TASK_NAME, LoginCommandsOptions,
-    ScheduledTask, SchedulerOptions, VersionOption, default_kick_messages, is_valid_nickname,
+    ScheduledTask, SchedulerOptions, VersionOption, default_kick_messages,
+    default_kick_messages_in, is_default_kick_messages, is_valid_nickname, kick_messages_in,
     new_account_id,
 };
 pub use orphans::RECORD_FILE_NAME;

@@ -169,7 +169,7 @@ function Confirm({
               {desktop.nickname}
             </span>
             <span className="block truncate text-[12px] text-ash-300">
-              {t("cloudAfk.location.here")}
+              {t("afkClear.here.title")}
             </span>
           </span>
         </span>

@@ -11,7 +11,5 @@ export const enSmall10 = {
   },
   afk: {
     stoppedAutoStart: "Stopped, connects next time the launcher starts",
-    connectHere: "Connect here",
-    inCloud: "Cloud: {{state}}",
   },
 };

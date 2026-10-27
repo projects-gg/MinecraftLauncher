@@ -28,7 +28,7 @@ use crate::orphans;
 use crate::pacing::{ConnectPacer, MIN_CONNECT_SPACING};
 use crate::page::SettingsPage;
 use crate::process::{ClientSpawner, ProcessSpawner};
-use crate::restart::RestartSchedule;
+use crate::restart::{FailureReason, RestartSchedule};
 use crate::runtime::{AfkClientRelease, AfkRuntime, ClientExe};
 use crate::session::{
     AfkActivity, AfkEventKind, EventSink, READER_DRAIN, Session, SessionEnv, SessionSnapshot,
@@ -99,7 +99,8 @@ pub struct ManagerOptions {
 pub struct BulkOutcome {
     /// Accounts that were started.
     pub started: Vec<String>,
-    /// Accounts skipped because they were already active.
+    /// Accounts skipped because they were already active, or the server stopped them for good
+    /// (a ban, a password it refused: the player fixes it and connects them on their own).
     pub skipped: Vec<String>,
     /// Accounts that could not be started (for example no client build available).
     pub failed: Vec<String>,
@@ -876,7 +877,22 @@ impl AfkManager {
             .is_some_and(|run| run.remaining.iter().any(|id| id == account_id))
     }
 
+    /// Stopped for good by the server (a ban, the whitelist, a password it refused, ...): a bulk
+    /// connect leaves it to the player, since trying a refused password again can lock the
+    /// account on the server (AFK-CLEAR).
+    fn refused(&self, account_id: &str) -> bool {
+        matches!(
+            self.snapshot(account_id).state,
+            SessionState::Error {
+                reason: FailureReason::Refused { .. },
+                ..
+            }
+        )
+    }
+
     async fn run_staggered(&self, ids: Vec<String>) -> Result<BulkOutcome> {
+        let (ids, refused): (Vec<String>, Vec<String>) =
+            ids.into_iter().partition(|id| !self.refused(id));
         let token = {
             let mut bulk = self.inner.bulk.lock();
             if bulk.is_some() {
@@ -891,7 +907,10 @@ impl AfkManager {
         };
         let _guard = BulkGuard(&self.inner.bulk);
 
-        let mut outcome = BulkOutcome::default();
+        let mut outcome = BulkOutcome {
+            skipped: refused,
+            ..BulkOutcome::default()
+        };
         // The run's accounts wait for the client together, every card showing it. A client that
         // cannot be had ends the run, and each of those accounts says why.
         let idle: Vec<String> = ids

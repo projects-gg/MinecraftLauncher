@@ -398,8 +398,10 @@ pub async fn cloud_afk_move(
     Ok(result)
 }
 
-/// "Tümünü bağla" while some accounts run in the cloud: every other desktop account connects
-/// (staggered, as usual). Returns how many were left to the cloud.
+/// "Tümünü bağla" of the AFK page's "Bu bilgisayarda" list while the player has 7/24 Bulut
+/// accounts: every desktop account without a cloud twin connects (staggered, as usual). A twin's
+/// card is its cloud account's, which has its own buttons, so it is left out whether it runs there
+/// or not (AFK-CLEAR). Returns how many were left out.
 #[tauri::command]
 #[specta::specta]
 pub fn cloud_afk_connect_here(app: AppHandle, state: State<'_, AppState>) -> u32 {
@@ -410,13 +412,13 @@ pub fn cloud_afk_connect_here(app: AppHandle, state: State<'_, AppState>) -> u32
         .accounts()
         .into_iter()
         .filter(|desktop| {
-            let away = cloud
+            let twin = cloud
                 .twin(&desktop.nickname, &desktop_server(desktop))
-                .is_some_and(|twin| twin.wants_to_run());
-            if away {
+                .is_some();
+            if twin {
                 skipped += 1;
             }
-            !away
+            !twin
         })
         .map(|desktop| desktop.id)
         .collect();

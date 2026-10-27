@@ -129,7 +129,9 @@ export function AppShell() {
   useCleanupReminder();
 
   return (
-    <div className="flex h-dvh w-dvw overflow-hidden text-bone-100">
+    // Clip, not hidden: a hidden box still scrolls, and a field scrolled into view moved the
+    // whole window up by the few pixels its content reaches past the bottom (AFK-CLEAR).
+    <div className="flex h-dvh w-dvw overflow-clip text-bone-100">
       <PresenceSync />
       <TaskbarProgress />
       <TrayInGame />
