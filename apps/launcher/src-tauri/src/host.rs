@@ -717,31 +717,37 @@ impl Launcher for AppLauncher {
         })
     }
 
-    /// Only the game this launcher started may come in (PROTOCOL.md §8): the connection's owner
-    /// must be its process, or one it started (a wrapper command's Java: `hooks.wrapper` starts
-    /// the game through another program), when Windows tells who owns it.
+    /// Only a game this launcher started may come in (PROTOCOL.md §8): the connection's owner
+    /// must be one of its processes, or one they started (a wrapper command's Java:
+    /// `hooks.wrapper` starts the game through another program), when Windows tells who owns it.
+    /// With several games (PLAY-AGAIN) the one that joins may be any of them.
     fn accept_filter(&self) -> Option<pl_host::guest::local::AcceptFilter> {
         let app = self.app.clone();
         Some(Arc::new(move |remote: std::net::SocketAddr| {
             let Some(state) = app.try_state::<AppState>() else {
                 return false;
             };
-            let game = state
-                .running
+            let games: Vec<u32> = state
+                .games
                 .lock()
-                .as_ref()
+                .iter()
                 .filter(|game| !game.adopted)
-                .and_then(|game| game.process.pid());
-            let Some(game) = game else {
+                .filter_map(|game| game.process.pid())
+                .collect();
+            if games.is_empty() {
                 tracing::info!("a connection to a friend's world came while no game of ours ran");
                 return false;
-            };
+            }
             match pl_desktop::tcp::loopback_owner(remote.port()) {
-                Some(owner) if !pl_desktop::process::started_by(owner, game) => {
+                Some(owner)
+                    if !games
+                        .iter()
+                        .any(|game| pl_desktop::process::started_by(owner, *game)) =>
+                {
                     tracing::warn!("a connection to a friend's world came from another program");
                     false
                 }
-                // The game's (or its wrapper's Java), or the system can't tell.
+                // A game's (or its wrapper's Java), or the system can't tell.
                 _ => true,
             }
         }))

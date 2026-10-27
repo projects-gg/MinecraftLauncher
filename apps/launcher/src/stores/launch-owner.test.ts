@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { LaunchPhase } from "./launch";
-import { gameStage, launchOwner, planPlay, playingAccountId } from "./launch-owner";
+import type { LaunchPhase, RunningGame } from "./launch";
+import {
+  gameStage,
+  inProgress,
+  type LaunchView,
+  launchOwner,
+  othersInGame,
+  ownLaunch,
+  planPlay,
+  playingAccountIds,
+  runningPhase,
+} from "./launch-owner";
 
 const idle: LaunchPhase = { kind: "idle" };
 const preparing: LaunchPhase = {
@@ -17,6 +27,32 @@ const open: LaunchPhase = { kind: "running", since: 1, shown: true, firstStart: 
 const failed: LaunchPhase = { kind: "error", code: "X", message: "m", details: "d" };
 
 const ejder = { id: "a1", name: "EjderAvcisi" };
+const kor = { id: "a2", name: "KorAtesi_" };
+
+function game(run: number, account = ejder, instanceId = "projects", shown = true): RunningGame {
+  return { run, game: run + 100, instanceId, account, since: run * 1000, shown, firstStart: false };
+}
+
+/** The store with `games` on screen and nothing on its way. */
+function playing(...games: RunningGame[]): LaunchView {
+  const newest = games.at(-1);
+  return {
+    phase: newest ? runningPhase(newest) : idle,
+    instanceId: newest?.instanceId ?? null,
+    account: newest?.account ?? null,
+    games,
+  };
+}
+
+/** A launch on its way (`account`: null while its files are prepared), beside `games`. */
+function starting(
+  phase: LaunchPhase,
+  account: typeof ejder | null,
+  instanceId = "projects",
+  ...games: RunningGame[]
+): LaunchView {
+  return { phase, instanceId, account, games };
+}
 
 describe("gameStage", () => {
   it("names how far the launch is", () => {
@@ -26,79 +62,125 @@ describe("gameStage", () => {
     expect(gameStage(launching)).toBe("opening");
     expect(gameStage(opening)).toBe("opening");
     expect(gameStage(open)).toBe("open");
+    expect([preparing, launching, opening].every(inProgress)).toBe(true);
+    expect([idle, failed, open].some(inProgress)).toBe(false);
   });
 });
 
 describe("launchOwner (PLAY-ACCT)", () => {
-  it("is nobody's while nothing runs", () => {
+  it("is the account's that plays, every account's while files are prepared", () => {
     expect(launchOwner(idle, null, "a1")).toBe("none");
-    expect(launchOwner(failed, ejder, "a1")).toBe("none");
-  });
-
-  it("is the account's that plays, from the game's start on", () => {
-    expect(launchOwner(opening, ejder, "a1")).toBe("mine");
     expect(launchOwner(open, ejder, "a1")).toBe("mine");
-    // The owner's report: another account selected while the game runs is not in game.
     expect(launchOwner(open, ejder, "a2")).toBe("other");
-    expect(launchOwner(opening, ejder, "a2")).toBe("other");
-  });
-
-  it("is every account's while its files are prepared (it starts with the one selected then)", () => {
-    expect(launchOwner(preparing, null, "a1")).toBe("mine");
     expect(launchOwner(preparing, null, "a2")).toBe("mine");
-    expect(launchOwner(launching, null, "a2")).toBe("mine");
-  });
-
-  it("counts a game whose account is not known, or no account to tell, as the selected one's", () => {
-    // A game an older launcher left running.
+    // An older launcher's game, or no account to tell: the selected one's.
     expect(launchOwner(open, null, "a2")).toBe("mine");
-    // Accounts still loading, or none at all: nothing else could play.
     expect(launchOwner(open, ejder, undefined)).toBe("mine");
-    expect(launchOwner(open, ejder, null)).toBe("mine");
-    expect(launchOwner(open, { id: "", name: "" }, "a2")).toBe("mine");
   });
 });
 
-describe("planPlay", () => {
-  const game = (phase: LaunchPhase, account = ejder) => ({
-    phase,
-    instanceId: "projects",
-    account,
+describe("ownLaunch (PLAY-AGAIN): what the bar shows for the selected account", () => {
+  it("is the account's newest game on screen, while others play too", () => {
+    const view = playing(game(1), game(2, kor, "hardcore"));
+    expect(ownLaunch(view, "a1")).toMatchObject({
+      owner: "mine",
+      instanceId: "projects",
+      phase: { kind: "running", shown: true, since: 1000 },
+    });
+    expect(ownLaunch(view, "a2")).toMatchObject({ owner: "mine", instanceId: "hardcore" });
+    // Two games of one account: the newer one.
+    const twice = playing(game(1), game(3));
+    expect(ownLaunch(twice, "a1").game?.run).toBe(3);
   });
 
+  it("is nothing for an account with no game while others play", () => {
+    const view = playing(game(1));
+    expect(ownLaunch(view, "a2")).toEqual({
+      owner: "other",
+      phase: idle,
+      instanceId: null,
+      game: null,
+    });
+  });
+
+  it("is the launch on its way when it is the account's or nobody's yet", () => {
+    const files = starting(preparing, null, "fabric", game(1, kor));
+    expect(ownLaunch(files, "a1")).toMatchObject({ owner: "mine", phase: preparing });
+    // Bound to KorAtesi_: EjderAvcisi sees its own game, not that start.
+    const theirs = starting(opening, kor, "fabric", game(1));
+    expect(ownLaunch(theirs, "a1")).toMatchObject({ owner: "mine", instanceId: "projects" });
+    expect(ownLaunch(theirs, "a1").phase).toMatchObject({ shown: true });
+    expect(ownLaunch(starting(opening, kor, "fabric"), "a1").owner).toBe("other");
+  });
+
+  it("keeps the store's own phase when nothing runs (the last launch's error)", () => {
+    expect(ownLaunch(starting(failed, null), "a1")).toMatchObject({ owner: "mine", phase: failed });
+  });
+
+  it("tells this account's failed launch while other games run (the bar shows it once)", () => {
+    const view = starting(failed, kor, "projects", game(1));
+    expect(ownLaunch(view, "a2")).toMatchObject({ owner: "mine", phase: failed });
+    // EjderAvcisi's bar shows its own game, not KorAtesi_'s error.
+    expect(ownLaunch(view, "a1")).toMatchObject({ owner: "mine", phase: { kind: "running" } });
+    expect(ownLaunch(starting(failed, kor, "x", game(1, kor)), "a3").owner).toBe("other");
+  });
+
+  it("gives the same phase object for the same game (views draw only on a change)", () => {
+    const one = game(1);
+    expect(runningPhase(one)).toBe(runningPhase(one));
+    expect(runningPhase({ ...one })).not.toBe(runningPhase(one));
+  });
+});
+
+describe("planPlay (PLAY-AGAIN)", () => {
   it("plays when nothing runs", () => {
-    expect(planPlay({ phase: idle, instanceId: null, account: null }, "projects", "a1")).toBe(
-      "play",
-    );
-    expect(planPlay(game(failed), "projects", "a2")).toBe("play");
+    expect(planPlay(playing(), "projects", "a1")).toBe("play");
+    expect(planPlay(starting(failed, null), "projects", "a2")).toBe("play");
   });
 
-  it("does nothing for the game this account already has on (or on its way)", () => {
-    expect(planPlay(game(open), "projects", "a1")).toBe("nothing");
-    expect(planPlay(game(opening), "projects", "a1")).toBe("nothing");
-    expect(planPlay({ ...game(preparing), account: null }, "projects", "a2")).toBe("nothing");
+  it("does nothing for this account's launch of this instance on its way", () => {
+    expect(planPlay(starting(preparing, null), "projects", "a2")).toBe("nothing");
+    expect(planPlay(starting(opening, ejder), "projects", "a1")).toBe("nothing");
   });
 
-  it("asks first for another account's game, even of the same instance", () => {
-    expect(planPlay(game(open), "projects", "a2")).toBe("switch");
-    expect(planPlay(game(opening), "projects", "a2")).toBe("switch");
+  it("stops another launch on its way first (one at a time)", () => {
+    expect(planPlay(starting(opening, ejder), "projects", "a2")).toBe("switch");
+    expect(planPlay(starting(preparing, null), "fabric", "a1")).toBe("switch");
   });
 
-  it("asks first for another instance while a game runs (one game at a time)", () => {
-    expect(planPlay(game(open), "fabric", "a1")).toBe("switch");
-    expect(planPlay({ ...game(preparing), account: null }, "fabric", "a1")).toBe("switch");
+  it("asks the owner's question when this account has a game on screen, any instance", () => {
+    expect(planPlay(playing(game(1)), "projects", "a1")).toBe("again");
+    expect(planPlay(playing(game(1)), "fabric", "a1")).toBe("again");
+    // A game an older launcher left running counts as everyone's.
+    expect(planPlay(playing(game(1, null as never)), "projects", "a2")).toBe("again");
+  });
+
+  it("starts beside other accounts' games", () => {
+    expect(planPlay(playing(game(1)), "projects", "a2")).toBe("beside");
+    expect(planPlay(playing(game(1), game(2, kor)), "hardcore", "a3")).toBe("beside");
+    // A game still opening is a launch on its way: one at a time.
+    expect(planPlay(starting(opening, ejder, "projects", game(1, kor)), "x", "a2")).toBe("switch");
   });
 });
 
-describe("playingAccountId", () => {
-  it("is the account whose game window is on screen", () => {
-    expect(playingAccountId(open, ejder)).toBe("a1");
+describe("Oyunda on the accounts, and the bar's quiet line (PLAY-AGAIN)", () => {
+  it("marks every account with a game on screen, once", () => {
+    const view = playing(game(1), game(2, kor), game(3), game(4, kor, "x", false));
+    expect(playingAccountIds(view)).toEqual(["a1", "a2"]);
+    expect(playingAccountIds(playing(game(1, null as never)))).toEqual([]);
   });
 
-  it("is nobody while the game opens, when nothing runs or when the account is not known", () => {
-    expect(playingAccountId(opening, ejder)).toBeNull();
-    expect(playingAccountId(preparing, null)).toBeNull();
-    expect(playingAccountId(idle, ejder)).toBeNull();
-    expect(playingAccountId(open, null)).toBeNull();
+  it("names the other accounts in game while the selected one has none", () => {
+    const view = playing(game(1), game(2, kor), game(3));
+    expect(othersInGame(view, "a3")).toEqual(["EjderAvcisi", "KorAtesi_"]);
+    expect(othersInGame(playing(game(1)), "a2")).toEqual(["EjderAvcisi"]);
+    // The selected account plays (or starts): no line; the bar shows its own game.
+    expect(othersInGame(view, "a1")).toEqual([]);
+    expect(othersInGame(starting(preparing, null, "x", game(1)), "a2")).toEqual([]);
+    // Nobody else, or no account to tell.
+    expect(othersInGame(playing(), "a1")).toEqual([]);
+    expect(othersInGame(view, null)).toEqual([]);
+    // A game still opening is not "in game" yet.
+    expect(othersInGame(playing(game(1, ejder, "projects", false)), "a2")).toEqual([]);
   });
 });

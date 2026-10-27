@@ -127,10 +127,13 @@ function useHostSync() {
         // The feature stays hidden; nothing else depends on it.
       });
     // A launcher opening whose game ended before the world opened (cancelled, failed) is dropped.
+    // The launch's own end, also while other games run on (PLAY-AGAIN).
     const stopLaunch = useLaunch.subscribe((state, before) => {
-      const ended = state.phase.kind === "idle" || state.phase.kind === "error";
-      const was = before.phase.kind !== "idle" && before.phase.kind !== "error";
-      if (!ended || !was) return;
+      const run = before.progress;
+      const launchEnded =
+        run !== 0 && state.progress !== run && !state.games.some((game) => game.run === run);
+      const gameEnded = state.games.length < before.games.length && state.games.length === 0;
+      if (!launchEnded && !gameEnded) return;
       if (useHostUi.getState().view.session?.phase === "opening") void hostApi.cancelOpen();
     });
     return () => {

@@ -2,14 +2,17 @@
 // aç"), or into a friend's world through the launcher's own way to it on this computer ("Katıl").
 // Both go through OYNA's launch, so its progress, the Java question and the crash help work as for
 // any start. Neither waits for the game to end.
+import { ownGameBusy } from "@/features/social/join";
 import type { GameAccount } from "@/lib/api";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 
-/** True while a game is being prepared or running. */
+/**
+ * True while the selected account's launch is on its way or its game runs (other accounts' games
+ * run beside it, PLAY-AGAIN).
+ */
 function busy(): boolean {
-  const kind = useLaunch.getState().phase.kind;
-  return kind === "working" || kind === "launching" || kind === "running";
+  return ownGameBusy();
 }
 
 /** The game starts straight into the player's world; the backend opens it once it has loaded. */

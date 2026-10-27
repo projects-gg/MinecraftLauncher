@@ -1,10 +1,16 @@
-//! The launcher's one handle on the overlay ([`Overlay`]): the player's choices, and the session of
-//! the game that runs now.
+//! The launcher's one handle on the overlay ([`Overlay`]): the player's choices, and the sessions
+//! of the games that run now.
 //!
 //! The friends feature's sink hands every update to [`Overlay::on_social`]; with no game session
 //! it is dropped at once, so the overlay costs nothing between games. A launch calls
-//! [`Overlay::start`] for a fresh bridge and passes the [`Endpoint`] to the game; the game's exit,
-//! the launcher quitting or the switch turning off end it ([`Overlay::stop`]).
+//! [`Overlay::start`] for a fresh bridge and passes the [`Endpoint`] to the game; the game's exit
+//! ([`Overlay::stop_for`]), the launcher quitting or the switch turning off end it.
+//!
+//! Several games may run at once (PLAY-AGAIN), each with its own bridge and session: what the
+//! friends feature says, the player's choices, the language and the chat emojis reach every one,
+//! and a choice made in one game (the language, the emoji picker, a friend's marks) reaches the
+//! others at once. World sharing (HOST1) follows one game's session alone: the first game's, until
+//! the launcher names another ([`Overlay::set_host`]); the others see no world sharing.
 
 use std::io;
 use std::path::Path;
@@ -83,7 +89,7 @@ impl OverlayConfig {
     }
 }
 
-/// Whether the mod in the running game is connected (`overlay-status`): while it is, its toasts
+/// Whether the mod in a running game is connected (`overlay-status`): while one is, its toasts
 /// stand in for the launcher's system notifications of the same events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -114,12 +120,21 @@ struct Running {
     /// The bridge's port: names the session for [`Overlay::stop_for`].
     port: u16,
     msgs: mpsc::UnboundedSender<Msg>,
+    /// Its mod is connected now.
+    connected: bool,
+    /// What its mod's hello told world sharing ([`HostSignal::Connected`]): told again when its
+    /// game becomes the one world sharing follows ([`Overlay::set_host`]).
+    hello: Option<HostSignal>,
 }
 
 struct Inner {
     config: OverlayConfig,
-    running: Option<Running>,
-    /// What world sharing shows in every session (HOST1).
+    /// The sessions of the games that run now, oldest first.
+    sessions: Vec<Running>,
+    /// The session world sharing follows (HOST1): the first game's, until the launcher names
+    /// another. Kept after its session ended, so that its going still reaches world sharing.
+    host: Option<u64>,
+    /// What world sharing shows in the session it follows (HOST1).
     worlds: WorldsShown,
     /// OVL-LANG: the language the player picked in the overlay's settings (none: the launcher's).
     lang_pick: Option<Lang>,
@@ -133,6 +148,27 @@ impl Inner {
     /// The overlay's language: the player's pick in it, else the launcher's.
     fn language(&self) -> Lang {
         self.lang_pick.unwrap_or(self.launcher_lang)
+    }
+
+    fn session(&self, id: u64) -> Option<&Running> {
+        self.sessions.iter().find(|running| running.id == id)
+    }
+
+    /// Hands `msg()` to every session but `except`.
+    fn tell_others(&self, except: Option<u64>, msg: impl Fn() -> Msg) {
+        for running in self.sessions.iter().filter(|r| Some(r.id) != except) {
+            let _ = running.msgs.send(msg());
+        }
+    }
+
+    /// What world sharing shows in session `id`: everything in the one it follows, nothing in the
+    /// others (they never offer to open a world or join a friend's).
+    fn worlds_for(&self, id: u64) -> WorldsShown {
+        if self.host == Some(id) {
+            self.worlds.clone()
+        } else {
+            WorldsShown::default()
+        }
     }
 }
 
@@ -173,7 +209,8 @@ impl Overlay {
             shared: Arc::new(Shared {
                 inner: Mutex::new(Inner {
                     config,
-                    running: None,
+                    sessions: Vec::new(),
+                    host: None,
                     worlds: WorldsShown::default(),
                     lang_pick: None,
                     launcher_lang: Lang::default(),
@@ -219,16 +256,15 @@ impl Overlay {
     }
 
     /// CHAT-EMOJI: the server's chat emojis from now on (the content refresh brought Studio's
-    /// list, or the built-in one while it has none). A running session hears a different list.
+    /// list, or the built-in one while it has none). Running sessions hear a different list.
     pub fn set_emojis(&self, emojis: ChatEmojis) {
         let mut inner = self.lock();
         if *inner.emojis == emojis {
             return;
         }
         inner.emojis = Arc::new(emojis);
-        if let Some(running) = &inner.running {
-            let _ = running.msgs.send(Msg::Emojis(Arc::clone(&inner.emojis)));
-        }
+        let emojis = Arc::clone(&inner.emojis);
+        inner.tell_others(None, || Msg::Emojis(Arc::clone(&emojis)));
     }
 
     /// The emoji picker switched in the overlay's settings (CHAT-EMOJI): `sink` hands it to the
@@ -242,16 +278,17 @@ impl Overlay {
     }
 
     /// A session's mod switched the emoji picker: the choices here follow at once (the session's
-    /// own already did), then the page hears it. Only the running session counts.
+    /// own already did, the other games' sessions hear it), then the page hears it. Only a running
+    /// session counts.
     fn emoji_switched(&self, session: u64, on: bool) {
         {
             let mut inner = self.lock();
-            if inner.running.as_ref().map(|running| running.id) != Some(session)
-                || inner.config.emoji == on
-            {
+            if inner.session(session).is_none() || inner.config.emoji == on {
                 return;
             }
             inner.config.emoji = on;
+            let config = inner.config.clone();
+            inner.tell_others(Some(session), || Msg::Config(config.clone()));
         }
         let sink = self
             .shared
@@ -294,13 +331,11 @@ impl Overlay {
         Self::tell_language(&inner, before);
     }
 
-    /// The running session hears the overlay's language when it is no longer `before`.
+    /// The running sessions hear the overlay's language when it is no longer `before`.
     fn tell_language(inner: &Inner, before: Lang) {
         let now = inner.language();
-        if now != before
-            && let Some(running) = &inner.running
-        {
-            let _ = running.msgs.send(Msg::Language(now));
+        if now != before {
+            inner.tell_others(None, || Msg::Language(now));
         }
     }
 
@@ -314,15 +349,20 @@ impl Overlay {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
     }
 
-    /// A session's mod picked the overlay's language: it holds from now on (the sessions that
-    /// start later too), then the launcher keeps it. Only the running session counts.
+    /// A session's mod picked the overlay's language: it holds from now on (the other games'
+    /// sessions follow it, the sessions that start later too), then the launcher keeps it. Only a
+    /// running session counts.
     fn language_picked(&self, session: u64, lang: Lang) {
         {
             let mut inner = self.lock();
-            if inner.running.as_ref().map(|running| running.id) != Some(session) {
+            if inner.session(session).is_none() {
                 return;
             }
+            let before = inner.language();
             inner.lang_pick = Some(lang);
+            if inner.language() != before {
+                inner.tell_others(Some(session), || Msg::Language(lang));
+            }
         }
         let sink = self
             .shared
@@ -335,8 +375,8 @@ impl Overlay {
         }
     }
 
-    /// The page's choices. A session running now follows them; turning the overlay off ends it
-    /// (`bye{disabled}`), as does turning off the emoji picker of a game that has only that.
+    /// The page's choices. The sessions running now follow them; turning the overlay off ends
+    /// them (`bye{disabled}`), as does turning off the emoji picker of games that have only that.
     /// Returns whether anything changed.
     pub fn configure(&self, config: OverlayConfig) -> bool {
         let ended = {
@@ -349,27 +389,27 @@ impl Overlay {
             // while the picker stays on.
             let panel_off = inner.config.enabled && !config.enabled;
             inner.config = config.clone();
-            match &inner.running {
-                Some(_) if panel_off || !config.wants_mod() => inner.running.take(),
-                Some(running) => {
-                    let _ = running.msgs.send(Msg::Config(config));
-                    None
-                }
-                None => None,
+            if panel_off || !config.wants_mod() {
+                std::mem::take(&mut inner.sessions)
+            } else {
+                inner.tell_others(None, || Msg::Config(config.clone()));
+                Vec::new()
             }
         };
-        if let Some(running) = ended {
+        if !ended.is_empty() {
             tracing::info!("the in-game overlay was turned off during the game");
+        }
+        for running in ended {
             let _ = running.msgs.send(Msg::Stop {
                 reason: ByeReason::Disabled,
                 done: None,
             });
-            self.report(running.id, false, true);
+            self.report(running.id, false);
         }
         true
     }
 
-    /// Hears whether the mod is connected (the launcher tells its page).
+    /// Hears whether a mod is connected (the launcher tells its page).
     pub fn on_status(&self, sink: impl Fn(OverlayStatus) + Send + Sync + 'static) {
         *self
             .shared
@@ -378,39 +418,41 @@ impl Overlay {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
     }
 
-    /// The mod in the running game is connected now.
+    /// The mod in a running game is connected now.
     pub fn connected(&self) -> bool {
         self.shared.connected.load(Ordering::SeqCst)
     }
 
     /// A game session has a bridge now.
     pub fn active(&self) -> bool {
-        self.lock().running.is_some()
+        !self.lock().sessions.is_empty()
     }
 
-    /// Everything the friends feature tells the launcher's page goes here too. Without a game
-    /// session it is dropped at once.
+    /// Everything the friends feature tells the launcher's page goes to every game's session too.
+    /// Without a game session it is dropped at once.
     pub fn on_social(&self, update: SocialUpdate) {
-        let msgs = match &self.lock().running {
-            Some(running) => running.msgs.clone(),
-            None => return,
-        };
-        let msg = match update {
-            SocialUpdate::View(view) => Msg::View(Arc::from(view)),
-            SocialUpdate::Notice(notice) => Msg::Notice(notice),
-            SocialUpdate::Chat(change) => Msg::Chat(change),
-            // "Yazıyor…" (CHAT2): the session passes it on while the panel is open.
-            SocialUpdate::Typing(typing) => Msg::Typing(typing),
+        let inner = self.lock();
+        if inner.sessions.is_empty() {
+            return;
+        }
+        match update {
+            SocialUpdate::View(view) => {
+                let view: Arc<_> = Arc::from(view);
+                inner.tell_others(None, || Msg::View(Arc::clone(&view)));
+            }
+            SocialUpdate::Notice(notice) => inner.tell_others(None, || Msg::Notice(notice.clone())),
+            SocialUpdate::Chat(change) => inner.tell_others(None, || Msg::Chat(change.clone())),
+            // "Yazıyor…" (CHAT2): the sessions pass it on while the panel is open.
+            SocialUpdate::Typing(typing) => inner.tell_others(None, || Msg::Typing(typing.clone())),
             // The player's own crew tag taken off by its crew's leader (TEAM6): the next view
             // greets the mod again without it (the panel's header drops the chip, OVL-UX); the
             // launcher's toast says why.
-            SocialUpdate::TagOff(_) => return,
-        };
-        let _ = msgs.send(msg);
+            SocialUpdate::TagOff(_) => {}
+        }
     }
 
-    /// A fresh bridge for a game about to start (a session still running from an earlier start
-    /// ends first). The endpoint's two JVM arguments go on the game's command line.
+    /// A fresh bridge for a game about to start; the sessions of games already running stay
+    /// (PLAY-AGAIN). The endpoint's two JVM arguments go on the game's command line.
     pub async fn start<S: SocialActions>(
         &self,
         social: S,
@@ -437,7 +479,6 @@ impl Overlay {
         launcher: String,
         game: Option<String>,
     ) -> io::Result<Endpoint> {
-        self.stop(ByeReason::LauncherExit).await;
         let (bridge, endpoint) = Bridge::bind().await?;
         let id = self.shared.next.fetch_add(1, Ordering::Relaxed);
         let (control, control_rx) = mpsc::unbounded_channel();
@@ -445,14 +486,21 @@ impl Overlay {
         let (msgs, msgs_rx) = mpsc::unbounded_channel();
         let (config, worlds, lang, emojis) = {
             let mut inner = self.lock();
-            inner.running = Some(Running {
+            // The first game's session is the one world sharing follows, until the launcher names
+            // another (`set_host`); a game started beside others sees no world sharing.
+            if inner.sessions.is_empty() {
+                inner.host = Some(id);
+            }
+            inner.sessions.push(Running {
                 id,
                 port: endpoint.port(),
                 msgs: msgs.clone(),
+                connected: false,
+                hello: None,
             });
             (
                 inner.config.clone(),
-                inner.worlds.clone(),
+                inner.worlds_for(id),
                 inner.language(),
                 Arc::clone(&inner.emojis),
             )
@@ -463,7 +511,7 @@ impl Overlay {
             .speaking(lang)
             .switched(config.enabled, config.emoji);
         let hub = self.clone();
-        let connected: ConnectedFn = Arc::new(move |on| hub.report(id, on, false));
+        let connected: ConnectedFn = Arc::new(move |on| hub.report(id, on));
         let hub = self.clone();
         let host: HostSink = Arc::new(move |signal| hub.host_signal(id, signal));
         let hub = self.clone();
@@ -503,7 +551,13 @@ impl Overlay {
     /// fails or the game does not answer within [`CONNECT_WAIT`]: the caller then starts the game
     /// again as before.
     pub async fn connect_in_game(&self, target: &str) -> ConnectOutcome {
-        self.connect(target.to_owned(), None).await
+        self.connect(None, target.to_owned(), None).await
+    }
+
+    /// [`Overlay::connect_in_game`] for the game whose bridge is on `game` (PLAY-AGAIN: the one the
+    /// player meant among several); `None`: the newest game.
+    pub async fn connect_in_game_at(&self, game: Option<u16>, target: &str) -> ConnectOutcome {
+        self.connect(game, target.to_owned(), None).await
     }
 
     /// HOST1 (H12): "Katıl" on a friend's world while the game runs: the game moves to the
@@ -511,13 +565,38 @@ impl Overlay {
     /// dünyası: Ayşe") instead of an address. The same rules as [`Overlay::connect_in_game`], and
     /// only with a mod whose hello lists `host`.
     pub async fn connect_world_in_game(&self, port: u16, label: String) -> ConnectOutcome {
-        self.connect(format!("127.0.0.1:{port}"), Some(label)).await
+        self.connect(None, format!("127.0.0.1:{port}"), Some(label))
+            .await
     }
 
-    async fn connect(&self, target: String, label: Option<String>) -> ConnectOutcome {
-        let msgs = match &self.lock().running {
-            Some(running) => running.msgs.clone(),
-            None => return ConnectOutcome::unavailable("no-overlay"),
+    /// [`Overlay::connect_world_in_game`] for the game whose bridge is on `game`; `None`: the
+    /// newest game.
+    pub async fn connect_world_in_game_at(
+        &self,
+        game: Option<u16>,
+        port: u16,
+        label: String,
+    ) -> ConnectOutcome {
+        self.connect(game, format!("127.0.0.1:{port}"), Some(label))
+            .await
+    }
+
+    async fn connect(
+        &self,
+        game: Option<u16>,
+        target: String,
+        label: Option<String>,
+    ) -> ConnectOutcome {
+        let msgs = {
+            let inner = self.lock();
+            let running = match game {
+                Some(port) => inner.sessions.iter().find(|running| running.port == port),
+                None => inner.sessions.last(),
+            };
+            match running {
+                Some(running) => running.msgs.clone(),
+                None => return ConnectOutcome::unavailable("no-overlay"),
+            }
         };
         let (reply, answer) = oneshot::channel();
         let asked = Msg::Connect {
@@ -535,41 +614,102 @@ impl Overlay {
         }
     }
 
-    /// Ends the running session, if any: the mod hears `bye{reason}` (when it is still there) and
-    /// the bridge closes. Waits for that, at most [`STOP_WAIT`].
+    /// Ends every running session: each mod hears `bye{reason}` (when it is still there) and the
+    /// bridges close. Waits for that, at most [`STOP_WAIT`].
     pub async fn stop(&self, reason: ByeReason) {
         self.end(|_| true, reason).await;
     }
 
     /// [`Overlay::stop`] for the session of the bridge on `port` only (its game ended, its launch
-    /// stopped): a newer game's session is left alone.
+    /// stopped): the other games' sessions are left alone.
     pub async fn stop_for(&self, port: u16, reason: ByeReason) {
         self.end(|running| running.port == port, reason).await;
     }
 
-    async fn end(&self, which: impl FnOnce(&Running) -> bool, reason: ByeReason) {
-        let running = {
+    async fn end(&self, which: impl Fn(&Running) -> bool, reason: ByeReason) {
+        let ended: Vec<Running> = {
             let mut inner = self.lock();
-            match inner.running.as_ref() {
-                Some(running) if which(running) => inner.running.take(),
-                _ => None,
+            let (ended, kept) = std::mem::take(&mut inner.sessions)
+                .into_iter()
+                .partition(|running| which(running));
+            inner.sessions = kept;
+            ended
+        };
+        let mut closing = Vec::new();
+        for running in ended {
+            self.report(running.id, false);
+            let (done, closed) = oneshot::channel();
+            if running
+                .msgs
+                .send(Msg::Stop {
+                    reason,
+                    done: Some(done),
+                })
+                .is_ok()
+            {
+                closing.push(closed);
             }
-        };
-        let Some(running) = running else {
-            return;
-        };
-        self.report(running.id, false, true);
-        let (done, closed) = oneshot::channel();
-        if running
-            .msgs
-            .send(Msg::Stop {
-                reason,
-                done: Some(done),
-            })
-            .is_ok()
-        {
-            let _ = tokio::time::timeout(STOP_WAIT, closed).await;
         }
+        if closing.is_empty() {
+            return;
+        }
+        let _ = tokio::time::timeout(STOP_WAIT, async {
+            for closed in closing {
+                let _ = closed.await;
+            }
+        })
+        .await;
+    }
+
+    /// HOST1 with several games (PLAY-AGAIN): world sharing follows the game whose bridge is on
+    /// `port` from now on (`None`: no game; the launcher names the game that took over when the
+    /// one it followed ended). The session that leaves the role sees no world sharing any more;
+    /// the one that takes it gets what world sharing shows, and its mod's last hello is told to
+    /// world sharing again.
+    pub fn set_host(&self, port: Option<u16>) {
+        let (left, took, hello, worlds) = {
+            let mut inner = self.lock();
+            let next = port.and_then(|port| {
+                inner
+                    .sessions
+                    .iter()
+                    .find(|running| running.port == port)
+                    .map(|running| running.id)
+            });
+            if next == inner.host {
+                return;
+            }
+            let left = inner
+                .host
+                .and_then(|id| inner.session(id))
+                .map(|running| running.msgs.clone());
+            inner.host = next;
+            let took = next.and_then(|id| inner.session(id));
+            (
+                left,
+                took.map(|running| running.msgs.clone()),
+                took.and_then(|running| running.hello.clone()),
+                inner.worlds.clone(),
+            )
+        };
+        if let Some(left) = left {
+            let _ = left.send(Msg::Worlds(WorldsShown::default()));
+        }
+        if let Some(took) = took {
+            let _ = took.send(Msg::Worlds(worlds));
+        }
+        if let Some(hello) = hello {
+            self.tell_host(hello);
+        }
+    }
+
+    /// The port of the session world sharing follows, while it runs.
+    pub fn host_port(&self) -> Option<u16> {
+        let inner = self.lock();
+        inner
+            .host
+            .and_then(|id| inner.session(id))
+            .map(|running| running.port)
     }
 
     /// World sharing (HOST1) hears the running game's mod: its hello (whether it hosts), its
@@ -602,13 +742,13 @@ impl Overlay {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
     }
 
-    /// A session's mod changed a friend's mark: the choices here follow at once (the sessions that
-    /// start later, and the page pushing the same choices back changes nothing), then the page
-    /// hears it. Only the running session counts.
+    /// A session's mod changed a friend's mark: the choices here follow at once (the other games'
+    /// sessions hear them, the sessions that start later too, and the page pushing the same choices
+    /// back changes nothing), then the page hears it. Only a running session counts.
     fn people_change(&self, session: u64, change: PeopleChange) {
         {
             let mut inner = self.lock();
-            if inner.running.as_ref().map(|running| running.id) != Some(session) {
+            if inner.session(session).is_none() {
                 return;
             }
             let notify = &mut inner.config.notify;
@@ -618,6 +758,8 @@ impl Overlay {
                     notify.online_alerts.insert(friend.clone(), *on);
                 }
             }
+            let config = inner.config.clone();
+            inner.tell_others(Some(session), || Msg::Config(config.clone()));
         }
         let sink = self
             .shared
@@ -644,15 +786,17 @@ impl Overlay {
         })
     }
 
-    /// HOST1: frames for the running game's mod (H5, H8, H10, H11, H14), dropped unless its hello
-    /// lists `host`. Only right after the player's own press, or for a security event (H16).
+    /// HOST1: frames for the mod of the game world sharing follows (H5, H8, H10, H11, H14),
+    /// dropped unless its hello lists `host`. Only right after the player's own press, or for a
+    /// security event (H16).
     pub fn host_send(&self, frames: Vec<ToGame>) {
-        if let Some(running) = &self.lock().running {
+        let inner = self.lock();
+        if let Some(running) = inner.host.and_then(|id| inner.session(id)) {
             let _ = running.msgs.send(Msg::Host(frames));
         }
     }
 
-    /// HOST1: what every game session shows of world sharing (H2, H13): the friends who invited
+    /// HOST1: what the game world sharing follows shows of it (H2, H13): the friends who invited
     /// the player to their open world, and whether the player may open theirs now. Kept for the
     /// sessions that start later.
     pub fn set_worlds(&self, worlds: WorldsShown) {
@@ -662,21 +806,38 @@ impl Overlay {
                 return;
             }
             inner.worlds = worlds.clone();
-            inner.running.as_ref().map(|running| running.msgs.clone())
+            inner
+                .host
+                .and_then(|id| inner.session(id))
+                .map(|running| running.msgs.clone())
         };
         if let Some(msgs) = msgs {
             let _ = msgs.send(Msg::Worlds(worlds));
         }
     }
 
-    /// A session's mod said something to world sharing: only the running session counts, and the
-    /// going of the last one (taken away by [`Overlay::stop`]) when no newer one runs.
+    /// A session's mod said something to world sharing: only the session it follows counts (also
+    /// its going after the hub took it away). Every session's hello is kept, for the day its game
+    /// becomes the one world sharing follows.
     fn host_signal(&self, session: u64, signal: HostSignal) {
-        let running = self.lock().running.as_ref().map(|running| running.id);
-        let counts = running == Some(session) || (running.is_none() && signal == HostSignal::Gone);
-        if !counts {
-            return;
+        let counts = {
+            let mut inner = self.lock();
+            if let Some(running) = inner.sessions.iter_mut().find(|r| r.id == session) {
+                match &signal {
+                    HostSignal::Connected { .. } => running.hello = Some(signal.clone()),
+                    HostSignal::Gone => running.hello = None,
+                    _ => {}
+                }
+            }
+            inner.host == Some(session)
+        };
+        if counts {
+            self.tell_host(signal);
         }
+    }
+
+    /// Hands `signal` to world sharing.
+    fn tell_host(&self, signal: HostSignal) {
         let sink = self
             .shared
             .host
@@ -688,13 +849,23 @@ impl Overlay {
         }
     }
 
-    /// A session says whether its mod is connected; only the running one counts (`ended`: the
-    /// hub itself, for a session it just took away).
-    fn report(&self, session: u64, connected: bool, ended: bool) {
-        let current = self.lock().running.as_ref().map(|running| running.id) == Some(session);
-        if !current && !ended {
-            return;
-        }
+    /// A session says whether its mod is connected (the hub itself, `false`, for a session it just
+    /// took away). The page hears whether any game's mod is connected; a session already gone
+    /// cannot connect.
+    fn report(&self, session: u64, connected: bool) {
+        let connected = {
+            let mut inner = self.lock();
+            match inner
+                .sessions
+                .iter_mut()
+                .find(|running| running.id == session)
+            {
+                Some(running) => running.connected = connected,
+                None if connected => return,
+                None => {}
+            }
+            inner.sessions.iter().any(|running| running.connected)
+        };
         if self.shared.connected.swap(connected, Ordering::SeqCst) == connected {
             return;
         }

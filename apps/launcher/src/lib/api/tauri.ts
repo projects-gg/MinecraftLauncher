@@ -324,7 +324,13 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
     case "exited":
       return { type: "exited", code: e.code, runtimeSecs: e.runtimeSecs };
     case "started":
-      return { type: "started", pid: e.pid, firstStart: e.firstStart, account: e.account };
+      return {
+        type: "started",
+        pid: e.pid,
+        game: e.game,
+        firstStart: e.firstStart,
+        account: e.account,
+      };
     case "modsNotice":
       return {
         type: "modsNotice",
@@ -713,9 +719,15 @@ export const tauriApi: LauncherApi = {
   async cancelLaunch() {
     await commands.launchCancel();
   },
-  closeGame: () => commands.gameClose(),
-  async killGame() {
-    await commands.gameKill();
+  closeGame: (game) => commands.gameClose(game),
+  async killGame(game) {
+    await commands.gameKill(game);
+  },
+  async gameMemoryFits(instanceId) {
+    return ok(commands.gameMemoryFits(instanceId));
+  },
+  async gameWorldOpen(instanceId, world) {
+    return ok(commands.gameWorldOpen(instanceId, world));
   },
   async setScreenshotCopy(enabled) {
     await commands.gameCopyScreenshots(enabled);

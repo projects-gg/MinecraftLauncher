@@ -13,7 +13,7 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 vi.mock("@/stores/launch", () => ({
-  useLaunch: { getState: () => ({ phase: { kind: "idle" }, play }) },
+  useLaunch: { getState: () => ({ phase: { kind: "idle" }, games: [], play }) },
 }));
 let selectedInstanceId: string | null = null;
 vi.mock("@/stores/prefs", () => ({

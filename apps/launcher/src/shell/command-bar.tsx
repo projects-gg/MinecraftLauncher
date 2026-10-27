@@ -3,22 +3,27 @@ import {
   Chip,
   cn,
   easeOutExpo,
+  isCut,
   OverflowTooltip,
   PlayButton,
   type PlayState,
   Progress,
   returnFocusAfterKeys,
   Switch,
+  Tooltip,
   toast,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import type { TFunction } from "i18next";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useOwnLaunch } from "@/features/accounts/use-own-launch";
-import { launchErrorAction } from "@/features/disk/launch-error";
+import { AccountFace, type FaceAccount } from "@/features/accounts/account-face";
+import { useAccounts } from "@/features/accounts/use-accounts";
+import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launch";
+import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
 import { helpsWithLaunchError } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
@@ -366,18 +371,116 @@ function LaunchStatus({ phase }: { phase: LaunchPhase }) {
   );
 }
 
+/**
+ * Who else is in game (PLAY-AGAIN): with another account selected, the accounts in game while this
+ * one is not, so OYNA reads as one more game beside theirs. As the account menu shows it: the
+ * face, the name (two or more: "2 hesap") over a green "Oyunda", after "Devam et" behind the bar's
+ * divider, away from the switch (second looks: beside the switch it read as the switch's label;
+ * one line lost its subject at 1024 px). The sentence with every name is read out and shows under
+ * the pointer. Quiet: no dot, no glow, no hover.
+ */
+function othersWords(
+  t: TFunction,
+  names: readonly string[],
+): { sentence: string; who: string } | null {
+  const [first, second] = names;
+  if (!first) return null;
+  if (!second) return { sentence: t("playAgain.othersOne", { name: first }), who: first };
+  const total = String(names.length);
+  return {
+    sentence:
+      names.length === 2
+        ? t("playAgain.othersTwo", { first, second })
+        : `${t("playAgain.othersMany", { total })}: ${names.join(", ")}`,
+    who: t("playAgain.othersCount", { total }),
+  };
+}
+
+/**
+ * The bar's quiet "who is in game" (PLAY-AGAIN): their faces, the name (or the count) over
+ * "Oyunda". The names come under the pointer in the app's tooltip: always while the bar counts
+ * them ("2 hesap"), a single name only when it is cut (repeating the words on screen is noise). In
+ * a narrow bar (1024 px) the face and a name stay and the name is cut: a bare "Oyunda" beside OYNA
+ * read as the selected account in game (fourth look), a name without its face as a world (fifth
+ * look); "Devam et" keeps its world whole while this line gives (third look: two cut names side by
+ * side read as one thing twice).
+ */
+function OthersInGame({
+  sentence,
+  who,
+  many,
+  faces,
+}: {
+  sentence: string;
+  who: string;
+  many: boolean;
+  faces: readonly (FaceAccount & { id: string })[];
+}) {
+  const { t } = useTranslation();
+  const whoRef = useRef<HTMLSpanElement>(null);
+  // Measured when the pointer comes, as OverflowTooltip does; one tooltip either way, so the tree
+  // stays when the count changes (design.md §5).
+  const [cut, setCut] = useState(false);
+  const body = (
+    <span
+      aria-hidden
+      className="flex min-w-0 items-center gap-2.5"
+      onPointerEnter={() => setCut(isCut(whoRef.current))}
+    >
+      {faces.length > 0 ? (
+        <span className="flex shrink-0 -space-x-2">
+          {faces.map((account) => (
+            <AccountFace
+              key={account.id}
+              account={account}
+              size={24}
+              className="ring-2 ring-obsidian-950/80"
+            />
+          ))}
+        </span>
+      ) : null}
+      <span className="min-w-0 leading-tight">
+        <span ref={whoRef} className="block truncate text-[13px] text-ash-300">
+          {who}
+        </span>
+        {/* One word that never breaks (round 4: "Oyund / a" when the bar was full). */}
+        <span className="block whitespace-nowrap text-[12px] text-jade-400">
+          {t("playAcct.inGame")}
+        </span>
+      </span>
+    </span>
+  );
+  return (
+    <>
+      <span className="sr-only">{sentence}</span>
+      <Tooltip content={sentence} disabled={!many && !cut}>
+        {body}
+      </Tooltip>
+    </>
+  );
+}
+
 function StatusArea({
   selected,
   phase,
+  others,
 }: {
   selected: InstanceSummary | undefined;
   /** The launch as the selected account sees it (idle while another account's game runs). */
   phase: LaunchPhase;
+  /** The other accounts in game while this one is not (PLAY-AGAIN). */
+  others: readonly string[];
 }) {
   const { t } = useTranslation();
   const reduce = useReducedMotion() ?? false;
   const autoJoin = usePrefs((s) => s.autoJoin);
   const setAutoJoin = usePrefs((s) => s.setAutoJoin);
+  const othersText = othersWords(t, others);
+  const { data: accounts } = useAccounts();
+  const faces = others
+    .map((name) => accounts?.find((account) => account.username === name))
+    .filter((account) => account !== undefined)
+    .slice(0, 3);
   // "Devam et" only while nothing runs (a click would start nothing otherwise).
   const target = useResumeTarget(selected);
   const resume = phase.kind === "idle" ? target : target === undefined ? undefined : null;
@@ -394,51 +497,84 @@ function StatusArea({
         ) : (
           <motion.div
             key="rest"
-            className="flex min-w-0 items-center justify-between gap-6"
+            className="@container/bar flex min-w-0 items-center justify-between gap-6"
             {...swapIn(reduce)}
           >
-            {/* "Devam et" and the last-played line share one cell and cross-fade in place. */}
-            <div className="grid min-w-0 flex-1 *:[grid-area:1/1]">
-              <AnimatePresence initial={false}>
-                {selected && resume ? (
-                  <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
-                    <ResumeButton instance={selected} target={resume} />
-                  </motion.div>
-                ) : selected && resume === null ? (
-                  <motion.div
-                    key="status"
-                    className="min-w-0 text-[12px] text-ash-300"
-                    {...swapIn(reduce)}
-                  >
-                    <span className="block truncate tabular-nums">
-                      {phase.kind === "running" ? (
-                        <SessionTime since={phase.since} />
-                      ) : selected.lastPlayedAt ? (
-                        t("play.lastPlayed", { when: formatRelative(selected.lastPlayedAt) })
-                      ) : // The session is recorded when the game closes: no "Henüz oynanmadı"
-                      // while the first one starts.
-                      phase.kind === "idle" ? (
-                        t("play.neverPlayed")
-                      ) : null}
-                    </span>
-                    {selected.playTimeSecs > 0 ? (
-                      <span className="block truncate">
-                        {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
+            <div className="flex min-w-0 items-center gap-4">
+              {/* "Devam et" and the last-played line share one cell and cross-fade in place. Beside
+                  the quiet "who is in game" line it keeps its width (capped) and that line gives
+                  instead: one cut name at most (third and fourth looks). */}
+              <div
+                className={cn(
+                  "grid *:[grid-area:1/1]",
+                  othersText
+                    ? "max-w-[200px] shrink-0 @min-[600px]/bar:max-w-[300px]"
+                    : "min-w-[120px] shrink",
+                )}
+              >
+                <AnimatePresence initial={false}>
+                  {selected && resume ? (
+                    <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
+                      <ResumeButton instance={selected} target={resume} />
+                    </motion.div>
+                  ) : selected && resume === null ? (
+                    <motion.div
+                      key="status"
+                      className="min-w-0 text-[12px] text-ash-300"
+                      {...swapIn(reduce)}
+                    >
+                      <span className="block truncate tabular-nums">
+                        {phase.kind === "running" ? (
+                          <SessionTime since={phase.since} />
+                        ) : selected.lastPlayedAt ? (
+                          t("play.lastPlayed", { when: formatRelative(selected.lastPlayedAt) })
+                        ) : // The session is recorded when the game closes: no "Henüz oynanmadı"
+                        // while the first one starts.
+                        phase.kind === "idle" ? (
+                          t("play.neverPlayed")
+                        ) : null}
                       </span>
-                    ) : null}
+                      {selected.playTimeSecs > 0 ? (
+                        <span className="block truncate">
+                          {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
+                        </span>
+                      ) : null}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+              <AnimatePresence initial={false}>
+                {othersText ? (
+                  <motion.div
+                    key="others"
+                    className="flex max-w-[200px] min-w-0 shrink items-center border-l border-white/8 pl-4"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1, transition: { duration: 0.24, ease: easeOutExpo } }}
+                    exit={{ opacity: 0, transition: { duration: 0.12, ease: easeOutExpo } }}
+                  >
+                    <OthersInGame
+                      sentence={othersText.sentence}
+                      who={othersText.who}
+                      many={others.length > 1}
+                      faces={faces}
+                    />
                   </motion.div>
                 ) : null}
               </AnimatePresence>
             </div>
-            {selected?.autoJoin ? (
-              <Switch
-                checked={autoJoin}
-                onCheckedChange={setAutoJoin}
-                label={t("play.autoJoin")}
-                description={selected.autoJoin}
-                className="shrink-0"
-              />
-            ) : null}
+            <div className="flex shrink-0 items-center">
+              {selected?.autoJoin ? (
+                <Switch
+                  checked={autoJoin}
+                  onCheckedChange={setAutoJoin}
+                  label={t("play.autoJoin")}
+                  description={selected.autoJoin}
+                  // A narrow bar (1024 px): its words take two lines and the address goes (it is in
+                  // the instance's settings), so "who is in game" keeps a whole name (sixth look).
+                  className="shrink-0 @max-[560px]/bar:max-w-[172px] @max-[560px]/bar:[&_label>span+span]:hidden"
+                />
+              ) : null}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -464,6 +600,8 @@ export function CommandBar() {
   // Only what the bar shows: the rest of the launch store (crash, notes, screenshots) changes
   // without it.
   const { phase, instanceId: launchId } = useOwnLaunch();
+  // Other accounts in game while this one is not: the quiet "X oyunda" (PLAY-AGAIN).
+  const others = useOthersInGame();
   const play = useLaunch((s) => s.play);
   const cancel = useLaunch((s) => s.cancel);
   const reset = useLaunch((s) => s.reset);
@@ -492,21 +630,32 @@ export function CommandBar() {
   // "Son oynama" (the account in game says "az önce" beside its "Oyunda"). The launch itself, not
   // this account's view of it: another account's game ends too, and switching accounts is no end.
   const launchKind = useLaunch((s) => s.phase.kind);
+  // One of several games ending changes no phase (PLAY-AGAIN): its end is read the same way.
+  const gameCount = useLaunch((s) => s.games.length);
   const lastKind = useRef(launchKind);
+  const lastCount = useRef(gameCount);
   useEffect(() => {
     const was = lastKind.current;
+    const wasCount = lastCount.current;
     lastKind.current = launchKind;
-    if (was === launchKind || was === "idle") return;
-    if (launchKind !== "running" && launchKind !== "idle") return;
+    lastCount.current = gameCount;
+    const ended = gameCount < wasCount;
+    if (!ended) {
+      if (was === launchKind || was === "idle") return;
+      if (launchKind !== "running" && launchKind !== "idle") return;
+    }
     for (const queryKey of [["instances"], ["instance"], ["resume"], ["accounts"]]) {
       void queryClient.invalidateQueries({ queryKey });
     }
-  }, [launchKind, queryClient]);
+  }, [launchKind, gameCount, queryClient]);
 
   const selectedLaunchId = selected?.id;
   useEffect(() => {
     if (phase.kind !== "error") return;
-    if (launchErrorAction(phase.code) === "makeSpace") {
+    if (phase.code === WORLD_OPEN) {
+      // The world is open in the player's other game (PLAY-AGAIN): nothing to copy or to fix.
+      toast(phase.message, { id: "launch-world-open" });
+    } else if (launchErrorAction(phase.code) === "makeSpace") {
       // The disk cannot hold the download: nothing was fetched yet (or the half-done file went).
       // Settings → Veri shows what can go and how much room it makes; OYNA tries again after.
       toast.error(phase.message, {
@@ -570,10 +719,12 @@ export function CommandBar() {
         onSelect={selectInstance}
       />
       <div className={cn("flex min-w-0 flex-1 items-center border-l border-white/8 pl-4")}>
-        <StatusArea selected={selected} phase={phase} />
+        <StatusArea selected={selected} phase={phase} others={others} />
       </div>
       <PlayButton
         state={state}
+        // "Oyunda" takes a press: one more game, after the owner's question (PLAY-AGAIN).
+        runningPressable={state.kind === "running"}
         onPlay={() => {
           if (selected) void play(selected.id);
           // Nothing to play: the offer "Hiç kurulum yok" with "Kur ve oyna" and "Yeni kurulum"
@@ -588,6 +739,8 @@ export function CommandBar() {
           update: t("play.update"),
           cancel: t("play.cancel"),
           running: t("play.running"),
+          runningAction: t("playAgain.runningAria"),
+          runningHover: t("playAgain.runningHover"),
           percentFirst: i18n.language !== "en",
         }}
       />

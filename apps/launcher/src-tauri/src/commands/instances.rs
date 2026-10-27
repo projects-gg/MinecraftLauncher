@@ -224,12 +224,7 @@ pub async fn instance_delete(
             detail.to_owned(),
         )
     };
-    if state
-        .running
-        .lock()
-        .as_ref()
-        .is_some_and(|running| running.instance_id == id)
-    {
+    if state.games.lock().of_instance(&id) {
         return Err(busy("the game of this instance is running"));
     }
     // The launcher's own background download of it stops first (LIB1): the player never started
@@ -801,13 +796,7 @@ async fn graphics_free(
     state: &AppState,
     id: &str,
 ) -> CmdResult<tokio::sync::OwnedMutexGuard<()>> {
-    let running = || {
-        state
-            .running
-            .lock()
-            .as_ref()
-            .is_some_and(|r| r.instance_id == id)
-    };
+    let running = || state.games.lock().of_instance(id);
     let refuse_running = || {
         CmdError::new(
             "OYUN-ACIK",
@@ -1042,13 +1031,7 @@ pub async fn instance_servers_edit(
     edit: pl_mc::server::ServerEdit,
 ) -> CmdResult<ServerEditView> {
     use pl_mc::server::{ServerEditError, ServerList};
-    let running = || {
-        state
-            .running
-            .lock()
-            .as_ref()
-            .is_some_and(|r| r.instance_id == instance_id)
-    };
+    let running = || state.games.lock().of_instance(&instance_id);
     let refuse_running = || {
         CmdError::new(
             "OYUN-ACIK",

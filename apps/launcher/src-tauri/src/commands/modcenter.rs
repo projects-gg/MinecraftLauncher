@@ -455,11 +455,7 @@ pub(crate) fn sync_progress(channel: Channel<JobProgressView>) -> SyncProgressFn
 }
 
 fn game_running(state: &AppState, instance_id: &str) -> bool {
-    state
-        .running
-        .lock()
-        .as_ref()
-        .is_some_and(|running| running.instance_id == instance_id)
+    state.games.lock().of_instance(instance_id)
 }
 
 fn not_available() -> CmdError {

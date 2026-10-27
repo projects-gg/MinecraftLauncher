@@ -1,17 +1,20 @@
-// The question's words (PLAY-ACCT): what starts in the title, what happens to the game that is on
-// in one sentence, and the answer's name; then each step on the way (the steps of FIX2 "Bağlan",
-// social/connect.ts, in this question's own words). Pure: i18n keys with their values (tested in
-// words.test.ts). Names never get a suffix (a Turkish case ending would have to follow the name's
-// vowels), and an installation is called one ("Projects" is also the server).
-import type { CloseStep } from "@/features/social/connect";
+// The question's words (PLAY-ACCT, PLAY-AGAIN). "Durdur ve oyna": what starts in the title, what
+// happens to the launch on its way in one sentence, the answer's name, then the short way. One
+// more game: one shape (second look): the title asks "Bir oyun daha açılsın mı?", the body says
+// why and what may happen (the name in game: one of the two is kicked from a shared server; the
+// memory: the games may stutter), "Yine de aç" answers. Pure: i18n keys
+// with their values (tested in words.test.ts). Names never get a suffix (a Turkish case ending
+// would have to follow the name's vowels), and an installation is called one ("Projects" is also
+// the server).
 import type { GameAccount } from "@/lib/api";
 import type { GameStage } from "@/stores/launch-owner";
+import type { SwitchKind } from "./store";
 
 export type Line = readonly [key: string, values?: Record<string, string>];
 
-/** The game that is on and what "Oyna" starts instead. */
+/** The launch on its way and what "Oyna" starts instead. */
 export interface SwitchSides {
-  /** How far the game that is on is. */
+  /** How far the launch on its way is. */
   stage: GameStage;
   /** Its account (null: not known) and installation (its name: null until the list is read). */
   from: { account: GameAccount | null; instance: string | null; instanceName: string | null };
@@ -28,7 +31,7 @@ export function accountChanges(sides: SwitchSides): boolean {
 
 const KEY = "playAcct.switch";
 
-/** What happens to the game that is on, in one sentence ("kaydedilip kapanacak" is always true). */
+/** What happens to the launch on its way, in one sentence. */
 function fate(sides: SwitchSides): Line {
   const { stage, from } = sides;
   const name = from.account?.name ?? "";
@@ -36,17 +39,16 @@ function fate(sides: SwitchSides): Line {
   if (stage === "preparing") {
     return instance ? [`${KEY}.preparingInstance`, { instance }] : [`${KEY}.preparingGame`];
   }
-  const kind = stage === "open" ? "open" : "opening";
   if (accountChanges(sides)) {
     // The installation is named only when it is not the one "Oyna" starts too.
     return instance && from.instance !== sides.to.instance
-      ? [`${KEY}.${kind}AccountInstance`, { name, instance }]
-      : [`${KEY}.${kind}Account`, { name }];
+      ? [`${KEY}.openingAccountInstance`, { name, instance }]
+      : [`${KEY}.openingAccount`, { name }];
   }
-  return instance ? [`${KEY}.${kind}Instance`, { instance }] : [`${KEY}.${kind}Game`];
+  return instance ? [`${KEY}.openingInstance`, { instance }] : [`${KEY}.openingGame`];
 }
 
-/** The question: its title, one sentence, the answer. */
+/** "Durdur ve oyna": its title, one sentence, the answer. */
 export function questionWords(sides: SwitchSides): { title: Line; body: Line[]; confirm: Line } {
   const to = sides.to;
   const title: Line =
@@ -55,18 +57,11 @@ export function questionWords(sides: SwitchSides): { title: Line; body: Line[]; 
       : to.instanceName
         ? [`${KEY}.titleInstance`, { instance: to.instanceName }]
         : ["fix2.connect.restartTitle"];
-  return {
-    title,
-    body: [fate(sides)],
-    confirm: [sides.stage === "open" ? `${KEY}.close` : `${KEY}.stop`],
-  };
+  return { title, body: [fate(sides)], confirm: [`${KEY}.stop`] };
 }
 
-/** After the answer: where the way is (the game closing, late, being ended). */
-export function stepWords(
-  sides: SwitchSides,
-  step: CloseStep["kind"],
-): { title: Line; body: Line[] } {
+/** After "Durdur ve oyna": the launch stops (as quickly as it is said), then this one starts. */
+export function stepWords(sides: SwitchSides): { title: Line; body: Line[] } {
   const to = sides.to;
   const next: Line =
     accountChanges(sides) && to.account
@@ -74,13 +69,35 @@ export function stepWords(
       : to.instanceName
         ? [`${KEY}.closingInstance`, { instance: to.instanceName }]
         : [`${KEY}.closingGame`];
-  switch (step) {
-    case "overdue":
-      return { title: [`${KEY}.overdueTitle`], body: [[`${KEY}.overdueBody`]] };
-    case "forcing":
-      return { title: [`${KEY}.forcingTitle`], body: [next] };
-    default:
-      // Closing, or a start that had not opened yet stopping (as quickly as it is said).
-      return { title: [`${KEY}.closingTitle`], body: [next] };
+  return { title: [`${KEY}.closingTitle`], body: [next] };
+}
+
+const AGAIN = "playAgain";
+
+/**
+ * One more game (PLAY-AGAIN), one shape whatever the reason: the title asks, the body says why
+ * and what may happen (the selected account `name` in game already, and that the same name on one
+ * server pushes one out), "Yine de aç" answers. The memory short is a second worry, so it is its
+ * own line (`note`) under them (third look: run together, the two read as one long warning);
+ * another account's games only: asked only when the memory is short, and then it is the body.
+ */
+export function oneMoreWords(
+  kind: Exclude<SwitchKind, "stop">,
+  memoryShort: boolean,
+  name: string | null = null,
+): { title: Line; body: Line[]; note: Line | null; confirm: Line } {
+  const title: Line = [`${AGAIN}.title`];
+  const memory: Line = [`${AGAIN}.memory`];
+  // The answer keeps the press's verb: "Bir oyun daha aç" → "Yine de aç", OYNA → "Yine de oyna"
+  // (design.md §8: one name per action; fourth look).
+  if (kind !== "again") {
+    const confirm: Line = [`${AGAIN}.confirmPlay`];
+    return { title, body: memoryShort ? [memory] : [], note: null, confirm };
   }
+  const confirm: Line = [`${AGAIN}.confirm`];
+  const same: Line[] = [
+    name ? [`${AGAIN}.sameName`, { name }] : [`${AGAIN}.sameNameUnknown`],
+    [`${AGAIN}.sameServer`],
+  ];
+  return { title, body: same, note: memoryShort ? memory : null, confirm };
 }

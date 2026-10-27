@@ -52,12 +52,7 @@ struct SwitchContext {
 }
 
 pub(crate) fn refuse_while_running(state: &AppState, instance_id: &str) -> CmdResult<()> {
-    if state
-        .running
-        .lock()
-        .as_ref()
-        .is_some_and(|running| running.instance_id == instance_id)
-    {
+    if state.games.lock().of_instance(instance_id) {
         return Err(CmdError::new(
             "OYUN-ACIK-MOD",
             pick(
@@ -603,11 +598,7 @@ pub async fn instance_versions(
         loader: instance.loader.kind,
         options,
         partial,
-        game_running: state
-            .running
-            .lock()
-            .as_ref()
-            .is_some_and(|running| running.instance_id == instance_id),
+        game_running: state.games.lock().of_instance(&instance_id),
     })
 }
 

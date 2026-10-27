@@ -349,7 +349,7 @@ async fn system_javas(app: &AppHandle, rescan: bool) -> (Vec<JavaInstallation>, 
 }
 
 fn game_active(state: &AppState) -> bool {
-    state.running.lock().is_some() || state.launch_cancel.lock().is_some()
+    state.games.lock().any() || state.launch_cancel.lock().is_some()
 }
 
 fn bits32(arch: Arch) -> bool {
@@ -1212,7 +1212,7 @@ async fn swap_runtime(app: &AppHandle, root: PathBuf) -> Option<SwapOutcome> {
     let outcome = tokio::task::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let preparing = state.launch_cancel.lock();
-        if preparing.is_some() || state.running.lock().is_some() {
+        if preparing.is_some() || state.games.lock().any() {
             return Ok(SwapOutcome::InUse);
         }
         managed::swap_in_staged(&root)

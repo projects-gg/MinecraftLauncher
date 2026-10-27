@@ -134,10 +134,9 @@ export function SettingsTab({ instance }: { instance: InstanceDetail }) {
     update({ ...s, graphics: pickFor(savedGraphics, value) });
   const gameOpen = useLaunch(
     (state) =>
-      state.instanceId === instance.id &&
-      (state.phase.kind === "working" ||
-        state.phase.kind === "launching" ||
-        state.phase.kind === "running"),
+      (state.instanceId === instance.id &&
+        (state.phase.kind === "working" || state.phase.kind === "launching")) ||
+      state.games.some((game) => game.instanceId === instance.id),
   );
   const graphicsWaits = gameOpen && pickedGraphics !== undefined;
   const wasOpen = useRef(gameOpen);

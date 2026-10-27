@@ -1,53 +1,27 @@
-// "Oyna" while another game runs (PLAY-ACCT): another account's game (the owner's report: with
-// another account selected, OYNA said "Oyunda"), or another installation's, since one game runs
-// at a time. One question names what starts and what happens to the game that is on; its answer
-// saves and closes that game the way its own close button does and starts this one with the
-// selected account (flow.ts). A game still opening, or files being prepared, simply stop. The AFK
-// question of a same-name account comes with the new launch, as for OYNA. Mounted once
-// (shell/app-shell.tsx).
+// The question "Oyna" asks while something runs (PLAY-ACCT, PLAY-AGAIN). Another launch on its way
+// (one at a time): what starts and what stops, "Durdur ve oyna". One more game (the selected
+// account in game: the owner's question with the name; the free memory short: one sentence): one
+// shape, "Bir oyun daha açılsın mı?", the reasons in one paragraph, "Yine de aç". The AFK question
+// of a same-name account comes with the new launch, as for OYNA. Mounted once (shell/app-shell.tsx).
 //
 // Second look (PLAY-ACCT): "Vazgeç" keeps one place (the left), nothing comes under the pointer
-// that pressed "Kapat ve oyna" (the closing step shows its bar there, at the buttons' height, so
-// the panel keeps its size), the buttons that come after the 20 s wait take no press for a moment,
-// and a click beside the panel (the rest of a double click on OYNA) does not close the question.
+// that pressed the answer (the short way shows its bar there, at the buttons' height, so the panel
+// keeps its size), and a click beside the panel (the rest of a double click on OYNA) does not close
+// the question.
 import { Play } from "@phosphor-icons/react";
-import { Button, type ButtonProps, Dialog, Progress, usePressGuard } from "@pl/ui";
+import { Button, Dialog, Progress } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
-import { type MouseEvent, useRef, useState } from "react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { CloseStep } from "@/features/social/connect";
 import { api } from "@/lib/api";
 import { useLaunch } from "@/stores/launch";
 import { gameStage } from "@/stores/launch-owner";
-import { cancelSwitch, confirmSwitch, sendSwitch } from "./flow";
+import { cancelSwitch, confirmSwitch } from "./flow";
 import { type SwitchRequest, useGameSwitch } from "./store";
-import { type Line, questionWords, type SwitchSides, stepWords } from "./words";
+import { type Line, oneMoreWords, questionWords, type SwitchSides, stepWords } from "./words";
 
 const say = (t: TFunction, [key, values]: Line) => t(key, values);
-
-/**
- * A button that came in place of the way's waiting bar: it takes presses once the pointer has left
- * it or a moment after it came (`usePressGuard`), never a click aimed at what was there before.
- */
-function ArrivingButton({
-  onClick,
-  ...props
-}: Omit<ButtonProps, "onClick"> & { onClick: () => void }) {
-  const [since] = useState(() => performance.now());
-  const guard = usePressGuard("arrived", { since });
-  return (
-    <Button
-      {...props}
-      aria-disabled={!guard.armed || undefined}
-      onPointerLeave={guard.handlers.onPointerLeave}
-      onKeyDown={guard.handlers.onKeyDown}
-      onClick={(event: MouseEvent<HTMLButtonElement>) => {
-        if (guard.take(event)) onClick();
-      }}
-    />
-  );
-}
 
 export function GameSwitchDialog() {
   const { t } = useTranslation();
@@ -66,7 +40,7 @@ export function GameSwitchDialog() {
   const nameOf = (id: string | null) =>
     id ? (instances?.find((i) => i.id === id)?.name ?? null) : null;
   const live: SwitchSides | null =
-    request && stage
+    request?.kind === "stop" && stage
       ? {
           stage,
           from: {
@@ -81,62 +55,55 @@ export function GameSwitchDialog() {
           },
         }
       : null;
-  // The words stay while the dialog fades out, and when the game ended before the answer.
+  // The words stay while the dialog fades out, and when the launch ended before the answer.
   const last = useRef<{
     request: SwitchRequest;
-    sides: SwitchSides;
-    step: CloseStep | null;
+    sides: SwitchSides | null;
+    stepping: boolean;
   } | null>(null);
-  const sides = frozen ?? live ?? (request ? last.current?.sides : null);
-  if (request && sides) last.current = { request, sides, step: current };
+  const sides = frozen ?? live ?? (request ? (last.current?.sides ?? null) : null);
+  if (request && (request.kind !== "stop" || sides)) {
+    last.current = { request, sides, stepping: current !== null };
+  }
   const shown = last.current;
   if (!shown) return null;
 
-  const step = shown.step?.kind;
-  const question = step ? null : questionWords(shown.sides);
-  const words = question ?? stepWords(shown.sides, step ?? "closing");
+  const { kind } = shown.request;
+  const words: { title: Line; body: Line[]; note: Line | null; confirm: Line | null } | null =
+    kind === "stop"
+      ? shown.stepping && shown.sides
+        ? { ...stepWords(shown.sides), note: null, confirm: null }
+        : shown.sides
+          ? { ...questionWords(shown.sides), note: null }
+          : null
+      : oneMoreWords(kind, Boolean(shown.request.memoryShort), shown.request.account?.name ?? null);
+  if (!words) return null;
   const title = say(t, words.title);
+  // The reasons of one worry read as one paragraph (second look: a line each read as separate
+  // notes); a second worry (the memory short) is its own line under it (third look).
   const body = words.body.map((line) => say(t, line)).join(" ");
-  // The question can be left with its X; the late game's choices are its three buttons (an X
-  // there would not say whether it waits on or gives up); the way between runs to its end.
-  const open = step === undefined;
-  const footer = question ? (
-    <>
-      <Button variant="ghost" className="mr-auto" onClick={cancelSwitch}>
-        {t("playAcct.switch.cancel")}
-      </Button>
-      <Button
-        variant="primary"
-        icon={<Play size={14} weight="fill" />}
-        onClick={() => confirmSwitch(shown.request, shown.sides)}
-      >
-        {say(t, question.confirm)}
-      </Button>
-    </>
-  ) : step === "overdue" ? (
-    <>
-      <ArrivingButton variant="ghost" className="mr-auto" onClick={cancelSwitch}>
-        {t("playAcct.switch.cancel")}
-      </ArrivingButton>
-      <ArrivingButton
-        variant="secondary"
-        onClick={() => sendSwitch({ type: "wait", now: Date.now() })}
-      >
-        {t("playAcct.switch.wait")}
-      </ArrivingButton>
-      <ArrivingButton
-        variant="danger"
-        onClick={() => sendSwitch({ type: "force", now: Date.now() })}
-      >
-        {t("playAcct.switch.force")}
-      </ArrivingButton>
-    </>
-  ) : (
-    // Where the buttons were, at their height: the panel keeps its size while the game goes.
-    <div className="flex h-[32px] w-full items-center">
-      <Progress label={title} className="w-full" />
-    </div>
-  );
+  const note = words.note ? say(t, words.note) : null;
+  const asking = !shown.stepping;
+  const footer =
+    asking && words.confirm ? (
+      <>
+        <Button variant="ghost" className="mr-auto" onClick={cancelSwitch}>
+          {t("playAcct.switch.cancel")}
+        </Button>
+        <Button
+          variant="primary"
+          icon={<Play size={14} weight="fill" />}
+          onClick={() => confirmSwitch(shown.request, shown.sides)}
+        >
+          {say(t, words.confirm)}
+        </Button>
+      </>
+    ) : (
+      // Where the buttons were, at their height: the panel keeps its size while the launch stops.
+      <div className="flex h-[32px] w-full items-center">
+        <Progress label={title} className="w-full" />
+      </div>
+    );
   return (
     <Dialog
       open={request !== null}
@@ -144,11 +111,16 @@ export function GameSwitchDialog() {
         if (!next) cancelSwitch();
       }}
       title={title}
-      description={body}
+      description={
+        <>
+          <span className="block text-pretty">{body}</span>
+          {note ? <span className="mt-1.5 block text-pretty">{note}</span> : null}
+        </>
+      }
       closeLabel={t("common.close")}
       width={460}
       morph
-      dismissible={open}
+      dismissible={asking}
       dismissOnOutsideClick={false}
       footer={footer}
     />

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
@@ -69,9 +69,13 @@ fn trusted_content_keys() -> Vec<pl_content::VerifyingKey> {
     keys
 }
 
-/// The game currently running (one at a time).
+/// A game the launcher runs (several may run at once, PLAY-AGAIN).
 pub struct RunningGame {
+    /// The launcher's own number for it (the page names a game with it: closing, "Bağlan").
+    pub id: u64,
     pub instance_id: String,
+    /// The instance's game folder (games of one folder share its files).
+    pub game_dir: PathBuf,
     pub process: Arc<GameProcess>,
     /// A game an earlier start of the launcher left running when it quit, followed again
     /// (`commands::launch::adopt_detached`): it does not keep the launcher open.
@@ -79,6 +83,76 @@ pub struct RunningGame {
     /// The account it plays with ("Oyunda" for that account alone); `None` only for a game an
     /// older launcher left running.
     pub account: Option<pl_mc::launch::GameAccount>,
+    /// Its overlay bridge's port (none without the overlay).
+    pub overlay_port: Option<u16>,
+    /// Its bridge's token: world sharing's gate key (HOST1), when world sharing moves to it.
+    pub host_token: Option<String>,
+    /// Set once another game runs in the same folder beside it (its crash report is then only
+    /// the one its own output names).
+    pub shared_folder: Arc<AtomicBool>,
+}
+
+/// Every game the launcher runs, in the order they started (PLAY-AGAIN). The oldest leads: world
+/// sharing (HOST1) follows it.
+#[derive(Default)]
+pub struct Games(Vec<RunningGame>);
+
+impl Games {
+    /// A game runs (any).
+    pub fn any(&self) -> bool {
+        !self.0.is_empty()
+    }
+
+    /// A game this start of the launcher started runs (one a former start left running does not
+    /// keep the launcher open).
+    pub fn any_followed(&self) -> bool {
+        self.0.iter().any(|game| !game.adopted)
+    }
+
+    /// A game of `instance_id` runs.
+    pub fn of_instance(&self, instance_id: &str) -> bool {
+        self.0.iter().any(|game| game.instance_id == instance_id)
+    }
+
+    /// The games running in `game_dir`.
+    pub fn in_folder<'a>(&'a self, game_dir: &'a Path) -> impl Iterator<Item = &'a RunningGame> {
+        self.0.iter().filter(move |game| game.game_dir == game_dir)
+    }
+
+    /// The instances whose games run (each once).
+    pub fn instance_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = Vec::new();
+        for game in &self.0 {
+            if !ids.contains(&game.instance_id) {
+                ids.push(game.instance_id.clone());
+            }
+        }
+        ids
+    }
+
+    pub fn get(&self, id: u64) -> Option<&RunningGame> {
+        self.0.iter().find(|game| game.id == id)
+    }
+
+    /// The oldest game this start of the launcher started: the one world sharing follows (a game
+    /// a former start left running has no bridge).
+    pub fn lead(&self) -> Option<&RunningGame> {
+        self.0.iter().find(|game| !game.adopted)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &RunningGame> {
+        self.0.iter()
+    }
+
+    pub fn push(&mut self, game: RunningGame) {
+        self.0.push(game);
+    }
+
+    /// Takes the game `id` out; it was the lead when it was the oldest.
+    pub fn remove(&mut self, id: u64) -> Option<RunningGame> {
+        let at = self.0.iter().position(|game| game.id == id)?;
+        Some(self.0.remove(at))
+    }
 }
 
 /// Everything long-lived the commands need. Cheap handles only; heavy work runs in tasks.
@@ -91,7 +165,10 @@ pub struct AppState {
     pub afk: pl_afk::AfkManager,
     pub mc: McContext,
     pub instances: InstanceStore,
-    pub running: Mutex<Option<RunningGame>>,
+    /// The games that run now (PLAY-AGAIN: several at once).
+    pub games: Mutex<Games>,
+    /// The play time counted this run, so that games of one instance side by side count once.
+    pub sessions: Mutex<pl_mc::launch::SessionLedger>,
     /// The launch being prepared, if any (`commands::launch`).
     pub launch_cancel: Mutex<Option<crate::commands::launch::PreparingLaunch>>,
     /// Downloaded, signature-verified launcher update waiting for "restart to update".
@@ -241,7 +318,8 @@ impl AppState {
             afk,
             mc,
             instances,
-            running: Mutex::new(None),
+            games: Mutex::new(Games::default()),
+            sessions: Mutex::new(pl_mc::launch::SessionLedger::new()),
             launch_cancel: Mutex::new(None),
             pending_update: Mutex::new(None),
             ephemeral_secrets,

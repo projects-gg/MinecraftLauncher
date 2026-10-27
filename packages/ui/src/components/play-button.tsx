@@ -21,6 +21,17 @@ export interface PlayButtonLabels {
   cancel: string;
   running: string;
   /**
+   * The name of "Oyunda" when a press does something (`runningPressable`): what it does ("Oyunda,
+   * bir oyun daha aç").
+   */
+  runningAction?: string;
+  /**
+   * What "Oyunda" says under the pointer (or the keyboard's focus) when a press does something
+   * ("Bir oyun daha aç"): the state's word alone did not say what a click does (second look), and
+   * without a verb it read as "one more round" (third look).
+   */
+  runningHover?: string;
+  /**
    * Where the language puts the percent sign: before the figure in Turkish ("%42", the
    * default), after it in English ("42%").
    */
@@ -41,19 +52,25 @@ interface PlayButtonProps {
   className?: string;
   /** `aria-keyshortcuts` of the app's shortcut that presses the button (the launcher's Ctrl+Enter). */
   keyShortcuts?: string;
+  /**
+   * "Oyunda" takes a press (PLAY-AGAIN: one more game, after a question the press opens): it
+   * calls `onPlay`. Its face and words stay; the pointer finds it pressable.
+   */
+  runningPressable?: boolean;
 }
 
 /**
  * The button's accessible name says what a press does. While a launch is prepared or the game
  * opens the button shows that, and once a press would cancel it the name leads with that
  * ("İptal, Oyun dosyaları indiriliyor %42", "İptal, Açılıyor"); in the moment after OYNA, when a
- * press does nothing, it is the state alone.
+ * press does nothing, it is the state alone. "Oyunda" that takes a press says what it does.
  * Tests: apps/launcher/src/shell/play-button.test.ts.
  */
 export function playButtonName(
   state: PlayState,
   labels: PlayButtonLabels,
   cancelReady: boolean,
+  runningPressable = false,
 ): string {
   switch (state.kind) {
     case "ready":
@@ -67,7 +84,7 @@ export function playButtonName(
     case "opening":
       return cancelReady ? `${labels.cancel}, ${state.label}` : state.label;
     case "running":
-      return labels.running;
+      return runningPressable ? (labels.runningAction ?? labels.running) : labels.running;
     case "unavailable":
       return state.label;
   }
@@ -83,13 +100,21 @@ export type PlayPress = "play" | "cancel" | "showCancel" | "nothing";
  * `cancelShown`: "İptal" may show under the pointer. A pointer press on a launch whose "İptal"
  * is not shown yet (the pointer rested where it pressed OYNA, so the button says "%42" or
  * "Açılıyor") shows it instead of cancelling: a press never does what the button did not say.
- * The keyboard, whose name for the button already leads with "İptal", cancels.
+ * The keyboard, whose name for the button already leads with "İptal", cancels. "Oyunda" plays
+ * only when it takes presses (`runningPressable`: the question for one more game comes first).
  */
 export function playPress(
   kind: PlayState["kind"],
-  press: { cancellable: boolean; armed: boolean; cancelShown: boolean; pointer: boolean },
+  press: {
+    cancellable: boolean;
+    armed: boolean;
+    cancelShown: boolean;
+    pointer: boolean;
+    runningPressable?: boolean;
+  },
 ): PlayPress {
   if (kind === "ready" || kind === "update") return "play";
+  if (kind === "running") return press.runningPressable ? "play" : "nothing";
   if ((kind !== "working" && kind !== "opening") || !press.cancellable) return "nothing";
   return press.pointer && press.armed && !press.cancelShown ? "showCancel" : "cancel";
 }
@@ -117,6 +142,7 @@ export function PlayButton({
   labels,
   className,
   keyShortcuts,
+  runningPressable = false,
 }: PlayButtonProps) {
   const animate = useInteractionMotion();
   const { performanceMode, unseen } = usePerf();
@@ -127,8 +153,11 @@ export function PlayButton({
   const isOpening = state.kind === "opening";
   const filled = isWorking || isOpening;
   const cancellable = filled && Boolean(onCancel);
+  const pressableRunning = state.kind === "running" && runningPressable;
   const disabled =
-    state.kind === "running" || state.kind === "unavailable" || (isOpening && !onCancel);
+    (state.kind === "running" && !runningPressable) ||
+    state.kind === "unavailable" ||
+    (isOpening && !onCancel);
   // "İptal" takes OYNA's place after a press, and OYNA takes "İptal"'s after a cancel: neither
   // takes the rest of that double click, then each does once the pointer has left the button or
   // 0.8 s later, also under a resting pointer (E2E2: the player who did not move could never
@@ -142,6 +171,19 @@ export function PlayButton({
     if (guard.armed && !cancelShown) setCancelShownFor(guard.since);
   };
   const showCancel = hover && cancellable && guard.armed && cancelShown;
+  // "Oyunda" under the pointer says what a press does, once the pointer moves over it after the
+  // game came (a pointer resting where it pressed OYNA keeps reading "Oyunda"), and under the
+  // keyboard's focus.
+  const [actionShown, setActionShown] = useState(false);
+  const [focusShown, setFocusShown] = useState(false);
+  useEffect(() => {
+    if (state.kind !== "running") setActionShown(false);
+  }, [state.kind]);
+  const canSayAction = pressableRunning && Boolean(labels.runningHover);
+  const showAction = () => {
+    if (canSayAction && !actionShown) setActionShown(true);
+  };
+  const sayAction = canSayAction && ((hover && actionShown) || focusShown);
 
   // The swell behind the button and the light across it while the game opens.
   const swell = useRef<HTMLDivElement>(null);
@@ -217,8 +259,8 @@ export function PlayButton({
       key = showCancel ? "cancel" : "opening";
       break;
     case "running":
-      text = labels.running;
-      key = "running";
+      text = sayAction ? (labels.runningHover ?? labels.running) : labels.running;
+      key = sayAction ? "runningHover" : "running";
       break;
     case "unavailable":
       text = state.label;
@@ -232,6 +274,7 @@ export function PlayButton({
       armed: guard.armed,
       cancelShown,
       pointer: event.detail > 0,
+      runningPressable,
     });
     if (does === "showCancel") {
       showCancelLabel();
@@ -291,10 +334,21 @@ export function PlayButton({
         aria-hidden
         className="pointer-events-none absolute -inset-x-8 -inset-y-5 -z-20 rounded-[50%] bg-[radial-gradient(closest-side,rgb(95_203_142/0.62),rgb(95_203_142/0.22)_55%,transparent)] opacity-0 blur-xl"
       />
-      {/* Socket plate */}
-      <div
+      {/* Socket plate: warm, and neutral under "Oyunda" (the dark red read as an outline around
+          the dark face); the two cross-fade, opacity only. */}
+      <motion.div
         aria-hidden
         className="chamfer absolute -inset-[4px] -z-10 bg-[linear-gradient(180deg,rgb(63_10_10/0.9),rgb(10_9_12/0.95))] [--cut:15px]"
+        initial={false}
+        animate={{ opacity: state.kind === "running" ? 0 : 1 }}
+        transition={face}
+      />
+      <motion.div
+        aria-hidden
+        className="chamfer absolute -inset-[4px] -z-10 bg-[linear-gradient(180deg,rgb(38_36_44/0.95),rgb(10_9_12/0.95))] [--cut:15px]"
+        initial={false}
+        animate={{ opacity: state.kind === "running" ? 1 : 0 }}
+        transition={face}
       />
       <button
         type="button"
@@ -304,20 +358,32 @@ export function PlayButton({
         onPointerEnter={() => {
           setHover(true);
           showCancelLabel();
+          showAction();
           crossSheen();
         }}
         onFocus={(event) => {
           // The keyboard's focus only: a click focuses the button too, after the pointer came.
-          if (event.currentTarget.matches(":focus-visible")) crossSheen();
+          if (!event.currentTarget.matches(":focus-visible")) return;
+          crossSheen();
+          setFocusShown(true);
         }}
-        onPointerMove={showCancelLabel}
+        onBlur={() => setFocusShown(false)}
+        onPointerMove={() => {
+          showCancelLabel();
+          showAction();
+        }}
         onPointerLeave={(event) => {
           setHover(false);
           guard.handlers.onPointerLeave(event);
           // Back over the button, the pointer comes for "İptal".
           if (guard.since !== null) setCancelShownFor(guard.since);
         }}
-        aria-label={playButtonName(state, labels, guard.armed && Boolean(onCancel))}
+        aria-label={playButtonName(
+          state,
+          labels,
+          guard.armed && Boolean(onCancel),
+          pressableRunning,
+        )}
         aria-keyshortcuts={keyShortcuts}
         // What a press does now: the app's shortcut presses only "ready" and "update".
         data-play-state={state.kind}
@@ -345,6 +411,15 @@ export function PlayButton({
             animate={{ opacity: state.kind === "running" ? 1 : 0 }}
             transition={face}
           />
+          {/* "Oyunda" that takes a press (PLAY-AGAIN): a faint jade wash from the top under the
+              pointer or the keyboard's focus (opacity only, so it fades under reduced motion too:
+              design.md §5). */}
+          {pressableRunning ? (
+            <span
+              aria-hidden
+              className="absolute inset-0 bg-[linear-gradient(180deg,rgb(95_203_142/0.22),rgb(95_203_142/0.05)_70%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
+            />
+          ) : null}
           {/* Ready: the gold face. */}
           <motion.span
             className="absolute inset-0 bg-[linear-gradient(180deg,var(--color-gold-200),var(--color-gold-400)_38%,var(--color-gold-500)_62%,var(--color-gold-600))] transition-[filter] duration-300 group-hover:brightness-[1.07]"
@@ -417,7 +492,9 @@ export function PlayButton({
                 key === "cancel" && "text-flare-400",
                 key === "percent" && "text-bone-50 tabular-nums",
                 key === "opening" && "text-gold-ink",
-                state.kind === "running" && "text-jade-400",
+                key === "running" && "text-jade-400",
+                // What a press does is an action: the face's bone, not the state's jade (§2).
+                key === "runningHover" && "text-[16px] text-bone-100",
                 state.kind === "unavailable" && "text-[14px] text-ash-300",
               )}
             >

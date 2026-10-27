@@ -23,7 +23,8 @@ use tokio::task::JoinHandle;
 use crate::error::{Error, Result};
 use crate::launch::command::{LaunchCommand, java_argfile};
 use crate::launch::crash::{
-    CrashDiagnosis, CrashInput, analyze_crash, find_crash_report, find_jvm_error_log, is_failure,
+    CrashDiagnosis, CrashInput, SHORT_RUN, analyze_crash, crash_report_for, is_failure,
+    jvm_error_log_for,
 };
 use crate::launch::log::{Log4jParser, LogLine};
 use crate::launch::window::{GIVE_UP_AFTER, ShownBy, WindowProbe, log_marker, probe_interval};
@@ -70,6 +71,10 @@ pub struct SpawnOptions {
     pub max_memory_mb: Option<u32>,
     /// Looks for the game's window while it opens (Windows); without one the log alone tells.
     pub window_probe: Option<WindowProbe>,
+    /// Set (by the launcher) once another game runs in the same folder beside this one
+    /// (PLAY-AGAIN): a crash report or JVM log this run's output does not name could then be the
+    /// other game's, so none is taken by its date alone.
+    pub shared_folder: Arc<AtomicBool>,
 }
 
 /// A crash within this long of the game's window showing is a failed start, not a session: the
@@ -113,23 +118,50 @@ struct LogSink {
     truncated: bool,
 }
 
+/// How many numbered names a log file tries when games of one instance start in the same second.
+const LOG_NAME_TRIES: u32 = 20;
+
+/// A new log file in `dir` for `instance_id`'s game: `game-<instance>-<time>.log`, or with `-2`,
+/// `-3`… when another game of the instance started in the same second (PLAY-AGAIN: two games
+/// never write into one file).
+fn create_log_file(dir: &Path, instance_id: &str) -> std::io::Result<(std::fs::File, PathBuf)> {
+    let stamp = jiff::Zoned::now().strftime("%Y%m%d-%H%M%S").to_string();
+    let safe_id: String = instance_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    std::fs::create_dir_all(dir)?;
+    let mut last = std::io::Error::from(std::io::ErrorKind::AlreadyExists);
+    for n in 1..=LOG_NAME_TRIES {
+        let name = if n == 1 {
+            format!("game-{safe_id}-{stamp}.log")
+        } else {
+            format!("game-{safe_id}-{stamp}-{n}.log")
+        };
+        let path = dir.join(name);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => return Ok((file, path)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => last = error,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last)
+}
+
 impl LogSink {
     fn open(dir: &Path, instance_id: &str, header: &str) -> Self {
-        let stamp = jiff::Zoned::now().strftime("%Y%m%d-%H%M%S").to_string();
-        let safe_id: String = instance_id
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
-        let path = dir.join(format!("game-{safe_id}-{stamp}.log"));
-        let opened = std::fs::create_dir_all(dir).and_then(|_| std::fs::File::create(&path));
-        match opened {
-            Ok(file) => {
+        match create_log_file(dir, instance_id) {
+            Ok((file, path)) => {
                 let mut sink = Self {
                     file: Some(file),
                     path: Some(path),
@@ -140,7 +172,7 @@ impl LogSink {
                 sink
             }
             Err(error) => {
-                tracing::warn!(path = %path.display(), %error, "cannot create the game log file");
+                tracing::warn!(dir = %dir.display(), %error, "cannot create the game log file");
                 Self {
                     file: None,
                     path: None,
@@ -606,9 +638,11 @@ async fn prepare_args(
 }
 
 async fn supervise(mut s: Supervision) {
+    // The process id while the child still has one: its JVM error log is named after it.
+    let pid = s.child.id();
     // While the game opens its window is looked for (the probe, else the log alone tells) and,
     // after `GIVE_UP_AFTER` without a sign, counted as shown. Nothing runs once it showed.
-    let probe = s.options.window_probe.zip(s.child.id());
+    let probe = s.options.window_probe.zip(pid);
     let look = tokio::time::sleep(probe_interval(Duration::ZERO));
     tokio::pin!(look);
     let give_up = tokio::time::sleep(GIVE_UP_AFTER);
@@ -673,12 +707,25 @@ async fn supervise(mut s: Supervision) {
         runtime_secs: runtime.as_secs(),
     });
 
-    let crash_report = find_crash_report(&s.game_dir, s.started_at);
-    let jvm_log = find_jvm_error_log(&s.game_dir, s.started_at);
-    let crash = if !killed && is_failure(code, runtime, crash_report.is_some()) {
+    // This run's own report: the one its output names; another game of the same folder may have
+    // written the newest one (PLAY-AGAIN). Read only when the run may have failed (a clean exit
+    // after a full session never is one).
+    let may_have_failed = !killed && (code != Some(0) || runtime < SHORT_RUN);
+    let output = if may_have_failed {
+        s.shared.tail_text()
+    } else {
+        String::new()
+    };
+    let shared_folder = s.options.shared_folder.load(Ordering::SeqCst);
+    let crash_report = may_have_failed
+        .then(|| crash_report_for(&s.game_dir, s.started_at, &output, shared_folder))
+        .flatten();
+    let jvm_log = may_have_failed
+        .then(|| jvm_error_log_for(&s.game_dir, s.started_at, pid, shared_folder))
+        .flatten();
+    let crash = if may_have_failed && is_failure(code, runtime, crash_report.is_some()) {
         let report_path = crash_report.or(jvm_log);
         let report_text = report_path.as_deref().and_then(read_report);
-        let output = s.shared.tail_text();
         let mut diagnosis = analyze_crash(&CrashInput {
             output: &output,
             crash_report: report_text.as_deref(),
@@ -716,6 +763,24 @@ fn read_report(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn two_games_of_an_instance_never_share_a_log_file() {
+        // PLAY-AGAIN: a second game of the instance may start within the same second.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut first = LogSink::open(tmp.path(), "projects", "# first");
+        let mut second = LogSink::open(tmp.path(), "projects", "# second");
+        let (a, b) = (first.path.clone().unwrap(), second.path.clone().unwrap());
+        assert_ne!(a, b);
+        first.write("one");
+        second.write("two");
+        first.close();
+        second.close();
+        let read = |path: &Path| std::fs::read_to_string(path).unwrap();
+        assert!(read(&a).contains("# first") && read(&a).contains("one"));
+        assert!(read(&b).contains("# second") && read(&b).contains("two"));
+        assert!(!read(&a).contains("two") && !read(&b).contains("one"));
+    }
 
     #[test]
     fn games_start_with_the_console_java_on_windows() {

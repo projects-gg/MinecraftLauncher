@@ -24,9 +24,9 @@ pub use keys::{
     undo_key_fix_in,
 };
 pub use memory::{
-    AUTO_MAX_MB, MIN_HEAP_FLOOR_MB, MemoryIssue, MemoryLimits, MemoryValidation, auto_memory,
-    auto_memory_at_least, clamp_memory, memory_limits, recommended_memory, system_memory_mb,
-    validate_memory,
+    AUTO_MAX_MB, GAME_OVERHEAD_MB, MIN_HEAP_FLOOR_MB, MemoryIssue, MemoryLimits, MemoryValidation,
+    auto_memory, auto_memory_at_least, available_memory_mb, clamp_memory, fits_another_game,
+    memory_limits, recommended_memory, system_memory_mb, validate_memory,
 };
 pub use mod_configs::{ModConfig, configs_for, mod_configs, seed_mod_configs};
 pub use model::{

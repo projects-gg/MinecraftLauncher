@@ -35,7 +35,7 @@ pub use packs::{
     ResourcePackInfo, ShaderPackInfo, datapacks_dir, list_datapacks, list_resource_packs,
     list_shader_packs,
 };
-pub use screenshots::{ScreenshotInfo, ScreenshotSnapshot, list_screenshots};
+pub use screenshots::{AnnouncedShots, ScreenshotInfo, ScreenshotSnapshot, list_screenshots};
 pub use shot_watch::{
     ScreenshotEvent, ScreenshotWatcher, Timing as ScreenshotWatchTiming, ends_like_png,
     is_screenshot_name,

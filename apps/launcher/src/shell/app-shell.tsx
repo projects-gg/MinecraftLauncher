@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { useEffect } from "react";
 import heroFallback from "@/assets/art/hero-dragon-1.webp";
+import { useSelectedAccountMirror } from "@/features/accounts/use-own-launch";
 import { DropHost } from "@/features/drop/drop-host";
 import { GameSwitchDialog } from "@/features/game-switch/switch-dialog";
 import { EventReminders } from "@/features/home/event-reminders";
@@ -58,6 +59,12 @@ function TaskbarProgress() {
 
 function TrayInGame() {
   useTrayInGame();
+  return null;
+}
+
+/** The selected account for the play rules outside React (PLAY-AGAIN: several games at once). */
+function SelectedAccountMirror() {
+  useSelectedAccountMirror();
   return null;
 }
 
@@ -126,6 +133,7 @@ export function AppShell() {
       <PresenceSync />
       <TaskbarProgress />
       <TrayInGame />
+      <SelectedAccountMirror />
       <GlobalShortcuts disabled={onboarding} />
       <EventReminders />
       <Backdrop
