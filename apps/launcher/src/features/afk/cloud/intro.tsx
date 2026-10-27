@@ -16,22 +16,12 @@ import { useTranslation } from "react-i18next";
 import { useSocialUi } from "@/features/social/store";
 import { afkFailed } from "../errors";
 import { type CloudOverview, cloudApi } from "./api";
-import { formatPrice } from "./status";
+import { offerLine } from "./status";
 
-/**
- * The price line ("Aylık 60 TL"), or why nothing can be bought now: no free slot, or sales off
- * (Studio's switch; SMALL12: the card showed the price while nothing was on sale). `closed` greys
- * the line and turns the panel's start off.
- */
+/** The price line, or why nothing can be bought now (`offerLine`). */
 function useOfferLine(overview: CloudOverview): { text: string; closed: boolean } | null {
   const { t } = useTranslation();
-  if (overview.soldOut) return { text: t("cloudAfk.intro.soldOut"), closed: true };
-  if (!overview.salesOpen) return { text: t("cloudAfk.intro.salesClosed"), closed: true };
-  if (!overview.monthPrice) return null;
-  return {
-    text: t("cloudAfk.intro.pricePerMonth", { price: formatPrice(overview.monthPrice) }),
-    closed: false,
-  };
+  return offerLine(overview, t);
 }
 
 /** The card on the AFK page; the whole card opens the panel. */
