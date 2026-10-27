@@ -246,6 +246,52 @@ async fn a_ban_stops_reconnecting() {
     manager.shutdown().await;
 }
 
+/// "Tümünü bağla" leaves an account the server stopped for good (here a refused password: trying
+/// it again can lock the account on the server) and connects the others (AFK-CLEAR).
+#[tokio::test(start_paused = true)]
+async fn connect_all_leaves_an_account_stopped_for_good() {
+    let env = TestEnv::new(None);
+    let refused = env.add("Sifresiz").id;
+    let other = env.add("Diger").id;
+    let s = ScriptedSpawner::new(|run, mut proc| async move {
+        if run == 0 {
+            proc.event(r#"{"e":"disconnected","reason":"LoginRejected","msg":"§cYanlış şifre!"}"#)
+                .await;
+            Some(4)
+        } else {
+            proc.event(r#"{"e":"joined","user":"Diger","host":"h","port":25565,"protocol":777}"#)
+                .await;
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            Some(0)
+        }
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&refused).await.unwrap();
+    until("stopped on the password", LONG, || {
+        is_error(&env.last_state(&refused)) && !manager.any_active()
+    })
+    .await;
+    assert!(matches!(
+        env.last_state(&refused),
+        Some(SessionState::Error {
+            reason: FailureReason::Refused {
+                cause: KickCause::WrongPassword,
+                ..
+            },
+            ..
+        })
+    ));
+    let outcome = manager.connect_all().await.unwrap();
+    assert_eq!(outcome.skipped, vec![refused.clone()]);
+    assert_eq!(outcome.started, vec![other.clone()]);
+    assert_eq!(
+        s.launch_count(),
+        2,
+        "the refused password was not tried again"
+    );
+    manager.shutdown().await;
+}
+
 /// "Already connected" can be the server still holding a dropped session for a few seconds, so
 /// it is retried (backing off); five in a row mean the name really is online elsewhere.
 #[tokio::test(start_paused = true)]
