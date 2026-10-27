@@ -9,6 +9,7 @@ import { Button, cn, Tooltip } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import { gameBusy, joinProjects } from "@/features/social/join";
 import { useLaunch } from "@/stores/launch";
+import { ownLaunch } from "@/stores/launch-owner";
 
 export function EventJoin({
   describedBy,
@@ -19,7 +20,8 @@ export function EventJoin({
   className?: string;
 }) {
   const { t } = useTranslation();
-  const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  // This account's launch or game only: other accounts' games run beside it (PLAY-AGAIN).
+  const busy = useLaunch((s) => gameBusy(ownLaunch(s, s.selected).phase.kind));
   // A disabled button takes no pointer: the tooltip hangs on its wrapper, there all the time (and
   // quiet while the button works), so the button stays the same and fades into its waiting look.
   return (

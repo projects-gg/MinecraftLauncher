@@ -64,3 +64,23 @@ describe("playButtonName", () => {
     );
   });
 });
+
+describe("Oyunda that takes a press (PLAY-AGAIN)", () => {
+  const press = { cancellable: false, armed: true, cancelShown: true, pointer: true };
+
+  it("opens the question for one more game only when the bar asks for it", () => {
+    expect(playPress("running", { ...press, runningPressable: true })).toBe("play");
+    expect(playPress("running", press)).toBe("nothing");
+    // The rest of a double click is the press guard's (it takes no press it was not armed for).
+    expect(playPress("running", { ...press, runningPressable: true, armed: false })).toBe("play");
+  });
+
+  it("says what a press does", () => {
+    const named = { ...labels, runningAction: "Oyunda, bir oyun daha aç" };
+    expect(playButtonName({ kind: "running" }, named, false, true)).toBe(
+      "Oyunda, bir oyun daha aç",
+    );
+    expect(playButtonName({ kind: "running" }, named, false)).toBe("Oyunda");
+    expect(playButtonName({ kind: "running" }, labels, false, true)).toBe("Oyunda");
+  });
+});

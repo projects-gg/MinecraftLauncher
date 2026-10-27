@@ -5,7 +5,7 @@ import type { LaunchEvent } from "./types";
  * Preview switches that stop a launch with an error, worded as the launcher sends them
  * (`src-tauri/src/error.rs`; the code on the first line of the details, as `tauri.ts` passes it):
  * `?disk=low` (not enough room, before anything is downloaded), `?disk=full` (the disk fills up
- * during the download) and `?launchError=version|process|file|game`. Also from localStorage
+ * during the download) and `?launchError=version|process|file|game|worldOpen`. Also from localStorage
  * (`pl.mock.disk`, `pl.mock.launchError`).
  */
 function flag(key: string): string {
@@ -65,6 +65,13 @@ const stops: Record<string, { code: string; message: () => string; details: stri
       pick("Gereken bir dosya bulunamadı. Tekrar dene.", "A file it needs is missing. Try again."),
     details: "client jar of 1.21.1 not found",
   },
+  /** A launch straight into a world the player's other game has open (PLAY-AGAIN). */
+  worldOpen: {
+    code: "DUNYA-ACIK",
+    message: () =>
+      pick("Bu dünya diğer oyunda açık.", "This world is open in your other game."),
+    details: "the world's session.lock is held by another game",
+  },
   game: {
     code: "OYUN",
     message: () =>
@@ -90,7 +97,8 @@ export async function mockLaunchStop(
   const key = disk === "low" || disk === "full" ? disk : flag("launchError");
   const stop = stops[key];
   if (!stop) return false;
-  const steps = key === "full" ? 14 : 3;
+  // A world open in another game is told before anything is downloaded.
+  const steps = key === "full" ? 14 : key === "worldOpen" ? 0 : 3;
   for (let step = 1; step <= steps; step++) {
     if (job.cancelled) throw new Error("cancelled");
     await wait(110);

@@ -45,7 +45,7 @@ import { usePrefs } from "@/stores/prefs";
 import { ConfirmDialog, InlineNotice, TabEmpty, TabSection, TrashRow } from "../parts";
 import { canQuickPlay } from "../quick-play";
 import { trashLabel } from "../trash-label";
-import { useGameRunning } from "../use-game-running";
+import { useGameRunning, useOwnGameOf } from "../use-game-running";
 import { formatWhen } from "../when";
 import {
   backupJobKey,
@@ -249,6 +249,9 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const locked = useGameRunning(instance.id);
+  // A world's "Oyna" stays on while only another account plays this instance (PLAY-AGAIN): this
+  // account's game starts beside it (a world open there is refused before anything loads).
+  const playLocked = useOwnGameOf(instance.id);
   const id = instance.id;
   const worlds = useQuery({ queryKey: ["worlds", id], queryFn: () => api.library.worlds(id) });
   const backups = useQuery({
@@ -438,7 +441,7 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
             {
               label: t("instance.worlds.play"),
               icon: <Play size={16} />,
-              disabled: locked || !world.readable,
+              disabled: playLocked || !world.readable,
               onSelect: () => {
                 selectInstance(id);
                 void play(id, { quickPlay: { kind: "singleplayer", world: world.folder } });

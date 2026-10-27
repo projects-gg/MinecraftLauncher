@@ -4,13 +4,21 @@ import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { isTauri } from "@/lib/platform";
 import { isOpening, useLaunch } from "@/stores/launch";
+import { runningPhase } from "@/stores/launch-owner";
 import { usePrefs } from "@/stores/prefs";
 
 /** Keeps Discord Rich Presence in sync with what the player is doing in the launcher. */
 export function usePresenceSync() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const phase = useLaunch((s) => s.phase);
-  const launchInstanceId = useLaunch((s) => s.instanceId);
+  // The followed launch; with a game on screen while another launch is on its way, that game
+  // (PLAY-AGAIN: the player is playing, not waiting).
+  const shownGame = useLaunch((s) => s.games.findLast((game) => game.shown) ?? null);
+  const followedPhase = useLaunch((s) => s.phase);
+  const followedId = useLaunch((s) => s.instanceId);
+  const phase =
+    shownGame && followedPhase.kind !== "running" ? runningPhase(shownGame) : followedPhase;
+  const launchInstanceId =
+    shownGame && followedPhase.kind !== "running" ? shownGame.instanceId : followedId;
   const enabled = usePrefs((s) => s.discordEnabled);
   const showServer = usePrefs((s) => s.discordShowServer);
   const autoJoin = usePrefs((s) => s.autoJoin);

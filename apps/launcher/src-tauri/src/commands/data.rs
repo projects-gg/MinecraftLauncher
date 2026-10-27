@@ -466,7 +466,7 @@ fn ensure_can_move(app: &AppHandle, state: &AppState) -> CmdResult<()> {
             "PROJECTS_LAUNCHER_DATA_DIR is set",
         ));
     }
-    if state.running.lock().is_some() {
+    if state.games.lock().any() {
         return Err(CmdError::new(
             "TASI-OYUN",
             pick(

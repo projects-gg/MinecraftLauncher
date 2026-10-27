@@ -85,8 +85,8 @@ export const tauriLibrary: LibraryApi = {
       void unlisten.then((fn) => fn());
     };
   },
-  async runningInstance() {
-    return (await commands.gameRunning()) ?? null;
+  async runningInstances() {
+    return commands.gameRunning();
   },
 
   async worlds(instanceId) {

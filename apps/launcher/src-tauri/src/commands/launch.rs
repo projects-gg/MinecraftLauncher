@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use pl_auth::FailureClass;
@@ -99,6 +99,9 @@ pub enum LaunchEventView {
     #[serde(rename_all = "camelCase")]
     Started {
         pid: Option<u32>,
+        /// The launcher's number for this game (PLAY-AGAIN: several may run): the page names it
+        /// to close it (`game_close`, `game_kill`) or to move it in game.
+        game: u64,
         /// The first start with this version and loader: it takes longer (the loader prepares
         /// its caches, the computer reads every new file once).
         first_start: bool,
@@ -286,6 +289,11 @@ pub struct PreparingLaunch {
 }
 
 static NEXT_LAUNCH: AtomicU64 = AtomicU64::new(1);
+/// The launcher's numbers for its games (`RunningGame::id`).
+static NEXT_GAME: AtomicU64 = AtomicU64::new(1);
+/// Screenshots announced after a game ended while other games of its folder still run.
+static ANNOUNCED_SHOTS: std::sync::LazyLock<parking_lot::Mutex<pl_mc::gamefiles::AnnouncedShots>> =
+    std::sync::LazyLock::new(Default::default);
 
 /// How long a cancelled preparation step may take to stop by itself (removing its partial files)
 /// before it is dropped.
@@ -343,16 +351,7 @@ pub async fn launch_instance(
     settings: LaunchSettings,
     on_event: Channel<LaunchEventView>,
 ) -> CmdResult<()> {
-    if state.running.lock().is_some() {
-        return Err(CmdError::new(
-            "OYUN-ACIK",
-            pick(
-                "Oyun zaten açık. Önce mevcut oyunu kapat.",
-                "The game is already open. Close it first.",
-            ),
-            "",
-        ));
-    }
+    // Games already running stay (PLAY-AGAIN): the page asked whatever there was to ask.
     // A desktop shortcut or the tray can start a game while the data folder is being copied;
     // the game would write into the old folder, which goes after the restart.
     if crate::commands::data::move_running(&app) {
@@ -408,7 +407,7 @@ pub async fn launch_instance(
     crate::commands::cleanup::status_changed(&app);
     // A launch that ended without a game lets background preparation go on after a while (a game
     // that started tells it when it closes).
-    if state.running.lock().is_none() {
+    if !state.games.lock().any() {
         crate::prepare::launch_ended(&app);
     }
     match result {
@@ -598,6 +597,10 @@ pub(crate) enum Readying<'a> {
     /// The player pressed OYNA: their download settings, the Java question, offline play. The
     /// launch holds the instance lock all along.
     Launch(&'a LaunchSettings),
+    /// OYNA while another game runs in the instance's folder (PLAY-AGAIN): that game holds the
+    /// folder's files, so nothing in it changes (no version switch, no pack step); the shared game
+    /// files are only checked. As [`Readying::Launch`] otherwise.
+    Beside(&'a LaunchSettings),
     /// Background preparation (`crate::prepare`): gentle downloads, a disk reserve, no questions
     /// and nothing without the network. It takes the instance lock only to change the instance
     /// (its version, its install marker, its pack's files); the shared game files download
@@ -617,6 +620,8 @@ pub(crate) struct ReadyGame {
 pub(crate) const OFFLINE: &str = "CEVRIMDISI";
 /// Background preparation stopped: the instance's version changed while its files downloaded.
 pub(crate) const CHANGED: &str = "KURULUM-DEGISTI";
+/// A launch straight into a world another game has open (PLAY-AGAIN): nothing started.
+pub(crate) const WORLD_OPEN: &str = "DUNYA-ACIK";
 
 /// The instance lock, unless the preparation is cancelled first.
 async fn take_lock<'a>(
@@ -643,9 +648,10 @@ pub(crate) async fn ready_game_files(
     sink: &EventSink,
     cancel: &CancellationToken,
 ) -> CmdResult<Option<ReadyGame>> {
-    let (settings, background_lock) = match readying {
-        Readying::Launch(settings) => (Some(settings), None),
-        Readying::Background { lock } => (None, Some(lock)),
+    let (settings, background_lock, beside) = match readying {
+        Readying::Launch(settings) => (Some(settings), None, false),
+        Readying::Beside(settings) => (Some(settings), None, true),
+        Readying::Background { lock } => (None, Some(lock), false),
     };
     let background_ctx;
     let ctx = match settings {
@@ -662,7 +668,10 @@ pub(crate) async fn ready_game_files(
         Some(lock) => Some(take_lock(lock, cancel).await?),
         None => None,
     };
-    versions::ensure_switch_finished(state, instance).await?;
+    // Beside a running game of this folder its files stay as that game started with them.
+    if !beside {
+        versions::ensure_switch_finished(state, instance).await?;
+    }
     checkpoint(cancel)?;
 
     // 1. Version metadata, falling back to offline mode when the network is gone.
@@ -687,22 +696,27 @@ pub(crate) async fn ready_game_files(
     };
 
     // Official pack: Minecraft and loader versions follow the family member of the instance's
-    // version.
-    let prepared = step(
-        cancel,
-        official::prepare_pack(state, instance, game_dir, offline, &launcher_version),
-    )
-    .await?;
-    if prepared.content_changed {
-        let _ = app.emit("content-changed", ());
-    }
-    if let Some(dropped) = prepared.dropped {
-        sink(LaunchEventView::PackVersionDropped {
-            minecraft: dropped.minecraft,
-            recommended: dropped.recommended,
-        });
-    }
-    let pack = prepared.manifest;
+    // version. Not beside a running game of this folder: its pack's files are in use (they move
+    // with the next launch after it).
+    let pack = if beside {
+        None
+    } else {
+        let prepared = step(
+            cancel,
+            official::prepare_pack(state, instance, game_dir, offline, &launcher_version),
+        )
+        .await?;
+        if prepared.content_changed {
+            let _ = app.emit("content-changed", ());
+        }
+        if let Some(dropped) = prepared.dropped {
+            sink(LaunchEventView::PackVersionDropped {
+                minecraft: dropped.minecraft,
+                recommended: dropped.recommended,
+            });
+        }
+        prepared.manifest
+    };
     // Background: the shared game files download without the instance lock (what the instance
     // follows now tells a change made meanwhile).
     drop(background_guard.take());
@@ -954,6 +968,23 @@ async fn prepare_and_spawn(
         .game_dir(instance_id)
         .map_err(CmdError::from)?;
     let launcher_version = app.package_info().version.to_string();
+    // Another game runs in this folder (PLAY-AGAIN): it holds the folder's files, so this launch
+    // changes none of them.
+    let beside = state.games.lock().in_folder(&game_dir).next().is_some();
+    // Straight into a world that another game has open: Minecraft would not open it (its lock),
+    // after half a minute of loading. Said before anything is downloaded.
+    if let Some(QuickPlay::Singleplayer { world }) = &settings.quick_play
+        && pl_mc::launch::world_in_use(&game_dir.join("saves").join(world))
+    {
+        return Err(CmdError::new(
+            WORLD_OPEN,
+            pick(
+                "Bu dünya diğer oyunda açık.",
+                "This world is open in your other game.",
+            ),
+            "the world's session.lock is held by another game",
+        ));
+    }
 
     // Mod center changes, add-on installs and version switches of this instance wait until the
     // game files are prepared (and the other way round).
@@ -976,7 +1007,11 @@ async fn prepare_and_spawn(
         state,
         &mut instance,
         (instance_dir.as_path(), game_dir.as_path()),
-        Readying::Launch(&settings),
+        if beside {
+            Readying::Beside(&settings)
+        } else {
+            Readying::Launch(&settings)
+        },
         &sink,
         cancel,
     )
@@ -1001,15 +1036,22 @@ async fn prepare_and_spawn(
         } else {
             pl_mc::instance::FirstKeys::Defaults
         };
-    match pl_mc::instance::seed_options(
-        &game_dir,
-        &instance.mc_version,
-        &installed.client_jar,
-        pl_lang::Lang::current(),
-        first_keys,
-    )
-    .await
-    {
+    // Beside a running game of this folder (PLAY-AGAIN) none of these steps writes anything: the
+    // options, the packs and the mods stay as that game started with them (and it passed the
+    // check with them).
+    let seeded = if beside {
+        Ok(pl_mc::instance::OptionsSeed::Exists)
+    } else {
+        pl_mc::instance::seed_options(
+            &game_dir,
+            &instance.mc_version,
+            &installed.client_jar,
+            pl_lang::Lang::current(),
+            first_keys,
+        )
+        .await
+    };
+    match seeded {
         Ok(pl_mc::instance::OptionsSeed::Written { data_version }) => {
             tracing::info!(?data_version, "first-launch options written");
         }
@@ -1021,30 +1063,40 @@ async fn prepare_and_spawn(
     }
     // Resource packs a ready-made set installed before the game had an options.txt are turned
     // on now, once (a file read when there are none waiting).
-    crate::commands::modsets::activate_pending_packs(&game_dir).await;
+    if !beside {
+        crate::commands::modsets::activate_pending_packs(&game_dir).await;
+    }
     // The in-game overlay's jar for this Fabric instance (OVL-B), before the mod check sees the
     // folder: put in place only when nothing about it would stop or warn, else taken away.
     checkpoint(cancel)?;
-    let overlay_mod = crate::overlay::prepare_mod(
-        state,
-        &instance,
-        (instance_dir.as_path(), game_dir.as_path()),
-        installed.java.info.major,
-        cancel,
-    )
-    .await;
+    let overlay_mod = if beside {
+        crate::overlay::present_mod(state, &game_dir)
+    } else {
+        crate::overlay::prepare_mod(
+            state,
+            &instance,
+            (instance_dir.as_path(), game_dir.as_path()),
+            installed.java.info.major,
+            cancel,
+        )
+        .await
+    };
     // The mods are checked with the Java that will run, after the pack sync: problems that
     // would certainly stop the game stop the launch here instead.
     checkpoint(cancel)?;
     let java_major = Some(installed.java.info.major);
-    let health = modhealth::prelaunch(
-        app,
-        state,
-        &instance,
-        java_major,
-        settings.ignore_mod_issues,
-    )
-    .await;
+    let health = if beside {
+        modhealth::Prelaunch::Clear
+    } else {
+        modhealth::prelaunch(
+            app,
+            state,
+            &instance,
+            java_major,
+            settings.ignore_mod_issues,
+        )
+        .await
+    };
     checkpoint(cancel)?;
     match health {
         modhealth::Prelaunch::Blocked(check) => {
@@ -1232,9 +1284,15 @@ async fn prepare_and_spawn(
     let events = on_event.clone();
     let log_app = app.clone();
     let log_instance = instance.id.clone();
-    // Friends see the game: in game once its window shows, the server read from the log, exited.
-    let game_presence =
-        crate::commands::social::GamePresence::new(&state.social, options.quick_play.as_ref());
+    // The launcher's number for this game (PLAY-AGAIN: the page names it among several).
+    let game_id = NEXT_GAME.fetch_add(1, Ordering::Relaxed);
+    // Friends see the game: in game once its window shows, the server read from the log, exited
+    // (with several games, the oldest on screen).
+    let game_presence = crate::commands::social::GamePresence::new(
+        &state.social,
+        game_id,
+        options.quick_play.as_ref(),
+    );
     // A friend's world that turned the game away for missing mods says so in the log (HOST1).
     let log_worlds = state.worlds.clone();
     let started_account = game_account.clone();
@@ -1243,6 +1301,7 @@ async fn prepare_and_spawn(
         let view = match event {
             GameEvent::Started { pid } => Some(LaunchEventView::Started {
                 pid,
+                game: game_id,
                 first_start,
                 account: started_account.clone(),
             }),
@@ -1272,6 +1331,9 @@ async fn prepare_and_spawn(
         .await
         .map_err(|error| tracing::debug!(%error, "screenshots not listed before the game"))
         .ok();
+    // A crash report or JVM log this game's output does not name is not taken by its date while
+    // another game shares the folder (PLAY-AGAIN).
+    let shared_folder = Arc::new(AtomicBool::new(false));
     let process = GameProcess::spawn(
         &command,
         SpawnOptions {
@@ -1282,6 +1344,7 @@ async fn prepare_and_spawn(
             max_memory_mb: Some(memory.max_mb),
             // "Oyunda" once the game's own window is on screen (Windows; elsewhere its log).
             window_probe: pl_desktop::game_window::probe(),
+            shared_folder: Arc::clone(&shared_folder),
         },
         on_game,
     )
@@ -1294,13 +1357,33 @@ async fn prepare_and_spawn(
     // The game runs: its bridge stays until it ends.
     let overlay_port = overlay.keep();
     let process = Arc::new(process);
-    *state.running.lock() = Some(RunningGame {
-        instance_id: instance.id.clone(),
-        process: Arc::clone(&process),
-        adopted: false,
-        account: Some(game_account),
-    });
-    state.worlds.game_started(&instance.id, host_token);
+    let leads = {
+        let mut games = state.games.lock();
+        // Games of one folder share its crash reports from now on.
+        for other in games.in_folder(&game_dir) {
+            other.shared_folder.store(true, Ordering::SeqCst);
+            shared_folder.store(true, Ordering::SeqCst);
+        }
+        let leads = games.lead().is_none();
+        games.push(RunningGame {
+            id: game_id,
+            instance_id: instance.id.clone(),
+            game_dir: game_dir.clone(),
+            process: Arc::clone(&process),
+            adopted: false,
+            account: Some(game_account),
+            overlay_port,
+            host_token: host_token.clone(),
+            shared_folder,
+        });
+        leads
+    };
+    // World sharing follows the oldest game (HOST1): this one when no other game of this start
+    // runs; one started beside it gets none while it runs.
+    if leads {
+        state.overlay.set_host(overlay_port);
+        state.worlds.game_started(&instance.id, host_token);
+    }
     crate::commands::cleanup::status_changed(app);
     // A cancel that came while the game was being started (after the last checkpoint, before it
     // counted as running) still stops it: the page already went back to OYNA.
@@ -1310,7 +1393,13 @@ async fn prepare_and_spawn(
     }
     drop(preparing);
     // "Ekran görüntülerini panoya kopyala": the folder is watched while this game runs.
-    crate::shot_copy::session_started(app, &game_dir, on_event.clone(), settings.copy_screenshots);
+    crate::shot_copy::session_started(
+        app,
+        game_id,
+        &game_dir,
+        on_event.clone(),
+        settings.copy_screenshots,
+    );
     // The set of this version was played now (cleanup suggestions use it).
     let played = pl_content::SetInfo {
         minecraft: instance.mc_version.clone(),
@@ -1348,17 +1437,39 @@ async fn prepare_and_spawn(
         // crash: it runs again before anything below reaches it (crate::webview_rest).
         crate::webview_rest::wake(&app, "the game exited");
         let state = app.state::<AppState>();
-        state.running.lock().take();
+        // The game leaves the list; when it led, world sharing moves to the next oldest game.
+        let (led, next, games_left) = {
+            let mut games = state.games.lock();
+            let led = games.lead().is_some_and(|game| game.id == game_id);
+            games.remove(game_id);
+            let next = games.lead().map(|game| {
+                (
+                    game.instance_id.clone(),
+                    game.host_token.clone(),
+                    game.overlay_port,
+                )
+            });
+            (led, next, games.any())
+        };
         // Its overlay bridge goes with it (the mod is gone already).
         crate::overlay::game_ended(&state, overlay_port).await;
-        // The player's world closes with its game (HOST1).
-        state.worlds.game_exited();
+        if led {
+            // The player's world closes with its game (HOST1); a game still running takes world
+            // sharing over (PLAY-AGAIN).
+            state.worlds.game_exited();
+            if let Some((instance, token, port)) = next {
+                state.worlds.game_started(&instance, token);
+                state.overlay.set_host(port);
+            }
+        }
         crate::commands::cleanup::status_changed(&app);
-        crate::shot_copy::session_ended(&app);
-        // Java runtime updates waiting for the game can take their place now.
-        crate::commands::java::game_exited(&app);
-        // Background preparation looks again once the player is done with the launcher.
-        crate::prepare::game_exited(&app);
+        crate::shot_copy::session_ended(&app, game_id);
+        if !games_left {
+            // Java runtime updates waiting for the game can take their place now.
+            crate::commands::java::game_exited(&app);
+            // Background preparation looks again once the player is done with the launcher.
+            crate::prepare::game_exited(&app);
+        }
         if let Some(diagnosis) = exit.crash.clone() {
             let view = modhealth::crash_view(
                 &app,
@@ -1373,9 +1484,12 @@ async fn prepare_and_spawn(
             let _ = events.send(LaunchEventView::Crashed(view));
         }
         // A start that never reached the game (closed or crashed while it opened, or crashed on
-        // its loading screen) adds no play time and does not count as played.
+        // its loading screen) adds no play time and does not count as played. Two games of one
+        // instance side by side count their shared time once (PLAY-AGAIN).
         match exit.play_time() {
             Some(played) => {
+                let started = process.started_at();
+                let played = state.sessions.lock().count(&id, started, started + played);
                 if let Err(error) = state.instances.record_session(&id, played).await {
                     tracing::warn!(%error, "could not record play time");
                 }
@@ -1395,11 +1509,15 @@ async fn prepare_and_spawn(
         {
             tracing::warn!(%detail, "post-exit hook failed");
         }
-        // "N yeni ekran görüntüsü": the gallery opens from the notice.
-        if let Some(before) = &screenshots_before
-            && let Ok(added) = before.new_since(&game_dir).await
-            && !added.is_empty()
-        {
+        // "N yeni ekran görüntüsü": the gallery opens from the notice. Pictures another game of
+        // the folder announced already are not told again (PLAY-AGAIN).
+        let added = match &screenshots_before {
+            Some(before) => before.new_since(&game_dir).await.unwrap_or_default(),
+            None => Vec::new(),
+        };
+        let others_run = state.games.lock().in_folder(&game_dir).next().is_some();
+        let added = ANNOUNCED_SHOTS.lock().fresh(&game_dir, added, others_run);
+        if !added.is_empty() {
             if let Err(error) = app
                 .asset_protocol_scope()
                 .allow_directory(game_dir.join("screenshots"), false)
@@ -1435,34 +1553,41 @@ pub fn launch_cancel(state: State<'_, AppState>) {
         tracing::info!("launch cancel requested");
         launch.cancel.cancel();
     }
-    if let Some(running) = state.running.lock().as_ref()
-        && !running.process.window_shown()
-    {
-        tracing::info!("launch cancelled while the game was opening; closing it");
+    // One launch opens at a time; games on screen beside it are never touched (PLAY-AGAIN).
+    for game in state.games.lock().iter() {
+        if !game.adopted && !game.process.window_shown() {
+            tracing::info!(
+                game = game.id,
+                "launch cancelled while the game was opening; closing it"
+            );
+            game.process.kill();
+        }
+    }
+}
+
+/// Ends the game `game` at once (only at the player's word, after the warning).
+#[tauri::command]
+#[specta::specta]
+pub fn game_kill(state: State<'_, AppState>, game: u64) {
+    if let Some(running) = state.games.lock().get(game) {
+        tracing::info!(game, "ending the game at the player's word");
         running.process.kill();
     }
 }
 
+/// "Bağlan" while a game runs (FIX2): asks the game `game` to close the way its own close button
+/// does, so it leaves a server and saves a singleplayer world as always; the page starts it again
+/// into the server once it has ended (its exit comes as usual). False when nothing of it could be
+/// asked (no window yet, or it ended): the page then offers to end it, with its warning
+/// (`game_kill`).
 #[tauri::command]
 #[specta::specta]
-pub fn game_kill(state: State<'_, AppState>) {
-    if let Some(running) = state.running.lock().as_ref() {
-        running.process.kill();
-    }
-}
-
-/// "Bağlan" while a game runs (FIX2): asks the game to close the way its own close button does,
-/// so it leaves a server and saves a singleplayer world as always; the page starts it again into
-/// the server once it has ended (its exit comes as usual). False when nothing of it could be asked
-/// (no window yet, or it ended): the page then offers to end it, with its warning (`game_kill`).
-#[tauri::command]
-#[specta::specta]
-pub fn game_close(state: State<'_, AppState>) -> bool {
+pub fn game_close(state: State<'_, AppState>, game: u64) -> bool {
     // The process id only: asking reads the window list and must not hold the lock meanwhile.
     let pid = state
-        .running
+        .games
         .lock()
-        .as_ref()
+        .get(game)
         .and_then(|running| running.process.pid());
     let Some(pid) = pid else {
         return false;
@@ -1470,16 +1595,73 @@ pub fn game_close(state: State<'_, AppState>) -> bool {
     let asked = pl_desktop::game_close::ask_to_close(pid);
     tracing::info!(
         ?asked,
+        game,
         "asked the game to close before it joins another server"
     );
     asked.asked()
 }
 
-/// Instance id of the running game, if any (used after a UI reload).
+/// The instances whose games run, each once (used after a UI reload, and for the views that lock
+/// an instance's files while a game of it runs).
 #[tauri::command]
 #[specta::specta]
-pub fn game_running(state: State<'_, AppState>) -> Option<String> {
-    state.running.lock().as_ref().map(|r| r.instance_id.clone())
+pub fn game_running(state: State<'_, AppState>) -> Vec<String> {
+    state.games.lock().instance_ids()
+}
+
+/// Whether another game of `instance_id` fits in the memory the computer has free now (PLAY-AGAIN,
+/// asked before any game beside the ones running): its heap as the launch would set it (the
+/// instance's memory setting, "Otomatik" by its enabled mods) and the JVM's own share. Debug
+/// builds take the free memory from `PROJECTS_E2E_AVAILABLE_MB` when it is set.
+#[tauri::command]
+#[specta::specta]
+pub async fn game_memory_fits(state: State<'_, AppState>, instance_id: String) -> CmdResult<bool> {
+    let instance = state
+        .instances
+        .get(&instance_id)
+        .await
+        .map_err(CmdError::from)?;
+    let game_dir = state
+        .instances
+        .game_dir(&instance_id)
+        .map_err(CmdError::from)?;
+    let mods = game_dir.join("mods");
+    let (memory, available) = tauri::async_runtime::spawn_blocking(move || {
+        let memory = instance.launch_memory(
+            pl_mc::instance::system_memory_mb(),
+            pl_mc::mods::count_enabled_mods(&mods),
+        );
+        (
+            memory,
+            e2e_available_mb().unwrap_or_else(pl_mc::instance::available_memory_mb),
+        )
+    })
+    .await
+    .map_err(|error| CmdError::internal(error.to_string()))?;
+    let fits = pl_mc::instance::fits_another_game(available, memory.max_mb);
+    tracing::info!(
+        instance = %instance_id,
+        max_mb = memory.max_mb,
+        available_mb = available,
+        fits,
+        "memory for another game"
+    );
+    Ok(fits)
+}
+
+/// Debug builds: `PROJECTS_E2E_AVAILABLE_MB` stands in for the free memory (end-to-end tests of
+/// the "not enough memory" question). Release builds never read it.
+fn e2e_available_mb() -> Option<u64> {
+    #[cfg(debug_assertions)]
+    {
+        std::env::var("PROJECTS_E2E_AVAILABLE_MB")
+            .ok()
+            .and_then(|value| value.trim().parse().ok())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        None
+    }
 }
 
 /// Settings → Genel "Ekran görüntülerini panoya kopyala" switched: a game that runs now starts
@@ -1495,11 +1677,13 @@ pub async fn game_copy_screenshots(app: AppHandle, enabled: bool) {
 /// The page hears under this name that a game an earlier start left running has ended.
 pub const ADOPTED_GAME_EXITED: &str = "adopted-game-exited";
 
-/// The game an earlier start of the launcher left running, followed again by this start
+/// A game an earlier start of the launcher left running, followed again by this start
 /// ([`adopt_detached`]): the page shows it as "Oyunda" from its first paint.
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AdoptedGameView {
+    /// The launcher's number for it (as `LaunchEventView::Started::game`).
+    pub game: u64,
     pub instance_id: String,
     /// When its window showed (Unix milliseconds); the session time counts from there.
     pub since_ms: i64,
@@ -1512,59 +1696,62 @@ pub struct AdoptedGameView {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AdoptedGameExit {
+    pub game: u64,
     pub instance_id: String,
 }
 
-/// The launcher quits while a game runs ("Oyun açılınca launcher: Kapansın", the tray's "Çıkış"):
-/// the game plays on by itself, since it never depended on the launcher, and the next start
-/// learns of it from the note left here (`shell::quit`, just before the exit).
+/// The launcher quits while games run ("Oyun açılınca launcher: Kapansın", the tray's "Çıkış"):
+/// they play on by themselves, since they never depended on the launcher, and the next start
+/// learns of them from the note left here (`shell::quit`, just before the exit).
 pub(crate) fn detach_running(state: &AppState) {
-    let running = state.running.lock();
-    let Some(game) = running.as_ref() else {
+    let notes: Vec<pl_mc::launch::DetachedGame> = state
+        .games
+        .lock()
+        .iter()
+        .filter_map(|game| {
+            let pid = game.process.pid()?;
+            // Already ended (its exit is being handled): nothing to leave behind.
+            let process_started = pl_desktop::process::start_time(pid)?;
+            Some(pl_mc::launch::DetachedGame {
+                instance_id: game.instance_id.clone(),
+                pid,
+                process_started,
+                started_at_ms: pl_mc::launch::detached::unix_ms(game.process.started_at()),
+                shown_at_ms: game
+                    .process
+                    .shown_at()
+                    .map(pl_mc::launch::detached::unix_ms),
+                game_dir: game.game_dir.clone(),
+                account: game.account.clone(),
+                more: Vec::new(),
+            })
+        })
+        .collect();
+    if notes.is_empty() {
         return;
-    };
-    let Some(pid) = game.process.pid() else {
-        return;
-    };
-    // Already ended (its exit is being handled): nothing to leave behind.
-    let Some(process_started) = pl_desktop::process::start_time(pid) else {
-        return;
-    };
-    let Ok(game_dir) = state.instances.game_dir(&game.instance_id) else {
-        return;
-    };
-    let note = pl_mc::launch::DetachedGame {
-        instance_id: game.instance_id.clone(),
-        pid,
-        process_started,
-        started_at_ms: pl_mc::launch::detached::unix_ms(game.process.started_at()),
-        shown_at_ms: game
-            .process
-            .shown_at()
-            .map(pl_mc::launch::detached::unix_ms),
-        game_dir,
-        account: game.account.clone(),
-    };
-    match note.save(&state.root) {
+    }
+    match pl_mc::launch::detached::save_all(&state.root, &notes) {
         Ok(()) => tracing::info!(
-            instance = %note.instance_id,
-            pid,
-            "the launcher quits while the game runs; the game plays on"
+            games = notes.len(),
+            "the launcher quits while games run; they play on"
         ),
-        Err(error) => tracing::warn!(%error, "the running game's note was not left"),
+        Err(error) => tracing::warn!(%error, "the running games' note was not left"),
     }
 }
 
-/// At start: the game an earlier start left running when it quit ([`detach_running`]). One that
+/// At start: the games an earlier start left running when it quit ([`detach_running`]). One that
 /// still runs is followed again until it ends: the bar says "Oyunda", nothing changes its files
 /// meanwhile and its session is counted (without its log or crash help: its output went with the
 /// old launcher). One that ended meanwhile adds its session, ending at its log's last write. Runs
-/// in setup, before the page, so the page finds the game at once ([`game_adopted`]).
+/// in setup, before the page, so the page finds the games at once ([`game_adopted`]).
 pub fn adopt_detached(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let Some(note) = pl_mc::launch::DetachedGame::take(&state.root) else {
-        return;
-    };
+    for note in pl_mc::launch::detached::take_all(&state.root) {
+        adopt_one(app, &state, note);
+    }
+}
+
+fn adopt_one(app: &AppHandle, state: &AppState, note: pl_mc::launch::DetachedGame) {
     if !pl_desktop::process::is_same(note.pid, note.process_started) {
         let app = app.clone();
         tauri::async_runtime::spawn(async move { record_detached_session(&app, &note).await });
@@ -1596,34 +1783,61 @@ pub fn adopt_detached(app: &AppHandle) {
             kill,
         ))
     };
-    *state.running.lock() = Some(RunningGame {
-        instance_id: note.instance_id.clone(),
-        process: Arc::clone(&process),
-        adopted: true,
-        account: note.account.clone(),
-    });
-    tracing::info!(instance = %note.instance_id, pid, "the game the last start left running is followed again");
+    let game_id = NEXT_GAME.fetch_add(1, Ordering::Relaxed);
+    {
+        let mut games = state.games.lock();
+        let shared_folder = Arc::new(AtomicBool::new(false));
+        for other in games.in_folder(&note.game_dir) {
+            other.shared_folder.store(true, Ordering::SeqCst);
+            shared_folder.store(true, Ordering::SeqCst);
+        }
+        games.push(RunningGame {
+            id: game_id,
+            instance_id: note.instance_id.clone(),
+            game_dir: note.game_dir.clone(),
+            process: Arc::clone(&process),
+            adopted: true,
+            account: note.account.clone(),
+            overlay_port: None,
+            host_token: None,
+            shared_folder,
+        });
+    }
+    tracing::info!(instance = %note.instance_id, pid, "a game the last start left running is followed again");
     crate::commands::cleanup::status_changed(app);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let exit = process.wait().await;
         crate::webview_rest::wake(&app, "the adopted game exited");
         let state = app.state::<AppState>();
-        state.running.lock().take();
+        let games_left = {
+            let mut games = state.games.lock();
+            games.remove(game_id);
+            games.any()
+        };
         crate::commands::cleanup::status_changed(&app);
-        crate::commands::java::game_exited(&app);
-        crate::prepare::game_exited(&app);
-        if let Some(played) = exit.play_time()
-            && let Err(error) = state
+        if !games_left {
+            crate::commands::java::game_exited(&app);
+            crate::prepare::game_exited(&app);
+        }
+        if let Some(played) = exit.play_time() {
+            let started = process.started_at();
+            let played = state
+                .sessions
+                .lock()
+                .count(&note.instance_id, started, started + played);
+            if let Err(error) = state
                 .instances
                 .record_session(&note.instance_id, played)
                 .await
-        {
-            tracing::warn!(%error, "could not record the adopted game's play time");
+            {
+                tracing::warn!(%error, "could not record the adopted game's play time");
+            }
         }
         let _ = app.emit(
             ADOPTED_GAME_EXITED,
             AdoptedGameExit {
+                game: game_id,
                 instance_id: note.instance_id.clone(),
             },
         );
@@ -1656,19 +1870,27 @@ async fn record_detached_session(app: &AppHandle, note: &pl_mc::launch::Detached
     }
 }
 
-/// The game an earlier start left running, while this start follows it ([`adopt_detached`]).
+/// The games an earlier start left running, while this start follows them ([`adopt_detached`]),
+/// oldest first.
 #[tauri::command]
 #[specta::specta]
-pub fn game_adopted(state: State<'_, AppState>) -> Option<AdoptedGameView> {
-    let running = state.running.lock();
-    let game = running.as_ref().filter(|game| game.adopted)?;
-    let since = game
-        .process
-        .shown_at()
-        .unwrap_or_else(|| game.process.started_at());
-    Some(AdoptedGameView {
-        instance_id: game.instance_id.clone(),
-        since_ms: pl_mc::launch::detached::unix_ms(since),
-        account: game.account.clone(),
-    })
+pub fn game_adopted(state: State<'_, AppState>) -> Vec<AdoptedGameView> {
+    state
+        .games
+        .lock()
+        .iter()
+        .filter(|game| game.adopted)
+        .map(|game| {
+            let since = game
+                .process
+                .shown_at()
+                .unwrap_or_else(|| game.process.started_at());
+            AdoptedGameView {
+                game: game.id,
+                instance_id: game.instance_id.clone(),
+                since_ms: pl_mc::launch::detached::unix_ms(since),
+                account: game.account.clone(),
+            }
+        })
+        .collect()
 }

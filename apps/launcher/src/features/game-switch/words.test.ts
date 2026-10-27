@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { en } from "@/locales/en";
 import { tr } from "@/locales/tr";
-import { type Line, questionWords, type SwitchSides, stepWords } from "./words";
+import { type Line, oneMoreWords, questionWords, type SwitchSides, stepWords } from "./words";
 
 /** The line in a language, as i18next fills it. */
 function say(strings: object, [key, values]: Line): string {
@@ -19,55 +19,43 @@ const kor = { id: "a2", name: "KorAtesi_" };
 
 function sides(overrides: Partial<SwitchSides> = {}): SwitchSides {
   return {
-    stage: "open",
+    stage: "opening",
     from: { account: ejder, instance: "projects", instanceName: "Projects" },
     to: { account: kor, instance: "projects", instanceName: "Projects" },
     ...overrides,
   };
 }
 
-describe("the question (PLAY-ACCT)", () => {
-  it("names the account to play with and the one whose game is saved and closed", () => {
+describe("Durdur ve oyna (PLAY-ACCT): another launch on its way", () => {
+  it("names the account to play with and the one whose start stops", () => {
     const words = questionWords(sides());
     expect(turkish(words.title)).toBe("Oyun KorAtesi_ hesabıyla açılsın mı?");
-    expect(words.body.map(turkish)).toEqual([
-      "EjderAvcisi ile açık olan oyun kaydedilip kapanacak.",
-    ]);
-    expect(turkish(words.confirm)).toBe("Kapat ve oyna");
+    expect(words.body.map(turkish)).toEqual(["EjderAvcisi ile açılmakta olan oyun durdurulacak."]);
+    expect(turkish(words.confirm)).toBe("Durdur ve oyna");
     expect(english(words.title)).toBe("Play as KorAtesi_?");
-    expect(words.body.map(english)).toEqual([
-      "The game running as EjderAvcisi will be saved and closed.",
-    ]);
-    expect(english(words.confirm)).toBe("Close and play");
+    expect(words.body.map(english)).toEqual(["The game starting as EjderAvcisi will stop."]);
+    expect(english(words.confirm)).toBe("Stop and play");
   });
 
-  it("names the other installation as one when the other account plays another one", () => {
+  it("names the other installation as one when the other account starts another one", () => {
     const words = questionWords(
       sides({ to: { account: kor, instance: "fabric", instanceName: "Fabric 1.21" } }),
     );
-    expect(turkish(words.title)).toBe("Oyun KorAtesi_ hesabıyla açılsın mı?");
     expect(words.body.map(turkish)).toEqual([
-      "EjderAvcisi ile Projects kurulumunda açık olan oyun kaydedilip kapanacak.",
+      "EjderAvcisi ile Projects kurulumunda açılmakta olan oyun durdurulacak.",
     ]);
   });
 
-  it("names the installations when the same account plays another one", () => {
+  it("names the installations when the same account starts another one", () => {
     const words = questionWords(
       sides({ to: { account: ejder, instance: "fabric", instanceName: "Fabric 1.21" } }),
     );
     expect(turkish(words.title)).toBe("Fabric 1.21 kurulumu açılsın mı?");
     // "Projects" is also the server: the installation is called one.
     expect(words.body.map(turkish)).toEqual([
-      "Projects kurulumunda açık olan oyun kaydedilip kapanacak.",
+      "Projects kurulumunda açılmakta olan oyun durdurulacak.",
     ]);
     expect(english(words.title)).toBe("Play Fabric 1.21?");
-  });
-
-  it("stops a game that is still opening, with nothing to save", () => {
-    const words = questionWords(sides({ stage: "opening" }));
-    expect(words.body.map(turkish)).toEqual(["EjderAvcisi ile açılmakta olan oyun durdurulacak."]);
-    expect(turkish(words.confirm)).toBe("Durdur ve oyna");
-    expect(english(words.confirm)).toBe("Stop and play");
   });
 
   it("stops the files being prepared for another installation", () => {
@@ -80,7 +68,6 @@ describe("the question (PLAY-ACCT)", () => {
     );
     expect(turkish(words.title)).toBe("Fabric 1.21 kurulumu açılsın mı?");
     expect(words.body.map(turkish)).toEqual(["Projects kurulumunun hazırlığı durdurulacak."]);
-    expect(turkish(words.confirm)).toBe("Durdur ve oyna");
   });
 
   it("speaks of the game without names it does not know yet", () => {
@@ -91,34 +78,55 @@ describe("the question (PLAY-ACCT)", () => {
       }),
     );
     expect(turkish(words.title)).toBe("Oyun yeniden açılsın mı?");
-    expect(words.body.map(turkish)).toEqual(["Açık olan oyun kaydedilip kapanacak."]);
+    expect(words.body.map(turkish)).toEqual(["Açılmakta olan oyun durdurulacak."]);
   });
-});
 
-describe("the way after the answer", () => {
-  it("says what comes once the game has closed", () => {
-    const closing = stepWords(sides(), "closing");
-    expect(turkish(closing.title)).toBe("Oyun kapanıyor");
-    expect(closing.body.map(turkish)).toEqual(["Kapanınca KorAtesi_ hesabıyla açılacak."]);
+  it("says what comes once the start has stopped", () => {
+    const step = stepWords(sides());
+    expect(turkish(step.title)).toBe("Oyun kapanıyor");
+    expect(step.body.map(turkish)).toEqual(["Kapanınca KorAtesi_ hesabıyla açılacak."]);
     const other = sides({
       to: { account: ejder, instance: "fabric", instanceName: "Fabric 1.21" },
     });
-    expect(stepWords(other, "closing").body.map(turkish)).toEqual([
-      "Kapanınca Fabric 1.21 kurulumu açılacak.",
-    ]);
-    expect(stepWords(other, "closing").body.map(english)).toEqual([
-      "Once it closes, Fabric 1.21 will start.",
-    ]);
+    expect(stepWords(other).body.map(english)).toEqual(["Once it closes, Fabric 1.21 will start."]);
+  });
+});
+
+describe("one more game (PLAY-AGAIN)", () => {
+  it("asks the owner's question for the same name, nothing more when the memory holds", () => {
+    const words = oneMoreWords("again", false);
+    expect(turkish(words.title)).toBe("Bu adla oyun zaten açık");
+    expect(words.body.map(turkish)).toEqual(["Yine de bir tane daha açılsın mı?"]);
+    expect(turkish(words.confirm)).toBe("Bir tane daha aç");
+    expect(english(words.title)).toBe("A game with this name is already open");
+    expect(words.body.map(english)).toEqual(["Open another one anyway?"]);
+    expect(english(words.confirm)).toBe("Open another");
   });
 
-  it("offers to end a game that has not closed yet, with its warning", () => {
-    const words = stepWords(sides(), "overdue");
-    expect(turkish(words.title)).toBe("Oyun henüz kapanmadı");
+  it("says first when the free memory would not hold one more game", () => {
+    const words = oneMoreWords("again", true);
     expect(words.body.map(turkish)).toEqual([
-      "Zorla kapatırsan kaydedilmemiş ilerleme kaybolabilir.",
+      "Bilgisayarında bir oyun daha açmaya yetecek boş bellek yok.",
+      "Yine de bir tane daha açılsın mı?",
     ]);
-    expect(turkish(stepWords(sides(), "forcing").title)).toBe("Oyun kapatılıyor");
-    expect(tr.playAcct.switch.force).toBe("Zorla kapat ve oyna");
-    expect(english(["playAcct.switch.force"])).toBe("Force close and play");
+    // Another account's game only: the memory is the whole question.
+    const beside = oneMoreWords("memory", true);
+    expect(turkish(beside.title)).toBe("Bir oyun daha açılsın mı?");
+    expect(beside.body.map(turkish)).toEqual([
+      "Bilgisayarında bir oyun daha açmaya yetecek boş bellek yok.",
+    ]);
+    expect(turkish(beside.confirm)).toBe("Yine de aç");
+    expect(english(beside.confirm)).toBe("Open anyway");
+  });
+
+  it("never names a technical figure or an id", () => {
+    for (const kind of ["again", "memory"] as const) {
+      const words = oneMoreWords(kind, true);
+      for (const line of [words.title, ...words.body, words.confirm]) {
+        for (const text of [turkish(line), english(line)]) {
+          expect(text).not.toMatch(/\d|MB|GB|RAM|JVM/);
+        }
+      }
+    }
   });
 });

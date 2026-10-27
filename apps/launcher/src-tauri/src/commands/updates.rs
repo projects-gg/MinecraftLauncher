@@ -278,7 +278,7 @@ fn note_path(state: &AppState) -> PathBuf {
 
 /// A game runs or is being prepared (downloads, Java, mods): installing would end it.
 fn game_active(state: &AppState) -> bool {
-    state.running.lock().is_some() || state.launch_cancel.lock().is_some()
+    state.games.lock().any() || state.launch_cancel.lock().is_some()
 }
 
 fn window_on_screen(app: &AppHandle) -> bool {

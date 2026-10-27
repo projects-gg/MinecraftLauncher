@@ -15,7 +15,7 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 vi.mock("@/stores/launch", () => ({
-  useLaunch: { getState: () => ({ phase: { kind: "idle" }, play }) },
+  useLaunch: { getState: () => ({ phase: { kind: "idle" }, games: [], play }) },
 }));
 vi.mock("@/stores/prefs", () => ({
   usePrefs: { getState: () => ({ selectInstance, selectedInstanceId: null }) },

@@ -13,12 +13,13 @@ import {
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import type { TFunction } from "i18next";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useOwnLaunch } from "@/features/accounts/use-own-launch";
-import { launchErrorAction } from "@/features/disk/launch-error";
+import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launch";
+import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
 import { helpsWithLaunchError } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
@@ -366,18 +367,34 @@ function LaunchStatus({ phase }: { phase: LaunchPhase }) {
   );
 }
 
+/**
+ * "EjderAvcisi oyunda" (PLAY-AGAIN): with another account selected, who is in game while this one
+ * is not, so OYNA reads as one more game beside theirs. Quiet: plain words, no dot or glow.
+ */
+function othersLine(t: TFunction, names: readonly string[]): string | null {
+  const [first, second] = names;
+  if (!first) return null;
+  if (!second) return t("playAgain.othersOne", { name: first });
+  if (names.length === 2) return t("playAgain.othersTwo", { first, second });
+  return t("playAgain.othersMany", { total: String(names.length) });
+}
+
 function StatusArea({
   selected,
   phase,
+  others,
 }: {
   selected: InstanceSummary | undefined;
   /** The launch as the selected account sees it (idle while another account's game runs). */
   phase: LaunchPhase;
+  /** The other accounts in game while this one is not (PLAY-AGAIN). */
+  others: readonly string[];
 }) {
   const { t } = useTranslation();
   const reduce = useReducedMotion() ?? false;
   const autoJoin = usePrefs((s) => s.autoJoin);
   const setAutoJoin = usePrefs((s) => s.setAutoJoin);
+  const othersText = othersLine(t, others);
   // "Devam et" only while nothing runs (a click would start nothing otherwise).
   const target = useResumeTarget(selected);
   const resume = phase.kind === "idle" ? target : target === undefined ? undefined : null;
@@ -430,15 +447,30 @@ function StatusArea({
                 ) : null}
               </AnimatePresence>
             </div>
-            {selected?.autoJoin ? (
-              <Switch
-                checked={autoJoin}
-                onCheckedChange={setAutoJoin}
-                label={t("play.autoJoin")}
-                description={selected.autoJoin}
-                className="shrink-0"
-              />
-            ) : null}
+            <div className="flex min-w-0 shrink items-center gap-6">
+              <AnimatePresence initial={false}>
+                {othersText ? (
+                  <motion.span
+                    key="others"
+                    className="block max-w-[240px] min-w-0 truncate text-[12px] text-ash-300"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1, transition: { duration: 0.24, ease: easeOutExpo } }}
+                    exit={{ opacity: 0, transition: { duration: 0.12, ease: easeOutExpo } }}
+                  >
+                    {othersText}
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
+              {selected?.autoJoin ? (
+                <Switch
+                  checked={autoJoin}
+                  onCheckedChange={setAutoJoin}
+                  label={t("play.autoJoin")}
+                  description={selected.autoJoin}
+                  className="shrink-0"
+                />
+              ) : null}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -464,6 +496,8 @@ export function CommandBar() {
   // Only what the bar shows: the rest of the launch store (crash, notes, screenshots) changes
   // without it.
   const { phase, instanceId: launchId } = useOwnLaunch();
+  // Other accounts in game while this one is not: the quiet "X oyunda" (PLAY-AGAIN).
+  const others = useOthersInGame();
   const play = useLaunch((s) => s.play);
   const cancel = useLaunch((s) => s.cancel);
   const reset = useLaunch((s) => s.reset);
@@ -492,21 +526,32 @@ export function CommandBar() {
   // "Son oynama" (the account in game says "az önce" beside its "Oyunda"). The launch itself, not
   // this account's view of it: another account's game ends too, and switching accounts is no end.
   const launchKind = useLaunch((s) => s.phase.kind);
+  // One of several games ending changes no phase (PLAY-AGAIN): its end is read the same way.
+  const gameCount = useLaunch((s) => s.games.length);
   const lastKind = useRef(launchKind);
+  const lastCount = useRef(gameCount);
   useEffect(() => {
     const was = lastKind.current;
+    const wasCount = lastCount.current;
     lastKind.current = launchKind;
-    if (was === launchKind || was === "idle") return;
-    if (launchKind !== "running" && launchKind !== "idle") return;
+    lastCount.current = gameCount;
+    const ended = gameCount < wasCount;
+    if (!ended) {
+      if (was === launchKind || was === "idle") return;
+      if (launchKind !== "running" && launchKind !== "idle") return;
+    }
     for (const queryKey of [["instances"], ["instance"], ["resume"], ["accounts"]]) {
       void queryClient.invalidateQueries({ queryKey });
     }
-  }, [launchKind, queryClient]);
+  }, [launchKind, gameCount, queryClient]);
 
   const selectedLaunchId = selected?.id;
   useEffect(() => {
     if (phase.kind !== "error") return;
-    if (launchErrorAction(phase.code) === "makeSpace") {
+    if (phase.code === WORLD_OPEN) {
+      // The world is open in the player's other game (PLAY-AGAIN): nothing to copy or to fix.
+      toast(phase.message, { id: "launch-world-open" });
+    } else if (launchErrorAction(phase.code) === "makeSpace") {
       // The disk cannot hold the download: nothing was fetched yet (or the half-done file went).
       // Settings → Veri shows what can go and how much room it makes; OYNA tries again after.
       toast.error(phase.message, {
@@ -570,10 +615,12 @@ export function CommandBar() {
         onSelect={selectInstance}
       />
       <div className={cn("flex min-w-0 flex-1 items-center border-l border-white/8 pl-4")}>
-        <StatusArea selected={selected} phase={phase} />
+        <StatusArea selected={selected} phase={phase} others={others} />
       </div>
       <PlayButton
         state={state}
+        // "Oyunda" takes a press: one more game, after the owner's question (PLAY-AGAIN).
+        runningPressable={state.kind === "running"}
         onPlay={() => {
           if (selected) void play(selected.id);
           // Nothing to play: the offer "Hiç kurulum yok" with "Kur ve oyna" and "Yeni kurulum"
@@ -588,6 +635,7 @@ export function CommandBar() {
           update: t("play.update"),
           cancel: t("play.cancel"),
           running: t("play.running"),
+          runningAction: t("playAgain.runningAria"),
           percentFirst: i18n.language !== "en",
         }}
       />

@@ -425,11 +425,7 @@ fn issue_views(plan: &SyncPlan, variant: &ModSetVariant) -> Vec<ModIssueView> {
 }
 
 fn game_running(state: &AppState, instance_id: &str) -> bool {
-    state
-        .running
-        .lock()
-        .as_ref()
-        .is_some_and(|running| running.instance_id == instance_id)
+    state.games.lock().of_instance(instance_id)
 }
 
 /// The ready-made sets this launcher offers, with what each variant installs.

@@ -136,11 +136,7 @@ pub(crate) fn launcher_trash(state: &AppState) -> LauncherTrash {
 }
 
 fn is_running(state: &AppState, instance_id: &str) -> bool {
-    state
-        .running
-        .lock()
-        .as_ref()
-        .is_some_and(|r| r.instance_id == instance_id)
+    state.games.lock().of_instance(instance_id)
 }
 
 /// Worlds are never changed while their game runs (it keeps them open and would overwrite or
@@ -216,13 +212,15 @@ pub struct SharedLogView {
     pub url: String,
 }
 
-/// File name of the log the running game of `instance_id` writes, if it runs.
+/// File name of the log the running game of `instance_id` writes, if it runs (with several,
+/// the newest's).
 fn live_log_name(state: &AppState, instance_id: &str) -> Option<String> {
     let process = state
-        .running
+        .games
         .lock()
-        .as_ref()
+        .iter()
         .filter(|r| r.instance_id == instance_id)
+        .last()
         .map(|r| Arc::clone(&r.process))?;
     let path = process.log_file()?;
     Some(path.file_name()?.to_string_lossy().into_owned())

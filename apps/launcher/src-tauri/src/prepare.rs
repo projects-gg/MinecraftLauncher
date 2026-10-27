@@ -356,7 +356,7 @@ fn conditions(app: &AppHandle, state: &AppState) -> Conditions {
     });
     Conditions {
         enabled,
-        game: state.running.lock().is_some() || state.launch_cancel.lock().is_some(),
+        game: state.games.lock().any() || state.launch_cancel.lock().is_some(),
         busy: crate::commands::modrinth::jobs_running(app)
             || crate::commands::library::jobs_running(app)
             || crate::commands::java::job_running(app)

@@ -1,31 +1,21 @@
 // "Playing" for the account in game alone (PLAY-ACCT), and the question "Play" asks while another
-// account's game, or another installation's, runs (one game at a time).
+// launch is on its way (one launch at a time; games on screen stay, PLAY-AGAIN).
 export const enPlayAcct = {
   inGame: "Playing",
   switch: {
     titleAccount: "Play as {{name}}?",
     titleInstance: "Play {{instance}}?",
-    openAccount: "The game running as {{name}} will be saved and closed.",
-    openAccountInstance: "The game running as {{name}} in {{instance}} will be saved and closed.",
-    openInstance: "The game running in {{instance}} will be saved and closed.",
     openingAccount: "The game starting as {{name}} will stop.",
     openingAccountInstance: "The game starting as {{name}} in {{instance}} will stop.",
     openingInstance: "The game starting in {{instance}} will stop.",
     preparingInstance: "Getting {{instance}} ready will stop.",
-    openGame: "The running game will be saved and closed.",
     openingGame: "The game that's starting will stop.",
     preparingGame: "Getting the game ready will stop.",
     cancel: "Cancel",
-    close: "Close and play",
     stop: "Stop and play",
     closingTitle: "The game is closing",
     closingAccount: "Once it closes, it'll start as {{name}}.",
     closingInstance: "Once it closes, {{instance}} will start.",
     closingGame: "Once it closes, the game will start again.",
-    overdueTitle: "The game hasn't closed yet",
-    overdueBody: "If you force it to close, unsaved progress may be lost.",
-    wait: "Keep waiting",
-    force: "Force close and play",
-    forcingTitle: "Closing the game",
   },
 };

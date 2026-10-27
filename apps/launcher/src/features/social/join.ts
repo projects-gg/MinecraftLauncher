@@ -8,6 +8,7 @@ import { officialOrOffer } from "@/features/library/official";
 import { api, type GameAccount } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
+import { ownLaunch } from "@/stores/launch-owner";
 import { usePrefs } from "@/stores/prefs";
 import { isProjectsHost } from "./model";
 import { playInstance } from "./play-together";
@@ -15,6 +16,15 @@ import { playInstance } from "./play-together";
 /** True while a game is being prepared or running: "Katıl" waits. */
 export function gameBusy(kind: string): boolean {
   return kind === "working" || kind === "launching" || kind === "running";
+}
+
+/**
+ * True while the selected account's launch is on its way or its game runs (PLAY-AGAIN: other
+ * accounts' games run beside a new one). Code outside React reads it from the launch store.
+ */
+export function ownGameBusy(): boolean {
+  const launch = useLaunch.getState();
+  return gameBusy(ownLaunch(launch, launch.selected).phase.kind);
 }
 
 /**
@@ -58,7 +68,7 @@ export async function joinServer(
 ): Promise<void> {
   try {
     const launch = useLaunch.getState();
-    if (gameBusy(launch.phase.kind)) return;
+    if (ownGameBusy()) return;
     const prefs = usePrefs.getState();
     const instances = await api.instances();
     const id =
@@ -79,7 +89,7 @@ export async function joinServer(
 
 async function join(prefer?: string, account?: GameAccount): Promise<void> {
   const launch = useLaunch.getState();
-  if (gameBusy(launch.phase.kind)) return;
+  if (ownGameBusy()) return;
   const instances = await api.instances();
   const target =
     instances.find((i) => i.id === prefer && isProjectsHost(i.autoJoin)) ??

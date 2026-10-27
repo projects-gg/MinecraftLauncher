@@ -147,7 +147,7 @@ pub async fn import_start(
         ));
     };
     // A running game writes its settings and server list when it closes, over the copies.
-    if state.running.lock().is_some() || state.launch_cancel.lock().is_some() {
+    if state.games.lock().any() || state.launch_cancel.lock().is_some() {
         return Err(refused(
             "AKTAR-OYUN",
             "Oyun açıkken aktarılamaz. Oyunu kapatıp tekrar dene.",

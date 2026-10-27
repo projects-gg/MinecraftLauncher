@@ -10,11 +10,17 @@
 // copy button, for whoever would rather join from the game. Mounted once, by SocialHost.
 // A friend's world (HOST1, joinWorld) goes the same way once its join is ready, in its own words
 // and without an address: the game moves in game only when it runs the install the join prepared.
+// With several games (PLAY-AGAIN) "the game" is the selected account's newest one on screen; with
+// none of its own, a new game starts into the server beside the others.
+//
+// The buttons keep their places (PLAY-AGAIN, from PLAY-ACCT's second look): "Vazgeç" is on the
+// left at every step, so nothing comes under the pointer that pressed "Bağlan"; the buttons that
+// come after the 20 s wait take no press for a moment.
 import { Check, Copy, Play } from "@phosphor-icons/react";
-import { Button, Dialog, IconButton, toast } from "@pl/ui";
+import { Button, type ButtonProps, Dialog, IconButton, toast, usePressGuard } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { announce } from "@/features/accounts/use-accounts";
@@ -23,6 +29,7 @@ import { api, type GameAccount } from "@/lib/api";
 import type { SocialInvite } from "@/lib/api/social-types";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
+import { type OwnLaunch, ownLaunch } from "@/stores/launch-owner";
 import { copyText } from "./actions";
 import {
   CLOSE_GRACE_MS,
@@ -71,9 +78,17 @@ interface Flow {
   running: string | null;
   /** The account it played with: it starts again with it, whichever is selected (PLAY-ACCT). */
   account: GameAccount | null;
+  /** The launcher's number for the game that closes (PLAY-AGAIN: one among several). */
+  game: number | null;
   /** The step's own timer (its time limit). */
   timer?: number;
   unsubscribe: () => void;
+}
+
+/** The selected account's launch or newest game on screen (PLAY-AGAIN): what "Bağlan" moves. */
+function own(): OwnLaunch {
+  const launch = useLaunch.getState();
+  return ownLaunch(launch, launch.selected);
 }
 
 let flow: Flow | null = null;
@@ -93,14 +108,13 @@ function closeAsk() {
 
 /** Opens the question for `target` as the game is now; false when the player is there already. */
 function ask(target: JoinTarget, inviteId?: string): boolean {
-  const { phase } = useLaunch.getState();
+  const { phase, instanceId } = own();
   const activity = useSocialUi.getState().view.activity;
   const step = joinStep(target, gameNow(phase), activity);
   if (step === "already") return false;
   leave();
   // A friend's world is reached in game only from the install its join prepared.
-  const sameInstance =
-    target.kind !== "world" || useLaunch.getState().instanceId === target.instance;
+  const sameInstance = target.kind !== "world" || instanceId === target.instance;
   useJoinAsk.setState({
     ask: {
       inviteId,
@@ -118,7 +132,7 @@ function ask(target: JoinTarget, inviteId?: string): boolean {
  * question: "Katıl" said it); with a game open or opening, the question first.
  */
 export function joinWorld(target: Extract<JoinTarget, { kind: "world" }>) {
-  if (gameNow(useLaunch.getState().phase) === "closed") {
+  if (gameNow(own().phase) === "closed") {
     void start(target, null);
     return;
   }
@@ -154,7 +168,7 @@ export function joinCall(where: CallWhere = { kind: "projects" }) {
  * it starts at once, as it always did; with a game open or opening, the question first (FIX2).
  */
 export function joinOrAsk(target: JoinTarget) {
-  if (gameNow(useLaunch.getState().phase) === "closed") {
+  if (gameNow(own().phase) === "closed") {
     void start(target, null);
     return;
   }
@@ -166,7 +180,7 @@ export const PROJECTS: JoinTarget = { kind: "projects" };
 
 /** The player's game is on `target` already: its "Katıl" is off. */
 export function useThere(target: JoinTarget): boolean {
-  const open = useLaunch((s) => gameNow(s.phase) === "open");
+  const open = useLaunch((s) => gameNow(ownLaunch(s, s.selected).phase) === "open");
   const activity = useSocialUi((s) => s.view.activity);
   return open && onTarget(target, activity);
 }
@@ -239,20 +253,21 @@ function begin(current: Flow, next: CloseStep) {
     case "inGame":
       // The shell answers within five seconds; past the limit it counts as a no.
       limit(IN_GAME_LIMIT_MS, () => ({ type: "inGame", done: false, now: Date.now() }));
-      void connectInGame(current.target).then((done) =>
+      void connectInGame(current.target, current.game).then((done) =>
         step(id, { type: "inGame", done, now: Date.now() }),
       );
       break;
-    case "closing":
+    case "closing": {
       limit(CLOSE_GRACE_MS, () => ({ type: "tick", now: Date.now() }));
-      void api
-        .closeGame()
-        .catch(() => false)
-        .then((asked) => step(id, { type: "asked", asked }));
+      const { game } = current;
+      // A game the page cannot name cannot be asked: the warning comes at once.
+      const asking = game === null ? Promise.resolve(false) : api.closeGame(game);
+      void asking.catch(() => false).then((asked) => step(id, { type: "asked", asked }));
       break;
+    }
     case "forcing":
       limit(FORCE_GRACE_MS, () => ({ type: "tick", now: Date.now() }));
-      void api.killGame();
+      if (current.game !== null) void api.killGame(current.game);
       break;
     case "stopping":
       // Nothing to save yet: the start stops (a game that was opening closes with it).
@@ -268,7 +283,8 @@ function begin(current: Flow, next: CloseStep) {
 function connect(current: Ask) {
   if (current.inviteId) void api.social.dismissInvite(current.inviteId);
   const launch = useLaunch.getState();
-  const game = gameNow(launch.phase);
+  const mine = own();
+  const game = gameNow(mine.phase);
   if (game === "closed") {
     closeAsk();
     void start(current.target, null);
@@ -277,17 +293,21 @@ function connect(current: Ask) {
   leave();
   flows += 1;
   const id = flows;
-  // The game's end, however it comes (asked, ended, or closed by the player meanwhile).
-  const unsubscribe = useLaunch.subscribe((state, before) => {
-    if (gameNow(state.phase) === "closed" && gameNow(before.phase) !== "closed") {
+  // The launch on its way, or this account's newest game on screen (PLAY-AGAIN: other games may
+  // run beside it and stay).
+  const run = mine.game?.run ?? launch.progress;
+  // Its end, however it comes (asked, ended, or closed by the player meanwhile).
+  const unsubscribe = useLaunch.subscribe((state) => {
+    if (state.progress !== run && !state.games.some((g) => g.run === run)) {
       step(id, { type: "exited" });
     }
   });
   flow = {
     id,
     target: current.target,
-    running: launch.instanceId,
-    account: launch.account,
+    running: mine.instanceId,
+    account: mine.game?.account ?? launch.account,
+    game: mine.game?.game ?? null,
     unsubscribe,
   };
   const first: CloseStep =
@@ -439,6 +459,30 @@ function worldWords(t: TFunction, shown: Ask) {
     : { title: t("fix2.connect.restartTitle"), body: t("host.connect.restartBody") + saved };
 }
 
+/**
+ * A button that came in place of the waiting line (the 20 s wait ran out): it takes presses once
+ * the pointer has left it or a moment after it came (`usePressGuard`), never a click aimed at what
+ * was there before.
+ */
+function ArrivingButton({
+  onClick,
+  ...props
+}: Omit<ButtonProps, "onClick"> & { onClick: () => void }) {
+  const [since] = useState(() => performance.now());
+  const guard = usePressGuard("arrived", { since });
+  return (
+    <Button
+      {...props}
+      aria-disabled={!guard.armed || undefined}
+      onPointerLeave={guard.handlers.onPointerLeave}
+      onKeyDown={guard.handlers.onKeyDown}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        if (guard.take(event)) onClick();
+      }}
+    />
+  );
+}
+
 export function JoinDialog() {
   const { t } = useTranslation();
   const current = useJoinAsk((s) => s.ask);
@@ -451,12 +495,9 @@ export function JoinDialog() {
   const closing = shown.closing?.kind;
   // A move in game, a stopping start and an end the player asked for run to their end.
   const settled = closing === "inGame" || closing === "forcing" || closing === "stopping";
+  // "Vazgeç" stays on the left: after "Bağlan" nothing comes where the pointer pressed.
   const cancel = (
-    <Button
-      variant="ghost"
-      className={closing === "overdue" ? "mr-auto" : undefined}
-      onClick={closeAsk}
-    >
+    <Button variant="ghost" className="mr-auto" onClick={closeAsk}>
       {t("fix2.connect.cancel")}
     </Button>
   );
@@ -476,13 +517,15 @@ export function JoinDialog() {
       cancel
     ) : closing === "overdue" ? (
       <>
-        {cancel}
-        <Button variant="secondary" onClick={() => send({ type: "wait", now: Date.now() })}>
+        <ArrivingButton variant="ghost" className="mr-auto" onClick={closeAsk}>
+          {t("fix2.connect.cancel")}
+        </ArrivingButton>
+        <ArrivingButton variant="secondary" onClick={() => send({ type: "wait", now: Date.now() })}>
           {t("fix2.connect.wait")}
-        </Button>
-        <Button variant="danger" onClick={() => send({ type: "force", now: Date.now() })}>
+        </ArrivingButton>
+        <ArrivingButton variant="danger" onClick={() => send({ type: "force", now: Date.now() })}>
           {t("fix2.connect.force")}
-        </Button>
+        </ArrivingButton>
       </>
     ) : undefined;
   return (
