@@ -4,6 +4,7 @@ import { enAfkReconnect } from "./en-afk-reconnect";
 import { enAfkPlus } from "./en-afkplus";
 import { enBetaGate } from "./en-beta-gate";
 import { enChat } from "./en-chat";
+import { enChatProd } from "./en-chat-prod";
 import { enChat2 } from "./en-chat2";
 import { enCloudAfk } from "./en-cloud-afk";
 import { enCloudAfkFeat } from "./en-cloud-afk-feat";
@@ -315,6 +316,7 @@ export const en: DeepPartial<Strings> = {
   worldEntry: enWorldEntry,
   playAcct: enPlayAcct,
   playAgain: enPlayAgain,
+  chatProd: enChatProd,
   nav: {
     home: "Home",
     library: "Library",
