@@ -19,6 +19,7 @@ import { CopyDialog } from "./copy-dialog";
 import { CloudGuardDialog } from "./guard";
 import { CloudIntroCard, CloudIntroDialog } from "./intro";
 import { CloudMoveDialog } from "./move";
+import { movementShown } from "./movement/use-cloud-movement";
 import { PlusIntroCard, PlusIntroDialog } from "./plus/intro";
 import { PlusPanel } from "./plus/plus-panel";
 import { plusMe, plusOffer } from "./plus/types";
@@ -264,6 +265,9 @@ export function CloudSection({
                   (account.features?.inventory?.mode ?? "off") !== "off" && account.host
                     ? () => ui.openConsole(account.id, "inventory")
                     : undefined
+                }
+                onMovement={
+                  movementShown(account) ? () => ui.openConsole(account.id, "movement") : undefined
                 }
                 onCopy={
                   bulk

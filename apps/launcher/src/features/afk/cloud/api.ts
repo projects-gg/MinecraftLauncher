@@ -15,6 +15,7 @@ import {
   type CloudLiveEvent,
   type CloudLogPage,
   type CloudLogRange,
+  type CloudMovementError,
   type CloudMovePlan,
   type CloudMoveResult_Serialize,
   type CloudPageView_Serialize,
@@ -28,6 +29,7 @@ import {
 import { CommandError } from "@/lib/api/tauri";
 import { isTauri } from "@/lib/platform";
 import { mockCloudApi } from "./mock";
+import type { MoveOp } from "./movement/model";
 
 export type CloudAccount = CloudAccount_Serialize;
 export type CloudPageData = CloudPageView_Serialize;
@@ -45,6 +47,7 @@ export type {
   CloudLiveEvent,
   CloudLogPage,
   CloudLogRange,
+  CloudMovementError,
   CloudMovePlan,
   CloudReplyTry,
   CloudRevealOutcome,
@@ -94,6 +97,11 @@ export interface CloudApi {
   invOp(id: string, opId: string, op: InvOp): Promise<CloudInvError | null>;
   /** "Aç": the inventory view on for this account (from its next connection). */
   setInventory(id: string, enabled: boolean): Promise<CloudSaveResult>;
+  /** The "Hareket" panel is on screen: the account's movement streams through `onLive`. */
+  movementWatch(id: string): Promise<void>;
+  movementUnwatch(id: string): Promise<void>;
+  /** A movement operation; null: sent (its answer comes as `movementResult`), else why not. */
+  movementOp(id: string, opId: string, op: MoveOp): Promise<CloudMovementError | null>;
   /** "Dene": what the rule answers to a sample message, on this computer. */
   tryReply(rule: TryRule, sample: string, sender: string): Promise<CloudReplyTry>;
   /** "İndir": the console of a range as a file in Downloads; null: no line in that range. */
@@ -151,6 +159,11 @@ const tauriCloudApi: CloudApi = {
   inventoryUnwatch: (id) => commands.cloudAfkInventoryUnwatch(id),
   invOp: (id, opId, op) => commands.cloudAfkInvOp(id, opId, JSON.stringify(op)),
   setInventory: (id, enabled) => ok(commands.cloudAfkSetInventory(id, enabled)),
+  movementWatch: async (id) => {
+    await ok(commands.cloudAfkMovementWatch(id));
+  },
+  movementUnwatch: (id) => commands.cloudAfkMovementUnwatch(id),
+  movementOp: (id, opId, op) => commands.cloudAfkMovementOp(id, opId, JSON.stringify(op)),
   tryReply: (rule, sample, sender) =>
     commands.cloudAfkTryReply(rule.pattern, rule.regex, rule.from, rule.reply, sample, sender),
   download: (id, name, range) => ok(commands.cloudAfkConsoleDownload(id, name, range)),

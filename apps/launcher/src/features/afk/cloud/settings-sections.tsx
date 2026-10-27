@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import type { CloudFeatures } from "@/bindings";
 import { ErrorText, inputClass, RangeRow, SectionIntro, ToggleRow } from "../settings/controls";
 import type { CloudEditData } from "./api";
+import { slotKey } from "./movement/model";
 import { hasPlaceholder, insertToken } from "./placeholders";
 import { ReplyTools } from "./reply-tools";
 import { WordsField } from "./secret-field";
@@ -143,6 +144,69 @@ function move<T>(list: T[], from: number, to: number): T[] {
 }
 
 // --- Genel ------------------------------------------------------------------------------------
+
+/**
+ * "Hareket" (README "Movement"): only where the account may move (`features.movement.mode` on).
+ * Its one sentence says what turning it on means; while no slot is free the switch waits and the
+ * sentence says why (the words stay readable: only the switch dims). A save the service refused
+ * for it says so under it.
+ */
+function MovementRow({
+  draft,
+  setDraft,
+  view,
+  issues,
+}: Pick<PartProps, "draft" | "setDraft" | "view" | "issues">) {
+  const { t } = useTranslation();
+  const id = useId();
+  const movement = view.account.features?.movement;
+  if (movement?.mode !== "on") return null;
+  const on = draft.config.movement ?? movement.on ?? false;
+  // A slot is missing only for turning it on: the stored "on" never waits.
+  const waiting = !movement.on && movement.slot ? slotKey(movement.slot) : null;
+  const refused = issueAt(issues, "general", null, "movement");
+  const refusal = refused
+    ? refused.problem === "off"
+      ? { key: "serviceOff" }
+      : slotKey(refused.problem, refused.max)
+    : null;
+  const help =
+    waiting && !on
+      ? t(`cloudAfkMove.${waiting.key}`, waiting.values)
+      : t("cloudAfkMove.setting.line");
+  return (
+    <>
+      <div className="switch-row flex items-center justify-between gap-6 py-3">
+        <div className="min-w-0">
+          <label
+            htmlFor={id}
+            className={cn(
+              "block text-[13.5px] font-medium text-bone-50",
+              waiting && !on ? "cursor-default" : "cursor-pointer",
+            )}
+          >
+            {t("cloudAfkMove.setting.title")}
+          </label>
+          <p id={`${id}-help`} className="mt-0.5 max-w-[58ch] text-[12.5px] text-ash-400">
+            {help}
+          </p>
+        </div>
+        <Switch
+          id={id}
+          describedBy={`${id}-help`}
+          checked={on}
+          onCheckedChange={(enabled) =>
+            setDraft((d) => ({ ...d, config: { ...d.config, movement: enabled } }))
+          }
+          label={t("cloudAfkMove.setting.title")}
+          hideLabel
+          disabled={Boolean(waiting) && !on}
+        />
+      </div>
+      {refusal ? <ErrorText>{t(`cloudAfkMove.${refusal.key}`, refusal.values)}</ErrorText> : null}
+    </>
+  );
+}
 
 export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
   const { t } = useTranslation();
@@ -290,6 +354,7 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
             }
           />
         ) : null}
+        <MovementRow draft={draft} setDraft={setDraft} view={view} issues={issues} />
       </div>
       <Field
         label={t("cloudAfk.settings.owner")}

@@ -11,7 +11,8 @@
 // `&reveal=offline|retype|limited` makes "Göster" fail that way. AFK+ adds `&plus=<scenario>`
 // (plus/mock-data.ts); without it AFK+ is off, as the service is until its release. The cloud
 // features add `&feat=on|view` and their own switches (mock-feat.ts); without them the service is
-// one from before the features. `&link=down`: the machine is not connected.
+// one from before the features. `&link=down`: the machine is not connected. Movement adds
+// `&move=<scenario>` (mock-move.ts).
 import { api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
@@ -41,6 +42,14 @@ import {
   watchInventory,
 } from "./mock-feat";
 import { mockLive } from "./mock-live";
+import {
+  GECE,
+  geceRunning,
+  movementFeature,
+  moveOperation,
+  unwatchMovement,
+  watchMovement,
+} from "./mock-move";
 import {
   mockMe as mockPlusMe,
   mockOffer as mockPlusOffer,
@@ -181,7 +190,14 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
           ]),
     ],
     inventory: null,
+    movement: null,
   };
+}
+
+/** The account's features with movement's preview (`&move=…`), while the features are on. */
+function withMovement(id: string): CloudAccount["features"] {
+  const features = accountFeatures(id);
+  return features ? { ...features, movement: movementFeature(id) } : features;
 }
 
 function account(
@@ -223,7 +239,7 @@ function account(
     tier: plusScenario === "off" ? "" : "plain",
     plusUntil: null,
     ai: null,
-    features: accountFeatures(id),
+    features: withMovement(id),
     ...overrides,
   };
 }
@@ -251,9 +267,14 @@ function plainAccounts(which: Scenario): CloudAccount[] {
     account("a_7KQ2MZ3P9TW4XB1C", "Madenci07", "mc.madenciler.net", 25570, {
       version: "1.21.4",
     }),
-    account("a_8XH4N2RT6WQ9PB3D", "GeceBekcisi", "play.projects.gg", 0, {
+    account(GECE, "GeceBekcisi", "play.projects.gg", 0, {
       expiresAt: now + 5 * DAY + 4 * 3_600,
-      live: { state: "waiting", since: now - 30, reason: null, attempt: 2, retryAt: now + 14 },
+      live: geceRunning
+        ? { state: "running", since: now - 52 * 60, reason: null, attempt: null, retryAt: null }
+        : { state: "waiting", since: now - 30, reason: null, attempt: 2, retryAt: now + 14 },
+      ...(movementFeature(GECE)?.on
+        ? { config: { ...config("full"), movement: { enabled: true } } }
+        : {}),
       rev: 9,
     }),
     account("a_3MCV7Y1KD5HS8FQ2", "Tuccar_Ali", "play.projects.gg", 0, {
@@ -464,6 +485,7 @@ function editView(cloud: CloudAccount): CloudEditData {
           : { kind: "plain" as const, text: rule.reply.text ?? "" },
       })),
       inventory: cloud.config.inventory?.enabled ?? null,
+      movement: cloud.config.movement?.enabled ?? null,
     },
     versions: {
       versions: [
@@ -531,6 +553,7 @@ function plan(name: string, server: string): CloudMovePlan {
         },
       ],
       inventory: null,
+      movement: null,
     },
     dropped: [
       { what: "walking", count: 1 },
@@ -685,6 +708,23 @@ export const mockCloudApi: CloudApi = {
       if (issues.length) return { kind: "invalid", issues };
     }
     const inventory = edit.config?.inventory;
+    const movement = edit.config?.movement;
+    const movementNow = current.features?.movement;
+    // The service's slot check (README "Movement slots"): `&move=player|host` keep it off.
+    if (movement === true && movementNow && !movementNow.on && movementNow.slot) {
+      return {
+        kind: "invalid",
+        issues: [
+          {
+            place: "general",
+            index: null,
+            field: "movement",
+            problem: movementNow.slot,
+            max: movementNow.slot === "player" ? 1 : 10,
+          },
+        ],
+      };
+    }
     const next = replace({
       ...current,
       name: edit.name ?? current.name,
@@ -692,15 +732,21 @@ export const mockCloudApi: CloudApi = {
       version: edit.version ?? current.version,
       lang: edit.lang ?? current.lang,
       rev: current.rev + 1,
-      config:
-        typeof inventory === "boolean"
-          ? { ...current.config, inventory: { enabled: inventory } }
-          : current.config,
+      config: {
+        ...current.config,
+        ...(typeof inventory === "boolean" ? { inventory: { enabled: inventory } } : {}),
+        ...(typeof movement === "boolean" ? { movement: { enabled: movement } } : {}),
+      },
       features:
-        typeof inventory === "boolean" && current.features
+        (typeof inventory === "boolean" || typeof movement === "boolean") && current.features
           ? {
               ...current.features,
-              inventory: { mode: current.features.inventory?.mode ?? "off", on: inventory },
+              ...(typeof inventory === "boolean"
+                ? { inventory: { mode: current.features.inventory?.mode ?? "off", on: inventory } }
+                : {}),
+              ...(typeof movement === "boolean" && current.features.movement
+                ? { movement: { ...current.features.movement, on: movement, slot: null } }
+                : {}),
             }
           : current.features,
     });
@@ -770,6 +816,21 @@ export const mockCloudApi: CloudApi = {
     );
     return null;
   },
+  async movementWatch(id) {
+    await delay(60);
+    watchMovement(id, find(id).live.state === "running", emit);
+  },
+  async movementUnwatch(id) {
+    unwatchMovement(id);
+  },
+  async movementOp(id, opId, op) {
+    const refused = moveOperation(id, op);
+    window.setTimeout(
+      () => emit({ kind: "movementResult", id: opId, ok: refused === null, error: refused }),
+      40,
+    );
+    return null;
+  },
   async setInventory(id, enabled) {
     await delay(380);
     const current = find(id);
@@ -819,7 +880,11 @@ export const mockCloudApi: CloudApi = {
       if (current.expired) return { id: target, account: null, code: "BULUT-SURE" };
       const next = replace({
         ...current,
-        config: { ...from.config, inventory: current.config.inventory },
+        config: {
+          ...from.config,
+          inventory: current.config.inventory,
+          movement: current.config.movement,
+        },
         rev: current.rev + 1,
       });
       return { id: target, account: next, code: null };

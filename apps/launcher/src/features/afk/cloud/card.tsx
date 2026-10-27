@@ -1,8 +1,8 @@
 // A cloud account on the AFK page, the desktop card's twin: face, name and server, the state line,
 // the paid time with "Süreyi uzat" once renewal opens, and one main button (Başlat, Durdur, or
 // "Yeniden etkinleştir" on the site once the time is up), the console and the settings. With the
-// cloud features: "Envanter" in its menu (the panel's tab), "Ayarlarını kopyala", and a box while
-// several accounts are chosen (the chosen card carries the brand's pixel brackets).
+// cloud features: "Envanter" and "Hareket" in its menu (the panel's tabs), "Ayarlarını kopyala", and
+// a box while several accounts are chosen (the chosen card carries the brand's pixel brackets).
 import {
   ArrowSquareOut,
   ArrowsClockwise,
@@ -13,6 +13,7 @@ import {
   DotsThreeVertical,
   GearSix,
   Play,
+  SneakerMove,
   Stop,
   Terminal,
 } from "@phosphor-icons/react";
@@ -210,6 +211,7 @@ export function CloudCard({
   onPlus,
   onUpgrade,
   onInventory,
+  onMovement,
   onCopy,
   selecting = false,
   selected = false,
@@ -230,6 +232,8 @@ export function CloudCard({
   onUpgrade?: () => void;
   /** While the service shows this account's inventory: the panel opens on it. */
   onInventory?: () => void;
+  /** While this account's movement is on: the panel opens on Hareket. */
+  onMovement?: () => void;
   /** "Ayarlarını kopyala" (several accounts, the cloud features on). */
   onCopy?: () => void;
   /** Several accounts are being chosen: a box instead of the menu, the card toggles it. */
@@ -271,6 +275,9 @@ export function CloudCard({
             onSelect: onInventory,
           },
         ]
+      : []),
+    ...(onMovement
+      ? [{ label: t("cloudAfkMove.tab"), icon: <SneakerMove size={16} />, onSelect: onMovement }]
       : []),
     { label: t("cloudAfk.actions.settings"), icon: <GearSix size={16} />, onSelect: onSettings },
     ...(onCopy
