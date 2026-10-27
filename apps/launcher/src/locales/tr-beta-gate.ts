@@ -4,7 +4,7 @@
 // ("Discord'daki Ar-Ge rolü": where it lives, Discord's own word).
 export const trBetaGate = {
   // While the answer is out (only when it takes a moment).
-  checking: "Discord'daki Ar-Ge rolüne bakılıyor",
+  checking: "Discord'daki Ar-Ge rolüne bakılıyor.",
   notMember: "Beta, Ar-Ge ekibine özel.",
   // Opens the application page in the browser.
   apply: "Ekibe başvur",
