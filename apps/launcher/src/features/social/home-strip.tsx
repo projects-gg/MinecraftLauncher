@@ -14,8 +14,8 @@
 //   and "Çağır" (one crew: called at once; several: the picker); × hides it on that server;
 // - friends in game (or the one crewmate on Projects), with "Katıl" when some are on projects.gg;
 // - before sign-in, the invitation: three faces, "Arkadaşlarınla birlikte oyna" and "Discord ile
-//   bağlan", which opens the friends panel on its opt-in screen (what is shared, the privacy page,
-//   and the button that opens Discord);
+//   giriş yap" (the opt-in screen's own words, SMALL12), which opens the friends panel on that
+//   screen (what is shared, the privacy page, and the button that opens Discord);
 // - signed in with nobody yet, the player's face, "Henüz arkadaşın yok" and "Arkadaş ekle".
 // The invitations close for good with ×; the friends button then lights up once wherever it is,
 // to show where friends live (from the keyboard the focus goes there too). A line that replaces
@@ -26,14 +26,14 @@
 import { Check, MegaphoneSimple, Play, UserPlus, UsersThree, X } from "@phosphor-icons/react";
 import { ContextMenu, cn, easeOutExpo, IconButton, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
 import { homeInvite } from "@/features/host/rules";
 import { useHostUi } from "@/features/host/store";
 import { HomeWorldLine } from "@/features/host/world-invite";
 import { api } from "@/lib/api";
-import type { TeamMember } from "@/lib/api/social-types";
+import type { CrewCall, SocialSnapshot, TeamMember } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { entrySelector, usePlace } from "@/stores/placement";
@@ -56,7 +56,14 @@ import { JoinButton } from "./friend-row";
 import { gameBusy } from "./join";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
-import { crewmatesOnProjects, type HomeHint, homeStrip, isJoinable, playingPeople } from "./model";
+import {
+  crewmatesOnProjects,
+  type HomeHint,
+  type HomeStrip,
+  homeStrip,
+  isJoinable,
+  playingPeople,
+} from "./model";
 import { enter, leave, useSocialMotion } from "./motion";
 import { MarkedSentence, markedName } from "./person-mark";
 import { type PersonPlace, type PersonRef, usePeopleItems } from "./person-menu";
@@ -142,7 +149,7 @@ function InviteLine({ hint }: { hint: HomeHint }) {
         <ActionLook
           icon={connect ? <DiscordMark height={12} /> : <UserPlus size={15} aria-hidden />}
         >
-          {connect ? t("social.account.connect") : t("social.actions.add")}
+          {connect ? t("social.consent.signIn") : t("social.actions.add")}
         </ActionLook>
       </button>
       <IconButton
@@ -557,6 +564,81 @@ function CallCrewLine() {
   );
 }
 
+/** What Home's friends line is chosen from: the stores' values (the strip's hooks, or the stores
+ * as they are now for `homeShowsCall`). */
+interface HomeLineInputs {
+  view: SocialSnapshot;
+  closed: readonly HomeHint[];
+  closedCalls: readonly string[];
+  closedPlans: readonly string[];
+  /** Where "Ekibini çağır" was closed (`callLineKey`). */
+  closedOn: string | null;
+  refusedUntil: number;
+  lastCallAt: number | null;
+  /** A game is being prepared or running. */
+  busy: boolean;
+  now: number;
+  world: ReturnType<typeof homeInvite>;
+}
+
+/** The line Home shows (model.ts `homeStrip`); a friend's world invite (HOST1) before all: it asks
+ * the player personally. */
+function homeLine(input: HomeLineInputs): HomeStrip | "world" | null {
+  if (input.world) return "world";
+  const { view, now } = input;
+  const callable =
+    view.teams &&
+    callLineShown({
+      place: view.callPlace,
+      activity: view.activity,
+      closedOn: input.closedOn,
+      crews: view.crews,
+      features: view.crew,
+      calls: view.calls,
+      refusedUntil: input.refusedUntil,
+      lastCallAt: input.lastCallAt,
+      now,
+    });
+  const plan = homePlan(view.plans, now, input.closedPlans)?.phase ?? null;
+  return homeStrip(view, input.closed, {
+    closedCalls: input.closedCalls,
+    gameBusy: input.busy,
+    now,
+    callable,
+    plan,
+  });
+}
+
+/** Home's friends lines on screen (Home is the page; the strip counts itself). */
+let homeLinesShown = 0;
+
+/**
+ * Whether Home shows this crew call now, with its "Geliyorum" (the call line): a toast would say
+ * the same call a second time (SMALL12; social-host). The line's own choice from the stores as they
+ * are, the call counted in when the list has not brought it yet.
+ */
+export function homeShowsCall(call: CrewCall, now = Date.now()): boolean {
+  if (!homeLinesShown) return false;
+  const ui = useSocialUi.getState();
+  const view = ui.view.calls.some((c) => c.id === call.id)
+    ? ui.view
+    : { ...ui.view, calls: [call, ...ui.view.calls] };
+  const host = useHostUi.getState();
+  const kind = homeLine({
+    view,
+    closed: useSocialPrefs.getState().closedHints,
+    closedCalls: ui.closedCalls,
+    closedPlans: ui.closedPlans,
+    closedOn: ui.callLineClosed,
+    refusedUntil: ui.callRefusedUntil,
+    lastCallAt: ui.lastCallAt,
+    busy: gameBusy(useLaunch.getState().phase.kind),
+    now,
+    world: host.view.enabled ? homeInvite(host.view.invites, host.homeClosed) : null,
+  });
+  return kind === "call" && unansweredCall(view.calls, now, ui.closedCalls)?.id === call.id;
+}
+
 export function FriendsHomeStrip() {
   const { reduce, layout } = useSocialMotion();
   const view = useSocialUi((s) => s.view);
@@ -568,27 +650,27 @@ export function FriendsHomeStrip() {
   const lastCallAt = useSocialUi((s) => s.lastCallAt);
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
   const now = useCallClock((s) => s.now);
-  const callable =
-    view.teams &&
-    callLineShown({
-      place: view.callPlace,
-      activity: view.activity,
-      closedOn,
-      crews: view.crews,
-      features: view.crew,
-      calls: view.calls,
-      refusedUntil,
-      lastCallAt,
-      now,
-    });
-  const plan = homePlan(view.plans, now, closedPlans)?.phase ?? null;
-  // A friend's world invite (HOST1) is the most pressing: it asks the player personally.
   const world = useHostUi((s) =>
     s.view.enabled ? homeInvite(s.view.invites, s.homeClosed) : null,
   );
-  const kind = world
-    ? ("world" as const)
-    : homeStrip(view, closed, { closedCalls, gameBusy: busy, now, callable, plan });
+  const kind = homeLine({
+    view,
+    closed,
+    closedCalls,
+    closedPlans,
+    closedOn,
+    refusedUntil,
+    lastCallAt,
+    busy,
+    now,
+    world,
+  });
+  useEffect(() => {
+    homeLinesShown += 1;
+    return () => {
+      homeLinesShown -= 1;
+    };
+  }, []);
 
   return (
     <AnimatePresence initial={false} mode="popLayout">
