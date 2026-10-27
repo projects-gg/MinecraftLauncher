@@ -366,14 +366,22 @@ export function RangeRow({
   errors: Array<string | null | undefined>;
   children: [ReactNode, ReactNode];
 }) {
+  const { t } = useTranslation();
   const error = errors.find(Boolean) ?? null;
+  // "5 sn ile 10 sn arası": a random wait between the two, in words (a bare dash did not say it).
+  const after = t("afkPanel.rangeAfter");
   return (
     <SettingRow title={title} help={help} error={error}>
       {children[0]}
-      <span aria-hidden className="text-ash-400">
-        –
+      <span aria-hidden className="text-[13px] text-ash-300">
+        {t("afkPanel.rangeJoin")}
       </span>
       {children[1]}
+      {after ? (
+        <span aria-hidden className="text-[13px] text-ash-300">
+          {after}
+        </span>
+      ) : null}
     </SettingRow>
   );
 }

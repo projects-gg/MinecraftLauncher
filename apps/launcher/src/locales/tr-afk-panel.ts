@@ -28,6 +28,9 @@ export const trAfkPanel = {
    * by its name and its sign: "iki nokta" alone read as the address's dots.
    */
   portRange: "İki nokta üst üsteden (:) sonraki sayı 1 ile 65535 arasında olmalı.",
+  /** Two numbers of one wait: "5 sn ile 10 sn arası". */
+  rangeJoin: "ile",
+  rangeAfter: "arası",
   /** A scheduled task's "every 300–600 sn". */
   interval: "Aralık",
   /** A running desktop account's plain save, beside "Kaydet ve yeniden bağlan". */

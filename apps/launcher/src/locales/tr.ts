@@ -874,7 +874,7 @@ export const tr = {
       autoStart: "Launcher açılınca otomatik bağlan",
       resourcePacks: "Kaynak paketlerine izin ver",
       resourcePacksHelp:
-        "Kapalıyken paket indirilmez ama hesap yine de girer. Açıkken indirilir; sunucunun pakete koyduğu yazılar konsolda doğru görünür.",
+        "Kapalıyken paket indirilmez, hesap yine de girer. Açarsan konsolda sunucunun özel yazıları doğru görünür.",
     },
     login: {
       placeholder: "/kit ya da herkese merhaba",
@@ -934,13 +934,12 @@ export const tr = {
     eat: {
       threshold: "Açlık eşiği",
       thresholdValue: "{{value}} / 20",
-      note: "Otomatik yemek bağlantıda biraz daha fazla veri kullanır.",
     },
     respond: {
       enabled: "Otomatik yanıtı kullan",
       sound: "Yanıt gönderilince bildirim sesi çal",
       colors: "Renk kodlarını da ara",
-      colorsHelp: "Kalıp yazanlar için. Emin değilsen kapalı bırak.",
+      colorsHelp: "Yalnız kalıplar için. Emin değilsen kapalı bırak.",
       rules: "Kurallar",
       add: "Kural ekle",
       remove: "Kuralı sil",

@@ -347,7 +347,6 @@ function EatBlock({ draft, setDraft }: SectionProps) {
             ]}
             className="max-w-[360px]"
           />
-          <Hint className="mt-3">{t("afkSettings.eat.note")}</Hint>
         </WideRow>
       </Fold>
     </Block>

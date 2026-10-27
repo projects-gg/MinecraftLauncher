@@ -16,6 +16,8 @@ export const enAfkPanel = {
   commandOrdinal: "Command {{n}}",
   barLabel: "Unsaved changes",
   portRange: "The number after the colon (:) must be between 1 and 65535.",
+  rangeJoin: "to",
+  rangeAfter: "",
   interval: "Every",
   saveOnly: "Save only",
   kept: {
@@ -47,7 +49,7 @@ export const enAfkPanel = {
     ownerOnlyHelp: "Works only when {{name}} writes.",
     ownerFirst: "First write the name you play with above.",
     ownerDesktop: "Only replies to the account you play with.",
-    emptyReply: "Where you leave it empty, there's no reply.",
+    emptyReply: "An empty one gets no reply.",
     insert: "Add to the reply",
     sender: "Sender's name",
     insertSender: "Add the sender's name to the reply",

@@ -1115,7 +1115,7 @@ export const en: DeepPartial<Strings> = {
       autoStart: "Connect when the launcher starts",
       resourcePacks: "Allow resource packs",
       resourcePacksHelp:
-        "When off, the pack isn't downloaded but the account still joins. When on, it's downloaded, so the texts the server put in it show correctly in the console.",
+        "When off, the pack isn't downloaded and the account still joins. Turn it on to see the server's own texts right in the console.",
     },
     login: {
       placeholder: "/kit or hello everyone",
@@ -1175,13 +1175,12 @@ export const en: DeepPartial<Strings> = {
     eat: {
       threshold: "Hunger threshold",
       thresholdValue: "{{value}} / 20",
-      note: "Auto eat uses a little more data on the connection.",
     },
     respond: {
       enabled: "Use auto-reply",
       sound: "Play a sound when a reply is sent",
       colors: "Look for color codes too",
-      colorsHelp: "For those who write patterns. Leave it off if unsure.",
+      colorsHelp: "Only for patterns. Leave it off if unsure.",
       rules: "Rules",
       add: "Add rule",
       remove: "Remove rule",

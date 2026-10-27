@@ -151,7 +151,7 @@ function StoredLine({
       {/* The padlock, the hidden password and "Değiştir" say it is kept: no gold "Kayıtlı" pill
           beside them (SHEET-UX). */}
       <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-white/7 bg-obsidian-850/80 px-3">
-        <LockSimple size={15} weight="fill" className="shrink-0 text-gold-300" />
+        <LockSimple size={15} weight="fill" className="shrink-0 text-ash-300" />
         <span className="truncate font-mono text-[13px] text-bone-100">{row.command}</span>
         <span aria-hidden className="font-mono text-[13px] tracking-widest text-ash-400">
           ••••••
