@@ -436,6 +436,75 @@
     0 18px 48px rgb(34 6 6 / 0.5);
 }
 
+/* A toast's button (SMALL12): `Button`'s secondary look, chamfered, since a gold fill there was a
+   second gold block right above OYNA (and a rounded box broke the two-shape rule). Sonner draws it
+   as one <button>, so the layers are pseudo-elements: the edge (::before) and the face (::after),
+   each cut parallel to the button's outline. The keyboard ring turns the edge gold-300 and 2 px
+   wide inside the shape (outside it, the toast's own edge would cross it). */
+@utility toast-action {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 28px;
+  margin-left: auto;
+  padding-inline: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--color-bone-100);
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  --cut: 6px;
+  transition: scale 150ms ease-out;
+  &:active {
+    scale: 0.97;
+  }
+  &:focus-visible {
+    outline: none;
+  }
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    clip-path: polygon(
+      var(--cut) 0,
+      100% 0,
+      100% calc(100% - var(--cut)),
+      calc(100% - var(--cut)) 100%,
+      0 100%,
+      0 var(--cut)
+    );
+    transition: background-color 150ms ease-out;
+  }
+  &::before {
+    inset: 0;
+    background-color: rgb(255 255 255 / 0.12);
+  }
+  &::after {
+    inset: 1px;
+    --cut: 5.4px;
+    background-color: color-mix(in oklab, var(--color-obsidian-800) 85%, transparent);
+  }
+  &:hover::before {
+    background-color: rgb(255 255 255 / 0.2);
+  }
+  &:hover::after {
+    background-color: color-mix(in oklab, var(--color-obsidian-700) 90%, transparent);
+  }
+  &:focus-visible::before {
+    background-color: var(--color-gold-300);
+  }
+  &:focus-visible::after {
+    inset: 2px;
+    --cut: 4.8px;
+  }
+}
+
 /* A toast rises in on the entrance curve (Sonner's own 400 ms `ease` kept its buttons up to a
    toast's height below their place for the first ~150 ms: a press aimed at them landed under
    them; POLISH5, measured in a preview: the press works at once where the button is, and with

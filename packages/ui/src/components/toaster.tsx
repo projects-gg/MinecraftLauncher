@@ -5,6 +5,10 @@ import { Toaster as Sonner } from "sonner";
  * the page's grid (SMALL10b): their right edge on the page gutter's (`--spacing-page`, where the
  * news column, the cards and the panels end) and as wide as the news column (`--spacing-news`), so
  * on Home a toast lies exactly over the column's foot instead of overhanging it.
+ *
+ * Their buttons are secondary (`toast-action`, SMALL12): a toast rests right above OYNA, the one
+ * gold thing. A button sits beside the sentence while the sentence keeps about 18 characters a
+ * line, else on a row of its own at the right ("Discord ile giriş yap" fits a 280 px toast).
  */
 export function Toaster() {
   return (
@@ -17,18 +21,20 @@ export function Toaster() {
         unstyled: true,
         classNames: {
           // Not `glass-strong`: see `toast-surface` in styles.css.
+          // Wraps: a button that would squeeze the sentence under its basis (9rem) takes a row of
+          // its own (`toast-action` keeps it at the right).
           toast:
-            "toast-surface flex w-news items-start gap-3 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100",
+            "toast-surface flex w-news flex-wrap items-start gap-x-3 gap-y-2 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100",
+          content: "min-w-0 flex-[1_1_9rem]",
           // `text-balance` (design.md §3, as headings): a toast's two or three short lines come out
           // even, never one word alone on the last.
           title: "font-semibold text-balance text-bone-50",
           description: "mt-0.5 text-ash-300",
-          // `pointer-events-auto`: a modal sheet turns pointer events off outside itself, the
-          // toasts included; their buttons must still work (the sheet ignores those clicks).
-          actionButton:
-            "pointer-events-auto ml-auto shrink-0 cursor-pointer rounded-md bg-gold-500 px-2.5 py-1 text-[12px] font-semibold text-gold-ink transition-[filter,transform,scale] duration-150 ease-out hover:brightness-110 active:scale-[0.97]",
-          cancelButton:
-            "pointer-events-auto ml-auto shrink-0 cursor-pointer rounded-md bg-white/8 px-2.5 py-1 text-[12px] text-bone-100 transition-[background-color,transform,scale] duration-150 ease-out hover:bg-white/12 active:scale-[0.97]",
+          // `toast-action` takes pointer events: a modal sheet turns them off outside itself, the
+          // toasts included; their buttons must still work (the sheet ignores those clicks). The
+          // `cancel` slot is the same quiet button (AFK+ notices use it for "Aç").
+          actionButton: "toast-action",
+          cancelButton: "toast-action",
           // The state is the icon's colour; the sentence stays legible bone (a whole line of green
           // or red text shouts).
           error: "[&_[data-icon]]:text-flare-400",
