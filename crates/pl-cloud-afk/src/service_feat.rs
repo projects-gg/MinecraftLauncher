@@ -1,6 +1,7 @@
 //! The cloud features' calls (CAFK-FEAT phase 1): the inventory's stream and moves, the account's
 //! inventory choice, the console download, and copying one account's settings to others ("Ayarları
-//! kopyala"). Nothing here polls: the inventory streams only while a view is on screen.
+//! kopyala"); movement's stream and operations (README "Movement"). Nothing here polls: the
+//! inventory and movement stream only while their panel is on screen.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +16,7 @@ use crate::feat::{
     CloudInvError, CloudLogRange, PlaceholderRules, check_inv_op, console_text, is_inv_op_id,
 };
 use crate::model::{AccountPatch, CloudAccount, CloudConsoleLine, CloudLimits};
+use crate::movement::{CloudMovementError, check_move_op};
 use crate::service::{CloudEdit, CloudSaveOutcome, CloudService};
 
 /// A console download reads at most this many pages of 1,000 lines.
@@ -76,6 +78,42 @@ impl CloudService {
     /// The inventory view left the screen.
     pub fn unwatch_inventory(&self, id: &str) {
         self.inner.live.unwatch_inventory(id);
+    }
+
+    /// The movement panel is on screen: the account's movement state and position stream with its
+    /// console.
+    pub async fn watch_movement(&self, token: &Bearer, id: &str) -> Result<()> {
+        let account = self.account(token, id).await?;
+        let Some(host) = account.host.clone() else {
+            return Err(CloudError::Invalid("no machine yet"));
+        };
+        let url = self.inner.client.live_url(&host);
+        self.inner
+            .live
+            .watch_movement(url, token.clone(), &host, id);
+        Ok(())
+    }
+
+    /// The movement panel left the screen.
+    pub fn unwatch_movement(&self, id: &str) {
+        self.inner.live.unwatch_movement(id);
+    }
+
+    /// A movement operation: `op` is the app's `MoveOp` as JSON, `op_id` its own id. None: sent,
+    /// the answer follows as `moveResult`; Some: refused here (its shape, or no socket:
+    /// `host_offline`).
+    pub fn movement_op(&self, id: &str, op_id: &str, op: &str) -> Option<CloudMovementError> {
+        if !is_inv_op_id(op_id) || op.len() > 768 {
+            return Some(CloudMovementError::invalid("id", None));
+        }
+        let Ok(value) = serde_json::from_str::<Value>(op) else {
+            return Some(CloudMovementError::invalid("type", None));
+        };
+        if let Err(problem) = check_move_op(&value) {
+            return Some(problem);
+        }
+        (!self.inner.live.movement_op(id, op_id, &value))
+            .then(|| CloudMovementError::new("host_offline"))
     }
 
     /// A move: `op` is the app's `InvOp` as JSON, `op_id` its own id. None: sent, the answer
@@ -304,7 +342,7 @@ struct CopyJob<'a> {
 impl CopyJob<'_> {
     /// The source's settings for target `id`: every secret row with words to seal for it (this
     /// computer's copy, or what the player typed for this target, else for all); None when a row's
-    /// words are missing. The target keeps its own inventory choice.
+    /// words are missing. The target keeps its own inventory and movement choices.
     fn config_for(&self, id: &str) -> Option<CloudEditConfig> {
         let typed = |row: &str| {
             self.secrets
@@ -338,6 +376,7 @@ impl CopyJob<'_> {
             rule.reply = words(&rule.id, &rule.reply)?;
         }
         config.inventory = None;
+        config.movement = None;
         Some(config)
     }
 }
@@ -404,6 +443,7 @@ mod tests {
                 },
             }],
             inventory: Some(true),
+            movement: Some(true),
         }
     }
 
@@ -451,6 +491,7 @@ mod tests {
             "this computer's words, sealed again for the target"
         );
         assert_eq!(for_two.inventory, None);
+        assert_eq!(for_two.movement, None, "movement is never copied");
         assert_eq!(for_two.owner, "Ahmet");
         let for_three = job.config_for("a_3").unwrap();
         assert_eq!(

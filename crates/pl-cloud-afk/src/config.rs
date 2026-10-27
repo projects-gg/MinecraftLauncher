@@ -12,6 +12,7 @@ use crate::model::{
     CloudAntiAfk, CloudConfigView, CloudEvery, CloudLimits, CloudPayloadView, CloudServer,
     CommandInput, ConfigInput, PayloadInput, RuleInput, VaultKey,
 };
+use crate::movement::CloudMovementSetting;
 use crate::seal::{SealError, SealTarget, fingerprint, seal};
 use crate::text::{check_text, looks_sensitive, preview};
 
@@ -82,13 +83,16 @@ pub struct CloudEditConfig {
     /// The inventory view (CAFK-FEAT): the player's choice; None: never chosen (Studio's default
     /// applies), and then nothing about it is sent.
     pub inventory: Option<bool>,
+    /// Movement (README "Movement"): the player's switch; None: nothing stored, and then nothing
+    /// about it is sent. A change restarts a running client.
+    pub movement: Option<bool>,
 }
 
 /// Where a problem is and what it is. `place` is `general`, `commands` or `rules`; `index` the
 /// row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
 /// `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
 /// (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
-/// `owner`, `server`).
+/// `owner`, `server`; for `movement`: `off`, `player`, `host`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudIssue {
@@ -96,6 +100,10 @@ pub struct CloudIssue {
     pub index: Option<u32>,
     pub field: String,
     pub problem: String,
+    /// The number a refusal names, where the words need it (`limit_movement`'s `max`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub max: Option<u32>,
 }
 
 impl CloudIssue {
@@ -105,6 +113,7 @@ impl CloudIssue {
             index: None,
             field: field.into(),
             problem: problem.into(),
+            max: None,
         }
     }
 
@@ -114,6 +123,7 @@ impl CloudIssue {
             index: Some(index as u32),
             field: field.into(),
             problem: problem.into(),
+            max: None,
         }
     }
 
@@ -136,6 +146,7 @@ impl CloudIssue {
                 index: Some(index),
                 field: field.into(),
                 problem: problem.into(),
+                max: None,
             };
         }
         match head {
@@ -144,6 +155,7 @@ impl CloudIssue {
                 index: None,
                 field: "count".into(),
                 problem: problem.into(),
+                max: None,
             },
             _ => Self::general(head.split(['.', '[']).next().unwrap_or(head), problem),
         }
@@ -200,6 +212,7 @@ pub fn edit_config(view: &CloudConfigView, copies: &RowCopies) -> CloudEditConfi
             })
             .collect(),
         inventory: view.inventory.map(|setting| setting.enabled),
+        movement: view.movement.map(|setting| setting.enabled),
     }
 }
 
@@ -308,6 +321,7 @@ pub fn validate_with(
             index: None,
             field: "count".into(),
             problem: "limit".into(),
+            max: None,
         });
     }
     let max_rules = (limits.max_rules as usize).min(HARD_MAX_ROWS);
@@ -317,6 +331,7 @@ pub fn validate_with(
             index: None,
             field: "count".into(),
             problem: "limit".into(),
+            max: None,
         });
     }
     let mut ids = HashSet::new();
@@ -535,6 +550,9 @@ pub fn build(
             inventory: config
                 .inventory
                 .map(|enabled| CloudInventorySetting { enabled }),
+            movement: config
+                .movement
+                .map(|enabled| CloudMovementSetting { enabled }),
         },
         sealed,
         kept,
@@ -611,6 +629,7 @@ mod tests {
             commands,
             rules,
             inventory: None,
+            movement: None,
         }
     }
 
@@ -722,7 +741,8 @@ mod tests {
                 place: "commands".into(),
                 index: None,
                 field: "count".into(),
-                problem: "limit".into()
+                problem: "limit".into(),
+                max: None,
             }]
         );
     }
@@ -780,7 +800,7 @@ mod tests {
     }
 
     #[test]
-    fn the_inventory_choice_goes_only_when_there_is_one() {
+    fn the_inventory_and_movement_choices_go_only_when_there_is_one() {
         let server = CloudServer::new("play.projects.gg", 0);
         let key = test_key();
         let ctx = SealContext {
@@ -823,6 +843,31 @@ mod tests {
         assert_eq!(edit_config(&view, &RowCopies::new()).inventory, Some(false));
         assert_eq!(
             edit_config(&CloudConfigView::default(), &RowCopies::new()).inventory,
+            None
+        );
+        // Movement the same way: only a stored or chosen switch goes out.
+        assert_eq!(built.config.movement, None);
+        edit.movement = Some(true);
+        let built = build(
+            &edit,
+            &limits(),
+            &off,
+            &ctx,
+            &RowCopies::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            built.config.movement,
+            Some(CloudMovementSetting { enabled: true })
+        );
+        let view = CloudConfigView {
+            movement: Some(CloudMovementSetting { enabled: false }),
+            ..CloudConfigView::default()
+        };
+        assert_eq!(edit_config(&view, &RowCopies::new()).movement, Some(false));
+        assert_eq!(
+            edit_config(&CloudConfigView::default(), &RowCopies::new()).movement,
             None
         );
     }
@@ -1006,7 +1051,8 @@ mod tests {
                     place: "rules".into(),
                     index: Some(0),
                     field: "reply".into(),
-                    problem: "reseal".into()
+                    problem: "reseal".into(),
+                    max: None,
                 }]
             ),
             other => panic!("expected reseal, got {other:?}"),
@@ -1051,6 +1097,7 @@ mod tests {
                 ..CloudRuleView::default()
             }],
             inventory: None,
+            movement: None,
         };
         let mut copies = RowCopies::new();
         for id in ["c1", "c2"] {
@@ -1089,7 +1136,8 @@ mod tests {
                 place: "commands".into(),
                 index: Some(2),
                 field: "every".into(),
-                problem: "range".into()
+                problem: "range".into(),
+                max: None,
             }
         );
         assert_eq!(
