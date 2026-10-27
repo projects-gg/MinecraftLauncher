@@ -7,7 +7,7 @@ export const trCloudAfk = {
     subtitle: "Bilgisayarın kapalıyken de AFK'da kal.",
     points: {
       online: "Hesapların sunucuda kalır, sen yokken de.",
-      commands: "Giriş komutların ve tetikleyicilerin bulutta da çalışır.",
+      commands: "Komutların ve otomatik yanıtların bulutta da çalışır.",
       anywhere: "Her yerden yönet: afk.projects.gg",
     },
     pricePerMonth: "Aylık {{price}}",

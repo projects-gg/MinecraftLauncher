@@ -5,7 +5,7 @@ export const enCloudAfk = {
     subtitle: "Stay AFK while your PC is off.",
     points: {
       online: "Your accounts stay online, even when you're away.",
-      commands: "Your login commands and triggers run in the cloud too.",
+      commands: "Your commands and auto-replies run in the cloud too.",
       anywhere: "Manage from anywhere: afk.projects.gg",
     },
     pricePerMonth: "{{price}} a month",
