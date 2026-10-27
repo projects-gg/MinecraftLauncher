@@ -175,7 +175,7 @@ function MovementRow({
       ? t(`cloudAfkMove.${waiting.key}`, waiting.values)
       : t("cloudAfkMove.setting.line");
   return (
-    <>
+    <div className="border-t border-white/7 pt-1">
       <div className="switch-row flex items-center justify-between gap-6 py-3">
         <div className="min-w-0">
           <label
@@ -204,7 +204,7 @@ function MovementRow({
         />
       </div>
       {refusal ? <ErrorText>{t(`cloudAfkMove.${refusal.key}`, refusal.values)}</ErrorText> : null}
-    </>
+    </div>
   );
 }
 
@@ -354,7 +354,6 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
             }
           />
         ) : null}
-        <MovementRow draft={draft} setDraft={setDraft} view={view} issues={issues} />
       </div>
       <Field
         label={t("cloudAfk.settings.owner")}
@@ -375,6 +374,7 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
           className="max-w-[320px]"
         />
       </Field>
+      <MovementRow draft={draft} setDraft={setDraft} view={view} issues={issues} />
     </div>
   );
 }

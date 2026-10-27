@@ -47,6 +47,8 @@ export const trCloudAfkMove = {
   going: "Gidiyor: {{x}}, {{y}}, {{z}}",
   approaching: "Yanına gidiyor: {{name}}",
   following: "Takip ediyor: {{name}}",
+  stepping: "Yürüyor.",
+  idle: "Duruyor.",
   far: "En çok 256 blok uzağa gidebilir.",
   notNear: "Ana hesabın yakında değil.",
   notNearNamed: "{{name}} yakında değil.",

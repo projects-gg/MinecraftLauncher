@@ -46,6 +46,8 @@ export const enCloudAfkMove = {
   going: "Walking to {{x}}, {{y}}, {{z}}",
   approaching: "Walking to {{name}}",
   following: "Following {{name}}",
+  stepping: "Walking.",
+  idle: "Standing still.",
   far: "It can go at most 256 blocks away.",
   notNear: "Your main account isn't nearby.",
   notNearNamed: "{{name}} isn't nearby.",

@@ -19,6 +19,7 @@ import {
 import { Button, ContentIcon, cn, EmptyState, enter, Input, leave, Switch } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  Fragment,
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
@@ -192,19 +193,22 @@ function WalkRow({
   icon: Glyph,
   label,
   name,
+  ariaLabel,
   disabled,
   onClick,
 }: {
   icon: Icon;
   label: string;
   name?: string;
+  /** What a screen reader hears, when the words and the name read better as one sentence. */
+  ariaLabel?: string;
   disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      aria-label={name ? `${label}, ${name}` : label}
+      aria-label={ariaLabel ?? (name ? `${label}, ${name}` : label)}
       disabled={disabled}
       onClick={onClick}
       className={cn(
@@ -255,21 +259,18 @@ export function MovementPanel({
 
   const [refusal, setRefusal] = useState<string | null>(null);
   const [held, setHeld] = useState<MoveDir | null>(null);
+  // Typed axes only: an empty field means "where it stands now" (its placeholder, the live figure).
   const [coords, setCoords] = useState({ x: "", y: "", z: "" });
-  const [touched, setTouched] = useState(false);
   const [invalid, setInvalid] = useState<Set<"x" | "y" | "z">>(new Set());
   const askedName = useRef<string | null>(null);
   const coordId = useId();
   const refusalTimer = useRef<number | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (move?.state === "off" && move.reason === "service") onUnavailable();
   }, [move?.state, move?.reason, onUnavailable]);
-
-  // The coordinates start where it stands, until the player types.
-  useEffect(() => {
-    if (pos && !touched) setCoords({ x: String(pos.x), y: String(pos.y), z: String(pos.z) });
-  }, [pos, touched]);
 
   const words = useCallback(
     (word: WordKey | null) => (word ? t(`cloudAfkMove.${word.key}`, word.values) : null),
@@ -341,6 +342,15 @@ export function MovementPanel({
   useEffect(() => {
     if (!ok || locked) cancel();
   }, [ok, locked, cancel]);
+  // A trade makes the controls inert: a focus that was in them stays in the panel, so W, A, S, D
+  // work again the moment the trade ends.
+  useEffect(() => {
+    if (!locked) return;
+    const now = document.activeElement;
+    if (!now || now === document.body || controlsRef.current?.contains(now)) {
+      rootRef.current?.focus({ preventScroll: true });
+    }
+  }, [locked]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const dir = KEYS[event.code];
@@ -362,7 +372,7 @@ export function MovementPanel({
       label={t(`cloudAfkMove.pad.${dir}`)}
       keyLabel={keyLabels[KEY_OF[dir]]}
       held={held === dir}
-      disabled={!ok || locked}
+      disabled={!ok}
       className={className}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
@@ -386,11 +396,9 @@ export function MovementPanel({
   );
 
   const go = () => {
-    const parsed = {
-      x: coordinate(coords.x, "x"),
-      y: coordinate(coords.y, "y"),
-      z: coordinate(coords.z, "z"),
-    };
+    const axis = (name: "x" | "y" | "z") =>
+      coords[name].trim() === "" ? (pos ? pos[name] : null) : coordinate(coords[name], name);
+    const parsed = { x: axis("x"), y: axis("y"), z: axis("z") };
     const bad = new Set((["x", "y", "z"] as const).filter((axis) => parsed[axis] === null));
     setInvalid(bad);
     if (bad.size || parsed.x === null || parsed.y === null || parsed.z === null) return;
@@ -425,12 +433,14 @@ export function MovementPanel({
       ? words(endedKey(move.ended, move.name ?? askedName.current, main))
       : null;
   const going = isGoing(move);
+  const activity = doing ?? (ok && move?.doing === "step" ? t("cloudAfkMove.stepping") : null);
+  const rest = ended ?? (ok && move?.doing === "idle" ? t("cloudAfkMove.idle") : null);
   const line = refusal
     ? { text: refusal, tone: "text-flare-400" }
-    : doing
-      ? { text: doing, tone: "text-gold-300" }
-      : ended
-        ? { text: ended, tone: "text-ash-300" }
+    : activity
+      ? { text: activity, tone: locked ? "text-bone-100" : "text-gold-300" }
+      : rest
+        ? { text: rest, tone: "text-ash-300" }
         : null;
   const dim = pos ? dimension(pos.dim) : null;
   const dimText = dim ? ("key" in dim ? t(`cloudAfkMove.dims.${dim.key}`) : dim.text) : "";
@@ -451,6 +461,7 @@ export function MovementPanel({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: W, A, S, D move the account while the panel has focus
     <div
+      ref={rootRef}
       data-movement-panel=""
       tabIndex={-1}
       className="flex flex-col gap-3 pb-4 outline-none"
@@ -475,7 +486,8 @@ export function MovementPanel({
       </section>
 
       {/* One reserved line, nothing below moves: a refusal (4 s), else what it is doing, else how the
-          last walk ended; "Dur" at its end while it walks. Words cross-fade in place. */}
+          last walk ended, else that it stands; "Dur" at its end while it walks. Words cross-fade in
+          place. */}
       <div className="flex min-h-8 items-center gap-3">
         <div aria-live="polite" className="grid min-w-0 flex-1">
           <AnimatePresence initial={false}>
@@ -511,7 +523,15 @@ export function MovementPanel({
         </Button>
       </div>
 
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-6">
+      {/* A trade holds every control at once: one even dim, nothing inside reachable. */}
+      <div
+        ref={controlsRef}
+        inert={locked}
+        className={cn(
+          "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-6 transition-opacity duration-150",
+          locked && "opacity-55",
+        )}
+      >
         <div className="flex flex-col items-center gap-4">
           <fieldset
             aria-label={t("cloudAfkMove.pad.label")}
@@ -522,7 +542,7 @@ export function MovementPanel({
             <PadButton
               icon={ArrowLineUp}
               label={t("cloudAfkMove.pad.jump")}
-              disabled={!ok || locked}
+              disabled={!ok}
               className="col-start-2 row-start-2"
               onClick={() => void act({ action: "jump" })}
             />
@@ -532,7 +552,7 @@ export function MovementPanel({
           <Switch
             label={t("cloudAfkMove.pad.sneak")}
             checked={Boolean(move?.sneak)}
-            disabled={!ok || locked}
+            disabled={!ok}
             onCheckedChange={(on) => void act({ action: "sneak", on })}
           />
         </div>
@@ -561,14 +581,14 @@ export function MovementPanel({
                   <Input
                     id={`${coordId}-${axis}`}
                     value={coords[axis]}
+                    placeholder={pos ? String(pos[axis]) : undefined}
                     inputMode="numeric"
                     autoComplete="off"
                     spellCheck={false}
                     maxLength={9}
-                    disabled={!ok || locked}
+                    disabled={!ok}
                     invalid={invalid.has(axis)}
                     onChange={(event) => {
-                      setTouched(true);
                       setCoords((c) => ({ ...c, [axis]: event.target.value }));
                       if (invalid.has(axis))
                         setInvalid((s) => new Set([...s].filter((a) => a !== axis)));
@@ -582,7 +602,7 @@ export function MovementPanel({
                 size="md"
                 variant="secondary"
                 icon={<Crosshair size={15} />}
-                disabled={!ok || locked}
+                disabled={!ok}
               >
                 {t("cloudAfkMove.goto.go")}
               </Button>
@@ -597,42 +617,37 @@ export function MovementPanel({
                     icon={UserFocus}
                     label={t("cloudAfkMove.main.go")}
                     name={main}
-                    disabled={!ok || locked}
+                    disabled={!ok}
                     onClick={() => void act({ action: "approach", name: main }, main)}
                   />
                   <WalkRow
                     icon={PersonSimpleWalk}
                     label={t("cloudAfkMove.main.follow")}
                     name={main}
-                    disabled={!ok || locked}
+                    disabled={!ok}
                     onClick={() => void act({ action: "follow", name: main }, main)}
                   />
                 </>
               ) : null}
               {own.map((name) => (
-                <div key={name} className="flex h-9 items-center gap-1 pl-2.5">
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-bone-100">
-                    {name}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={t("cloudAfkMove.own.goNamed", { name })}
-                    disabled={!ok || locked}
+                <Fragment key={name}>
+                  <WalkRow
+                    icon={UserFocus}
+                    label={t("cloudAfkMove.own.go")}
+                    name={name}
+                    ariaLabel={t("cloudAfkMove.own.goNamed", { name })}
+                    disabled={!ok}
                     onClick={() => void act({ action: "approach", name }, name)}
-                  >
-                    {t("cloudAfkMove.own.go")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={t("cloudAfkMove.own.followNamed", { name })}
-                    disabled={!ok || locked}
+                  />
+                  <WalkRow
+                    icon={PersonSimpleWalk}
+                    label={t("cloudAfkMove.own.follow")}
+                    name={name}
+                    ariaLabel={t("cloudAfkMove.own.followNamed", { name })}
+                    disabled={!ok}
                     onClick={() => void act({ action: "follow", name }, name)}
-                  >
-                    {t("cloudAfkMove.own.follow")}
-                  </Button>
-                </div>
+                  />
+                </Fragment>
               ))}
             </div>
           ) : null}
