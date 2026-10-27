@@ -5,6 +5,9 @@ import type { LaunchEvent } from "@/lib/api";
 const launch = vi.fn(async (..._args: unknown[]) => {});
 const cancelLaunch = vi.fn(async () => {});
 const confirm = vi.fn(async () => true);
+/** Whether one more game fits in the free memory (PLAY-AGAIN). */
+const memoryFits = vi.fn(async () => true);
+const flowOpen = vi.fn();
 /** The account list as the backend has it: the first one is selected unless a test says. */
 const accounts = vi.fn(async () => [
   { id: "a1", username: "EjderAvcisi", kind: "offline", active: true },
@@ -15,6 +18,7 @@ vi.mock("@/lib/api", () => ({
     launch: (...args: unknown[]) => launch(...args),
     cancelLaunch: () => cancelLaunch(),
     accounts: () => accounts(),
+    gameMemoryFits: () => memoryFits(),
   },
 }));
 vi.mock("@/features/accounts/afk-guard", () => ({
@@ -25,7 +29,7 @@ vi.mock("@pl/ui", () => ({
 }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: vi.fn() }));
 vi.mock("@/lib/sound", () => ({ playSound: vi.fn() }));
-vi.mock("@/lib/attention", () => ({ notifyWhenAway: vi.fn() }));
+vi.mock("@/lib/attention", () => ({ notifyWhenAway: vi.fn(), notify: vi.fn() }));
 vi.mock("@/lib/platform", () => ({ isTauri: () => false }));
 vi.mock("@/lib/i18n", () => ({ default: { t: (key: string) => key } }));
 vi.mock("@/features/java/prompt-store", () => ({
@@ -37,7 +41,7 @@ vi.mock("@/features/modcenter/notices", () => ({
 }));
 vi.mock("@/features/modhealth/flow", () => ({
   announceModWarnings: vi.fn(),
-  useModFlow: { getState: () => ({ open: vi.fn() }) },
+  useModFlow: { getState: () => ({ open: flowOpen }) },
 }));
 vi.mock("./prefs", () => ({
   usePrefs: { getState: () => ({ selectInstance: vi.fn(), onGameStart: "keep" }) },
@@ -48,14 +52,28 @@ const { useGameSwitch } = await import("@/features/game-switch/store");
 
 /** The account the tests' games play with. */
 const EJDER = { id: "a1", name: "EjderAvcisi" };
+const KOR = { id: "a2", name: "KorAtesi_" };
+
+/** Nothing runs, nothing is on its way. */
+function reset() {
+  useLaunch.setState({
+    phase: { kind: "idle" },
+    instanceId: null,
+    account: null,
+    games: [],
+    progress: 0,
+    followed: 0,
+    crash: null,
+  });
+}
 
 /** Starts a launch whose backend events the test sends. */
-async function startLaunch(): Promise<(event: LaunchEvent) => void> {
+async function startLaunch(instanceId = "projects"): Promise<(event: LaunchEvent) => void> {
   let send: ((event: LaunchEvent) => void) | undefined;
   launch.mockImplementationOnce(async (...args: unknown[]) => {
     send = args[1] as (event: LaunchEvent) => void;
   });
-  await useLaunch.getState().play("projects");
+  await useLaunch.getState().play(instanceId);
   if (!send) throw new Error("the launch did not start");
   return send;
 }
@@ -64,7 +82,7 @@ describe("useLaunch.play", () => {
   beforeEach(() => {
     launch.mockClear();
     confirm.mockClear();
-    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null });
+    reset();
   });
 
   it("starts one launch for a double click on OYNA (CR1-F)", async () => {
@@ -79,7 +97,7 @@ describe("useLaunch.play", () => {
 
   it("starts again once the first launch is over", async () => {
     await useLaunch.getState().play("projects");
-    useLaunch.setState({ phase: { kind: "idle" } });
+    reset();
     await useLaunch.getState().play("projects");
     expect(launch).toHaveBeenCalledTimes(2);
   });
@@ -96,7 +114,7 @@ describe("the game opening (PLAY1)", () => {
   beforeEach(() => {
     launch.mockClear();
     cancelLaunch.mockClear();
-    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null });
+    reset();
   });
 
   it("says Açılıyor from the files being ready until the game's window shows", async () => {
@@ -161,7 +179,7 @@ describe("the game opening (PLAY1)", () => {
 
 describe('"Devam et" into a world from the main menu (OVL-FIX)', () => {
   it("says what to do and why when the game opens on its main menu, and the launch goes on", async () => {
-    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null });
+    reset();
     const { toast } = await import("@pl/ui");
     const shown = vi.mocked(toast.info);
     shown.mockClear();
@@ -195,7 +213,7 @@ describe("OYNA for the account in game alone (PLAY-ACCT)", () => {
   beforeEach(() => {
     launch.mockClear();
     select("a1");
-    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null, account: null });
+    reset();
     useGameSwitch.setState({ request: null, step: null, sides: null });
   });
 
@@ -206,22 +224,43 @@ describe("OYNA for the account in game alone (PLAY-ACCT)", () => {
     expect(useLaunch.getState().account).toEqual(EJDER);
   });
 
-  it("asks before closing another account's game, and starts nothing yet", async () => {
+  it("starts another account's game beside the one on screen (PLAY-AGAIN)", async () => {
     await playing();
     select("a2");
     await useLaunch.getState().play("projects");
+    expect(useGameSwitch.getState().request).toBeNull();
+    expect(launch).toHaveBeenCalledTimes(2);
+    // It plays as the account selected at the press, whatever is selected later.
+    expect(launch.mock.calls[1]?.[2]).toMatchObject({ account: { id: "a2", name: "KorAtesi_" } });
+  });
+
+  it("asks first when the free memory would not hold another game", async () => {
+    await playing();
+    select("a2");
+    memoryFits.mockResolvedValueOnce(false);
+    await useLaunch.getState().play("projects");
     expect(launch).toHaveBeenCalledTimes(1);
     expect(useGameSwitch.getState().request).toMatchObject({
+      kind: "memory",
+      memoryShort: true,
       instanceId: "projects",
-      account: { id: "a2", name: "KorAtesi_" },
-      // Another account's own bar: its selection stays as it is.
-      restore: null,
+    });
+  });
+
+  it("asks the owner's question for the account's own game; one more joins no server", async () => {
+    await playing();
+    await useLaunch.getState().play("projects");
+    expect(launch).toHaveBeenCalledTimes(1);
+    expect(useGameSwitch.getState().request).toMatchObject({
+      kind: "again",
+      memoryShort: false,
+      instanceId: "projects",
+      options: { account: EJDER, autoJoin: false },
     });
   });
 
   it("asks once for a double press", async () => {
     await playing();
-    select("a2");
     await Promise.all([
       useLaunch.getState().play("projects"),
       useLaunch.getState().play("projects"),
@@ -233,21 +272,10 @@ describe("OYNA for the account in game alone (PLAY-ACCT)", () => {
     expect(launch).toHaveBeenCalledTimes(1);
   });
 
-  it("does nothing for the account whose game it is", async () => {
-    await playing();
-    await useLaunch.getState().play("projects");
-    expect(useGameSwitch.getState().request).toBeNull();
-    expect(launch).toHaveBeenCalledTimes(1);
-  });
-
-  it("asks before another installation starts for the same account, and keeps the bar's game", async () => {
+  it("asks the same for another installation of the same account", async () => {
     await playing();
     await useLaunch.getState().play("fabric");
-    expect(useGameSwitch.getState().request).toMatchObject({
-      instanceId: "fabric",
-      account: EJDER,
-      restore: "projects",
-    });
+    expect(useGameSwitch.getState().request).toMatchObject({ kind: "again", instanceId: "fabric" });
   });
 
   it("starts a game that ended while the account was being read", async () => {
@@ -270,5 +298,89 @@ describe("OYNA for the account in game alone (PLAY-ACCT)", () => {
     await pressed;
     expect(useGameSwitch.getState().request).toBeNull();
     expect(launch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("several games at once (PLAY-AGAIN)", () => {
+  beforeEach(() => {
+    launch.mockClear();
+    flowOpen.mockClear();
+    reset();
+    useGameSwitch.setState({ request: null, step: null, sides: null });
+  });
+
+  /** A game of `account` on screen, its launch started at once (the question answered). */
+  async function onScreen(account: typeof EJDER, game: number) {
+    let send: ((event: LaunchEvent) => void) | undefined;
+    launch.mockImplementationOnce(async (...args: unknown[]) => {
+      send = args[1] as (event: LaunchEvent) => void;
+    });
+    await useLaunch.getState().start("projects", { account });
+    if (!send) throw new Error("the launch did not start");
+    send({ type: "started", pid: game, game, firstStart: false, account });
+    send({ type: "windowShown" });
+    return send;
+  }
+
+  it("follows each game; the bar stays on while one of them runs", async () => {
+    const first = await onScreen(EJDER, 1);
+    const second = await onScreen(KOR, 2);
+    expect(useLaunch.getState().games.map((g) => g.game)).toEqual([1, 2]);
+    expect(useLaunch.getState().account).toEqual(KOR);
+    // The newer one ends: the store follows the other, still "Oyunda".
+    second({ type: "exited", code: 0, runtimeSecs: 60 });
+    expect(useLaunch.getState()).toMatchObject({
+      account: EJDER,
+      phase: { kind: "running", shown: true },
+    });
+    first({ type: "exited", code: 0, runtimeSecs: 90 });
+    expect(useLaunch.getState().phase.kind).toBe("idle");
+    expect(useLaunch.getState().games).toEqual([]);
+  });
+
+  it("helps with each crash in turn", async () => {
+    const first = await onScreen(EJDER, 1);
+    const second = await onScreen(EJDER, 2);
+    const crash = (instanceId: string) =>
+      ({
+        type: "crashed",
+        title: "t",
+        hint: "h",
+        actions: [],
+        mods: [],
+        logFile: null,
+        crashReport: null,
+        kind: "unknown",
+        instanceId,
+        suspects: [],
+        repairable: false,
+        turnOff: null,
+        reinstall: false,
+        memory: null,
+        resetJvmArgs: false,
+      }) as unknown as LaunchEvent;
+    first(crash("projects"));
+    second(crash("other"));
+    expect(useLaunch.getState().crash?.instanceId).toBe("projects");
+    expect(flowOpen).toHaveBeenCalledTimes(1);
+    useLaunch.getState().dismissCrash();
+    expect(useLaunch.getState().crash?.instanceId).toBe("other");
+    expect(flowOpen).toHaveBeenCalledTimes(2);
+    useLaunch.getState().dismissCrash();
+    expect(useLaunch.getState().crash).toBeNull();
+  });
+
+  it("never closes a game on screen when another launch is cancelled", async () => {
+    await onScreen(EJDER, 1);
+    let send: ((event: LaunchEvent) => void) | undefined;
+    launch.mockImplementationOnce(async (...args: unknown[]) => {
+      send = args[1] as (event: LaunchEvent) => void;
+    });
+    await useLaunch.getState().start("projects", { account: KOR });
+    expect(useLaunch.getState().progress).not.toBe(0);
+    send?.({ type: "started", pid: 3, game: 3, firstStart: false, account: KOR });
+    await useLaunch.getState().cancel();
+    expect(useLaunch.getState().games.map((g) => g.game)).toEqual([1]);
+    expect(useLaunch.getState().phase).toMatchObject({ kind: "running", shown: true });
   });
 });

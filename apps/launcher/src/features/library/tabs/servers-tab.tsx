@@ -40,7 +40,7 @@ import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { InlineNotice, TabEmpty } from "../parts";
 import { parseServerAddress, serverRowKeys } from "../quick-play";
-import { useGameRunning } from "../use-game-running";
+import { useGameRunning, useOwnGameOf } from "../use-game-running";
 
 type Editing = { mode: "add" } | { mode: "edit"; index: number; server: SavedServer };
 
@@ -123,6 +123,9 @@ export function ServersTab({ instance }: { instance: InstanceDetail }) {
   const id = instance.id;
   const servers = instance.servers;
   const locked = useGameRunning(id);
+  // "Katıl" stays on while only another account plays this instance (PLAY-AGAIN): this account's
+  // game starts beside it. The list itself is not changed while any game of it runs.
+  const playLocked = useOwnGameOf(id);
   const play = useLaunch((s) => s.play);
   const selectInstance = usePrefs((s) => s.selectInstance);
   const { layout } = useMotionPrefs();
@@ -191,7 +194,7 @@ export function ServersTab({ instance }: { instance: InstanceDetail }) {
           {
             label: t("instance.servers.join"),
             icon: <Play size={16} />,
-            disabled: locked || !parseServerAddress(server.address),
+            disabled: playLocked || !parseServerAddress(server.address),
             onSelect: () => join(server),
           },
           null,
@@ -281,7 +284,7 @@ export function ServersTab({ instance }: { instance: InstanceDetail }) {
                       size="sm"
                       variant="secondary"
                       icon={<Play size={14} weight="fill" className="text-gold-300" />}
-                      disabled={locked || !parseServerAddress(server.address)}
+                      disabled={playLocked || !parseServerAddress(server.address)}
                       onClick={() => join(server)}
                     >
                       {t("instance.servers.join")}

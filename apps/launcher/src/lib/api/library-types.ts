@@ -169,8 +169,8 @@ export interface LibraryApi {
   revealLog(instanceId: string, fileName?: string, source?: LogSource): Promise<void>;
   /** Live lines of the running game. Returns an unsubscribe function. */
   onGameLog(listener: (instanceId: string, line: LogLine) => void): () => void;
-  /** Instance whose game is running, if any. */
-  runningInstance(): Promise<string | null>;
+  /** The instances whose games run (PLAY-AGAIN: several may), each once. */
+  runningInstances(): Promise<string[]>;
 
   worlds(instanceId: string): Promise<WorldDetail[]>;
   backups(instanceId: string): Promise<WorldBackup[]>;

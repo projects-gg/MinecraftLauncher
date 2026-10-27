@@ -1,15 +1,14 @@
-// What OYNA and the other play actions show for the selected account (PLAY-ACCT): the launch as it
-// is while it is this account's (or not bound to one yet: its files are prepared), else nothing
-// running, so another account's "Oyna" is there to press (it asks before closing the other game).
-// The rules are in stores/launch-owner.ts.
+// What OYNA and the other play actions show for the selected account (PLAY-ACCT, PLAY-AGAIN): its
+// launch on its way (or one nobody's yet: its files are prepared), else its newest game on screen,
+// else nothing running for it, so its "Oyna" is there to press while other accounts play. The rules
+// are in stores/launch-owner.ts.
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { api } from "@/lib/api";
 import { type LaunchPhase, useLaunch } from "@/stores/launch";
-import { type LaunchOwner, launchOwner, playingAccountId } from "@/stores/launch-owner";
+import { type OwnLaunch, othersInGame, ownLaunch, playingAccountIds } from "@/stores/launch-owner";
 import { ACCOUNTS_KEY } from "./use-accounts";
-
-/** The phase another account's play actions see: nothing runs for them. */
-const IDLE: LaunchPhase = { kind: "idle" };
 
 /** The selected account's id: `undefined` while the accounts load, `null` with none. */
 export function useSelectedAccountId(): string | null | undefined {
@@ -21,37 +20,49 @@ export function useSelectedAccountId(): string | null | undefined {
   return data;
 }
 
-export interface OwnLaunch {
-  owner: LaunchOwner;
-  /** The launch's phase for this account: idle while another account's game runs. */
-  phase: LaunchPhase;
-  /** The instance of this account's launch (null while it has none). */
-  instanceId: string | null;
+/**
+ * Keeps the launch store's `selected` in step with the account list (mounted once, in the shell):
+ * the play rules of code outside React read it there.
+ */
+export function useSelectedAccountMirror() {
+  const selected = useSelectedAccountId();
+  useEffect(() => {
+    useLaunch.setState({ selected });
+  }, [selected]);
 }
+
+export type { OwnLaunch };
 
 export function useOwnLaunch(): OwnLaunch {
   const selected = useSelectedAccountId();
-  const phase = useLaunch((s) => s.phase);
-  const instanceId = useLaunch((s) => s.instanceId);
-  const account = useLaunch((s) => s.account);
-  const owner = launchOwner(phase, account, selected);
-  return owner === "other"
-    ? { owner, phase: IDLE, instanceId: null }
-    : { owner, phase, instanceId };
+  return useLaunch(useShallow((s) => ownLaunch(s, selected)));
 }
 
 /**
- * Only the kind of this account's launch phase ("idle" while another account's game runs): for
+ * Only the kind of this account's launch phase ("idle" while only other accounts' games run): for
  * views that need no progress figures, so they do not render again at every progress step.
  */
 export function useOwnLaunchKind(): LaunchPhase["kind"] {
   const selected = useSelectedAccountId();
-  return useLaunch((s) =>
-    launchOwner(s.phase, s.account, selected) === "other" ? "idle" : s.phase.kind,
-  );
+  return useLaunch((s) => ownLaunch(s, selected).phase.kind);
 }
 
-/** The account whose game is on screen: its rows say "Oyunda" (account center, account menu). */
-export function usePlayingAccountId(): string | null {
-  return useLaunch((s) => playingAccountId(s.phase, s.account));
+/** The instance of this account's launch or game (null while it has none). */
+export function useOwnLaunchInstance(): string | null {
+  const selected = useSelectedAccountId();
+  return useLaunch((s) => ownLaunch(s, selected).instanceId);
+}
+
+/** The accounts whose game is on screen: their rows say "Oyunda" (account center, account menu). */
+export function usePlayingAccountIds(): string[] {
+  return useLaunch(useShallow((s) => playingAccountIds(s)));
+}
+
+/**
+ * The names of the other accounts in game while the selected one has nothing running: the command
+ * bar's quiet "EjderAvcisi oyunda" (PLAY-AGAIN).
+ */
+export function useOthersInGame(): string[] {
+  const selected = useSelectedAccountId();
+  return useLaunch(useShallow((s) => othersInGame(s, selected)));
 }

@@ -10,7 +10,7 @@ import { useResumeTarget } from "@/features/resume/resume-button";
 import { api, type ContentKind, type InstanceDetail, type WorldDetail } from "@/lib/api";
 import { ModpackCard } from "../modpack-update";
 import { canQuickPlay } from "../quick-play";
-import { useGameRunning, useOthersGame } from "../use-game-running";
+import { useGameRunning, useOwnGameOf } from "../use-game-running";
 import { LeadCard } from "./lead-card";
 import {
   featuredServer,
@@ -81,10 +81,10 @@ export function OverviewTab({
   const notesId = useId();
   const id = instance.id;
   const running = useGameRunning(id);
-  const othersGame = useOthersGame();
   // "Devam et", the worlds' and the server's "Oyna": off while this account's game of the instance
-  // runs; another account's game leaves them on, and they ask first (PLAY-ACCT).
-  const locked = running && !othersGame;
+  // runs (one more is OYNA's "Oyunda"); another account's game leaves them on, and this account's
+  // starts beside it (PLAY-ACCT, PLAY-AGAIN).
+  const locked = useOwnGameOf(id);
   // The worlds and screenshots tabs' own queries: what one reads, the other shows at once.
   const worlds = useQuery({ queryKey: ["worlds", id], queryFn: () => api.library.worlds(id) });
   const shots = useQuery({

@@ -10,7 +10,7 @@ import type { LauncherApi } from "./index";
 import { mockAccountName, mockAccounts, mockMarkUsed } from "./mock-accounts";
 import { mockAfk } from "./mock-afk";
 import { createMockCleanup } from "./mock-cleanup";
-import { mockCloseGame, mockKillGame, mockSession } from "./mock-connect";
+import { mockCloseGame, mockGameNumber, mockKillGame, mockSession } from "./mock-connect";
 import { createMockContent, mockExtraMods } from "./mock-content";
 import { createMockConveniences, mockNewScreenshots, mockSessionMs } from "./mock-conveniences";
 import { createMockData } from "./mock-data";
@@ -1176,9 +1176,11 @@ export const mockApi: LauncherApi = {
     await delay(1600);
     // Preview switches (mock-opening.ts): how long the game's window takes, a first start.
     const opening = mockOpening();
+    const game = mockGameNumber();
     onEvent({
       type: "started",
       pid: 4242,
+      game,
       firstStart: opening.firstStart,
       account: account ?? { id: "", name: "" },
     });
@@ -1200,7 +1202,7 @@ export const mockApi: LauncherApi = {
     }
     const session = mockSessionMs();
     // "Bağlan" (FIX2) may close the game before its session is over (mock-connect.ts).
-    await mockSession(session);
+    await mockSession(game, session);
     const shots = mockNewScreenshots();
     if (shots) onEvent({ type: "newScreenshots", ...shots });
     onEvent({ type: "exited", code: 0, runtimeSecs: Math.round(session / 1000) });
@@ -1211,6 +1213,17 @@ export const mockApi: LauncherApi = {
   },
   closeGame: mockCloseGame,
   killGame: mockKillGame,
+  async gameMemoryFits() {
+    // `?memory=short`: the computer has no room for one more game (PLAY-AGAIN).
+    await delay(120);
+    return mockFlag("memory") !== "short";
+  },
+  async gameWorldOpen() {
+    // `?worldOpen=<name>` (or `1`: whose is not known): the world is open in a game (PLAY-AGAIN).
+    await delay(60);
+    const who = mockFlag("worldOpen");
+    return { open: who !== "", account: who && who !== "1" ? who : null };
+  },
   async setScreenshotCopy() {},
   async updatePresence() {},
   async setPresenceEnabled() {},

@@ -4,6 +4,7 @@ import type {
   LegacyImportRequest,
   LegacyScan,
   PresenceContext,
+  WorldOpenView,
 } from "@/bindings";
 import { isTauri } from "../platform";
 import type {
@@ -132,12 +133,22 @@ export interface LauncherApi {
   ): Promise<void>;
   cancelLaunch(instanceId: string): Promise<void>;
   /**
-   * "Bağlan" (FIX2): asks the running game to close the way its own close button does (it saves
-   * and leaves its server). False when nothing of it could be asked.
+   * "Bağlan" (FIX2): asks the game `game` (the launcher's number for it) to close the way its own
+   * close button does (it saves and leaves its server). False when nothing of it could be asked.
    */
-  closeGame(): Promise<boolean>;
-  /** Ends the running game at once (only at the player's word, after the warning). */
-  killGame(): Promise<void>;
+  closeGame(game: number): Promise<boolean>;
+  /** Ends the game `game` at once (only at the player's word, after the warning). */
+  killGame(game: number): Promise<void>;
+  /**
+   * Whether one more game of the instance fits in the memory the computer has free now
+   * (PLAY-AGAIN: asked before any game beside the ones running).
+   */
+  gameMemoryFits(instanceId: string): Promise<boolean>;
+  /**
+   * Whether the world `world` (its folder) of the instance is open in a game now, and whose
+   * (PLAY-AGAIN: "Devam et" and a world's "Oyna" say so before a launch would stop on it).
+   */
+  gameWorldOpen(instanceId: string, world: string): Promise<WorldOpenView>;
   /** "Ekran görüntülerini panoya kopyala" switched: a game that runs now follows it at once. */
   setScreenshotCopy(enabled: boolean): Promise<void>;
   openUrl(url: string): Promise<void>;

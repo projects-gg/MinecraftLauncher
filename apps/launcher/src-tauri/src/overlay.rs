@@ -348,6 +348,21 @@ pub async fn prepare_mod(
     }
 }
 
+/// [`prepare_mod`] for a game started beside another game of the same folder (PLAY-AGAIN): the
+/// running game holds the mods folder, so nothing in it changes; the new game gets a bridge when
+/// the launcher's own jar is there and on.
+pub fn present_mod(state: &AppState, game_dir: &Path) -> PreparedMod {
+    let mods = game_dir.join("mods");
+    let ours = state.overlay.wants_mod()
+        && owned_files(game_dir)
+            .iter()
+            .any(|name| mods.join(name).is_file());
+    PreparedMod {
+        present: ours,
+        ours,
+    }
+}
+
 /// Fabric API for the overlay's jar: its newest version for the instance's Minecraft, installed
 /// as the mod pages install a mod (verified, recorded in the instance's add-on index, so the
 /// player sees it and can update it). It stays when the overlay goes: other mods may need it.
@@ -486,7 +501,7 @@ pub async fn for_launch(
     }
 }
 
-/// The game ended: its bridge (`port`, from [`OverlayLaunch::keep`]) goes; a newer game's stays.
+/// The game ended: its bridge (`port`, from [`OverlayLaunch::keep`]) goes; the other games' stay.
 pub async fn game_ended(state: &AppState, port: Option<u16>) {
     if let Some(port) = port {
         state.overlay.stop_for(port, ByeReason::LauncherExit).await;
@@ -506,16 +521,28 @@ pub async fn leaving(app: &AppHandle, reason: ByeReason) {
 /// or crew shares now) through its overlay instead of starting again. One at a time; `unavailable`
 /// (no overlay, an older mod, another one on its way, a target nobody shares, no answer in 5 s,
 /// the game said no): start the game again as before. Never call it on the launcher's own
-/// initiative (a reminder, a timer).
-pub async fn connect_in_game(state: &AppState, target: &str) -> ConnectOutcome {
-    state.overlay.connect_in_game(target).await
+/// initiative (a reminder, a timer). `game`: the game the player meant (PLAY-AGAIN: the page
+/// names it among several); `None`, or a game without a bridge: the newest game's.
+pub async fn connect_in_game(state: &AppState, target: &str, game: Option<u64>) -> ConnectOutcome {
+    let port = game.and_then(|id| {
+        state
+            .games
+            .lock()
+            .get(id)
+            .and_then(|game| game.overlay_port)
+    });
+    state.overlay.connect_in_game_at(port, target).await
 }
 
 /// [`connect_in_game`] for the page.
 #[tauri::command]
 #[specta::specta]
-pub async fn overlay_connect_in_game(app: AppHandle, target: String) -> ConnectOutcome {
-    connect_in_game(&app.state::<AppState>(), &target).await
+pub async fn overlay_connect_in_game(
+    app: AppHandle,
+    target: String,
+    game: Option<u64>,
+) -> ConnectOutcome {
+    connect_in_game(&app.state::<AppState>(), &target, game).await
 }
 
 /// The page's choices: Settings → Genel "Oyun içi katman", the friends notification choices and

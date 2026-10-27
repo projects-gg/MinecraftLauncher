@@ -2,6 +2,12 @@
 export const DISK_FULL = "DISK-DOLU";
 
 /**
+ * The launcher's code for a launch straight into a world the player's other game has open
+ * (PLAY-AGAIN, `launch::WORLD_OPEN`): nothing started, nothing to copy.
+ */
+export const WORLD_OPEN = "DUNYA-ACIK";
+
+/**
  * The code of a launch error. The app's API keeps it on the first line of the details
  * (`lib/api/tauri.ts`), so "Ayrıntıları kopyala" copies it along; anything else reads as no code.
  */

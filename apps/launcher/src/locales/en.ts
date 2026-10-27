@@ -34,6 +34,7 @@ import { enOverlay } from "./en-overlay";
 import { enOverview } from "./en-overview";
 import { enPlacement } from "./en-placement";
 import { enPlayAcct } from "./en-play-acct";
+import { enPlayAgain } from "./en-play-again";
 import { enPlayOpen } from "./en-play-open";
 import { enPlayTogether } from "./en-play-together";
 import { enPrepare } from "./en-prepare";
@@ -317,6 +318,7 @@ export const en: DeepPartial<Strings> = {
   newsColumn: enNewsColumn,
   worldEntry: enWorldEntry,
   playAcct: enPlayAcct,
+  playAgain: enPlayAgain,
   chatProd: enChatProd,
   nav: {
     home: "Home",

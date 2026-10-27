@@ -148,10 +148,10 @@ fn may_suspend(app: &AppHandle) -> Result<(), &'static str> {
         return Err("a launch is being prepared");
     }
     if state
-        .running
+        .games
         .lock()
-        .as_ref()
-        .is_some_and(|game| !game.process.window_shown())
+        .iter()
+        .any(|game| !game.process.window_shown())
     {
         // "Oyunda", the presence and the launcher's own window answer the game's window.
         return Err("the game is opening");

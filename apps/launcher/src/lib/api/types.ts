@@ -299,7 +299,14 @@ export type LaunchEvent =
    * first start with this version and loader, which takes longer. `account`: the account it plays
    * with ("Oyunda" for that account alone, PLAY-ACCT).
    */
-  | { type: "started"; pid: number | null; firstStart: boolean; account: GameAccount }
+  | {
+      type: "started";
+      pid: number | null;
+      /** The launcher's number for the game (PLAY-AGAIN: the page names it to close it). */
+      game?: number | null;
+      firstStart: boolean;
+      account: GameAccount;
+    }
   /** The game's window is on screen ("Oyunda"); once, never after the exit. */
   | { type: "windowShown" }
   | { type: "exited"; code: number | null; runtimeSecs: number }
