@@ -68,8 +68,7 @@ const stops: Record<string, { code: string; message: () => string; details: stri
   /** A launch straight into a world the player's other game has open (PLAY-AGAIN). */
   worldOpen: {
     code: "DUNYA-ACIK",
-    message: () =>
-      pick("Bu dünya diğer oyunda açık.", "This world is open in your other game."),
+    message: () => pick("Bu dünya diğer oyunda açık.", "This world is open in your other game."),
     details: "the world's session.lock is held by another game",
   },
   game: {
