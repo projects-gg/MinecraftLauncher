@@ -9,6 +9,7 @@ import {
   Progress,
   returnFocusAfterKeys,
   Switch,
+  Tooltip,
   toast,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +19,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AccountFace } from "@/features/accounts/account-face";
+import { AccountFace, type FaceAccount } from "@/features/accounts/account-face";
 import { useAccounts } from "@/features/accounts/use-accounts";
 import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launch";
 import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
@@ -394,6 +395,60 @@ function othersWords(
   };
 }
 
+/**
+ * The bar's quiet "who is in game" (PLAY-AGAIN): their faces, the name (or the count) over
+ * "Oyunda". The names come under the pointer in the app's tooltip: always while the bar counts
+ * them ("2 hesap"), a single name only when it is cut (repeating the words on screen is noise).
+ */
+function OthersInGame({
+  sentence,
+  who,
+  many,
+  faces,
+}: {
+  sentence: string;
+  who: string;
+  many: boolean;
+  faces: readonly (FaceAccount & { id: string })[];
+}) {
+  const { t } = useTranslation();
+  const whoRef = useRef<HTMLSpanElement>(null);
+  const body = (
+    <span aria-hidden className="flex min-w-0 items-center gap-2.5">
+      {faces.length > 0 ? (
+        <span className="flex shrink-0 -space-x-2">
+          {faces.map((account) => (
+            <AccountFace
+              key={account.id}
+              account={account}
+              size={24}
+              className="ring-2 ring-obsidian-950/80"
+            />
+          ))}
+        </span>
+      ) : null}
+      <span className="min-w-0 leading-tight">
+        <span ref={whoRef} className="block truncate text-[13px] text-ash-300">
+          {who}
+        </span>
+        <span className="block text-[12px] text-jade-400">{t("playAcct.inGame")}</span>
+      </span>
+    </span>
+  );
+  return (
+    <>
+      <span className="sr-only">{sentence}</span>
+      {many ? (
+        <Tooltip content={sentence}>{body}</Tooltip>
+      ) : (
+        <OverflowTooltip text={sentence} of={whoRef}>
+          {body}
+        </OverflowTooltip>
+      )}
+    </>
+  );
+}
+
 function StatusArea({
   selected,
   phase,
@@ -472,33 +527,17 @@ function StatusArea({
                 {othersText ? (
                   <motion.div
                     key="others"
-                    className="flex max-w-[200px] min-w-0 shrink items-center gap-2.5 border-l border-white/8 pl-4"
-                    title={othersText.sentence}
+                    className="flex max-w-[200px] min-w-0 shrink items-center border-l border-white/8 pl-4"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.24, ease: easeOutExpo } }}
                     exit={{ opacity: 0, transition: { duration: 0.12, ease: easeOutExpo } }}
                   >
-                    <span className="sr-only">{othersText.sentence}</span>
-                    {faces.length > 0 ? (
-                      <span aria-hidden className="flex shrink-0 -space-x-2">
-                        {faces.map((account) => (
-                          <AccountFace
-                            key={account.id}
-                            account={account}
-                            size={24}
-                            className="ring-2 ring-obsidian-950/80"
-                          />
-                        ))}
-                      </span>
-                    ) : null}
-                    <span aria-hidden className="min-w-0 leading-tight">
-                      <span className="block truncate text-[13px] text-ash-200">
-                        {othersText.who}
-                      </span>
-                      <span className="block text-[12px] text-jade-400">
-                        {t("playAcct.inGame")}
-                      </span>
-                    </span>
+                    <OthersInGame
+                      sentence={othersText.sentence}
+                      who={othersText.who}
+                      many={others.length > 1}
+                      faces={faces}
+                    />
                   </motion.div>
                 ) : null}
               </AnimatePresence>

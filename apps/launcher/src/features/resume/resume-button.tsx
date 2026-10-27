@@ -3,7 +3,7 @@
 // of them says so on the button before a press (PLAY-AGAIN, second look): dimmed, no play mark,
 // whose game has it.
 import { Play } from "@phosphor-icons/react";
-import { ContentIcon, cn, easeOutExpo } from "@pl/ui";
+import { ContentIcon, cn, easeOutExpo, Tooltip } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -89,7 +89,7 @@ export function ResumeButton({
       ? t("playAgain.worldBusyName", { name: busy.account })
       : t("playAgain.worldBusyOther")
     : undefined;
-  return (
+  const button = (
     <button
       type="button"
       aria-disabled={reason ? true : undefined}
@@ -108,7 +108,6 @@ export function ResumeButton({
           ? t("playAgain.worldBusyAria", { world: target.name, reason: whose })
           : t("resume.aria", { name: target.name })
       }
-      title={whose}
       className={cn(
         "group -my-1 -ml-2 flex w-fit max-w-full min-w-0 items-center gap-3 rounded-[var(--radius-panel)] py-1 pr-3 pl-2 text-left transition-[background-color,transform,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none",
         reason ? "cursor-default" : "cursor-pointer hover:bg-white/6 active:scale-[0.98]",
@@ -168,5 +167,12 @@ export function ResumeButton({
         </span>
       </span>
     </button>
+  );
+  // Whose game has the world, under the pointer: the app's own tooltip (a native one drew the
+  // system's grey box), only while the world is open in a game.
+  return (
+    <Tooltip content={whose} disabled={!whose}>
+      {button}
+    </Tooltip>
   );
 }
