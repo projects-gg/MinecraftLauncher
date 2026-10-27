@@ -7,7 +7,7 @@ import { Toaster as Sonner } from "sonner";
  * on Home a toast lies exactly over the column's foot instead of overhanging it.
  *
  * Their buttons are secondary (`toast-action`, SMALL12): a toast rests right above OYNA, the one
- * gold thing. A button sits beside the sentence while the sentence keeps about 18 characters a
+ * gold thing. A button sits beside the sentence while the sentence keeps about 21 characters a
  * line, else on a row of its own at the right ("Discord ile giriş yap" fits a 280 px toast).
  */
 export function Toaster() {
@@ -21,11 +21,12 @@ export function Toaster() {
         unstyled: true,
         classNames: {
           // Not `glass-strong`: see `toast-surface` in styles.css.
-          // Wraps: a button that would squeeze the sentence under its basis (9rem) takes a row of
-          // its own (`toast-action` keeps it at the right).
+          // Wraps: a button that would squeeze the sentence under its basis (10.5rem, about 21
+          // characters a line) takes a row of its own (`toast-action` keeps it at the right). A
+          // toast reached from the keyboard (Alt+T, Tab) shows its ring, as containers do.
           toast:
-            "toast-surface flex w-news flex-wrap items-start gap-x-3 gap-y-2 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100",
-          content: "min-w-0 flex-[1_1_9rem]",
+            "toast-surface flex w-news flex-wrap items-start gap-x-3 gap-y-2 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-300",
+          content: "min-w-0 flex-[1_1_10.5rem]",
           // `text-balance` (design.md §3, as headings): a toast's two or three short lines come out
           // even, never one word alone on the last.
           title: "font-semibold text-balance text-bone-50",
