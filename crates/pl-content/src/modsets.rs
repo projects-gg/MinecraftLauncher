@@ -445,35 +445,6 @@ pub struct SetApplyReport {
     pub new_mods: Vec<String>,
 }
 
-/// The Modrinth projects (else the item ids) of the mods `plan` puts in place for `variant`: a
-/// file downloaded where none was, or a disabled copy renamed back. Each once, in plan order.
-fn placed_mods(plan: &SyncPlan, variant: &ModSetVariant) -> Vec<String> {
-    let project_of = |item: &str| {
-        variant.items.iter().find(|i| i.id == item).map(|i| {
-            i.modrinth
-                .as_ref()
-                .map_or_else(|| i.id.clone(), |m| m.project_id.clone())
-        })
-    };
-    let added = plan
-        .downloads
-        .iter()
-        .filter(|d| d.category == FileCategory::Mod && d.action == DownloadAction::Add)
-        .filter_map(|d| d.item.as_deref());
-    let restored = plan
-        .restores
-        .iter()
-        .filter(|r| r.category == FileCategory::Mod)
-        .filter_map(|r| r.item.as_deref());
-    let mut placed: Vec<String> = Vec::new();
-    for project in added.chain(restored).filter_map(project_of) {
-        if !placed.contains(&project) {
-            placed.push(project);
-        }
-    }
-    placed
-}
-
 /// Applies a plan from [`plan_set`] or [`plan_set_removal`] and records the result in
 /// `.projects/mod-sets.json` (at the point where a pack sync writes its state, so a crash never
 /// leaves a state that misreads the set's own changes as the player's).
@@ -495,7 +466,7 @@ pub async fn apply_set(
         .unwrap_or_default();
     let installing = matches!(change, SetChange::Install { .. });
     let new_mods = match &change {
-        SetChange::Install { variant, .. } => placed_mods(plan, variant),
+        SetChange::Install { variant, .. } => plan.placed_mods(&variant.items),
         SetChange::Remove => Vec::new(),
     };
     let new_shader_packs: Vec<String> = plan

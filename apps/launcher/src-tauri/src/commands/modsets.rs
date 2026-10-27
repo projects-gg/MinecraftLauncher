@@ -712,7 +712,7 @@ async fn install_set(
     .await
     .map_err(apply_error)?;
     settle_packs(&game_dir, &report).await;
-    seed_mod_settings(&game_dir, &report).await;
+    seed_mod_settings(&game_dir, &report.new_mods).await;
     tracing::info!(
         instance = %instance.id,
         set = %set_id,
@@ -800,19 +800,22 @@ async fn settle_packs(game_dir: &Path, report: &SetApplyReport) {
     }
 }
 
-/// After a set put mods in place: their first settings files where none exist yet (MODHUB2,
-/// `pl_mc::instance::mod_configs`: Litematica's easy placement stays off and its keys leave the
-/// voice chat's mute alone). A file already there is never touched; a failure never fails the set.
-async fn seed_mod_settings(game_dir: &Path, report: &SetApplyReport) {
-    if report.new_mods.is_empty() {
+/// After a set or the official pack put mods in place (`mods`: their Modrinth projects, else item
+/// ids; `SyncPlan::placed_mods`): their first settings files where none exist yet (MODHUB2,
+/// CHEST-TRACKER; `pl_mc::instance::mod_configs`: Litematica's easy placement stays off and its
+/// keys leave the voice chat's mute alone; Chest Tracker draws no container names, which on the
+/// Projects server are menu pictures). Called right after the files are in place, before any
+/// launch. A file already there is never touched; a failure never fails the sync or the launch.
+pub(crate) async fn seed_mod_settings(game_dir: &Path, mods: &[String]) {
+    if mods.is_empty() {
         return;
     }
-    match pl_mc::instance::seed_mod_configs(game_dir, &report.new_mods).await {
+    match pl_mc::instance::seed_mod_configs(game_dir, mods).await {
         Ok(written) if !written.is_empty() => {
-            tracing::info!(?written, "wrote the first settings of a set's mods");
+            tracing::info!(?written, "wrote the first settings of newly placed mods");
         }
         Ok(_) => {}
-        Err(error) => tracing::warn!(%error, "could not write a set mod's first settings"),
+        Err(error) => tracing::warn!(%error, "could not write a placed mod's first settings"),
     }
 }
 

@@ -595,6 +595,37 @@ impl SyncPlan {
     pub fn is_noop(&self) -> bool {
         !self.changes_files() && !self.state_changed
     }
+
+    /// The mods this plan puts in place (a file downloaded where there was none, or a disabled
+    /// copy renamed back; not updates), by the Modrinth project of their item in `items` (else
+    /// the item id), each once in plan order. The desktop launcher writes their first settings
+    /// files where none exist (pl-mc `mod_configs`), for the official pack and for sets.
+    pub fn placed_mods(&self, items: &[PackItem]) -> Vec<String> {
+        let project_of = |item: &str| {
+            items.iter().find(|i| i.id == item).map(|i| {
+                i.modrinth
+                    .as_ref()
+                    .map_or_else(|| i.id.clone(), |m| m.project_id.clone())
+            })
+        };
+        let added = self
+            .downloads
+            .iter()
+            .filter(|d| d.category == FileCategory::Mod && d.action == DownloadAction::Add)
+            .filter_map(|d| d.item.as_deref());
+        let restored = self
+            .restores
+            .iter()
+            .filter(|r| r.category == FileCategory::Mod)
+            .filter_map(|r| r.item.as_deref());
+        let mut placed: Vec<String> = Vec::new();
+        for project in added.chain(restored).filter_map(project_of) {
+            if !placed.contains(&project) {
+                placed.push(project);
+            }
+        }
+        placed
+    }
 }
 
 /// What a sync would download for a set, estimated from its state alone (no disk access).
@@ -1628,8 +1659,8 @@ where
 mod tests {
     use super::*;
     use crate::model::{
-        ConfigPolicy, ItemCategory, OptionalGroup, PackDependencies, PackEnv, PackHashes,
-        PolicyRule, ProjectsExtension,
+        ConfigPolicy, ItemCategory, ModrinthRef, OptionalGroup, PackDependencies, PackEnv,
+        PackHashes, PolicyRule, ProjectsExtension,
     };
     use crate::testutil::{TestServer, sample_manifest, sha1_hex, test_http};
     use std::sync::Mutex;
@@ -2384,6 +2415,62 @@ mod tests {
             ("projects", "1.21.1")
         );
         assert!(plan.items.iter().all(|status| !status.is_new));
+    }
+
+    #[tokio::test]
+    async fn placed_mods_name_the_mods_a_first_sync_puts_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut m = item_manifest("mods/sodium.jar", &[]);
+        // Sodium's item names its Modrinth project; the library's does not, so its id stands in.
+        let sodium = m
+            .projects
+            .items
+            .iter_mut()
+            .find(|i| i.id == "sodium")
+            .unwrap();
+        sodium.modrinth = Some(ModrinthRef {
+            project_id: "AANobbMI".into(),
+            version_id: "v1".into(),
+        });
+        let plan = plan_sync(&m, dir.path(), None, None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        // The config outside items is not a mod; Iris is off.
+        assert_eq!(
+            plan.placed_mods(&m.projects.items),
+            ["fabric-api", "AANobbMI"]
+        );
+    }
+
+    #[tokio::test]
+    async fn placed_mods_count_renamed_back_copies_but_not_updates() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let (_, state) = installed_with_zoom(game).await;
+        // The player switched zoom off by renaming it and now switches it on in the mod center,
+        // while the pack moved Sodium to a new file name (an update of an installed mod).
+        std::fs::rename(
+            game.join("mods/zoom.jar"),
+            game.join("mods/zoom.jar.disabled"),
+        )
+        .unwrap();
+        let next = item_manifest("mods/sodium-2.jar", &[("zoom", true), ("minimap", true)]);
+        let plan = plan_sync(
+            &next,
+            game,
+            Some(&state),
+            Some(&select(&[("zoom", true)])),
+            &SyncPolicy::default(),
+        )
+        .await
+        .unwrap();
+        let restored: Vec<_> = plan.restores.iter().map(|r| r.path.as_str()).collect();
+        assert_eq!(restored, ["mods/zoom.jar"]);
+        assert_eq!(
+            paths(&plan.downloads),
+            [("mods/sodium-2.jar", DownloadAction::Update)]
+        );
+        assert_eq!(plan.placed_mods(&next.projects.items), ["zoom"]);
     }
 
     #[tokio::test]
