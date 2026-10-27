@@ -3,6 +3,7 @@ import { trAfkAlerts } from "./tr-afk-alerts";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
+import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
 import { trChat2 } from "./tr-chat2";
 import { trCloudAfk } from "./tr-cloud-afk";
@@ -60,6 +61,7 @@ export const tr = {
   overview: trOverview,
   libraryDrop: trLibraryDrop,
   updates: trUpdates,
+  betaGate: trBetaGate,
   shortcuts: trShortcuts,
   prepare: trPrepare,
   social: trSocial,
@@ -1093,7 +1095,7 @@ export const tr = {
       channel: "Güncelleme kanalı",
       stable: "Kararlı",
       beta: "Beta",
-      betaHelp: "Yeni özellikleri herkesten önce dener; ara sıra hata görebilirsin.",
+      betaHelp: "Beta'da yeni özellikler önce gelir; ara sıra hata olabilir.",
       autoDownload: "Güncellemeleri arka planda indir",
       check: "Güncellemeleri denetle",
       checking: "Denetleniyor",
