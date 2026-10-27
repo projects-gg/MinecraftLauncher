@@ -22,6 +22,25 @@ pub fn system_memory_mb() -> u64 {
     system.total_memory() / (1024 * 1024)
 }
 
+/// Physical memory the system can hand out now, in MB (free and reclaimable cache: Windows'
+/// "available").
+pub fn available_memory_mb() -> u64 {
+    let mut system = sysinfo::System::new();
+    system.refresh_memory();
+    system.available_memory() / (1024 * 1024)
+}
+
+/// What a game takes beside its heap: the JVM itself, loaded classes, native buffers and the
+/// graphics driver's share.
+pub const GAME_OVERHEAD_MB: u64 = 1024;
+
+/// Whether another game whose heap may grow to `max_heap_mb` fits in the memory the system can
+/// hand out now (`available_mb`), next to the games already running (PLAY-AGAIN: small computers
+/// freeze when two JVMs outgrow the RAM, so the player is told first).
+pub fn fits_another_game(available_mb: u64, max_heap_mb: u32) -> bool {
+    available_mb >= u64::from(max_heap_mb) + GAME_OVERHEAD_MB
+}
+
 /// Limits derived from the machine's RAM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -398,6 +417,20 @@ mod tests {
             }
             assert!(validate_memory(&auto_memory(total, false, 0), total).is_valid());
         }
+    }
+
+    #[test]
+    fn another_game_fits_only_with_room_for_its_heap_and_the_jvm() {
+        // An 8 GB computer with one modded game on: about 1.5 GB left.
+        assert!(!fits_another_game(1536, 4096));
+        assert!(
+            !fits_another_game(4096, 4096),
+            "the heap alone is not enough"
+        );
+        assert!(fits_another_game(5120, 4096));
+        assert!(fits_another_game(7000, 4096));
+        assert!(!fits_another_game(0, 1024));
+        assert!(available_memory_mb() <= system_memory_mb());
     }
 
     #[test]

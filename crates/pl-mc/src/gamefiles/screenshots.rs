@@ -1,6 +1,6 @@
 //! Screenshots (`screenshots/*.png`), and the ones a game session added.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,42 @@ impl ScreenshotSnapshot {
     /// The screenshots `game_dir` has now that the snapshot does not, newest first.
     pub async fn new_since(&self, game_dir: &Path) -> Result<Vec<ScreenshotInfo>> {
         Ok(self.added(list_screenshots(game_dir).await?))
+    }
+}
+
+/// The screenshots already announced after a game ended, per game folder, while other games of
+/// that folder run (PLAY-AGAIN: two games of one instance share its `screenshots/`, and each one's
+/// end would otherwise announce the other's pictures again).
+#[derive(Debug, Default)]
+pub struct AnnouncedShots {
+    folders: HashMap<PathBuf, HashSet<String>>,
+}
+
+impl AnnouncedShots {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The pictures of `added` (a game of `game_dir` just ended) not announced yet. While
+    /// `others_run` (games of the folder still run) they count as announced; once none runs, the
+    /// folder is forgotten.
+    pub fn fresh(
+        &mut self,
+        game_dir: &Path,
+        added: Vec<ScreenshotInfo>,
+        others_run: bool,
+    ) -> Vec<ScreenshotInfo> {
+        let told = self.folders.entry(game_dir.to_path_buf()).or_default();
+        let fresh: Vec<ScreenshotInfo> = added
+            .into_iter()
+            .filter(|shot| !told.contains(&shot.file_name))
+            .collect();
+        if others_run {
+            told.extend(fresh.iter().map(|shot| shot.file_name.clone()));
+        } else {
+            self.folders.remove(game_dir);
+        }
+        fresh
     }
 }
 
@@ -85,6 +121,46 @@ mod tests {
     use std::time::{Duration, SystemTime};
 
     use super::*;
+
+    fn shot(name: &str) -> ScreenshotInfo {
+        ScreenshotInfo {
+            file_name: name.to_owned(),
+            path: PathBuf::from("game/screenshots").join(name),
+            size: 1,
+            modified_ms: None,
+        }
+    }
+
+    fn names(shots: &[ScreenshotInfo]) -> Vec<&str> {
+        shots.iter().map(|s| s.file_name.as_str()).collect()
+    }
+
+    #[test]
+    fn two_games_of_a_folder_announce_each_picture_once() {
+        let mut told = AnnouncedShots::new();
+        let dir = Path::new("game");
+        // The second game ends first (the first still runs): its pictures, and the first's so far.
+        let first_end = told.fresh(dir, vec![shot("b.png"), shot("a.png")], true);
+        assert_eq!(names(&first_end), ["b.png", "a.png"]);
+        // The first ends after it: only what came since (the folder is forgotten after).
+        let second_end = told.fresh(
+            dir,
+            vec![shot("c.png"), shot("b.png"), shot("a.png")],
+            false,
+        );
+        assert_eq!(names(&second_end), ["c.png"]);
+        // A later game alone announces everything new again.
+        assert_eq!(
+            names(&told.fresh(dir, vec![shot("a.png")], false)),
+            ["a.png"]
+        );
+        // Other folders are their own.
+        told.fresh(dir, vec![shot("x.png")], true);
+        assert_eq!(
+            names(&told.fresh(Path::new("other"), vec![shot("x.png")], false)),
+            ["x.png"]
+        );
+    }
 
     #[tokio::test]
     async fn newest_first_png_only() {
