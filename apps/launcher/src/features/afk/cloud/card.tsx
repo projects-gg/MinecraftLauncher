@@ -199,6 +199,17 @@ function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => vo
   );
 }
 
+/** Menu items with a separator (null) only between groups: none first or last, never two in a row. */
+function separated(items: Array<MenuItem | null>): Array<MenuItem | null> {
+  const out: Array<MenuItem | null> = [];
+  for (const item of items) {
+    if (item === null && (out.length === 0 || out[out.length - 1] === null)) continue;
+    out.push(item);
+  }
+  if (out[out.length - 1] === null) out.pop();
+  return out;
+}
+
 export function CloudCard({
   account,
   skewMs,
@@ -251,7 +262,9 @@ export function CloudCard({
       .open("account", account.id)
       .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
 
-  const items: Array<MenuItem | null> = [
+  // Groups: the account itself, its panel's tabs, its settings, then the site. A separator stands
+  // only between groups (never first, last or twice: the first group may be empty).
+  const items = separated([
     action === "start"
       ? { label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }
       : action === "stop"
@@ -266,6 +279,7 @@ export function CloudCard({
           },
         ]
       : []),
+    null,
     { label: t("cloudAfk.actions.console"), icon: <Terminal size={16} />, onSelect: onConsole },
     ...(onInventory
       ? [
@@ -279,6 +293,7 @@ export function CloudCard({
     ...(onMovement
       ? [{ label: t("cloudAfkMove.tab"), icon: <SneakerMove size={16} />, onSelect: onMovement }]
       : []),
+    null,
     { label: t("cloudAfk.actions.settings"), icon: <GearSix size={16} />, onSelect: onSettings },
     ...(onCopy
       ? [{ label: t("cloudAfkFeat.copy.menu"), icon: <Copy size={16} />, onSelect: onCopy }]
@@ -313,7 +328,7 @@ export function CloudCard({
       icon: <ArrowSquareOut size={16} />,
       onSelect: openSite,
     },
-  ];
+  ]);
 
   return (
     <motion.li

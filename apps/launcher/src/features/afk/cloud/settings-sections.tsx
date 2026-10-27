@@ -318,7 +318,7 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
           }
         />
         {anti.enabled ? (
-          <RangeRow title={t("afkSettings.antiAfk.interval")}>
+          <RangeRow title={t("cloudAfk.settings.antiAfkInterval")}>
             <NumberField
               label={t("cloudAfk.settings.antiAfkMin")}
               value={anti.delayMin}
