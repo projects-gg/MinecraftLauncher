@@ -163,11 +163,6 @@ export function ConnectCard({ session, onConnect }: { session: boolean; onConnec
       <h3 className="mt-5 max-w-[30ch] font-display text-[17px] leading-tight font-semibold text-bone-50 [text-wrap:balance]">
         {session ? t("projectsSkin.connect.sessionTitle") : t("projectsSkin.connect.title")}
       </h3>
-      {session ? null : (
-        <p className="mt-2 max-w-[40ch] text-[13.5px] text-ash-300 [text-wrap:pretty]">
-          {t("projectsSkin.connect.body")}
-        </p>
-      )}
       <Button
         className="mt-6"
         variant="secondary"
