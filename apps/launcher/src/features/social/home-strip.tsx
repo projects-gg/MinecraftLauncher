@@ -612,6 +612,16 @@ function homeLine(input: HomeLineInputs): HomeStrip | "world" | null {
 /** Home's friends lines on screen (Home is the page; the strip counts itself). */
 let homeLinesShown = 0;
 
+/** Counts Home's friends line as on screen while the calling component is mounted. */
+export function useHomeLineShown() {
+  useEffect(() => {
+    homeLinesShown += 1;
+    return () => {
+      homeLinesShown -= 1;
+    };
+  }, []);
+}
+
 /**
  * Whether Home shows this crew call now, with its "Geliyorum" (the call line): a toast would say
  * the same call a second time (SMALL12; social-host). The line's own choice from the stores as they
@@ -665,12 +675,7 @@ export function FriendsHomeStrip() {
     now,
     world,
   });
-  useEffect(() => {
-    homeLinesShown += 1;
-    return () => {
-      homeLinesShown -= 1;
-    };
-  }, []);
+  useHomeLineShown();
 
   return (
     <AnimatePresence initial={false} mode="popLayout">
