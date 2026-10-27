@@ -39,6 +39,7 @@ import { useTranslation } from "react-i18next";
 import { Check } from "@/features/settings/cleanup/check";
 import { AfkHead } from "../afk-head";
 import { afkFailed } from "../errors";
+import { SettingsButton } from "../settings/settings-button";
 import { type CloudAccount, cloudApi } from "./api";
 import { AI_TONE, useAiSentence } from "./plus/rail";
 import { plusAi } from "./plus/types";
@@ -436,10 +437,10 @@ export function CloudCard({
             <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
               {t("cloudAfk.actions.console")}
             </Button>
-            <IconButton
+            <SettingsButton
+              kind="cloud"
+              id={account.id}
               label={t("cloudAfk.actions.settings")}
-              icon={<GearSix size={17} />}
-              size="sm"
               onClick={onSettings}
             />
           </div>

@@ -830,8 +830,6 @@ export const tr = {
     title: "{{name}} ayarları",
     sectionsLabel: "Ayar bölümleri",
     sectionHasErrors: "Bu bölümde düzeltilmesi gereken alanlar var",
-    on: "Açık",
-    off: "Kapalı",
     min: "En az",
     max: "En çok",
     seconds: "sn",
@@ -862,8 +860,6 @@ export const tr = {
     server: {
       host: "Sunucu adresi",
       hostHelp: "Boş bırakırsan play.projects.gg kullanılır.",
-      port: "Port",
-      portHelp: "0 ise otomatik bulunur.",
       version: "Oyun sürümü",
       recommended: "Önerilen",
       versionAuto: "Otomatik (sunucudan algıla)",
@@ -881,8 +877,6 @@ export const tr = {
         "Kapalıyken paket indirilmez ama sunucuya yüklendi denir; açıkken sohbet çevirileri doğru görünür.",
     },
     login: {
-      enabled: "Giriş komutlarını kullan",
-      commands: "Komutlar",
       placeholder: "/kit ya da herkese merhaba",
       lineLabel: "{{n}}. komut",
       add: "Komut ekle",
@@ -906,7 +900,6 @@ export const tr = {
       delayHelp: "İlk komuttan önce ve komutlar arasında beklenir.",
     },
     scheduler: {
-      enabled: "Zamanlayıcıyı kullan",
       add: "Görev ekle",
       remove: "Görevi sil",
       empty: "Henüz görev yok.",
@@ -919,7 +912,6 @@ export const tr = {
       help: 'Örnek eylem: "send /kit" sohbete /kit yazar. Aralıklı görevler en az ile en çok arasında rastgele bir sürede yinelenir.',
     },
     antiAfk: {
-      enabled: "AFK engellemeyi kullan",
       interval: "Hareket aralığı",
       command: "Her turda gönderilecek komut",
       commandPlaceholder: "Boş bırakılabilir",
@@ -932,7 +924,6 @@ export const tr = {
       blocks: "blok",
     },
     relog: {
-      enabled: "Yeniden bağlanmayı kullan",
       delay: "Bekleme süresi",
       unlimited: "Sınırsız dene",
       retries: "Deneme sayısı",
@@ -944,7 +935,6 @@ export const tr = {
       kickEmpty: "Liste boş: sunucudan atılınca yeniden bağlanılmaz.",
     },
     eat: {
-      enabled: "Otomatik yemeyi kullan",
       threshold: "Açlık eşiği",
       thresholdValue: "{{value}} / 20",
       note: "Bağlantı biraz daha fazla veri kullanır.",
@@ -974,7 +964,6 @@ export const tr = {
       help: "Yanıta düz mesaj ya da /komut yazabilirsin.",
     },
     chatLog: {
-      enabled: "Sohbet günlüğünü kullan",
       dateTime: "Satırlara tarih ve saat ekle",
       filter: "Kaydedilecek içerik",
       filterAll: "Tümü",
@@ -988,7 +977,6 @@ export const tr = {
       showDateHelp: "Sohbet günlüğü kapalıyken de çalışır.",
     },
     alerts: {
-      enabled: "Uyarıları kullan",
       beep: "Bip sesi çal",
       words: "Kelimelerde tetikle",
       wordsHelp: "Aranan kelimelerden biri sohbette geçince uyarı üretilir.",
@@ -1007,7 +995,6 @@ export const tr = {
     saveReconnect: "Kaydet ve yeniden bağlan",
     saving: "Kaydediliyor",
     cancel: "Vazgeç",
-    close: "Kapat",
     dirty: "Kaydedilmemiş değişikliklerin var.",
     fixErrors: "Kaydetmeden önce işaretli alanları düzelt.",
     saved: "{{name}} ayarları kaydedildi",
@@ -1016,12 +1003,6 @@ export const tr = {
     saveFailed: "Ayarlar kaydedilemedi. Tekrar dene.",
     loadFailed: "Ayarlar yüklenemedi.",
     loadFailedHint: "Tekrar dene; sürerse launcher'ı yeniden başlat.",
-    discard: {
-      title: "Değişiklikler kaydedilmedi",
-      body: "Kaydetmeden kapatırsan yaptığın değişiklikler silinir.",
-      confirm: "Kaydetmeden kapat",
-      keep: "Düzenlemeye dön",
-    },
     errors: {
       hostInvalid:
         "Adres yalnızca harf, rakam, nokta, tire ve alt çizgi içerebilir. Örnek: play.projects.gg",

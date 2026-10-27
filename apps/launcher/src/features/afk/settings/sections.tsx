@@ -1,20 +1,25 @@
-// Form sections of the AFK settings sheet: server, AFK prevention, reconnect, eating, chat log,
-// alerts. The list-based ones (login commands, scheduler, auto respond) are in list-sections.tsx.
+// The desktop AFK settings panel's sections (SHEET-UX): Bağlantı (server, version, reconnecting),
+// Oyun içi (anti-AFK, eating), Kayıt ve uyarılar (alerts, chat log); Komutlar and Otomatik yanıt
+// are the list sections in list-sections.tsx. Each feature is a block led by its switch, its fields
+// folded away while it is off.
 import { ArrowCounterClockwise } from "@phosphor-icons/react";
-import { Button, Field, Input, Select, Slider } from "@pl/ui";
+import { Button, Input, Select, Slider } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import type { AfkSettingsView, ChatLogFilter, SettingsPage } from "@/lib/api";
 import {
-  Dependent,
+  AddressField,
+  Block,
+  Fold,
   FolderLink,
   Hint,
   LinesField,
   NumberField,
   RangeRow,
-  SectionIntro,
+  SettingRow,
   ToggleRow,
+  WideRow,
 } from "./controls";
-import { DEFAULT_RETRIES, type Draft, LIMITS, splitHostPort } from "./model";
+import { DEFAULT_RETRIES, type Draft, LIMITS } from "./model";
 
 export interface SectionProps {
   draft: Draft;
@@ -42,7 +47,7 @@ export function usePage(setDraft: SectionProps["setDraft"]) {
   };
 }
 
-export function ServerSection({ draft, setDraft, errorFor, view }: SectionProps) {
+function ServerBlock({ draft, setDraft, errorFor, view }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const p = draft.page;
@@ -62,82 +67,56 @@ export function ServerSection({ draft, setDraft, errorFor, view }: SectionProps)
           : t("afkSettings.server.versionHintPinned");
 
   return (
-    <>
-      <SectionIntro title={t("afkSettings.sections.server")} />
-      <div className="grid grid-cols-[minmax(0,1fr)_170px] gap-4 py-3">
-        <Field
+    <Block>
+      <WideRow lead>
+        <AddressField
+          id="afk-host"
           label={t("afkSettings.server.host")}
+          host={p.serverHost}
+          port={p.serverPort}
+          placeholder="play.projects.gg"
           help={t("afkSettings.server.hostHelp")}
-          error={errorFor("serverHost")}
-          htmlFor="afk-host"
-        >
-          <Input
-            id="afk-host"
-            value={p.serverHost}
-            placeholder="play.projects.gg"
-            spellCheck={false}
-            autoComplete="off"
-            invalid={Boolean(errorFor("serverHost"))}
-            onChange={(e) => page.set("serverHost", e.target.value)}
-            onBlur={() => {
-              // "play.example.net:25566" with no port set: move the port to its own field.
-              const split = splitHostPort(p.serverHost);
-              if (split && p.serverPort === 0)
-                setDraft((d) => ({
-                  ...d,
-                  page: { ...d.page, serverHost: split[0], serverPort: split[1] },
-                }));
-            }}
-          />
-        </Field>
-        <NumberField
-          label={t("afkSettings.server.port")}
-          value={p.serverPort}
-          onChange={(v) => page.set("serverPort", v)}
-          limit={LIMITS.port}
-          help={t("afkSettings.server.portHelp")}
-          error={errorFor("serverPort")}
+          error={errorFor("serverHost") ?? errorFor("serverPort")}
+          onChange={(host, port) =>
+            setDraft((d) => ({
+              ...d,
+              page: {
+                ...d.page,
+                serverHost: host,
+                // Empty: the server's own port (0); more than five digits fails its range check.
+                serverPort: port === "" ? 0 : Number(port),
+              },
+            }))
+          }
         />
-      </div>
-
-      <div className="flex flex-col gap-1.5 py-3">
-        <span className="text-[13px] font-medium text-bone-100">
-          {t("afkSettings.server.version")}
-        </span>
-        <div className="flex items-center gap-2">
-          <Select
-            value={p.minecraftVersion}
-            onValueChange={(v) => page.set("minecraftVersion", v)}
-            label={t("afkSettings.server.version")}
-            className="w-[320px]"
-            searchable={{
-              searchLabel: t("afkSettings.server.versionSearch"),
-              emptyText: t("afkSettings.server.versionNone"),
-            }}
-            options={versions.map((v) => ({
-              value: v.value,
-              label: v.auto ? t("afkSettings.server.versionAuto") : v.label,
-              badge: v.recommended ? t("afkSettings.server.recommended") : undefined,
-            }))}
-          />
-          {!isDefault && recommended ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<ArrowCounterClockwise size={15} />}
-              onClick={() => page.set("minecraftVersion", recommended.value)}
-            >
-              {t("afkSettings.server.versionReset")}
-            </Button>
-          ) : null}
-        </div>
-        {hint ? (
-          <Hint tone="warn" className="mt-1 max-w-[60ch]">
-            {hint}
-          </Hint>
+      </WideRow>
+      <SettingRow title={t("afkSettings.server.version")} help={hint}>
+        {!isDefault && recommended ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<ArrowCounterClockwise size={15} />}
+            onClick={() => page.set("minecraftVersion", recommended.value)}
+          >
+            {t("afkSettings.server.versionReset")}
+          </Button>
         ) : null}
-      </div>
-
+        <Select
+          value={p.minecraftVersion}
+          onValueChange={(v) => page.set("minecraftVersion", v)}
+          label={t("afkSettings.server.version")}
+          className="w-[240px]"
+          searchable={{
+            searchLabel: t("afkSettings.server.versionSearch"),
+            emptyText: t("afkSettings.server.versionNone"),
+          }}
+          options={versions.map((v) => ({
+            value: v.value,
+            label: v.auto ? t("afkSettings.server.versionAuto") : v.label,
+            badge: v.recommended ? t("afkSettings.server.recommended") : undefined,
+          }))}
+        />
+      </SettingRow>
       <ToggleRow
         title={t("afkSettings.server.autoStart")}
         checked={p.autoStart}
@@ -149,36 +128,127 @@ export function ServerSection({ draft, setDraft, errorFor, view }: SectionProps)
         checked={p.allowResourcePacks}
         onCheckedChange={(v) => page.set("allowResourcePacks", v)}
       />
+    </Block>
+  );
+}
+
+function RelogBlock({ draft, setDraft, errorFor }: SectionProps) {
+  const { t } = useTranslation();
+  const page = usePage(setDraft);
+  const r = draft.page.autoRelog;
+  const sec = t("afkSettings.seconds");
+  const unlimited = r.retries === -1;
+  const noKickMessages = !r.kickMessages.some((m) => m.trim());
+  return (
+    <Block>
+      <ToggleRow
+        lead
+        title={t("afkSettings.sections.relog")}
+        help={t("afkSettings.intro.relog")}
+        checked={r.enabled}
+        onCheckedChange={(v) => page.patch("autoRelog", { enabled: v })}
+      />
+      <Fold open={r.enabled}>
+        <RangeRow
+          title={t("afkSettings.relog.delay")}
+          errors={[errorFor("relog.min"), errorFor("relog.max")]}
+        >
+          <NumberField
+            label={t("afkSettings.min")}
+            value={r.delayMin}
+            onChange={(v) => page.patch("autoRelog", { delayMin: v })}
+            limit={LIMITS.relogDelay}
+            unit={sec}
+            invalid={Boolean(errorFor("relog.min"))}
+          />
+          <NumberField
+            label={t("afkSettings.max")}
+            value={r.delayMax}
+            onChange={(v) => page.patch("autoRelog", { delayMax: v })}
+            limit={LIMITS.relogDelay}
+            unit={sec}
+            invalid={Boolean(errorFor("relog.max"))}
+          />
+        </RangeRow>
+        <ToggleRow
+          title={t("afkSettings.relog.unlimited")}
+          checked={unlimited}
+          onCheckedChange={(v) => page.patch("autoRelog", { retries: v ? -1 : DEFAULT_RETRIES })}
+        />
+        <Fold nested open={!unlimited}>
+          <SettingRow title={t("afkSettings.relog.retries")} error={errorFor("relog.retries")}>
+            <NumberField
+              label={t("afkSettings.relog.retries")}
+              value={r.retries}
+              onChange={(v) => page.patch("autoRelog", { retries: v })}
+              limit={LIMITS.relogRetries}
+              invalid={Boolean(errorFor("relog.retries"))}
+            />
+          </SettingRow>
+        </Fold>
+        <ToggleRow
+          title={t("afkSettings.relog.ignoreKick")}
+          help={t("afkSettings.relog.ignoreKickHelp")}
+          checked={r.ignoreKickMessage}
+          onCheckedChange={(v) => page.patch("autoRelog", { ignoreKickMessage: v })}
+        />
+        <Fold nested open={!r.ignoreKickMessage}>
+          <WideRow>
+            <LinesField
+              label={t("afkSettings.relog.kickMessages")}
+              help={t("afkSettings.relog.kickMessagesHelp")}
+              value={r.kickMessages}
+              onChange={(v) => page.patch("autoRelog", { kickMessages: v })}
+              rows={5}
+            />
+            {noKickMessages ? (
+              <Hint tone="warn" className="mt-2">
+                {t("afkSettings.relog.kickEmpty")}
+              </Hint>
+            ) : null}
+          </WideRow>
+        </Fold>
+      </Fold>
+    </Block>
+  );
+}
+
+/** Bağlantı: where the account connects, and how it comes back after a drop. */
+export function ConnectionSection(props: SectionProps) {
+  return (
+    <>
+      <ServerBlock {...props} />
+      <RelogBlock {...props} />
     </>
   );
 }
 
-export function AntiAfkSection({ draft, setDraft, errorFor }: SectionProps) {
+function AntiAfkBlock({ draft, setDraft, errorFor }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const a = draft.page.antiAfk;
   const sec = t("afkSettings.seconds");
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.antiAfk")}
-        description={t("afkSettings.intro.antiAfk")}
-      />
+    <Block>
       <ToggleRow
-        emphasis
-        title={t("afkSettings.antiAfk.enabled")}
+        lead
+        title={t("afkSettings.sections.antiAfk")}
+        help={t("afkSettings.intro.antiAfk")}
         checked={a.enabled}
         onCheckedChange={(v) => page.patch("antiAfk", { enabled: v })}
       />
-      <Dependent enabled={a.enabled}>
-        <RangeRow title={t("afkSettings.antiAfk.interval")}>
+      <Fold open={a.enabled}>
+        <RangeRow
+          title={t("afkSettings.antiAfk.interval")}
+          errors={[errorFor("antiAfk.min"), errorFor("antiAfk.max")]}
+        >
           <NumberField
             label={t("afkSettings.min")}
             value={a.delayMin}
             onChange={(v) => page.patch("antiAfk", { delayMin: v })}
             limit={LIMITS.antiAfkDelay}
             unit={sec}
-            error={errorFor("antiAfk.min")}
+            invalid={Boolean(errorFor("antiAfk.min"))}
           />
           <NumberField
             label={t("afkSettings.max")}
@@ -186,14 +256,13 @@ export function AntiAfkSection({ draft, setDraft, errorFor }: SectionProps) {
             onChange={(v) => page.patch("antiAfk", { delayMax: v })}
             limit={LIMITS.antiAfkDelay}
             unit={sec}
-            error={errorFor("antiAfk.max")}
+            invalid={Boolean(errorFor("antiAfk.max"))}
           />
         </RangeRow>
-        <Field
-          label={t("afkSettings.antiAfk.command")}
+        <SettingRow
+          title={t("afkSettings.antiAfk.command")}
           help={t("afkSettings.antiAfk.commandHelp")}
           htmlFor="afk-anti-command"
-          className="py-3"
         >
           <Input
             id="afk-anti-command"
@@ -201,10 +270,10 @@ export function AntiAfkSection({ draft, setDraft, errorFor }: SectionProps) {
             placeholder={t("afkSettings.antiAfk.commandPlaceholder")}
             spellCheck={false}
             autoComplete="off"
-            className="max-w-[420px] font-mono text-[13px]"
+            className="w-[240px] font-mono text-[13px]"
             onChange={(e) => page.patch("antiAfk", { command: e.target.value })}
           />
-        </Field>
+        </SettingRow>
         <ToggleRow
           title={t("afkSettings.antiAfk.sneak")}
           checked={a.useSneak}
@@ -216,127 +285,54 @@ export function AntiAfkSection({ draft, setDraft, errorFor }: SectionProps) {
           checked={a.useTerrainHandling}
           onCheckedChange={(v) => page.patch("antiAfk", { useTerrainHandling: v })}
         />
-        <Dependent enabled={a.useTerrainHandling}>
-          <div className="grid max-w-[420px] grid-cols-2 gap-3 pt-1 pb-3">
+        <Fold nested open={a.useTerrainHandling}>
+          <SettingRow
+            title={t("afkSettings.antiAfk.walkRange")}
+            error={errorFor("antiAfk.walkRange")}
+          >
             <NumberField
               label={t("afkSettings.antiAfk.walkRange")}
               value={a.walkRange}
               onChange={(v) => page.patch("antiAfk", { walkRange: v })}
               limit={LIMITS.walkRange}
               unit={t("afkSettings.antiAfk.blocks")}
-              error={errorFor("antiAfk.walkRange")}
+              invalid={Boolean(errorFor("antiAfk.walkRange"))}
+              className="w-[116px]"
             />
+          </SettingRow>
+          <SettingRow
+            title={t("afkSettings.antiAfk.walkRetries")}
+            error={errorFor("antiAfk.walkRetries")}
+          >
             <NumberField
               label={t("afkSettings.antiAfk.walkRetries")}
               value={a.walkRetries}
               onChange={(v) => page.patch("antiAfk", { walkRetries: v })}
               limit={LIMITS.walkRetries}
-              error={errorFor("antiAfk.walkRetries")}
+              invalid={Boolean(errorFor("antiAfk.walkRetries"))}
             />
-          </div>
-        </Dependent>
-      </Dependent>
-    </>
+          </SettingRow>
+        </Fold>
+      </Fold>
+    </Block>
   );
 }
 
-export function RelogSection({ draft, setDraft, errorFor }: SectionProps) {
-  const { t } = useTranslation();
-  const page = usePage(setDraft);
-  const r = draft.page.autoRelog;
-  const sec = t("afkSettings.seconds");
-  const unlimited = r.retries === -1;
-  const noKickMessages = !r.kickMessages.some((m) => m.trim());
-  return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.relog")}
-        description={t("afkSettings.intro.relog")}
-      />
-      <ToggleRow
-        emphasis
-        title={t("afkSettings.relog.enabled")}
-        checked={r.enabled}
-        onCheckedChange={(v) => page.patch("autoRelog", { enabled: v })}
-      />
-      <Dependent enabled={r.enabled}>
-        <RangeRow title={t("afkSettings.relog.delay")}>
-          <NumberField
-            label={t("afkSettings.min")}
-            value={r.delayMin}
-            onChange={(v) => page.patch("autoRelog", { delayMin: v })}
-            limit={LIMITS.relogDelay}
-            unit={sec}
-            error={errorFor("relog.min")}
-          />
-          <NumberField
-            label={t("afkSettings.max")}
-            value={r.delayMax}
-            onChange={(v) => page.patch("autoRelog", { delayMax: v })}
-            limit={LIMITS.relogDelay}
-            unit={sec}
-            error={errorFor("relog.max")}
-          />
-        </RangeRow>
-        <ToggleRow
-          title={t("afkSettings.relog.unlimited")}
-          checked={unlimited}
-          onCheckedChange={(v) => page.patch("autoRelog", { retries: v ? -1 : DEFAULT_RETRIES })}
-        />
-        {unlimited ? null : (
-          <NumberField
-            label={t("afkSettings.relog.retries")}
-            value={r.retries}
-            onChange={(v) => page.patch("autoRelog", { retries: v })}
-            limit={LIMITS.relogRetries}
-            error={errorFor("relog.retries")}
-            className="max-w-[200px] pb-3"
-          />
-        )}
-        <ToggleRow
-          title={t("afkSettings.relog.ignoreKick")}
-          help={t("afkSettings.relog.ignoreKickHelp")}
-          checked={r.ignoreKickMessage}
-          onCheckedChange={(v) => page.patch("autoRelog", { ignoreKickMessage: v })}
-        />
-        <Dependent enabled={!r.ignoreKickMessage}>
-          <div className="flex flex-col gap-2 py-3">
-            <LinesField
-              label={t("afkSettings.relog.kickMessages")}
-              help={t("afkSettings.relog.kickMessagesHelp")}
-              value={r.kickMessages}
-              onChange={(v) => page.patch("autoRelog", { kickMessages: v })}
-              rows={5}
-            />
-            {!r.ignoreKickMessage && noKickMessages ? (
-              <Hint tone="warn">{t("afkSettings.relog.kickEmpty")}</Hint>
-            ) : null}
-          </div>
-        </Dependent>
-      </Dependent>
-    </>
-  );
-}
-
-export function EatSection({ draft, setDraft }: SectionProps) {
+function EatBlock({ draft, setDraft }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const e = draft.page.autoEat;
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.eat")}
-        description={t("afkSettings.intro.eat")}
-      />
+    <Block>
       <ToggleRow
-        emphasis
-        title={t("afkSettings.eat.enabled")}
+        lead
+        title={t("afkSettings.sections.eat")}
+        help={t("afkSettings.intro.eat")}
         checked={e.enabled}
         onCheckedChange={(v) => page.patch("autoEat", { enabled: v })}
       />
-      <Dependent enabled={e.enabled}>
-        {/* The slider is not a form control, so the disabled fieldset alone would not stop it. */}
-        <div className="max-w-[440px] py-3" inert={!e.enabled}>
+      <Fold open={e.enabled}>
+        <WideRow>
           <Slider
             label={t("afkSettings.eat.threshold")}
             value={e.threshold}
@@ -350,99 +346,40 @@ export function EatSection({ draft, setDraft }: SectionProps) {
               { value: 10, label: "10" },
               { value: 20, label: "20" },
             ]}
+            className="max-w-[360px]"
           />
-        </div>
-        <Hint>{t("afkSettings.eat.note")}</Hint>
-      </Dependent>
-    </>
+          <Hint className="mt-3">{t("afkSettings.eat.note")}</Hint>
+        </WideRow>
+      </Fold>
+    </Block>
   );
 }
 
-export function ChatLogSection({ draft, setDraft, onOpenFolder }: SectionProps) {
-  const { t } = useTranslation();
-  const page = usePage(setDraft);
-  const c = draft.page.chatLog;
+/** Oyun içi: what the account does while it waits in the game. */
+export function GameSection(props: SectionProps) {
   return (
     <>
-      <SectionIntro
-        title={t("afkSettings.sections.chatLog")}
-        description={t("afkSettings.intro.chatLog")}
-      />
-      <ToggleRow
-        emphasis
-        title={t("afkSettings.chatLog.enabled")}
-        checked={c.enabled}
-        onCheckedChange={(v) => page.patch("chatLog", { enabled: v })}
-      />
-      <Dependent enabled={c.enabled}>
-        <ToggleRow
-          title={t("afkSettings.chatLog.dateTime")}
-          checked={c.addDateTime}
-          onCheckedChange={(v) => page.patch("chatLog", { addDateTime: v })}
-        />
-        <div className="flex flex-col gap-1.5 py-3">
-          <span className="text-[13px] font-medium text-bone-100">
-            {t("afkSettings.chatLog.filter")}
-          </span>
-          <Select<ChatLogFilter>
-            value={c.filter}
-            onValueChange={(v) => page.patch("chatLog", { filter: v })}
-            label={t("afkSettings.chatLog.filter")}
-            className="w-[280px]"
-            disabled={!c.enabled}
-            options={[
-              {
-                value: "all",
-                label: t("afkSettings.chatLog.filterAll"),
-                hint: t("afkSettings.chatLog.filterAllHint"),
-              },
-              {
-                value: "messages",
-                label: t("afkSettings.chatLog.filterMessages"),
-                hint: t("afkSettings.chatLog.filterMessagesHint"),
-              },
-              {
-                value: "chat",
-                label: t("afkSettings.chatLog.filterChat"),
-                hint: t("afkSettings.chatLog.filterChatHint"),
-              },
-            ]}
-          />
-        </div>
-        <Hint>
-          {t("afkSettings.chatLog.file")} <FolderLink onOpen={onOpenFolder} />
-        </Hint>
-      </Dependent>
-      <div className="mt-4 border-t border-white/7 pt-1">
-        <ToggleRow
-          title={t("afkSettings.chatLog.showDate")}
-          help={t("afkSettings.chatLog.showDateHelp")}
-          checked={c.showDate}
-          onCheckedChange={(v) => page.patch("chatLog", { showDate: v })}
-        />
-      </div>
+      <AntiAfkBlock {...props} />
+      <EatBlock {...props} />
     </>
   );
 }
 
-export function AlertsSection({ draft, setDraft, onOpenFolder }: SectionProps) {
+function AlertsBlock({ draft, setDraft, onOpenFolder }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const a = draft.page.alerts;
   const noWords = !a.matches.some((m) => m.trim());
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.alerts")}
-        description={t("afkSettings.intro.alerts")}
-      />
+    <Block>
       <ToggleRow
-        emphasis
-        title={t("afkSettings.alerts.enabled")}
+        lead
+        title={t("afkSettings.sections.alerts")}
+        help={t("afkSettings.intro.alerts")}
         checked={a.enabled}
         onCheckedChange={(v) => page.patch("alerts", { enabled: v })}
       />
-      <Dependent enabled={a.enabled}>
+      <Fold open={a.enabled}>
         <ToggleRow
           title={t("afkSettings.alerts.beep")}
           checked={a.beepEnabled}
@@ -464,26 +401,101 @@ export function AlertsSection({ draft, setDraft, onOpenFolder }: SectionProps) {
           checked={a.logToFile}
           onCheckedChange={(v) => page.patch("alerts", { logToFile: v })}
         />
-        <div className="grid grid-cols-2 gap-4 py-3">
-          <LinesField
-            label={t("afkSettings.alerts.matches")}
-            help={t("afkSettings.alerts.matchesHelp")}
-            value={a.matches}
-            onChange={(v) => page.patch("alerts", { matches: v })}
-            rows={5}
+        <WideRow>
+          <div className="grid grid-cols-2 gap-4">
+            <LinesField
+              label={t("afkSettings.alerts.matches")}
+              help={t("afkSettings.alerts.matchesHelp")}
+              value={a.matches}
+              onChange={(v) => page.patch("alerts", { matches: v })}
+              rows={5}
+            />
+            <LinesField
+              label={t("afkSettings.alerts.excludes")}
+              help={t("afkSettings.alerts.excludesHelp")}
+              value={a.excludes}
+              onChange={(v) => page.patch("alerts", { excludes: v })}
+              rows={5}
+            />
+          </div>
+          {a.triggerByWords && noWords ? (
+            <Hint tone="warn" className="mt-2">
+              {t("afkSettings.alerts.noWords")}
+            </Hint>
+          ) : null}
+        </WideRow>
+      </Fold>
+    </Block>
+  );
+}
+
+function ChatLogBlock({ draft, setDraft, onOpenFolder }: SectionProps) {
+  const { t } = useTranslation();
+  const page = usePage(setDraft);
+  const c = draft.page.chatLog;
+  return (
+    <Block>
+      <ToggleRow
+        lead
+        title={t("afkSettings.sections.chatLog")}
+        help={t("afkSettings.intro.chatLog")}
+        checked={c.enabled}
+        onCheckedChange={(v) => page.patch("chatLog", { enabled: v })}
+      />
+      <Fold open={c.enabled}>
+        <ToggleRow
+          title={t("afkSettings.chatLog.dateTime")}
+          checked={c.addDateTime}
+          onCheckedChange={(v) => page.patch("chatLog", { addDateTime: v })}
+        />
+        <SettingRow title={t("afkSettings.chatLog.filter")}>
+          <Select<ChatLogFilter>
+            value={c.filter}
+            onValueChange={(v) => page.patch("chatLog", { filter: v })}
+            label={t("afkSettings.chatLog.filter")}
+            className="w-[240px]"
+            options={[
+              {
+                value: "all",
+                label: t("afkSettings.chatLog.filterAll"),
+                hint: t("afkSettings.chatLog.filterAllHint"),
+              },
+              {
+                value: "messages",
+                label: t("afkSettings.chatLog.filterMessages"),
+                hint: t("afkSettings.chatLog.filterMessagesHint"),
+              },
+              {
+                value: "chat",
+                label: t("afkSettings.chatLog.filterChat"),
+                hint: t("afkSettings.chatLog.filterChatHint"),
+              },
+            ]}
           />
-          <LinesField
-            label={t("afkSettings.alerts.excludes")}
-            help={t("afkSettings.alerts.excludesHelp")}
-            value={a.excludes}
-            onChange={(v) => page.patch("alerts", { excludes: v })}
-            rows={5}
-          />
-        </div>
-        {a.enabled && a.triggerByWords && noWords ? (
-          <Hint tone="warn">{t("afkSettings.alerts.noWords")}</Hint>
-        ) : null}
-      </Dependent>
+        </SettingRow>
+        <WideRow>
+          <Hint>
+            {t("afkSettings.chatLog.file")} <FolderLink onOpen={onOpenFolder} />
+          </Hint>
+        </WideRow>
+      </Fold>
+      {/* The console's dates follow this even with the log off. */}
+      <ToggleRow
+        title={t("afkSettings.chatLog.showDate")}
+        help={t("afkSettings.chatLog.showDateHelp")}
+        checked={c.showDate}
+        onCheckedChange={(v) => page.patch("chatLog", { showDate: v })}
+      />
+    </Block>
+  );
+}
+
+/** Kayıt ve uyarılar: what the account records and when it calls the player. */
+export function LogSection(props: SectionProps) {
+  return (
+    <>
+      <AlertsBlock {...props} />
+      <ChatLogBlock {...props} />
     </>
   );
 }

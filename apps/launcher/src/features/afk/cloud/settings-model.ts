@@ -27,6 +27,52 @@ export interface Draft {
   config: CloudEditConfig;
 }
 
+/**
+ * The panel's rail (SHEET-UX), the desktop panel's names: where it connects, what it types, what it
+ * does in the game, how it answers.
+ */
+export const PARTS = ["connection", "commands", "game", "replies"] as const;
+export type Part = (typeof PARTS)[number];
+
+/** Fields of the "general" place that live outside Bağlantı. */
+const GENERAL_PART: Record<string, Part> = {
+  antiAfk: "game",
+  inventory: "game",
+  movement: "game",
+  owner: "replies",
+};
+
+/** The section a problem shows in. */
+export function partOf(issue: Issue): Part {
+  if (issue.place === "commands") return "commands";
+  if (issue.place === "rules") return "replies";
+  return GENERAL_PART[issue.field] ?? "connection";
+}
+
+/** What each section edits (every field of the draft belongs to one). */
+const partValue = (draft: Draft, part: Part): unknown => {
+  switch (part) {
+    case "connection":
+      return [draft.name, draft.host, draft.port, draft.version, draft.lang];
+    case "commands":
+      return draft.config.commands;
+    case "game":
+      return [draft.config.antiAfk, draft.config.inventory, draft.config.movement];
+    case "replies":
+      return [draft.config.owner, draft.config.rules];
+  }
+};
+
+/** The sections holding edits not saved yet. */
+export function unsavedParts(draft: Draft, baseline: Draft): Set<Part> {
+  return new Set(
+    PARTS.filter(
+      (part) =>
+        JSON.stringify(partValue(draft, part)) !== JSON.stringify(partValue(baseline, part)),
+    ),
+  );
+}
+
 export const TRIGGERS = ["join", "start", "reconnect", "interval", "daily"] as const;
 export type Trigger = (typeof TRIGGERS)[number];
 export const SOURCES = ["any", "player", "private", "server"] as const;

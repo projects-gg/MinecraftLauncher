@@ -1071,8 +1071,6 @@ export const en: DeepPartial<Strings> = {
     title: "{{name}} settings",
     sectionsLabel: "Settings sections",
     sectionHasErrors: "This section has fields to fix",
-    on: "On",
-    off: "Off",
     min: "Minimum",
     max: "Maximum",
     seconds: "s",
@@ -1103,8 +1101,6 @@ export const en: DeepPartial<Strings> = {
     server: {
       host: "Server address",
       hostHelp: "Leave empty to use play.projects.gg.",
-      port: "Port",
-      portHelp: "0 finds it automatically.",
       version: "Game version",
       recommended: "Recommended",
       versionAuto: "Automatic (ask the server)",
@@ -1123,8 +1119,6 @@ export const en: DeepPartial<Strings> = {
         "When off, the pack isn't downloaded but the server is told it loaded; when on, chat translations show correctly.",
     },
     login: {
-      enabled: "Use login commands",
-      commands: "Commands",
       placeholder: "/kit or hello everyone",
       lineLabel: "Command {{n}}",
       add: "Add command",
@@ -1148,7 +1142,6 @@ export const en: DeepPartial<Strings> = {
       delayHelp: "The wait before the first command and between commands.",
     },
     scheduler: {
-      enabled: "Use the scheduler",
       add: "Add task",
       remove: "Remove task",
       empty: "No tasks yet.",
@@ -1161,7 +1154,6 @@ export const en: DeepPartial<Strings> = {
       help: 'Example action: "send /kit" types /kit in chat. Interval tasks repeat after a random time between the minimum and the maximum.',
     },
     antiAfk: {
-      enabled: "Use anti-AFK",
       interval: "Movement interval",
       command: "Command sent every round",
       commandPlaceholder: "Optional",
@@ -1174,7 +1166,6 @@ export const en: DeepPartial<Strings> = {
       blocks: "blocks",
     },
     relog: {
-      enabled: "Use auto reconnect",
       delay: "Wait time",
       unlimited: "Retry without limit",
       retries: "Attempts",
@@ -1187,7 +1178,6 @@ export const en: DeepPartial<Strings> = {
       kickEmpty: "The list is empty, so a kick never triggers a reconnect.",
     },
     eat: {
-      enabled: "Use auto eat",
       threshold: "Hunger threshold",
       thresholdValue: "{{value}} / 20",
       note: "The connection uses a little more data.",
@@ -1217,7 +1207,6 @@ export const en: DeepPartial<Strings> = {
       help: "A reply can be a message or a /command.",
     },
     chatLog: {
-      enabled: "Use the chat log",
       dateTime: "Add date and time to lines",
       filter: "What to save",
       filterAll: "Everything",
@@ -1231,7 +1220,6 @@ export const en: DeepPartial<Strings> = {
       showDateHelp: "Works even with the chat log off.",
     },
     alerts: {
-      enabled: "Use alerts",
       beep: "Play a beep",
       words: "Trigger on words",
       wordsHelp: "An alert fires when one of the watched words shows up in chat.",
@@ -1250,7 +1238,6 @@ export const en: DeepPartial<Strings> = {
     saveReconnect: "Save and reconnect",
     saving: "Saving",
     cancel: "Cancel",
-    close: "Close",
     dirty: "You have unsaved changes.",
     fixErrors: "Fix the marked fields before saving.",
     saved: "{{name}} settings saved",
@@ -1259,12 +1246,6 @@ export const en: DeepPartial<Strings> = {
     saveFailed: "Couldn't save the settings. Try again.",
     loadFailed: "Couldn't load the settings.",
     loadFailedHint: "Try again; if it keeps failing, restart the launcher.",
-    discard: {
-      title: "Unsaved changes",
-      body: "If you close without saving, your changes are lost.",
-      confirm: "Close without saving",
-      keep: "Keep editing",
-    },
     errors: {
       hostInvalid:
         "Use only letters, numbers, dots, hyphens and underscores. Example: play.projects.gg",

@@ -1,5 +1,5 @@
-// List sections of the AFK settings sheet: login commands (with stored passwords), scheduler
-// tasks and auto-respond rules.
+// The desktop AFK settings panel's list sections (SHEET-UX): Komutlar (login commands with stored
+// passwords, scheduler tasks) and Otomatik yanıt (rules). Each feature is a block led by its switch.
 import {
   ArrowDown,
   ArrowUp,
@@ -13,7 +13,16 @@ import {
 import { Button, Chip, cn, Field, IconButton, Input, Switch } from "@pl/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Dependent, ErrorText, Hint, NumberField, SectionIntro, ToggleRow } from "./controls";
+import {
+  Block,
+  ErrorText,
+  Fold,
+  Hint,
+  NumberField,
+  SettingRow,
+  ToggleRow,
+  WideRow,
+} from "./controls";
 import {
   isSecretLine,
   LIMITS,
@@ -150,7 +159,7 @@ function StoredLine({
   );
 }
 
-export function LoginSection({ draft, setDraft, errorFor, view }: SectionProps) {
+function LoginBlock({ draft, setDraft, errorFor, view }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const login = draft.page.loginCommands;
@@ -162,39 +171,21 @@ export function LoginSection({ draft, setDraft, errorFor, view }: SectionProps) 
   const hasStored = rows.some((r) => r.kind !== "text");
 
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.login")}
-        description={t("afkSettings.intro.login")}
-      />
-      {view.keychainAvailable ? null : (
-        <Hint tone="warn" className="mb-2">
-          {t("afkSettings.login.keychainMissing")}
-        </Hint>
-      )}
+    <Block>
       <ToggleRow
-        emphasis
-        title={t("afkSettings.login.enabled")}
+        lead
+        title={t("afkSettings.sections.login")}
+        help={t("afkSettings.intro.login")}
         checked={login.enabled}
         onCheckedChange={(v) => page.patch("loginCommands", { enabled: v })}
       />
-      <Dependent enabled={login.enabled}>
-        <div className="py-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-[13.5px] font-medium text-bone-50">
-              {t("afkSettings.login.commands")}
-            </p>
-            {rows.length ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<Trash size={14} />}
-                onClick={() => setRows(() => [])}
-              >
-                {t("afkSettings.login.clearAll")}
-              </Button>
-            ) : null}
-          </div>
+      <Fold open={login.enabled}>
+        <WideRow>
+          {view.keychainAvailable ? null : (
+            <Hint tone="warn" className="mb-3">
+              {t("afkSettings.login.keychainMissing")}
+            </Hint>
+          )}
           {rows.length ? (
             <ol className="flex flex-col gap-2">
               {rows.map((row, i) => (
@@ -265,41 +256,52 @@ export function LoginSection({ draft, setDraft, errorFor, view }: SectionProps) 
               <ErrorText>{errorFor("login.list")}</ErrorText>
             </div>
           ) : null}
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<Plus size={14} />}
-            className="mt-3"
-            onClick={() => setRows((list) => [...list, newLoginRow()])}
-          >
-            {t("afkSettings.login.add")}
-          </Button>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Plus size={14} />}
+              onClick={() => setRows((list) => [...list, newLoginRow()])}
+            >
+              {t("afkSettings.login.add")}
+            </Button>
+            {rows.length ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Trash size={14} />}
+                onClick={() => setRows(() => [])}
+              >
+                {t("afkSettings.login.clearAll")}
+              </Button>
+            ) : null}
+          </div>
           {hasStored ? (
             <Hint className="mt-3 max-w-[62ch]">{t("afkSettings.login.storedHint")}</Hint>
           ) : null}
-        </div>
+        </WideRow>
         <ToggleRow
           title={t("afkSettings.login.onlyFirst")}
           help={t("afkSettings.login.onlyFirstHelp")}
           checked={login.onlyFirstLogin}
           onCheckedChange={(v) => page.patch("loginCommands", { onlyFirstLogin: v })}
         />
-        <div className="py-3">
+        <SettingRow
+          title={t("afkSettings.login.delay")}
+          help={t("afkSettings.login.delayHelp")}
+          error={errorFor("login.delay")}
+        >
           <NumberField
             label={t("afkSettings.login.delay")}
             value={login.delaySeconds}
             onChange={(v) => page.patch("loginCommands", { delaySeconds: v })}
             limit={LIMITS.loginDelay}
             unit={t("afkSettings.seconds")}
-            error={errorFor("login.delay")}
-            className="max-w-[200px]"
+            invalid={Boolean(errorFor("login.delay"))}
           />
-          <p className="mt-1.5 max-w-[62ch] text-[12.5px] text-ash-400">
-            {t("afkSettings.login.delayHelp")}
-          </p>
-        </div>
-      </Dependent>
-    </>
+        </SettingRow>
+      </Fold>
+    </Block>
   );
 }
 
@@ -323,6 +325,8 @@ function TaskCard({
   const sec = t("afkSettings.seconds");
   const nameId = `task-${task.key}-name`;
   const actionId = `task-${task.key}-action`;
+  const minError = errorFor(`task.${task.key}.min`);
+  const maxError = errorFor(`task.${task.key}.max`);
   return (
     <li className={cn(rowPanel, "p-3.5")}>
       <div className="flex items-start gap-3">
@@ -378,49 +382,57 @@ function TaskCard({
         />
       </div>
       {task.intervalEnabled ? (
-        <div className="mt-3 grid max-w-[420px] grid-cols-2 gap-3">
-          <NumberField
-            label={t("afkSettings.min")}
-            value={task.minSeconds}
-            onChange={(v) => set({ minSeconds: v })}
-            limit={LIMITS.taskSeconds}
-            unit={sec}
-            error={errorFor(`task.${task.key}.min`)}
-          />
-          <NumberField
-            label={t("afkSettings.max")}
-            value={task.maxSeconds}
-            onChange={(v) => set({ maxSeconds: v })}
-            limit={LIMITS.taskSeconds}
-            unit={sec}
-            error={errorFor(`task.${task.key}.max`)}
-          />
+        <div className="mt-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-ash-300">{t("afkPanel.interval")}</span>
+            <NumberField
+              label={t("afkSettings.min")}
+              value={task.minSeconds}
+              onChange={(v) => set({ minSeconds: v })}
+              limit={LIMITS.taskSeconds}
+              unit={sec}
+              invalid={Boolean(minError)}
+            />
+            <span aria-hidden className="text-ash-400">
+              –
+            </span>
+            <NumberField
+              label={t("afkSettings.max")}
+              value={task.maxSeconds}
+              onChange={(v) => set({ maxSeconds: v })}
+              limit={LIMITS.taskSeconds}
+              unit={sec}
+              invalid={Boolean(maxError)}
+            />
+          </div>
+          {minError || maxError ? (
+            <div className="mt-1.5">
+              <ErrorText>{minError ?? maxError}</ErrorText>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </li>
   );
 }
 
-export function SchedulerSection({ draft, setDraft, errorFor }: SectionProps) {
+function SchedulerBlock({ draft, setDraft, errorFor }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const enabled = draft.page.scheduler.enabled;
   const setTasks = (update: (tasks: TaskRow[]) => TaskRow[]) =>
     setDraft((d) => ({ ...d, tasks: update(d.tasks) }));
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.scheduler")}
-        description={t("afkSettings.intro.scheduler")}
-      />
+    <Block>
       <ToggleRow
-        emphasis
-        title={t("afkSettings.scheduler.enabled")}
+        lead
+        title={t("afkSettings.sections.scheduler")}
+        help={t("afkSettings.intro.scheduler")}
         checked={enabled}
         onCheckedChange={(v) => page.patch("scheduler", { enabled: v })}
       />
-      <Dependent enabled={enabled}>
-        <div className="py-3">
+      <Fold open={enabled}>
+        <WideRow>
           {draft.tasks.length ? (
             <ul className="flex flex-col gap-3">
               {draft.tasks.map((task, i) => (
@@ -455,9 +467,19 @@ export function SchedulerSection({ draft, setDraft, errorFor }: SectionProps) {
           >
             {t("afkSettings.scheduler.add")}
           </Button>
-        </div>
-        <Hint className="max-w-[62ch]">{t("afkSettings.scheduler.help")}</Hint>
-      </Dependent>
+          <Hint className="mt-3 max-w-[62ch]">{t("afkSettings.scheduler.help")}</Hint>
+        </WideRow>
+      </Fold>
+    </Block>
+  );
+}
+
+/** Komutlar: what the account types as it joins, and on its own schedule. */
+export function CommandsSection(props: SectionProps) {
+  return (
+    <>
+      <LoginBlock {...props} />
+      <SchedulerBlock {...props} />
     </>
   );
 }
@@ -480,6 +502,7 @@ function RuleCard({
   const id = (field: string) => `rule-${rule.key}-${field}`;
   const patternError = errorFor(`rule.${rule.key}.pattern`);
   const replyError = errorFor(`rule.${rule.key}.reply`);
+  const cooldownError = errorFor(`rule.${rule.key}.cooldown`);
   return (
     <li className={cn(rowPanel, "p-3.5")}>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-start gap-3">
@@ -552,52 +575,55 @@ function RuleCard({
         </Field>
         <span className="w-8" />
       </div>
-      <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
-        <NumberField
-          label={t("afkSettings.respond.cooldown")}
-          value={rule.cooldownSeconds}
-          onChange={(v) => set({ cooldownSeconds: v })}
-          limit={LIMITS.cooldown}
-          unit={t("afkSettings.seconds")}
-          error={errorFor(`rule.${rule.key}.cooldown`)}
-          className="w-[150px]"
-        />
+      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] text-ash-300">{t("afkSettings.respond.cooldown")}</span>
+          <NumberField
+            label={t("afkSettings.respond.cooldown")}
+            value={rule.cooldownSeconds}
+            onChange={(v) => set({ cooldownSeconds: v })}
+            limit={LIMITS.cooldown}
+            unit={t("afkSettings.seconds")}
+            invalid={Boolean(cooldownError)}
+          />
+        </div>
         <Switch
           checked={rule.ownersOnly}
           onCheckedChange={(v) => set({ ownersOnly: v })}
           label={t("afkSettings.respond.ownersOnly")}
-          className="mb-2.5"
         />
         <Switch
           checked={rule.isRegex}
           onCheckedChange={(v) => set({ isRegex: v })}
           label={t("afkSettings.respond.regex")}
-          className="mb-2.5"
         />
       </div>
+      {cooldownError ? (
+        <div className="mt-1.5">
+          <ErrorText>{cooldownError}</ErrorText>
+        </div>
+      ) : null}
     </li>
   );
 }
 
-export function RespondSection({ draft, setDraft, errorFor }: SectionProps) {
+/** Otomatik yanıt: one block, so its switch says "use" rather than repeat the section's name. */
+export function RepliesSection({ draft, setDraft, errorFor }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const r = draft.page.autoRespond;
   const setRules = (update: (rules: RuleRow[]) => RuleRow[]) =>
     setDraft((d) => ({ ...d, rules: update(d.rules) }));
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.respond")}
-        description={t("afkSettings.intro.respond")}
-      />
+    <Block>
       <ToggleRow
-        emphasis
+        lead
         title={t("afkSettings.respond.enabled")}
+        help={t("afkSettings.intro.respond")}
         checked={r.enabled}
         onCheckedChange={(v) => page.patch("autoRespond", { enabled: v })}
       />
-      <Dependent enabled={r.enabled}>
+      <Fold open={r.enabled}>
         <ToggleRow
           title={t("afkSettings.respond.sound")}
           checked={r.soundEnabled}
@@ -609,8 +635,8 @@ export function RespondSection({ draft, setDraft, errorFor }: SectionProps) {
           checked={r.matchColors}
           onCheckedChange={(v) => page.patch("autoRespond", { matchColors: v })}
         />
-        <div className="py-3">
-          <p className="mb-2 text-[13.5px] font-medium text-bone-50">
+        <WideRow>
+          <p className="mb-2 text-[13.5px] font-medium text-bone-100">
             {t("afkSettings.respond.rules")}
           </p>
           {draft.rules.length ? (
@@ -646,9 +672,9 @@ export function RespondSection({ draft, setDraft, errorFor }: SectionProps) {
           >
             {t("afkSettings.respond.add")}
           </Button>
-        </div>
-        <Hint className="max-w-[62ch]">{t("afkSettings.respond.help")}</Hint>
-      </Dependent>
-    </>
+          <Hint className="mt-3 max-w-[62ch]">{t("afkSettings.respond.help")}</Hint>
+        </WideRow>
+      </Fold>
+    </Block>
   );
 }

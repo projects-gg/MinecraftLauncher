@@ -53,6 +53,8 @@ import {
 } from "./cloud/use-cloud";
 import { afkFailed, isFriendly, runAfk } from "./errors";
 import { AfkPrimaryAction, primaryAction } from "./primary-action";
+import { draftKey, useAfkDrafts } from "./settings/drafts";
+import { SettingsButton } from "./settings/settings-button";
 import { AfkSettingsSheet, useAfkReconnect } from "./settings/settings-sheet";
 import { StateLine } from "./state-line";
 
@@ -338,10 +340,10 @@ function AfkCard({
             <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
               {t("afk.console")}
             </Button>
-            <IconButton
+            <SettingsButton
+              kind="desktop"
+              id={account.id}
               label={t("afk.settings")}
-              icon={<GearSix size={17} />}
-              size="sm"
               onClick={onSettings}
             />
           </div>
@@ -457,6 +459,8 @@ export function AfkPage() {
   const remove = (account: AfkAccount) => {
     if (settingsId === account.id) setSettingsId(null);
     if (consoleId === account.id) setConsoleId(null);
+    // Its unsaved settings go with it.
+    useAfkDrafts.getState().hold(draftKey("desktop", account.id), null);
     api
       .afkRemove(account.id)
       .catch((error: unknown) => afkFailed(error, t("afk.removeFailed")))

@@ -13,12 +13,15 @@ import {
   newCommand,
   newRule,
   nextId,
+  PARTS,
+  partOf,
   portOf,
   serverChanges,
   textProblem,
   toDraft,
   toEdit,
   typed,
+  unsavedParts,
   withTrigger,
 } from "./settings-model";
 
@@ -404,5 +407,34 @@ describe("issueKey", () => {
         expect(enCloudAfk.settings.issues, `${field}/${problem}`).toHaveProperty(key);
       }
     }
+  });
+});
+
+describe("the panel's sections (SHEET-UX)", () => {
+  it("shows a problem in the section that holds its field", () => {
+    const at = (place: string, field: string) =>
+      partOf({ place, index: null, field, problem: "format" });
+    expect(at("general", "name")).toBe("connection");
+    expect(at("general", "server")).toBe("connection");
+    expect(at("general", "port")).toBe("connection");
+    expect(at("general", "antiAfk")).toBe("game");
+    expect(at("general", "movement")).toBe("game");
+    expect(at("general", "owner")).toBe("replies");
+    expect(at("commands", "text")).toBe("commands");
+    expect(at("rules", "reply")).toBe("replies");
+  });
+
+  it("marks only the sections whose fields changed", () => {
+    const base = toDraft(view());
+    expect(unsavedParts(base, base).size).toBe(0);
+    expect([...unsavedParts({ ...base, port: "25571" }, base)]).toEqual(["connection"]);
+    const owner = { ...base, config: { ...base.config, owner: "Baska" } };
+    expect([...unsavedParts(owner, base)]).toEqual(["replies"]);
+    const anti = {
+      ...base,
+      config: { ...base.config, antiAfk: { ...base.config.antiAfk, enabled: false } },
+    };
+    expect([...unsavedParts(anti, base)]).toEqual(["game"]);
+    expect(PARTS).toEqual(["connection", "commands", "game", "replies"]);
   });
 });

@@ -1,12 +1,12 @@
-// The cloud settings sheet's three parts: Genel (name, server, version, console language,
-// anti-AFK, the player's own name), Komutlar (rows by trigger) and Otomatik yanıt (rules). With the
-// cloud features (only while the service offers them): the inventory view's switch, placeholders
-// in replies with their chips and "Dene", and a line while old rules still match the old way.
+// The cloud settings panel's sections (SHEET-UX): Bağlantı (name, address, version, console
+// language), Komutlar (rows by trigger), Oyun içi (anti-AFK, the inventory view, movement) and
+// Otomatik yanıt (the player's own name, rules). With the cloud features (only while the service
+// offers them): the inventory view's switch, placeholders in replies with their chips and "Dene",
+// and a line while old rules still match the old way.
 import { ArrowDown, ArrowUp, Info, Plus, Trash, X } from "@phosphor-icons/react";
 import {
   Button,
   cn,
-  Field,
   IconButton,
   Input,
   Segmented,
@@ -17,7 +17,17 @@ import {
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CloudFeatures } from "@/bindings";
-import { ErrorText, inputClass, RangeRow, SectionIntro, ToggleRow } from "../settings/controls";
+import {
+  AddressField,
+  Block,
+  ErrorText,
+  Fold,
+  inputClass,
+  RangeRow,
+  SettingRow,
+  ToggleRow,
+  WideRow,
+} from "../settings/controls";
 import type { CloudEditData } from "./api";
 import { slotKey } from "./movement/model";
 import { hasPlaceholder, insertToken } from "./placeholders";
@@ -143,15 +153,15 @@ function move<T>(list: T[], from: number, to: number): T[] {
   return next;
 }
 
-// --- Genel ------------------------------------------------------------------------------------
+// --- Oyun içi ---------------------------------------------------------------------------------
 
 /**
- * "Hareket" (README "Movement"): only where the account may move (`features.movement.mode` on).
- * Its one sentence says what turning it on means; while no slot is free the switch waits and the
- * sentence says why (the words stay readable: only the switch dims). A save the service refused
- * for it says so under it.
+ * "Hareket" (README "Movement"): only where the account may move (`features.movement.mode` on),
+ * a block of its own led by its switch. Its one sentence says what turning it on means; while no
+ * slot is free the switch waits and the sentence says why (the words stay readable: only the
+ * switch dims). A save the service refused for it says so under it.
  */
-function MovementRow({
+function MovementBlock({
   draft,
   setDraft,
   view,
@@ -175,19 +185,19 @@ function MovementRow({
       ? t(`cloudAfkMove.${waiting.key}`, waiting.values)
       : t("cloudAfkMove.setting.line");
   return (
-    <div className="border-t border-white/7 pt-1">
-      <div className="switch-row flex items-center justify-between gap-6 py-3">
+    <Block>
+      <div className="switch-row flex items-center justify-between gap-6 py-3.5">
         <div className="min-w-0">
           <label
             htmlFor={id}
             className={cn(
-              "block text-[13.5px] font-medium text-bone-50",
+              "block text-[14.5px] font-semibold text-bone-50",
               waiting && !on ? "cursor-default" : "cursor-pointer",
             )}
           >
             {t("cloudAfkMove.setting.title")}
           </label>
-          <p id={`${id}-help`} className="mt-0.5 max-w-[58ch] text-[12.5px] text-ash-400">
+          <p id={`${id}-help`} className="mt-0.5 max-w-[52ch] text-[12.5px] text-ash-400">
             {help}
           </p>
         </div>
@@ -203,16 +213,93 @@ function MovementRow({
           disabled={Boolean(waiting) && !on}
         />
       </div>
-      {refusal ? <ErrorText>{t(`cloudAfkMove.${refusal.key}`, refusal.values)}</ErrorText> : null}
-    </div>
+      {refusal ? (
+        <div className="pb-3">
+          <ErrorText>{t(`cloudAfkMove.${refusal.key}`, refusal.values)}</ErrorText>
+        </div>
+      ) : null}
+    </Block>
   );
 }
 
-export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
+/** Oyun içi: anti-AFK with its interval, the inventory view, movement (each where it is offered). */
+export function GamePart({ draft, setDraft, view, issues }: PartProps) {
   const { t } = useTranslation();
   const issueText = useIssueText(view, draft);
   const inventory = view.account.features?.inventory;
   const inventoryShown = (inventory?.mode ?? "off") !== "off";
+  const general = (field: string) => issueText(issueAt(issues, "general", null, field));
+  const anti = draft.config.antiAfk;
+  return (
+    <>
+      <Block>
+        <ToggleRow
+          lead
+          title={t("cloudAfk.settings.antiAfk")}
+          help={t("cloudAfk.settings.antiAfkHelp")}
+          checked={anti.enabled}
+          onCheckedChange={(enabled) =>
+            setDraft((d) => ({
+              ...d,
+              config: { ...d.config, antiAfk: { ...d.config.antiAfk, enabled } },
+            }))
+          }
+        />
+        <Fold open={anti.enabled}>
+          <RangeRow title={t("cloudAfk.settings.antiAfkInterval")} errors={[general("antiAfk")]}>
+            <NumberField
+              label={t("cloudAfk.settings.antiAfkMin")}
+              hideLabel
+              value={anti.delayMin}
+              unit={t("cloudAfk.settings.seconds")}
+              className="w-[104px]"
+              onChange={(delayMin) =>
+                setDraft((d) => ({
+                  ...d,
+                  config: { ...d.config, antiAfk: { ...d.config.antiAfk, delayMin } },
+                }))
+              }
+            />
+            <NumberField
+              label={t("cloudAfk.settings.antiAfkMax")}
+              hideLabel
+              value={anti.delayMax}
+              unit={t("cloudAfk.settings.seconds")}
+              className="w-[104px]"
+              onChange={(delayMax) =>
+                setDraft((d) => ({
+                  ...d,
+                  config: { ...d.config, antiAfk: { ...d.config.antiAfk, delayMax } },
+                }))
+              }
+            />
+          </RangeRow>
+        </Fold>
+      </Block>
+      {inventoryShown ? (
+        <Block>
+          <ToggleRow
+            lead
+            title={t("cloudAfkFeat.settings.inventory")}
+            help={t("cloudAfkFeat.settings.inventoryHelp")}
+            checked={draft.config.inventory ?? inventory?.on ?? false}
+            onCheckedChange={(enabled) =>
+              setDraft((d) => ({ ...d, config: { ...d.config, inventory: enabled } }))
+            }
+          />
+        </Block>
+      ) : null}
+      <MovementBlock draft={draft} setDraft={setDraft} view={view} issues={issues} />
+    </>
+  );
+}
+
+// --- Bağlantı ---------------------------------------------------------------------------------
+
+/** Bağlantı: the account's name, the server it joins, the game version, the console's language. */
+export function ConnectionPart({ draft, setDraft, view, issues }: PartProps) {
+  const { t } = useTranslation();
+  const issueText = useIssueText(view, draft);
   const general = (field: string) => issueText(issueAt(issues, "general", null, field));
   const versions: SelectOption<string>[] = [
     { value: "auto", label: t("cloudAfk.settings.versionAuto") },
@@ -227,10 +314,14 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
     versions.push({ value: draft.version, label: draft.version });
   }
   const changes = view.account.serverChanges;
-  const anti = draft.config.antiAfk;
   return (
-    <div className="flex flex-col gap-5">
-      <Field label={t("cloudAfk.settings.name")} error={general("name")} htmlFor="cloud-name">
+    <Block>
+      <SettingRow
+        lead
+        title={t("cloudAfk.settings.name")}
+        htmlFor="cloud-name"
+        error={general("name")}
+      >
         <Input
           id="cloud-name"
           value={draft.name}
@@ -239,143 +330,55 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
           autoComplete="off"
           invalid={Boolean(general("name"))}
           onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-          className="max-w-[320px]"
+          className="w-[240px]"
         />
-      </Field>
-      <div className="flex flex-col gap-1.5">
-        <div className="grid max-w-[520px] grid-cols-[1fr_110px] gap-3">
-          <Field label={t("cloudAfk.settings.host")} htmlFor="cloud-host">
-            <Input
-              id="cloud-host"
-              value={draft.host}
-              spellCheck={false}
-              autoComplete="off"
-              invalid={Boolean(general("server"))}
-              onChange={(e) => setDraft((d) => ({ ...d, host: e.target.value }))}
-            />
-          </Field>
-          <Field label={t("cloudAfk.settings.port")} htmlFor="cloud-port">
-            <Input
-              id="cloud-port"
-              value={draft.port}
-              inputMode="numeric"
-              placeholder="0"
-              spellCheck={false}
-              autoComplete="off"
-              invalid={Boolean(general("port"))}
-              onChange={(e) => setDraft((d) => ({ ...d, port: e.target.value }))}
-            />
-          </Field>
-        </div>
-        {general("server") || general("port") ? (
-          <ErrorText>{general("server") ?? general("port")}</ErrorText>
-        ) : changes.used > 0 ? (
-          <p className="text-[12.5px] text-ash-400 tabular-nums">
-            {t("cloudAfk.settings.serverChanges", { used: changes.used, limit: changes.limit })}
-          </p>
-        ) : null}
-      </div>
-      <div className="grid max-w-[520px] grid-cols-2 gap-3">
-        <Field label={t("cloudAfk.settings.version")} error={general("version")}>
-          <Select
-            value={draft.version}
-            onValueChange={(version) => setDraft((d) => ({ ...d, version }))}
-            options={versions}
-            label={t("cloudAfk.settings.version")}
-            searchable={
-              versions.length > 12
-                ? {
-                    searchLabel: t("cloudAfk.settings.versionSearch"),
-                    emptyText: t("cloudAfk.settings.versionNone"),
-                  }
-                : undefined
-            }
-          />
-        </Field>
-        <Field label={t("cloudAfk.settings.lang")}>
-          <Segmented
-            value={draft.lang === "en" ? "en" : "tr"}
-            onValueChange={(lang) => setDraft((d) => ({ ...d, lang }))}
-            label={t("cloudAfk.settings.lang")}
-            className="self-start"
-            options={[
-              { value: "tr", label: "Türkçe", lang: "tr" },
-              { value: "en", label: "English", lang: "en" },
-            ]}
-          />
-        </Field>
-      </div>
-      <div className="border-t border-white/7 pt-1">
-        <ToggleRow
-          title={t("cloudAfk.settings.antiAfk")}
-          help={t("cloudAfk.settings.antiAfkHelp")}
-          checked={anti.enabled}
-          onCheckedChange={(enabled) =>
-            setDraft((d) => ({
-              ...d,
-              config: { ...d.config, antiAfk: { ...d.config.antiAfk, enabled } },
-            }))
+      </SettingRow>
+      <WideRow>
+        <AddressField
+          id="cloud-host"
+          label={t("cloudAfk.settings.host")}
+          host={draft.host}
+          port={draft.port}
+          error={general("server") ?? general("port")}
+          help={
+            changes.used > 0 ? (
+              <span className="tabular-nums">
+                {t("cloudAfk.settings.serverChanges", { used: changes.used, limit: changes.limit })}
+              </span>
+            ) : undefined
+          }
+          onChange={(host, port) => setDraft((d) => ({ ...d, host, port }))}
+        />
+      </WideRow>
+      <SettingRow title={t("cloudAfk.settings.version")} error={general("version")}>
+        <Select
+          value={draft.version}
+          onValueChange={(version) => setDraft((d) => ({ ...d, version }))}
+          options={versions}
+          label={t("cloudAfk.settings.version")}
+          className="w-[240px]"
+          searchable={
+            versions.length > 12
+              ? {
+                  searchLabel: t("cloudAfk.settings.versionSearch"),
+                  emptyText: t("cloudAfk.settings.versionNone"),
+                }
+              : undefined
           }
         />
-        {anti.enabled ? (
-          <RangeRow title={t("cloudAfk.settings.antiAfkInterval")}>
-            <NumberField
-              label={t("cloudAfk.settings.antiAfkMin")}
-              value={anti.delayMin}
-              unit={t("cloudAfk.settings.seconds")}
-              onChange={(delayMin) =>
-                setDraft((d) => ({
-                  ...d,
-                  config: { ...d.config, antiAfk: { ...d.config.antiAfk, delayMin } },
-                }))
-              }
-            />
-            <NumberField
-              label={t("cloudAfk.settings.antiAfkMax")}
-              value={anti.delayMax}
-              unit={t("cloudAfk.settings.seconds")}
-              onChange={(delayMax) =>
-                setDraft((d) => ({
-                  ...d,
-                  config: { ...d.config, antiAfk: { ...d.config.antiAfk, delayMax } },
-                }))
-              }
-            />
-          </RangeRow>
-        ) : null}
-        {general("antiAfk") ? <ErrorText>{general("antiAfk")}</ErrorText> : null}
-        {inventoryShown ? (
-          <ToggleRow
-            title={t("cloudAfkFeat.settings.inventory")}
-            help={t("cloudAfkFeat.settings.inventoryHelp")}
-            checked={draft.config.inventory ?? inventory?.on ?? false}
-            onCheckedChange={(enabled) =>
-              setDraft((d) => ({ ...d, config: { ...d.config, inventory: enabled } }))
-            }
-          />
-        ) : null}
-      </div>
-      <Field
-        label={t("cloudAfk.settings.owner")}
-        help={t("cloudAfk.settings.ownerHelp")}
-        error={general("owner")}
-        htmlFor="cloud-owner"
-      >
-        <Input
-          id="cloud-owner"
-          value={draft.config.owner}
-          maxLength={16}
-          spellCheck={false}
-          autoComplete="off"
-          invalid={Boolean(general("owner"))}
-          onChange={(e) =>
-            setDraft((d) => ({ ...d, config: { ...d.config, owner: e.target.value.trim() } }))
-          }
-          className="max-w-[320px]"
+      </SettingRow>
+      <SettingRow title={t("cloudAfk.settings.lang")}>
+        <Segmented
+          value={draft.lang === "en" ? "en" : "tr"}
+          onValueChange={(lang) => setDraft((d) => ({ ...d, lang }))}
+          label={t("cloudAfk.settings.lang")}
+          options={[
+            { value: "tr", label: "Türkçe", lang: "tr" },
+            { value: "en", label: "English", lang: "en" },
+          ]}
         />
-      </Field>
-      <MovementRow draft={draft} setDraft={setDraft} view={view} issues={issues} />
-    </div>
+      </SettingRow>
+    </Block>
   );
 }
 
@@ -491,7 +494,7 @@ function CommandRow({
           onValueChange={(next) => onChange(withTrigger(command, next, minInterval))}
           options={triggers}
           label={t("cloudAfk.settings.commands.trigger")}
-          className="w-[210px]"
+          className="w-[196px]"
         />
         {on === "interval" ? (
           <div className="flex items-center gap-1.5">
@@ -576,22 +579,23 @@ function CommandRow({
   );
 }
 
+/** How many command rows the account may have (Studio's limit, at most 50). */
+export const commandLimit = (view: CloudEditData) => Math.min(view.limits.maxCommandRows ?? 20, 50);
+
+/** How many reply rules the account may have (Studio's limit, at most 50). */
+export const ruleLimit = (view: CloudEditData) => Math.min(view.limits.maxRules ?? 10, 50);
+
+/** Komutlar: the rows by trigger; the section's title counts them. */
 export function CommandsPart(part: PartProps) {
   const { t } = useTranslation();
   const { draft, setDraft, view } = part;
   const [added, setAdded] = useState<string | null>(null);
   const commands = draft.config.commands;
-  const max = Math.min(view.limits.maxCommandRows ?? 20, 50);
+  const max = commandLimit(view);
   const set = (next: Command[]) =>
     setDraft((d) => ({ ...d, config: { ...d.config, commands: next } }));
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <SectionIntro title={t("cloudAfk.settings.sections.commands")} />
-        <span className="text-[12.5px] text-ash-400 tabular-nums">
-          {t("cloudAfk.settings.commands.count", { count: commands.length, max })}
-        </span>
-      </div>
+    <div className="flex flex-col gap-3 pt-2">
       {commands.length ? (
         <ul className="flex flex-col gap-2">
           {commands.map((command, index) => (
@@ -796,58 +800,84 @@ function RuleRow({
   );
 }
 
+/**
+ * Otomatik yanıt: the player's own name ("Yalnız ana hesabımdan" rules know them by it), then the
+ * rules; the section's title counts them.
+ */
 export function RepliesPart(part: PartProps) {
   const { t } = useTranslation();
-  const { draft, setDraft, view } = part;
+  const { draft, setDraft, view, issues } = part;
+  const issueText = useIssueText(view, draft);
+  const owner = issueText(issueAt(issues, "general", null, "owner"));
   const [added, setAdded] = useState<string | null>(null);
   const rules = draft.config.rules;
-  const max = Math.min(view.limits.maxRules ?? 10, 50);
+  const max = ruleLimit(view);
   const set = (next: Rule[]) => setDraft((d) => ({ ...d, config: { ...d.config, rules: next } }));
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <SectionIntro title={t("cloudAfk.settings.sections.replies")} />
-        <span className="text-[12.5px] text-ash-400 tabular-nums">
-          {t("cloudAfk.settings.replies.count", { count: rules.length, max })}
-        </span>
-      </div>
-      {view.account.features?.legacyRules ? (
-        <p className="flex items-start gap-2 rounded-[var(--radius-panel)] bg-white/[0.035] px-3 py-2.5 text-[12.5px] text-bone-100 ring-1 ring-white/7">
-          <Info size={15} aria-hidden className="mt-px shrink-0 text-gold-300" />
-          <span>{t("cloudAfkFeat.settings.legacyRules")}</span>
-        </p>
-      ) : null}
-      {rules.length ? (
-        <ul className="flex flex-col gap-2">
-          {rules.map((rule, index) => (
-            <RuleRow
-              key={rule.id}
-              rule={rule}
-              index={index}
-              part={part}
-              focus={rule.id === added}
-              onChange={(next) => set(rules.map((r) => (r.id === rule.id ? next : r)))}
-              onRemove={() => set(rules.filter((r) => r.id !== rule.id))}
-            />
-          ))}
-        </ul>
-      ) : (
-        <p className="py-3 text-[13px] text-ash-400">{t("cloudAfk.settings.replies.empty")}</p>
-      )}
-      <Button
-        variant="secondary"
-        size="sm"
-        icon={<Plus size={14} weight="bold" />}
-        className="self-start"
-        disabled={rules.length >= max}
-        onClick={() => {
-          const row = newRule(draft.config, view.limits.minRuleCooldownSec ?? 10);
-          setAdded(row.id);
-          set([...rules, row]);
-        }}
-      >
-        {t("cloudAfk.settings.replies.add")}
-      </Button>
-    </div>
+    <>
+      <Block>
+        <SettingRow
+          lead
+          title={t("cloudAfk.settings.owner")}
+          help={t("cloudAfk.settings.ownerHelp")}
+          htmlFor="cloud-owner"
+          error={owner}
+        >
+          <Input
+            id="cloud-owner"
+            value={draft.config.owner}
+            maxLength={16}
+            spellCheck={false}
+            autoComplete="off"
+            invalid={Boolean(owner)}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d, config: { ...d.config, owner: e.target.value.trim() } }))
+            }
+            className="w-[240px]"
+          />
+        </SettingRow>
+      </Block>
+      <Block>
+        <div className="flex flex-col gap-3 py-3">
+          {view.account.features?.legacyRules ? (
+            <p className="flex items-start gap-2 rounded-[var(--radius-panel)] bg-white/[0.035] px-3 py-2.5 text-[12.5px] text-bone-100 ring-1 ring-white/7">
+              <Info size={15} aria-hidden className="mt-px shrink-0 text-gold-300" />
+              <span>{t("cloudAfkFeat.settings.legacyRules")}</span>
+            </p>
+          ) : null}
+          {rules.length ? (
+            <ul className="flex flex-col gap-2">
+              {rules.map((rule, index) => (
+                <RuleRow
+                  key={rule.id}
+                  rule={rule}
+                  index={index}
+                  part={part}
+                  focus={rule.id === added}
+                  onChange={(next) => set(rules.map((r) => (r.id === rule.id ? next : r)))}
+                  onRemove={() => set(rules.filter((r) => r.id !== rule.id))}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="py-3 text-[13px] text-ash-400">{t("cloudAfk.settings.replies.empty")}</p>
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Plus size={14} weight="bold" />}
+            className="self-start"
+            disabled={rules.length >= max}
+            onClick={() => {
+              const row = newRule(draft.config, view.limits.minRuleCooldownSec ?? 10);
+              setAdded(row.id);
+              set([...rules, row]);
+            }}
+          >
+            {t("cloudAfk.settings.replies.add")}
+          </Button>
+        </div>
+      </Block>
+    </>
   );
 }
