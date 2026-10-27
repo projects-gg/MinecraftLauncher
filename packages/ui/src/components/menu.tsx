@@ -84,9 +84,9 @@ function focusBackAfterKeys(event: Event, own?: (event: Event) => void) {
 const rowClass =
   "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-45";
 
-/** Whose rows they are, above them (`title`): quiet words, never a row. */
+/** Whose rows they are, above them (`title`), in the card title's face: never a row. */
 const titleClass =
-  "max-w-[240px] truncate px-2.5 pt-1.5 pb-1 text-[12px] leading-[16px] font-semibold text-ash-300 select-none";
+  "max-w-[240px] truncate px-2.5 pt-1.5 pb-1 font-display text-[13px] leading-[16px] font-semibold text-bone-50 select-none";
 
 interface MenuParts {
   Item: typeof DropdownMenu.Item | typeof RadixContextMenu.Item;
