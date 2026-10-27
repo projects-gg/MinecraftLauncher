@@ -545,12 +545,19 @@ export function Conversation({
 
   // Ctrl + wheel over the conversation, Ctrl + "+" / "-" / "0" while the focus is in its panel
   // (not in a menu or picker over it): the size steps, the plate shows, screen readers hear it.
+  // Screen readers hear where a quick run of steps (a spun wheel) ended, once.
+  const sizeTold = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(sizeTold.current), []);
   const resize = useCallback(
     (to: TextSize) => {
       const store = useChatTextSize.getState();
       if (store.size !== to) store.setSize(to);
       hud.current?.show();
-      announce(t("chatProd.zoom.announce", { level: formatPercent(to) }));
+      window.clearTimeout(sizeTold.current);
+      sizeTold.current = window.setTimeout(
+        () => announce(t("chatProd.zoom.announce", { level: formatPercent(to) })),
+        300,
+      );
     },
     [t],
   );

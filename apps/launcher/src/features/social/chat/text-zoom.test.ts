@@ -25,11 +25,13 @@ const press = (key: string, code: string, extra: Partial<KeyPress> = {}): KeyPre
 
 describe("the chat's text size", () => {
   it("is one of the steps, the default for anything unreadable", () => {
-    expect(TEXT_SIZES).toEqual([80, 90, 100, 110, 125, 150]);
+    expect(TEXT_SIZES).toEqual([90, 100, 110, 125, 150]);
     expect(textSizeOf(110)).toBe(110);
     expect(textSizeOf(120)).toBe(125);
     expect(textSizeOf(500)).toBe(150);
-    expect(textSizeOf(10)).toBe(80);
+    expect(textSizeOf(10)).toBe(90);
+    // A size saved before the steps changed reads as the nearest one.
+    expect(textSizeOf(80)).toBe(90);
     for (const bad of [undefined, null, "125", Number.NaN, Number.POSITIVE_INFINITY, {}]) {
       expect(textSizeOf(bad)).toBe(DEFAULT_TEXT_SIZE);
     }
@@ -41,15 +43,15 @@ describe("the chat's text size", () => {
     expect(stepTextSize(125, 1)).toBe(150);
     expect(stepTextSize(150, 1)).toBe(150);
     expect(stepTextSize(100, -1)).toBe(90);
-    expect(stepTextSize(80, -1)).toBe(80);
-    expect(stepTextSize(80, 9)).toBe(150);
+    expect(stepTextSize(90, -1)).toBe(90);
+    expect(stepTextSize(90, 9)).toBe(150);
     expect(stepTextSize(100, 0)).toBe(100);
   });
 
   it("zooms the writing only above 100 %", () => {
     expect(zoomOf(125)).toBe(1.25);
-    expect(zoomOf(80)).toBe(0.8);
-    expect(writingZoomOf(80)).toBe(1);
+    expect(zoomOf(90)).toBe(0.9);
+    expect(writingZoomOf(90)).toBe(1);
     expect(writingZoomOf(150)).toBe(1.5);
   });
 });

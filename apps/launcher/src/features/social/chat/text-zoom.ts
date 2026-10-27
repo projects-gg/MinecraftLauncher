@@ -1,14 +1,17 @@
 // The chat's text size (CHAT-PROD; the owner, 27 Oct 2026: Ctrl + wheel and Ctrl + "+"/"-" over
 // the chat should make its messages bigger or smaller). One of a few steps, as a browser zooms
-// (Chrome and Edge between 80 and 150 %). It scales the conversation as a whole (the messages and
+// (Chrome's and Edge's between 90 and 150 %). It scales the conversation as a whole (the messages and
 // what sits with them: emoji, stickers, reactions, cards, faces, times and spacing) and, above
 // 100 %, the words being written; the panel around it and the launcher window keep their size.
 // Kept on this computer (`pl.social`), never in the settings backup.
 import type { DesktopOs } from "@/lib/platform";
 import type { KeyPress } from "@/lib/shortcuts";
 
-/** The steps, in percent. */
-export const TEXT_SIZES = [80, 90, 100, 110, 125, 150] as const;
+/**
+ * The steps, in percent. Not below 90 %: the times, day lines and card details are 11–12 px at
+ * 100 %, and at 80 % they fell to 9 px (unreadable; design.md: nothing below 11 px by default).
+ */
+export const TEXT_SIZES = [90, 100, 110, 125, 150] as const;
 export type TextSize = (typeof TEXT_SIZES)[number];
 export const DEFAULT_TEXT_SIZE: TextSize = 100;
 

@@ -8,7 +8,7 @@ export const trChatProd = {
   },
   settings: {
     title: "Sohbet",
-    sampleTheirs: "Akşam bedwars'a girecek misin?",
+    sampleTheirs: "Akşam Bedwars'a girecek misin?",
     sampleMine: "Girerim, 9 gibi",
   },
 };

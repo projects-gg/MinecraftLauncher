@@ -60,7 +60,8 @@ export function ZoomHud({ ref, onReset }: { ref: Ref<ZoomHudHandle>; onReset: ()
         >
           <span aria-hidden className="flex items-baseline gap-2 whitespace-nowrap">
             <span className="text-[12.5px] text-ash-300">{t("chatProd.zoom.label")}</span>
-            <span className="min-w-[4ch] font-display text-[14px] font-semibold text-gold-300 tabular-nums">
+            {/* Figtree: Tektur's "%" reads as a slash at this size ("⁒125"). */}
+            <span className="min-w-[4ch] text-[13px] font-semibold text-gold-300 tabular-nums">
               {formatPercent(size)}
             </span>
           </span>
