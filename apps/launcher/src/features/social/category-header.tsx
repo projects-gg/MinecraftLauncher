@@ -23,6 +23,7 @@ import {
   Menu,
   type MenuItem,
   returnFocusAfterKeys,
+  swallowDismissClick,
 } from "@pl/ui";
 import { AnimatePresence, type MotionValue, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
@@ -318,6 +319,7 @@ export function CategoryHeader({
               {grip ? (
                 <DropdownMenu.Portal forceMount>
                   <DropdownMenu.Content
+                    onPointerDownOutside={swallowDismissClick}
                     onCloseAutoFocus={returnFocusAfterKeys}
                     forceMount
                     asChild

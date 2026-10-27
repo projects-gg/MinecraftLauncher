@@ -15,6 +15,7 @@ import {
   IconButton,
   returnFocusAfterKeys,
   Skeleton,
+  swallowDismissClick,
   useMotionPrefs,
 } from "@pl/ui";
 import { AnimatePresence } from "motion/react";
@@ -111,6 +112,7 @@ export function EmojiPickerButton({
           <Popover.Portal forceMount>
             <EntranceGate key="emoji-picker">
               <Popover.Content
+                onPointerDownOutside={swallowDismissClick}
                 forceMount
                 asChild
                 side={side}

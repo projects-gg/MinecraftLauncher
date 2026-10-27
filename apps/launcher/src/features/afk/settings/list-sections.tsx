@@ -1,5 +1,5 @@
-// List sections of the AFK settings sheet: login commands (with stored passwords), scheduler
-// tasks and auto-respond rules.
+// The desktop AFK settings panel's list sections (SHEET-UX): Komutlar (login commands with stored
+// passwords, scheduler tasks) and Otomatik yanıt (rules). Each feature is a block led by its switch.
 import {
   ArrowDown,
   ArrowUp,
@@ -10,10 +10,25 @@ import {
   Plus,
   Trash,
 } from "@phosphor-icons/react";
-import { Button, Chip, cn, Field, IconButton, Input, Switch } from "@pl/ui";
-import { useState } from "react";
+import { Button, cn, Field, IconButton, Input, Segmented } from "@pl/ui";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Dependent, ErrorText, Hint, NumberField, SectionIntro, ToggleRow } from "./controls";
+import { insertToken } from "../cloud/placeholders";
+import {
+  Block,
+  desktopTokens,
+  ErrorText,
+  Fold,
+  Hint,
+  InsertChip,
+  NumberField,
+  RangeRow,
+  SettingRow,
+  ToggleRow,
+  TokenField,
+  TriggerField,
+  WideRow,
+} from "./controls";
 import {
   isSecretLine,
   LIMITS,
@@ -133,15 +148,15 @@ function StoredLine({
   const { t } = useTranslation();
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      {/* The padlock, the hidden password and "Değiştir" say it is kept: no gold "Kayıtlı" pill
+          beside them (SHEET-UX). */}
       <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-white/7 bg-obsidian-850/80 px-3">
-        <LockSimple size={15} weight="fill" className="shrink-0 text-gold-300" />
+        <LockSimple size={15} weight="fill" className="shrink-0 text-ash-300" />
         <span className="truncate font-mono text-[13px] text-bone-100">{row.command}</span>
         <span aria-hidden className="font-mono text-[13px] tracking-widest text-ash-400">
           ••••••
         </span>
-        <Chip tone="gold" className="ml-auto">
-          {t("afkSettings.login.stored")}
-        </Chip>
+        <span className="sr-only">{t("afkSettings.login.stored")}</span>
       </div>
       <Button size="sm" variant="secondary" icon={<PencilSimple size={14} />} onClick={onReplace}>
         {t("afkSettings.login.replace")}
@@ -150,7 +165,7 @@ function StoredLine({
   );
 }
 
-export function LoginSection({ draft, setDraft, errorFor, view }: SectionProps) {
+function LoginBlock({ draft, setDraft, errorFor, view }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const login = draft.page.loginCommands;
@@ -162,39 +177,21 @@ export function LoginSection({ draft, setDraft, errorFor, view }: SectionProps) 
   const hasStored = rows.some((r) => r.kind !== "text");
 
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.login")}
-        description={t("afkSettings.intro.login")}
-      />
-      {view.keychainAvailable ? null : (
-        <Hint tone="warn" className="mb-2">
-          {t("afkSettings.login.keychainMissing")}
-        </Hint>
-      )}
+    <Block>
       <ToggleRow
-        emphasis
-        title={t("afkSettings.login.enabled")}
+        lead
+        title={t("afkSettings.sections.login")}
+        help={t("afkSettings.intro.login")}
         checked={login.enabled}
         onCheckedChange={(v) => page.patch("loginCommands", { enabled: v })}
       />
-      <Dependent enabled={login.enabled}>
-        <div className="py-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-[13.5px] font-medium text-bone-50">
-              {t("afkSettings.login.commands")}
-            </p>
-            {rows.length ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<Trash size={14} />}
-                onClick={() => setRows(() => [])}
-              >
-                {t("afkSettings.login.clearAll")}
-              </Button>
-            ) : null}
-          </div>
+      <Fold open={login.enabled}>
+        <WideRow>
+          {view.keychainAvailable ? null : (
+            <Hint tone="warn" className="mb-3">
+              {t("afkSettings.login.keychainMissing")}
+            </Hint>
+          )}
           {rows.length ? (
             <ol className="flex flex-col gap-2">
               {rows.map((row, i) => (
@@ -265,41 +262,52 @@ export function LoginSection({ draft, setDraft, errorFor, view }: SectionProps) 
               <ErrorText>{errorFor("login.list")}</ErrorText>
             </div>
           ) : null}
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<Plus size={14} />}
-            className="mt-3"
-            onClick={() => setRows((list) => [...list, newLoginRow()])}
-          >
-            {t("afkSettings.login.add")}
-          </Button>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Plus size={14} />}
+              onClick={() => setRows((list) => [...list, newLoginRow()])}
+            >
+              {t("afkSettings.login.add")}
+            </Button>
+            {rows.length ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Trash size={14} />}
+                onClick={() => setRows(() => [])}
+              >
+                {t("afkSettings.login.clearAll")}
+              </Button>
+            ) : null}
+          </div>
           {hasStored ? (
             <Hint className="mt-3 max-w-[62ch]">{t("afkSettings.login.storedHint")}</Hint>
           ) : null}
-        </div>
+        </WideRow>
         <ToggleRow
           title={t("afkSettings.login.onlyFirst")}
           help={t("afkSettings.login.onlyFirstHelp")}
           checked={login.onlyFirstLogin}
           onCheckedChange={(v) => page.patch("loginCommands", { onlyFirstLogin: v })}
         />
-        <div className="py-3">
+        <SettingRow
+          title={t("afkSettings.login.delay")}
+          help={t("afkSettings.login.delayHelp")}
+          error={errorFor("login.delay")}
+        >
           <NumberField
             label={t("afkSettings.login.delay")}
             value={login.delaySeconds}
             onChange={(v) => page.patch("loginCommands", { delaySeconds: v })}
             limit={LIMITS.loginDelay}
             unit={t("afkSettings.seconds")}
-            error={errorFor("login.delay")}
-            className="max-w-[200px]"
+            invalid={Boolean(errorFor("login.delay"))}
           />
-          <p className="mt-1.5 max-w-[62ch] text-[12.5px] text-ash-400">
-            {t("afkSettings.login.delayHelp")}
-          </p>
-        </div>
-      </Dependent>
-    </>
+        </SettingRow>
+      </Fold>
+    </Block>
   );
 }
 
@@ -323,9 +331,19 @@ function TaskCard({
   const sec = t("afkSettings.seconds");
   const nameId = `task-${task.key}-name`;
   const actionId = `task-${task.key}-action`;
+  const minError = errorFor(`task.${task.key}.min`);
+  const maxError = errorFor(`task.${task.key}.max`);
+  const actionError = errorFor(`task.${task.key}.action`);
+  // The client's own syntax stays out of sight: the field holds what goes into the chat and the
+  // launcher writes "send" before it. An action of another kind ("log …", "script …") stays as
+  // written, the advanced way (SHEET-UX; the fourth look's P1).
+  const chat = task.action === "" || SEND.test(task.action);
+  const shown = chat ? task.action.replace(SEND, "") : task.action;
+  const join = task.onLogin ? "every" : task.onFirstLogin ? "first" : "never";
+  const never = join === "never" && !task.intervalEnabled;
   return (
-    <li className={cn(rowPanel, "p-3.5")}>
-      <div className="flex items-start gap-3">
+    <li className={cn(rowPanel, "px-3.5 pt-3.5 pb-0.5")}>
+      <div className="flex items-start gap-3 pb-3">
         <Field label={t("afkSettings.scheduler.name")} htmlFor={nameId} className="w-[180px]">
           <Input
             id={nameId}
@@ -336,20 +354,28 @@ function TaskCard({
           />
         </Field>
         <Field
-          label={t("afkSettings.scheduler.action")}
+          label={chat ? t("afkPanel.task.line") : t("afkPanel.task.raw")}
           htmlFor={actionId}
-          error={errorFor(`task.${task.key}.action`)}
+          error={actionError}
           className="min-w-0 flex-1"
         >
           <Input
             id={actionId}
-            value={task.action}
-            placeholder="send /kit"
+            value={shown}
+            placeholder={t("afkPanel.task.linePlaceholder")}
             spellCheck={false}
             autoComplete="off"
-            invalid={Boolean(errorFor(`task.${task.key}.action`))}
+            invalid={Boolean(actionError)}
             className="h-9 font-mono text-[13px]"
-            onChange={(e) => set({ action: e.target.value })}
+            onChange={(e) =>
+              set({
+                action: !chat
+                  ? e.target.value
+                  : e.target.value.trim()
+                    ? `send ${e.target.value}`
+                    : "",
+              })
+            }
           />
         </Field>
         <IconButton
@@ -360,32 +386,36 @@ function TaskCard({
           onClick={onRemove}
         />
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-        <Switch
-          checked={task.onLogin}
-          onCheckedChange={(v) => set({ onLogin: v })}
-          label={t("afkSettings.scheduler.onLogin")}
+      {/* When it runs: one choice for joining (every one or only the first, never both), and a
+          repeat on its own switch, both on the card's right edge (three like switches overlapped). */}
+      <SettingRow title={t("afkPanel.task.onJoin")}>
+        <Segmented<"every" | "first" | "never">
+          // A quiet plate: gold stays the save button's (the sixth look).
+          className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
+          value={join}
+          onValueChange={(v) => set({ onLogin: v === "every", onFirstLogin: v === "first" })}
+          label={t("afkPanel.task.onJoin")}
+          options={[
+            { value: "every", label: t("afkPanel.task.every") },
+            { value: "first", label: t("afkPanel.task.first") },
+            { value: "never", label: t("afkPanel.task.never") },
+          ]}
         />
-        <Switch
-          checked={task.onFirstLogin}
-          onCheckedChange={(v) => set({ onFirstLogin: v })}
-          label={t("afkSettings.scheduler.onFirstLogin")}
-        />
-        <Switch
-          checked={task.intervalEnabled}
-          onCheckedChange={(v) => set({ intervalEnabled: v })}
-          label={t("afkSettings.scheduler.interval")}
-        />
-      </div>
-      {task.intervalEnabled ? (
-        <div className="mt-3 grid max-w-[420px] grid-cols-2 gap-3">
+      </SettingRow>
+      <ToggleRow
+        title={t("afkSettings.scheduler.interval")}
+        checked={task.intervalEnabled}
+        onCheckedChange={(v) => set({ intervalEnabled: v })}
+      />
+      <Fold open={task.intervalEnabled}>
+        <RangeRow title={t("afkPanel.interval")} errors={[minError, maxError]}>
           <NumberField
             label={t("afkSettings.min")}
             value={task.minSeconds}
             onChange={(v) => set({ minSeconds: v })}
             limit={LIMITS.taskSeconds}
             unit={sec}
-            error={errorFor(`task.${task.key}.min`)}
+            invalid={Boolean(minError)}
           />
           <NumberField
             label={t("afkSettings.max")}
@@ -393,34 +423,39 @@ function TaskCard({
             onChange={(v) => set({ maxSeconds: v })}
             limit={LIMITS.taskSeconds}
             unit={sec}
-            error={errorFor(`task.${task.key}.max`)}
+            invalid={Boolean(maxError)}
           />
-        </div>
+        </RangeRow>
+      </Fold>
+      {never ? (
+        <Hint tone="warn" className="pb-3">
+          {t("afkPanel.task.neverRuns")}
+        </Hint>
       ) : null}
     </li>
   );
 }
 
-export function SchedulerSection({ draft, setDraft, errorFor }: SectionProps) {
+/** The client's chat action: what follows it goes into the chat. */
+const SEND = /^send\s+/i;
+
+function SchedulerBlock({ draft, setDraft, errorFor }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const enabled = draft.page.scheduler.enabled;
   const setTasks = (update: (tasks: TaskRow[]) => TaskRow[]) =>
     setDraft((d) => ({ ...d, tasks: update(d.tasks) }));
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.scheduler")}
-        description={t("afkSettings.intro.scheduler")}
-      />
+    <Block>
       <ToggleRow
-        emphasis
-        title={t("afkSettings.scheduler.enabled")}
+        lead
+        title={t("afkSettings.sections.scheduler")}
+        help={t("afkSettings.intro.scheduler")}
         checked={enabled}
         onCheckedChange={(v) => page.patch("scheduler", { enabled: v })}
       />
-      <Dependent enabled={enabled}>
-        <div className="py-3">
+      <Fold open={enabled}>
+        <WideRow>
           {draft.tasks.length ? (
             <ul className="flex flex-col gap-3">
               {draft.tasks.map((task, i) => (
@@ -455,22 +490,37 @@ export function SchedulerSection({ draft, setDraft, errorFor }: SectionProps) {
           >
             {t("afkSettings.scheduler.add")}
           </Button>
-        </div>
-        <Hint className="max-w-[62ch]">{t("afkSettings.scheduler.help")}</Hint>
-      </Dependent>
+          <Hint className="mt-3 max-w-[62ch]">{t("afkSettings.scheduler.help")}</Hint>
+        </WideRow>
+      </Fold>
+    </Block>
+  );
+}
+
+/** Komutlar: what the account types as it joins, and on its own schedule. */
+export function CommandsSection(props: SectionProps) {
+  return (
+    <>
+      <LoginBlock {...props} />
+      <SchedulerBlock {...props} />
     </>
   );
 }
 
 // --- Auto respond ----------------------------------------------------------------------------
 
+/** A rule's three replies: to public chat, to private messages, to the server's own lines. */
+type ReplyField = "reply" | "privateReply" | "otherReply";
+
 function RuleCard({
   rule,
+  index,
   onChange,
   onRemove,
   errorFor,
 }: {
   rule: RuleRow;
+  index: number;
   onChange: (rule: RuleRow) => void;
   onRemove: () => void;
   errorFor: SectionProps["errorFor"];
@@ -480,145 +530,167 @@ function RuleCard({
   const id = (field: string) => `rule-${rule.key}-${field}`;
   const patternError = errorFor(`rule.${rule.key}.pattern`);
   const replyError = errorFor(`rule.${rule.key}.reply`);
+  const cooldownError = errorFor(`rule.${rule.key}.cooldown`);
+  // The client answers each kind of message with its own line, and stays quiet where it is empty
+  // (MCC's action / actionprivate / actionother). "Yazanın adı" goes where the caret last was.
+  const refs = {
+    reply: useRef<HTMLInputElement>(null),
+    privateReply: useRef<HTMLInputElement>(null),
+    otherReply: useRef<HTMLInputElement>(null),
+  };
+  const [last, setLast] = useState<ReplyField>("reply");
+  // The fields show "$u" by name; a chip goes in where the caret is, in those words.
+  const tokens = useMemo(() => desktopTokens(t("afkPanel.rule.sender")), [t]);
+  const insertSender = () => {
+    const input = refs[last].current;
+    const text = tokens.toShown(rule[last]);
+    const start = input?.selectionStart ?? text.length;
+    const end = input?.selectionEnd ?? start;
+    const next = insertToken(text, start, end, tokens.toShown("$u"));
+    set({ [last]: tokens.toStored(next.text) } as Partial<RuleRow>);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+  const replyField = (field: ReplyField, label: string) => (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={id(field)} className="text-[13px] font-medium text-bone-100">
+        {label}
+      </label>
+      <TokenField
+        id={id(field)}
+        value={rule[field]}
+        onChange={(value) => set({ [field]: value } as Partial<RuleRow>)}
+        tokens={tokens}
+        maxLength={Number.MAX_SAFE_INTEGER}
+        placeholder={field === "reply" ? t("afkSettings.respond.replyPlaceholder") : undefined}
+        invalid={Boolean(replyError)}
+        inputRef={refs[field]}
+        onFocus={() => setLast(field)}
+      />
+      {/* "+ Yazanın adı" under the field it adds to: the one typed in last (the first at start). */}
+      {field === last ? (
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <span aria-hidden className="mr-0.5 text-[12px] text-ash-400">
+            {t("afkPanel.rule.insert")}
+          </span>
+          <InsertChip label={t("afkPanel.rule.insertSender")} onClick={insertSender}>
+            {t("afkPanel.rule.sender")}
+          </InsertChip>
+        </div>
+      ) : null}
+    </div>
+  );
   return (
-    <li className={cn(rowPanel, "p-3.5")}>
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-start gap-3">
-        <Field
-          label={t("afkSettings.respond.pattern")}
-          htmlFor={id("pattern")}
-          error={patternError}
-        >
-          <Input
-            id={id("pattern")}
-            value={rule.pattern}
-            placeholder={t("afkSettings.respond.patternPlaceholder")}
-            spellCheck={false}
-            maxLength={MAX_PATTERN_CHARS}
-            invalid={Boolean(patternError)}
-            className={cn("h-9", rule.isRegex && "font-mono text-[13px]")}
-            onChange={(e) => set({ pattern: e.target.value })}
-          />
-        </Field>
-        <Field
-          label={t("afkSettings.respond.reply")}
-          htmlFor={id("reply")}
-          error={replyError}
-          help={t("afkSettings.respond.replyHelp")}
-        >
-          <Input
-            id={id("reply")}
-            value={rule.reply}
-            placeholder={t("afkSettings.respond.replyPlaceholder")}
-            spellCheck={false}
-            invalid={Boolean(replyError)}
-            className="h-9"
-            onChange={(e) => set({ reply: e.target.value })}
-          />
-        </Field>
+    <li className={cn(rowPanel, "px-3.5 pt-2 pb-0.5")}>
+      {/* Which rule it is, quietly, and its delete button in the card's corner, as a cloud
+          rule's: beside the first reply it read as "clear this reply" (SHEET-UX). */}
+      <div className="flex items-center gap-3 pb-1">
+        <span className="min-w-0 flex-1 text-[12.5px] font-medium text-ash-400">
+          {t("afkPanel.ruleOrdinal", { n: index + 1 })}
+        </span>
         <IconButton
           label={t("afkSettings.respond.remove")}
           icon={<Trash size={15} />}
           size="sm"
-          className="mt-6 hover:text-flare-400"
+          className="hover:text-flare-400"
           onClick={onRemove}
         />
       </div>
-      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-3">
-        <Field
-          label={t("afkSettings.respond.privateReply")}
-          htmlFor={id("private")}
-          help={t("afkSettings.respond.privateReplyHelp")}
-        >
-          <Input
-            id={id("private")}
-            value={rule.privateReply}
-            spellCheck={false}
-            className="h-9"
-            onChange={(e) => set({ privateReply: e.target.value })}
-          />
-        </Field>
-        <Field
-          label={t("afkSettings.respond.otherReply")}
-          htmlFor={id("other")}
-          help={t("afkSettings.respond.otherReplyHelp")}
-        >
-          <Input
-            id={id("other")}
-            value={rule.otherReply}
-            spellCheck={false}
-            className="h-9"
-            onChange={(e) => set({ otherReply: e.target.value })}
-          />
-        </Field>
-        <span className="w-8" />
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start gap-x-4">
+        {/* A plain phrase; a pattern is the advanced way under it (SHEET-UX). */}
+        <TriggerField
+          id={id("pattern")}
+          value={rule.pattern}
+          regex={rule.isRegex}
+          onChange={(pattern, isRegex) => set({ pattern, isRegex })}
+          placeholder={t("afkSettings.respond.patternPlaceholder")}
+          error={patternError}
+          maxLength={MAX_PATTERN_CHARS}
+        />
+        <div className="flex min-w-0 flex-col gap-3">
+          {replyField("reply", t("afkSettings.respond.reply"))}
+          {replyField("privateReply", t("afkSettings.respond.privateReply"))}
+          {replyField("otherReply", t("afkSettings.respond.otherReply"))}
+          <div className="-mt-1">
+            {replyError ? (
+              <ErrorText>{replyError}</ErrorText>
+            ) : (
+              <p className="text-[12px] text-ash-400">{t("afkPanel.rule.emptyReply")}</p>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
+      <div className="mt-3 flex items-center gap-2 pb-3">
+        <span className="text-[13px] text-ash-300">{t("afkPanel.rule.cooldown")}</span>
         <NumberField
-          label={t("afkSettings.respond.cooldown")}
+          label={t("afkPanel.rule.cooldown")}
           value={rule.cooldownSeconds}
           onChange={(v) => set({ cooldownSeconds: v })}
           limit={LIMITS.cooldown}
           unit={t("afkSettings.seconds")}
-          error={errorFor(`rule.${rule.key}.cooldown`)}
-          className="w-[150px]"
-        />
-        <Switch
-          checked={rule.ownersOnly}
-          onCheckedChange={(v) => set({ ownersOnly: v })}
-          label={t("afkSettings.respond.ownersOnly")}
-          className="mb-2.5"
-        />
-        <Switch
-          checked={rule.isRegex}
-          onCheckedChange={(v) => set({ isRegex: v })}
-          label={t("afkSettings.respond.regex")}
-          className="mb-2.5"
+          invalid={Boolean(cooldownError)}
         />
       </div>
+      {cooldownError ? (
+        <div className="-mt-1.5 pb-3">
+          <ErrorText>{cooldownError}</ErrorText>
+        </div>
+      ) : null}
+      {/* On the card's right edge, as every switch of the panel. */}
+      <ToggleRow
+        title={t("afkPanel.rule.ownerOnly")}
+        help={t("afkPanel.rule.ownerDesktop")}
+        checked={rule.ownersOnly}
+        onCheckedChange={(v) => set({ ownersOnly: v })}
+      />
     </li>
   );
 }
 
-export function RespondSection({ draft, setDraft, errorFor }: SectionProps) {
+/** Otomatik yanıt: one block, so its switch says "use" rather than repeat the section's name. */
+export function RepliesSection({ draft, setDraft, errorFor }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const r = draft.page.autoRespond;
   const setRules = (update: (rules: RuleRow[]) => RuleRow[]) =>
     setDraft((d) => ({ ...d, rules: update(d.rules) }));
   return (
-    <>
-      <SectionIntro
-        title={t("afkSettings.sections.respond")}
-        description={t("afkSettings.intro.respond")}
-      />
+    <Block>
       <ToggleRow
-        emphasis
+        lead
         title={t("afkSettings.respond.enabled")}
+        help={t("afkSettings.intro.respond")}
         checked={r.enabled}
         onCheckedChange={(v) => page.patch("autoRespond", { enabled: v })}
       />
-      <Dependent enabled={r.enabled}>
+      <Fold open={r.enabled}>
         <ToggleRow
           title={t("afkSettings.respond.sound")}
           checked={r.soundEnabled}
           onCheckedChange={(v) => page.patch("autoRespond", { soundEnabled: v })}
         />
-        <ToggleRow
-          title={t("afkSettings.respond.colors")}
-          help={t("afkSettings.respond.colorsHelp")}
-          checked={r.matchColors}
-          onCheckedChange={(v) => page.patch("autoRespond", { matchColors: v })}
-        />
-        <div className="py-3">
-          <p className="mb-2 text-[13.5px] font-medium text-bone-50">
+        {/* For patterns only: shown once a rule has one (or while it is on). */}
+        {r.matchColors || draft.rules.some((rule) => rule.isRegex) ? (
+          <ToggleRow
+            title={t("afkSettings.respond.colors")}
+            help={t("afkSettings.respond.colorsHelp")}
+            checked={r.matchColors}
+            onCheckedChange={(v) => page.patch("autoRespond", { matchColors: v })}
+          />
+        ) : null}
+        <WideRow>
+          <p className="mb-2 text-[13.5px] font-medium text-bone-100">
             {t("afkSettings.respond.rules")}
           </p>
           {draft.rules.length ? (
             <ul className="flex flex-col gap-3">
-              {draft.rules.map((rule) => (
+              {draft.rules.map((rule, i) => (
                 <RuleCard
                   key={rule.key}
                   rule={rule}
+                  index={i}
                   errorFor={errorFor}
                   onChange={(next) =>
                     setRules((list) => list.map((x) => (x.key === rule.key ? next : x)))
@@ -646,9 +718,9 @@ export function RespondSection({ draft, setDraft, errorFor }: SectionProps) {
           >
             {t("afkSettings.respond.add")}
           </Button>
-        </div>
-        <Hint className="max-w-[62ch]">{t("afkSettings.respond.help")}</Hint>
-      </Dependent>
-    </>
+          <Hint className="mt-3 max-w-[62ch]">{t("afkSettings.respond.help")}</Hint>
+        </WideRow>
+      </Fold>
+    </Block>
   );
 }

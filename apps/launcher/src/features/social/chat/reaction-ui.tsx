@@ -5,7 +5,15 @@
 // quick row (the toolbar's 😊+, the right click's top row) offers six emoji and "+", the whole
 // picker; a pick lands on its chip with a small pop.
 import { DotsThree, Plus } from "@phosphor-icons/react";
-import { Button, cn, easeOutExpo, IconButton, Menu, useMotionPrefs } from "@pl/ui";
+import {
+  Button,
+  cn,
+  easeOutExpo,
+  IconButton,
+  Menu,
+  swallowDismissClick,
+  useMotionPrefs,
+} from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
 import { memo, useRef, useState } from "react";
@@ -263,6 +271,7 @@ function Chip({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
+          onPointerDownOutside={swallowDismissClick}
           side="top"
           align="start"
           sideOffset={6}

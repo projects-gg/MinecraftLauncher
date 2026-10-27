@@ -27,6 +27,98 @@ export interface Draft {
   config: CloudEditConfig;
 }
 
+/**
+ * The panel's rail (SHEET-UX), the desktop panel's names: where it connects, what it types, what it
+ * does in the game, how it answers.
+ */
+export const PARTS = ["connection", "commands", "game", "replies"] as const;
+export type Part = (typeof PARTS)[number];
+
+/** Fields of the "general" place that live outside Bağlantı. */
+const GENERAL_PART: Record<string, Part> = {
+  antiAfk: "game",
+  inventory: "game",
+  movement: "game",
+  owner: "replies",
+};
+
+/** The section a problem shows in. */
+export function partOf(issue: Issue): Part {
+  if (issue.place === "commands") return "commands";
+  if (issue.place === "rules") return "replies";
+  return GENERAL_PART[issue.field] ?? "connection";
+}
+
+/**
+ * Where a stop for a wrong password sends the player (the card says "Ayarlar'da giriş komutunu
+ * düzelt" and the machine names no row): the section holding a login line, a command first.
+ */
+export function loginPart(view: CloudEditData, draft: Draft): Part | null {
+  if (!stoppedOnPassword(view)) return null;
+  return loginRow(draft)?.place === "rules" ? "replies" : "commands";
+}
+
+const stoppedOnPassword = (view: CloudEditData) =>
+  view.account.hold?.kind === "cause" && view.account.hold.cause === "wrongPassword";
+
+const isLogin = (words: Words) =>
+  words.kind !== "plain" || looksSensitive(withoutLeadingIgnorable(words.text));
+
+/** The first row holding a login: a command first, else a reply. */
+function loginRow(draft: Draft): { place: "commands" | "rules"; index: number } | null {
+  const command = draft.config.commands.findIndex((c) => isLogin(c.words));
+  if (command >= 0) return { place: "commands", index: command };
+  const rule = draft.config.rules.findIndex((r) => isLogin(r.reply));
+  return rule >= 0 ? { place: "rules", index: rule } : null;
+}
+
+/**
+ * The login line a stop for a wrong password points at (the machine names no row). Shown with
+ * the rest, never blocking (as `heldIssue`), while the line still has the stored words.
+ */
+export function passwordIssue(view: CloudEditData, draft: Draft): Issue | null {
+  if (!stoppedOnPassword(view)) return null;
+  const row = loginRow(draft);
+  if (!row) return null;
+  const same = (a: Words, b: Words | undefined) => JSON.stringify(a) === JSON.stringify(b);
+  if (row.place === "commands") {
+    const command = draft.config.commands[row.index];
+    const stored = view.config.commands.find((c) => c.id === command?.id)?.words;
+    return command && same(command.words, stored)
+      ? { place: "commands", index: row.index, field: "text", problem: "wrongPassword" }
+      : null;
+  }
+  const rule = draft.config.rules[row.index];
+  const stored = view.config.rules.find((r) => r.id === rule?.id)?.reply;
+  return rule && same(rule.reply, stored)
+    ? { place: "rules", index: row.index, field: "reply", problem: "wrongPassword" }
+    : null;
+}
+
+/** What each section edits (every field of the draft belongs to one). */
+const partValue = (draft: Draft, part: Part): unknown => {
+  switch (part) {
+    case "connection":
+      return [draft.name, draft.host, draft.port, draft.version, draft.lang];
+    case "commands":
+      return draft.config.commands;
+    case "game":
+      return [draft.config.antiAfk, draft.config.inventory, draft.config.movement];
+    case "replies":
+      return [draft.config.owner, draft.config.rules];
+  }
+};
+
+/** The sections holding edits not saved yet. */
+export function unsavedParts(draft: Draft, baseline: Draft): Set<Part> {
+  return new Set(
+    PARTS.filter(
+      (part) =>
+        JSON.stringify(partValue(draft, part)) !== JSON.stringify(partValue(baseline, part)),
+    ),
+  );
+}
+
 export const TRIGGERS = ["join", "start", "reconnect", "interval", "daily"] as const;
 export type Trigger = (typeof TRIGGERS)[number];
 export const SOURCES = ["any", "player", "private", "server"] as const;

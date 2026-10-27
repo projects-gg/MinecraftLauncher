@@ -16,7 +16,6 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
-  Chip,
   ContentIcon,
   ContextMenu,
   cn,
@@ -53,6 +52,8 @@ import {
 } from "./cloud/use-cloud";
 import { afkFailed, isFriendly, runAfk } from "./errors";
 import { AfkPrimaryAction, primaryAction } from "./primary-action";
+import { draftKey, useAfkDrafts } from "./settings/drafts";
+import { SettingsButton } from "./settings/settings-button";
 import { AfkSettingsSheet, useAfkReconnect } from "./settings/settings-sheet";
 import { StateLine } from "./state-line";
 
@@ -242,7 +243,7 @@ function AfkCard({
       }}
       className="flex"
     >
-      <ContextMenu items={items}>
+      <ContextMenu items={items} title={account.nickname}>
         <div
           className={cn(
             "glass relative flex w-full flex-col rounded-[var(--radius-panel)] p-3.5",
@@ -257,23 +258,14 @@ function AfkCard({
               <h3 className="truncate font-display text-[15px] font-semibold text-bone-50">
                 {account.nickname}
               </h3>
-              {/* The address keeps its line: the version chip moves under it when both do not
-                  fit (three cards in a row at 1200 px, "Automatic version" in English). */}
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ash-300">
-                <span
-                  className="min-w-0 max-w-full truncate"
-                  title={account.server}
-                  data-selectable
-                >
-                  {account.server}
-                </span>
-                {!account.mcVersionRecommended ? (
-                  <Chip className="shrink-0">
-                    {account.mcVersion === "auto"
-                      ? t("afk.versionAuto")
-                      : t("afk.versionPinned", { version: account.mcVersion })}
-                  </Chip>
-                ) : null}
+              {/* The address alone: the game version is a setting, not a state, and a pill
+                  beside it read as a badge with nothing to act on (SHEET-UX). */}
+              <p
+                className="truncate text-[12.5px] text-ash-300"
+                title={account.server}
+                data-selectable
+              >
+                {account.server}
               </p>
             </div>
             <Menu
@@ -285,6 +277,10 @@ function AfkCard({
                 />
               }
               items={items}
+              // Turned upwards it would sit under the "⋯" of the card above; opened beside it, the
+              // name at its top says whose it is.
+              besideWhenNoRoom
+              title={account.nickname}
             />
           </div>
 
@@ -336,10 +332,10 @@ function AfkCard({
             <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
               {t("afk.console")}
             </Button>
-            <IconButton
+            <SettingsButton
+              kind="desktop"
+              id={account.id}
               label={t("afk.settings")}
-              icon={<GearSix size={17} />}
-              size="sm"
               onClick={onSettings}
             />
           </div>
@@ -455,6 +451,8 @@ export function AfkPage() {
   const remove = (account: AfkAccount) => {
     if (settingsId === account.id) setSettingsId(null);
     if (consoleId === account.id) setConsoleId(null);
+    // Its unsaved settings go with it.
+    useAfkDrafts.getState().hold(draftKey("desktop", account.id), null);
     api
       .afkRemove(account.id)
       .catch((error: unknown) => afkFailed(error, t("afk.removeFailed")))

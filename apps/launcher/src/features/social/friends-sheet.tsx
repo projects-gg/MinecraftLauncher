@@ -14,6 +14,7 @@ import {
   Skeleton,
   scrimMotion,
   sheetMotion,
+  sheetOutside,
   useInteractionMotion,
 } from "@pl/ui";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
@@ -191,17 +192,8 @@ export function FriendsSheet() {
                     returnFocus.focus();
                   }
                 }}
-                // Toasts live outside the sheet: answering one must not close it.
-                onPointerDownOutside={(event) => {
-                  if ((event.target as Element | null)?.closest?.("[data-sonner-toaster]")) {
-                    event.preventDefault();
-                  }
-                }}
-                onFocusOutside={(event) => {
-                  if ((event.target as Element | null)?.closest?.("[data-sonner-toaster]")) {
-                    event.preventDefault();
-                  }
-                }}
+                // A press outside closes it; answering a toast does not.
+                {...sheetOutside}
               >
                 <GatedMotion.aside
                   tabIndex={-1}
