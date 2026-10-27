@@ -4,7 +4,7 @@
 // - `crewApproval`: the player leads "Gece Kartalları", which approves newcomers: two requests
 //   wait, its invite link is on, two plans ahead (the first with answers), 6 h together this week;
 //   `crewRequestLive`: the same, and a request arrives live (`&liveAt=<ms>`);
-// - `crewPlans`: a member of it (Ayşe leads): a plan is under way, the player said "Geliyorum",
+// - `crewPlans`: a member of it (GeceKurdu_ leads): a plan is under way, the player said "Geliyorum",
 //   another is tomorrow; `crewPlanLive`: a crewmate makes one live;
 // - `crewAsk`: several crews; an invite link to "Skyblock Ustaları" (approving) opens as
 //   `projects://crew/…` would; `&asked=1`: the player's request to it waits already;
@@ -77,15 +77,15 @@ function previewRequests(): JoinRequest[] {
   return [
     {
       id: "601",
-      name: "Kerem",
-      username: "keremtr",
+      name: "SessizOkcu",
+      username: "sessizokcu",
       avatar: "preset:lantern",
       sentAt: now() - 3 * 3600,
     },
     {
       id: "604",
-      name: "Zeynep",
-      username: "zeynep.mc",
+      name: "ZumrutKilic",
+      username: "zumrutkilic",
       avatar: "preset:fox",
       sentAt: now() - 25 * 60,
     },
@@ -126,28 +126,28 @@ function plan(
 
 /** `&crowd=1`: 22 more crewmates, for a plan whose answers list pages (FIX2). */
 const CROWD = [
-  "Deniz",
-  "Ece",
-  "Mert",
-  "Zeynep",
-  "Kerem",
-  "Elif",
-  "Emir",
-  "Defne",
-  "Berk",
-  "Ada",
-  "Yiğit",
-  "Duru",
-  "Kaan",
-  "Lina",
-  "Arda",
-  "Nehir",
-  "Çınar",
-  "Asya",
-  "Ozan",
-  "İpek",
-  "Selin",
-  "Toprak",
+  "PixelAvci",
+  "Lavci_42",
+  "ElmasKazma",
+  "ZumrutKilic",
+  "SessizOkcu",
+  "NetherKral",
+  "CraftTilki",
+  "xNightFoxTR",
+  "BlazeKral",
+  "PikselKedi",
+  "YildizTozu",
+  "RuzgarBekcisi",
+  "ShadowAvci",
+  "SkyBlokcu",
+  "TasDevi",
+  "MadenKrali",
+  "KomurTozu",
+  "BuzKiran",
+  "KristalKule",
+  "OduncuTR",
+  "Obsidyen77",
+  "Zirve_34",
 ];
 const CROWD_FACES = ["fox", "wolf", "knight", "axolotl", "lantern", "wizard", "golden-dragon"];
 
@@ -196,8 +196,8 @@ function previewPlans(
 ): CrewPlan[] {
   const team = crews[0];
   if (!team) return [];
-  const ayse = { id: "301", name: "Ayşe" };
-  const me = { id: "100", name: "EjderAvcısı" };
+  const ayse = { id: "301", name: "GeceKurdu_" };
+  const me = { id: "100", name: "EjderAvcisi" };
   const more = crowd ? crowdAnswers() : [];
   if (scenario === "crewApproval" || scenario === "crewRequestLive") {
     const tonight = at(now() + 3 * 3600);
@@ -251,7 +251,7 @@ function previewPlans(
         team,
         "d1b2c3d4e5f60718",
         at(now() + 26 * 3600),
-        { id: "302", name: "KorAteşi" },
+        { id: "302", name: "KorAtesi" },
         [{ id: "302", answer: "yes" }],
         undefined,
         notes,
@@ -374,8 +374,8 @@ export function startWave2(ctx: Wave2Context) {
       if (!crew) return;
       const request: JoinRequest = {
         id: "605",
-        name: "Ece",
-        username: "ece.tr",
+        name: "Lavci_42",
+        username: "lavci_42",
         avatar: "preset:axolotl",
         sentAt: now(),
       };
@@ -391,7 +391,7 @@ export function startWave2(ctx: Wave2Context) {
         crew,
         "e1b2c3d4e5f60718",
         at(now() + 2 * 86_400),
-        { id: "701", name: "Yusuf" },
+        { id: "701", name: "MaviElmas" },
         [{ id: "701", answer: "yes" }],
         "Skyblock, adada buluşalım",
         ctx.view().crew.planNotes,

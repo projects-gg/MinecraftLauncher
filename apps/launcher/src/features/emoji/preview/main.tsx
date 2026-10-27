@@ -41,7 +41,7 @@ type Message =
 
 const WORDS = {
   tr: {
-    name: "Ayşe",
+    name: "GeceKurdu_",
     status: "Oyunda",
     field: "Mesaj yaz",
     send: "Gönder",
@@ -54,7 +54,7 @@ const WORDS = {
     ] as Message[],
   },
   en: {
-    name: "Ayşe",
+    name: "GeceKurdu_",
     status: "In game",
     field: "Write a message",
     send: "Send",

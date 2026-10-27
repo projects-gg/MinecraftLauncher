@@ -1,16 +1,16 @@
 // Browser preview of crew tags (TEAM6), on mock-social.ts's data: tags before names, their cards,
 // hidden crews, requests from a tag's card and the crew chat's "Hoş geldin" line. The switches (from
 // the page URL, see mock-social.ts):
-// - `badges`: several crews; the player wears "GKR". Friends wear tags of the player's crews (Ayşe
-//   "SKY", KorAteşi "GKR": "Sen de bu ekiptesin"), of a crew that takes requests (Mert "YLD":
-//   "Katılma isteği gönder"), of a full one (Deniz "RSM": no row), of one that invited the player
-//   (Elif Su "GBY": "Kabul et") and of one the player asked already (Bora "ATL": "İsteğin
-//   bekliyor"); a crewmate who is no friend wears "LAV" (no row). "PvP Kulübü" is hidden. Kerem asked
-//   to join "Gece Kartalları" through Ayşe's tag ("Ayşe aracılığıyla"); a plan tonight has answers;
-// - `badgesLive`: the same, and tags change live (Zeynep puts one on, Ayşe switches, Mert takes his
+// - `badges`: several crews; the player wears "GKR". Friends wear tags of the player's crews (GeceKurdu_
+//   "SKY", KorAtesi "GKR": "Sen de bu ekiptesin"), of a crew that takes requests (ElmasKazma "YLD":
+//   "Katılma isteği gönder"), of a full one (PixelAvci "RSM": no row), of one that invited the player
+//   (NetherKral "GBY": "Kabul et") and of one the player asked already (KizilEjder "ATL": "İsteğin
+//   bekliyor"); a crewmate who is no friend wears "LAV" (no row). "PvP Kulübü" is hidden. SessizOkcu asked
+//   to join "Gece Kartalları" through GeceKurdu_'s tag ("GeceKurdu_ aracılığıyla"); a plan tonight has answers;
+// - `badgesLive`: the same, and tags change live (ZumrutKilic puts one on, GeceKurdu_ switches, ElmasKazma takes his
 //   off; `&liveAt=<ms>`);
 // - `badgesHidden`: the player wears "PVP", and its leader hides the crew live (the toast);
-// - `badgesJoined`: Ece joins "Gece Kartalları" live (its chat's "Hoş geldin" line, with
+// - `badgesJoined`: Lavci_42 joins "Gece Kartalları" live (its chat's "Hoş geldin" line, with
 //   `&chat2=1` the "Selam" sticker), and the player's own arrival shows in "Skyblock Ustaları"'s
 //   chat;
 // - `&badges=0`: a service from before TEAM6 (nothing of it shows); `&requests=0`: without requests
@@ -184,23 +184,23 @@ export function badgesSnapshot(snapshot: SocialSnapshot, ctx: BadgesContext): So
     ...crew,
     hidden: crew.id === PVP && ctx.scenario !== "badgesHidden",
     badgeRequests: true,
-    // Kerem asked through Ayşe's tag; Zeynep by the crew's code.
+    // SessizOkcu asked through GeceKurdu_'s tag; ZumrutKilic by the crew's code.
     requests:
       crew.id === GKR
         ? ([
             {
               id: "601",
-              name: "Kerem",
-              username: "keremtr",
+              name: "SessizOkcu",
+              username: "sessizokcu",
               avatar: "preset:lantern",
               sentAt: now() - 40 * 60,
               via: "301",
-              viaName: "Ayşe",
+              viaName: "GeceKurdu_",
             },
             {
               id: "604",
-              name: "Zeynep",
-              username: "zeynep.mc",
+              name: "ZumrutKilic",
+              username: "zumrutkilic",
               avatar: "preset:fox",
               sentAt: now() - 3 * 3600,
             },
@@ -220,7 +220,7 @@ export function badgesSnapshot(snapshot: SocialSnapshot, ctx: BadgesContext): So
     frame: "shield",
     motto: other.gby?.motto ?? "",
     members: 6,
-    from: { id: "305", name: "Elif Su", username: "elifsu", avatar: "preset:axolotl" },
+    from: { id: "305", name: "NetherKral", username: "netherkral", avatar: "preset:axolotl" },
     sentAt: now() - 20 * 60,
   };
   const asked: TeamRequest = {
@@ -239,7 +239,7 @@ export function badgesSnapshot(snapshot: SocialSnapshot, ctx: BadgesContext): So
     id: "e9b2c3d4e5f60718",
     crew: GKR,
     by: "301",
-    byName: "Ayşe",
+    byName: "GeceKurdu_",
     mine: false,
     canCancel: true,
     at: tonight,
@@ -326,8 +326,8 @@ export function startBadges(ctx: BadgesContext) {
                   ...c.members,
                   {
                     id: "605",
-                    name: "Ece",
-                    username: "ece.tr",
+                    name: "Lavci_42",
+                    username: "lavci_42",
                     avatar: "preset:axolotl",
                     role: "member" as const,
                     moderator: false,
@@ -349,7 +349,7 @@ export function startBadges(ctx: BadgesContext) {
           {
             crew: GKR,
             id: "605",
-            name: "Ece",
+            name: "Lavci_42",
             mine: false,
             at: now(),
             greetUntil: now() + GREET_SECONDS,
