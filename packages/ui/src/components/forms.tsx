@@ -183,7 +183,10 @@ export interface SelectOption<T extends string> {
   value: T;
   label: string;
   hint?: string;
-  /** A short gold tag after the label ("Önerilen"), also shown in the closed select. */
+  /**
+   * A short quiet tag after the label ("Önerilen"), also shown in the closed select. Neutral, never
+   * gold (AFK-CLEAR): the gold is the page's main action and the chosen plates.
+   */
   badge?: string;
 }
 
@@ -223,8 +226,8 @@ const triggerClass =
 
 function Badge({ text }: { text: string }) {
   return (
-    // 11 px: nothing is smaller (design guide §3).
-    <Chip tone="gold" className="ml-2 h-[18px] px-1.5 align-[1px] text-[11px]">
+    // 11 px: nothing is smaller (design guide §3). Neutral, the words quieter than the label's.
+    <Chip tone="neutral" className="ml-2 h-[18px] px-1.5 align-[1px] text-[11px] text-ash-300">
       {text}
     </Chip>
   );
@@ -790,7 +793,9 @@ export function Slider({
         <span id={id} className="text-[13px] font-medium text-bone-100">
           {label}
         </span>
-        <span className="font-display text-[15px] font-semibold text-gold-300 tabular-nums">
+        {/* The value in bone, not gold: the gold is the track's fill and the page's main action
+            (AFK-CLEAR; Studio's one-gold rule, design.md §9). */}
+        <span className="font-display text-[15px] font-semibold text-bone-50 tabular-nums">
           {format ? <SliderValue text={format(value)} /> : value}
         </span>
       </div>
