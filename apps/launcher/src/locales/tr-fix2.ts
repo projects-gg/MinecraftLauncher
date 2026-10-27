@@ -72,7 +72,7 @@ export const trFix2 = {
     movingBody: "{{server}} sunucusuna geçiliyor.",
     closingTitle: "Oyun kapanıyor",
     saving: "Dünyan kaydediliyor.",
-    closingBody: "Oyun kapanınca {{server}} sunucusuna bağlanacak.",
+    closingBody: "Kapanınca {{server}} sunucusunda yeniden açılacak.",
     overdueTitle: "Oyun henüz kapanmadı",
     overdueBody: "Zorla kapatırsan tek oyunculu dünyadaki kaydedilmemiş ilerlemen kaybolabilir.",
     wait: "Beklemeye devam et",

@@ -399,9 +399,10 @@ function othersWords(
 /**
  * The bar's quiet "who is in game" (PLAY-AGAIN): their faces, the name (or the count) over
  * "Oyunda". The names come under the pointer in the app's tooltip: always while the bar counts
- * them ("2 hesap"), a single name only when it is cut or hidden (repeating the words on screen is
- * noise). In a narrow bar (1024 px) the name gives way to the faces (third look: two cut names side
- * by side, "Ejderha A…" and "EjderAvci…", read as one thing twice), so "Devam et" keeps its world.
+ * them ("2 hesap"), a single name only when it is cut (repeating the words on screen is noise). In
+ * a narrow bar (1024 px) the faces give way and the name is the last thing cut: a bare "Oyunda"
+ * beside OYNA read as the selected account in game (fourth look), and "Devam et" keeps its world
+ * whole while this line gives (third look: two cut names side by side read as one thing twice).
  */
 function OthersInGame({
   sentence,
@@ -423,13 +424,10 @@ function OthersInGame({
     <span
       aria-hidden
       className="flex min-w-0 items-center gap-2.5"
-      onPointerEnter={() => {
-        const line = whoRef.current;
-        setCut(isCut(line) || (line !== null && line.getClientRects().length === 0));
-      }}
+      onPointerEnter={() => setCut(isCut(whoRef.current))}
     >
       {faces.length > 0 ? (
-        <span className="flex shrink-0 -space-x-2">
+        <span className="flex shrink-0 -space-x-2 @max-[560px]/bar:hidden">
           {faces.map((account) => (
             <AccountFace
               key={account.id}
@@ -441,13 +439,7 @@ function OthersInGame({
         </span>
       ) : null}
       <span className="min-w-0 leading-tight">
-        <span
-          ref={whoRef}
-          className={cn(
-            "block truncate text-[13px] text-ash-300",
-            faces.length > 0 && "@max-[560px]/bar:hidden",
-          )}
-        >
+        <span ref={whoRef} className="block truncate text-[13px] text-ash-300">
           {who}
         </span>
         {/* One word that never breaks (round 4: "Oyund / a" when the bar was full). */}
@@ -508,8 +500,17 @@ function StatusArea({
             {...swapIn(reduce)}
           >
             <div className="flex min-w-0 items-center gap-4">
-              {/* "Devam et" and the last-played line share one cell and cross-fade in place. */}
-              <div className="grid min-w-[120px] shrink *:[grid-area:1/1]">
+              {/* "Devam et" and the last-played line share one cell and cross-fade in place. Beside
+                  the quiet "who is in game" line it keeps its width (capped) and that line gives
+                  instead: one cut name at most (third and fourth looks). */}
+              <div
+                className={cn(
+                  "grid *:[grid-area:1/1]",
+                  othersText
+                    ? "max-w-[200px] shrink-0 @min-[600px]/bar:max-w-[300px]"
+                    : "min-w-[120px] shrink",
+                )}
+              >
                 <AnimatePresence initial={false}>
                   {selected && resume ? (
                     <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
@@ -545,9 +546,7 @@ function StatusArea({
                 {othersText ? (
                   <motion.div
                     key="others"
-                    // In a narrow bar it is only faces and "Oyunda": it keeps that room, the world's
-                    // name gives first.
-                    className="flex max-w-[200px] min-w-0 shrink items-center border-l border-white/8 pl-4 @max-[560px]/bar:shrink-0"
+                    className="flex max-w-[200px] min-w-0 shrink items-center border-l border-white/8 pl-4"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.24, ease: easeOutExpo } }}
                     exit={{ opacity: 0, transition: { duration: 0.12, ease: easeOutExpo } }}

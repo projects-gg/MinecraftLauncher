@@ -12,7 +12,9 @@ export const trPlayAgain = {
   sameServer: "İki oyun aynı sunucuya girerse biri atılır.",
   /** Before any extra game, when the computer's free memory would not hold it (its own line). */
   memory: "Bilgisayarında boş bellek az, oyunlar takılabilir.",
+  /** The answer after "Bir oyun daha aç" (the same verb), and after OYNA ("Oyna" stays "Oyna": §8). */
   confirm: "Yine de aç",
+  confirmPlay: "Yine de oyna",
   /** OYNA while it says "Oyunda": under the pointer it says what a press does (a verb: third look). */
   runningHover: "Bir oyun daha aç",
   /** OYNA's name for screen readers while it says "Oyunda": what a press does. */
@@ -23,10 +25,9 @@ export const trPlayAgain = {
   othersMany: "{{total}} hesap oyunda",
   /** The same as the bar shows it: the name (or the count) over "Oyunda", as the account menu. */
   othersCount: "{{total}} hesap",
-  /** "Devam et" while its world is open in a game: where it is (in its label's place; short, so the
-   * world's name keeps its room at 1024 px), and under the pointer whose game has it when that is
-   * one account. */
-  worldBusy: "Başka oyunda",
+  /** "Devam et" while its world is open in a game: where it is (in its label's place), and under
+   * the pointer whose game has it when that is one account. */
+  worldBusy: "Başka oyunda açık",
   worldBusyName: "{{name}} bu dünyada",
   worldBusyAria: "{{world}}: {{reason}}",
   /** A world's "Oyna" while the world is open in a game (said before any question). */
