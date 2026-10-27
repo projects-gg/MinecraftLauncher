@@ -1081,6 +1081,11 @@ async fn sync_set(
         )
         .await
         .map_err(pack_error)?;
+        crate::commands::modsets::seed_mod_settings(
+            game_dir,
+            &plan.placed_mods(&manifest.projects.items),
+        )
+        .await;
     }
     if let Some(managed) = instance.managed_pack.as_mut()
         && managed.version != manifest.version_id
