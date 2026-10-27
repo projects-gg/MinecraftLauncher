@@ -39,7 +39,7 @@ export const trChat = {
     cleared: "Geçmiş temizlendi",
     mute: "Sessize al",
     unmute: "Sesi aç",
-    newest: "En yeni mesajlar",
+    newest: "Son mesajlara in",
     menu: "Mesaj seçenekleri",
     conversation: "Konuşma seçenekleri",
   },

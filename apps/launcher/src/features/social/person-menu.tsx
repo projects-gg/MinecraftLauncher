@@ -31,7 +31,7 @@ import {
 } from "@phosphor-icons/react";
 import { Button, ContextMenu, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
 import type { TFunction } from "i18next";
-import { type ReactElement, useMemo, useRef } from "react";
+import { type ReactElement, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { announce } from "@/features/accounts/use-accounts";
@@ -41,15 +41,17 @@ import { useHostUi } from "@/features/host/store";
 import { api } from "@/lib/api";
 import type { HostView } from "@/lib/api/host-types";
 import type { SocialProfile, SocialSnapshot, SocialTeam, TeamMember } from "@/lib/api/social-types";
+import { useLaunch } from "@/stores/launch";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { directConversation } from "./chat/conversations";
+import { gameNow } from "./connect";
 import { type InviteState, inviteTargets } from "./crews";
 import { openInDiscord } from "./discord-link";
 import { REST } from "./groups";
-import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
+import { joinOrAsk, PROJECTS } from "./join-dialog";
 import { type PersonAction, peopleMenu, personMenu, rowsOf, without } from "./menus";
 import { isJoinable, notifiesOnline } from "./model";
-import { canInvite } from "./play-together";
+import { canInvite, onTarget } from "./play-together";
 import { SocialFace } from "./social-face";
 import { type SocialPage, useSocialPrefs, useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
@@ -244,25 +246,41 @@ export interface PersonEnv {
   host: HostView;
 }
 
-export function usePersonEnv(): PersonEnv {
+/**
+ * What a person's menu reads, only while `live` (CHAT-PROD): otherwise it reads nothing and draws
+ * nothing again when the friends service changes. A long chat shows hundreds of faces and names,
+ * each with its menu, and every presence change or unread count worked all of them out again (a
+ * second per new message in a crew chat of 600 messages).
+ */
+function usePersonEnvWhile(live: boolean): PersonEnv | null {
   const { t } = useTranslation();
-  const view = useSocialUi((s) => s.view);
-  const cooldown = useSocialUi((s) => s.inviteCooldown);
-  const prefs = useSocialPrefs();
-  const here = useThere(PROJECTS);
+  const view = useSocialUi((s) => (live ? s.view : null));
+  const cooldown = useSocialUi((s) => (live ? s.inviteCooldown : null));
+  const favorites = useSocialPrefs((s) => (live ? s.favorites : null));
+  const onlineAlerts = useSocialPrefs((s) => (live ? s.onlineAlerts : null));
+  const notifyFavoriteOnline = useSocialPrefs((s) => live && s.notifyFavoriteOnline);
+  const notifyFavoriteProjects = useSocialPrefs((s) => live && s.notifyFavoriteProjects);
+  // "Katıl" is off while the player's game is on projects.gg already (useThere's rule).
+  const gameOpen = useLaunch((s) => live && gameNow(s.phase) === "open");
   // World sharing (HOST1): menus render again only when what they show of it changes.
-  const hostKey = useHostUi((s) => hostMenuKey(s.view));
+  const hostKey = useHostUi((s) => (live ? hostMenuKey(s.view) : ""));
   // biome-ignore lint/correctness/useExhaustiveDependencies: the key says when it changed
   const host = useMemo(() => useHostUi.getState().view, [hostKey]);
+  if (!view || !cooldown || !favorites || !onlineAlerts) return null;
+  const prefs = { favorites, onlineAlerts, notifyFavoriteOnline, notifyFavoriteProjects };
   return {
     t,
     view,
     cooldown,
-    favorites: prefs.favorites,
+    favorites,
     notifies: (id) => notifiesOnline(prefs, id),
-    here,
+    here: gameOpen && onTarget(PROJECTS, view.activity),
     host,
   };
+}
+
+export function usePersonEnv(): PersonEnv {
+  return usePersonEnvWhile(true) as PersonEnv;
 }
 
 /** The person's menu rows, worded, with their icons and what they do. */
@@ -672,9 +690,15 @@ export function PersonContextMenu({
   /** One element: it gets the right click's handlers. */
   children: ReactElement;
 }) {
-  const items = usePersonItems(person, place);
+  // Its rows are worked out while it is open (CHAT-PROD; usePersonEnvWhile) and kept for its
+  // closing fade. Only the player's own menu is empty (menus.ts → personMenu).
+  const [open, setOpen] = useState(false);
+  const me = useSocialUi((s) => s.view.me?.id);
+  const env = usePersonEnvWhile(open);
+  const rows = useRef<Array<MenuItem | null>>([]);
+  if (env) rows.current = personItems(person, place ?? {}, env);
   return (
-    <ContextMenu items={items} disabled={!items.length}>
+    <ContextMenu items={rows.current} disabled={person.id === me} onOpenChange={setOpen}>
       {children}
     </ContextMenu>
   );
