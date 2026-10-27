@@ -1,7 +1,27 @@
 // SHEET-UX: one Backspace or Delete beside or inside a reply's placeholder takes the whole of it.
 import type { KeyboardEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { deleteWholeToken } from "./controls";
+import { cloudTokens, deleteWholeToken, desktopTokens } from "./controls";
+
+describe("token sets", () => {
+  const cloud = cloudTokens("Yazanın adı", (n) => `${n}. parça`);
+  const desktop = desktopTokens("Yazanın adı");
+
+  it("show a reply's placeholders by name and store them back as they were", () => {
+    const stored = "/msg {u} {1} davet listene eklendi.";
+    const shown = cloud.toShown(stored);
+    expect(shown).toBe("/msg {Yazanın adı} {1. parça} davet listene eklendi.");
+    expect(cloud.toStored(shown)).toBe(stored);
+    expect(desktop.toShown("Merhaba $u, sonra")).toBe("Merhaba {Yazanın adı}, sonra");
+    expect(desktop.toStored("Merhaba {Yazanın adı}, sonra")).toBe("Merhaba $u, sonra");
+  });
+
+  it("leave other braces and a broken name as plain words", () => {
+    expect(cloud.toStored("{Yazanın ad} {x} {10}")).toBe("{Yazanın ad} {x} {10}");
+    expect(cloud.toShown("{x} {0} {10}")).toBe("{x} {0} {10}");
+    expect("Selam {Yazanın adı}!".split(cloud.shown)).toEqual(["Selam ", "{Yazanın adı}", "!"]);
+  });
+});
 
 const CLOUD = /(\{(?:u|[1-9])\})/;
 const DESKTOP = /(\$u)/;

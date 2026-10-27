@@ -153,6 +153,8 @@ function RelogBlock({ draft, setDraft, errorFor }: SectionProps) {
             first ("Her kopuşta yeniden bağlan" under "Otomatik yeniden bağlan"; SHEET-UX). */}
         <SettingRow title={t("afkSettings.relog.when")}>
           <Segmented<"any" | "listed">
+            // A quiet plate: gold stays the save button's (the sixth look).
+            className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
             value={r.ignoreKickMessage ? "any" : "listed"}
             onValueChange={(v) => page.patch("autoRelog", { ignoreKickMessage: v === "any" })}
             label={t("afkSettings.relog.when")}

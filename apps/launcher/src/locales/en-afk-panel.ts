@@ -11,6 +11,7 @@ export const enAfkPanel = {
   unsavedSection: "unsaved changes",
   settingsUnsaved: "Settings, unsaved changes",
   use: "Use",
+  makeSecret: "Hide",
   ruleOrdinal: "Rule {{n}}",
   commandOrdinal: "Command {{n}}",
   barLabel: "Unsaved changes",

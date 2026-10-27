@@ -11,11 +11,12 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { Button, cn, Field, IconButton, Input, Segmented } from "@pl/ui";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { insertToken } from "../cloud/placeholders";
 import {
   Block,
+  desktopTokens,
   ErrorText,
   Fold,
   Hint,
@@ -24,7 +25,7 @@ import {
   RangeRow,
   SettingRow,
   ToggleRow,
-  TokenInput,
+  TokenField,
   TriggerField,
   WideRow,
 } from "./controls";
@@ -389,6 +390,8 @@ function TaskCard({
           repeat on its own switch, both on the card's right edge (three like switches overlapped). */}
       <SettingRow title={t("afkPanel.task.onJoin")}>
         <Segmented<"every" | "first" | "never">
+          // A quiet plate: gold stays the save button's (the sixth look).
+          className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
           value={join}
           onValueChange={(v) => set({ onLogin: v === "every", onFirstLogin: v === "first" })}
           label={t("afkPanel.task.onJoin")}
@@ -509,9 +512,6 @@ export function CommandsSection(props: SectionProps) {
 /** A rule's three replies: to public chat, to private messages, to the server's own lines. */
 type ReplyField = "reply" | "privateReply" | "otherReply";
 
-/** The desktop client's placeholder: `$u` is the sender's name. */
-const DESKTOP_TOKENS = /(\$u)/;
-
 function RuleCard({
   rule,
   index,
@@ -539,14 +539,15 @@ function RuleCard({
     otherReply: useRef<HTMLInputElement>(null),
   };
   const [last, setLast] = useState<ReplyField>("reply");
-  const sender = () => t("afkPanel.rule.sender");
+  // The fields show "$u" by name; a chip goes in where the caret is, in those words.
+  const tokens = useMemo(() => desktopTokens(t("afkPanel.rule.sender")), [t]);
   const insertSender = () => {
     const input = refs[last].current;
-    const text = rule[last];
+    const text = tokens.toShown(rule[last]);
     const start = input?.selectionStart ?? text.length;
     const end = input?.selectionEnd ?? start;
-    const next = insertToken(text, start, end, "$u");
-    set({ [last]: next.text } as Partial<RuleRow>);
+    const next = insertToken(text, start, end, tokens.toShown("$u"));
+    set({ [last]: tokens.toStored(next.text) } as Partial<RuleRow>);
     requestAnimationFrame(() => {
       input?.focus();
       input?.setSelectionRange(next.caret, next.caret);
@@ -557,12 +558,12 @@ function RuleCard({
       <label htmlFor={id(field)} className="text-[13px] font-medium text-bone-100">
         {label}
       </label>
-      <TokenInput
+      <TokenField
         id={id(field)}
         value={rule[field]}
         onChange={(value) => set({ [field]: value } as Partial<RuleRow>)}
-        split={DESKTOP_TOKENS}
-        name={sender}
+        tokens={tokens}
+        maxLength={Number.MAX_SAFE_INTEGER}
         placeholder={field === "reply" ? t("afkSettings.respond.replyPlaceholder") : undefined}
         invalid={Boolean(replyError)}
         inputRef={refs[field]}
@@ -670,12 +671,15 @@ export function RepliesSection({ draft, setDraft, errorFor }: SectionProps) {
           checked={r.soundEnabled}
           onCheckedChange={(v) => page.patch("autoRespond", { soundEnabled: v })}
         />
-        <ToggleRow
-          title={t("afkSettings.respond.colors")}
-          help={t("afkSettings.respond.colorsHelp")}
-          checked={r.matchColors}
-          onCheckedChange={(v) => page.patch("autoRespond", { matchColors: v })}
-        />
+        {/* For patterns only: shown once a rule has one (or while it is on). */}
+        {r.matchColors || draft.rules.some((rule) => rule.isRegex) ? (
+          <ToggleRow
+            title={t("afkSettings.respond.colors")}
+            help={t("afkSettings.respond.colorsHelp")}
+            checked={r.matchColors}
+            onCheckedChange={(v) => page.patch("autoRespond", { matchColors: v })}
+          />
+        ) : null}
         <WideRow>
           <p className="mb-2 text-[13.5px] font-medium text-bone-100">
             {t("afkSettings.respond.rules")}

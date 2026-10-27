@@ -17,6 +17,8 @@ export const trAfkPanel = {
   settingsUnsaved: "Ayarlar, kaydedilmemiş değişiklik var",
   /** A list row's switch, right beside it ("Komutu kullan" is its name). */
   use: "Kullan",
+  /** A line's secret switch while it is not secret yet (pressed, it says "Gizli"). */
+  makeSecret: "Gizle",
   ruleOrdinal: "{{n}}. kural",
   commandOrdinal: "{{n}}. komut",
   /** The change bar's region. */

@@ -10,9 +10,8 @@ import { Button, cn, enter, IconButton, Input, leave, useMotionPrefs } from "@pl
 import { AnimatePresence, motion } from "motion/react";
 import { type Ref, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { deleteWholeToken, TokenText } from "../settings/controls";
+import { TokenField, type TokenSet } from "../settings/controls";
 import { cloudApi } from "./api";
-import { hasPlaceholder } from "./placeholders";
 import { looksSensitive } from "./sensitive";
 import { typed, type Words } from "./settings-model";
 
@@ -165,9 +164,6 @@ function Stored({
   );
 }
 
-/** A 7/24 Bulut reply's placeholders (`{u}`, `{1}`…), each piece of a split. */
-const CLOUD_TOKENS = /(\{(?:u|[1-9])\})/;
-
 export function WordsField({
   words,
   onChange,
@@ -181,7 +177,7 @@ export function WordsField({
   id,
   showLabel = false,
   mono = true,
-  tokenName,
+  tokens,
 }: {
   words: Words;
   onChange: (words: Words) => void;
@@ -198,12 +194,11 @@ export function WordsField({
   showLabel?: boolean;
   /** Commands look like what is typed into the game; a reply is a sentence (SHEET-UX). */
   mono?: boolean;
-  /** A reply's placeholders: their names, shown as chips while the field is not typed in. */
-  tokenName?: (token: string) => string;
+  /** A reply's placeholders, shown by name as chips (`TokenField`). */
+  tokens?: TokenSet;
 }) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
-  const [typing, setTyping] = useState(false);
   // "Değiştir" on a stored secret: what to go back to with "Vazgeç".
   const replaced = useRef<Words | null>(null);
   const [focusNext, setFocusNext] = useState(false);
@@ -245,50 +240,48 @@ export function WordsField({
   const secret = words.kind === "secret";
   const forced = looksSensitive(words.text);
   const kept = words.kind === "secret" && words.kept;
-  const chips = Boolean(tokenName) && !secret && !typing && hasPlaceholder(words.text);
   return (
     <div className="min-w-0 flex-1">
       {heading}
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
-          <Input
-            ref={inputRef}
-            id={fieldId}
-            aria-label={showLabel ? undefined : label}
-            value={words.text}
-            placeholder={replaced.current ? t("cloudAfk.settings.secret.newValue") : placeholder}
-            type={secret && !visible ? "password" : "text"}
-            maxLength={256}
-            spellCheck={false}
-            autoComplete={secret ? "new-password" : "off"}
-            data-1p-ignore=""
-            data-lpignore="true"
-            invalid={Boolean(error)}
-            autoFocus={autoFocus || focusNext}
-            onFocus={() => setTyping(true)}
-            onBlur={() => setTyping(false)}
-            // A placeholder goes in one press of Backspace or Delete, never half of it.
-            onKeyDown={
-              tokenName && !secret
-                ? (event) =>
-                    deleteWholeToken(event, CLOUD_TOKENS, (text) => onChange(typed(words, text)))
-                : undefined
-            }
-            onChange={(event) => onChange(typed(words, event.target.value))}
-            className={cn(
-              "h-9",
-              mono ? "font-mono text-[13px]" : "text-[13.5px]",
-              secret && "pr-10",
-              chips && "text-transparent",
-            )}
-          />
-          {chips && tokenName ? (
-            <TokenText
-              text={words.text}
-              split={CLOUD_TOKENS}
-              name={(piece) => tokenName(piece.slice(1, -1))}
+          {tokens && !secret ? (
+            // A reply's placeholders stay chips with their names, typing included.
+            <TokenField
+              id={fieldId}
+              label={showLabel ? undefined : label}
+              value={words.text}
+              tokens={tokens}
+              placeholder={placeholder}
+              invalid={Boolean(error)}
+              inputRef={inputRef}
+              autoFocus={autoFocus || focusNext}
+              autoComplete="off"
+              onChange={(text) => onChange(typed(words, text))}
             />
-          ) : null}
+          ) : (
+            <Input
+              ref={inputRef}
+              id={fieldId}
+              aria-label={showLabel ? undefined : label}
+              value={words.text}
+              placeholder={replaced.current ? t("cloudAfk.settings.secret.newValue") : placeholder}
+              type={secret && !visible ? "password" : "text"}
+              maxLength={256}
+              spellCheck={false}
+              autoComplete={secret ? "new-password" : "off"}
+              data-1p-ignore=""
+              data-lpignore="true"
+              invalid={Boolean(error)}
+              autoFocus={autoFocus || focusNext}
+              onChange={(event) => onChange(typed(words, event.target.value))}
+              className={cn(
+                "h-9",
+                mono ? "font-mono text-[13px]" : "text-[13.5px]",
+                secret && "pr-10",
+              )}
+            />
+          )}
           {secret ? (
             <IconButton
               label={
@@ -340,7 +333,7 @@ export function WordsField({
             ) : (
               <LockSimpleOpen size={14} aria-hidden />
             )}
-            {t("cloudAfk.settings.secret.mark")}
+            {secret ? t("cloudAfk.settings.secret.mark") : t("afkPanel.makeSecret")}
           </button>
         )}
       </div>

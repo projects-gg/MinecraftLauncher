@@ -6,6 +6,7 @@ import { Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  type InputHTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
@@ -568,43 +569,198 @@ export function TriggerField({
 }
 
 /**
- * A reply's placeholders as small chips with their names ("Yazanın adı", "1. parça") while its
- * field is not being typed in; typing shows the words as they are sent (`{u}`, `$u`), so the caret,
- * copy and paste stay plain text. Laid over the field, its text hidden meanwhile (SHEET-UX).
- * `split` has one capturing group: the whole token.
+ * A reply's placeholders shown by name: the stored token (`{u}` on 7/24 Bulut, `$u` for the
+ * desktop client) reads "{Yazanın adı}" in the field, typing included, and goes back as it is
+ * stored (SHEET-UX; raw codes mid-edit were deleted or broken).
  */
-export function TokenText({
-  text,
-  split,
-  name,
+export interface TokenSet {
+  toShown: (stored: string) => string;
+  toStored: (shown: string) => string;
+  /** A whole shown token ("{Yazanın adı}"), as one capturing group. */
+  shown: RegExp;
+}
+
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** 7/24 Bulut: `{u}` the sender's name, `{1}`…`{9}` the pattern's parts. */
+export function cloudTokens(sender: string, part: (n: number) => string): TokenSet {
+  const names = new Map<string, string>([["u", sender]]);
+  for (let n = 1; n <= 9; n++) names.set(String(n), part(n));
+  const back = new Map([...names].map(([id, name]) => [`{${name}}`, `{${id}}`]));
+  const shown = new RegExp(`(${[...back.keys()].map(escapeRe).join("|")})`);
+  return {
+    toShown: (stored) => stored.replace(/\{(u|[1-9])\}/g, (_, id: string) => `{${names.get(id)}}`),
+    toStored: (text) => text.replace(new RegExp(shown.source, "g"), (m) => back.get(m) ?? m),
+    shown,
+  };
+}
+
+/** The desktop client: `$u` the sender's name. */
+export function desktopTokens(sender: string): TokenSet {
+  const token = `{${sender}}`;
+  return {
+    toShown: (stored) => stored.replaceAll("$u", token),
+    toStored: (text) => text.replaceAll(token, "$u"),
+    shown: new RegExp(`(${escapeRe(token)})`),
+  };
+}
+
+/** Where every shown token starts and ends in `text`. */
+function tokenSpans(text: string, set: TokenSet): Array<[number, number]> {
+  return [...text.matchAll(new RegExp(set.shown.source, "g"))].map((m) => [
+    m.index ?? 0,
+    (m.index ?? 0) + m[0].length,
+  ]);
+}
+
+/**
+ * A plain reply's field with its placeholders as chips, also while typing: the field keeps the
+ * readable text ("{Yazanın adı}") and a layer over it draws each token as a chip in the very same
+ * letters, so the caret, selection, copy, paste and undo stay the field's own. The caret never
+ * rests inside a token, and Backspace or Delete takes a token whole. `value` is the stored text.
+ */
+export function TokenField({
+  id,
+  value,
+  onChange,
+  tokens,
+  placeholder,
+  invalid,
+  inputRef,
+  onFocus,
+  label,
+  maxLength = 256,
+  autoFocus,
+  className,
+  ...rest
 }: {
-  text: string;
-  split: RegExp;
-  name: (token: string) => string;
-}) {
-  const pieces = text.split(split);
+  id: string;
+  value: string;
+  onChange: (stored: string) => void;
+  tokens: TokenSet;
+  placeholder?: string;
+  invalid?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
+  onFocus?: () => void;
+  /** Its accessible name when no label stands over it. */
+  label?: string;
+  /** Of the stored text. */
+  maxLength?: number;
+  autoFocus?: boolean;
+  className?: string;
+} & Pick<InputHTMLAttributes<HTMLInputElement>, "autoComplete">) {
+  const [text, setText] = useState(() => tokens.toShown(value));
+  const own = useRef<HTMLInputElement | null>(null);
+  const layer = useRef<HTMLSpanElement | null>(null);
+  // Follow outside changes (an inserted chip, "Vazgeç") without fighting the typing.
+  useEffect(() => {
+    setText((current) => (tokens.toStored(current) === value ? current : tokens.toShown(value)));
+  }, [value, tokens]);
+  const chips = tokenSpans(text, tokens).length > 0;
+  // The layer moves with the field's own scroll (a long reply).
+  const follow = () => {
+    const input = own.current;
+    if (input && layer.current)
+      layer.current.style.transform = `translateX(${-input.scrollLeft}px)`;
+  };
+  const commit = (shown: string, caretFromEnd?: number) => {
+    const stored = tokens.toStored(shown);
+    if (stored.length > maxLength) return;
+    const normal = tokens.toShown(stored);
+    setText(normal);
+    onChange(stored);
+    // A typed "{u}" turned into its name: the caret keeps its place from the end.
+    if (normal !== shown && caretFromEnd !== undefined) {
+      requestAnimationFrame(() => {
+        const at = Math.max(0, normal.length - caretFromEnd);
+        own.current?.setSelectionRange(at, at);
+        follow();
+      });
+    }
+  };
+  // The caret steps out of a token (to its nearer end); a selection takes tokens whole.
+  const snap = () => {
+    const input = own.current;
+    if (!input) return;
+    const start = input.selectionStart ?? 0;
+    const end = input.selectionEnd ?? start;
+    let from = start;
+    let to = end;
+    for (const [a, b] of tokenSpans(input.value, tokens)) {
+      if (start === end) {
+        if (start > a && start < b) {
+          from = start - a < b - start ? a : b;
+          to = from;
+        }
+      } else {
+        if (from > a && from < b) from = a;
+        if (to > a && to < b) to = b;
+      }
+    }
+    if (from !== start || to !== end) input.setSelectionRange(from, to);
+    follow();
+  };
+  const pieces = text.split(tokens.shown);
   return (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute inset-0 flex items-center overflow-hidden px-3"
-    >
-      <span className="block min-w-0 truncate text-[13.5px] leading-5 whitespace-pre text-bone-50">
-        {pieces.map((piece, i) =>
-          i % 2 === 1 ? (
-            <span
-              // biome-ignore lint/suspicious/noArrayIndexKey: the pieces of one text, in order
-              key={i}
-              className="relative isolate inline-flex h-5 items-center px-1.5 align-top text-[12px] font-semibold text-bone-50 [--cut:3px]"
-            >
-              <span aria-hidden className="chamfer absolute inset-0 -z-10 bg-white/12" />
-              {name(piece)}
-            </span>
-          ) : (
-            piece
-          ),
+    <div className={cn("relative min-w-0 flex-1", className)}>
+      <Input
+        {...rest}
+        ref={(element) => {
+          own.current = element;
+          if (typeof inputRef === "function") inputRef(element);
+          else if (inputRef) inputRef.current = element;
+        }}
+        id={id}
+        aria-label={label}
+        value={text}
+        placeholder={placeholder}
+        spellCheck={false}
+        invalid={invalid}
+        autoFocus={autoFocus}
+        onFocus={onFocus}
+        onSelect={snap}
+        onScroll={follow}
+        onKeyUp={follow}
+        onKeyDown={(event) => deleteWholeToken(event, tokens.shown, (shown) => commit(shown))}
+        onChange={(event) => {
+          const shown = event.target.value;
+          commit(shown, shown.length - (event.target.selectionStart ?? shown.length));
+        }}
+        // Same letters under and over: no kerning or ligatures that could part them.
+        className={cn(
+          "h-9 text-[13.5px] [font-kerning:none] [font-variant-ligatures:none]",
+          chips && "text-transparent caret-bone-50",
         )}
-      </span>
-    </span>
+      />
+      {chips ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-hidden rounded-md"
+        >
+          <span
+            ref={layer}
+            className="absolute inset-y-0 left-px flex items-center px-3 text-[13.5px] whitespace-pre text-bone-50 [font-kerning:none] [font-variant-ligatures:none]"
+          >
+            {pieces.map((piece, i) =>
+              i % 2 === 1 ? (
+                <span
+                  // biome-ignore lint/suspicious/noArrayIndexKey: the pieces of one text, in order
+                  key={i}
+                  className="rounded-[3px] bg-white/14 box-decoration-clone"
+                >
+                  <span className="text-transparent">{piece.slice(0, 1)}</span>
+                  {piece.slice(1, -1)}
+                  <span className="text-transparent">{piece.slice(-1)}</span>
+                </span>
+              ) : (
+                // biome-ignore lint/suspicious/noArrayIndexKey: the pieces of one text, in order
+                <span key={i}>{piece}</span>
+              ),
+            )}
+          </span>
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -666,54 +822,6 @@ export function InsertChip({
       <Plus size={11} weight="bold" aria-hidden className="text-ash-300" />
       {children}
     </button>
-  );
-}
-
-/** A plain reply field whose placeholders read as chips while it is not typed in (`TokenText`). */
-export function TokenInput({
-  id,
-  value,
-  onChange,
-  split,
-  name,
-  placeholder,
-  invalid,
-  inputRef,
-  onFocus,
-}: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-  split: RegExp;
-  name: (token: string) => string;
-  placeholder?: string;
-  invalid?: boolean;
-  inputRef?: Ref<HTMLInputElement>;
-  onFocus?: () => void;
-}) {
-  const [typing, setTyping] = useState(false);
-  // A fresh test each time: `split` carries no state (no /g), but a shared one could.
-  const chips = !typing && new RegExp(split.source, split.flags).test(value);
-  return (
-    <div className="relative min-w-0">
-      <Input
-        ref={inputRef}
-        id={id}
-        value={value}
-        placeholder={placeholder}
-        spellCheck={false}
-        invalid={invalid}
-        onFocus={() => {
-          setTyping(true);
-          onFocus?.();
-        }}
-        onBlur={() => setTyping(false)}
-        onKeyDown={(event) => deleteWholeToken(event, split, onChange)}
-        onChange={(event) => onChange(event.target.value)}
-        className={cn("h-9", chips && "text-transparent")}
-      />
-      {chips ? <TokenText text={value} split={split} name={name} /> : null}
-    </div>
   );
 }
 

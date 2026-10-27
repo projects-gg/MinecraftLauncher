@@ -946,10 +946,10 @@ export const tr = {
       remove: "Kuralı sil",
       empty: "Henüz kural yok.",
       patternPlaceholder: "selam",
-      reply: "Genel sohbette yanıt",
+      reply: "Genel sohbete yanıt",
       replyPlaceholder: "Şu an klavye başında değilim.",
-      privateReply: "Özel mesajda yanıt",
-      otherReply: "Sunucu mesajında yanıt",
+      privateReply: "Özel mesaja yanıt",
+      otherReply: "Sunucu mesajına yanıt",
       help: "Yanıta düz mesaj ya da /komut yazabilirsin.",
     },
     chatLog: {

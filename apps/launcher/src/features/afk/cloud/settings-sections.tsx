@@ -14,12 +14,13 @@ import {
   type SelectOption,
   Switch,
 } from "@pl/ui";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CloudFeatures } from "@/bindings";
 import {
   AddressField,
   Block,
+  cloudTokens,
   ErrorText,
   Fold,
   inputClass,
@@ -723,13 +724,22 @@ function RuleRow({
     reply.kind === "plain" &&
     hasPlaceholder(reply.text) &&
     (!placeholders || (problem !== null && !at("reply")));
+  // The field shows placeholders by name: a chip goes in where its caret is, in those words.
+  const tokens = useMemo(
+    () =>
+      cloudTokens(t("cloudAfkFeat.settings.chips.sender"), (n) =>
+        t("cloudAfkFeat.settings.chips.part", { n }),
+      ),
+    [t],
+  );
   const insert = (token: string) => {
     if (reply.kind !== "plain") return;
     const input = replyRef.current;
-    const start = input?.selectionStart ?? reply.text.length;
+    const shown = tokens.toShown(reply.text);
+    const start = input?.selectionStart ?? shown.length;
     const end = input?.selectionEnd ?? start;
-    const next = insertToken(reply.text, start, end, token);
-    onChange({ ...rule, reply: typed(reply, next.text) });
+    const next = insertToken(shown, start, end, tokens.toShown(token));
+    onChange({ ...rule, reply: typed(reply, tokens.toStored(next.text)) });
     requestAnimationFrame(() => {
       input?.focus();
       input?.setSelectionRange(next.caret, next.caret);
@@ -748,10 +758,6 @@ function RuleRow({
         ? t("afkPanel.rule.ownerOnlyHelp", { name: owner })
         : t("afkPanel.rule.ownerFirst");
   const ownerLocked = rule.from === "server" || (!owner && !rule.ownerOnly);
-  const tokenName = (token: string) =>
-    token === "u"
-      ? t("cloudAfkFeat.settings.chips.sender")
-      : t("cloudAfkFeat.settings.chips.part", { n: token });
   return (
     <li className={cn(rowPanel, "flex flex-col px-3.5 pt-2")}>
       {/* The rule's own switch in words, on the card's right edge as every switch of the panel,
@@ -806,7 +812,7 @@ function RuleRow({
               id={`${ids}-reply`}
               showLabel
               mono={false}
-              tokenName={placeholders ? tokenName : undefined}
+              tokens={placeholders ? tokens : undefined}
               words={rule.reply}
               onChange={(next) => onChange({ ...rule, reply: next })}
               accountId={part.view.account.id}

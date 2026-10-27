@@ -1187,7 +1187,7 @@ export const en: DeepPartial<Strings> = {
       remove: "Remove rule",
       empty: "No rules yet.",
       patternPlaceholder: "hello",
-      reply: "Reply in public chat",
+      reply: "Reply to public chat",
       replyPlaceholder: "I'm away from the keyboard right now.",
       privateReply: "Reply to private messages",
       otherReply: "Reply to server messages",
