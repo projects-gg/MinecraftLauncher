@@ -648,7 +648,8 @@ export function Segmented<T extends string>({
           <OptionPlate on={current === o.value} />
           {/* The keyboard ring never touches gold. Around the chosen option's plate it sits outside,
               as on buttons (`chamfer-ring`, its 2 px gap over the control's padding and border); an
-              option without the plate keeps it inside, where no neighbour's plate lies under it. */}
+              option without the plate keeps it inside, 1 px in from the edge, so a dark line parts
+              it from a neighbour's plate. */}
           {current === o.value ? (
             <span
               aria-hidden
@@ -657,7 +658,7 @@ export function Segmented<T extends string>({
           ) : (
             <span
               aria-hidden
-              className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_2px_var(--color-gold-300)] group-focus-visible/option:opacity-100"
+              className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_1px_var(--color-obsidian-900),inset_0_0_0_3px_var(--color-gold-300)] group-focus-visible/option:opacity-100"
             />
           )}
           {/* The label twice in one cell: in its own colour and in the plate's ink. */}
