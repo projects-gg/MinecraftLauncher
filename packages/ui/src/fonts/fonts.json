@@ -14,9 +14,14 @@
     "version": "5.3.0",
     "source": "2c4e3f0723427b12e30b10fd233c362244963124ecbdd3a3cba40dcf78c3f22e",
     "file": "tektur-latin-wght-normal.woff2",
-    "sha256": "68daf4052d9345e906e8e362f962167f7d898f4e0fab99baa89d6a4a9b04279d",
+    "sha256": "adcf1323f6ad5e6f80125243520658a63c7c0d5c7ed775c01f6a9d71d5bef83e",
     "pairs": {
       "r dotlessi": 80
+    },
+    "pairFade": {
+      "opszAxis": "6-12-22",
+      "fullTo": 17,
+      "noneFrom": 22
     },
     "yShoulders": {
       "wght400": 270,

@@ -15,6 +15,8 @@ interface Built {
   file: string;
   sha256: string;
   pairs: Record<string, number>;
+  /** The pairs fade out over an optical size axis (Tektur, SMALL12). */
+  pairFade?: { opszAxis: string; fullTo: number; noneFrom: number };
 }
 
 const ui = new URL("../../../../packages/ui/", import.meta.url);
@@ -30,6 +32,12 @@ const familyOf = (face: string) => /font-family: "([^"]+)"/.exec(face)?.[1];
 describe("text fonts", () => {
   it("covers both faces", () => {
     expect(Object.keys(manifest).sort()).toEqual(["figtree", "tektur"]);
+  });
+
+  it("fades Tektur's pair out over title sizes, where it set the ı apart (SMALL12)", () => {
+    // Full up to 17 px (where antialiasing joined "rı"), none from 22 px; Figtree stays under 17.
+    expect(manifest.tektur?.pairFade).toEqual({ opszAxis: "6-12-22", fullTo: 17, noneFrom: 22 });
+    expect(manifest.figtree?.pairFade).toBeUndefined();
   });
 
   it.each(Object.values(manifest))("$file is built from the installed $package", (built) => {
