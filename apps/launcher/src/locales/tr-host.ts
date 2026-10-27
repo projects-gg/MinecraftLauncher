@@ -137,10 +137,10 @@ export const trHost = {
   connect: {
     moveTitle: "Dünyaya geçilsin mi?",
     moveBody: "Oyunda arkadaşının dünyasına geçeceksin; olmazsa oyun yeniden açılır.",
-    restartBody: "Oyun kapanacak ve arkadaşının dünyasına bağlanarak yeniden açılacak.",
+    restartBody: "Oyun kapanıp arkadaşının dünyasında yeniden açılır.",
     reopenBody: "Oyun baştan açılıp arkadaşının dünyasına bağlanacak.",
     movingBody: "Arkadaşının dünyasına geçiliyor.",
-    closingBody: "Oyun kapanınca arkadaşının dünyasına bağlanacak.",
+    closingBody: "Oyun kapanınca arkadaşının dünyasında yeniden açılacak.",
     connecting: "Arkadaşının dünyasına bağlanılıyor",
   },
   menu: {

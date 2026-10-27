@@ -7,9 +7,11 @@
 //! shows a quiet notice, a system notification while the window is away).
 //!
 //! The setting travels with each launch (`LaunchSettings::copy_screenshots`); switching it while
-//! a game runs starts or stops the watch at once (`game_copy_screenshots`).
+//! a game runs starts or stops the watch at once (`game_copy_screenshots`). Games of one folder
+//! (PLAY-AGAIN: a second game of the same instance) share one watch, so a picture is copied once.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use parking_lot::Mutex;
 use pl_mc::gamefiles::{ScreenshotEvent, ScreenshotWatcher};
@@ -19,14 +21,16 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::commands::launch::LaunchEventView;
 
-/// The running game's session (one game at a time) and its watch, while the setting is on.
+/// The running games' sessions, one per game folder, and their watches while the setting is on.
 #[derive(Default)]
-pub struct ShotCopy(Mutex<Option<Session>>);
+pub struct ShotCopy(Mutex<Vec<Session>>);
 
 struct Session {
     game_dir: PathBuf,
-    /// The launch's channel: the page's notice comes through it.
-    events: Channel<LaunchEventView>,
+    /// The games of this folder that run, oldest first, with their launch channels.
+    games: Vec<(u64, Channel<LaunchEventView>)>,
+    /// The newest game's launch channel: the page's notice comes through it.
+    events: Arc<Mutex<Channel<LaunchEventView>>>,
     watch: Option<Watch>,
 }
 
@@ -50,40 +54,65 @@ fn shot_copy(app: &AppHandle) -> tauri::State<'_, ShotCopy> {
     app.state::<ShotCopy>()
 }
 
-/// A game started in `game_dir`; `enabled` is the setting the launch came with.
+/// The game `game` started in `game_dir`; `enabled` is the setting the launch came with.
 pub fn session_started(
     app: &AppHandle,
+    game: u64,
     game_dir: &Path,
     events: Channel<LaunchEventView>,
     enabled: bool,
 ) {
-    let mut session = Session {
-        game_dir: game_dir.to_path_buf(),
-        events,
-        watch: None,
-    };
-    if enabled {
-        session.watch = watch(app, &session);
-    }
-    *shot_copy(app).0.lock() = Some(session);
-}
-
-/// The game closed: the watch ends with it.
-pub fn session_ended(app: &AppHandle) {
-    shot_copy(app).0.lock().take();
-}
-
-/// The player switched the setting: a running game starts or stops being watched now.
-pub fn set_enabled(app: &AppHandle, enabled: bool) {
     let state = shot_copy(app);
-    let mut current = state.0.lock();
-    let Some(session) = current.as_mut() else {
-        return;
+    let mut sessions = state.0.lock();
+    let at = match sessions.iter().position(|s| s.game_dir == game_dir) {
+        Some(at) => {
+            let session = &mut sessions[at];
+            session.games.push((game, events.clone()));
+            *session.events.lock() = events;
+            at
+        }
+        None => {
+            sessions.push(Session {
+                game_dir: game_dir.to_path_buf(),
+                games: vec![(game, events.clone())],
+                events: Arc::new(Mutex::new(events)),
+                watch: None,
+            });
+            sessions.len() - 1
+        }
     };
+    let session = &mut sessions[at];
     if !enabled {
         session.watch = None;
     } else if session.watch.is_none() {
         session.watch = watch(app, session);
+    }
+}
+
+/// The game `game` closed: its folder's watch ends with the last game of that folder; until then
+/// the notice goes through the newest game that is left.
+pub fn session_ended(app: &AppHandle, game: u64) {
+    let state = shot_copy(app);
+    let mut sessions = state.0.lock();
+    sessions.retain_mut(|session| {
+        session.games.retain(|(id, _)| *id != game);
+        if let Some((_, newest)) = session.games.last() {
+            *session.events.lock() = newest.clone();
+        }
+        !session.games.is_empty()
+    });
+}
+
+/// The player switched the setting: running games start or stop being watched now.
+pub fn set_enabled(app: &AppHandle, enabled: bool) {
+    let state = shot_copy(app);
+    let mut sessions = state.0.lock();
+    for session in sessions.iter_mut() {
+        if !enabled {
+            session.watch = None;
+        } else if session.watch.is_none() {
+            session.watch = watch(app, session);
+        }
     }
 }
 
@@ -98,7 +127,7 @@ fn watch(app: &AppHandle, session: &Session) -> Option<Watch> {
     };
     tracing::info!("copying the session's screenshots to the clipboard");
     let app = app.clone();
-    let events = session.events.clone();
+    let events = Arc::clone(&session.events);
     let task = tauri::async_runtime::spawn(async move {
         let mut told = false;
         while let Some(shot) = shots.recv().await {
@@ -116,7 +145,7 @@ fn watch(app: &AppHandle, session: &Session) -> Option<Watch> {
                         told = true;
                         // A page resting while the game runs hears about it now.
                         crate::webview_rest::wake(&app, "a screenshot was not copied");
-                        let _ = events.send(LaunchEventView::ScreenshotNotCopied);
+                        let _ = events.lock().send(LaunchEventView::ScreenshotNotCopied);
                     }
                 }
             }

@@ -280,8 +280,8 @@ fn quit_from_tray(app: &AppHandle) {
 }
 
 /// Leaves for real (the tray's "Çıkış", the close button when nothing keeps the launcher,
-/// "Oyun açılınca launcher: Kapansın"): AFK sessions are stopped cleanly first. A game that runs
-/// plays on by itself; the next start follows it again (`commands::launch::detach_running`).
+/// "Oyun açılınca launcher: Kapansın"): AFK sessions are stopped cleanly first. Games that run
+/// play on by themselves; the next start follows them again (`commands::launch::detach_running`).
 /// Exiting runs the plugins' last steps (the window's size and place are saved) and removes the
 /// tray icon; the single-instance lock goes with the process.
 pub(crate) fn quit(app: &AppHandle) {
@@ -393,11 +393,7 @@ fn close_activity(app: &AppHandle) -> close::Activity {
     };
     // A game the last start left running does not keep the launcher: the player already left it
     // to play on alone ("Kapansın"), so closing the window leaves it alone again.
-    let game = state
-        .running
-        .lock()
-        .as_ref()
-        .is_some_and(|game| !game.adopted);
+    let game = state.games.lock().any_followed();
     close::Activity {
         game: game || state.launch_cancel.lock().is_some(),
         afk: state.afk.any_active(),
@@ -518,8 +514,9 @@ fn tray_tooltip(activity: pl_afk::AfkActivity, lang: pl_lang::Lang) -> String {
 }
 
 /// The selected account's game runs (PLAY-ACCT): the tray's "Oyna" says "Oyunda" and does
-/// nothing, as OYNA does. Another account's "Oyna" stays: it asks to close the other game first.
-/// The page tells when this changes ([`set_tray_in_game`]).
+/// nothing (a second game with the same name is asked for in the window, PLAY-AGAIN). Another
+/// account's "Oyna" stays: its game starts beside the others. The page tells when this changes
+/// ([`set_tray_in_game`]).
 #[cfg(desktop)]
 static TRAY_IN_GAME: AtomicBool = AtomicBool::new(false);
 
@@ -567,6 +564,11 @@ pub fn retitle_tray(app: &AppHandle) {
 #[cfg(desktop)]
 pub fn set_tray_in_game(app: &AppHandle, in_game: bool) {
     if TRAY_IN_GAME.swap(in_game, Ordering::Relaxed) != in_game {
+        // The menu cannot be read from outside; the log says what its "Oyna" item shows.
+        tracing::info!(
+            in_game,
+            "tray menu: the play item follows the selected account"
+        );
         rebuild_tray_menu(app);
     }
 }

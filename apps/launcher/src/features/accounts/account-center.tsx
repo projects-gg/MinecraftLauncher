@@ -72,7 +72,7 @@ import {
   useAfkSessions,
   useSessionChecks,
 } from "./use-accounts";
-import { usePlayingAccountId } from "./use-own-launch";
+import { usePlayingAccountIds } from "./use-own-launch";
 
 const enter = { duration: 0.3, ease: easeOutExpo };
 const NO_ACCOUNTS: AccountSummary[] = [];
@@ -410,7 +410,8 @@ export function AccountCenter({
   const { data: accounts = NO_ACCOUNTS, isPending } = useAccounts();
   const sessions = useAfkSessions(true);
   // The account whose game is on screen says so (PLAY-ACCT): OYNA is that account's alone.
-  const playing = usePlayingAccountId();
+  // Every account with a game on screen (PLAY-AGAIN: several may play at once).
+  const playing = usePlayingAccountIds();
   const openLogin = useAccountsUi((s) => s.openLogin);
   const openAppearance = useAccountsUi((s) => s.openAppearance);
   const fresh = useAccountsUi((s) => s.fresh);
@@ -589,7 +590,7 @@ export function AccountCenter({
                       account={account}
                       accounts={accounts}
                       afk={onlineAfkSession(account.username, sessions)}
-                      playing={playing === account.id}
+                      playing={playing.includes(account.id)}
                       bracketsId={bracketsId}
                       fresh={fresh === account.id}
                       onFreshDone={() => markFresh(null)}

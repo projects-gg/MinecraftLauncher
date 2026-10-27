@@ -1,10 +1,14 @@
-//! A game the launcher left running when it quit (SMALL7: "Oyun açılınca launcher: Kapansın"
-//! really quits, and the tray's "Çıkış" during a game leaves it too). The game never depended on
+//! Games the launcher left running when it quit (SMALL7: "Oyun açılınca launcher: Kapansın"
+//! really quits, and the tray's "Çıkış" during a game leaves it too). A game never depended on
 //! the launcher; what the launcher keeps of it is this note in its data folder
 //! ([`DetachedGame`]). The next start reads it once: a game that still runs is followed again
 //! (`GameProcess::adopt`: the bar says "Oyunda", nothing changes its files meanwhile), and one
 //! that ended meanwhile adds its session to the instance's play time, its end read from the
 //! game's own log.
+//!
+//! Several games may run at once (PLAY-AGAIN): the note keeps the first one at its top, as it
+//! always did (an older launcher reads that one and follows it), and the others under `more`
+//! ([`save_all`], [`take_all`]).
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -43,6 +47,39 @@ pub struct DetachedGame {
     /// A note left by an older launcher has none: its game counts as every account's.
     #[serde(default)]
     pub account: Option<GameAccount>,
+    /// The other games that ran when the launcher quit (PLAY-AGAIN), in the order they started.
+    /// Only the note's first game has any; an older launcher ignores them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub more: Vec<DetachedGame>,
+}
+
+/// Leaves the note of `games` (in the order they started) in `root`, at once and durably (the
+/// launcher is about to exit); with none, an older note goes.
+pub fn save_all(root: &Path, games: &[DetachedGame]) -> Result<()> {
+    let Some((first, rest)) = games.split_first() else {
+        let _ = std::fs::remove_file(root.join(DETACHED_FILE));
+        return Ok(());
+    };
+    let note = DetachedGame {
+        more: rest
+            .iter()
+            .map(|game| DetachedGame {
+                more: Vec::new(),
+                ..game.clone()
+            })
+            .collect(),
+        ..first.clone()
+    };
+    note.save(root)
+}
+
+/// Every game of the note in `root`, in the order they started, read once ([`DetachedGame::take`]).
+pub fn take_all(root: &Path) -> Vec<DetachedGame> {
+    let Some(mut first) = DetachedGame::take(root) else {
+        return Vec::new();
+    };
+    let more = std::mem::take(&mut first.more);
+    std::iter::once(first).chain(more).collect()
 }
 
 /// `time` in Unix milliseconds (0 before 1970).
@@ -58,7 +95,8 @@ pub fn from_unix_ms(ms: i64) -> SystemTime {
 }
 
 impl DetachedGame {
-    /// Leaves the note in `root`, at once and durably (the launcher is about to exit).
+    /// Leaves the note in `root`, at once and durably (the launcher is about to exit). Several
+    /// games go through [`save_all`].
     pub fn save(&self, root: &Path) -> Result<()> {
         let path = root.join(DETACHED_FILE);
         let bytes = serde_json::to_vec_pretty(self).map_err(|e| Error::json(DETACHED_FILE, e))?;
@@ -115,7 +153,50 @@ mod tests {
                 id: "0b7d6c1e-3f42-4c55-9d1a-2f0e8c4b6a10".into(),
                 name: "EjderAvcisi".into(),
             }),
+            more: Vec::new(),
         }
+    }
+
+    #[test]
+    fn the_note_keeps_every_game_and_the_first_on_top() {
+        // PLAY-AGAIN: two games of one account (and one of another) ran when the launcher quit.
+        let dir = tempfile::tempdir().unwrap();
+        let first = game(dir.path());
+        let second = DetachedGame {
+            pid: 4343,
+            started_at_ms: first.started_at_ms + 60_000,
+            ..first.clone()
+        };
+        let third = DetachedGame {
+            pid: 4444,
+            instance_id: "hardcore".into(),
+            account: Some(GameAccount {
+                id: "5c1e0d2a-7b44-4e10-8f6a-3d2c1b0a9e88".into(),
+                name: "KorAtesi_".into(),
+            }),
+            ..first.clone()
+        };
+        save_all(dir.path(), &[first.clone(), second.clone(), third.clone()]).unwrap();
+        // An older launcher reads the top of the note: the first game, nothing else.
+        let text = std::fs::read_to_string(dir.path().join(DETACHED_FILE)).unwrap();
+        let top: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(top["pid"], 4242);
+        assert_eq!(top["more"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            take_all(dir.path()),
+            vec![first.clone(), second, third],
+            "in the order they started, read once"
+        );
+        assert!(take_all(dir.path()).is_empty());
+        // One game writes the note as it always was (no `more`).
+        save_all(dir.path(), std::slice::from_ref(&first)).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(DETACHED_FILE)).unwrap();
+        assert!(!text.contains("more"));
+        assert_eq!(take_all(dir.path()), vec![first.clone()]);
+        // None takes an older note away.
+        first.save(dir.path()).unwrap();
+        save_all(dir.path(), &[]).unwrap();
+        assert!(take_all(dir.path()).is_empty());
     }
 
     #[test]

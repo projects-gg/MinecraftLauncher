@@ -137,10 +137,10 @@ export const enHost = {
   connect: {
     moveTitle: "Move to the world?",
     moveBody: "You'll move to your friend's world in game, or the game restarts if it can't.",
-    restartBody: "The game will close and reopen connected to your friend's world.",
+    restartBody: "The game will close and reopen in your friend's world.",
     reopenBody: "The game will start over and connect to your friend's world.",
     movingBody: "Moving to your friend's world.",
-    closingBody: "Once it closes, it'll reopen connected to your friend's world.",
+    closingBody: "Once the game closes, it reopens in your friend's world.",
     connecting: "Connecting to your friend's world",
   },
   menu: {

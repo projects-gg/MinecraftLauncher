@@ -277,6 +277,64 @@ pub fn find_jvm_error_log(game_dir: &Path, since: SystemTime) -> Option<PathBuf>
     })
 }
 
+/// What Minecraft prints (to its plain output, past the log) once it saved a crash report:
+/// `#@!@# Game crashed! Crash report saved to: #@!@# <path>`.
+const CRASH_SAVED_MARK: &str = "Crash report saved to: #@!@#";
+
+/// The file name of the crash report the game's own output names (the last one it named), if
+/// any. Only the name: the output the launcher keeps has the home folder's account name masked
+/// (`crate::mask`), and the game saves its reports in its folder's `crash-reports/` anyway.
+pub fn reported_crash_file(output: &str) -> Option<String> {
+    output.lines().rev().find_map(|line| {
+        let (_, path) = line.split_once(CRASH_SAVED_MARK)?;
+        let name = path.trim().rsplit(['/', '\\']).next()?.trim();
+        (name.starts_with("crash-") && name.ends_with(".txt")).then(|| name.to_owned())
+    })
+}
+
+/// The crash report of one run (PLAY-AGAIN): the one its output names when that file is in the
+/// folder's `crash-reports/`; else, unless another game ran in the same folder meanwhile
+/// (`shared`: its report could be the other game's), the newest one written since `since`
+/// ([`find_crash_report`]).
+pub fn crash_report_for(
+    game_dir: &Path,
+    since: SystemTime,
+    output: &str,
+    shared: bool,
+) -> Option<PathBuf> {
+    let named = reported_crash_file(output).map(|name| game_dir.join("crash-reports").join(name));
+    if let Some(path) = named.filter(|path| path.is_file()) {
+        return Some(path);
+    }
+    if shared {
+        return None;
+    }
+    find_crash_report(game_dir, since)
+}
+
+/// The JVM's fatal error log of one run: `hs_err_pid<pid>.log` when the process id is known (the
+/// JVM names its log after it); without one, the newest since `since` unless another game ran in
+/// the same folder meanwhile (`shared`).
+pub fn jvm_error_log_for(
+    game_dir: &Path,
+    since: SystemTime,
+    pid: Option<u32>,
+    shared: bool,
+) -> Option<PathBuf> {
+    match pid {
+        Some(pid) => {
+            let path = game_dir.join(format!("hs_err_pid{pid}.log"));
+            let from = since.checked_sub(CRASH_SCAN_MARGIN).unwrap_or(since);
+            let written = std::fs::metadata(&path)
+                .and_then(|meta| meta.modified())
+                .is_ok_and(|modified| modified >= from);
+            written.then_some(path)
+        }
+        None if shared => None,
+        None => find_jvm_error_log(game_dir, since),
+    }
+}
+
 fn newest_file(dir: &Path, since: SystemTime, accept: impl Fn(&str) -> bool) -> Option<PathBuf> {
     let from = since.checked_sub(CRASH_SCAN_MARGIN).unwrap_or(since);
     std::fs::read_dir(dir)
@@ -2633,6 +2691,66 @@ mod tests {
         assert!(find_crash_report(tmp.path(), later).is_none());
         std::fs::write(tmp.path().join("hs_err_pid123.log"), "x").unwrap();
         assert!(find_jvm_error_log(tmp.path(), start).is_some());
+    }
+
+    #[test]
+    fn two_games_of_one_folder_keep_their_own_reports() {
+        // PLAY-AGAIN: the second game of a folder wrote its report after the first one started.
+        let tmp = tempfile::tempdir().unwrap();
+        let start = SystemTime::now();
+        let reports = tmp.path().join("crash-reports");
+        std::fs::create_dir_all(&reports).unwrap();
+        let mine = reports.join("crash-2026-10-27_12.00.00-client.txt");
+        let theirs = reports.join("crash-2026-10-27_12.05.00-client.txt");
+        std::fs::write(&mine, "mine").unwrap();
+        std::fs::write(&theirs, "theirs").unwrap();
+        // The kept output has the account name in the home folder masked: the name is enough.
+        let output = "[12:00:00] [Render thread/FATAL]: Unreported exception thrown!\n\
+             #@!@# Game crashed! Crash report saved to: #@!@# C:\\Users\\********\\AppData\\\
+             Roaming\\ProjectsLauncher\\instances\\projects\\.minecraft\\crash-reports\\\
+             crash-2026-10-27_12.00.00-client.txt\n";
+        assert_eq!(
+            reported_crash_file(output).as_deref(),
+            Some("crash-2026-10-27_12.00.00-client.txt")
+        );
+        assert_eq!(
+            crash_report_for(tmp.path(), start, output, true),
+            Some(mine.clone())
+        );
+        let unix = "#@!@# Game crashed! Crash report saved to: #@!@# /home/********/x/crash-reports/crash-2026-10-27_12.00.00-client.txt";
+        assert_eq!(
+            crash_report_for(tmp.path(), start, unix, true),
+            Some(mine.clone())
+        );
+        // Not named: the newest file only while no other game shared the folder.
+        assert_eq!(crash_report_for(tmp.path(), start, "", true), None);
+        assert!(crash_report_for(tmp.path(), start, "", false).is_some());
+        // A named file that is not there falls back the same way.
+        let gone = "#@!@# Game crashed! Crash report saved to: #@!@# C:/x/crash-2020-01-01_00.00.00-client.txt";
+        assert_eq!(crash_report_for(tmp.path(), start, gone, true), None);
+        // "Could not be saved" names nothing.
+        assert_eq!(
+            reported_crash_file("#@?@# Game crashed! Crash report could not be saved. #@?@#"),
+            None
+        );
+        assert!(
+            theirs.is_file(),
+            "the other game's report stays where it is"
+        );
+
+        // The JVM names its own log after the process.
+        std::fs::write(tmp.path().join("hs_err_pid111.log"), "theirs").unwrap();
+        assert_eq!(jvm_error_log_for(tmp.path(), start, Some(222), true), None);
+        std::fs::write(tmp.path().join("hs_err_pid222.log"), "mine").unwrap();
+        assert_eq!(
+            jvm_error_log_for(tmp.path(), start, Some(222), true),
+            Some(tmp.path().join("hs_err_pid222.log"))
+        );
+        assert_eq!(jvm_error_log_for(tmp.path(), start, None, true), None);
+        assert!(jvm_error_log_for(tmp.path(), start, None, false).is_some());
+        // An old log of the same number (a process long gone) is not this run's.
+        let later = start + Duration::from_secs(3600);
+        assert_eq!(jvm_error_log_for(tmp.path(), later, Some(222), false), None);
     }
 
     // --- suspects and attribution ---

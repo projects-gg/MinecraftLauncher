@@ -18,15 +18,17 @@ export function inGameReady(): boolean {
 /**
  * Whether the overlay took the player to `target` (`host[:port]`, as the shell takes it). A
  * friend's world (HOST1) goes through its join, which hands the overlay the world's label.
+ * `game`: the launcher's number for the game that moves (PLAY-AGAIN: the selected account's
+ * newest among several; null: the newest game).
  */
-export async function connectInGame(target: JoinTarget): Promise<boolean> {
+export async function connectInGame(target: JoinTarget, game: number | null): Promise<boolean> {
   if (!inGameReady()) return false;
   if (target.kind === "world") {
     return hostApi.connectInGame(target.session, target.label).catch(() => false);
   }
   if (!isTauri()) return mockConnectInGame();
   try {
-    const outcome = await commands.overlayConnectInGame(targetAddress(target));
+    const outcome = await commands.overlayConnectInGame(targetAddress(target), game);
     if (outcome.status === "done") return true;
     console.info(`in-game connect unavailable: ${outcome.reason}`);
     return false;

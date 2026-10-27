@@ -8,11 +8,14 @@ const commands = {
   launcherLeaveForGame: vi.fn(async () => {}),
   windowBringForward: vi.fn(async () => {}),
   gameAdopted: vi.fn(
-    async (): Promise<{
-      instanceId: string;
-      sinceMs: number;
-      account?: { id: string; name: string } | null;
-    } | null> => null,
+    async (): Promise<
+      Array<{
+        game: number;
+        instanceId: string;
+        sinceMs: number;
+        account?: { id: string; name: string } | null;
+      }>
+    > => [],
   ),
 };
 const win = {
@@ -21,7 +24,7 @@ const win = {
   minimize: vi.fn(async () => {}),
   hide: vi.fn(async () => {}),
 };
-let heard: ((event: { payload: { instanceId: string } }) => void) | undefined;
+let heard: ((event: { payload: { game: number; instanceId: string } }) => void) | undefined;
 const prefs = { selectInstance: vi.fn(), onGameStart: "close" };
 
 vi.mock("@/bindings", () => ({ commands }));
@@ -45,7 +48,7 @@ vi.mock("@pl/ui", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }));
 vi.mock("@/lib/sound", () => ({ playSound: vi.fn() }));
-vi.mock("@/lib/attention", () => ({ notifyWhenAway: vi.fn() }));
+vi.mock("@/lib/attention", () => ({ notifyWhenAway: vi.fn(), notify: vi.fn() }));
 vi.mock("@/lib/i18n", () => ({ default: { t: (key: string) => key } }));
 vi.mock("@/features/java/prompt-store", () => ({
   useJavaPrompt: { getState: () => ({ open: vi.fn() }) },
@@ -93,7 +96,13 @@ describe("Oyun açılınca launcher", () => {
     }
     win.isVisible.mockResolvedValue(true);
     win.isMinimized.mockResolvedValue(false);
-    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null });
+    useLaunch.setState({
+      phase: { kind: "idle" },
+      instanceId: null,
+      games: [],
+      progress: 0,
+      followed: 0,
+    });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -142,11 +151,19 @@ describe("Oyun açılınca launcher", () => {
 
 describe("a game an earlier start left running", () => {
   beforeEach(() => {
-    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null });
+    useLaunch.setState({
+      phase: { kind: "idle" },
+      instanceId: null,
+      games: [],
+      progress: 0,
+      followed: 0,
+    });
   });
 
   it("is Oyunda from the start until it ends", async () => {
-    commands.gameAdopted.mockResolvedValueOnce({ instanceId: "projects", sinceMs: 1_000 });
+    commands.gameAdopted.mockResolvedValueOnce([
+      { game: 9, instanceId: "projects", sinceMs: 1_000 },
+    ]);
     const ended = vi.fn();
     const stop = followAdoptedGame(ended);
     await vi.waitFor(() =>
@@ -156,7 +173,7 @@ describe("a game an earlier start left running", () => {
       instanceId: "projects",
       phase: { shown: true, firstStart: false },
     });
-    heard?.({ payload: { instanceId: "projects" } });
+    heard?.({ payload: { game: 9, instanceId: "projects" } });
     expect(useLaunch.getState().phase.kind).toBe("idle");
     expect(ended).toHaveBeenCalledWith("projects");
     stop();
@@ -164,12 +181,22 @@ describe("a game an earlier start left running", () => {
 
   it("keeps the account it plays with (PLAY-ACCT); one from an older launcher has none", async () => {
     const account = { id: "a1", name: "EjderAvcisi" };
-    commands.gameAdopted.mockResolvedValueOnce({ instanceId: "projects", sinceMs: 1_000, account });
+    commands.gameAdopted.mockResolvedValueOnce([
+      { game: 9, instanceId: "projects", sinceMs: 1_000, account },
+    ]);
     const stop = followAdoptedGame(vi.fn());
     await vi.waitFor(() => expect(useLaunch.getState().account).toEqual(account));
     stop();
-    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null, account: null });
-    commands.gameAdopted.mockResolvedValueOnce({ instanceId: "projects", sinceMs: 1_000 });
+    useLaunch.setState({
+      phase: { kind: "idle" },
+      instanceId: null,
+      account: null,
+      games: [],
+      followed: 0,
+    });
+    commands.gameAdopted.mockResolvedValueOnce([
+      { game: 10, instanceId: "projects", sinceMs: 1_000 },
+    ]);
     const again = followAdoptedGame(vi.fn());
     await vi.waitFor(() => expect(useLaunch.getState().phase.kind).toBe("running"));
     expect(useLaunch.getState().account).toBeNull();
@@ -177,11 +204,47 @@ describe("a game an earlier start left running", () => {
   });
 
   it("changes nothing when no game was left running", async () => {
-    commands.gameAdopted.mockResolvedValueOnce(null);
+    commands.gameAdopted.mockResolvedValueOnce([]);
     const stop = followAdoptedGame(vi.fn());
     await vi.waitFor(() => expect(commands.gameAdopted).toHaveBeenCalled());
     await Promise.resolve();
     expect(useLaunch.getState().phase.kind).toBe("idle");
+    stop();
+  });
+});
+
+describe("games an earlier start left running (PLAY-AGAIN: several)", () => {
+  beforeEach(() => {
+    useLaunch.setState({
+      phase: { kind: "idle" },
+      instanceId: null,
+      account: null,
+      games: [],
+      progress: 0,
+      followed: 0,
+    });
+  });
+
+  it("follows every one of them, each until it ends", async () => {
+    const ejder = { id: "a1", name: "EjderAvcisi" };
+    const kor = { id: "a2", name: "KorAtesi_" };
+    commands.gameAdopted.mockResolvedValueOnce([
+      { game: 11, instanceId: "projects", sinceMs: 1_000, account: ejder },
+      { game: 12, instanceId: "hardcore", sinceMs: 2_000, account: kor },
+    ]);
+    const ended = vi.fn();
+    const stop = followAdoptedGame(ended);
+    await vi.waitFor(() => expect(useLaunch.getState().games).toHaveLength(2));
+    expect(useLaunch.getState()).toMatchObject({ instanceId: "hardcore", account: kor });
+    heard?.({ payload: { game: 12, instanceId: "hardcore" } });
+    expect(useLaunch.getState()).toMatchObject({
+      instanceId: "projects",
+      account: ejder,
+      phase: { kind: "running", since: 1_000 },
+    });
+    heard?.({ payload: { game: 11, instanceId: "projects" } });
+    expect(useLaunch.getState().phase.kind).toBe("idle");
+    expect(ended).toHaveBeenCalledTimes(2);
     stop();
   });
 });

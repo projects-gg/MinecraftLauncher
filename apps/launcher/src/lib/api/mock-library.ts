@@ -711,8 +711,8 @@ export function createMockLibrary(options: {
         }
       };
     },
-    async runningInstance() {
-      return liveInstance;
+    async runningInstances() {
+      return liveInstance ? [liveInstance] : [];
     },
 
     async worlds(instanceId) {

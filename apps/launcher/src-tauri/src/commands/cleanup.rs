@@ -101,7 +101,7 @@ pub enum CleanupBlock {
 }
 
 fn blocked(app: &AppHandle, state: &AppState) -> Option<CleanupBlock> {
-    if state.running.lock().is_some() {
+    if state.games.lock().any() {
         Some(CleanupBlock::GameRunning)
     } else if state.launch_cancel.lock().is_some() {
         Some(CleanupBlock::Preparing)
@@ -723,7 +723,7 @@ async fn places(app: &AppHandle, state: &AppState) -> (Places, InUse) {
         .filter_map(|instance| state.instances.game_dir(&instance.id).ok())
         .collect();
     let mut in_use = InUse::default();
-    if let Some(running) = state.running.lock().as_ref() {
+    for running in state.games.lock().iter() {
         if let Ok(game_dir) = state.instances.game_dir(&running.instance_id) {
             in_use.game_dirs.push(game_dir);
         }

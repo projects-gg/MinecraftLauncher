@@ -143,33 +143,64 @@ fn device_label() -> String {
     }
 }
 
+/// The games presence may follow (PLAY-AGAIN: several at once, one status): the oldest on screen
+/// leads (`pl_social::GameLead`).
+static GAME_LEAD: std::sync::LazyLock<parking_lot::Mutex<pl_social::GameLead>> =
+    std::sync::LazyLock::new(Default::default);
+
 /// Follows one game session for presence: in game once its window is on screen (while it opens
-/// the player is still in the launcher), the log, exited.
+/// the player is still in the launcher), the log, exited. With several games the friends' status
+/// follows the oldest on screen and moves to the next when it ends.
 pub struct GamePresence {
     social: SocialService,
-    quick_play: Option<String>,
+    game: u64,
 }
 
 impl GamePresence {
-    pub fn new(social: &SocialService, quick_play: Option<&QuickPlay>) -> Self {
+    pub fn new(social: &SocialService, game: u64, quick_play: Option<&QuickPlay>) -> Self {
         let quick_play = match quick_play {
             Some(QuickPlay::Multiplayer { host, port }) => {
                 pl_social::server_label(host, port.unwrap_or(25565))
             }
             _ => None,
         };
+        GAME_LEAD.lock().started(game, quick_play);
         Self {
             social: social.clone(),
-            quick_play,
+            game,
         }
     }
 
     pub fn on_event(&self, event: &GameEvent) {
-        match event {
-            GameEvent::WindowShown => self.social.game_started(self.quick_play.as_deref()),
-            GameEvent::Line(line) => self.social.game_line(&line.message),
-            GameEvent::Exited { .. } => self.social.game_stopped(),
-            _ => {}
+        let steps = match event {
+            GameEvent::WindowShown => GAME_LEAD.lock().shown(self.game),
+            // Most lines can never move the status: they never take the lock.
+            GameEvent::Line(line) if pl_social::may_signal(&line.message) => {
+                GAME_LEAD.lock().line(self.game, &line.message)
+            }
+            GameEvent::Exited { .. } => GAME_LEAD.lock().exited(self.game),
+            _ => return,
+        };
+        for step in steps {
+            match step {
+                pl_social::PresenceStep::Started { quick_play } => {
+                    self.social.game_started(quick_play.as_deref());
+                }
+                pl_social::PresenceStep::Line(line) => self.social.game_line(&line),
+                pl_social::PresenceStep::Stopped => self.social.game_stopped(),
+            }
+        }
+    }
+}
+
+impl Drop for GamePresence {
+    /// A launch that stopped before its game ran, or whose game never said it ended: forgotten.
+    fn drop(&mut self) {
+        let steps = GAME_LEAD.lock().exited(self.game);
+        for step in steps {
+            if step == pl_social::PresenceStep::Stopped {
+                self.social.game_stopped();
+            }
         }
     }
 }

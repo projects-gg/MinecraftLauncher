@@ -210,27 +210,40 @@ export const commands = {
 	 *  showed is never closed from here.
 	 */
 	launchCancel: () => __TAURI_INVOKE<void>("launch_cancel"),
-	gameKill: () => __TAURI_INVOKE<void>("game_kill"),
+	/**  Ends the game `game` at once (only at the player's word, after the warning). */
+	gameKill: (game: number) => __TAURI_INVOKE<void>("game_kill", { game }),
 	/**
-	 *  "Bağlan" while a game runs (FIX2): asks the game to close the way its own close button does,
-	 *  so it leaves a server and saves a singleplayer world as always; the page starts it again into
-	 *  the server once it has ended (its exit comes as usual). False when nothing of it could be asked
-	 *  (no window yet, or it ended): the page then offers to end it, with its warning (`game_kill`).
+	 *  "Bağlan" while a game runs (FIX2): asks the game `game` to close the way its own close button
+	 *  does, so it leaves a server and saves a singleplayer world as always; the page starts it again
+	 *  into the server once it has ended (its exit comes as usual). False when nothing of it could be
+	 *  asked (no window yet, or it ended): the page then offers to end it, with its warning
+	 *  (`game_kill`).
 	 */
-	gameClose: () => __TAURI_INVOKE<boolean>("game_close"),
-	/**  Instance id of the running game, if any (used after a UI reload). */
-	gameRunning: () => __TAURI_INVOKE<string | null>("game_running"),
-	/**  The game an earlier start left running, while this start follows it ([`adopt_detached`]). */
-	gameAdopted: () => __TAURI_INVOKE<{
-	instanceId: string,
-	/**  When its window showed (Unix milliseconds); the session time counts from there. */
-	sinceMs: number,
+	gameClose: (game: number) => __TAURI_INVOKE<boolean>("game_close", { game }),
 	/**
-	 *  The account it plays with; none when an older launcher left it running (it then counts as
-	 *  every account's).
+	 *  The instances whose games run, each once (used after a UI reload, and for the views that lock
+	 *  an instance's files while a game of it runs).
 	 */
-	account: GameAccount | null,
-} | null>("game_adopted"),
+	gameRunning: () => __TAURI_INVOKE<string[]>("game_running"),
+	/**
+	 *  The games an earlier start left running, while this start follows them ([`adopt_detached`]),
+	 *  oldest first.
+	 */
+	gameAdopted: () => __TAURI_INVOKE<AdoptedGameView[]>("game_adopted"),
+	/**
+	 *  Whether another game of `instance_id` fits in the memory the computer has free now (PLAY-AGAIN,
+	 *  asked before any game beside the ones running): its heap as the launch would set it (the
+	 *  instance's memory setting, "Otomatik" by its enabled mods) and the JVM's own share. Debug
+	 *  builds take the free memory from `PROJECTS_E2E_AVAILABLE_MB` when it is set.
+	 */
+	gameMemoryFits: (instanceId: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("game_memory_fits", { instanceId })),
+	/**
+	 *  Whether the world `world` (its folder name under `saves/`) of `instance_id` is open in a game
+	 *  now (PLAY-AGAIN): "Devam et" says so before a press, and a world's "Oyna" before any question,
+	 *  where the launch would otherwise stop on it. Read when the page asks (games starting or ending,
+	 *  the pointer over "Devam et"), never on a timer.
+	 */
+	gameWorldOpen: (instanceId: string, world: string) => typedError<WorldOpenView, CmdError>(__TAURI_INVOKE("game_world_open", { instanceId, world })),
 	/**
 	 *  Settings → Genel "Ekran görüntülerini panoya kopyala" switched: a game that runs now starts
 	 *  or stops copying its new screenshots at once (each launch also brings the setting along).
@@ -251,7 +264,7 @@ export const commands = {
 	overlayConfigure: (config: OverlayConfig) => __TAURI_INVOKE<void>("overlay_configure", { config }),
 	overlayState: () => __TAURI_INVOKE<OverlayStateView>("overlay_state"),
 	/**  [`connect_in_game`] for the page. */
-	overlayConnectInGame: (target: string) => __TAURI_INVOKE<ConnectOutcome>("overlay_connect_in_game", { target }),
+	overlayConnectInGame: (target: string, game: number | null) => __TAURI_INVOKE<ConnectOutcome>("overlay_connect_in_game", { target, game }),
 	/**  The view now (the page's start; every change after comes as `host-changed`). */
 	hostState: () => typedError<HostView_Serialize, CmdError>(__TAURI_INVOKE("host_state")),
 	/**
@@ -1537,14 +1550,17 @@ export type AddonUpdate = {
 
 /**  Payload of [`ADOPTED_GAME_EXITED`]. */
 export type AdoptedGameExit = {
+	game: number,
 	instanceId: string,
 };
 
 /**
- *  The game an earlier start of the launcher left running, followed again by this start
+ *  A game an earlier start of the launcher left running, followed again by this start
  *  ([`adopt_detached`]): the page shows it as "Oyunda" from its first paint.
  */
 export type AdoptedGameView = {
+	/**  The launcher's number for it (as `LaunchEventView::Started::game`). */
+	game: number,
 	instanceId: string,
 	/**  When its window showed (Unix milliseconds); the session time counts from there. */
 	sinceMs: number,
@@ -5081,9 +5097,14 @@ export type LaunchEventView = {
 	type: "progress",
 } & ProgressView | 
 /**  The network is unreachable: continuing with installed files only. */
-({ type: "offline" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "launching" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "offline" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "launching" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**  The game process started; its window is not on screen yet ("Açılıyor"). */
 ({ type: "started"; pid: number | null; 
+/**
+ *  The launcher's number for this game (PLAY-AGAIN: several may run): the page names it
+ *  to close it (`game_close`, `game_kill`) or to move it in game.
+ */
+game: number; 
 /**
  *  The first start with this version and loader: it takes longer (the loader prepares
  *  its caches, the computer reads every new file once).
@@ -5092,7 +5113,7 @@ firstStart: boolean;
 /**  The account it plays with: "Oyunda" for that account alone (PLAY-ACCT). */
 account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; mods?: never; name?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**  The game's window is on screen ("Oyunda"); sent once, never after the exit. */
-({ type: "windowShown" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "exited"; code: number | null; runtimeSecs: number }) & { account?: never; changedFiles?: never; changelog?: never; count?: never; firstStart?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; version?: never } | {
+({ type: "windowShown" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "exited"; code: number | null; runtimeSecs: number }) & { account?: never; changedFiles?: never; changelog?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; version?: never } | {
 	type: "crashed",
 } & CrashView | {
 	type: "error",
@@ -5101,9 +5122,9 @@ account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: neve
  *  `launch_cancel` stopped the launch before the game started (downloads and installs end,
  *  partial files go); the command bar simply returns to idle.
  */
-({ type: "cancelled" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "cancelled" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**  The official pack moved to a new version during this launch. */
-({ type: "packUpdated"; name: string; version: string; changelog: string | null; changedFiles: number }) & { account?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; mods?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never } | 
+({ type: "packUpdated"; name: string; version: string; changelog: string | null; changedFiles: number }) & { account?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never } | 
 /**
  *  Changes the player made in the mods folder were adopted, files could not be read, or the
  *  mods folder was installed again (a non-blocking notice; details in the mod center).
@@ -5115,13 +5136,13 @@ account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: neve
  *  The pack no longer offers this Minecraft version: the installed set was launched as it
  *  is. `recommended` is the version the pack recommends now.
  */
-({ type: "packVersionDropped"; minecraft: string; recommended: string | null }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; mods?: never; name?: never; pid?: never; recent?: never; runtimeSecs?: never; version?: never } | 
+({ type: "packVersionDropped"; minecraft: string; recommended: string | null }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; mods?: never; name?: never; pid?: never; recent?: never; runtimeSecs?: never; version?: never } | 
 /**
  *  "Devam et" into a world while a mod breaks the game's quick play into worlds and no overlay
  *  of this launcher opens it instead (`pl_mc::launch::world_entry`): the game starts on its
  *  title screen, where the player opens the world. `mods` names those mods.
  */
-({ type: "worldFromTitle"; mods: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "worldFromTitle"; mods: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**
  *  The mods would certainly stop the game: it was not started (the player chooses
  *  "Onar", "Yine de başlat" or "İptal").
@@ -5153,12 +5174,12 @@ account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: neve
  *  files (at most three, newest first) for thumbnails; their folder is allowed in the asset
  *  protocol.
  */
-({ type: "newScreenshots"; count: number; recent: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; firstStart?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "newScreenshots"; count: number; recent: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**
  *  "Ekran görüntülerini panoya kopyala" could not put a new screenshot on the clipboard
  *  (sent once per session, during the game; the page shows a quiet notice).
  */
-({ type: "screenshotNotCopied" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never };
+({ type: "screenshotNotCopied" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never };
 
 /**  Download preferences from Settings → İndirmeler, and how this launch starts. */
 export type LaunchSettings = {
@@ -6296,7 +6317,7 @@ export type OverlayStateView = {
 };
 
 /**
- *  Whether the mod in the running game is connected (`overlay-status`): while it is, its toasts
+ *  Whether the mod in a running game is connected (`overlay-status`): while one is, its toasts
  *  stand in for the launcher's system notifications of the same events.
  */
 export type OverlayStatus = {
@@ -10160,6 +10181,17 @@ export type WorldOpenRequest = {
 	commands: boolean,
 	/**  Friend ids, at most the guest limit. */
 	invite: string[],
+};
+
+/**  Whether a world is open in a game now ([`game_world_open`]), and whose game it is. */
+export type WorldOpenView = {
+	/**  A game holds the world's lock. */
+	open: boolean,
+	/**
+	 *  The account of the launcher's games in the instance's folder, when they are all one (the
+	 *  page says whose game has it). None: no game of the launcher there, or several accounts.
+	 */
+	account: string | null,
 };
 
 /**  Where an opening from the launcher is. */

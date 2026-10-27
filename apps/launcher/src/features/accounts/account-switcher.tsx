@@ -1,7 +1,7 @@
 // Title bar account switcher: the active account's head and name; opens a menu of every account
 // (arrow keys, Enter, Esc, typeahead) with "Hesap ekle" and "Hesap merkezini aç".
 import { CaretDown, Check, PushPin, UserPlus, UsersThree } from "@phosphor-icons/react";
-import { Chip, cn, easeOutExpo, returnFocusAfterKeys, springSnappy } from "@pl/ui";
+import { cn, easeOutExpo, returnFocusAfterKeys, springSnappy } from "@pl/ui";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useRef, useState } from "react";
@@ -11,7 +11,7 @@ import { onlineAfkSession } from "./afk-match";
 import { useCalm } from "./calm";
 import { useAccountsUi } from "./store";
 import { useAccountHeads, useAccounts, useAfkSessions, useSwitchAccount } from "./use-accounts";
-import { usePlayingAccountId } from "./use-own-launch";
+import { usePlayingAccountIds } from "./use-own-launch";
 
 const itemClass =
   "flex cursor-pointer items-center gap-3 rounded-md px-2 outline-none select-none data-[highlighted]:bg-white/8";
@@ -23,7 +23,8 @@ export function AccountSwitcher() {
   const [open, setOpen] = useState(false);
   const sessions = useAfkSessions(open);
   // The account whose game is on screen says so (PLAY-ACCT): OYNA is that account's alone.
-  const playing = usePlayingAccountId();
+  // Every account with a game on screen (PLAY-AGAIN: several may play at once).
+  const playing = usePlayingAccountIds();
   const switchTo = useSwitchAccount();
   const openCenter = useAccountsUi((s) => s.openCenter);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -179,28 +180,25 @@ export function AccountSwitcher() {
                                       aria-hidden
                                     />
                                   ) : null}
-                                  {playing === account.id ? (
-                                    <Chip tone="jade" className="shrink-0">
-                                      {t("playAcct.inGame")}
-                                    </Chip>
-                                  ) : null}
-                                  {afk ? (
-                                    <Chip tone="jade" className="shrink-0">
-                                      {t("accounts.center.afk")}
-                                    </Chip>
-                                  ) : null}
                                 </span>
-                                {/* Microsoft accounts say so; a username alone needs no line. */}
-                                {expired || account.kind === "microsoft" ? (
-                                  <span
-                                    className={cn(
-                                      "block truncate text-[12px]",
-                                      expired ? "text-flare-400" : "text-ash-400",
-                                    )}
-                                  >
-                                    {expired
-                                      ? t("accounts.switcher.expired")
-                                      : t("accounts.kind.microsoft")}
+                                {/* Every state in one place, as coloured words under the name
+                                    (PLAY-AGAIN second look: tags beside the name and a line
+                                    under it read as two systems): an expired session first, then
+                                    in game, AFK, else what kind the account is (a username alone
+                                    needs no line). */}
+                                {expired ? (
+                                  <span className="block truncate text-[12px] text-flare-400">
+                                    {t("accounts.switcher.expired")}
+                                  </span>
+                                ) : playing.includes(account.id) || afk ? (
+                                  <span className="block truncate text-[12px] text-jade-400">
+                                    {playing.includes(account.id)
+                                      ? t("playAcct.inGame")
+                                      : t("accounts.center.afk")}
+                                  </span>
+                                ) : account.kind === "microsoft" ? (
+                                  <span className="block truncate text-[12px] text-ash-400">
+                                    {t("accounts.kind.microsoft")}
                                   </span>
                                 ) : null}
                               </span>

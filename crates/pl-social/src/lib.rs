@@ -53,6 +53,7 @@ mod closed;
 mod codes;
 mod error;
 mod game;
+mod game_lead;
 mod gate;
 mod history;
 mod links;
@@ -93,6 +94,7 @@ pub use codes::{
 };
 pub use error::{ErrorCode, Result, SocialError};
 pub use game::{GameActivity, LogSignal, log_signal, may_signal, server_label};
+pub use game_lead::{GameLead, PresenceStep};
 pub use gate::service_url;
 pub use history::{HISTORY_LIMIT, crew_conversation, direct_conversation, same_emoji};
 pub use links::{find_links, first_link, host_of};

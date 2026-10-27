@@ -10,11 +10,17 @@
 // copy button, for whoever would rather join from the game. Mounted once, by SocialHost.
 // A friend's world (HOST1, joinWorld) goes the same way once its join is ready, in its own words
 // and without an address: the game moves in game only when it runs the install the join prepared.
+// With several games (PLAY-AGAIN) "the game" is the selected account's newest one on screen; with
+// none of its own, a new game starts into the server beside the others.
+//
+// The buttons keep their places (PLAY-AGAIN, from PLAY-ACCT's second look): "Vazgeç" is on the
+// left at every step, so nothing comes under the pointer that pressed "Bağlan"; the buttons that
+// come after the 20 s wait take no press for a moment.
 import { Check, Copy, Play } from "@phosphor-icons/react";
-import { Button, Dialog, IconButton, toast } from "@pl/ui";
+import { Button, type ButtonProps, Dialog, IconButton, toast, usePressGuard } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { announce } from "@/features/accounts/use-accounts";
@@ -23,6 +29,7 @@ import { api, type GameAccount } from "@/lib/api";
 import type { SocialInvite } from "@/lib/api/social-types";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
+import { type OwnLaunch, ownLaunch } from "@/stores/launch-owner";
 import { copyText } from "./actions";
 import {
   CLOSE_GRACE_MS,
@@ -71,9 +78,17 @@ interface Flow {
   running: string | null;
   /** The account it played with: it starts again with it, whichever is selected (PLAY-ACCT). */
   account: GameAccount | null;
+  /** The launcher's number for the game that closes (PLAY-AGAIN: one among several). */
+  game: number | null;
   /** The step's own timer (its time limit). */
   timer?: number;
   unsubscribe: () => void;
+}
+
+/** The selected account's launch or newest game on screen (PLAY-AGAIN): what "Bağlan" moves. */
+function own(): OwnLaunch {
+  const launch = useLaunch.getState();
+  return ownLaunch(launch, launch.selected);
 }
 
 let flow: Flow | null = null;
@@ -93,14 +108,13 @@ function closeAsk() {
 
 /** Opens the question for `target` as the game is now; false when the player is there already. */
 function ask(target: JoinTarget, inviteId?: string): boolean {
-  const { phase } = useLaunch.getState();
+  const { phase, instanceId } = own();
   const activity = useSocialUi.getState().view.activity;
   const step = joinStep(target, gameNow(phase), activity);
   if (step === "already") return false;
   leave();
   // A friend's world is reached in game only from the install its join prepared.
-  const sameInstance =
-    target.kind !== "world" || useLaunch.getState().instanceId === target.instance;
+  const sameInstance = target.kind !== "world" || instanceId === target.instance;
   useJoinAsk.setState({
     ask: {
       inviteId,
@@ -118,7 +132,7 @@ function ask(target: JoinTarget, inviteId?: string): boolean {
  * question: "Katıl" said it); with a game open or opening, the question first.
  */
 export function joinWorld(target: Extract<JoinTarget, { kind: "world" }>) {
-  if (gameNow(useLaunch.getState().phase) === "closed") {
+  if (gameNow(own().phase) === "closed") {
     void start(target, null);
     return;
   }
@@ -154,7 +168,7 @@ export function joinCall(where: CallWhere = { kind: "projects" }) {
  * it starts at once, as it always did; with a game open or opening, the question first (FIX2).
  */
 export function joinOrAsk(target: JoinTarget) {
-  if (gameNow(useLaunch.getState().phase) === "closed") {
+  if (gameNow(own().phase) === "closed") {
     void start(target, null);
     return;
   }
@@ -166,7 +180,7 @@ export const PROJECTS: JoinTarget = { kind: "projects" };
 
 /** The player's game is on `target` already: its "Katıl" is off. */
 export function useThere(target: JoinTarget): boolean {
-  const open = useLaunch((s) => gameNow(s.phase) === "open");
+  const open = useLaunch((s) => gameNow(ownLaunch(s, s.selected).phase) === "open");
   const activity = useSocialUi((s) => s.view.activity);
   return open && onTarget(target, activity);
 }
@@ -239,20 +253,21 @@ function begin(current: Flow, next: CloseStep) {
     case "inGame":
       // The shell answers within five seconds; past the limit it counts as a no.
       limit(IN_GAME_LIMIT_MS, () => ({ type: "inGame", done: false, now: Date.now() }));
-      void connectInGame(current.target).then((done) =>
+      void connectInGame(current.target, current.game).then((done) =>
         step(id, { type: "inGame", done, now: Date.now() }),
       );
       break;
-    case "closing":
+    case "closing": {
       limit(CLOSE_GRACE_MS, () => ({ type: "tick", now: Date.now() }));
-      void api
-        .closeGame()
-        .catch(() => false)
-        .then((asked) => step(id, { type: "asked", asked }));
+      const { game } = current;
+      // A game the page cannot name cannot be asked: the warning comes at once.
+      const asking = game === null ? Promise.resolve(false) : api.closeGame(game);
+      void asking.catch(() => false).then((asked) => step(id, { type: "asked", asked }));
       break;
+    }
     case "forcing":
       limit(FORCE_GRACE_MS, () => ({ type: "tick", now: Date.now() }));
-      void api.killGame();
+      if (current.game !== null) void api.killGame(current.game);
       break;
     case "stopping":
       // Nothing to save yet: the start stops (a game that was opening closes with it).
@@ -268,7 +283,8 @@ function begin(current: Flow, next: CloseStep) {
 function connect(current: Ask) {
   if (current.inviteId) void api.social.dismissInvite(current.inviteId);
   const launch = useLaunch.getState();
-  const game = gameNow(launch.phase);
+  const mine = own();
+  const game = gameNow(mine.phase);
   if (game === "closed") {
     closeAsk();
     void start(current.target, null);
@@ -277,17 +293,21 @@ function connect(current: Ask) {
   leave();
   flows += 1;
   const id = flows;
-  // The game's end, however it comes (asked, ended, or closed by the player meanwhile).
-  const unsubscribe = useLaunch.subscribe((state, before) => {
-    if (gameNow(state.phase) === "closed" && gameNow(before.phase) !== "closed") {
+  // The launch on its way, or this account's newest game on screen (PLAY-AGAIN: other games may
+  // run beside it and stay).
+  const run = mine.game?.run ?? launch.progress;
+  // Its end, however it comes (asked, ended, or closed by the player meanwhile).
+  const unsubscribe = useLaunch.subscribe((state) => {
+    if (state.progress !== run && !state.games.some((g) => g.run === run)) {
       step(id, { type: "exited" });
     }
   });
   flow = {
     id,
     target: current.target,
-    running: launch.instanceId,
-    account: launch.account,
+    running: mine.instanceId,
+    account: mine.game?.account ?? launch.account,
+    game: mine.game?.game ?? null,
     unsubscribe,
   };
   const first: CloseStep =
@@ -323,52 +343,81 @@ function AddressRow({ target }: { target: JoinTarget }) {
       announce(t("playTogether.addressCopied"));
     });
   return (
-    <div className="mt-1 flex items-center gap-2 rounded-[var(--radius-panel)] bg-obsidian-950/45 py-1 pr-1 pl-3 ring-1 ring-white/8">
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-bone-100 select-text">
-        <span className="sr-only">{t("fix2.connect.address")}: </span>
-        {address}
-      </span>
-      <IconButton
-        size="sm"
-        label={copied ? t("playTogether.addressCopied") : t("playTogether.copyAddress")}
-        onClick={copy}
-        icon={
-          <span className="relative flex size-4 items-center justify-center">
-            <AnimatePresence initial={false} mode="popLayout">
-              <motion.span key={copied ? "done" : "copy"} className="flex" {...pop(reduce, 0.16)}>
-                {copied ? (
-                  <Check size={15} weight="bold" className="text-jade-400" />
-                ) : (
-                  <Copy size={15} />
-                )}
-              </motion.span>
-            </AnimatePresence>
-          </span>
-        }
-      />
+    <div className="mt-1">
+      {/* What the address is for (second look: the field said nothing of it). */}
+      <p className="mb-1.5 text-[12.5px] text-ash-400">{t("playAgain.addressHint")}</p>
+      <div className="flex items-center gap-2 rounded-[var(--radius-panel)] bg-obsidian-950/45 py-1 pr-1 pl-3 ring-1 ring-white/8">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-bone-100 select-text">
+          <span className="sr-only">{t("fix2.connect.address")}: </span>
+          {address}
+        </span>
+        <IconButton
+          size="sm"
+          label={copied ? t("playTogether.addressCopied") : t("playTogether.copyAddress")}
+          onClick={copy}
+          icon={
+            <span className="relative flex size-4 items-center justify-center">
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.span key={copied ? "done" : "copy"} className="flex" {...pop(reduce, 0.16)}>
+                  {copied ? (
+                    <Check size={15} weight="bold" className="text-jade-400" />
+                  ) : (
+                    <Copy size={15} />
+                  )}
+                </motion.span>
+              </AnimatePresence>
+            </span>
+          }
+        />
+      </div>
     </div>
   );
 }
 
-/** A quiet line that moves while the game closes or moves (only while the dialog waits). */
-function Waiting() {
+/**
+ * A quiet line that fills from the left over the time the dialog waits for this step (the game
+ * closing, a forced end, a move in game), once: full when the wait would run out (second look:
+ * the endless sweep read as a stray speck in a still). None without movement, or for a start that
+ * stops (no wait of its own).
+ */
+function Waiting({ ms }: { ms: number | null }) {
   const { reduce } = useSocialMotion();
-  if (reduce) return null;
+  if (reduce || ms === null) return null;
   return (
-    <div aria-hidden className="relative mt-2 h-[3px] overflow-hidden rounded-full bg-white/[0.06]">
+    <div aria-hidden className="relative mt-2 h-[3px] overflow-hidden rounded-full bg-white/10">
       <motion.span
-        className="absolute inset-y-0 left-0 w-1/3 rounded-full bg-gold-400/70"
-        initial={{ transform: "translateX(-100%)" }}
-        animate={{ transform: "translateX(300%)" }}
-        transition={{ duration: 1.4, ease: [0.65, 0, 0.35, 1], repeat: Infinity }}
+        className="absolute inset-0 origin-left rounded-full bg-gold-400/70"
+        initial={{ transform: "scaleX(0)" }}
+        animate={{ transform: "scaleX(1)" }}
+        transition={{ duration: ms / 1000, ease: "linear" }}
       />
     </div>
   );
 }
 
-/** Title and sentence for where the question or the way is. */
-function words(t: TFunction, shown: Ask) {
-  if (shown.target.kind === "world") return worldWords(t, shown);
+/** How long the dialog waits at a step before it says more (connect.ts). */
+function waitOf(closing: CloseStep["kind"]): number | null {
+  if (closing === "closing") return CLOSE_GRACE_MS;
+  if (closing === "forcing") return FORCE_GRACE_MS;
+  if (closing === "inGame") return IN_GAME_LIMIT_MS;
+  return null;
+}
+
+/** The title while a game closes: whose, when several games are on screen (PLAY-AGAIN). */
+function closeTitle(
+  t: TFunction,
+  key: "closingTitle" | "overdueTitle" | "forcingTitle",
+  name: string | null,
+): string {
+  return name ? t(`playAgain.${key}Account`, { name }) : t(`fix2.connect.${key}`);
+}
+
+/**
+ * Title and sentence for where the question or the way is. `closingName`: the account of the
+ * game that would close, named when several games are on screen (PLAY-AGAIN, second look).
+ */
+function words(t: TFunction, shown: Ask, closingName: string | null) {
+  if (shown.target.kind === "world") return worldWords(t, shown, closingName);
   const server = targetName(shown.target);
   const saved = shown.world ? ` ${t("fix2.connect.saved")}` : "";
   const closing = shown.closing?.kind;
@@ -378,16 +427,20 @@ function words(t: TFunction, shown: Ask) {
   if (closing === "closing" || closing === "stopping") {
     const saving = shown.world && closing === "closing" ? `${t("fix2.connect.saving")} ` : "";
     return {
-      title: t("fix2.connect.closingTitle"),
+      title: closeTitle(t, "closingTitle", closingName),
       body: saving + t("fix2.connect.closingBody", { server }),
     };
   }
   if (closing === "overdue") {
-    return { title: t("fix2.connect.overdueTitle"), body: t("fix2.connect.overdueBody") };
+    // What a force costs, then what still follows (sixth look: the reopening went unsaid here).
+    return {
+      title: closeTitle(t, "overdueTitle", closingName),
+      body: `${t("fix2.connect.overdueBody")} ${t("fix2.connect.closingBody", { server })}`,
+    };
   }
   if (closing === "forcing") {
     return {
-      title: t("fix2.connect.forcingTitle"),
+      title: closeTitle(t, "forcingTitle", closingName),
       body: t("fix2.connect.closingBody", { server }),
     };
   }
@@ -407,12 +460,15 @@ function words(t: TFunction, shown: Ask) {
     ? { title: t("fix2.connect.moveTitle"), body: t("fix2.connect.moveBody", { server }) + saved }
     : {
         title: t("fix2.connect.restartTitle"),
-        body: t("fix2.connect.restartBody", { server }) + saved,
+        body:
+          (closingName
+            ? t("playAgain.restartBodyAccount", { name: closingName, server })
+            : t("fix2.connect.restartBody", { server })) + saved,
       };
 }
 
 /** The same steps for a friend's world (HOST1): "arkadaşının dünyası", never an address. */
-function worldWords(t: TFunction, shown: Ask) {
+function worldWords(t: TFunction, shown: Ask, closingName: string | null) {
   const saved = shown.world ? ` ${t("fix2.connect.saved")}` : "";
   const closing = shown.closing?.kind;
   if (closing === "inGame") {
@@ -421,45 +477,86 @@ function worldWords(t: TFunction, shown: Ask) {
   if (closing === "closing" || closing === "stopping") {
     const saving = shown.world && closing === "closing" ? `${t("fix2.connect.saving")} ` : "";
     return {
-      title: t("fix2.connect.closingTitle"),
+      title: closeTitle(t, "closingTitle", closingName),
       body: saving + t("host.connect.closingBody"),
     };
   }
   if (closing === "overdue") {
-    return { title: t("fix2.connect.overdueTitle"), body: t("fix2.connect.overdueBody") };
+    return {
+      title: closeTitle(t, "overdueTitle", closingName),
+      body: `${t("fix2.connect.overdueBody")} ${t("host.connect.closingBody")}`,
+    };
   }
   if (closing === "forcing") {
-    return { title: t("fix2.connect.forcingTitle"), body: t("host.connect.closingBody") };
+    return {
+      title: closeTitle(t, "forcingTitle", closingName),
+      body: t("host.connect.closingBody"),
+    };
   }
   if (shown.step === "reopen") {
     return { title: t("fix2.connect.restartTitle"), body: t("host.connect.reopenBody") };
   }
   return shown.inGame
     ? { title: t("host.connect.moveTitle"), body: t("host.connect.moveBody") + saved }
-    : { title: t("fix2.connect.restartTitle"), body: t("host.connect.restartBody") + saved };
+    : {
+        title: t("fix2.connect.restartTitle"),
+        body:
+          (closingName
+            ? t("playAgain.restartWorldAccount", { name: closingName })
+            : t("host.connect.restartBody")) + saved,
+      };
+}
+
+/**
+ * A button that came in place of the waiting line (the 20 s wait ran out): it takes presses once
+ * the pointer has left it or a moment after it came (`usePressGuard`), never a click aimed at what
+ * was there before.
+ */
+function ArrivingButton({
+  onClick,
+  ...props
+}: Omit<ButtonProps, "onClick"> & { onClick: () => void }) {
+  const [since] = useState(() => performance.now());
+  const guard = usePressGuard("arrived", { since });
+  return (
+    <Button
+      {...props}
+      aria-disabled={!guard.armed || undefined}
+      onPointerLeave={guard.handlers.onPointerLeave}
+      onKeyDown={guard.handlers.onKeyDown}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        if (guard.take(event)) onClick();
+      }}
+    />
+  );
 }
 
 export function JoinDialog() {
   const { t } = useTranslation();
   const current = useJoinAsk((s) => s.ask);
+  // Several games on screen: the sentence names whose game closes (the selected account's).
+  const gameCount = useLaunch((s) => s.games.length);
   // The dialog keeps its words while it fades out.
   const last = useRef<Ask | null>(null);
   if (current) last.current = current;
   const shown = current ?? last.current;
   if (!shown) return null;
-  const { title, body } = words(t, shown);
+  const closingName = gameCount > 1 ? (own().game?.account?.name ?? null) : null;
+  const { title, body } = words(t, shown, closingName);
   const closing = shown.closing?.kind;
-  // A move in game, a stopping start and an end the player asked for run to their end.
-  const settled = closing === "inGame" || closing === "forcing" || closing === "stopping";
+  // A move in game, a stopping start and an end the player asked for run to their end; while the
+  // game closes the named button is the one way out (fifth look: an unnamed × beside it left the
+  // game's fate unsaid), so the × shows only while "Bağlan" asks.
+  const dismissible = closing === undefined;
+  // "Vazgeç" stays on the left: after "Bağlan" nothing comes where the pointer pressed.
   const cancel = (
-    <Button
-      variant="ghost"
-      className={closing === "overdue" ? "mr-auto" : undefined}
-      onClick={closeAsk}
-    >
+    <Button variant="ghost" className="mr-auto" onClick={closeAsk}>
       {t("fix2.connect.cancel")}
     </Button>
   );
+  // The answer says when the game on screen closes first (second look: "Bağlan" under "Oyun
+  // yeniden açılsın mı?" left the closing unsaid).
+  const closesFirst = shown.step === "restart" && !shown.inGame;
   const footer =
     closing === undefined ? (
       <>
@@ -469,20 +566,27 @@ export function JoinDialog() {
           icon={<Play size={14} weight="fill" />}
           onClick={() => connect(shown)}
         >
-          {t("fix2.connect.connect")}
+          {closesFirst ? t("playAgain.closeAndConnect") : t("fix2.connect.connect")}
         </Button>
       </>
     ) : closing === "closing" ? (
-      cancel
+      // The game closes either way: this only leaves the server for later. The one button of the
+      // step, so it looks like one (sixth look: alone, ghost text read as a caption).
+      <Button variant="secondary" className="mr-auto" onClick={closeAsk}>
+        {t("playAgain.stopConnecting")}
+      </Button>
     ) : closing === "overdue" ? (
       <>
-        {cancel}
-        <Button variant="secondary" onClick={() => send({ type: "wait", now: Date.now() })}>
+        {/* What it does, by name (second look: "Vazgeç" read like "Beklemeye devam et"). */}
+        <ArrivingButton variant="ghost" className="mr-auto" onClick={closeAsk}>
+          {t("playAgain.keepOpen")}
+        </ArrivingButton>
+        <ArrivingButton variant="secondary" onClick={() => send({ type: "wait", now: Date.now() })}>
           {t("fix2.connect.wait")}
-        </Button>
-        <Button variant="danger" onClick={() => send({ type: "force", now: Date.now() })}>
+        </ArrivingButton>
+        <ArrivingButton variant="danger" onClick={() => send({ type: "force", now: Date.now() })}>
           {t("fix2.connect.force")}
-        </Button>
+        </ArrivingButton>
       </>
     ) : undefined;
   return (
@@ -496,7 +600,7 @@ export function JoinDialog() {
       closeLabel={t("common.close")}
       width={460}
       morph
-      dismissible={!settled}
+      dismissible={dismissible}
       footer={footer}
     >
       {closing === undefined ? (
@@ -505,7 +609,7 @@ export function JoinDialog() {
           <AddressRow target={shown.target} />
         )
       ) : closing === "overdue" ? null : (
-        <Waiting />
+        <Waiting key={closing} ms={waitOf(closing)} />
       )}
     </Dialog>
   );

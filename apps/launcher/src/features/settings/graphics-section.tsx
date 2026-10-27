@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useOwnLaunchInstance, useOwnLaunchKind } from "@/features/accounts/use-own-launch";
 import { showError } from "@/features/content/jobs";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { GraphicsPicker } from "@/features/library/tabs/graphics-picker";
@@ -32,15 +33,24 @@ const TOAST_ID = "graphics-switch";
  */
 export function usePlayInstance(instances: InstanceSummary[]) {
   const selectedId = usePrefs((s) => s.selectedInstanceId);
-  const phaseKind = useLaunch((s) => s.phase.kind);
-  const launchId = useLaunch((s) => s.instanceId);
+  // The selected account's launch or game (PLAY-AGAIN: other accounts' games run beside it).
+  const phaseKind = useOwnLaunchKind();
+  const launchId = useOwnLaunchInstance();
   // While a game is prepared or played the command bar stays on that instance.
   const busy = phaseKind === "working" || phaseKind === "launching" || phaseKind === "running";
   const instance =
     (busy ? instances.find((i) => i.id === launchId) : undefined) ??
     instances.find((i) => i.id === selectedId) ??
     instances[0];
-  return { instance, busy, gameOpen: busy && instance !== undefined && launchId === instance.id };
+  // Its files are in use while any game of it runs, whichever account's.
+  const anyGame = useLaunch((s) =>
+    instance ? s.games.some((game) => game.instanceId === instance.id) : false,
+  );
+  return {
+    instance,
+    busy,
+    gameOpen: (busy && instance !== undefined && launchId === instance.id) || anyGame,
+  };
 }
 
 /** The instance row: the one Play launches, chosen here as in the command bar's picker. */

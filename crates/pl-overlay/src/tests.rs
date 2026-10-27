@@ -664,16 +664,50 @@ async fn connect_switches_the_game_only_where_and_when_it_may() {
 }
 
 #[tokio::test]
-async fn without_a_game_nothing_listens_and_a_new_start_replaces_the_old_session() {
+async fn two_games_keep_their_own_sessions_and_hear_everything() {
+    // PLAY-AGAIN: a second game starts while the first runs; neither loses its overlay.
     let social = FakeSocial::new(view());
     let overlay = Overlay::new(OverlayConfig::default());
+    let seen = statuses(&overlay);
     let first = overlay.start(social.clone(), "t").await.unwrap();
-    let mut game = MockMod::connect(&first).await;
-    game.next_of("snapshot").await;
-    let second = overlay.start(social, "t").await.unwrap();
-    // The first session said goodbye as the launcher would on quitting.
-    assert_eq!(game.next_of("bye").await["reason"], "launcher-exit");
+    let mut one = MockMod::connect_with(&first, &["lang"]).await;
+    assert_eq!(one.next_of("welcome").await["lang"], "tr");
+    one.next_of("snapshot").await;
+    let second = overlay.start(social.clone(), "t").await.unwrap();
     assert_ne!(first.port(), second.port());
+    let mut two = MockMod::connect_with(&second, &["lang"]).await;
+    two.next_of("snapshot").await;
+    eventually("both connected", || overlay.connected()).await;
+
+    // A message pops in both games (each decides for itself).
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::ChatMessage {
+        conv: "d:f-ayse:me".into(),
+        message: Box::new(message("i:9", "f-ayse", false, MessageState::Sent)),
+        name: Some("Ayşe".into()),
+        crew: None,
+    }));
+    assert_eq!(one.next_of("toast").await["title"], "Ayşe");
+    assert_eq!(two.next_of("toast").await["title"], "Ayşe");
+
+    // The language picked in one game reaches the other at once (a new greeting in it).
+    one.send(serde_json::json!({"t":"lang","lang":"en"})).await;
+    assert_eq!(one.next_of("welcome").await["lang"], "en");
+    assert_eq!(two.next_of("welcome").await["lang"], "en");
+    assert_eq!(overlay.language(), pl_lang::Lang::En);
+
+    // The first game ends: the second keeps its session, and the page still hears a mod.
+    overlay
+        .stop_for(first.port(), ByeReason::LauncherExit)
+        .await;
+    assert_eq!(one.next_of("bye").await["reason"], "launcher-exit");
+    assert!(overlay.active() && overlay.connected());
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::ChatMessage {
+        conv: "d:f-ayse:me".into(),
+        message: Box::new(message("i:10", "f-ayse", false, MessageState::Sent)),
+        name: Some("Ayşe".into()),
+        crew: None,
+    }));
+    assert_eq!(two.next_of("toast").await["body"], "metin i:10");
     // A late stop for the first game's bridge leaves the second game's session alone.
     overlay
         .stop_for(first.port(), ByeReason::LauncherExit)
@@ -682,8 +716,101 @@ async fn without_a_game_nothing_listens_and_a_new_start_replaces_the_old_session
     overlay
         .stop_for(second.port(), ByeReason::LauncherExit)
         .await;
-    assert!(!overlay.active());
+    assert!(!overlay.active() && !overlay.connected());
+    assert_eq!(*seen.lock().unwrap(), [true, false]);
     // Stopping again is harmless.
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn world_sharing_follows_one_game_and_moves_when_the_launcher_says() {
+    use crate::protocol::{ToGame, WorldMark};
+    use crate::{HostSignal, WorldsShown};
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&heard);
+    overlay.on_host(move |signal| sink.lock().unwrap().push(signal));
+    overlay.set_worlds(WorldsShown {
+        marks: [("f-mert".to_owned(), WorldMark { guests: 1, max: 7 })].into(),
+        may_host: true,
+    });
+    let first = overlay.start(social.clone(), "t").await.unwrap();
+    let mut one = MockMod::connect_with(&first, &["connect", "host"]).await;
+    let snapshot = one.next_of("snapshot").await;
+    let marked = |snapshot: &serde_json::Value| {
+        snapshot["friends"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["id"] == "f-mert" && !f["world"].is_null())
+    };
+    assert!(marked(&snapshot), "the first game shows world sharing");
+    assert_eq!(overlay.host_port(), Some(first.port()));
+
+    // A second game: no world sharing in it, its hello and frames go nowhere.
+    let second = overlay.start(social.clone(), "t").await.unwrap();
+    let mut two = MockMod::connect_with(&second, &["connect", "host"]).await;
+    assert!(!lists(&two.next_of("welcome").await, "host"));
+    let snapshot = two.next_of("snapshot").await;
+    assert!(!marked(&snapshot), "the second game shows none");
+    two.send(serde_json::json!({"t":"host-world","open":true,"folder":"B","mode":"survival"}))
+        .await;
+    eventually("the first game's hello reached world sharing", || {
+        heard
+            .lock()
+            .unwrap()
+            .contains(&HostSignal::Connected { hosts: true })
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        heard.lock().unwrap().len(),
+        1,
+        "only the first game's hello: {:?}",
+        heard.lock().unwrap()
+    );
+    // Its frames go to the first game alone.
+    overlay.host_send(vec![ToGame::HostPublish {
+        id: "p1".into(),
+        mode: "survival".into(),
+        commands: false,
+        max: 7,
+        binding: "sW9hzU3c".into(),
+    }]);
+    assert_eq!(one.next_of("host-publish").await["id"], "p1");
+
+    // The first game ends; its going still reaches world sharing. The launcher hands world
+    // sharing to the second game: it hears the second mod's hello again and shows the marks.
+    overlay
+        .stop_for(first.port(), ByeReason::LauncherExit)
+        .await;
+    drop(one);
+    eventually("the first game's going", || {
+        heard.lock().unwrap().contains(&HostSignal::Gone)
+    })
+    .await;
+    heard.lock().unwrap().clear();
+    overlay.set_host(Some(second.port()));
+    assert_eq!(
+        *heard.lock().unwrap(),
+        [HostSignal::Connected { hosts: true }]
+    );
+    // Its features now name `host`: it is greeted again, Mert's world marked.
+    assert!(lists(&two.next_of("welcome").await, "host"));
+    assert!(marked(&two.next_of("snapshot").await));
+    overlay.host_send(vec![ToGame::HostPublish {
+        id: "p2".into(),
+        mode: "survival".into(),
+        commands: false,
+        max: 7,
+        binding: "sW9hzU3c".into(),
+    }]);
+    assert_eq!(two.next_of("host-publish").await["id"], "p2");
+    // Naming it again changes nothing.
+    overlay.set_host(Some(second.port()));
+    assert_eq!(heard.lock().unwrap().len(), 1);
     overlay.stop(ByeReason::LauncherExit).await;
 }
 

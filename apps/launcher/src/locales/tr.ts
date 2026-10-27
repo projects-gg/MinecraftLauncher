@@ -34,6 +34,7 @@ import { trOverlay } from "./tr-overlay";
 import { trOverview } from "./tr-overview";
 import { trPlacement } from "./tr-placement";
 import { trPlayAcct } from "./tr-play-acct";
+import { trPlayAgain } from "./tr-play-again";
 import { trPlayOpen } from "./tr-play-open";
 import { trPlayTogether } from "./tr-play-together";
 import { trPrepare } from "./tr-prepare";
@@ -110,6 +111,7 @@ export const tr = {
   newsColumn: trNewsColumn,
   worldEntry: trWorldEntry,
   playAcct: trPlayAcct,
+  playAgain: trPlayAgain,
   chatProd: trChatProd,
   nav: {
     home: "Ana Sayfa",

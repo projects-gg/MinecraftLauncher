@@ -22,7 +22,7 @@ import { formatDuration, formatRelative } from "@/lib/format";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { settingsChanged, useDrafts } from "@/stores/drafts";
 import { isOpening, useLaunch } from "@/stores/launch";
-import { launchOwner } from "@/stores/launch-owner";
+import { ownLaunch } from "@/stores/launch-owner";
 import { usePrefs } from "@/stores/prefs";
 import { type InstanceTab, instanceTab, type ModsSection } from "./instance-tab";
 import { OverviewTab } from "./overview/overview-tab";
@@ -63,10 +63,10 @@ export function InstancePage() {
   // selected account's own game (PLAY-ACCT); another account's game leaves its "Oyna" pressable.
   const selectedAccount = useSelectedAccountId();
   const launchKind = useLaunch((s) => {
-    if (s.instanceId !== instanceId) return "idle";
-    if (launchOwner(s.phase, s.account, selectedAccount) !== "mine") return "idle";
-    if (s.phase.kind === "working") return "preparing";
-    return isOpening(s.phase) ? "opening" : s.phase.kind;
+    const own = ownLaunch(s, selectedAccount);
+    if (own.owner !== "mine" || own.instanceId !== instanceId) return "idle";
+    if (own.phase.kind === "working") return "preparing";
+    return isOpening(own.phase) ? "opening" : own.phase.kind;
   });
   // Unsaved settings and unapplied mod choices wait in their tabs (stores/drafts.ts): the tab
   // shows a small marker so they are not forgotten.
@@ -194,8 +194,8 @@ export function InstancePage() {
               },
             ]}
           />
-          {/* Follows this instance's launch like OYNA does (another one's launch: "Oyna" says
-              that only one game runs at a time). */}
+          {/* Follows this account's launch of this instance like OYNA does. One more game of it
+              is OYNA's "Oyunda" (PLAY-AGAIN); this one stays a state while it runs. */}
           <Button
             variant="primary"
             icon={<Play size={15} weight="fill" />}

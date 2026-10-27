@@ -6,11 +6,11 @@ import { Button, ContentIcon, cn, SwapLabel } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { useOwnLaunch } from "@/features/accounts/use-own-launch";
 import { pop, useSocialMotion } from "@/features/social/motion";
 import { type FaceSource, SocialFace } from "@/features/social/social-face";
 import { api } from "@/lib/api";
 import type { GuestState, HostSession, WorldInvite } from "@/lib/api/host-types";
-import { useLaunch } from "@/stores/launch";
 import { pressJoin } from "./actions";
 import { type JoinButton, joinButton } from "./rules";
 
@@ -193,8 +193,8 @@ function labelIndex(state: JoinButton): number {
 
 /** Where a join stands for the invite (the launch says when the game opens and connects). */
 export function useJoinButton(invite: WorldInvite): JoinButton {
-  const phase = useLaunch((s) => s.phase);
-  const instanceId = useLaunch((s) => s.instanceId);
+  // The selected account's launch or game (PLAY-AGAIN: other accounts' games run beside it).
+  const { phase, instanceId } = useOwnLaunch();
   return joinButton(invite.join, { phase, instanceId });
 }
 

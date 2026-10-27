@@ -121,7 +121,15 @@ export function ModCenter({
   // The mod check (what would stop the game), refreshed whenever the mods change.
   const health = useModCheck(instance.id, instance.loader !== "vanilla");
   // A launch syncs the pack (updates, adopted changes): show the result once the game starts.
-  const launchPhase = useLaunch((s) => (s.instanceId === instance.id ? s.phase.kind : null));
+  // The launch on its way for this instance, else "running" while any game of it runs
+  // (PLAY-AGAIN: another account's game holds its files too).
+  const launchPhase = useLaunch((s) =>
+    s.instanceId === instance.id && s.progress !== 0
+      ? s.phase.kind
+      : s.games.some((game) => game.instanceId === instance.id)
+        ? "running"
+        : null,
+  );
   useEffect(() => {
     if (launchPhase === "launching" || launchPhase === "running") {
       refreshMods(queryClient, instance.id);

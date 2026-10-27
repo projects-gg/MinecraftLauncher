@@ -251,6 +251,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::launch::game_close,
             commands::launch::game_running,
             commands::launch::game_adopted,
+            commands::launch::game_memory_fits,
+            commands::launch::game_world_open,
             commands::launch::game_copy_screenshots,
             prepare::prepare_configure,
             prepare::prepare_status,
