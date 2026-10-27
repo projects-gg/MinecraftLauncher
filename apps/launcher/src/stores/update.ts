@@ -1,6 +1,7 @@
 import { Channel } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { commands, type UpdateProgress, type UpdateStep } from "@/bindings";
+import { keepBeta } from "@/features/updates/beta-gate";
 import { isTauri } from "@/lib/platform";
 import { usePrefs } from "./prefs";
 
@@ -79,11 +80,14 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
     if (current === "downloading") return "downloading";
     if (current === "ready" || current === "applying") return "ready";
     if (current === "checking") return "busy";
-    const { updateChannel, autoDownloadUpdates } = usePrefs.getState();
+    const { autoDownloadUpdates } = usePrefs.getState();
     // A background look at an update the title bar already offers keeps the offer in place.
     const quiet = !manual && current === "available";
     if (!quiet) set({ phase: "checking", error: null, manual });
     try {
+      // BETA-GATE: the beta channel asks first whether this launcher may stay on it.
+      const updateChannel =
+        usePrefs.getState().updateChannel === "beta" ? await keepBeta() : "stable";
       const status = await commands.updateCheck(updateChannel);
       if (status.status === "error") throw new Error(status.error.message);
       const s = status.data;

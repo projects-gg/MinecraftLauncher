@@ -19,7 +19,9 @@ export function Toaster() {
           // Not `glass-strong`: see `toast-surface` in styles.css.
           toast:
             "toast-surface flex w-news items-start gap-3 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100",
-          title: "font-semibold text-bone-50",
+          // `text-balance` (design.md §3, as headings): a toast's two or three short lines come out
+          // even, never one word alone on the last.
+          title: "font-semibold text-balance text-bone-50",
           description: "mt-0.5 text-ash-300",
           // `pointer-events-auto`: a modal sheet turns pointer events off outside itself, the
           // toasts included; their buttons must still work (the sheet ignores those clicks).
@@ -31,6 +33,8 @@ export function Toaster() {
           // or red text shouts).
           error: "[&_[data-icon]]:text-flare-400",
           success: "[&_[data-icon]]:text-jade-400",
+          // Something that could not be done now (BETA-GATE: "couldn't check"), as inline warnings mark it.
+          warning: "[&_[data-icon]]:text-gold-300",
         },
       }}
     />
