@@ -7,8 +7,9 @@ use std::sync::Arc;
 
 use pl_afk::{
     AccountStore, AfkPaths, LoadReport, MemorySecretStore, SecretStore, VersionCatalog,
-    build_config, default_kick_messages, login_commands_key,
+    build_config, default_kick_messages_in, is_default_kick_messages, login_commands_key,
 };
+use pl_lang::Lang;
 
 const PLAIN_ID: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
 const PASSWORD: &str = "çokGizli123";
@@ -71,7 +72,12 @@ fn legacy_file_loads_unchanged_and_secrets_move_to_the_keychain() {
     assert_eq!(plain.id, PLAIN_ID);
     assert_eq!(plain.nickname, "Ana_Hesap");
     assert!(plain.login_commands.enabled);
-    assert_eq!(plain.auto_relog.kick_messages, default_kick_messages());
+    // Loaded as written: the legacy English list word for word, still known as the default one.
+    assert_eq!(
+        plain.auto_relog.kick_messages,
+        default_kick_messages_in(Lang::En)
+    );
+    assert!(is_default_kick_messages(&plain.auto_relog.kick_messages));
 
     let regenerated = &accounts[1];
     assert_eq!(regenerated.nickname, "Kimliksiz");
