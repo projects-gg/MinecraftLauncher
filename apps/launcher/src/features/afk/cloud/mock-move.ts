@@ -7,7 +7,8 @@
 // - `&move=player|host`: GeceBekcisi has it off and no slot is free (the switch waits);
 // - `&move=restart|slots|version|trade|notrunning`: what the machine says for GeceBekcisi;
 // - `&move=goto|follow`: GeceBekcisi walks to coordinates or follows EjderAvcisi at first;
-// - `&move=nomain`: no main account (only its other account).
+// - `&move=nomain`: no main account (only its other account);
+// - `&move=away`: the main account is out of sight (walking to it is refused).
 // A small stand-in machine answers the operations as the gate would (distance, who may be followed,
 // the rate limit), moves the account block by block and ends walks by themselves.
 import type {
@@ -234,7 +235,7 @@ export function moveOperation(acct: string, op: MoveOp): CloudMovementError | nu
       const isMain = main !== null && op.name.toLowerCase() === main.toLowerCase();
       if (!isMain && !own.includes(op.name)) return refuse("not_allowed");
       // Tuccar_Ali is stopped in the previews: not in sight.
-      if (!isMain) return refuse("not_visible");
+      if (!isMain || moveScenario === "away") return refuse("not_visible");
       stopTimer(machine);
       machine.move = {
         ...idle(sneak),
