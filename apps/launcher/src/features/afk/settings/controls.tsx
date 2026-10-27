@@ -5,7 +5,15 @@
 import { Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, type Ref, useEffect, useId, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { formatCount } from "@/lib/format";
 import { joinAddress, splitAddress } from "../address";
@@ -586,7 +594,7 @@ export function TokenText({
             <span
               // biome-ignore lint/suspicious/noArrayIndexKey: the pieces of one text, in order
               key={i}
-              className="relative isolate mx-px inline-flex h-5 items-center px-1.5 align-top text-[12px] font-semibold text-bone-50 [--cut:3px]"
+              className="relative isolate inline-flex h-5 items-center px-1.5 align-top text-[12px] font-semibold text-bone-50 [--cut:3px]"
             >
               <span aria-hidden className="chamfer absolute inset-0 -z-10 bg-white/12" />
               {name(piece)}
@@ -598,6 +606,35 @@ export function TokenText({
       </span>
     </span>
   );
+}
+
+/**
+ * Backspace or Delete beside or inside a placeholder (`{u}`, `$u`) takes the whole of it, so one
+ * press never leaves a broken "{u" behind (SHEET-UX). `split` has one capturing group: the token.
+ */
+export function deleteWholeToken(
+  event: KeyboardEvent<HTMLInputElement>,
+  split: RegExp,
+  onText: (text: string) => void,
+) {
+  if (event.key !== "Backspace" && event.key !== "Delete") return;
+  if (event.ctrlKey || event.altKey || event.metaKey) return;
+  const input = event.currentTarget;
+  const caret = input.selectionStart ?? 0;
+  // A selection is deleted as usual.
+  if (caret !== (input.selectionEnd ?? caret)) return;
+  const text = input.value;
+  for (const match of text.matchAll(new RegExp(split.source, `${split.flags.replace("g", "")}g`))) {
+    const from = match.index ?? 0;
+    const to = from + match[0].length;
+    const hit =
+      event.key === "Backspace" ? caret > from && caret <= to : caret >= from && caret < to;
+    if (!hit) continue;
+    event.preventDefault();
+    onText(text.slice(0, from) + text.slice(to));
+    requestAnimationFrame(() => input.setSelectionRange(from, from));
+    return;
+  }
 }
 
 /** A chip that puts a placeholder where the reply's caret is ("+ Yazanın adı"). */
@@ -671,6 +708,7 @@ export function TokenInput({
           onFocus?.();
         }}
         onBlur={() => setTyping(false)}
+        onKeyDown={(event) => deleteWholeToken(event, split, onChange)}
         onChange={(event) => onChange(event.target.value)}
         className={cn("h-9", chips && "text-transparent")}
       />

@@ -514,11 +514,13 @@ const DESKTOP_TOKENS = /(\$u)/;
 
 function RuleCard({
   rule,
+  index,
   onChange,
   onRemove,
   errorFor,
 }: {
   rule: RuleRow;
+  index: number;
   onChange: (rule: RuleRow) => void;
   onRemove: () => void;
   errorFor: SectionProps["errorFor"];
@@ -566,11 +568,36 @@ function RuleCard({
         inputRef={refs[field]}
         onFocus={() => setLast(field)}
       />
+      {/* "+ Yazanın adı" under the field it adds to: the one typed in last (the first at start). */}
+      {field === last ? (
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <span aria-hidden className="mr-0.5 text-[12px] text-ash-400">
+            {t("afkPanel.rule.insert")}
+          </span>
+          <InsertChip label={t("afkPanel.rule.insertSender")} onClick={insertSender}>
+            {t("afkPanel.rule.sender")}
+          </InsertChip>
+        </div>
+      ) : null}
     </div>
   );
   return (
-    <li className={cn(rowPanel, "px-3.5 pt-3.5 pb-0.5")}>
-      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] items-start gap-x-4">
+    <li className={cn(rowPanel, "px-3.5 pt-2 pb-0.5")}>
+      {/* Which rule it is, quietly, and its delete button in the card's corner, as a cloud
+          rule's: beside the first reply it read as "clear this reply" (SHEET-UX). */}
+      <div className="flex items-center gap-3 pb-1">
+        <span className="min-w-0 flex-1 text-[12.5px] font-medium text-ash-400">
+          {t("afkPanel.ruleOrdinal", { n: index + 1 })}
+        </span>
+        <IconButton
+          label={t("afkSettings.respond.remove")}
+          icon={<Trash size={15} />}
+          size="sm"
+          className="hover:text-flare-400"
+          onClick={onRemove}
+        />
+      </div>
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start gap-x-4">
         {/* A plain phrase; a pattern is the advanced way under it (SHEET-UX). */}
         <TriggerField
           id={id("pattern")}
@@ -585,29 +612,14 @@ function RuleCard({
           {replyField("reply", t("afkSettings.respond.reply"))}
           {replyField("privateReply", t("afkSettings.respond.privateReply"))}
           {replyField("otherReply", t("afkSettings.respond.otherReply"))}
-          <div className="-mt-1 flex flex-col gap-2">
+          <div className="-mt-1">
             {replyError ? (
               <ErrorText>{replyError}</ErrorText>
             ) : (
               <p className="text-[12px] text-ash-400">{t("afkPanel.rule.emptyReply")}</p>
             )}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span aria-hidden className="mr-0.5 text-[12px] text-ash-400">
-                {t("afkPanel.rule.insert")}
-              </span>
-              <InsertChip label={t("afkPanel.rule.insertSender")} onClick={insertSender}>
-                {t("afkPanel.rule.sender")}
-              </InsertChip>
-            </div>
           </div>
         </div>
-        <IconButton
-          label={t("afkSettings.respond.remove")}
-          icon={<Trash size={15} />}
-          size="sm"
-          className="mt-6 hover:text-flare-400"
-          onClick={onRemove}
-        />
       </div>
       <div className="mt-3 flex items-center gap-2 pb-3">
         <span className="text-[13px] text-ash-300">{t("afkPanel.rule.cooldown")}</span>
@@ -670,10 +682,11 @@ export function RepliesSection({ draft, setDraft, errorFor }: SectionProps) {
           </p>
           {draft.rules.length ? (
             <ul className="flex flex-col gap-3">
-              {draft.rules.map((rule) => (
+              {draft.rules.map((rule, i) => (
                 <RuleCard
                   key={rule.key}
                   rule={rule}
+                  index={i}
                   errorFor={errorFor}
                   onChange={(next) =>
                     setRules((list) => list.map((x) => (x.key === rule.key ? next : x)))

@@ -504,14 +504,12 @@ function CommandRow({
   const ids = useId();
   return (
     <li className={cn(rowPanel, "flex flex-col px-3.5 pt-2 pb-3")}>
-      {/* The row's own switch in words on the right edge, as a reply rule's (SHEET-UX). */}
-      <div className="switch-row flex items-center gap-3 py-1">
-        <label
-          htmlFor={`${ids}-use`}
-          className="min-w-0 flex-1 cursor-pointer text-[13.5px] font-semibold text-bone-50"
-        >
-          {t("cloudAfk.settings.commands.use")}
-        </label>
+      {/* Which row it is, quietly, then its own tools and its switch, "Kullan" right beside it on
+          the right edge as a reply rule's (SHEET-UX). */}
+      <div className="flex items-center gap-3 py-1">
+        <span className="min-w-0 flex-1 text-[12.5px] font-medium text-ash-400">
+          {t("afkPanel.commandOrdinal", { n: index + 1 })}
+        </span>
         <div className="flex items-center gap-0.5">
           <IconButton
             label={t("cloudAfk.settings.commands.moveUp")}
@@ -534,13 +532,21 @@ function CommandRow({
             onClick={onRemove}
           />
         </div>
-        <Switch
-          id={`${ids}-use`}
-          checked={command.enabled}
-          onCheckedChange={(enabled) => onChange({ ...command, enabled })}
-          label={t("cloudAfk.settings.commands.use")}
-          hideLabel
-        />
+        <span className="switch-row flex items-center gap-2 border-l border-white/8 pl-3">
+          <label
+            htmlFor={`${ids}-use`}
+            className="cursor-pointer text-[13px] font-medium text-bone-100"
+          >
+            {t("afkPanel.use")}
+          </label>
+          <Switch
+            id={`${ids}-use`}
+            checked={command.enabled}
+            onCheckedChange={(enabled) => onChange({ ...command, enabled })}
+            label={t("cloudAfk.settings.commands.use")}
+            hideLabel
+          />
+        </span>
       </div>
       <div
         className={cn(
@@ -750,26 +756,31 @@ function RuleRow({
     <li className={cn(rowPanel, "flex flex-col px-3.5 pt-2")}>
       {/* The rule's own switch in words, on the card's right edge as every switch of the panel,
           with its delete button: three unnamed switches in a row read alike (SHEET-UX). */}
-      <div className="switch-row flex items-center gap-3 py-1">
-        <label
-          htmlFor={`${ids}-use`}
-          className="min-w-0 flex-1 cursor-pointer text-[13.5px] font-semibold text-bone-50"
-        >
-          {t("cloudAfk.settings.replies.use")}
-        </label>
+      <div className="flex items-center gap-3 py-1">
+        <span className="min-w-0 flex-1 text-[12.5px] font-medium text-ash-400">
+          {t("afkPanel.ruleOrdinal", { n: index + 1 })}
+        </span>
         <IconButton
           label={t("cloudAfk.settings.replies.remove")}
           icon={<Trash size={15} />}
           size="sm"
           onClick={onRemove}
         />
-        <Switch
-          id={`${ids}-use`}
-          checked={rule.enabled}
-          onCheckedChange={(enabled) => onChange({ ...rule, enabled })}
-          label={t("cloudAfk.settings.replies.use")}
-          hideLabel
-        />
+        <span className="switch-row flex items-center gap-2 border-l border-white/8 pl-3">
+          <label
+            htmlFor={`${ids}-use`}
+            className="cursor-pointer text-[13px] font-medium text-bone-100"
+          >
+            {t("afkPanel.use")}
+          </label>
+          <Switch
+            id={`${ids}-use`}
+            checked={rule.enabled}
+            onCheckedChange={(enabled) => onChange({ ...rule, enabled })}
+            label={t("cloudAfk.settings.replies.use")}
+            hideLabel
+          />
+        </span>
       </div>
       {/* A rule that is off stays readable, a step quieter; its switch above stays as it is. */}
       <div

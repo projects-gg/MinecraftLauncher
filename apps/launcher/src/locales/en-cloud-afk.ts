@@ -62,7 +62,7 @@ export const enCloudAfk = {
     other: "Disconnected",
   },
   hint: {
-    wrongPassword: "Fix the login command in Settings, then start.",
+    wrongPassword: "Fix the login password in Settings, then start.",
     secretUnreadable: "Type your secret commands again in Settings, then start.",
     unreadableCommandRow: "Type command {{n}} again in Settings, then start.",
     unreadableReplyRow: "Type auto-reply {{n}} again in Settings, then start.",
@@ -266,7 +266,7 @@ export const enCloudAfk = {
       mark: "Secret",
       markHelp: "Secret lines are encrypted on this PC before they're sent.",
       auto: "Secret because it holds a password.",
-      kept: "Kept on this PC",
+      kept: "Encrypted in the cloud, also kept on this PC.",
       sealed: "Kept in the cloud",
       show: "Show",
       hide: "Hide",

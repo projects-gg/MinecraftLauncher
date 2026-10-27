@@ -910,10 +910,10 @@ export const tr = {
     },
     antiAfk: {
       interval: "Hareket aralığı",
-      command: "Her turda gönderilecek komut",
+      command: "Her harekette gönderilecek komut",
       commandPlaceholder: "Boş bırakılabilir",
       commandHelp: "Boş bırakırsan yalnız hareket edilir.",
-      sneak: "Çömelerek hareket et",
+      sneak: "Eğilerek hareket et",
       walk: "Rastgele yürü",
       walkHelp: "Hesap çevrede rastgele yürür; düşebilir ya da ölebilir.",
       walkRange: "Yürüme yarıçapı",
@@ -939,9 +939,8 @@ export const tr = {
     respond: {
       enabled: "Otomatik yanıtı kullan",
       sound: "Yanıt gönderilince bildirim sesi çal",
-      colors: "Renk kodlarıyla eşleştir",
-      colorsHelp:
-        "Sunucu mesajlarındaki renk kodları da eşleşmeye dahil edilir. Emin değilsen kapalı bırak.",
+      colors: "Renk kodlarını da ara",
+      colorsHelp: "Kalıp yazanlar için. Emin değilsen kapalı bırak.",
       rules: "Kurallar",
       add: "Kural ekle",
       remove: "Kuralı sil",
@@ -958,7 +957,7 @@ export const tr = {
       filter: "Kaydedilecek içerik",
       filterAll: "Tümü",
       filterAllHint: "Sunucudan gelen bütün mesajlar",
-      filterMessages: "İletiler",
+      filterMessages: "Mesajlar",
       filterMessagesHint: "Sohbet ve özel mesajlar",
       filterChat: "Sohbet",
       filterChatHint: "Yalnızca genel sohbet",

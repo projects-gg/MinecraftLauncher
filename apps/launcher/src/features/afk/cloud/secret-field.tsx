@@ -1,7 +1,7 @@
 // The words of a command or a reply. Three looks:
 // - plain words: a field, with a lock that makes them secret (a password command is secret at once);
 // - a secret this computer has (sealed here, kept in the keychain, or typed now): a hidden field
-//   with an eye that shows it on this computer only, and a quiet "Bu bilgisayarda saklı";
+//   with an eye that shows it on this computer only, and a quiet "Bulutta şifreli, bu bilgisayarda da saklı.";
 // - a secret only the cloud can show (sealed on the site or another computer): its preview, with
 //   "Göster" (the machine sends it sealed to a one-time key; shown for a few seconds, never kept)
 //   and "Değiştir" (type it again).
@@ -10,7 +10,7 @@ import { Button, cn, enter, IconButton, Input, leave, useMotionPrefs } from "@pl
 import { AnimatePresence, motion } from "motion/react";
 import { type Ref, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TokenText } from "../settings/controls";
+import { deleteWholeToken, TokenText } from "../settings/controls";
 import { cloudApi } from "./api";
 import { hasPlaceholder } from "./placeholders";
 import { looksSensitive } from "./sensitive";
@@ -86,7 +86,7 @@ function Stored({
           )}
         >
           <span className="sr-only">{label}</span>
-          <LockSimple size={15} weight="fill" className="shrink-0 text-gold-300" aria-hidden />
+          <LockSimple size={15} weight="fill" className="shrink-0 text-ash-300" aria-hidden />
           <span className="grid min-w-0 flex-1">
             <AnimatePresence initial={false}>
               {shown ? (
@@ -251,14 +251,6 @@ export function WordsField({
       {heading}
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
-          {secret ? (
-            <LockSimple
-              size={15}
-              weight="fill"
-              aria-hidden
-              className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-gold-300"
-            />
-          ) : null}
           <Input
             ref={inputRef}
             id={fieldId}
@@ -275,11 +267,17 @@ export function WordsField({
             autoFocus={autoFocus || focusNext}
             onFocus={() => setTyping(true)}
             onBlur={() => setTyping(false)}
+            // A placeholder goes in one press of Backspace or Delete, never half of it.
+            onKeyDown={
+              tokenName && !secret
+                ? (event) =>
+                    deleteWholeToken(event, CLOUD_TOKENS, (text) => onChange(typed(words, text)))
+                : undefined
+            }
             onChange={(event) => onChange(typed(words, event.target.value))}
             className={cn(
               "h-9",
               mono ? "font-mono text-[13px]" : "text-[13.5px]",
-              secret && "pl-9",
               secret && "pr-10",
               chips && "text-transparent",
             )}
@@ -316,14 +314,13 @@ export function WordsField({
             {t("cloudAfk.settings.secret.undoChange")}
           </Button>
         ) : (
-          <IconButton
-            label={t("cloudAfk.settings.secret.mark")}
-            icon={secret ? <LockSimple size={16} weight="fill" /> : <LockSimpleOpen size={16} />}
-            size="sm"
+          // In words, as on the site: an unnamed padlock beside every line said nothing. Pressed
+          // while the line is secret (a password command stays so); no gold, it is not the action.
+          <button
+            type="button"
             aria-pressed={secret}
-            // A password command stays secret.
             disabled={forced && secret}
-            className={cn(secret && "text-gold-300")}
+            title={t("cloudAfk.settings.secret.markHelp")}
             onClick={() =>
               onChange(
                 secret
@@ -331,7 +328,20 @@ export function WordsField({
                   : { kind: "secret", text: words.text, kept: false },
               )
             }
-          />
+            className={cn(
+              "chamfer inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[12.5px] font-medium transition-[background-color,color,transform,scale] duration-150 [--cut:5px] outline-none focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] disabled:cursor-default disabled:active:scale-100",
+              secret
+                ? "bg-white/12 text-bone-50"
+                : "bg-white/5 text-ash-300 hover:bg-white/9 hover:text-bone-100",
+            )}
+          >
+            {secret ? (
+              <LockSimple size={14} weight="fill" aria-hidden />
+            ) : (
+              <LockSimpleOpen size={14} aria-hidden />
+            )}
+            {t("cloudAfk.settings.secret.mark")}
+          </button>
         )}
       </div>
       {error ? (

@@ -1,5 +1,5 @@
 // The desktop AFK settings panel's sections (SHEET-UX): Bağlantı (server, version, reconnecting),
-// Oyun içi (anti-AFK, eating), Kayıt ve uyarılar (alerts, chat log); Komutlar and Otomatik yanıt
+// Oyun içi (anti-AFK, eating), Uyarılar ve günlük (alerts, chat log); Komutlar and Otomatik yanıt
 // are the list sections in list-sections.tsx. Each feature is a block led by its switch, its fields
 // folded away while it is off.
 import { ArrowCounterClockwise } from "@phosphor-icons/react";
@@ -486,7 +486,7 @@ function ChatLogBlock({ draft, setDraft, onOpenFolder }: SectionProps) {
   );
 }
 
-/** Kayıt ve uyarılar: what the account records and when it calls the player. */
+/** Uyarılar ve günlük: when the account calls the player and what it records. */
 export function LogSection(props: SectionProps) {
   return (
     <>

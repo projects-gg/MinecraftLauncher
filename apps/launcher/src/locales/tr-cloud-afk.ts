@@ -61,7 +61,7 @@ export const trCloudAfk = {
     other: "Bağlantı kesildi",
   },
   hint: {
-    wrongPassword: "Ayarlar'da giriş komutunu düzelt, sonra başlat.",
+    wrongPassword: "Ayarlar'da giriş şifresini düzelt, sonra başlat.",
     secretUnreadable: "Ayarlar'da gizli komutlarını yeniden yaz, sonra başlat.",
     unreadableCommandRow: "Ayarlar'da {{n}}. komutu yeniden yaz, sonra başlat.",
     unreadableReplyRow: "Ayarlar'da {{n}}. otomatik yanıtı yeniden yaz, sonra başlat.",
@@ -266,7 +266,7 @@ export const trCloudAfk = {
       mark: "Gizli",
       markHelp: "Gizli satırlar bu bilgisayarda şifrelenip gönderilir.",
       auto: "Şifre içerdiği için gizli.",
-      kept: "Bu bilgisayarda saklı",
+      kept: "Bulutta şifreli, bu bilgisayarda da saklı.",
       sealed: "Bulutta saklı",
       show: "Göster",
       hide: "Gizle",

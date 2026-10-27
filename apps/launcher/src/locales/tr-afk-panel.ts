@@ -8,12 +8,17 @@ export const trAfkPanel = {
     /** Not "Oyunda": that is the card's word for an account in the game. */
     game: "Oyun içi",
     replies: "Otomatik yanıt",
-    log: "Kayıt ve uyarılar",
+    /** Not "Kayıt": the servers' /kayıt is signing up. */
+    log: "Uyarılar ve günlük",
   },
   /** A rail section holding edits not saved yet (read after its name). */
   unsavedSection: "kaydedilmemiş değişiklik var",
   /** The card's settings button while the panel was closed with edits in it. */
   settingsUnsaved: "Ayarlar, kaydedilmemiş değişiklik var",
+  /** A list row's switch, right beside it ("Komutu kullan" is its name). */
+  use: "Kullan",
+  ruleOrdinal: "{{n}}. kural",
+  commandOrdinal: "{{n}}. komut",
   /** The change bar's region. */
   barLabel: "Kaydedilmemiş değişiklikler",
   /**
@@ -39,10 +44,10 @@ export const trAfkPanel = {
     linePlaceholder: "/kit günlük",
     /** An action of the client's own kind ("log …", "script …"), kept as written. */
     raw: "İstemci komutu",
-    onJoin: "Girişte",
-    every: "Her seferinde",
-    first: "Yalnız ilkinde",
-    never: "Çalışmasın",
+    onJoin: "Ne zaman",
+    every: "Her girişte",
+    first: "Yalnız ilk girişte",
+    never: "Girişte değil",
     neverRuns: "Bu görev hiç çalışmaz: girişte ya da aralıkla çalışmasını seç.",
   },
   /** Under a cloud account's login line after the machine stopped it for a wrong password. */

@@ -1151,7 +1151,7 @@ export const en: DeepPartial<Strings> = {
     },
     antiAfk: {
       interval: "Movement interval",
-      command: "Command sent every round",
+      command: "Command sent with each move",
       commandPlaceholder: "Optional",
       commandHelp: "Leave it empty to only move.",
       sneak: "Sneak while moving",
@@ -1165,8 +1165,8 @@ export const en: DeepPartial<Strings> = {
       unlimited: "Retry without limit",
       retries: "Attempts",
       when: "When",
-      whenAny: "Every drop",
-      whenListed: "Listed messages",
+      whenAny: "Any disconnect",
+      whenListed: "Only these messages",
       kickMessages: "Kick messages",
       kickMessagesHelp:
         "One per line. The account reconnects when the server kicks it with a message that holds one of these.",
@@ -1180,8 +1180,8 @@ export const en: DeepPartial<Strings> = {
     respond: {
       enabled: "Use auto-reply",
       sound: "Play a sound when a reply is sent",
-      colors: "Match color codes",
-      colorsHelp: "Color codes in server messages count in the match too. Leave it off if unsure.",
+      colors: "Look for color codes too",
+      colorsHelp: "For those who write patterns. Leave it off if unsure.",
       rules: "Rules",
       add: "Add rule",
       remove: "Remove rule",
