@@ -1,7 +1,8 @@
 // The question's words (PLAY-ACCT, PLAY-AGAIN). "Durdur ve oyna": what starts in the title, what
 // happens to the launch on its way in one sentence, the answer's name, then the short way. One
 // more game: one shape (second look): the title asks "Bir oyun daha açılsın mı?", the body says
-// why (the owner's words with the name, the memory), "Yine de aç" answers. Pure: i18n keys
+// why and what may happen (the name in game: one of the two is kicked from a shared server; the
+// memory: the games may stutter), "Yine de aç" answers. Pure: i18n keys
 // with their values (tested in words.test.ts). Names never get a suffix (a Turkish case ending
 // would have to follow the name's vowels), and an installation is called one ("Projects" is also
 // the server).
@@ -75,9 +76,9 @@ const AGAIN = "playAgain";
 
 /**
  * One more game (PLAY-AGAIN), one shape whatever the reason: the title asks, the body says why
- * (the selected account `name` in game already: the owner's words with it; the memory short: one
- * sentence after it), "Yine de aç" answers. Another account's games only: asked only when the
- * memory is short.
+ * and what may happen (the selected account `name` in game already, and that the same name on one
+ * server pushes one out; the memory short: one sentence after them), "Yine de aç" answers. Another
+ * account's games only: asked only when the memory is short.
  */
 export function oneMoreWords(
   kind: Exclude<SwitchKind, "stop">,
@@ -85,7 +86,12 @@ export function oneMoreWords(
   name: string | null = null,
 ): { title: Line; body: Line[]; confirm: Line } {
   const same: Line[] =
-    kind === "again" ? [name ? [`${AGAIN}.sameName`, { name }] : [`${AGAIN}.sameNameUnknown`]] : [];
+    kind === "again"
+      ? [
+          name ? [`${AGAIN}.sameName`, { name }] : [`${AGAIN}.sameNameUnknown`],
+          [`${AGAIN}.sameServer`],
+        ]
+      : [];
   const memory: Line[] = memoryShort ? [[`${AGAIN}.memory`]] : [];
   return { title: [`${AGAIN}.title`], body: [...same, ...memory], confirm: [`${AGAIN}.confirm`] };
 }

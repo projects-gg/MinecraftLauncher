@@ -6,9 +6,10 @@
 export const trPlayAgain = {
   /** The question for one more game (the same name in game, or the memory short). */
   title: "Bir oyun daha açılsın mı?",
-  /** The owner's words with the name: the selected account is in game already. */
-  sameName: "{{name}} adıyla oyun zaten açık.",
+  /** The owner's words with the name: the selected account is in game already, and what that means. */
+  sameName: "{{name}} zaten oyunda.",
   sameNameUnknown: "Bu adla oyun zaten açık.",
+  sameServer: "İkisi aynı sunucuya girerse biri atılır.",
   /** Before any extra game, when the computer's free memory would not hold it. */
   memory: "Bilgisayarında boş bellek az, oyunlar takılabilir.",
   confirm: "Yine de aç",
@@ -20,10 +21,13 @@ export const trPlayAgain = {
   othersOne: "{{name}} oyunda",
   othersTwo: "{{first}} ve {{second}} oyunda",
   othersMany: "{{total}} hesap oyunda",
-  /** "Devam et" while its world is open in a game: whose game, or that it is another one. */
+  /** The same as the bar shows it: the name (or the count) over "Oyunda", as the account menu. */
+  othersCount: "{{total}} hesap",
+  /** "Devam et" while its world is open in a game (one word at every width), and under the pointer
+   * whose game has it, or that it is another one. */
+  worldBusy: "Kullanımda",
   worldBusyName: "{{name}} bu dünyada",
-  worldBusy: "Başka bir oyunda açık",
-  worldBusyShort: "Oyunda açık",
+  worldBusyOther: "Başka bir oyunda açık",
   worldBusyAria: "{{world}}: {{reason}}",
   /** A world's "Oyna" while the world is open in a game (said before any question). */
   worldOpen: "Bu dünya diğer oyunda açık.",
@@ -34,6 +38,13 @@ export const trPlayAgain = {
     "{{name}} hesabının oyunu kapanacak ve arkadaşının dünyasına bağlanarak yeniden açılacak.",
   /** Over the server's address in "Bağlan": what it is for. */
   addressHint: "Oyunun içinden de girebilirsin:",
+  /** "Bağlan" while a game closes, when several are on screen: whose. */
+  closingTitleAccount: "{{name}} hesabının oyunu kapanıyor",
+  overdueTitleAccount: "{{name}} hesabının oyunu kapanmadı",
+  forcingTitleAccount: "{{name}} hesabının oyunu kapatılıyor",
+  /** "Bağlan"'s answer when the game on screen closes first, and the way out while it closes. */
+  closeAndConnect: "Kapat ve bağlan",
+  stopConnecting: "Bağlanmaktan vazgeç",
   /** "Bağlan" when the game did not close in time: the way out that leaves it as it is. */
   keepOpen: "Oyunu açık bırak",
   /** A game crashed while another game is on screen: the notification that brings the help. */

@@ -370,29 +370,27 @@ function LaunchStatus({ phase }: { phase: LaunchPhase }) {
 }
 
 /**
- * "EjderAvcisi oyunda" (PLAY-AGAIN): with another account selected, who is in game while this one
- * is not, so OYNA reads as one more game beside theirs. Quiet: one line after the accounts' faces,
- * no dot or glow (second look: "Oyunda" over the names read as a tile of its own, and two names
- * did not fit at 1024 px). Two or more read "2 hesap oyunda", and a narrow window only "Oyunda"
- * after the faces; the sentence with every name is read out and shows under the pointer.
+ * Who else is in game (PLAY-AGAIN): with another account selected, the accounts in game while this
+ * one is not, so OYNA reads as one more game beside theirs. As the account menu shows it: the
+ * face, the name (two or more: "2 hesap") over a green "Oyunda", after "Devam et" behind the bar's
+ * divider, away from the switch (second looks: beside the switch it read as the switch's label;
+ * one line lost its subject at 1024 px). The sentence with every name is read out and shows under
+ * the pointer. Quiet: no dot, no glow, no hover.
  */
 function othersWords(
   t: TFunction,
   names: readonly string[],
-): { sentence: string; line: string } | null {
+): { sentence: string; who: string } | null {
   const [first, second] = names;
   if (!first) return null;
-  if (!second) {
-    const one = t("playAgain.othersOne", { name: first });
-    return { sentence: one, line: one };
-  }
-  const many = t("playAgain.othersMany", { total: String(names.length) });
+  if (!second) return { sentence: t("playAgain.othersOne", { name: first }), who: first };
+  const total = String(names.length);
   return {
     sentence:
       names.length === 2
         ? t("playAgain.othersTwo", { first, second })
-        : `${many}: ${names.join(", ")}`,
-    line: many,
+        : `${t("playAgain.othersMany", { total })}: ${names.join(", ")}`,
+    who: t("playAgain.othersCount", { total }),
   };
 }
 
@@ -436,48 +434,45 @@ function StatusArea({
             className="flex min-w-0 items-center justify-between gap-6"
             {...swapIn(reduce)}
           >
-            {/* "Devam et" and the last-played line share one cell and cross-fade in place. */}
-            {/* "Devam et" keeps its width; the quiet "X oyunda" beside the switch gives way first
-                (PLAY-AGAIN: at 1024 px the two would squeeze it to nothing). */}
-            <div className="grid min-w-[148px] flex-1 *:[grid-area:1/1]">
-              <AnimatePresence initial={false}>
-                {selected && resume ? (
-                  <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
-                    <ResumeButton instance={selected} target={resume} />
-                  </motion.div>
-                ) : selected && resume === null ? (
-                  <motion.div
-                    key="status"
-                    className="min-w-0 text-[12px] text-ash-300"
-                    {...swapIn(reduce)}
-                  >
-                    <span className="block truncate tabular-nums">
-                      {phase.kind === "running" ? (
-                        <SessionTime since={phase.since} />
-                      ) : selected.lastPlayedAt ? (
-                        t("play.lastPlayed", { when: formatRelative(selected.lastPlayedAt) })
-                      ) : // The session is recorded when the game closes: no "Henüz oynanmadı"
-                      // while the first one starts.
-                      phase.kind === "idle" ? (
-                        t("play.neverPlayed")
-                      ) : null}
-                    </span>
-                    {selected.playTimeSecs > 0 ? (
-                      <span className="block truncate">
-                        {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
+            <div className="flex min-w-0 items-center gap-4">
+              {/* "Devam et" and the last-played line share one cell and cross-fade in place. */}
+              <div className="grid min-w-[120px] shrink *:[grid-area:1/1]">
+                <AnimatePresence initial={false}>
+                  {selected && resume ? (
+                    <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
+                      <ResumeButton instance={selected} target={resume} />
+                    </motion.div>
+                  ) : selected && resume === null ? (
+                    <motion.div
+                      key="status"
+                      className="min-w-0 text-[12px] text-ash-300"
+                      {...swapIn(reduce)}
+                    >
+                      <span className="block truncate tabular-nums">
+                        {phase.kind === "running" ? (
+                          <SessionTime since={phase.since} />
+                        ) : selected.lastPlayedAt ? (
+                          t("play.lastPlayed", { when: formatRelative(selected.lastPlayedAt) })
+                        ) : // The session is recorded when the game closes: no "Henüz oynanmadı"
+                        // while the first one starts.
+                        phase.kind === "idle" ? (
+                          t("play.neverPlayed")
+                        ) : null}
                       </span>
-                    ) : null}
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-            </div>
-            {/* A wide gap before the switch: the line is not the switch's label. */}
-            <div className="flex min-w-0 shrink items-center gap-7">
+                      {selected.playTimeSecs > 0 ? (
+                        <span className="block truncate">
+                          {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
+                        </span>
+                      ) : null}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
               <AnimatePresence initial={false}>
                 {othersText ? (
-                  <motion.p
+                  <motion.div
                     key="others"
-                    className="flex max-w-[220px] min-w-0 items-center gap-2"
+                    className="flex max-w-[200px] min-w-0 shrink items-center gap-2.5 border-l border-white/8 pl-4"
                     title={othersText.sentence}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.24, ease: easeOutExpo } }}
@@ -485,25 +480,30 @@ function StatusArea({
                   >
                     <span className="sr-only">{othersText.sentence}</span>
                     {faces.length > 0 ? (
-                      <span aria-hidden className="flex shrink-0 -space-x-1">
+                      <span aria-hidden className="flex shrink-0 -space-x-2">
                         {faces.map((account) => (
                           <AccountFace
                             key={account.id}
                             account={account}
-                            size={16}
+                            size={24}
                             className="ring-2 ring-obsidian-950/80"
                           />
                         ))}
                       </span>
                     ) : null}
-                    {/* Narrow windows (1024 px): the faces say who, the word says where. */}
-                    <span aria-hidden className="truncate text-[12.5px] text-ash-300">
-                      <span className="hidden min-[1180px]:inline">{othersText.line}</span>
-                      <span className="min-[1180px]:hidden">{t("playAcct.inGame")}</span>
+                    <span aria-hidden className="min-w-0 leading-tight">
+                      <span className="block truncate text-[13px] text-ash-200">
+                        {othersText.who}
+                      </span>
+                      <span className="block text-[12px] text-jade-400">
+                        {t("playAcct.inGame")}
+                      </span>
                     </span>
-                  </motion.p>
+                  </motion.div>
                 ) : null}
               </AnimatePresence>
+            </div>
+            <div className="flex shrink-0 items-center">
               {selected?.autoJoin ? (
                 <Switch
                   checked={autoJoin}

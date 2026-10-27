@@ -109,7 +109,7 @@ export function GameSwitchDialog() {
         if (!next) cancelSwitch();
       }}
       title={title}
-      description={body}
+      description={<span className="text-pretty">{body}</span>}
       closeLabel={t("common.close")}
       width={460}
       morph

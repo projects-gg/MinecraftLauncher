@@ -403,6 +403,15 @@ function waitOf(closing: CloseStep["kind"]): number | null {
   return null;
 }
 
+/** The title while a game closes: whose, when several games are on screen (PLAY-AGAIN). */
+function closeTitle(
+  t: TFunction,
+  key: "closingTitle" | "overdueTitle" | "forcingTitle",
+  name: string | null,
+): string {
+  return name ? t(`playAgain.${key}Account`, { name }) : t(`fix2.connect.${key}`);
+}
+
 /**
  * Title and sentence for where the question or the way is. `closingName`: the account of the
  * game that would close, named when several games are on screen (PLAY-AGAIN, second look).
@@ -418,16 +427,19 @@ function words(t: TFunction, shown: Ask, closingName: string | null) {
   if (closing === "closing" || closing === "stopping") {
     const saving = shown.world && closing === "closing" ? `${t("fix2.connect.saving")} ` : "";
     return {
-      title: t("fix2.connect.closingTitle"),
+      title: closeTitle(t, "closingTitle", closingName),
       body: saving + t("fix2.connect.closingBody", { server }),
     };
   }
   if (closing === "overdue") {
-    return { title: t("fix2.connect.overdueTitle"), body: t("fix2.connect.overdueBody") };
+    return {
+      title: closeTitle(t, "overdueTitle", closingName),
+      body: t("fix2.connect.overdueBody"),
+    };
   }
   if (closing === "forcing") {
     return {
-      title: t("fix2.connect.forcingTitle"),
+      title: closeTitle(t, "forcingTitle", closingName),
       body: t("fix2.connect.closingBody", { server }),
     };
   }
@@ -464,15 +476,21 @@ function worldWords(t: TFunction, shown: Ask, closingName: string | null) {
   if (closing === "closing" || closing === "stopping") {
     const saving = shown.world && closing === "closing" ? `${t("fix2.connect.saving")} ` : "";
     return {
-      title: t("fix2.connect.closingTitle"),
+      title: closeTitle(t, "closingTitle", closingName),
       body: saving + t("host.connect.closingBody"),
     };
   }
   if (closing === "overdue") {
-    return { title: t("fix2.connect.overdueTitle"), body: t("fix2.connect.overdueBody") };
+    return {
+      title: closeTitle(t, "overdueTitle", closingName),
+      body: t("fix2.connect.overdueBody"),
+    };
   }
   if (closing === "forcing") {
-    return { title: t("fix2.connect.forcingTitle"), body: t("host.connect.closingBody") };
+    return {
+      title: closeTitle(t, "forcingTitle", closingName),
+      body: t("host.connect.closingBody"),
+    };
   }
   if (shown.step === "reopen") {
     return { title: t("fix2.connect.restartTitle"), body: t("host.connect.reopenBody") };
@@ -533,6 +551,9 @@ export function JoinDialog() {
       {t("fix2.connect.cancel")}
     </Button>
   );
+  // The answer says when the game on screen closes first (second look: "Bağlan" under "Oyun
+  // yeniden açılsın mı?" left the closing unsaid).
+  const closesFirst = shown.step === "restart" && !shown.inGame;
   const footer =
     closing === undefined ? (
       <>
@@ -542,11 +563,14 @@ export function JoinDialog() {
           icon={<Play size={14} weight="fill" />}
           onClick={() => connect(shown)}
         >
-          {t("fix2.connect.connect")}
+          {closesFirst ? t("playAgain.closeAndConnect") : t("fix2.connect.connect")}
         </Button>
       </>
     ) : closing === "closing" ? (
-      cancel
+      // The game closes either way: this only leaves the server for later.
+      <Button variant="ghost" className="mr-auto" onClick={closeAsk}>
+        {t("playAgain.stopConnecting")}
+      </Button>
     ) : closing === "overdue" ? (
       <>
         {/* What it does, by name (second look: "Vazgeç" read like "Beklemeye devam et"). */}

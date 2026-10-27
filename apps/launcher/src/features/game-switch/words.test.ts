@@ -96,20 +96,30 @@ describe("one more game (PLAY-AGAIN)", () => {
   it("asks the owner's question with the name, nothing more when the memory holds", () => {
     const words = oneMoreWords("again", false, "EjderAvcisi");
     expect(turkish(words.title)).toBe("Bir oyun daha açılsın mı?");
-    expect(words.body.map(turkish)).toEqual(["EjderAvcisi adıyla oyun zaten açık."]);
+    expect(words.body.map(turkish)).toEqual([
+      "EjderAvcisi zaten oyunda.",
+      "İkisi aynı sunucuya girerse biri atılır.",
+    ]);
     expect(turkish(words.confirm)).toBe("Yine de aç");
     expect(english(words.title)).toBe("Open one more game?");
-    expect(words.body.map(english)).toEqual(["EjderAvcisi is already in a game."]);
+    expect(words.body.map(english)).toEqual([
+      "EjderAvcisi is already in a game.",
+      "If both join the same server, one gets kicked.",
+    ]);
     expect(english(words.confirm)).toBe("Open anyway");
     // The account not known: the owner's own words.
-    expect(oneMoreWords("again", false).body.map(turkish)).toEqual(["Bu adla oyun zaten açık."]);
+    expect(oneMoreWords("again", false).body.map(turkish)).toEqual([
+      "Bu adla oyun zaten açık.",
+      "İkisi aynı sunucuya girerse biri atılır.",
+    ]);
   });
 
   it("keeps one shape when the free memory would not hold one more game", () => {
     const words = oneMoreWords("again", true, "EjderAvcisi");
     expect(turkish(words.title)).toBe("Bir oyun daha açılsın mı?");
     expect(words.body.map(turkish)).toEqual([
-      "EjderAvcisi adıyla oyun zaten açık.",
+      "EjderAvcisi zaten oyunda.",
+      "İkisi aynı sunucuya girerse biri atılır.",
       "Bilgisayarında boş bellek az, oyunlar takılabilir.",
     ]);
     expect(turkish(words.confirm)).toBe("Yine de aç");

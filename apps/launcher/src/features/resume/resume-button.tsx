@@ -82,11 +82,13 @@ export function ResumeButton({
   const [broken, setBroken] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const busy = useWorldBusy(instance, target);
-  const reason = busy.open
+  // One word at every width ("Kullanımda"); whose game has it shows under the pointer.
+  const reason = busy.open ? t("playAgain.worldBusy") : null;
+  const whose = busy.open
     ? busy.account
       ? t("playAgain.worldBusyName", { name: busy.account })
-      : t("playAgain.worldBusy")
-    : null;
+      : t("playAgain.worldBusyOther")
+    : undefined;
   return (
     <button
       type="button"
@@ -102,10 +104,11 @@ export function ResumeButton({
         void play(instance.id, { quickPlay: target.quickPlay });
       }}
       aria-label={
-        reason
-          ? t("playAgain.worldBusyAria", { world: target.name, reason })
+        whose
+          ? t("playAgain.worldBusyAria", { world: target.name, reason: whose })
           : t("resume.aria", { name: target.name })
       }
+      title={whose}
       className={cn(
         "group -my-1 -ml-2 flex w-fit max-w-full min-w-0 items-center gap-3 rounded-[var(--radius-panel)] py-1 pr-3 pl-2 text-left transition-[background-color,transform,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none",
         reason ? "cursor-default" : "cursor-pointer hover:bg-white/6 active:scale-[0.98]",
@@ -152,15 +155,7 @@ export function ResumeButton({
             animate={{ opacity: 1, transition: { duration: 0.18, ease: easeOutExpo } }}
             exit={{ opacity: 0, transition: { duration: 0.1, ease: easeOutExpo } }}
           >
-            {reason ? (
-              <>
-                {/* Narrow windows (1024 px): the short words fit beside the switch. */}
-                <span className="hidden min-[1180px]:inline">{reason}</span>
-                <span className="min-[1180px]:hidden">{t("playAgain.worldBusyShort")}</span>
-              </>
-            ) : (
-              t("resume.label")
-            )}
+            {reason ?? t("resume.label")}
           </motion.span>
         </AnimatePresence>
         <span
