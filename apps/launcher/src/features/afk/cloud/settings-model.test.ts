@@ -10,6 +10,7 @@ import {
   isDirty,
   issueKey,
   localIssues,
+  loginPart,
   newCommand,
   newRule,
   nextId,
@@ -436,5 +437,43 @@ describe("the panel's sections (SHEET-UX)", () => {
     };
     expect([...unsavedParts(anti, base)]).toEqual(["game"]);
     expect(PARTS).toEqual(["connection", "commands", "game", "replies"]);
+  });
+});
+
+describe("a wrong password opens where the login line is (SHEET-UX)", () => {
+  const stopped = (): CloudEditData => {
+    const base = view();
+    return {
+      ...base,
+      account: {
+        ...base.account,
+        hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null },
+      },
+    };
+  };
+
+  it("goes to Komutlar when a command holds a login", () => {
+    const data = stopped();
+    expect(loginPart(data, toDraft(data))).toBe("commands");
+  });
+
+  it("goes to Otomatik yanıt when only a reply holds one", () => {
+    const data = stopped();
+    const draft = toDraft(data);
+    const replies = {
+      ...draft,
+      config: {
+        ...draft.config,
+        commands: draft.config.commands.map((c) => ({
+          ...c,
+          words: { kind: "plain" as const, text: "/afk" },
+        })),
+      },
+    };
+    expect(loginPart(data, replies)).toBe("replies");
+  });
+
+  it("says nothing without that stop", () => {
+    expect(loginPart(view(), toDraft(view()))).toBeNull();
   });
 });

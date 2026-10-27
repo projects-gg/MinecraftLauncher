@@ -540,7 +540,11 @@ export function AfkPage() {
       </div>
 
       <AfkConsole account={consoleAccount} onClose={() => setConsoleId(null)} />
-      <AfkSettingsSheet account={settingsAccount} onClose={() => setSettingsId(null)} />
+      <AfkSettingsSheet
+        account={settingsAccount}
+        onClose={() => setSettingsId(null)}
+        onReopen={setSettingsId}
+      />
       <Dialog
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}

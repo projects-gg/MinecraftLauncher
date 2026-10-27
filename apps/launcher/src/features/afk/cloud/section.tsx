@@ -385,7 +385,11 @@ export function CloudSection({
         }}
         onClose={() => ui.openConsole(null)}
       />
-      <CloudSettingsSheet account={settingsAccount} onClose={() => ui.openSettings(null)} />
+      <CloudSettingsSheet
+        account={settingsAccount}
+        onClose={() => ui.openSettings(null)}
+        onReopen={(id) => ui.openSettings(id)}
+      />
       <CloudMoveDialog
         desktop={moveDesktop}
         accounts={accounts}

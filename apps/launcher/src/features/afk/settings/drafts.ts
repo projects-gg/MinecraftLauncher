@@ -3,6 +3,7 @@
 // AFK+'s do (docs/design.md §5 "Unsaved edits wait where they were made"); saving or "Vazgeç" drops
 // them. The card's settings button carries a dot meanwhile. Kept in memory only: a restart starts
 // clean.
+import { toast } from "@pl/ui";
 import { create } from "zustand";
 
 /** The panel as edited, with the stored settings it was edited from. */
@@ -32,6 +33,18 @@ export const useAfkDrafts = create<AfkDraftState>()((set) => ({
 /** One account's slot: a desktop account and a cloud account may share an id. */
 export function draftKey(kind: "desktop" | "cloud", id: string): string {
   return `${kind}:${id}`;
+}
+
+/**
+ * A panel closed with edits in it says so once, quietly, with the way back (a closed panel is easy
+ * to take for a saved one): "Değişikliklerin kaydedilmedi", "Ayarları aç".
+ */
+export function remindKept(t: (key: string) => string, key: string, reopen: () => void) {
+  if (!(key in useAfkDrafts.getState().held)) return;
+  toast(t("afkPanel.kept.title"), {
+    description: t("afkPanel.kept.body"),
+    action: { label: t("afkPanel.kept.open"), onClick: reopen },
+  });
 }
 
 /** Whether the account's panel was closed with edits in it (the dot on its settings button). */

@@ -20,7 +20,13 @@ import { useTranslation } from "react-i18next";
 import { copyErrorDetails } from "@/features/content/jobs";
 import { isFriendly } from "../errors";
 import { SectionTitle } from "../settings/controls";
-import { draftKey, type HeldDraft, rebaseDraft, useAfkDrafts } from "../settings/drafts";
+import {
+  draftKey,
+  type HeldDraft,
+  rebaseDraft,
+  remindKept,
+  useAfkDrafts,
+} from "../settings/drafts";
 import { PanelBody, PanelSkeleton, SettingsPanel } from "../settings/panel";
 import { type CloudAccount, type CloudEditData, cloudApi } from "./api";
 import { PlusChangeDock } from "./plus/change-dock";
@@ -30,6 +36,7 @@ import {
   type Issue,
   isDirty,
   localIssues,
+  loginPart,
   PARTS,
   type Part,
   partOf,
@@ -78,11 +85,16 @@ function Editor({
     const held = useAfkDrafts.getState().held[slot] as HeldDraft<Draft> | undefined;
     return held ? rebaseDraft(held.draft, held.base, baseline) : baseline;
   });
-  // A stop that names a row opens the panel on it; else where edits wait; else Bağlantı.
+  // A stop that names a row opens the panel on it, a wrong password where the login line is; else
+  // where edits wait; else Bağlantı.
   const [part, setPart] = useState<Part>(() => {
     const stopped = heldIssue(view, draft);
     if (stopped) return partOf(stopped);
-    return PARTS.find((p) => unsavedParts(draft, baseline).has(p)) ?? "connection";
+    return (
+      loginPart(view, draft) ??
+      PARTS.find((p) => unsavedParts(draft, baseline).has(p)) ??
+      "connection"
+    );
   });
   const [submitted, setSubmitted] = useState(false);
   const [serverIssues, setServerIssues] = useState<Issue[]>([]);
@@ -340,12 +352,19 @@ function Editor({
 export function CloudSettingsSheet({
   account,
   onClose,
+  onReopen,
 }: {
   account: CloudAccount | undefined;
   onClose: () => void;
+  /** Opens the panel of this account again (the toast's "Aç" after a close with edits waiting). */
+  onReopen: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const open = Boolean(account);
+  const close = () => {
+    if (account) remindKept(t, draftKey("cloud", account.id), () => onReopen(account.id));
+    onClose();
+  };
   // Bumped once the stored settings were read again (after a save or a conflict).
   const [generation, setGeneration] = useState(0);
   const {
@@ -369,7 +388,7 @@ export function CloudSettingsSheet({
   return (
     <SettingsPanel
       open={open}
-      onClose={onClose}
+      onClose={close}
       nickname={account?.name ?? ""}
       title={t("cloudAfk.settings.title", { name: account?.name ?? "" })}
       server={account ? serverLabel(account.server) : ""}

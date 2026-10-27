@@ -20,4 +20,12 @@ export const trAfkPanel = {
   portRange: "Port 1 ile 65535 arasında olmalı.",
   /** A scheduled task's "every 300–600 sn". */
   interval: "Aralık",
+  /** A running desktop account's plain save, beside "Kaydet ve yeniden bağlan". */
+  saveOnly: "Yalnız kaydet",
+  /** The toast after a close with edits waiting (a closed panel reads as a saved one). */
+  kept: {
+    title: "Değişikliklerin kaydedilmedi",
+    body: "Ayarları yeniden açınca yerinde olacaklar.",
+    open: "Ayarları aç",
+  },
 };

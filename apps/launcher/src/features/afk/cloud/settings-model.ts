@@ -49,6 +49,20 @@ export function partOf(issue: Issue): Part {
   return GENERAL_PART[issue.field] ?? "connection";
 }
 
+/**
+ * Where a stop for a wrong password sends the player (the card says "Ayarlar'da giriş komutunu
+ * düzelt" and the machine names no row): the section holding a login line, a command first.
+ */
+export function loginPart(view: CloudEditData, draft: Draft): Part | null {
+  const hold = view.account.hold;
+  if (hold?.kind !== "cause" || hold.cause !== "wrongPassword") return null;
+  const login = (words: Words) =>
+    words.kind !== "plain" || looksSensitive(withoutLeadingIgnorable(words.text));
+  if (draft.config.commands.some((c) => login(c.words))) return "commands";
+  if (draft.config.rules.some((r) => login(r.reply))) return "replies";
+  return "commands";
+}
+
 /** What each section edits (every field of the draft belongs to one). */
 const partValue = (draft: Draft, part: Part): unknown => {
   switch (part) {

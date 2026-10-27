@@ -4,13 +4,19 @@ export const enAfkPanel = {
   sections: {
     connection: "Connection",
     commands: "Commands",
-    game: "In game",
+    game: "Gameplay",
     replies: "Auto-reply",
-    log: "Log and alerts",
+    log: "Logs and alerts",
   },
   unsavedSection: "unsaved changes",
   settingsUnsaved: "Settings, unsaved changes",
   barLabel: "Unsaved changes",
   portRange: "The port must be between 1 and 65535.",
   interval: "Every",
+  saveOnly: "Save only",
+  kept: {
+    title: "Your changes aren't saved",
+    body: "They'll be there when you open the settings again.",
+    open: "Open settings",
+  },
 };

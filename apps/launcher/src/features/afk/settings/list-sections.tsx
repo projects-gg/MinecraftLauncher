@@ -522,12 +522,8 @@ function RuleCard({
             onChange={(e) => set({ pattern: e.target.value })}
           />
         </Field>
-        <Field
-          label={t("afkSettings.respond.reply")}
-          htmlFor={id("reply")}
-          error={replyError}
-          help={t("afkSettings.respond.replyHelp")}
-        >
+        {/* What "$u" does is said once, under the list. */}
+        <Field label={t("afkSettings.respond.reply")} htmlFor={id("reply")} error={replyError}>
           <Input
             id={id("reply")}
             value={rule.reply}

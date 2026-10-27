@@ -21,7 +21,7 @@ import { type AfkAccount, type AfkSettingsView, api } from "@/lib/api";
 import { PlusChangeDock } from "../cloud/plus/change-dock";
 import { afkFailed, isFriendly, runAfk } from "../errors";
 import { SectionTitle, useIssueText } from "./controls";
-import { draftKey, type HeldDraft, rebaseDraft, useAfkDrafts } from "./drafts";
+import { draftKey, type HeldDraft, rebaseDraft, remindKept, useAfkDrafts } from "./drafts";
 import { CommandsSection, RepliesSection } from "./list-sections";
 import {
   type Draft,
@@ -359,7 +359,7 @@ function Editor({
           onClick={() => submit("save")}
           disabled={!dirty || save.isPending || settling}
         >
-          {pending === "save" ? t("afkSettings.saving") : t("afkSettings.save")}
+          {pending === "save" ? t("afkSettings.saving") : t("afkPanel.saveOnly")}
         </Button>
       ) : null}
       <Button
@@ -411,12 +411,19 @@ function Editor({
 export function AfkSettingsSheet({
   account,
   onClose,
+  onReopen,
 }: {
   account: AfkAccount | undefined;
   onClose: () => void;
+  /** Opens the panel of this account again (the toast's "Aç" after a close with edits waiting). */
+  onReopen: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const open = Boolean(account);
+  const close = () => {
+    if (account) remindKept(t, draftKey("desktop", account.id), () => onReopen(account.id));
+    onClose();
+  };
   const {
     data: view,
     error: loadError,
@@ -434,7 +441,7 @@ export function AfkSettingsSheet({
   return (
     <SettingsPanel
       open={open}
-      onClose={onClose}
+      onClose={close}
       nickname={account?.nickname ?? ""}
       title={t("afkSettings.title", { name: account?.nickname ?? "" })}
       server={account?.server ?? ""}

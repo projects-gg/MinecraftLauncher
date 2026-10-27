@@ -1169,9 +1169,8 @@ export const en: DeepPartial<Strings> = {
       delay: "Wait time",
       unlimited: "Retry without limit",
       retries: "Attempts",
-      ignoreKick: "Ignore the kick message",
-      ignoreKickHelp:
-        "When on, the account reconnects after every disconnect, whatever the reason.",
+      ignoreKick: "Reconnect after every disconnect",
+      ignoreKickHelp: "When off, it only reconnects after a kick whose message is on the list.",
       kickMessages: "Kick messages that trigger a reconnect",
       kickMessagesHelp:
         "One per line. After a kick, the account only reconnects if the server's message contains one of these.",
@@ -1180,7 +1179,7 @@ export const en: DeepPartial<Strings> = {
     eat: {
       threshold: "Hunger threshold",
       thresholdValue: "{{value}} / 20",
-      note: "The connection uses a little more data.",
+      note: "While on, the connection uses a little more data.",
     },
     respond: {
       enabled: "Use auto reply",
@@ -1197,14 +1196,13 @@ export const en: DeepPartial<Strings> = {
       regex: "Regular expression (regex)",
       reply: "Reply",
       replyPlaceholder: "Hi $u, I'm away from the keyboard!",
-      replyHelp: "$u becomes the sender's name.",
       privateReply: "In a private message",
       privateReplyHelp: "Sent instead when the phrase comes in a private message.",
       otherReply: "In an announcement",
       otherReplyHelp: "Sent when the phrase is in a server announcement.",
       ownersOnly: "Only my main account triggers it",
       cooldown: "Cooldown",
-      help: "A reply can be a message or a /command.",
+      help: "A reply can be a message or a /command. $u becomes the sender's name.",
     },
     chatLog: {
       dateTime: "Add date and time to lines",
