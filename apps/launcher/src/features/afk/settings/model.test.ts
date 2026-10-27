@@ -120,6 +120,18 @@ describe("draft", () => {
     changed.page = { ...changed.page, antiAfk: { ...changed.page.antiAfk, delayMin: Number.NaN } };
     expect(isDirty(changed, baseline)).toBe(true);
   });
+
+  it("takes 'Değiştir' alone for no change, a typed password for one (AFK-CLEAR)", () => {
+    const baseline = toDraft(page());
+    const opened = toDraft(page());
+    const stored = opened.login[0];
+    if (stored?.kind !== "stored") throw new Error("expected a stored line");
+    opened.login[0] = { ...stored, kind: "replace", args: "  " };
+    expect(isDirty(opened, baseline)).toBe(false);
+
+    opened.login[0] = { ...stored, kind: "replace", args: "yeniSifre" };
+    expect(isDirty(opened, baseline)).toBe(true);
+  });
 });
 
 describe("validation", () => {

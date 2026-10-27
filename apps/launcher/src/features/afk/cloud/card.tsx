@@ -80,28 +80,39 @@ const ORDER: CloudPrimary[] = ["start", "stop", "renew", "fixPassword"];
  * which is at any time unless Studio keeps it to the last days (the site renews). Gold is the
  * link's: a gold time beside a gold link read as one more link (SHEET-UX).
  */
-function TimeRow({ account, skewMs }: { account: CloudAccount; skewMs: number }) {
+function TimeRow({
+  account,
+  skewMs,
+  here = false,
+}: {
+  account: CloudAccount;
+  skewMs: number;
+  /** The card stands under "Bu bilgisayarda": the time is the cloud's, and it says so. */
+  here?: boolean;
+}) {
   const { t } = useTranslation();
   const now = Date.now() + skewMs;
+  const soon = endsSoon(account, now);
+  const left = timeLeft(account, now, t);
   const renew = () =>
     cloudApi
       .open("renew", account.id)
       .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
   return (
     <p className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 pl-[23px] text-[12px]">
-      <span
-        className={cn(
-          "tabular-nums",
-          endsSoon(account, now) ? "font-semibold text-bone-50" : "text-ash-300",
-        )}
-      >
-        {timeLeft(account, now, t)}
+      <span className={cn("tabular-nums", soon ? "font-semibold text-bone-50" : "text-ash-300")}>
+        {here && !account.expired ? t("afkClear.twin.timeLeft", { time: left }) : left}
       </span>
       {account.renewal.open && !account.expired ? (
+        // Quiet until the last week: gold on every card beside the main button and OYNA said
+        // "this needs you" where nothing did (AFK-CLEAR look 2).
         <button
           type="button"
           onClick={() => void renew()}
-          className="inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+          className={cn(
+            "inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium underline-offset-2 transition-colors duration-150 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300",
+            soon ? "text-gold-300" : "text-ash-300 hover:text-bone-100",
+          )}
         >
           {t("cloudAfk.actions.renew")}
           <ArrowSquareOut size={12} weight="bold" aria-hidden />
@@ -146,18 +157,20 @@ function useTwinMove(account: CloudAccount, here: AfkAccount | null, place: Twin
  */
 function PlaceRow({ move }: { move: NonNullable<ReturnType<typeof useTwinMove>> }) {
   const Mark = move.toHere ? Desktop : Cloud;
+  // A button's shape: as words with a place mark under the state lines it read as one more of
+  // them, where the account runs now (AFK-CLEAR look 2).
   return (
-    <p className="mt-1.5 flex min-h-5 items-center pl-[23px] text-[12px]">
-      <button
-        type="button"
+    <div className="mt-2 flex pl-[23px]">
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={<Mark size={14} weight="bold" aria-hidden className="text-ash-300" />}
         disabled={move.busy}
         onClick={() => void move.run()}
-        className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm font-medium text-bone-100 underline-offset-2 transition-opacity duration-150 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-default disabled:opacity-60"
       >
-        <Mark size={13} weight="bold" aria-hidden className="shrink-0 text-ash-300" />
         {move.label}
-      </button>
-    </p>
+      </Button>
+    </div>
   );
 }
 
@@ -624,7 +637,7 @@ export function CloudCard({
             )}
           </div>
           {local ? <ClientRow account={local} /> : null}
-          <TimeRow account={account} skewMs={skewMs} />
+          <TimeRow account={account} skewMs={skewMs} here={local !== null} />
           {move ? <PlaceRow move={move} /> : null}
           {onPlus ? <PlusLine account={account} onOpen={onPlus} /> : null}
 

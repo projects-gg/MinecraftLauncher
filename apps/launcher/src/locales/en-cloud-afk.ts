@@ -210,7 +210,7 @@ export const enCloudAfk = {
     antiAfkMin: "At least",
     antiAfkMax: "At most",
     owner: "The name you play with",
-    ownerHelp: 'Rules with "Only reply to me" turned on answer only this name.',
+    ownerHelp: 'With "Only reply to me" on, a rule answers only this player.',
     seconds: "s",
     commands: {
       add: "Add command",
@@ -260,7 +260,6 @@ export const enCloudAfk = {
       mark: "Secret",
       markHelp: "Secret lines are encrypted on this PC before they're sent.",
       auto: "Secret because it holds a password.",
-      kept: "Encrypted in the cloud, also kept on this PC.",
       sealed: "Kept in the cloud",
       show: "Show",
       hide: "Hide",

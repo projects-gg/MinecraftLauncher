@@ -67,8 +67,8 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
   const { t } = useTranslation();
   return (issue: Issue | undefined): string | null => {
     if (!issue) return null;
-    // A stop for a wrong password, marked on the login line (SHEET-UX). A line kept in the cloud
-    // opens with "Değiştir" first: its masked field with a padlock read as locked.
+    // A stop for a wrong password, marked on the login line (SHEET-UX). A stored line (kept in the
+    // cloud, or here too: both read-only, AFK-CLEAR) opens with "Değiştir" first.
     if (issue.problem === "wrongPassword") {
       const words =
         issue.index === null
@@ -78,9 +78,8 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
             : issue.place === "rules"
               ? draft?.config.rules[issue.index]?.reply
               : undefined;
-      return t(
-        words?.kind === "sealed" ? "afkPanel.wrongPasswordSealed" : "afkPanel.wrongPassword",
-      );
+      const stored = words?.kind === "sealed" || (words?.kind === "secret" && words.kept);
+      return t(stored ? "afkPanel.wrongPasswordSealed" : "afkPanel.wrongPassword");
     }
     if (issue.problem.startsWith("placeholder_")) {
       const rule =

@@ -209,7 +209,8 @@ export const trCloudAfk = {
     antiAfkMin: "En az",
     antiAfkMax: "En çok",
     owner: "Oynadığın hesabın adı",
-    ownerHelp: '"Yalnız bana yanıt versin" açık olan kurallar yalnız bu ad yazınca çalışır.',
+    ownerHelp:
+      '"Yalnız bana yanıt versin" seçeneği açık kurallar yalnız bu oyuncu yazınca çalışır.',
     seconds: "sn",
     commands: {
       add: "Komut ekle",
@@ -260,7 +261,6 @@ export const trCloudAfk = {
       mark: "Gizli",
       markHelp: "Gizli satırlar bu bilgisayarda şifrelenip gönderilir.",
       auto: "Şifre içerdiği için gizli.",
-      kept: "Bulutta şifreli, bu bilgisayarda da saklı.",
       sealed: "Bulutta saklı",
       show: "Göster",
       hide: "Gizle",

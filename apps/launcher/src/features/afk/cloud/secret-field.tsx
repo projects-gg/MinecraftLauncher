@@ -1,18 +1,17 @@
 // The words of a command or a reply, in the AFK surfaces' one look for secret lines (secret.tsx):
 // - plain words: a field, with "Gizle" beside it that makes them secret (a password command is
-//   secret at once);
-// - a secret this computer has (sealed here, kept in the keychain, or typed now): the padlocked,
-//   masked field with its eye (shown on this computer only), and a quiet "Bulutta şifreli, bu
-//   bilgisayarda da saklı.";
-// - a secret only the cloud can show (sealed on the site or another computer): the kept field, with
-//   "Göster" (the machine sends it sealed to a one-time key; shown for a few seconds, never kept)
-//   and "Değiştir" (type it again).
+//   secret at once, and says so);
+// - a stored secret, wherever its words are: the kept field (padlock, its command, dots) with
+//   "Değiştir" beside it, as on the desktop. Its eye shows the words for a few seconds: from this
+//   computer's copy (sealed here, in the keychain) or from the machine (sealed on the site or
+//   another computer: sent sealed to a one-time key, never kept);
+// - a secret being typed (new, or again after "Değiştir"): the padlocked, masked field with its eye.
 import { LockSimple, LockSimpleOpen, PencilSimple } from "@phosphor-icons/react";
 import { Button, cn, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
 import { type Ref, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SecretField, SecretKept } from "../secret";
+import { SecretField, SecretKept, splitCommand } from "../secret";
 import { TokenField, type TokenSet } from "../settings/controls";
 import { cloudApi } from "./api";
 import { commandOf } from "./bulk";
@@ -27,6 +26,70 @@ type Reveal =
   | { state: "loading" }
   | { state: "shown"; text: string; until: number }
   | { state: "failed"; reason: "offline" | "limited" | "unreadable" };
+
+/** How long shown words stay: a hairline that empties (transform only; still under reduced
+ * motion, where it simply goes with the words). */
+function Countdown() {
+  const { reduce } = useMotionPrefs();
+  return (
+    <motion.span
+      aria-hidden
+      className="absolute right-0 bottom-0 left-0 h-[2px] origin-left bg-gold-400/70"
+      initial={{ transform: "scaleX(1)" }}
+      animate={{
+        transform: reduce ? "scaleX(1)" : "scaleX(0)",
+        transition: { duration: SHOWN_MS / 1000, ease: "linear" },
+      }}
+    />
+  );
+}
+
+/**
+ * A stored secret this computer has the words of (sealed here, in the keychain): the same kept
+ * field as one only the machine can show, its eye showing this computer's copy (no trip). As an
+ * open field with a pressed "Gizli" it was a third look for a stored line (AFK-CLEAR look 2).
+ */
+function KeptHere({
+  text,
+  label,
+  error,
+  onChange,
+}: {
+  text: string;
+  label: string;
+  error: string | null;
+  onChange: () => void;
+}) {
+  const { t } = useTranslation();
+  const [shown, setShown] = useState(false);
+  // Shown words go when the time is up, when the row leaves and when the sheet closes.
+  useEffect(() => {
+    if (!shown) return;
+    const id = window.setTimeout(() => setShown(false), SHOWN_MS);
+    return () => window.clearTimeout(id);
+  }, [shown]);
+  return (
+    <div className="min-w-0 flex-1">
+      <SecretKept
+        label={label}
+        prefix={splitCommand(text)?.command ?? null}
+        invalid={Boolean(error)}
+        shown={shown ? text : null}
+        eye={{ busy: false, onToggle: () => setShown((on) => !on) }}
+        overlay={shown ? <Countdown /> : null}
+      >
+        <Button size="sm" variant="ghost" icon={<PencilSimple size={14} />} onClick={onChange}>
+          {t("cloudAfk.settings.secret.change")}
+        </Button>
+      </SecretKept>
+      {error ? (
+        <p role="alert" className="mt-1.5 text-[12.5px] text-flare-400">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function Stored({
   preview,
@@ -44,7 +107,6 @@ function Stored({
   label: string;
 }) {
   const { t } = useTranslation();
-  const { reduce } = useMotionPrefs();
   const [reveal, setReveal] = useState<Reveal>({ state: "idle" });
   // Shown words go when the time is up, when the row leaves and when the sheet closes.
   useEffect(() => {
@@ -88,21 +150,7 @@ function Stored({
           busy: reveal.state === "loading",
           onToggle: () => (shown ? setReveal({ state: "idle" }) : void show()),
         }}
-        overlay={
-          // How long the words stay: a hairline that empties (transform only; still under
-          // reduced motion, where it simply goes with the words).
-          shown ? (
-            <motion.span
-              aria-hidden
-              className="absolute right-0 bottom-0 left-0 h-[2px] origin-left bg-gold-400/70"
-              initial={{ transform: "scaleX(1)" }}
-              animate={{
-                transform: reduce ? "scaleX(1)" : "scaleX(0)",
-                transition: { duration: SHOWN_MS / 1000, ease: "linear" },
-              }}
-            />
-          ) : null
-        }
+        overlay={shown ? <Countdown /> : null}
       >
         <Button size="sm" variant="ghost" icon={<PencilSimple size={14} />} onClick={onChange}>
           {t("cloudAfk.settings.secret.change")}
@@ -157,8 +205,9 @@ export function WordsField({
   const [focusNext, setFocusNext] = useState(false);
   const generated = useId();
   const fieldId = id ?? generated;
+  const stored = words.kind === "sealed" || (words.kind === "secret" && words.kept);
   const heading = showLabel ? (
-    words.kind === "sealed" ? (
+    stored ? (
       <p aria-hidden className="mb-1.5 text-[13px] font-medium text-bone-100">
         {label}
       </p>
@@ -168,6 +217,13 @@ export function WordsField({
       </label>
     )
   ) : null;
+
+  // "Değiştir" on a stored secret: the field empties for the new words ("Eskisi kalsın" goes back).
+  const replace = (before: Words) => {
+    replaced.current = before;
+    setFocusNext(true);
+    onChange({ kind: "secret", text: "", kept: false });
+  };
 
   if (words.kind === "sealed") {
     return (
@@ -179,22 +235,31 @@ export function WordsField({
           rowId={rowId}
           label={label}
           error={error}
-          onChange={() => {
-            replaced.current = words;
-            setFocusNext(true);
-            onChange({ kind: "secret", text: "", kept: false });
-          }}
+          onChange={() => replace(words)}
         />
+      </div>
+    );
+  }
+  if (words.kind === "secret" && words.kept) {
+    return (
+      <div className="min-w-0 flex-1">
+        {heading}
+        <KeptHere text={words.text} label={label} error={error} onChange={() => replace(words)} />
       </div>
     );
   }
 
   const secret = words.kind === "secret";
   const forced = looksSensitive(words.text);
-  // Being typed again over a kept line: its command (`/login`), shown before the field.
-  const command = replaced.current?.kind === "sealed" ? commandOf(replaced.current.preview) : "";
+  // Being typed again over a stored line: its command (`/login`), shown before the field.
+  const before = replaced.current;
+  const command =
+    before?.kind === "sealed"
+      ? commandOf(before.preview)
+      : before?.kind === "secret"
+        ? (splitCommand(before.text)?.command ?? "")
+        : "";
   const withCommand = command !== "" && (words.text === "" || words.text.startsWith(`${command} `));
-  const kept = words.kind === "secret" && words.kept;
   return (
     <div className="min-w-0 flex-1">
       {heading}
@@ -294,9 +359,8 @@ export function WordsField({
         <p role="alert" className="mt-1.5 text-[12.5px] text-flare-400">
           {error}
         </p>
-      ) : kept ? (
-        <p className="mt-1 text-[12px] text-ash-400">{t("cloudAfk.settings.secret.kept")}</p>
-      ) : forced && secret ? (
+      ) : forced && secret && !replaced.current ? (
+        // Why a line just typed went secret; a line typed again over a stored one needs no word.
         <p className="mt-1 text-[12px] text-ash-400">{t("cloudAfk.settings.secret.auto")}</p>
       ) : null}
     </div>

@@ -310,6 +310,35 @@ describe("toEdit", () => {
     expect(edit.config).toEqual(draft.config);
   });
 
+  it("takes 'Değiştir' alone on a stored line for no change (AFK-CLEAR)", () => {
+    const baseline = toDraft(view());
+    const empty = { kind: "secret" as const, text: "", kept: false };
+    const opened = draftWith((d) => {
+      d.config.commands = d.config.commands.map((c) =>
+        c.id === "c1" ? { ...c, words: empty } : c,
+      );
+      d.config.rules = d.config.rules.map((r) => (r.id === "r1" ? { ...r, reply: empty } : r));
+    });
+    expect(isDirty(opened, baseline)).toBe(false);
+    expect(unsavedParts(opened, baseline).size).toBe(0);
+
+    const typedOne = draftWith((d) => {
+      d.config.rules = d.config.rules.map((r) =>
+        r.id === "r1" ? { ...r, reply: { ...empty, text: "/login Yeni456" } } : r,
+      );
+    });
+    expect(isDirty(typedOne, baseline)).toBe(true);
+    expect([...unsavedParts(typedOne, baseline)]).toEqual(["replies"]);
+
+    // Plain words emptied are a change.
+    const cleared = draftWith((d) => {
+      d.config.commands = d.config.commands.map((c) =>
+        c.id === "c2" ? { ...c, words: empty } : c,
+      );
+    });
+    expect(isDirty(cleared, baseline)).toBe(true);
+  });
+
   it("reads an empty port as the default and a typed one as a number", () => {
     expect(portOf(draftWith((d) => (d.port = "")))).toBe(0);
     expect(portOf(draftWith((d) => (d.port = " 25565 ")))).toBe(25565);

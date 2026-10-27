@@ -172,9 +172,21 @@ export const newLoginRow = (): LoginRow => ({ key: key(), kind: "text", text: ""
 /** Line lists compare by their saved form (trimmed, blank lines dropped). */
 const lines = (items: string[]) => items.map((s) => s.trim()).filter(Boolean);
 
-/** Comparable form of a draft: what saving would actually change. */
+/**
+ * Comparable form of a draft: what saving would actually change. A stored secret opened with
+ * "Değiştir" and nothing typed yet is still the stored one: the press alone brought up the change
+ * bar, whose save would have asked for a password nobody had typed (AFK-CLEAR look 2).
+ */
 function comparable(draft: Draft): string {
-  const page = fromDraft(draft);
+  const page = fromDraft({
+    ...draft,
+    login: draft.login.map(
+      (row): LoginRow =>
+        row.kind === "replace" && !row.args.trim()
+          ? { key: row.key, kind: "stored", index: row.index, command: row.command }
+          : row,
+    ),
+  });
   return JSON.stringify({
     ...page,
     serverHost: page.serverHost.trim(),

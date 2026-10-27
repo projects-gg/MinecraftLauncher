@@ -1129,7 +1129,7 @@ export const en: DeepPartial<Strings> = {
       remove: "Remove command",
       empty: "No commands yet.",
       stored: "Saved",
-      storedHint: "Passwords are kept safely on this computer and never shown here.",
+      storedHint: "Passwords are kept safely on this computer; saved ones are never shown here.",
       replace: "Change",
       undoReplace: "Keep the old one",
       newSecret: "New password",

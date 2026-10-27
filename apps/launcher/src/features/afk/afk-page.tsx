@@ -29,6 +29,7 @@ import {
   Input,
   Menu,
   type MenuItem,
+  Tooltip,
   useMotionPrefs,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -318,29 +319,33 @@ const refused = (account: AfkAccount) =>
   account.state.kind === "error" && Boolean(account.state.cause);
 
 /**
- * "Tümünü durdur" and "Tümünü bağla" of the "Bu bilgisayarda" list: what it shows. Stopping takes
- * every client of the list (the copy here of an account also in 7/24 Bulut while it runs here
- * included); connecting takes its idle accounts only this computer has, never one the server
+ * "Buradakileri durdur" and "Buradakileri bağla" of the "Bu bilgisayarda" list: what it shows (the
+ * words say so: "Tümünü …" under the page title read as every account, the cloud's too). Stopping
+ * takes every client of the list (the copy here of an account also in 7/24 Bulut while it runs
+ * here included); connecting takes its idle accounts only this computer has, never one the server
  * turned away (a refused password tried again can lock the account on the server; pl-afk leaves
- * those out too).
+ * those out too), and its tooltip says so while the list has one.
  */
 function DesktopBulk({
   running,
   idle,
   others,
+  skipped,
 }: {
   /** The list's clients that are busy now. */
   running: AfkAccount[];
-  /** The list's accounts "Tümünü bağla" would connect. */
+  /** The list's accounts "Buradakileri bağla" would connect. */
   idle: AfkAccount[];
   /** Some desktop accounts are 7/24 Bulut cards: stopping then goes one by one. */
   others: boolean;
+  /** The list's accounts the server stopped for good, which connecting leaves out. */
+  skipped: number;
 }) {
   const { t } = useTranslation();
   const connectAll = useConnectAll();
   const stopAll = () => {
     if (!others) return runAfk(api.afkStopAll(), t("afk.stopFailed"));
-    // One by one: each also leaves a running "Tümünü bağla" (pl-afk `disconnect`).
+    // One by one: each also leaves a running "Buradakileri bağla" (pl-afk `disconnect`).
     for (const account of running) runAfk(api.afkStop(account.id), t("afk.stopFailed"));
   };
   return (
@@ -348,17 +353,22 @@ function DesktopBulk({
       {running.length ? (
         // On a ghost button a filled square reads as a checkbox: the outlined stop sign.
         <Button variant="ghost" icon={<StopCircle size={16} />} onClick={stopAll}>
-          {t("afk.stopAll")}
+          {t("afkClear.bulk.stopHere")}
         </Button>
       ) : null}
-      <Button
-        variant="secondary"
-        icon={<Play size={15} weight="fill" className="text-gold-300" />}
-        onClick={connectAll}
-        disabled={idle.length === 0}
-      >
-        {t("afk.connectAll")}
-      </Button>
+      {/* A disabled button takes no pointer: the reason hangs on its wrapper (event-join.tsx). */}
+      <Tooltip content={t("afkClear.bulk.skipped")} disabled={skipped === 0}>
+        <span className="inline-flex">
+          <Button
+            variant="secondary"
+            icon={<Play size={15} weight="fill" className="text-gold-300" />}
+            onClick={connectAll}
+            disabled={idle.length === 0}
+          >
+            {t("afkClear.bulk.connectHere")}
+          </Button>
+        </span>
+      </Tooltip>
     </div>
   );
 }
@@ -453,7 +463,12 @@ export function AfkPage() {
               <p className="mt-0.5 text-[13px] text-ash-300 tabular-nums">{count}</p>
             </div>
             {listed > 0 ? (
-              <DesktopBulk running={running} idle={idle} others={folded.size > 0} />
+              <DesktopBulk
+                running={running}
+                idle={idle}
+                others={folded.size > 0}
+                skipped={local.filter(refused).length}
+              />
             ) : null}
           </header>
         )}

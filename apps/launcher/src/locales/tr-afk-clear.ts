@@ -19,6 +19,13 @@ export const trAfkClear = {
     /** Only accounts in both places, none running here (their cards are in 7/24 Bulut). */
     noneRunning: "Şu an burada çalışan hesap yok",
   },
+  /** The buttons in that list's heading: the words say they take this list only. */
+  bulk: {
+    stopHere: "Buradakileri durdur",
+    connectHere: "Buradakileri bağla",
+    /** On "Buradakileri bağla" while the list has an account the server stopped (a ban, a password). */
+    skipped: "Sunucunun durdurduğu hesap bağlanmaz.",
+  },
   /** The 7/24 Bulut list's count while some of its accounts run on this computer (listed there). */
   cloud: {
     countHere: "{{count}} bulut hesabı, {{here}} tanesi bu bilgisayarda",
@@ -34,15 +41,22 @@ export const trAfkClear = {
     moveTitle: "{{name}} bu bilgisayarda çalışsın mı?",
     moveBody:
       "Bulutta durur, süresi işlemeye devam eder. Bu bilgisayar ya da launcher kapanınca oyundan çıkar.",
+    /** Its paid time, on its card while it runs on this computer ("18 gün kaldı"). */
+    timeLeft: "Bulutta {{time}}",
     hereSettings: "Bu bilgisayardaki ayarlar",
     cloudSettings: "Buluttaki ayarlar",
     /** The settings panel's title: which of the two it is. */
-    hereTitle: "{{name}} bu bilgisayardaki ayarları",
-    cloudTitle: "{{name}} bulut ayarları",
+    hereTitle: "Bu bilgisayardaki {{name}} ayarları",
+    cloudTitle: "Buluttaki {{name}} ayarları",
     removeHere: "Bu bilgisayardan kaldır",
     removeTitle: "{{name}} bu bilgisayardan kaldırılsın mı?",
     removeBody:
       "Bu bilgisayardaki ayarları ve kayıtlı giriş komutları silinir, 7/24 Bulut hesabı olduğu gibi kalır. Bu işlem geri alınamaz.",
+  },
+  /** "Ayarlarını kopyala" from an account whose password the server turned down. */
+  copy: {
+    refused:
+      "Sunucu {{name}} hesabının şifresini kabul etmedi. Önce şifresini düzelt, sonra kopyala.",
   },
   /** A secret line's field (the eye inside it, what a screen reader hears for a kept one). */
   secret: {

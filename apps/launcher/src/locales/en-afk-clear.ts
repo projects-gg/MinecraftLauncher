@@ -1,6 +1,6 @@
 // AFK-CLEAR: the English of tr-afk-clear.ts. Root key `afkClear`.
 export const enAfkClear = {
-  fixPassword: "Fix the password",
+  fixPassword: "Fix password",
   saveConnect: "Save and connect",
   saveStart: "Save and start",
   savedConnecting: "The account is connecting.",
@@ -10,6 +10,11 @@ export const enAfkClear = {
     title: "On this PC",
     none: "No accounts",
     noneRunning: "No account runs here now",
+  },
+  bulk: {
+    stopHere: "Stop all here",
+    connectHere: "Connect all here",
+    skipped: "Accounts the server stopped aren't connected.",
   },
   cloud: {
     countHere_one: "{{count}} cloud account, {{here}} on this PC",
@@ -23,6 +28,7 @@ export const enAfkClear = {
     moveTitle: "Run {{name}} on this PC?",
     moveBody:
       "It stops in the cloud and its time keeps running. It leaves the game when this PC or the launcher closes.",
+    timeLeft: "{{time}} in the cloud",
     hereSettings: "Settings on this PC",
     cloudSettings: "Cloud settings",
     hereTitle: "{{name}} settings on this PC",
@@ -31,6 +37,9 @@ export const enAfkClear = {
     removeTitle: "Remove {{name}} from this PC?",
     removeBody:
       "Its settings and saved login commands on this PC are deleted; the 24/7 Cloud account stays as it is. This can't be undone.",
+  },
+  copy: {
+    refused: "The server turned down {{name}}'s password. Fix it first, then copy.",
   },
   secret: {
     show: "Show",

@@ -2,8 +2,8 @@
 // answered and is not off: with the service down the page is exactly what it was. Without a cloud
 // account (or signed out of Friends) it is one quiet intro card; with accounts, their cards. The
 // layers (intro, the account panel, settings, "Buluta taşı", the two-places question) live here
-// too. With a service of the cloud features and two accounts or more, "Seç" chooses several for
-// one action at a time (CAFK-FEAT §3.4). An account this computer has too lists where it runs
+// too. With a service of the cloud features and two accounts or more, "Hesap seç" chooses several
+// for one action at a time (CAFK-FEAT §3.4). An account this computer has too lists where it runs
 // (AFK-CLEAR): while its copy here is busy its card stands under "Bu bilgisayarda", with the same
 // actions (`useCloudCardActions`), and this list's count says so.
 import { ArrowSquareOut, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
@@ -141,7 +141,7 @@ export function CloudSection({
   const [selecting, setSelecting] = useState(false);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [copy, setCopy] = useState<CopyRequest | null>(null);
-  // "Seç" and "Hepsini seç" swap places: the focus follows from one to the other.
+  // "Hesap seç" and "Hepsini seç" swap places: the focus follows from one to the other.
   const selectRef = useRef<HTMLButtonElement>(null);
   const allRef = useRef<HTMLButtonElement>(null);
   const moveFocus = useRef(false);

@@ -888,7 +888,7 @@ export const tr = {
       remove: "Komutu sil",
       empty: "Henüz komut yok.",
       stored: "Kayıtlı",
-      storedHint: "Şifreler bu bilgisayarda güvenle saklanır, burada gösterilmez.",
+      storedHint: "Şifreler bu bilgisayarda güvenle saklanır; kayıtlı olanlar burada gösterilmez.",
       replace: "Değiştir",
       undoReplace: "Eskisi kalsın",
       newSecret: "Yeni şifre",

@@ -109,12 +109,48 @@ const partValue = (draft: Draft, part: Part): unknown => {
   }
 };
 
+/**
+ * The draft as saving would change it: a stored secret opened with "Değiştir" and nothing typed
+ * yet is still the stored one, as on the desktop (the press alone brought up the change bar;
+ * AFK-CLEAR look 2). A row whose plain words were emptied is a change.
+ */
+function settled(draft: Draft, baseline: Draft): Draft {
+  const untouched = (words: Words, before: Words | undefined): Words =>
+    words.kind === "secret" &&
+    !words.kept &&
+    words.text === "" &&
+    before !== undefined &&
+    before.kind !== "plain"
+      ? before
+      : words;
+  return {
+    ...draft,
+    config: {
+      ...draft.config,
+      commands: draft.config.commands.map((command) => ({
+        ...command,
+        words: untouched(
+          command.words,
+          baseline.config.commands.find((one) => one.id === command.id)?.words,
+        ),
+      })),
+      rules: draft.config.rules.map((rule) => ({
+        ...rule,
+        reply: untouched(
+          rule.reply,
+          baseline.config.rules.find((one) => one.id === rule.id)?.reply,
+        ),
+      })),
+    },
+  };
+}
+
 /** The sections holding edits not saved yet. */
 export function unsavedParts(draft: Draft, baseline: Draft): Set<Part> {
+  const now = settled(draft, baseline);
   return new Set(
     PARTS.filter(
-      (part) =>
-        JSON.stringify(partValue(draft, part)) !== JSON.stringify(partValue(baseline, part)),
+      (part) => JSON.stringify(partValue(now, part)) !== JSON.stringify(partValue(baseline, part)),
     ),
   );
 }
@@ -142,7 +178,7 @@ export function toDraft(view: CloudEditData): Draft {
 }
 
 export function isDirty(draft: Draft, baseline: Draft): boolean {
-  return JSON.stringify(draft) !== JSON.stringify(baseline);
+  return JSON.stringify(settled(draft, baseline)) !== JSON.stringify(baseline);
 }
 
 /** The port as a number (NaN while it is not one). */
