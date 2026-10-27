@@ -10,6 +10,7 @@ import {
   isValidHost,
   newRule,
   newTask,
+  passwordIssue,
   SECTIONS,
   splitHostPort,
   toDraft,
@@ -245,5 +246,69 @@ describe("the panel's sections (SHEET-UX)", () => {
     const base = toDraft(page());
     const spaced = { ...base, page: { ...base.page, serverHost: "  " } };
     expect(unsavedGroups(spaced, base).size).toBe(0);
+  });
+});
+
+describe("a stop for a refused password (AFK-CLEAR)", () => {
+  const sensitive = ["/login", "/l", "/register"];
+  const on = (draft: ReturnType<typeof toDraft>) => ({
+    ...draft,
+    page: { ...draft.page, loginCommands: { ...draft.page.loginCommands, enabled: true } },
+  });
+
+  it("marks the kept login line, never blocking, until it is being replaced", () => {
+    const base = on(toDraft(page()));
+    const first = base.login[0];
+    expect(passwordIssue(base, base, sensitive)).toEqual({
+      section: "login",
+      field: `login.${first?.key}`,
+      code: "wrongPasswordKept",
+    });
+    const replacing = {
+      ...base,
+      login: base.login.map((row) =>
+        row.kind === "stored" ? { ...row, kind: "replace" as const, args: "" } : row,
+      ),
+    };
+    expect(passwordIssue(replacing, base, sensitive)).toBeNull();
+    // The login commands are off: they typed no password.
+    expect(passwordIssue(toDraft(page()), toDraft(page()), sensitive)).toBeNull();
+  });
+
+  it("marks a typed password line while it has its saved words", () => {
+    const typed = page();
+    typed.loginCommands.commands = [{ kind: "text", text: "/login eski1" }];
+    const base = on(toDraft(typed));
+    const line = base.login[0];
+    expect(passwordIssue(base, base, sensitive)?.code).toBe("wrongPassword");
+    const edited = {
+      ...base,
+      login: base.login.map((row) =>
+        row.kind === "text" && row.key === line?.key ? { ...row, text: "/login yeni2" } : row,
+      ),
+    };
+    expect(passwordIssue(edited, base, sensitive)).toBeNull();
+  });
+
+  it("falls back to the auto-reply that types the password", () => {
+    const replies = page();
+    replies.loginCommands.commands = [];
+    replies.autoRespond = {
+      enabled: true,
+      soundEnabled: false,
+      matchColors: false,
+      rules: [
+        { ...newRule(), pattern: "selam", reply: "Merhaba" },
+        { ...newRule(), pattern: "giriş yap", reply: "/login gizli1" },
+      ],
+    };
+    const base = toDraft(replies);
+    const rule = base.rules[1];
+    expect(passwordIssue(base, base, sensitive)).toEqual({
+      section: "respond",
+      field: `rule.${rule?.key}.reply`,
+      code: "wrongPassword",
+    });
+    expect(GROUP_OF.respond).toBe("replies");
   });
 });
