@@ -131,7 +131,7 @@ export interface ProjectsSkinLimits {
 
 /** Why the panel can do nothing with the service right now. */
 export type ProjectsSkinAccess =
-  /** Not signed in to friends (Discord): "Skinin Projects'te görünsün". */
+  /** Not signed in to friends (Discord): "Projects skini Discord hesabınla çalışır". */
   | "signedOut"
   /** The service's skin switch is off: "Projects skini şu an kapalı.". */
   | "off"

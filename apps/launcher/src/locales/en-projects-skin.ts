@@ -83,7 +83,7 @@ export const enProjectsSkin = {
     unlinked: "Link removed",
   },
   connect: {
-    title: "Show your skin on Projects",
+    title: "Projects skins work with your Discord account",
     sessionTitle: "Your Discord session ended",
     action: "Sign in with Discord",
     again: "Sign in again",

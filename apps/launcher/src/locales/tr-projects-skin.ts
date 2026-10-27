@@ -85,7 +85,7 @@ export const trProjectsSkin = {
     unlinked: "Eşleme kaldırıldı",
   },
   connect: {
-    title: "Skinin Projects'te görünsün",
+    title: "Projects skini Discord hesabınla çalışır",
     sessionTitle: "Discord oturumun kapandı",
     action: "Discord ile giriş yap",
     again: "Yeniden giriş yap",
