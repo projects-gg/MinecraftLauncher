@@ -276,9 +276,11 @@ mod tests {
         // with names on, a menu opened at a block left its picture hanging above that block.
         let file = file_of(CHEST_TRACKER);
         assert_eq!(file.path, "config/chesttracker.json5");
+        // YACL's Gson names the fields in snake_case: a camelCase key is ignored and the mod
+        // writes its own default (false) over it (seen in the game, 27 Oct).
         assert_eq!(
             file.json,
-            json!({ "debug": { "disableContainerNames": true } })
+            json!({ "debug": { "disable_container_names": true } })
         );
     }
 
@@ -299,7 +301,7 @@ mod tests {
         let bytes = std::fs::read(dir.path().join("config").join("chesttracker.json5")).unwrap();
         // Plain JSON (no comments, no trailing commas) is JSON5 as well.
         let on_disk: Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(on_disk["debug"]["disableContainerNames"], json!(true));
+        assert_eq!(on_disk["debug"]["disable_container_names"], json!(true));
         assert!(!dir.path().join("config").join("litematica.json").exists());
     }
 

@@ -48,10 +48,10 @@
       "path": "config/chesttracker.json5",
       "json": {
         "debug": {
-          "disableContainerNames": true
+          "disable_container_names": true
         }
       },
-      "why": "Chest Tracker (the unofficial port, the only build for 26.x) keeps the title of every menu a player opens at a block and draws it above that block in the world, through walls. The Projects server's menus draw their pictures with resource pack glyphs in the title (ItemsAdder font images), so after opening one the menu's picture hung in the world. Its switch Disable Container Names (under Rendering in its settings, `debug` in the file, off in the mod) is on; the player can turn the names back on there. YACL reads the file and keeps its defaults for every other field."
+      "why": "Chest Tracker (the unofficial port, the only build for 26.x) keeps the title of every menu a player opens at a block and draws it above that block in the world, through walls. The Projects server's menus draw their pictures with resource pack glyphs in the title (ItemsAdder font images), so after opening one the menu's picture hung in the world. Its switch Disable Container Names (under Rendering in its settings, `debug.disable_container_names` in the file, off in the mod) is on; the player can turn the names back on there. YACL writes and reads the fields in snake_case (a camelCase key is ignored, seen in the game on 27 Oct) and keeps its defaults for every other field."
     }
   ]
 }
