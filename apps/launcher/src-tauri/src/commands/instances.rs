@@ -224,7 +224,7 @@ pub async fn instance_delete(
             detail.to_owned(),
         )
     };
-    if state.games.lock().of_instance(id) {
+    if state.games.lock().of_instance(&id) {
         return Err(busy("the game of this instance is running"));
     }
     // The launcher's own background download of it stops first (LIB1): the player never started

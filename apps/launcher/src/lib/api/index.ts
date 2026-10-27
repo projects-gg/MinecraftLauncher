@@ -4,6 +4,7 @@ import type {
   LegacyImportRequest,
   LegacyScan,
   PresenceContext,
+  WorldOpenView,
 } from "@/bindings";
 import { isTauri } from "../platform";
 import type {
@@ -143,6 +144,11 @@ export interface LauncherApi {
    * (PLAY-AGAIN: asked before any game beside the ones running).
    */
   gameMemoryFits(instanceId: string): Promise<boolean>;
+  /**
+   * Whether the world `world` (its folder) of the instance is open in a game now, and whose
+   * (PLAY-AGAIN: "Devam et" and a world's "Oyna" say so before a launch would stop on it).
+   */
+  gameWorldOpen(instanceId: string, world: string): Promise<WorldOpenView>;
   /** "Ekran görüntülerini panoya kopyala" switched: a game that runs now follows it at once. */
   setScreenshotCopy(enabled: boolean): Promise<void>;
   openUrl(url: string): Promise<void>;

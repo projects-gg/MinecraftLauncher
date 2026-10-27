@@ -1,7 +1,7 @@
 // The question's words (PLAY-ACCT, PLAY-AGAIN). "Durdur ve oyna": what starts in the title, what
 // happens to the launch on its way in one sentence, the answer's name, then the short way. One
-// more game: the owner's words ("Bu adla oyun zaten açık" / "Yine de bir tane daha açılsın mı?"),
-// with one sentence before the question when the free memory would not hold it. Pure: i18n keys
+// more game: one shape (second look): the title asks "Bir oyun daha açılsın mı?", the body says
+// why (the owner's words with the name, the memory), "Yine de aç" answers. Pure: i18n keys
 // with their values (tested in words.test.ts). Names never get a suffix (a Turkish case ending
 // would have to follow the name's vowels), and an installation is called one ("Projects" is also
 // the server).
@@ -74,20 +74,18 @@ export function stepWords(sides: SwitchSides): { title: Line; body: Line[] } {
 const AGAIN = "playAgain";
 
 /**
- * One more game (PLAY-AGAIN). The same name in game: the owner's question, the memory sentence
- * before it when needed. Another account's games only: asked only when the memory is short.
+ * One more game (PLAY-AGAIN), one shape whatever the reason: the title asks, the body says why
+ * (the selected account `name` in game already: the owner's words with it; the memory short: one
+ * sentence after it), "Yine de aç" answers. Another account's games only: asked only when the
+ * memory is short.
  */
 export function oneMoreWords(
   kind: Exclude<SwitchKind, "stop">,
   memoryShort: boolean,
+  name: string | null = null,
 ): { title: Line; body: Line[]; confirm: Line } {
+  const same: Line[] =
+    kind === "again" ? [name ? [`${AGAIN}.sameName`, { name }] : [`${AGAIN}.sameNameUnknown`]] : [];
   const memory: Line[] = memoryShort ? [[`${AGAIN}.memory`]] : [];
-  if (kind === "again") {
-    return {
-      title: [`${AGAIN}.title`],
-      body: [...memory, [`${AGAIN}.body`]],
-      confirm: [`${AGAIN}.confirm`],
-    };
-  }
-  return { title: [`${AGAIN}.memoryTitle`], body: memory, confirm: [`${AGAIN}.memoryConfirm`] };
+  return { title: [`${AGAIN}.title`], body: [...same, ...memory], confirm: [`${AGAIN}.confirm`] };
 }

@@ -26,6 +26,11 @@ export interface PlayButtonLabels {
    */
   runningAction?: string;
   /**
+   * What "Oyunda" says under the pointer (or the keyboard's focus) when a press does something
+   * ("Bir oyun daha"): the state's word alone did not say what a click does (second look).
+   */
+  runningHover?: string;
+  /**
    * Where the language puts the percent sign: before the figure in Turkish ("%42", the
    * default), after it in English ("42%").
    */
@@ -165,6 +170,19 @@ export function PlayButton({
     if (guard.armed && !cancelShown) setCancelShownFor(guard.since);
   };
   const showCancel = hover && cancellable && guard.armed && cancelShown;
+  // "Oyunda" under the pointer says what a press does, once the pointer moves over it after the
+  // game came (a pointer resting where it pressed OYNA keeps reading "Oyunda"), and under the
+  // keyboard's focus.
+  const [actionShown, setActionShown] = useState(false);
+  const [focusShown, setFocusShown] = useState(false);
+  useEffect(() => {
+    if (state.kind !== "running") setActionShown(false);
+  }, [state.kind]);
+  const canSayAction = pressableRunning && Boolean(labels.runningHover);
+  const showAction = () => {
+    if (canSayAction && !actionShown) setActionShown(true);
+  };
+  const sayAction = canSayAction && ((hover && actionShown) || focusShown);
 
   // The swell behind the button and the light across it while the game opens.
   const swell = useRef<HTMLDivElement>(null);
@@ -240,8 +258,8 @@ export function PlayButton({
       key = showCancel ? "cancel" : "opening";
       break;
     case "running":
-      text = labels.running;
-      key = "running";
+      text = sayAction ? (labels.runningHover ?? labels.running) : labels.running;
+      key = sayAction ? "runningHover" : "running";
       break;
     case "unavailable":
       text = state.label;
@@ -315,10 +333,21 @@ export function PlayButton({
         aria-hidden
         className="pointer-events-none absolute -inset-x-8 -inset-y-5 -z-20 rounded-[50%] bg-[radial-gradient(closest-side,rgb(95_203_142/0.62),rgb(95_203_142/0.22)_55%,transparent)] opacity-0 blur-xl"
       />
-      {/* Socket plate */}
-      <div
+      {/* Socket plate: warm, and neutral under "Oyunda" (the dark red read as an outline around
+          the dark face); the two cross-fade, opacity only. */}
+      <motion.div
         aria-hidden
         className="chamfer absolute -inset-[4px] -z-10 bg-[linear-gradient(180deg,rgb(63_10_10/0.9),rgb(10_9_12/0.95))] [--cut:15px]"
+        initial={false}
+        animate={{ opacity: state.kind === "running" ? 0 : 1 }}
+        transition={face}
+      />
+      <motion.div
+        aria-hidden
+        className="chamfer absolute -inset-[4px] -z-10 bg-[linear-gradient(180deg,rgb(38_36_44/0.95),rgb(10_9_12/0.95))] [--cut:15px]"
+        initial={false}
+        animate={{ opacity: state.kind === "running" ? 1 : 0 }}
+        transition={face}
       />
       <button
         type="button"
@@ -328,13 +357,20 @@ export function PlayButton({
         onPointerEnter={() => {
           setHover(true);
           showCancelLabel();
+          showAction();
           crossSheen();
         }}
         onFocus={(event) => {
           // The keyboard's focus only: a click focuses the button too, after the pointer came.
-          if (event.currentTarget.matches(":focus-visible")) crossSheen();
+          if (!event.currentTarget.matches(":focus-visible")) return;
+          crossSheen();
+          setFocusShown(true);
         }}
-        onPointerMove={showCancelLabel}
+        onBlur={() => setFocusShown(false)}
+        onPointerMove={() => {
+          showCancelLabel();
+          showAction();
+        }}
         onPointerLeave={(event) => {
           setHover(false);
           guard.handlers.onPointerLeave(event);
@@ -379,7 +415,7 @@ export function PlayButton({
           {pressableRunning ? (
             <span
               aria-hidden
-              className="absolute inset-0 bg-[linear-gradient(180deg,rgb(95_203_142/0.18),rgb(95_203_142/0.03)_70%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
+              className="absolute inset-0 bg-[linear-gradient(180deg,rgb(95_203_142/0.22),rgb(95_203_142/0.05)_70%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
             />
           ) : null}
           {/* Ready: the gold face. */}
@@ -455,6 +491,7 @@ export function PlayButton({
                 key === "percent" && "text-bone-50 tabular-nums",
                 key === "opening" && "text-gold-ink",
                 state.kind === "running" && "text-jade-400",
+                key === "runningHover" && "text-[16px]",
                 state.kind === "unavailable" && "text-[14px] text-ash-300",
               )}
             >

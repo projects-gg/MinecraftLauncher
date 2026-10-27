@@ -726,6 +726,9 @@ export const tauriApi: LauncherApi = {
   async gameMemoryFits(instanceId) {
     return ok(commands.gameMemoryFits(instanceId));
   },
+  async gameWorldOpen(instanceId, world) {
+    return ok(commands.gameWorldOpen(instanceId, world));
+  },
   async setScreenshotCopy(enabled) {
     await commands.gameCopyScreenshots(enabled);
   },

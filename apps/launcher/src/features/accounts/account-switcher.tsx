@@ -1,7 +1,7 @@
 // Title bar account switcher: the active account's head and name; opens a menu of every account
 // (arrow keys, Enter, Esc, typeahead) with "Hesap ekle" and "Hesap merkezini aç".
 import { CaretDown, Check, PushPin, UserPlus, UsersThree } from "@phosphor-icons/react";
-import { Chip, cn, easeOutExpo, returnFocusAfterKeys, springSnappy } from "@pl/ui";
+import { cn, easeOutExpo, returnFocusAfterKeys, springSnappy } from "@pl/ui";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useRef, useState } from "react";
@@ -180,28 +180,25 @@ export function AccountSwitcher() {
                                       aria-hidden
                                     />
                                   ) : null}
-                                  {playing.includes(account.id) ? (
-                                    <Chip tone="jade" className="shrink-0">
-                                      {t("playAcct.inGame")}
-                                    </Chip>
-                                  ) : null}
-                                  {afk ? (
-                                    <Chip tone="jade" className="shrink-0">
-                                      {t("accounts.center.afk")}
-                                    </Chip>
-                                  ) : null}
                                 </span>
-                                {/* Microsoft accounts say so; a username alone needs no line. */}
-                                {expired || account.kind === "microsoft" ? (
-                                  <span
-                                    className={cn(
-                                      "block truncate text-[12px]",
-                                      expired ? "text-flare-400" : "text-ash-400",
-                                    )}
-                                  >
-                                    {expired
-                                      ? t("accounts.switcher.expired")
-                                      : t("accounts.kind.microsoft")}
+                                {/* Every state in one place, as coloured words under the name
+                                    (PLAY-AGAIN second look: tags beside the name and a line
+                                    under it read as two systems): an expired session first, then
+                                    in game, AFK, else what kind the account is (a username alone
+                                    needs no line). */}
+                                {expired ? (
+                                  <span className="block truncate text-[12px] text-flare-400">
+                                    {t("accounts.switcher.expired")}
+                                  </span>
+                                ) : playing.includes(account.id) || afk ? (
+                                  <span className="block truncate text-[12px] text-jade-400">
+                                    {playing.includes(account.id)
+                                      ? t("playAcct.inGame")
+                                      : t("accounts.center.afk")}
+                                  </span>
+                                ) : account.kind === "microsoft" ? (
+                                  <span className="block truncate text-[12px] text-ash-400">
+                                    {t("accounts.kind.microsoft")}
                                   </span>
                                 ) : null}
                               </span>

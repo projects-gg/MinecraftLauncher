@@ -18,6 +18,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AccountFace } from "@/features/accounts/account-face";
+import { useAccounts } from "@/features/accounts/use-accounts";
 import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launch";
 import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
 import { helpsWithLaunchError } from "@/features/help/launch";
@@ -369,26 +371,28 @@ function LaunchStatus({ phase }: { phase: LaunchPhase }) {
 
 /**
  * "EjderAvcisi oyunda" (PLAY-AGAIN): with another account selected, who is in game while this one
- * is not, so OYNA reads as one more game beside theirs. Quiet: two small lines like "Devam et"'s
- * ("Oyunda" over the names), no dot or glow; read out as the sentence.
+ * is not, so OYNA reads as one more game beside theirs. Quiet: one line after the accounts' faces,
+ * no dot or glow (second look: "Oyunda" over the names read as a tile of its own, and two names
+ * did not fit at 1024 px). Two or more read "2 hesap oyunda", and a narrow window only "Oyunda"
+ * after the faces; the sentence with every name is read out and shows under the pointer.
  */
 function othersWords(
   t: TFunction,
   names: readonly string[],
-): { sentence: string; who: string } | null {
+): { sentence: string; line: string } | null {
   const [first, second] = names;
   if (!first) return null;
-  if (!second) return { sentence: t("playAgain.othersOne", { name: first }), who: first };
-  if (names.length === 2) {
-    return {
-      sentence: t("playAgain.othersTwo", { first, second }),
-      who: t("playAgain.namesTwo", { first, second }),
-    };
+  if (!second) {
+    const one = t("playAgain.othersOne", { name: first });
+    return { sentence: one, line: one };
   }
-  const total = String(names.length);
+  const many = t("playAgain.othersMany", { total: String(names.length) });
   return {
-    sentence: t("playAgain.othersMany", { total }),
-    who: t("playAgain.namesMany", { total }),
+    sentence:
+      names.length === 2
+        ? t("playAgain.othersTwo", { first, second })
+        : `${many}: ${names.join(", ")}`,
+    line: many,
   };
 }
 
@@ -408,6 +412,11 @@ function StatusArea({
   const autoJoin = usePrefs((s) => s.autoJoin);
   const setAutoJoin = usePrefs((s) => s.setAutoJoin);
   const othersText = othersWords(t, others);
+  const { data: accounts } = useAccounts();
+  const faces = others
+    .map((name) => accounts?.find((account) => account.username === name))
+    .filter((account) => account !== undefined)
+    .slice(0, 3);
   // "Devam et" only while nothing runs (a click would start nothing otherwise).
   const target = useResumeTarget(selected);
   const resume = phase.kind === "idle" ? target : target === undefined ? undefined : null;
@@ -462,22 +471,35 @@ function StatusArea({
                 ) : null}
               </AnimatePresence>
             </div>
-            <div className="flex min-w-0 shrink items-center gap-4">
+            {/* A wide gap before the switch: the line is not the switch's label. */}
+            <div className="flex min-w-0 shrink items-center gap-7">
               <AnimatePresence initial={false}>
                 {othersText ? (
                   <motion.p
                     key="others"
-                    className="max-w-[200px] min-w-0 leading-tight"
-                    aria-label={othersText.sentence}
+                    className="flex max-w-[220px] min-w-0 items-center gap-2"
+                    title={othersText.sentence}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.24, ease: easeOutExpo } }}
                     exit={{ opacity: 0, transition: { duration: 0.12, ease: easeOutExpo } }}
                   >
-                    <span aria-hidden className="block text-[12px] text-ash-400">
-                      {t("playAcct.inGame")}
-                    </span>
-                    <span aria-hidden className="block truncate text-[13px] text-ash-300">
-                      {othersText.who}
+                    <span className="sr-only">{othersText.sentence}</span>
+                    {faces.length > 0 ? (
+                      <span aria-hidden className="flex shrink-0 -space-x-1">
+                        {faces.map((account) => (
+                          <AccountFace
+                            key={account.id}
+                            account={account}
+                            size={16}
+                            className="ring-2 ring-obsidian-950/80"
+                          />
+                        ))}
+                      </span>
+                    ) : null}
+                    {/* Narrow windows (1024 px): the faces say who, the word says where. */}
+                    <span aria-hidden className="truncate text-[12.5px] text-ash-300">
+                      <span className="hidden min-[1180px]:inline">{othersText.line}</span>
+                      <span className="min-[1180px]:hidden">{t("playAcct.inGame")}</span>
                     </span>
                   </motion.p>
                 ) : null}
@@ -657,6 +679,7 @@ export function CommandBar() {
           cancel: t("play.cancel"),
           running: t("play.running"),
           runningAction: t("playAgain.runningAria"),
+          runningHover: t("playAgain.runningHover"),
           percentFirst: i18n.language !== "en",
         }}
       />

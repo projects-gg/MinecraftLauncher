@@ -288,13 +288,29 @@ async function memoryFits(instanceId: string): Promise<boolean> {
   }
 }
 
+/** The world a launch goes straight into, when it is a singleplayer one. */
+function worldOf(options: LaunchOptions | undefined): string | null {
+  const quickPlay = options?.quickPlay;
+  return quickPlay?.kind === "singleplayer" ? quickPlay.world : null;
+}
+
+/** Whether `world` of `instanceId` is open in a game now (not known: no; the launch checks too). */
+async function worldOpen(instanceId: string, world: string): Promise<boolean> {
+  try {
+    return (await api.gameWorldOpen(instanceId, world)).open;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * "Oyna" while a launch is on its way or games run (PLAY-ACCT, PLAY-AGAIN). The selected
  * account's launch of this instance on its way: nothing more (OYNA says so). Another launch on its
  * way: "Durdur ve oyna" first (one launch at a time). This account in game: the owner's question
  * ("Bu adla oyun zaten açık"), then one more game, which joins no server by itself (the same name
  * there would push one out). Only other accounts in game: this one starts beside them. Before any
- * extra game, the free memory: when it would not hold one more, the question says so.
+ * extra game, the free memory: when it would not hold one more, the question says so. Straight
+ * into a world one of the games has open: said at once, before any question.
  */
 async function playWhileBusy(instanceId: string, options: LaunchOptions | undefined) {
   if (switching) return;
@@ -330,10 +346,17 @@ async function playWhileBusy(instanceId: string, options: LaunchOptions | undefi
   if (switching) return;
   switching = true;
   let fits = true;
+  let worldBusy = false;
   try {
-    fits = await memoryFits(instanceId);
+    const world = worldOf(options);
+    worldBusy = world !== null && (await worldOpen(instanceId, world));
+    if (!worldBusy) fits = await memoryFits(instanceId);
   } finally {
     switching = false;
+  }
+  if (worldBusy) {
+    toast(i18n.t("playAgain.worldOpen"), { id: "launch-world-open" });
+    return;
   }
   if (!again && fits) return useLaunch.getState().start(instanceId, extra);
   askGameSwitch({

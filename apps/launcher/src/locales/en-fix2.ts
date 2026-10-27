@@ -57,7 +57,7 @@ export const enFix2: typeof trFix2 = {
     restartTitle: "Restart the game?",
     restartBody: "The game will close and reopen connected to {{server}}.",
     reopenBody: "The game will start over and connect to {{server}}.",
-    saved: "Your world is saved.",
+    saved: "Your world will be saved.",
     movingTitle: "Connecting",
     movingBody: "Moving to {{server}}.",
     closingTitle: "The game is closing",

@@ -93,29 +93,36 @@ describe("Durdur ve oyna (PLAY-ACCT): another launch on its way", () => {
 });
 
 describe("one more game (PLAY-AGAIN)", () => {
-  it("asks the owner's question for the same name, nothing more when the memory holds", () => {
-    const words = oneMoreWords("again", false);
-    expect(turkish(words.title)).toBe("Bu adla oyun zaten açık");
-    expect(words.body.map(turkish)).toEqual(["Yine de bir tane daha açılsın mı?"]);
-    expect(turkish(words.confirm)).toBe("Bir tane daha aç");
-    expect(english(words.title)).toBe("A game with this name is already open");
-    expect(words.body.map(english)).toEqual(["Open another one anyway?"]);
-    expect(english(words.confirm)).toBe("Open another");
+  it("asks the owner's question with the name, nothing more when the memory holds", () => {
+    const words = oneMoreWords("again", false, "EjderAvcisi");
+    expect(turkish(words.title)).toBe("Bir oyun daha açılsın mı?");
+    expect(words.body.map(turkish)).toEqual(["EjderAvcisi adıyla oyun zaten açık."]);
+    expect(turkish(words.confirm)).toBe("Yine de aç");
+    expect(english(words.title)).toBe("Open one more game?");
+    expect(words.body.map(english)).toEqual(["EjderAvcisi is already in a game."]);
+    expect(english(words.confirm)).toBe("Open anyway");
+    // The account not known: the owner's own words.
+    expect(oneMoreWords("again", false).body.map(turkish)).toEqual(["Bu adla oyun zaten açık."]);
   });
 
-  it("says first when the free memory would not hold one more game", () => {
-    const words = oneMoreWords("again", true);
+  it("keeps one shape when the free memory would not hold one more game", () => {
+    const words = oneMoreWords("again", true, "EjderAvcisi");
+    expect(turkish(words.title)).toBe("Bir oyun daha açılsın mı?");
     expect(words.body.map(turkish)).toEqual([
-      "Bilgisayarında bir oyun daha açmaya yetecek boş bellek yok.",
-      "Yine de bir tane daha açılsın mı?",
+      "EjderAvcisi adıyla oyun zaten açık.",
+      "Bilgisayarında boş bellek az, oyunlar takılabilir.",
     ]);
-    // Another account's game only: the memory is the whole question.
-    const beside = oneMoreWords("memory", true);
+    expect(turkish(words.confirm)).toBe("Yine de aç");
+    // Another account's game only: the memory is the whole reason, the same title and answer.
+    const beside = oneMoreWords("memory", true, "KorAtesi_");
     expect(turkish(beside.title)).toBe("Bir oyun daha açılsın mı?");
     expect(beside.body.map(turkish)).toEqual([
-      "Bilgisayarında bir oyun daha açmaya yetecek boş bellek yok.",
+      "Bilgisayarında boş bellek az, oyunlar takılabilir.",
     ]);
     expect(turkish(beside.confirm)).toBe("Yine de aç");
+    expect(beside.body.map(english)).toEqual([
+      "Your computer is low on free memory, so the games may stutter.",
+    ]);
     expect(english(beside.confirm)).toBe("Open anyway");
   });
 

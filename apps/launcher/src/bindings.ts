@@ -238,6 +238,13 @@ export const commands = {
 	 */
 	gameMemoryFits: (instanceId: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("game_memory_fits", { instanceId })),
 	/**
+	 *  Whether the world `world` (its folder name under `saves/`) of `instance_id` is open in a game
+	 *  now (PLAY-AGAIN): "Devam et" says so before a press, and a world's "Oyna" before any question,
+	 *  where the launch would otherwise stop on it. Read when the page asks (games starting or ending,
+	 *  the pointer over "Devam et"), never on a timer.
+	 */
+	gameWorldOpen: (instanceId: string, world: string) => typedError<WorldOpenView, CmdError>(__TAURI_INVOKE("game_world_open", { instanceId, world })),
+	/**
 	 *  Settings → Genel "Ekran görüntülerini panoya kopyala" switched: a game that runs now starts
 	 *  or stops copying its new screenshots at once (each launch also brings the setting along).
 	 */
@@ -9424,6 +9431,19 @@ export type WorldOpenRequest = {
 	commands: boolean,
 	/**  Friend ids, at most the guest limit. */
 	invite: string[],
+};
+
+/**
+ *  Whether a world is open in a game now ([`game_world_open`]), and whose game it is.
+ */
+export type WorldOpenView = {
+	/**  A game holds the world's lock. */
+	open: boolean,
+	/**
+	 *  The account of the launcher's games in the instance's folder, when they are all one (the
+	 *  page says whose game has it). None: no game of the launcher there, or several accounts.
+	 */
+	account: string | null,
 };
 
 /**  Where an opening from the launcher is. */

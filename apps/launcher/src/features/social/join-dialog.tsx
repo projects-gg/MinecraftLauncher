@@ -343,52 +343,72 @@ function AddressRow({ target }: { target: JoinTarget }) {
       announce(t("playTogether.addressCopied"));
     });
   return (
-    <div className="mt-1 flex items-center gap-2 rounded-[var(--radius-panel)] bg-obsidian-950/45 py-1 pr-1 pl-3 ring-1 ring-white/8">
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-bone-100 select-text">
-        <span className="sr-only">{t("fix2.connect.address")}: </span>
-        {address}
-      </span>
-      <IconButton
-        size="sm"
-        label={copied ? t("playTogether.addressCopied") : t("playTogether.copyAddress")}
-        onClick={copy}
-        icon={
-          <span className="relative flex size-4 items-center justify-center">
-            <AnimatePresence initial={false} mode="popLayout">
-              <motion.span key={copied ? "done" : "copy"} className="flex" {...pop(reduce, 0.16)}>
-                {copied ? (
-                  <Check size={15} weight="bold" className="text-jade-400" />
-                ) : (
-                  <Copy size={15} />
-                )}
-              </motion.span>
-            </AnimatePresence>
-          </span>
-        }
-      />
+    <div className="mt-1">
+      {/* What the address is for (second look: the field said nothing of it). */}
+      <p className="mb-1.5 text-[12.5px] text-ash-400">{t("playAgain.addressHint")}</p>
+      <div className="flex items-center gap-2 rounded-[var(--radius-panel)] bg-obsidian-950/45 py-1 pr-1 pl-3 ring-1 ring-white/8">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-bone-100 select-text">
+          <span className="sr-only">{t("fix2.connect.address")}: </span>
+          {address}
+        </span>
+        <IconButton
+          size="sm"
+          label={copied ? t("playTogether.addressCopied") : t("playTogether.copyAddress")}
+          onClick={copy}
+          icon={
+            <span className="relative flex size-4 items-center justify-center">
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.span key={copied ? "done" : "copy"} className="flex" {...pop(reduce, 0.16)}>
+                  {copied ? (
+                    <Check size={15} weight="bold" className="text-jade-400" />
+                  ) : (
+                    <Copy size={15} />
+                  )}
+                </motion.span>
+              </AnimatePresence>
+            </span>
+          }
+        />
+      </div>
     </div>
   );
 }
 
-/** A quiet line that moves while the game closes or moves (only while the dialog waits). */
-function Waiting() {
+/**
+ * A quiet line that fills from the left over the time the dialog waits for this step (the game
+ * closing, a forced end, a move in game), once: full when the wait would run out (second look:
+ * the endless sweep read as a stray speck in a still). None without movement, or for a start that
+ * stops (no wait of its own).
+ */
+function Waiting({ ms }: { ms: number | null }) {
   const { reduce } = useSocialMotion();
-  if (reduce) return null;
+  if (reduce || ms === null) return null;
   return (
-    <div aria-hidden className="relative mt-2 h-[3px] overflow-hidden rounded-full bg-white/[0.06]">
+    <div aria-hidden className="relative mt-2 h-[3px] overflow-hidden rounded-full bg-white/10">
       <motion.span
-        className="absolute inset-y-0 left-0 w-1/3 rounded-full bg-gold-400/70"
-        initial={{ transform: "translateX(-100%)" }}
-        animate={{ transform: "translateX(300%)" }}
-        transition={{ duration: 1.4, ease: [0.65, 0, 0.35, 1], repeat: Infinity }}
+        className="absolute inset-0 origin-left rounded-full bg-gold-400/70"
+        initial={{ transform: "scaleX(0)" }}
+        animate={{ transform: "scaleX(1)" }}
+        transition={{ duration: ms / 1000, ease: "linear" }}
       />
     </div>
   );
 }
 
-/** Title and sentence for where the question or the way is. */
-function words(t: TFunction, shown: Ask) {
-  if (shown.target.kind === "world") return worldWords(t, shown);
+/** How long the dialog waits at a step before it says more (connect.ts). */
+function waitOf(closing: CloseStep["kind"]): number | null {
+  if (closing === "closing") return CLOSE_GRACE_MS;
+  if (closing === "forcing") return FORCE_GRACE_MS;
+  if (closing === "inGame") return IN_GAME_LIMIT_MS;
+  return null;
+}
+
+/**
+ * Title and sentence for where the question or the way is. `closingName`: the account of the
+ * game that would close, named when several games are on screen (PLAY-AGAIN, second look).
+ */
+function words(t: TFunction, shown: Ask, closingName: string | null) {
+  if (shown.target.kind === "world") return worldWords(t, shown, closingName);
   const server = targetName(shown.target);
   const saved = shown.world ? ` ${t("fix2.connect.saved")}` : "";
   const closing = shown.closing?.kind;
@@ -427,12 +447,15 @@ function words(t: TFunction, shown: Ask) {
     ? { title: t("fix2.connect.moveTitle"), body: t("fix2.connect.moveBody", { server }) + saved }
     : {
         title: t("fix2.connect.restartTitle"),
-        body: t("fix2.connect.restartBody", { server }) + saved,
+        body:
+          (closingName
+            ? t("playAgain.restartBodyAccount", { name: closingName, server })
+            : t("fix2.connect.restartBody", { server })) + saved,
       };
 }
 
 /** The same steps for a friend's world (HOST1): "arkadaşının dünyası", never an address. */
-function worldWords(t: TFunction, shown: Ask) {
+function worldWords(t: TFunction, shown: Ask, closingName: string | null) {
   const saved = shown.world ? ` ${t("fix2.connect.saved")}` : "";
   const closing = shown.closing?.kind;
   if (closing === "inGame") {
@@ -456,7 +479,13 @@ function worldWords(t: TFunction, shown: Ask) {
   }
   return shown.inGame
     ? { title: t("host.connect.moveTitle"), body: t("host.connect.moveBody") + saved }
-    : { title: t("fix2.connect.restartTitle"), body: t("host.connect.restartBody") + saved };
+    : {
+        title: t("fix2.connect.restartTitle"),
+        body:
+          (closingName
+            ? t("playAgain.restartWorldAccount", { name: closingName })
+            : t("host.connect.restartBody")) + saved,
+      };
 }
 
 /**
@@ -486,12 +515,15 @@ function ArrivingButton({
 export function JoinDialog() {
   const { t } = useTranslation();
   const current = useJoinAsk((s) => s.ask);
+  // Several games on screen: the sentence names whose game closes (the selected account's).
+  const gameCount = useLaunch((s) => s.games.length);
   // The dialog keeps its words while it fades out.
   const last = useRef<Ask | null>(null);
   if (current) last.current = current;
   const shown = current ?? last.current;
   if (!shown) return null;
-  const { title, body } = words(t, shown);
+  const closingName = gameCount > 1 ? (own().game?.account?.name ?? null) : null;
+  const { title, body } = words(t, shown, closingName);
   const closing = shown.closing?.kind;
   // A move in game, a stopping start and an end the player asked for run to their end.
   const settled = closing === "inGame" || closing === "forcing" || closing === "stopping";
@@ -517,8 +549,9 @@ export function JoinDialog() {
       cancel
     ) : closing === "overdue" ? (
       <>
+        {/* What it does, by name (second look: "Vazgeç" read like "Beklemeye devam et"). */}
         <ArrivingButton variant="ghost" className="mr-auto" onClick={closeAsk}>
-          {t("fix2.connect.cancel")}
+          {t("playAgain.keepOpen")}
         </ArrivingButton>
         <ArrivingButton variant="secondary" onClick={() => send({ type: "wait", now: Date.now() })}>
           {t("fix2.connect.wait")}
@@ -548,7 +581,7 @@ export function JoinDialog() {
           <AddressRow target={shown.target} />
         )
       ) : closing === "overdue" ? null : (
-        <Waiting />
+        <Waiting key={closing} ms={waitOf(closing)} />
       )}
     </Dialog>
   );

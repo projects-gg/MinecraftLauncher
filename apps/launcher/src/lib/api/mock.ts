@@ -1218,6 +1218,12 @@ export const mockApi: LauncherApi = {
     await delay(120);
     return mockFlag("memory") !== "short";
   },
+  async gameWorldOpen() {
+    // `?worldOpen=<name>` (or `1`: whose is not known): the world is open in a game (PLAY-AGAIN).
+    await delay(60);
+    const who = mockFlag("worldOpen");
+    return { open: who !== "", account: who && who !== "1" ? who : null };
+  },
   async setScreenshotCopy() {},
   async updatePresence() {},
   async setPresenceEnabled() {},

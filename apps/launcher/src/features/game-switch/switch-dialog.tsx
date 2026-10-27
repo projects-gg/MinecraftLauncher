@@ -1,7 +1,7 @@
 // The question "Oyna" asks while something runs (PLAY-ACCT, PLAY-AGAIN). Another launch on its way
-// (one at a time): what starts and what stops, "Durdur ve oyna". The selected account in game: the
-// owner's question, "Bu adla oyun zaten açık. Yine de bir tane daha açılsın mı?", "Bir tane daha
-// aç". One more game the free memory would not hold: one sentence, "Yine de aç". The AFK question
+// (one at a time): what starts and what stops, "Durdur ve oyna". One more game (the selected
+// account in game: the owner's question with the name; the free memory short: one sentence): one
+// shape, "Bir oyun daha açılsın mı?", the reasons in one paragraph, "Yine de aç". The AFK question
 // of a same-name account comes with the new launch, as for OYNA. Mounted once (shell/app-shell.tsx).
 //
 // Second look (PLAY-ACCT): "Vazgeç" keeps one place (the left), nothing comes under the pointer
@@ -76,20 +76,11 @@ export function GameSwitchDialog() {
         : shown.sides
           ? questionWords(shown.sides)
           : null
-      : oneMoreWords(kind, Boolean(shown.request.memoryShort));
+      : oneMoreWords(kind, Boolean(shown.request.memoryShort), shown.request.account?.name ?? null);
   if (!words) return null;
   const title = say(t, words.title);
-  // One sentence per line: the memory sentence, then the owner's question (a line break inside
-  // either reads badly in the narrow panel).
-  const lines = words.body.map((line) => say(t, line));
-  const body =
-    lines.length > 1
-      ? lines.map((line) => (
-          <span key={line} className="block text-pretty">
-            {line}
-          </span>
-        ))
-      : lines[0];
+  // The reasons read as one paragraph (second look: two lines read as two separate notes).
+  const body = words.body.map((line) => say(t, line)).join(" ");
   const asking = !shown.stepping;
   const footer =
     asking && words.confirm ? (

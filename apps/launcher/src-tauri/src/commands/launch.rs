@@ -1658,6 +1658,60 @@ pub async fn game_memory_fits(state: State<'_, AppState>, instance_id: String) -
     Ok(fits)
 }
 
+/// Whether a world is open in a game now ([`game_world_open`]), and whose game it is.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WorldOpenView {
+    /// A game holds the world's lock.
+    pub open: bool,
+    /// The account of the launcher's games in the instance's folder, when they are all one (the
+    /// page says whose game has it). None: no game of the launcher there, or several accounts.
+    pub account: Option<String>,
+}
+
+/// Whether the world `world` (its folder name under `saves/`) of `instance_id` is open in a game
+/// now (PLAY-AGAIN): "Devam et" says so before a press, and a world's "Oyna" before any question,
+/// where the launch would otherwise stop on it. Read when the page asks (games starting or ending,
+/// the pointer over "Devam et"), never on a timer.
+#[tauri::command]
+#[specta::specta]
+pub async fn game_world_open(
+    state: State<'_, AppState>,
+    instance_id: String,
+    world: String,
+) -> CmdResult<WorldOpenView> {
+    let closed = WorldOpenView {
+        open: false,
+        account: None,
+    };
+    // A folder name only, as the world list gives it: never a way out of `saves/`.
+    if world.is_empty() || world == "." || world == ".." || world.contains(['/', '\\', ':']) {
+        return Ok(closed);
+    }
+    let game_dir = state
+        .instances
+        .game_dir(&instance_id)
+        .map_err(CmdError::from)?;
+    let names: Vec<String> = state
+        .games
+        .lock()
+        .in_folder(&game_dir)
+        .filter_map(|game| game.account.as_ref().map(|account| account.name.clone()))
+        .collect();
+    let dir = game_dir.join("saves").join(&world);
+    let open = tauri::async_runtime::spawn_blocking(move || pl_mc::launch::world_in_use(&dir))
+        .await
+        .map_err(|error| CmdError::internal(error.to_string()))?;
+    if !open {
+        return Ok(closed);
+    }
+    let account = match names.split_first() {
+        Some((first, rest)) if rest.iter().all(|name| name == first) => Some(first.clone()),
+        _ => None,
+    };
+    Ok(WorldOpenView { open, account })
+}
+
 /// Debug builds: `PROJECTS_E2E_AVAILABLE_MB` stands in for the free memory (end-to-end tests of
 /// the "not enough memory" question). Release builds never read it.
 fn e2e_available_mb() -> Option<u64> {
