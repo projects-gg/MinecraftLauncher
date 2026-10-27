@@ -195,6 +195,13 @@ export const trAfkPlus = {
     giftSome: "Yaklaşık {{count}} tanesi hediye",
     giftSomeUntil: "Yaklaşık {{count}} tanesi hediye, {{day}} kadar geçerli",
     frozen: "Kontörün yetkililerce donduruldu.",
+    // AFK+ extra credits (cloud-afk README "AFK+ extra credits"): how many of the replies the
+    // bought credits pay for (the gift's words), the moment they pay for all, and the button that
+    // opens the site's packs.
+    bought: "Yaklaşık {{n}} tanesi aldığın kontörden",
+    // "Aldığın kontör" first: "Şu an aldığın" read as "the kontör you are buying now".
+    boughtInUse: "Aldığın kontör şu an kullanılıyor.",
+    buy: "Kontör al",
     asOf: "Son bilgi {{time}}",
     // README "Saving": past the player's share, small talk and public chat scans stop; deals go on.
     saver:
@@ -1022,6 +1029,7 @@ export const trAfkPlus = {
     quotaFullUntil: "Kontörün bitti; {{when}} yenilenir.",
     quota80: "Kontörün çoğu kullanıldı.",
     giftEnding: "Hediye kontörün yakında bitiyor.",
+    boughtInUse: "Kontörün bitti, aldığın kontör kullanılıyor.",
     incident: "Uygunsuz mesajlar geldi; o oyuncuya artık cevap verilmiyor.",
     summary: "Bugün {{pms}}, {{deals}}.",
     summaryPms: "{{count}} mesaj",

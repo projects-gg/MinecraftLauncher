@@ -127,6 +127,16 @@ export function usePlusFeatures(): PlusFeatureFlags {
   );
 }
 
+/**
+ * AFK+ extra credits on sale now (cloud-afk README "AFK+ extra credits"): the rail's "Kontör al"
+ * opens the site's packs. Null while Studio has them off or nothing can be bought this moment.
+ */
+export function usePlusTopupOpen(): boolean {
+  const { data } = useCloudPage();
+  const topup = plusOffer(data?.overview)?.topup ?? null;
+  return Boolean(topup?.sales && topup.packs.length > 0);
+}
+
 /** The account has AFK+ now, or had it (its settings and history stay readable). */
 export function isPlusAccount(account: CloudAccount | null | undefined): boolean {
   return Boolean(account && (account.tier === "plus" || account.plusUntil !== null));

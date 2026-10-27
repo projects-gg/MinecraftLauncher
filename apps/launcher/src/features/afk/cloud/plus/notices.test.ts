@@ -131,6 +131,9 @@ describe("AFK notices in words", () => {
     expect(noticeWords(notice("quota", { which: "full" }), t, "tr")?.body).toBe(
       "afkPlus.notices.quotaFull",
     );
+    expect(noticeWords(notice("quota", { which: "bought" }), t, "tr")?.body).toBe(
+      "afkPlus.notices.boughtInUse",
+    );
     expect(noticeWords(notice("quota", { which: "odd" }), t, "tr")).toBeNull();
   });
 

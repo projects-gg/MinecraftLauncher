@@ -560,7 +560,40 @@ export function giftReplies(quota: PlusQuota): number {
     0,
     Math.min(quota.w5h.cap - quota.w5h.used, quota.week.cap - quota.week.used),
   );
-  return Math.min(quota.estReplies, Math.floor((gift * quota.estReplies) / (windows + gift)));
+  // Bought credits are part of the room too (cloud-afk README "AFK+ extra credits").
+  const bought = Math.max(0, quota.bought?.remaining ?? 0);
+  return Math.min(
+    quota.estReplies,
+    Math.floor((gift * quota.estReplies) / (windows + gift + bought)),
+  );
+}
+
+/** Bought credits left (AFK+ extra credits); 0 from an older service. The site reads the same. */
+export function boughtLeft(quota: PlusQuota): number {
+  return Math.max(0, quota.bought?.remaining ?? 0);
+}
+
+/** How many of the replies left the bought credits pay for: their share of the room, as the gifts'. */
+export function boughtReplies(quota: PlusQuota): number {
+  const bought = boughtLeft(quota);
+  if (bought <= 0 || quota.estReplies <= 0) return 0;
+  const windows = Math.max(
+    0,
+    Math.min(quota.w5h.cap - quota.w5h.used, quota.week.cap - quota.week.used),
+  );
+  const gift = quota.gifts.reduce((sum, g) => sum + Math.max(0, g.remaining), 0);
+  return Math.min(
+    quota.estReplies,
+    Math.floor((bought * quota.estReplies) / (windows + gift + bought)),
+  );
+}
+
+/** The windows are full and every gift is spent: bought credits pay for the replies now. */
+export function boughtInUse(quota: PlusQuota): boolean {
+  if (quota.frozen || boughtLeft(quota) <= 0) return false;
+  const windows = Math.min(quota.w5h.cap - quota.w5h.used, quota.week.cap - quota.week.used);
+  const gifts = quota.gifts.reduce((sum, g) => sum + Math.max(0, g.remaining), 0);
+  return windows <= 0 && gifts <= 0;
 }
 
 /** The assistant's state as one sentence's key (README "AFK+ tier": never a code). */
