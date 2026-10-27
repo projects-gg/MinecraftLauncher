@@ -235,7 +235,9 @@ function Badge({ text }: { text: string }) {
  * drawn only while it is open. Radix's select mounts every row as a full item with its own
  * context, collection entry and hidden native option when it opens: 103 versions cost a 94 ms
  * task per opening, snapshots many times that. Arrow keys move, Enter picks, Esc closes, typing
- * filters; the focus stays in the field (`aria-activedescendant`).
+ * filters; the focus stays in the field (`aria-activedescendant`). Modal, as the short select is:
+ * a press outside only closes it (it pressed "Kaydet" under it before), and a sheet around it
+ * stays open (SHEET-UX).
  */
 function SearchableSelect<T extends string>({
   value,
@@ -293,6 +295,7 @@ function SearchableSelect<T extends string>({
 
   return (
     <Popover.Root
+      modal
       open={open}
       onOpenChange={(next) => {
         setOpen(next);

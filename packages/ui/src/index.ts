@@ -43,7 +43,14 @@ export {
   Slider,
   useField,
 } from "./components/forms";
-export { ContextMenu, Menu, type MenuItem, type MenuStripItem } from "./components/menu";
+export {
+  ContextMenu,
+  Menu,
+  type MenuItem,
+  type MenuStripItem,
+  menuHeight,
+  placeBelowOrBeside,
+} from "./components/menu";
 export {
   PlayButton,
   type PlayButtonLabels,
@@ -89,6 +96,13 @@ export {
   lastInputWasPointer,
   returnFocusAfterKeys,
 } from "./input-modality";
+export {
+  keepOpenOnToast,
+  type OutsideEvent,
+  onToast,
+  sheetOutside,
+  swallowDismissClick,
+} from "./layer-dismiss";
 export { cn } from "./lib/cn";
 export * from "./motion";
 export {

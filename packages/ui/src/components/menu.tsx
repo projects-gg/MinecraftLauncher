@@ -1,6 +1,12 @@
 import { CaretRight, Check } from "@phosphor-icons/react";
 import { DropdownMenu, ContextMenu as RadixContextMenu } from "radix-ui";
-import type { ReactElement, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import {
+  type ReactElement,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useRef,
+  useState,
+} from "react";
 import { returnFocusAfterKeys } from "../input-modality";
 import { cn } from "../lib/cn";
 import { fromPortal } from "../native-menu";
@@ -190,6 +196,43 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
   });
 }
 
+/** A row's height, a separator's and the panel's padding, as `rowClass` and `contentClass` draw them. */
+const ROW_PX = 33;
+const SEPARATOR_PX = 13;
+const PANEL_PX = 10;
+/** The strip of small actions with the line under it. */
+const STRIP_PX = 50;
+/** How far a menu keeps from the window's edges when it opens beside its trigger. */
+const MENU_MARGIN = 8;
+
+/** How tall a menu of these rows opens (no header): measured in the launcher, ±2 px. */
+export function menuHeight(
+  items: ReadonlyArray<MenuItem | null>,
+  strip?: readonly MenuStripItem[],
+): number {
+  const rows = items.filter((item) => item !== null).length;
+  const separators = items.length - rows;
+  return PANEL_PX + rows * ROW_PX + separators * SEPARATOR_PX + (strip?.length ? STRIP_PX : 0);
+}
+
+/**
+ * Where a menu opens below its trigger, or beside it when the whole menu has no room below: to
+ * the trigger's left for a menu aligned to its end, else to its right, its top level with the
+ * trigger's and pushed up as far as the window needs. A menu turned upwards over a grid of cards
+ * sat under the next card's own "⋯" and read as that card's (FEAT-L).
+ */
+export function placeBelowOrBeside(
+  trigger: { bottom: number },
+  viewportHeight: number,
+  height: number,
+  align: "start" | "center" | "end",
+  sideOffset: number,
+): { side: "bottom" | "left" | "right"; align: "start" | "center" | "end" } {
+  const room = viewportHeight - trigger.bottom - sideOffset - MENU_MARGIN;
+  if (room >= height) return { side: "bottom", align };
+  return { side: align === "start" ? "right" : "left", align: "start" };
+}
+
 /** Action menu for "more" buttons and instance cards. Use `null` for a separator. */
 export function Menu({
   trigger,
@@ -205,6 +248,7 @@ export function Menu({
   header,
   label,
   className,
+  besideWhenNoRoom = false,
 }: {
   trigger: ReactElement;
   items: Array<MenuItem | null>;
@@ -233,16 +277,44 @@ export function Menu({
   label?: string;
   /** A class for the menu's surface (the inventory's slot menu is solid over the game's window). */
   className?: string;
+  /**
+   * With `side="bottom"`: when the whole menu has no room below the trigger, it opens beside it
+   * (`placeBelowOrBeside`) instead of turning upwards (cards in a grid, where it would sit under
+   * the next card's own trigger).
+   */
+  besideWhenNoRoom?: boolean;
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [placed, setPlaced] = useState<ReturnType<typeof placeBelowOrBeside> | null>(null);
+  const changeOpen = (next: boolean) => {
+    // Decided once as it opens (before Radix places it), so it never jumps from above to beside.
+    const element = triggerRef.current;
+    if (next && besideWhenNoRoom && side === "bottom" && element) {
+      const view = element.ownerDocument.defaultView;
+      setPlaced(
+        placeBelowOrBeside(
+          element.getBoundingClientRect(),
+          view?.innerHeight ?? Number.POSITIVE_INFINITY,
+          menuHeight(items, strip),
+          align,
+          sideOffset,
+        ),
+      );
+    }
+    onOpenChange?.(next);
+  };
+  const at = besideWhenNoRoom ? placed : null;
   return (
-    <DropdownMenu.Root open={open} onOpenChange={onOpenChange}>
-      <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
+    <DropdownMenu.Root open={open} onOpenChange={changeOpen}>
+      <DropdownMenu.Trigger asChild ref={triggerRef}>
+        {trigger}
+      </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          align={align}
-          side={side}
+          align={at ? at.align : align}
+          side={at ? at.side : side}
           sideOffset={sideOffset}
-          collisionPadding={collisionPadding}
+          collisionPadding={at && at.side !== "bottom" ? MENU_MARGIN : collisionPadding}
           className={cn(contentClass, className)}
           // Radix names the menu after its trigger; a label of its own replaces that name.
           {...(label ? { "aria-label": label, "aria-labelledby": undefined } : {})}
