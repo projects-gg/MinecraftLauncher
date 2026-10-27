@@ -1,13 +1,14 @@
 //! 7/24 Bulut's cloud features (CAFK-FEAT phase 1) over `pl_cloud_afk`: the live inventory (its
 //! stream while a view is on screen, the moves), the account's inventory choice, "Dene" for an
-//! auto-reply, the console download and "Ayarları kopyala". Each shows in the UI only when the
-//! service offers it (`CloudOverview.features`, `CloudAccount.features`).
+//! auto-reply, the console download and "Ayarları kopyala"; movement (its stream while the
+//! "Hareket" panel is on screen, the operations). Each shows in the UI only when the service offers
+//! it (`CloudOverview.features`, `CloudAccount.features`).
 
 use std::path::{Path, PathBuf};
 
 use pl_cloud_afk::{
     CloudAccount, CloudCopyOutcome, CloudCopySecret, CloudCopySource, CloudInvError, CloudLogRange,
-    CloudReplyTry, CloudSaveOutcome,
+    CloudMovementError, CloudReplyTry, CloudSaveOutcome,
 };
 use pl_lang::{Lang, pick};
 use serde::{Deserialize, Serialize};
@@ -50,6 +51,41 @@ pub fn cloud_afk_inv_op(
     op: String,
 ) -> Option<CloudInvError> {
     service(&app, &state).inv_op(&id, &op_id, &op)
+}
+
+/// The movement panel is on screen: the account's movement state and position stream as
+/// `cloud-afk-live` events (`moveState`, `pos`).
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_movement_watch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<()> {
+    let token = token(&state)?;
+    Ok(service(&app, &state).watch_movement(&token, &id).await?)
+}
+
+/// The movement panel left the screen (closed, another tab, the window hidden).
+#[tauri::command]
+#[specta::specta]
+pub fn cloud_afk_movement_unwatch(app: AppHandle, state: State<'_, AppState>, id: String) {
+    service(&app, &state).unwatch_movement(&id);
+}
+
+/// A movement operation (`op`: the panel's `MoveOp` as JSON, `opId` its own id). Null: sent, its
+/// answer comes as a `moveResult` event; else why it could not go out (its shape, or
+/// `host_offline`).
+#[tauri::command]
+#[specta::specta]
+pub fn cloud_afk_movement_op(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    op_id: String,
+    op: String,
+) -> Option<CloudMovementError> {
+    service(&app, &state).movement_op(&id, &op_id, &op)
 }
 
 /// The inventory view on or off for this account ("Aç"; the settings' switch saves with the rest).
