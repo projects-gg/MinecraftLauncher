@@ -87,14 +87,20 @@ type GuardRequest =
   | { where: "cloud"; desktop: AfkAccount; cloud: CloudAccount }
   | { where: "here"; desktop: AfkAccount; cloud: CloudAccount };
 
+/** The account panel's tabs (the inventory's only while the service offers it). */
+export type PanelTab = "console" | "inventory";
+
 interface CloudUi {
   consoleId: string | null;
+  /** The panel's tab: the card's "Envanter" opens it on the inventory. */
+  consoleTab: PanelTab;
   settingsId: string | null;
   /** "Buluta taşı" is open for this desktop account. */
   moveFor: string | null;
   introOpen: boolean;
   guard: GuardRequest | null;
-  openConsole: (id: string | null) => void;
+  openConsole: (id: string | null, tab?: PanelTab) => void;
+  setConsoleTab: (tab: PanelTab) => void;
   openSettings: (id: string | null) => void;
   openMove: (desktopId: string | null) => void;
   setIntroOpen: (open: boolean) => void;
@@ -103,11 +109,13 @@ interface CloudUi {
 
 export const useCloudUi = create<CloudUi>()((set) => ({
   consoleId: null,
+  consoleTab: "console",
   settingsId: null,
   moveFor: null,
   introOpen: false,
   guard: null,
-  openConsole: (consoleId) => set({ consoleId }),
+  openConsole: (consoleId, consoleTab = "console") => set({ consoleId, consoleTab }),
+  setConsoleTab: (consoleTab) => set({ consoleTab }),
   openSettings: (settingsId) => set({ settingsId }),
   openMove: (moveFor) => set({ moveFor }),
   setIntroOpen: (introOpen) => set({ introOpen }),

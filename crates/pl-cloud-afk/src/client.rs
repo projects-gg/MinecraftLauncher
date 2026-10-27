@@ -177,6 +177,9 @@ pub struct LogQuery {
     pub to: Option<i64>,
     pub after: Option<String>,
     pub limit: Option<u32>,
+    /// Only lines of these console kinds (`c` values, comma-separated: `chat,pm`); lines from
+    /// before console kinds match none (CAFK-FEAT).
+    pub kinds: Option<String>,
 }
 
 impl CloudClient {
@@ -487,6 +490,9 @@ fn log_params(query: &LogQuery) -> String {
     }
     if let Some(limit) = query.limit {
         params.append_pair("limit", &limit.to_string());
+    }
+    if let Some(kinds) = &query.kinds {
+        params.append_pair("kinds", kinds);
     }
     params.finish()
 }

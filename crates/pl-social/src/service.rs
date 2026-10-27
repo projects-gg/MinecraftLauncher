@@ -21,6 +21,7 @@ use tokio::runtime::Handle;
 use url::Url;
 
 use crate::auth::{LoginAttempt, SessionToken, SignedIn, auth_code_from_deep_link};
+use crate::beta::{BetaAccess, BetaAnswer, BetaRecordFile, decide_join, decide_keep};
 use crate::cards::StoredCard;
 use crate::chat::{
     CARD_WINDOW_MS, Context, EDIT_WINDOW_MS, PAGE_SIZE, REACT_WINDOW_MS, REPORT_CONTEXT,
@@ -951,6 +952,55 @@ impl SocialService {
     pub fn is_signed_out(&self) -> bool {
         let core = self.lock();
         core.url.is_some() && core.auth == AuthPhase::SignedOut
+    }
+
+    // --- beta access (BETA-GATE, crate::beta) ----------------------------------------------
+
+    /// What the friends service says about the beta update channel for whoever is signed in here
+    /// (or nobody). Never fails: what cannot be asked (the feature off, the service away) is
+    /// "cannot tell".
+    pub async fn beta_answer(&self) -> BetaAnswer {
+        let (client, token) = {
+            let core = self.lock();
+            (core.client.clone(), {
+                match (&core.session, core.auth) {
+                    (Some(session), AuthPhase::SignedIn | AuthPhase::Restoring) => {
+                        Some(session.token().clone())
+                    }
+                    _ => None,
+                }
+            })
+        };
+        let Some(client) = client else {
+            return BetaAnswer::unknown();
+        };
+        match client.beta(token.as_ref()).await {
+            Ok(answer) => answer,
+            Err(error) => {
+                tracing::info!(%error, "beta access could not be asked");
+                BetaAnswer::unknown()
+            }
+        }
+    }
+
+    /// The player picked "Beta": let in, or why not. A yes is kept in `record`.
+    pub async fn beta_join(&self, record: &BetaRecordFile) -> BetaAccess {
+        let (access, let_in) = decide_join(&self.beta_answer().await, unix_now());
+        if let_in.is_some()
+            && let Err(error) = record.save(let_in)
+        {
+            tracing::warn!(%error, "could not keep when beta let this launcher in");
+        }
+        access
+    }
+
+    /// Before an update look on the beta channel: stay, or go back to the stable one (and why).
+    pub async fn beta_keep(&self, record: &BetaRecordFile) -> BetaAccess {
+        let (access, let_in) = decide_keep(&self.beta_answer().await, record.load(), unix_now());
+        if let Err(error) = record.save(let_in) {
+            tracing::warn!(%error, "could not keep when beta let this launcher in");
+        }
+        access
     }
 
     fn signed_in(&self) -> Result<(Session, u64)> {
@@ -4316,6 +4366,78 @@ mod tests {
             MockReply::json(503, r#"{"error":{"code":"unavailable","message":"x"}}"#)
                 .with_header("Retry-After", "600")
         })
+    }
+
+    /// BETA-GATE: the question carries the session while someone is signed in and nobody's
+    /// otherwise; the feature off is "cannot tell"; a yes is kept, a "not on the team" forgets it.
+    #[tokio::test]
+    async fn asks_about_the_beta_channel_and_keeps_the_yes() {
+        let member = Arc::new(AtomicBool::new(true));
+        let server = MockServer::start({
+            let member = member.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                    "/v1/me" => MockReply::json(200, ME),
+                    "/v1/friends" => MockReply::json(200, FRIENDS),
+                    "/v1/beta" => match req.header("authorization") {
+                        None => MockReply::json(
+                            200,
+                            r#"{"gate":true,"access":"signin","apply":"https://projects.gg/basvuru"}"#,
+                        ),
+                        Some(_) if member.load(Ordering::SeqCst) => MockReply::json(
+                            200,
+                            r#"{"gate":true,"access":"member","apply":"https://projects.gg/basvuru"}"#,
+                        ),
+                        Some(_) => MockReply::json(
+                            200,
+                            r#"{"gate":true,"access":"none","apply":"https://projects.gg/basvuru"}"#,
+                        ),
+                    },
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                })
+            }
+        })
+        .await;
+        let dir = tempfile::tempdir().unwrap();
+        let record = crate::BetaRecordFile::new(dir.path().join(crate::BETA_RECORD_FILE));
+
+        // The feature off: nobody to ask.
+        let off = Harness::new(Arc::new(MemoryTokenStore::new()));
+        assert_eq!(off.service.beta_answer().await, BetaAnswer::unknown());
+
+        // Nobody signed in: the question goes without a session; the join waits for a sign-in.
+        let out = Harness::new(Arc::new(MemoryTokenStore::new()));
+        out.service.configure(url(&server));
+        assert_eq!(out.service.beta_answer().await, BetaAnswer::sign_in());
+        let refused = out.service.beta_join(&record).await;
+        assert_eq!(refused.verdict, crate::BetaVerdict::SignIn);
+        assert_eq!(record.load(), None);
+
+        // Signed in on the team: let in, and the time kept.
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.configure(url(&server));
+        harness
+            .until("signed in", |view| view.auth == AuthPhase::SignedIn)
+            .await;
+        assert!(harness.service.beta_join(&record).await.allowed());
+        let kept = record.load().expect("the yes is kept");
+        assert!(harness.service.beta_keep(&record).await.allowed());
+        // Off the team: back to stable, and the time goes.
+        member.store(false, Ordering::SeqCst);
+        let left = harness.service.beta_keep(&record).await;
+        assert_eq!(left.verdict, crate::BetaVerdict::NotMember);
+        assert_eq!(left.apply, "https://projects.gg/basvuru");
+        assert_eq!(record.load(), None);
+        assert!(kept > 0);
+        let asked: Vec<_> = server
+            .requests()
+            .into_iter()
+            .filter(|r| r.path == "/v1/beta")
+            .map(|r| r.header("authorization").is_some())
+            .collect();
+        assert_eq!(asked, vec![false, false, true, true, true]);
     }
 
     /// An invite the player closed is listed again by the service on every connection, also

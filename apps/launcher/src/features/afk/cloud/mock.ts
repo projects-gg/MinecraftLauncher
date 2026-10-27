@@ -9,7 +9,9 @@
 // - `paused`: maintenance (Studio's note, the accounts held);
 // - `failed`: signed in, the accounts could not be read.
 // `&reveal=offline|retype|limited` makes "Göster" fail that way. AFK+ adds `&plus=<scenario>`
-// (plus/mock-data.ts); without it AFK+ is off, as the service is until its release.
+// (plus/mock-data.ts); without it AFK+ is off, as the service is until its release. The cloud
+// features add `&feat=on|view` and their own switches (mock-feat.ts); without them the service is
+// one from before the features. `&link=down`: the machine is not connected.
 import { api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
@@ -18,6 +20,7 @@ import { trCloudAfk } from "@/locales/tr-cloud-afk";
 import type {
   CloudAccount,
   CloudApi,
+  CloudCopyResult,
   CloudEdit,
   CloudEditData,
   CloudLiveEvent,
@@ -25,6 +28,18 @@ import type {
   CloudMovePlan,
   CloudPageData,
 } from "./api";
+import {
+  accountFeatures,
+  barsEvent,
+  featScenario,
+  inventoryMove,
+  kindLines,
+  liveKindLine,
+  mockTryReply,
+  offerFeatures,
+  unwatchInventory,
+  watchInventory,
+} from "./mock-feat";
 import { mockLive } from "./mock-live";
 import {
   mockMe as mockPlusMe,
@@ -144,7 +159,28 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
         cooldown: 60,
         reply: { secret: false, text: "Selam! Şu an AFK'yım.", preview: null, fp: null },
       },
+      // With the cloud features: a rule whose reply names the sender and a part of its pattern.
+      ...(featScenario === "off"
+        ? []
+        : [
+            {
+              id: "r3",
+              enabled: true,
+              match: String.raw`^!davet (\w+)$`,
+              regex: true,
+              from: "any",
+              ownerOnly: false,
+              cooldown: 30,
+              reply: {
+                secret: false,
+                text: "/msg {u} {1} davet listene eklendi.",
+                preview: null,
+                fp: null,
+              },
+            },
+          ]),
     ],
+    inventory: null,
   };
 }
 
@@ -187,6 +223,7 @@ function account(
     tier: plusScenario === "off" ? "" : "plain",
     plusUntil: null,
     ai: null,
+    features: accountFeatures(id),
     ...overrides,
   };
 }
@@ -359,6 +396,7 @@ async function overview(): Promise<CloudPageData> {
       now,
       plus: hidden ? null : mockPlusOffer(),
       plusMe: which === "signedout" || hidden ? null : mockPlusMe(),
+      features: hidden ? null : offerFeatures(),
     },
     twins,
   };
@@ -387,9 +425,10 @@ const CHAT: string[] = [
 const watching = new Map<string, number>();
 
 function lines(id: string, count: number, endAt: number) {
+  if (featScenario !== "off") return kindLines(count, endAt, find(id).name);
   return Array.from({ length: count }, (_, i) => {
     const [k, text] = CONSOLE[i % CONSOLE.length] ?? ["n", ""];
-    return { at: endAt - (count - i) * 37, text, k };
+    return { at: endAt - (count - i) * 37, text, k, c: null, who: null, goto: null };
   }).map((line) => ({ ...line, text: line.text.replace("Madenci07", find(id).name) }));
 }
 
@@ -424,6 +463,7 @@ function editView(cloud: CloudAccount): CloudEditData {
           ? { kind: "sealed" as const, preview: rule.reply.preview ?? "******" }
           : { kind: "plain" as const, text: rule.reply.text ?? "" },
       })),
+      inventory: cloud.config.inventory?.enabled ?? null,
     },
     versions: {
       versions: [
@@ -490,6 +530,7 @@ function plan(name: string, server: string): CloudMovePlan {
           reply: { kind: "plain", text: "Selam! Şu an AFK'yım." },
         },
       ],
+      inventory: null,
     },
     dropped: [
       { what: "walking", count: 1 },
@@ -550,7 +591,16 @@ export const mockCloudApi: CloudApi = {
       emit({
         kind: "lines",
         acct: id,
-        lines: [{ at: nowSecs(), text: `[Projects] Komut alındı: ${line.split(" ")[0]}`, k: "n" }],
+        lines: [
+          {
+            at: nowSecs(),
+            text: `[Projects] Komut alındı: ${line.split(" ")[0]}`,
+            k: "n",
+            c: featScenario === "off" ? null : "sys",
+            who: null,
+            goto: null,
+          },
+        ],
         skipped: 0,
         snapshot: false,
       });
@@ -566,7 +616,8 @@ export const mockCloudApi: CloudApi = {
     emit({ kind: "status", host: "kz1", status: "connecting" });
     setTimeout(() => {
       emit({ kind: "status", host: "kz1", status: "live" });
-      emit({ kind: "hello", host: "kz1", online: true });
+      // `&link=down`: the account's machine is away (the panel says so above its tabs).
+      emit({ kind: "hello", host: "kz1", online: param("link") !== "down" });
       const cloud = find(id);
       emit({ kind: "state", acct: id, live: cloud.live });
       emit({
@@ -576,6 +627,8 @@ export const mockCloudApi: CloudApi = {
         skipped: 0,
         snapshot: true,
       });
+      const bars = cloud.live.state === "running" ? barsEvent(id) : null;
+      if (bars) emit(bars);
     }, 260);
     let n = 0;
     window.clearInterval(watching.get(id));
@@ -583,10 +636,15 @@ export const mockCloudApi: CloudApi = {
       id,
       window.setInterval(() => {
         if (find(id).live.state !== "running") return;
+        const at = nowSecs();
         emit({
           kind: "lines",
           acct: id,
-          lines: [{ at: nowSecs(), text: CHAT[n++ % CHAT.length] ?? "", k: "n" }],
+          lines: [
+            featScenario === "off"
+              ? { at, text: CHAT[n++ % CHAT.length] ?? "", k: "n", c: null, who: null, goto: null }
+              : liveKindLine(n++, at, find(id).name),
+          ],
           skipped: 0,
           snapshot: false,
         });
@@ -626,6 +684,7 @@ export const mockCloudApi: CloudApi = {
       ];
       if (issues.length) return { kind: "invalid", issues };
     }
+    const inventory = edit.config?.inventory;
     const next = replace({
       ...current,
       name: edit.name ?? current.name,
@@ -633,6 +692,17 @@ export const mockCloudApi: CloudApi = {
       version: edit.version ?? current.version,
       lang: edit.lang ?? current.lang,
       rev: current.rev + 1,
+      config:
+        typeof inventory === "boolean"
+          ? { ...current.config, inventory: { enabled: inventory } }
+          : current.config,
+      features:
+        typeof inventory === "boolean" && current.features
+          ? {
+              ...current.features,
+              inventory: { mode: current.features.inventory?.mode ?? "off", on: inventory },
+            }
+          : current.features,
     });
     return { kind: "saved", account: next };
   },
@@ -673,5 +743,86 @@ export const mockCloudApi: CloudApi = {
   },
   async open(page, account) {
     console.info("[cloud-afk mock] open afk.projects.gg", page, account ?? "");
+  },
+  async inventoryWatch(id) {
+    await delay(60);
+    watchInventory(id, find(id).live.state === "running", emit);
+  },
+  async inventoryUnwatch(id) {
+    unwatchInventory(id);
+  },
+  async invOp(id, opId, op) {
+    void inventoryMove(id, op).then((result) =>
+      emit({
+        kind: "invResult",
+        id: opId,
+        ok: result.ok === true,
+        error:
+          result.ok === true
+            ? null
+            : {
+                code: result.error.code,
+                reason: result.error.reason ?? null,
+                field: result.error.field ?? null,
+                retryAfter: result.error.retryAfter ?? null,
+              },
+      }),
+    );
+    return null;
+  },
+  async setInventory(id, enabled) {
+    await delay(380);
+    const current = find(id);
+    const next = replace({
+      ...current,
+      rev: current.rev + 1,
+      config: { ...current.config, inventory: { enabled } },
+      features: current.features
+        ? {
+            ...current.features,
+            inventory: { mode: current.features.inventory?.mode ?? "off", on: enabled },
+          }
+        : current.features,
+    });
+    // The running client started without it: it comes at the next connection.
+    setTimeout(
+      () => emit({ kind: "invState", acct: id, state: "off", reason: "restart", lock: null }),
+      120,
+    );
+    return { kind: "saved", account: next };
+  },
+  async tryReply(rule, sample, sender) {
+    return mockTryReply(rule, sample, sender);
+  },
+  async download(id) {
+    await delay(500);
+    const day = new Date().toISOString().slice(0, 10);
+    return { fileName: `${find(id).name}-konsol-${day}.txt` };
+  },
+  async showDownload(fileName) {
+    console.info("[cloud-afk mock] show", fileName);
+  },
+  async copySource(id) {
+    await delay(200);
+    const source = find(id);
+    // The site's seal (r1): this computer has no words for it; its own copy (c1) it has.
+    const toType = source.config.rules
+      .filter((rule) => rule.reply.secret && rule.reply.fp !== "KEPTKEPTKEPTKEPT")
+      .map((rule) => ({ row: rule.id, place: "rules", preview: rule.reply.preview ?? "******" }));
+    return { id, toType };
+  },
+  async copySettings(source, targets) {
+    await delay(700);
+    const from = find(source);
+    return targets.map((target): CloudCopyResult => {
+      const current = find(target);
+      if (current.expired) return { id: target, account: null, code: "BULUT-SURE" };
+      const next = replace({
+        ...current,
+        config: { ...from.config, inventory: current.config.inventory },
+        rev: current.rev + 1,
+      });
+      return { id: target, account: next, code: null };
+    });
   },
 };

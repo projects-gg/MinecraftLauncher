@@ -423,6 +423,50 @@ export const commands = {
 	/**  Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there. */
 	cloudAfkOpen: (page: CloudPage, account: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_open", { page, account })),
 	/**
+	 *  An inventory view is on screen: the account's inventory streams as `cloud-afk-live` events
+	 *  (`invState`, `inventory`, `window`).
+	 */
+	cloudAfkInventoryWatch: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_inventory_watch", { id })),
+	/**  The inventory view left the screen (closed, another tab, the window hidden). */
+	cloudAfkInventoryUnwatch: (id: string) => __TAURI_INVOKE<void>("cloud_afk_inventory_unwatch", { id }),
+	/**
+	 *  A move (`op`: the view's `InvOp` as JSON, `opId` its own id). Null: sent, its answer comes as an
+	 *  `invResult` event; else why it could not go out (its shape, or `host_offline`).
+	 */
+	cloudAfkInvOp: (id: string, opId: string, op: string) => __TAURI_INVOKE<{
+	code?: string,
+	reason?: string | null,
+	field?: string | null,
+	retryAfter?: number | null,
+} | null>("cloud_afk_inv_op", { id, opId, op }),
+	/**
+	 *  The inventory view on or off for this account ("Aç"; the settings' switch saves with the rest).
+	 *  It applies at the client's next start.
+	 */
+	cloudAfkSetInventory: (id: string, enabled: boolean) => typedError<CloudSaveOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_set_inventory", { id, enabled })),
+	/**
+	 *  "Dene": what the rule would answer to `sample` written by `sender` (the account's owner, else
+	 *  "Oyuncu"), on this computer.
+	 */
+	cloudAfkTryReply: (pattern: string, regex: boolean, from: string, reply: string, sample: string, sender: string) => __TAURI_INVOKE<CloudReplyTry>("cloud_afk_try_reply", { pattern, regex, from, reply, sample, sender }),
+	/**
+	 *  "İndir": the masked console of `range` as a `.txt` in the Downloads folder (UTF-8 with a byte
+	 *  order mark, CRLF, Turkey time; kind names in the launcher's language). Null: no line in that
+	 *  range, nothing written.
+	 */
+	cloudAfkConsoleDownload: (id: string, name: string, range: CloudLogRange) => typedError<{
+	fileName: string,
+} | null, CmdError>(__TAURI_INVOKE("cloud_afk_console_download", { id, name, range })),
+	/**  "Klasörde göster" for a console download (only such a file, in Downloads). */
+	cloudAfkShowDownload: (fileName: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_show_download", { fileName })),
+	/**  "Ayarları kopyala": the source's secret rows this computer has no words for. */
+	cloudAfkCopySource: (id: string) => typedError<CloudCopySource, CmdError>(__TAURI_INVOKE("cloud_afk_copy_source", { id })),
+	/**
+	 *  "Ayarları kopyala": one change per target, in order (owner name, anti-AFK, commands, replies;
+	 *  the server and version with `withServer`). Every secret row is sealed again for its target.
+	 */
+	cloudAfkCopySettings: (source: string, targets: string[], withServer: boolean, secrets: CloudCopySecret[]) => typedError<CloudCopyResult_Serialize[], CmdError>(__TAURI_INVOKE("cloud_afk_copy_settings", { source, targets, withServer, secrets })),
+	/**
 	 *  The panel's first look at an account: its settings, the mode's catalog, the quota and the
 	 *  approvals (the last two wait while the account's machine is away).
 	 */
@@ -507,6 +551,17 @@ export const commands = {
 	 */
 	index: string,
 } | null, CmdError>(__TAURI_INVOKE("items_atlas", { minecraft })),
+	/**
+	 *  The content index's item art document, for the 7/24 Bulut inventory on the servers it names:
+	 *  read from the signed tree (cached), its pictures fetched once and verified by SHA-256. `None`
+	 *  without a document or while the tree cannot be read (items keep the game's pictures). Never an
+	 *  error.
+	 */
+	itemsOverlay: () => typedError<{
+	/**  The document as JSON text, as the content index publishes it. */
+	doc: string,
+	files: ItemArtLocalFile[],
+} | null, CmdError>(__TAURI_INVOKE("items_overlay")),
 	legacyScan: () => typedError<LegacyScan, CmdError>(__TAURI_INVOKE("legacy_scan")),
 	legacyImport: (request: LegacyImportRequest) => typedError<LegacyImportReport, CmdError>(__TAURI_INVOKE("legacy_import", { request })),
 	/**  Other launchers' data on this computer (cheap: small files and folder listings). */
@@ -544,6 +599,16 @@ export const commands = {
 	/**  The page the player was on, set right after the restart. */
 	route: string | null,
 } | null>("update_restart_info"),
+	/**
+	 *  BETA-GATE: the player picked "Beta" in Settings → Güncellemeler. `allowed`: switch to it;
+	 *  otherwise why not (not on the Ar-Ge team, sign in first, cannot ask now) and the page to apply.
+	 */
+	updateBetaJoin: () => typedError<BetaAccess, CmdError>(__TAURI_INVOKE("update_beta_join")),
+	/**
+	 *  BETA-GATE: before an update look on the beta channel: `allowed` stays on it; otherwise the
+	 *  launcher goes back to the stable channel (it never installs an older version) and says why.
+	 */
+	updateBetaKeep: () => typedError<BetaAccess, CmdError>(__TAURI_INVOKE("update_beta_keep")),
 	officialStatus: () => typedError<OfficialStatus, CmdError>(__TAURI_INVOKE("official_status")),
 	/**
 	 *  The Projects instance, made when there is none. It follows the official pack family when one
@@ -1790,6 +1855,23 @@ export type BannerView = {
 	endsAt: string | null,
 };
 
+/**  The verdict and the page "Ar-Ge'ye başvur" opens (`https://` only). */
+export type BetaAccess = {
+	verdict: BetaVerdict,
+	apply: string,
+};
+
+/**  What the launcher does about the beta channel, as the UI shows it. */
+export type BetaVerdict = 
+/**  Beta: switch to it, or stay on it. */
+"allowed" | 
+/**  Not on the team: "Ar-Ge'ye başvur". */
+"notMember" | 
+/**  Sign in with Discord first. */
+"signIn" | 
+/**  Cannot ask now: try again later. */
+"unknown";
+
 /**  An answer to a crew call: "Geliyorum", "Birazdan", "Gelemem". */
 export type CallAnswer = "yes" | "soon" | "no";
 
@@ -2206,6 +2288,21 @@ export type CloudAccountCount = {
 	cap: number,
 };
 
+/**
+ *  `Account.features`: what this account may use now. An account without a machine has
+ *  everything off.
+ */
+export type CloudAccountFeatures = {
+	inventory?: CloudInventoryFeature,
+	consoleKinds?: boolean,
+	placeholders?: boolean,
+	/**
+	 *  Console kinds are on, but this account's player, private or server rules still match the
+	 *  old way until its settings are saved once.
+	 */
+	legacyRules?: boolean,
+};
+
 /**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
 export type CloudAccount_Deserialize = {
 	id: string,
@@ -2240,6 +2337,11 @@ export type CloudAccount_Deserialize = {
 	plusUntil?: number | null,
 	/**  The assistant's state; None unless the tier is `plus`. */
 	ai?: PlusAi | null,
+	/**
+	 *  What this account may use of the cloud features (CAFK-FEAT); None from a service before
+	 *  them: then none shows.
+	 */
+	features?: CloudAccountFeatures | null,
 };
 
 /**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
@@ -2276,6 +2378,11 @@ export type CloudAccount_Serialize = {
 	plusUntil: number | null,
 	/**  The assistant's state; None unless the tier is `plus`. */
 	ai: PlusAi | null,
+	/**
+	 *  What this account may use of the cloud features (CAFK-FEAT); None from a service before
+	 *  them: then none shows.
+	 */
+	features: CloudAccountFeatures | null,
 };
 
 /**  Why an address cannot be used. */
@@ -2302,6 +2409,30 @@ export type CloudAntiAfk = {
 	enabled: boolean,
 	delayMin: number,
 	delayMax: number,
+};
+
+/**  The action bar's text, shown until `untilMs` (Unix milliseconds) unless a newer strip came. */
+export type CloudBarText = {
+	text?: string,
+	untilMs?: number,
+};
+
+/**
+ *  `bars`: what the server keeps showing (the action bar, a title, at most four boss bars), kept
+ *  out of the log and shown above the console.
+ */
+export type CloudBars = {
+	actionbar?: CloudBarText | null,
+	title?: CloudTitleBar | null,
+	boss?: CloudBossBar[],
+};
+
+/**  A boss bar: `id` the machine's own (`b1`), `progress` 0–1, `color` the game's name of it. */
+export type CloudBossBar = {
+	id?: string,
+	text?: string,
+	progress?: number | null,
+	color?: string,
 };
 
 /**
@@ -2338,13 +2469,78 @@ export type CloudConfigView = {
 	antiAfk: CloudAntiAfk,
 	commands: CloudCommandView[],
 	rules: CloudRuleView[],
+	/**  The player's own inventory choice; None: never chosen (Studio's default applies). */
+	inventory: CloudInventorySetting | null,
 };
 
-/**  One masked console line: `k` is `n` (normal), `e` (a client error) or `s` (a command row). */
+/**  A console download written to the Downloads folder. */
+export type CloudConsoleFile = {
+	fileName: string,
+};
+
+/**
+ *  One masked console line: `k` is `n` (normal), `e` (a client error) or `s` (a command row).
+ *  With console kinds (CAFK-FEAT) `c` says what it is (`chat`, `pm`, `sys`, `title`, `cli`, `err`;
+ *  kept as text, an unknown one reads as `cli`), `who` the other player of a chat or private line,
+ *  `goto: "inventory"` a machine line the console may link to the inventory. Older lines have none.
+ */
 export type CloudConsoleLine = {
 	at: number,
 	text: string,
 	k: string,
+	c: string | null,
+	who: string | null,
+	goto: string | null,
+};
+
+/**
+ *  How copying to one account ended: the account as stored now, or the refusal's code (the
+ *  launcher's `BULUT-…` codes, worded by the bulk toast).
+ */
+export type CloudCopyResult = CloudCopyResult_Serialize | CloudCopyResult_Deserialize;
+
+/**
+ *  How copying to one account ended: the account as stored now, or the refusal's code (the
+ *  launcher's `BULUT-…` codes, worded by the bulk toast).
+ */
+export type CloudCopyResult_Deserialize = {
+	id: string,
+	account: CloudAccount_Deserialize | null,
+	code: string | null,
+};
+
+/**
+ *  How copying to one account ended: the account as stored now, or the refusal's code (the
+ *  launcher's `BULUT-…` codes, worded by the bulk toast).
+ */
+export type CloudCopyResult_Serialize = {
+	id: string,
+	account: CloudAccount_Serialize | null,
+	code: string | null,
+};
+
+/**
+ *  A secret row of the source this computer has no words for: the player types them before
+ *  "Ayarları kopyala" (once for all, or per account). `place` is `commands` or `rules`.
+ */
+export type CloudCopyRow = {
+	row: string,
+	place: string,
+	/**  `/login ******`. */
+	preview: string,
+};
+
+/**  The words typed for one secret row of the source: for one target (`target`) or for all. */
+export type CloudCopySecret = {
+	row: string,
+	target: string | null,
+	text: string,
+};
+
+/**  What copying from an account needs: its rows to type. */
+export type CloudCopySource = {
+	id: string,
+	toType: CloudCopyRow[],
 };
 
 export type CloudDropped = {
@@ -2407,6 +2603,11 @@ export type CloudEditConfig = {
 	antiAfk: CloudAntiAfk,
 	commands: CloudEditCommand[],
 	rules: CloudEditRule[],
+	/**
+	 *  The inventory view (CAFK-FEAT): the player's choice; None: never chosen (Studio's default
+	 *  applies), and then nothing about it is sent.
+	 */
+	inventory: boolean | null,
 };
 
 /**  An auto-reply rule: `from` is `any`, `player`, `private` or `server`. */
@@ -2443,6 +2644,23 @@ export type CloudEditView_Serialize = {
 export type CloudEvery = {
 	min: number,
 	max: number,
+};
+
+/**
+ *  Studio's feature switches as the AFK page reads them (`CloudOverview.features`; None: a service
+ *  before this phase, which shows none of them).
+ */
+export type CloudFeatures = {
+	/**  `off`, `view` (the inventory shows) or `full` (and takes moves). */
+	inventory: string,
+	consoleKinds: boolean,
+	/**
+	 *  The save checks of placeholders run (the account's own `features.placeholders` says whether
+	 *  its replies may use them).
+	 */
+	placeholders: boolean,
+	/**  The commands a reply with placeholders may start with (without `/`, lower case). */
+	placeholderCommands: string[],
 };
 
 /**
@@ -2517,6 +2735,92 @@ export type CloudHold_Serialize =
  */
 ({ kind: "cause"; cause: string; at: number; row: string | null }) & { mode?: never; reason?: never; since?: never; until?: never } | ({ kind: "other" }) & { at?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never; until?: never };
 
+export type CloudInvDurability = {
+	left?: number,
+	max?: number,
+};
+
+/**  An active enchantment (or an enchanted book's), `label` as the game writes it ("Keskinlik V"). */
+export type CloudInvEnchant = {
+	id?: string,
+	lvl?: number,
+	label?: CloudLocalized,
+};
+
+/**
+ *  Why a move was refused (`invres.error`): `invalid` (`reason`, `field`), `inventory_off`
+ *  (`reason`), `not_running`, `busy_trade`, `stale`, `rate_limited` (`retryAfter` seconds),
+ *  `not_found`, `host_offline`.
+ */
+export type CloudInvError = {
+	code?: string,
+	reason?: string | null,
+	field?: string | null,
+	retryAfter?: number | null,
+};
+
+export type CloudInvInside = {
+	/**  The items' total. */
+	count?: number,
+	top?: CloudInvInsideStack[],
+};
+
+/**  One of the first nine stacks inside a shulker box or bundle. */
+export type CloudInvInsideStack = {
+	id?: string,
+	count?: number,
+	label?: CloudLocalized,
+	cmd?: number | null,
+	model?: string | null,
+};
+
+/**
+ *  `InvItem`: one stack in the player inventory (`slot` 5–8 armour, 9–35 main, 36–44 hotbar, 45
+ *  off hand) or in an open window (`0 … size-1`); the cursor's item has no slot (0). `name`,
+ *  `lore` and every label are anyone's plain text: never markup.
+ */
+export type CloudInvItem = {
+	slot?: number,
+	/**  `minecraft:diamond_sword`. */
+	id?: string,
+	count?: number,
+	label?: CloudLocalized,
+	/**  A custom name (anvil) or a server's item name. */
+	name?: string | null,
+	/**  At most 4 lines of at most 80 characters. */
+	lore?: string[],
+	durability?: CloudInvDurability | null,
+	/**  `custom_model_data` (its first float, rounded down). */
+	cmd?: number | null,
+	/**  The `item_model` component, when a server set one. */
+	model?: string | null,
+	ench?: CloudInvEnchant[],
+	enchanted?: boolean,
+	inside?: CloudInvInside | null,
+	/**  A potion's type, `minecraft:strong_healing`. */
+	potion?: string | null,
+	/**  A dye or a potion's own colour, `0xRRGGBB`. */
+	color?: number | null,
+	/**  Something could not be shown. */
+	partial?: boolean,
+};
+
+/**
+ *  `Account.features.inventory`: Studio's switch while the account's machine can show an
+ *  inventory (else `off`), and the account's own setting.
+ */
+export type CloudInventoryFeature = {
+	/**  `off`, `view` or `full`. */
+	mode?: string,
+	/**  The account's setting (`config.inventory.enabled`, else Studio's default). */
+	on?: boolean,
+};
+
+/**  The account's own inventory choice (`config.inventory`; absent: never chosen). */
+export type CloudInventorySetting = {
+	enabled: boolean,
+};
+
 /**
  *  Where a problem is and what it is. `place` is `general`, `commands` or `rules`; `index` the
  *  row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
@@ -2570,7 +2874,33 @@ export type CloudLiveEvent =
 /**  AFK+: an approval came, was answered, expired or closed. */
 { kind: "approval"; acct: string; approval: PlusApproval } | 
 /**  AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again. */
-{ kind: "messages"; acct: string; count: number; at: number };
+{ kind: "messages"; acct: string; count: number; at: number } | 
+/**
+ *  The inventory (watched with `inv`): whether it shows now (`state` `ok`, or `off` with
+ *  `reason` `not_running`, `setting`, `restart`, `version` or `service`); `lock: "trade"`
+ *  while an AFK+ trade holds it (the view stays live, moves wait).
+ */
+{ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null } | 
+/**
+ *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
+ *  non-empty slot; `snap`: the first frame after a watch.
+ */
+{ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem | null; items: CloudInvItem[]; snap: boolean } | 
+/**
+ *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
+ *  names this opening (every move names the one the player sees).
+ */
+{ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem[]; closed: boolean } | 
+/**
+ *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
+ *  sent it on; what the server did shows in the frames that follow.
+ */
+{ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null } | 
+/**
+ *  A watched account's status strip: the action bar, a title and the boss bars (never in the
+ *  log).
+ */
+{ kind: "bars"; acct: string; bars: CloudBars };
 
 /**
  *  What the machine says about the account now. `state` is one of `unknown`, `stopped`, `queued`,
@@ -2615,6 +2945,15 @@ export type CloudLogPage = {
 	lines: CloudConsoleLine[],
 	next: string | null,
 };
+
+/**  "İndir": which lines. */
+export type CloudLogRange = 
+/**  "Son 1 saat". */
+"hour" | 
+/**  "Bugün": since midnight in Turkey. */
+"today" | 
+/**  "Son 3 gün" (the log keeps three days). */
+"days3";
 
 /**  The desktop account in the cloud's form. */
 export type CloudMovePlan = {
@@ -2685,6 +3024,11 @@ export type CloudOverview_Deserialize = {
 	plus: PlusOffer | null,
 	/**  With a session: whether this player may buy AFK+ (an invite list, a restriction). */
 	plusMe: MePlus | null,
+	/**
+	 *  Studio's switches of the cloud features (CAFK-FEAT); None from a service before them, which
+	 *  shows none of them (bulk management included).
+	 */
+	features: CloudFeatures | null,
 };
 
 /**  The AFK page's look at 7/24 Bulut. */
@@ -2712,6 +3056,11 @@ export type CloudOverview_Serialize = {
 	plus: PlusOffer | null,
 	/**  With a session: whether this player may buy AFK+ (an invite list, a restriction). */
 	plusMe: MePlus | null,
+	/**
+	 *  Studio's switches of the cloud features (CAFK-FEAT); None from a service before them, which
+	 *  shows none of them (bulk management included).
+	 */
+	features: CloudFeatures | null,
 };
 
 /**  Which page of afk.projects.gg to open. */
@@ -2773,6 +3122,17 @@ export type CloudRenewal = {
 	open: boolean,
 	opensAt: number,
 };
+
+/**  What "Dene" shows for a sample message. */
+export type CloudReplyTry = 
+/**  The rule answers with this reply. */
+{ kind: "matches"; reply: string } | 
+/**  The message does not match. */
+{ kind: "noMatch" } | 
+/**  It matches, but a part is not one word of letters, digits or `_`: no reply goes out. */
+{ kind: "value" } | 
+/**  The pattern can't be used (the editor says why). */
+{ kind: "pattern" };
 
 /**  How "Göster" ended. */
 export type CloudRevealOutcome = 
@@ -2857,6 +3217,12 @@ export type CloudStock = {
 	remaining?: number | null,
 };
 
+export type CloudTitleBar = {
+	text?: string,
+	subtitle?: string | null,
+	untilMs?: number,
+};
+
 /**
  *  A desktop AFK account and the cloud account with its name on its server (the same account in
  *  two places keeps kicking itself).
@@ -2875,6 +3241,16 @@ export type CloudVersionOption = {
 export type CloudVersions = {
 	versions: CloudVersionOption[],
 	recommended: string,
+};
+
+/**
+ *  `win.open`: the game's menu name (`generic_9x3`, `hopper`, …, `unknown`), its plain title (at
+ *  most 80 characters; may keep a resource pack's private-use glyphs) and its own slots.
+ */
+export type CloudWinOpen = {
+	type?: string,
+	title?: string,
+	size?: number,
 };
 
 /**
@@ -4086,6 +4462,24 @@ export type IssueKind =
  *  never reports it: the launcher adds it for official pack instances.
  */
 "keyClash";
+
+/**  One picture of the item art document, on this computer. */
+export type ItemArtLocalFile = {
+	/**  The document's own path (`itemart/atlas-16.<sha256>.png`). */
+	path: string,
+	/**  Where it is on disk; the UI loads it with `convertFileSrc` (`cache/` is allowed). */
+	local: string,
+};
+
+/**
+ *  IA-ART's signed `itemArt` document (the Projects server's own item looks and menu pictures,
+ *  `docs/content-format.md` "Item art") with its pictures downloaded and verified.
+ */
+export type ItemArtOverlayFiles = {
+	/**  The document as JSON text, as the content index publishes it. */
+	doc: string,
+	files: ItemArtLocalFile[],
+};
 
 /**  An atlas on disk. */
 export type ItemAtlasFiles = {
