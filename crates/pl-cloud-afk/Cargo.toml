@@ -10,6 +10,10 @@ publish = false
 [dependencies]
 # The desktop AFK model ("Buluta taşı"), its password commands, pattern check and keychain store.
 pl-afk = { workspace = true }
+# AFK+'s item data (the format, the manifest's version choice, the names AFK notices use).
+pl-items = { workspace = true }
+# The audit log this computer keeps: closed days in one raw deflate block each.
+flate2 = "1.1"
 tokio = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }

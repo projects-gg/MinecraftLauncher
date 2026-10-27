@@ -29,7 +29,7 @@ use crate::model::{
     AccountPatch, CloudAccount, CloudAccountCount, CloudCanBuy, CloudLimits, CloudLocalized,
     CloudLogPage, CloudServer, CloudVersions, Me, Offer, ServiceMode, VaultKey,
 };
-use crate::plus::{MePlus, PlusCatalog, PlusOffer};
+use crate::plus::{MePlus, PlusOffer};
 use crate::seal::{CONSOLE_ROW, RevealKey, RevealTarget, SealTarget, seal};
 use crate::server::{CloudAddressProblem, normalize, same_server};
 use crate::text::{check_text, looks_sensitive};
@@ -196,8 +196,8 @@ pub(crate) struct Inner {
     pub(crate) known: Mutex<Known>,
     copies: Arc<Copies>,
     pub(crate) live: LiveHub,
-    /// AFK+ catalogs by game mode, with when they were read (an hour, as the service's caches).
-    pub(crate) catalogs: Mutex<HashMap<String, (Instant, PlusCatalog)>>,
+    /// AFK+: the item data and the settings read this session.
+    pub(crate) plus: crate::service_plus::PlusCache,
 }
 
 /// Cheap to clone.
@@ -242,7 +242,7 @@ impl CloudService {
                 known: Mutex::new(Known::default()),
                 copies: Arc::new(copies),
                 live,
-                catalogs: Mutex::new(HashMap::new()),
+                plus: crate::service_plus::PlusCache::default(),
             }),
         }
     }
@@ -405,7 +405,7 @@ impl CloudService {
     pub async fn forget(&self) {
         self.inner.live.stop_all();
         *self.inner.known.lock() = Known::default();
-        self.inner.catalogs.lock().clear();
+        self.inner.plus.forget();
         let copies = self.inner.copies.clone();
         let _ = blocking(move || copies.forget_all()).await;
     }
