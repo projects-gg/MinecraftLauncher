@@ -431,17 +431,17 @@ const CONSOLE: Array<[string, string]> = [
   ["n", "[AuthMe] Başarıyla giriş yaptın."],
   ["s", "/warp maden"],
   ["n", "Maden bölgesine ışınlandın."],
-  ["n", "<Ayşe> selam millet"],
+  ["n", "<GeceKurdu_> selam millet"],
   ["n", "[Duyuru] Etkinlik 21:00'de başlıyor!"],
   ["e", "Sunucuyla bağlantı bir an yavaşladı."],
-  ["n", "<Mert> akşam pvp var mı"],
+  ["n", "<ElmasKazma> akşam pvp var mı"],
   ["n", "[Projects] AFK bölgesindesin, ödüllerin birikiyor."],
 ];
 
 const CHAT: string[] = [
-  "<Ayşe> biri pazara gelsin",
+  "<GeceKurdu_> biri pazara gelsin",
   "[Duyuru] Haftalık sıralama yenilendi.",
-  "<Kerem> hoş geldin Madenci07",
+  "<SessizOkcu> hoş geldin Madenci07",
   "[Projects] 15 dakika AFK ödülü: 120 altın.",
 ];
 
