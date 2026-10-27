@@ -1,4 +1,4 @@
-import { Gauge, Package, Sparkle, Sword } from "@phosphor-icons/react";
+import { Gauge, Mountains, Package, Sword } from "@phosphor-icons/react";
 import {
   Chip,
   ContentIcon,
@@ -32,7 +32,7 @@ import {
 const marks: Record<SetPurpose, typeof Sword> = {
   pvp: Sword,
   performance: Gauge,
-  visual: Sparkle,
+  visual: Mountains,
   other: Package,
 };
 
