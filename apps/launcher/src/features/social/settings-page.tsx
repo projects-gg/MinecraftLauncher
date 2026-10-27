@@ -287,14 +287,14 @@ function PrivacySection({ me }: { me: SocialMe }) {
 
 /**
  * Two bubbles at the chosen text size (the conversation is not on screen here). The box is as tall
- * as the largest size needs: nothing below it moves while the slider moves.
+ * as the largest size needs, with room around it: nothing below it moves while the slider moves.
  */
 function TextSizeSample({ size }: { size: number }) {
   const { t } = useTranslation();
   return (
     <div
       aria-hidden
-      className="mt-3 flex h-[132px] flex-col justify-center overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/45 px-3 ring-1 ring-white/8"
+      className="mt-3 flex h-[144px] flex-col justify-center overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/45 px-3 ring-1 ring-white/8"
     >
       <div className="flex flex-col gap-1" style={{ zoom: zoomOf(size) }}>
         <span className="max-w-[85%] self-start rounded-[10px] bg-obsidian-800/85 px-3 py-[7px] text-[13.5px] leading-[1.45] text-bone-100 ring-1 ring-white/7 ring-inset">

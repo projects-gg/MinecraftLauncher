@@ -24,6 +24,7 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -154,6 +155,7 @@ export function Composer({
   onEditLast,
   onSent,
   onPage,
+  status = null,
   replyTo = null,
   replyQuote = null,
   onCancelReply = () => {},
@@ -177,6 +179,8 @@ export function Composer({
   onSent: () => void;
   /** PageUp (-1) or PageDown (1) in the field: the messages scroll a screen. */
   onPage?: (direction: 1 | -1) => void;
+  /** A quiet line under the field while nothing is wrong (the text size as it changes). */
+  status?: ReactNode;
   /** CHAT2: someone else in the conversation is online ("yazıyor…" goes only then). */
   othersOnline?: boolean;
   /** CHAT2: the message the next one answers (sent: it has its id). */
@@ -584,11 +588,14 @@ export function Composer({
           </span>
         </button>
       </div>
+      {/* As tall as one line of words, empty or not: a reason or the text size coming and going
+          moves nothing. */}
       <div
         id={`composer-${conv}`}
-        className="flex min-h-[20px] items-start justify-between gap-3 px-1 pt-1.5 text-[12px]"
+        className="flex min-h-[24px] items-start justify-between gap-3 px-1 pt-1.5 text-[12px]"
       >
         <span className="relative min-w-0 flex-1">
+          {reason ? null : <span className="absolute inset-x-0 top-0">{status}</span>}
           <AnimatePresence initial={false}>
             {reason ? (
               <motion.span

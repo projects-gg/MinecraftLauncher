@@ -1123,7 +1123,6 @@ export function Conversation({
           </div>
         </motion.div>
       </MotionConfig>
-      <ZoomHud ref={hud} onReset={() => resize(DEFAULT_TEXT_SIZE)} />
       <div className="relative">
         <AnimatePresence initial={false}>
           {away && (newer || far) ? (
@@ -1153,6 +1152,7 @@ export function Conversation({
           onEditLast={editLast}
           onSent={() => toBottom(false)}
           onPage={page}
+          status={<ZoomHud ref={hud} onReset={() => resize(DEFAULT_TEXT_SIZE)} />}
           replyTo={replyTo?.id !== undefined ? replyTo : null}
           replyQuote={replyQuote}
           onCancelReply={() => setReplying(conv, null)}

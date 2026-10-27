@@ -8,7 +8,7 @@ export const enChatProd = {
   },
   settings: {
     title: "Chat",
-    sampleTheirs: "Are you playing Bedwars tonight?",
+    sampleTheirs: "Playing Bedwars tonight?",
     sampleMine: "Sure, around 9",
   },
 };
