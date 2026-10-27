@@ -1,47 +1,107 @@
 // An AFK+ item's picture beside its name: the game's own texture (ITEMART's `ItemSprite`, from the
-// atlas the launcher draws from the player's installed Minecraft) on the chamfered tile, or its
-// quiet stand-in where the atlas has no such item (a server's own item, or the browser preview,
-// which has no atlas at all). Decorative: the name beside it says what it is.
+// atlas the launcher draws from the player's installed Minecraft of the account's version) on the
+// chamfered tile, or its quiet stand-in where the atlas has no such item (the browser preview has
+// no atlas at all). A custom item is drawn by its material and look (`cmd`, `model`): the server's
+// own art where ITEMART has it, else the material as the game shows it without the server's pack;
+// one whose material is not known yet (typed, waiting for its first sight) is the tile with a line
+// cube in it, as on the site (an empty tile read as a picture that failed). Decorative: the name
+// beside it says what it is.
+import { Cube } from "@phosphor-icons/react";
 import { cn } from "@pl/ui";
-import { type ItemArt, ItemArtProvider, ItemSprite } from "@pl/ui/items";
-import { type ReactNode, useEffect, useState } from "react";
-import { vanillaItemArt } from "@/lib/item-art";
-import type { PlusCatalog } from "./api";
-import { currentLang } from "./words";
+import type { TitleGlyph } from "@pl/ui/inventory";
+import { hostMatches, type ItemArt, ItemArtProvider, ItemSprite } from "@pl/ui/items";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { type ItemOverlay, itemArtOverlay, vanillaItemArt } from "@/lib/item-art";
+import { customOf, type NamedCustom } from "./items";
 
-/** The atlas once it was drawn: a panel opened again shows the pictures from its first frame. */
-let known: ItemArt | undefined;
+/** The atlases drawn so far, by Minecraft version: a panel opened again shows them from its first frame. */
+const known = new Map<string, NonNullable<ItemArt["vanilla"]>>();
+/** IA-ART's layer once read (it is the same for every account). */
+let knownOverlay: ItemOverlay | undefined;
+
+type GlyphOf = (codePoint: number) => TitleGlyph | undefined;
+const TitleGlyphs = createContext<GlyphOf | undefined>(undefined);
+
+/** A menu title's pictures on the account's server (IA-ART), for an `InventoryView` in the panel. */
+export function usePlusTitleGlyph(): GlyphOf | undefined {
+  return useContext(TitleGlyphs);
+}
 
 /**
- * Gives the AFK+ panel (and the dialogs it opens) the vanilla atlas of the newest installed
- * Minecraft: the bot's items are the game's, whatever version the player plays.
+ * Gives the AFK+ panel (and the dialogs it opens) the vanilla atlas of the account's Minecraft
+ * version (else of the newest installed one): the bot's items are the game's; and, on the servers
+ * IA-ART names, the Projects server's own looks (FEAT-L's `itemArtOverlay()`), never elsewhere.
  */
-export function PlusItemArt({ children }: { children: ReactNode }) {
-  const [art, setArt] = useState(known);
+export function PlusItemArt({
+  minecraft,
+  server,
+  children,
+}: {
+  minecraft?: string | null;
+  /** The account's server address (`play.projects.gg:25565`). */
+  server?: string;
+  children: ReactNode;
+}) {
+  const key = minecraft ?? "";
+  const [vanilla, setVanilla] = useState(() => known.get(key));
+  const [overlay, setOverlay] = useState(knownOverlay);
   useEffect(() => {
-    if (known) return;
     let live = true;
-    void vanillaItemArt().then((vanilla) => {
-      if (!vanilla) return;
-      known = { vanilla };
-      if (live) setArt(known);
-    });
+    const hit = known.get(key);
+    setVanilla(hit);
+    if (!hit) {
+      void vanillaItemArt(minecraft ?? undefined).then((atlas) => {
+        if (!atlas) return;
+        known.set(key, atlas);
+        if (live) setVanilla(atlas);
+      });
+    }
+    if (!knownOverlay) {
+      void itemArtOverlay().then((loaded) => {
+        if (!loaded) return;
+        knownOverlay = loaded;
+        if (live) setOverlay(loaded);
+      });
+    }
     return () => {
       live = false;
     };
-  }, []);
-  return <ItemArtProvider value={art}>{children}</ItemArtProvider>;
+  }, [key, minecraft]);
+  const onItsServer = Boolean(overlay && hostMatches(server, overlay.hosts));
+  const art: ItemArt | undefined =
+    vanilla || onItsServer
+      ? {
+          vanilla,
+          overlay: onItsServer ? overlay?.overlay : undefined,
+          host: onItsServer ? server : undefined,
+        }
+      : undefined;
+  return (
+    <ItemArtProvider value={art}>
+      <TitleGlyphs.Provider value={onItsServer ? overlay?.glyph : undefined}>
+        {children}
+      </TitleGlyphs.Provider>
+    </ItemArtProvider>
+  );
 }
 
-export function PlusItemIcon({
-  item,
+export type IconSize = 24 | 32 | 40 | 48;
+
+/** A custom item whose material is not known yet. */
+const UNSEEN = "custom:unseen";
+
+/** The chamfered tile with an item drawn on it by its id and look. */
+export function ItemTile({
+  id,
+  cmd,
+  model,
   size = 32,
   className,
 }: {
-  /** The catalog id (`minecraft:elytra`): the texture's key. */
-  item: string;
-  /** The tile's side in px. */
-  size?: 24 | 32 | 40 | 48;
+  id: string;
+  cmd?: number | null;
+  model?: string | null;
+  size?: IconSize;
   className?: string;
 }) {
   return (
@@ -60,17 +120,44 @@ export function PlusItemIcon({
         className,
       )}
     >
-      {/* Whole multiples of 16 keep the game's pixels square. */}
-      <ItemSprite id={item} size={size >= 40 ? 32 : 16} />
+      {id === UNSEEN ? (
+        <Cube size={Math.round(size * 0.45)} className="text-ash-400" />
+      ) : (
+        // Whole multiples of 16 keep the game's pixels square.
+        <ItemSprite
+          id={id}
+          cmd={cmd ?? undefined}
+          model={model ?? undefined}
+          size={size >= 40 ? 32 : 16}
+        />
+      )}
     </span>
   );
 }
 
-/** An item's name in the interface's language, from the catalog (its id read plainly without). */
-export function itemName(catalog: PlusCatalog | null | undefined, id: string): string {
-  const found = catalog?.items.find((item) => item.id === id);
-  if (found) return currentLang() === "en" ? found.en : found.tr;
-  const path = id.split(":").pop() ?? id;
-  const words = path.replace(/_/g, " ").trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : id;
+export function PlusItemIcon({
+  item,
+  custom = [],
+  size = 32,
+  className,
+}: {
+  /** `minecraft:elytra` (the texture's key) or `custom:<k>`. */
+  item: string;
+  /** The account's custom items (a custom reference is drawn by its material and look). */
+  custom?: readonly NamedCustom[];
+  /** The tile's side in px. */
+  size?: IconSize;
+  className?: string;
+}) {
+  const own = customOf(item, custom);
+  const id = item.startsWith("custom:") ? (own?.base ?? UNSEEN) : item;
+  return (
+    <ItemTile
+      id={id}
+      cmd={own?.look?.cmd}
+      model={own?.look?.model}
+      size={size}
+      className={className}
+    />
+  );
 }
