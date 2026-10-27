@@ -27,8 +27,9 @@ fn amount(text: &str, english: bool) -> Option<String> {
     Some(out)
 }
 
-/// The item's name: the catalog's when the launcher knows it, else its id made readable
-/// (`minecraft:diamond_sword` → "Diamond sword").
+/// The item's name: the item data's (or the account's own) when the launcher knows it, else its id
+/// made readable (`minecraft:diamond_sword` → "Diamond sword"); a custom item whose name the
+/// launcher has not read yet is "Özel eşya" / "Custom item", never its key.
 fn item(notice: &AfkNotice, english: bool) -> Option<String> {
     if let Some(name) = &notice.item_name {
         let text = if english { &name.en } else { &name.tr };
@@ -37,28 +38,49 @@ fn item(notice: &AfkNotice, english: bool) -> Option<String> {
         }
     }
     let id = notice.get("item")?;
+    if id.starts_with("custom:") {
+        return Some(
+            if english {
+                "Custom item"
+            } else {
+                "Özel eşya"
+            }
+            .to_owned(),
+        );
+    }
     let path = id.rsplit(':').next().unwrap_or(id).replace('_', " ");
     let mut chars = path.trim().chars();
     let first = chars.next()?;
     Some(first.to_uppercase().chain(chars).collect())
 }
 
-/// "1 Elytra, 37.500" / "1 × Elytra, 37,500": what a deal or an approval is about. Turkish takes no
+/// "1 Elytra = 37.500" / "Elytra = 37,500": what a deal or an approval is about, in the deal's
+/// notation the launcher and the site write everywhere (FREE-WEB, 27 Oct). Turkish takes no
 /// plural after a number; the game's English names are singular and their plurals cannot be
-/// guessed ("Totem of Undying"), so English counts with "×" (as the launcher does).
+/// guessed ("Totem of Undying"), so English counts with "×" and leaves a single one bare (as the
+/// launcher and the site do). A deal paid with an item (`pay` not `money`: `price` counts that
+/// item) says only what changes hands.
 fn deal(notice: &AfkNotice, english: bool) -> Option<String> {
     let item = item(notice, english)?;
     let qty = notice
         .get("qty")
         .filter(|qty| !qty.is_empty())
         .unwrap_or("1");
-    let what = if english {
+    let what = if english && qty == "1" {
+        item
+    } else if english {
         format!("{qty} × {item}")
     } else {
         format!("{qty} {item}")
     };
+    if notice
+        .get("pay")
+        .is_some_and(|pay| !pay.is_empty() && pay != "money")
+    {
+        return Some(what);
+    }
     match notice.get("price").and_then(|price| amount(price, english)) {
-        Some(price) => Some(format!("{what}, {price}")),
+        Some(price) => Some(format!("{what} = {price}")),
         None => Some(what),
     }
 }
@@ -73,13 +95,27 @@ pub(crate) fn afk_toast(notice: &AfkNotice, english: bool) -> Option<ToastView> 
         }
     };
     let body = match notice.event.as_str() {
-        "approval" => {
-            let what = deal(notice, english)?;
-            pick(
-                &format!("Onay bekliyor: {what}"),
-                &format!("Waiting for approval: {what}"),
-            )
-        }
+        // An order's handoff and first sight (AFKPLUS-FREE): never the counterpart's name.
+        "approval" => match notice.get("approvalKind") {
+            Some("handoff") => pick(
+                "Anlaşma tamam, takası sen yapacaksın.",
+                "Deal agreed; you'll make the trade.",
+            ),
+            Some("confirm_item") => {
+                let what = item(notice, english)?;
+                pick(
+                    &format!("{what} için onayın gerekiyor."),
+                    &format!("Your OK is needed on {what}."),
+                )
+            }
+            _ => {
+                let what = deal(notice, english)?;
+                pick(
+                    &format!("Onay bekliyor: {what}"),
+                    &format!("Waiting for approval: {what}"),
+                )
+            }
+        },
         "deal_done" => {
             let what = deal(notice, english)?;
             if notice.get("side") == Some("sell") {
@@ -221,14 +257,80 @@ mod tests {
         let card = afk_toast(&approval, false).unwrap();
         assert_eq!(card.kind, ToastKind::Info);
         assert_eq!(card.title, "Ahmet_AFK asistanı");
-        assert_eq!(card.body, "Onay bekliyor: 1 Elytra, 37.500");
+        assert_eq!(card.body, "Onay bekliyor: 1 Elytra = 37.500");
         assert_eq!(card.key, "afk:approval:01JBXK3D2E");
         let card = afk_toast(&approval, true).unwrap();
         assert_eq!(card.title, "Ahmet_AFK's assistant");
-        assert_eq!(card.body, "Waiting for approval: 1 × Elytra, 37,500");
+        assert_eq!(card.body, "Waiting for approval: Elytra = 37,500");
         // A plain account's event keeps the bare name.
         let renewal = notice("renewal", &[("name", "Ahmet_AFK"), ("days", "3")]);
         assert_eq!(afk_toast(&renewal, false).unwrap().title, "Ahmet_AFK");
+    }
+
+    #[test]
+    fn an_orders_handoff_and_first_sight_say_what_waits() {
+        let handoff = notice(
+            "approval",
+            &[
+                ("name", "Ahmet_AFK"),
+                ("approvalKind", "handoff"),
+                ("item", "custom:c1"),
+                ("qty", "2"),
+                ("price", "9000"),
+            ],
+        );
+        assert_eq!(
+            afk_toast(&handoff, false).unwrap().body,
+            "Anlaşma tamam, takası sen yapacaksın."
+        );
+        assert_eq!(
+            afk_toast(&handoff, true).unwrap().body,
+            "Deal agreed; you'll make the trade."
+        );
+        let mut seen = notice(
+            "approval",
+            &[
+                ("name", "Ahmet_AFK"),
+                ("approvalKind", "confirm_item"),
+                ("item", "custom:c2"),
+            ],
+        );
+        seen.item_name = Some(AfkItemName {
+            tr: "Ejder Kılıcı".into(),
+            en: "Ejder Kılıcı".into(),
+        });
+        assert_eq!(
+            afk_toast(&seen, false).unwrap().body,
+            "Ejder Kılıcı için onayın gerekiyor."
+        );
+        assert_eq!(
+            afk_toast(&seen, true).unwrap().body,
+            "Your OK is needed on Ejder Kılıcı."
+        );
+        // A custom item whose name the launcher has not read yet: never its key.
+        seen.item_name = None;
+        assert_eq!(
+            afk_toast(&seen, false).unwrap().body,
+            "Özel eşya için onayın gerekiyor."
+        );
+        assert_eq!(
+            afk_toast(&seen, true).unwrap().body,
+            "Your OK is needed on Custom item."
+        );
+        // A deal paid with an item says what changes hands, never the count as money.
+        let swap = notice(
+            "approval",
+            &[
+                ("item", "minecraft:netherite_ingot"),
+                ("qty", "2"),
+                ("price", "9"),
+                ("pay", "minecraft:diamond"),
+            ],
+        );
+        assert_eq!(
+            afk_toast(&swap, false).unwrap().body,
+            "Onay bekliyor: 2 Netherite ingot"
+        );
     }
 
     #[test]
@@ -245,7 +347,7 @@ mod tests {
         );
         assert_eq!(
             afk_toast(&done, false).unwrap().body,
-            "Satıldı: 64 Diamond, 7.200"
+            "Satıldı: 64 Diamond = 7.200"
         );
         done.item_name = Some(AfkItemName {
             tr: "Elmas".into(),
@@ -253,11 +355,11 @@ mod tests {
         });
         assert_eq!(
             afk_toast(&done, false).unwrap().body,
-            "Satıldı: 64 Elmas, 7.200"
+            "Satıldı: 64 Elmas = 7.200"
         );
         assert_eq!(
             afk_toast(&done, true).unwrap().body,
-            "Sold: 64 × Diamond, 7,200"
+            "Sold: 64 × Diamond = 7,200"
         );
         let found = notice(
             "found",

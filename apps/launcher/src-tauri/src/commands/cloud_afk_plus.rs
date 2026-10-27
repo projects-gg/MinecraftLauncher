@@ -2,19 +2,22 @@
 //! Nothing of it shows while the service's `plusMode` is `off` (`cloud_afk_overview` → `plus` is
 //! null then). Purchases, upgrades and plan changes open the site (`cloud_afk_open`).
 //!
-//! While the AFK+ panel is on screen its account is watched with `ai`: the AI's state, feed and
-//! approvals stream as `cloud-afk-live` events, as a console's lines do.
+//! While the AFK+ panel is on screen its account is watched with `ai`: the AI's state, new audit
+//! log entries, the orders' progress and approvals stream as `cloud-afk-live` events, as a
+//! console's lines do.
 //!
-//! Refusals the panel says where they happen (a typed rule that could not be read, a reply the
-//! game would not take, an approval that closed meanwhile) come back as outcomes, not errors.
+//! Refusals the panel says where they happen (a typed order the rules refused, an inventory item
+//! that cannot be picked, a reply the game would not take, an approval that closed meanwhile) come
+//! back as outcomes, not errors.
 
 use std::path::PathBuf;
 
 use pl_cloud_afk::{
-    CloudError, CloudNotifyPrefs, PlusAction, PlusApproval, PlusCatalog, PlusConfig,
-    PlusControlAnswer, PlusDealPage, PlusDealSummary, PlusFeedPage, PlusHistory, PlusInboxLine,
-    PlusInboxPage, PlusPanelView, PlusParseDraft, PlusQuota, PlusSaveOutcome, PlusSettings,
-    PlusThreadPage, PlusWeeklyReport,
+    CloudError, CloudNotifyPrefs, PlusAction, PlusApproval, PlusAuditEntry, PlusAuditOutcome,
+    PlusCheckOutcome, PlusConfig, PlusControlAnswer, PlusHistory, PlusInboxLine, PlusInboxPage,
+    PlusItemData, PlusNewCustomItem, PlusNewOrder, PlusOrderOutcome, PlusOrderPatch,
+    PlusOrderSettings, PlusPanelView, PlusPickOutcome, PlusQuota, PlusReceiptPage,
+    PlusReceiptSummary, PlusSaveOutcome, PlusSettings, PlusThreadPage, PlusWeeklyReport,
 };
 use pl_lang::{Lang, pick};
 use serde::Serialize;
@@ -25,8 +28,21 @@ use crate::commands::cloud_afk::{service, token};
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 
-/// The panel's first look at an account: its settings, the mode's catalog, the quota and the
-/// approvals (the last two wait while the account's machine is away).
+/// The launcher's cache folder (`<data>/cache`): AFK+'s item data and the audit logs it kept.
+fn cache_root(state: &AppState) -> PathBuf {
+    state.root.join("cache")
+}
+
+/// Signed out: the audit logs this computer kept go too (counterparts' names and masked
+/// messages stay only while the player is signed in, and 7 days at most).
+pub(crate) async fn forget_kept(app: &AppHandle, state: &AppState) {
+    service(app, state)
+        .plus_audit_prune(&cache_root(state), Vec::new())
+        .await;
+}
+
+/// The panel's first look at an account: its settings, the quota and the approvals (the last two
+/// wait while the account's machine is away).
 #[tauri::command]
 #[specta::specta]
 pub async fn cloud_afk_plus_panel(
@@ -50,18 +66,23 @@ pub async fn cloud_afk_plus_settings(
     Ok(service(&app, &state).plus_settings(&token, &id).await?)
 }
 
-/// A game mode's catalog (no session needed; kept an hour). None when it cannot be had now.
+/// The game's item data for a Minecraft version (the account's; none: the newest), checked and
+/// cached. None when it cannot be had now (the order form offers to try again).
 #[tauri::command]
 #[specta::specta]
-pub async fn cloud_afk_plus_catalog(
+pub async fn cloud_afk_plus_item_data(
     app: AppHandle,
     state: State<'_, AppState>,
-    mode: String,
-) -> CmdResult<Option<PlusCatalog>> {
-    Ok(service(&app, &state).plus_catalog(&mode).await)
+    minecraft: Option<String>,
+) -> CmdResult<Option<PlusItemData>> {
+    let root = cache_root(&state);
+    Ok(service(&app, &state)
+        .plus_item_data(&root, minecraft.as_deref())
+        .await)
 }
 
-/// Saves the settings (`rev`: the revision the panel started from).
+/// Saves the settings (`rev`: the revision the panel started from). The orders and custom items
+/// are not sent: they have their own routes.
 #[tauri::command]
 #[specta::specta]
 pub async fn cloud_afk_plus_save(
@@ -109,32 +130,163 @@ pub async fn cloud_afk_plus_control(
         .await?)
 }
 
-/// Older feed lines (the socket brings the latest while the panel is open).
+/// "Kontrol et": the player's words become an order's card (nothing is stored).
 #[tauri::command]
 #[specta::specta]
-pub async fn cloud_afk_plus_feed(
+pub async fn cloud_afk_plus_check(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
-    after: Option<String>,
-) -> CmdResult<PlusFeedPage> {
+    text: String,
+) -> CmdResult<PlusCheckOutcome> {
     let token = token(&state)?;
+    let lang = Lang::current().pick("tr", "en");
     Ok(service(&app, &state)
-        .plus_feed(&token, &id, after.as_deref())
+        .plus_check(&token, &id, &text, lang)
         .await?)
 }
 
+/// "Kaydet" of an order's card or form (or "Geri al" of a deleted one): the order, the new custom
+/// items it names and a chip's settings change, in one write.
 #[tauri::command]
 #[specta::specta]
-pub async fn cloud_afk_plus_deals(
+pub async fn cloud_afk_plus_order_create(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
-    after: Option<String>,
-) -> CmdResult<PlusDealPage> {
+    order: PlusNewOrder,
+    custom_items: Vec<PlusNewCustomItem>,
+    settings: PlusOrderSettings,
+) -> CmdResult<PlusOrderOutcome> {
     let token = token(&state)?;
     Ok(service(&app, &state)
-        .plus_deals(&token, &id, after.as_deref())
+        .plus_order_create(&token, &id, order, custom_items, settings)
+        .await?)
+}
+
+/// An order's change: "Düzenle", "Durdur", "Sürdür", "Süreyi uzat".
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_plus_order_patch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    order: String,
+    patch: PlusOrderPatch,
+) -> CmdResult<PlusOrderOutcome> {
+    let token = token(&state)?;
+    Ok(service(&app, &state)
+        .plus_order_patch(&token, &id, &order, patch)
+        .await?)
+}
+
+/// "Sil": at once, or once the order's trade ended.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_plus_order_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    order: String,
+) -> CmdResult<PlusOrderOutcome> {
+    let token = token(&state)?;
+    Ok(service(&app, &state)
+        .plus_order_delete(&token, &id, &order)
+        .await?)
+}
+
+/// "Envanterden seç": the item in a slot of the bot's inventory (5-45, as the live inventory
+/// shows it), its id and look as the view showed them.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_plus_pick(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    slot: u32,
+    item: String,
+    cmd: Option<i64>,
+    model: Option<String>,
+) -> CmdResult<PlusPickOutcome> {
+    let token = token(&state)?;
+    Ok(service(&app, &state)
+        .plus_pick(&token, &id, slot, &item, cmd, model.as_deref())
+        .await?)
+}
+
+/// A page of the audit log ("Akış"): `after` the newest entries past the last one kept, `before`
+/// older ones; `group` `deals`, `messages` or `warnings`. While the machine cannot be asked, what
+/// this computer kept.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_plus_audit(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    before: Option<i64>,
+    after: Option<i64>,
+    group: Option<String>,
+) -> CmdResult<PlusAuditOutcome> {
+    let token = token(&state)?;
+    let root = cache_root(&state);
+    Ok(service(&app, &state)
+        .plus_audit(&token, &id, &root, before, after, group.as_deref())
+        .await?)
+}
+
+/// What this computer kept of an account's audit log, newest first (the panel's first frame).
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_plus_audit_kept(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<Vec<PlusAuditEntry>> {
+    let root = cache_root(&state);
+    Ok(service(&app, &state).plus_audit_kept(&root, &id).await)
+}
+
+/// Keeps entries the live stream brought.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_plus_audit_keep(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    items: Vec<PlusAuditEntry>,
+) -> CmdResult<()> {
+    let root = cache_root(&state);
+    service(&app, &state)
+        .plus_audit_keep(&root, &id, items)
+        .await;
+    Ok(())
+}
+
+/// Drops the audit logs kept for accounts that are not AFK+ any more (`keep`: those that are).
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_plus_audit_prune(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    keep: Vec<String>,
+) -> CmdResult<()> {
+    let root = cache_root(&state);
+    service(&app, &state).plus_audit_prune(&root, keep).await;
+    Ok(())
+}
+
+/// Completed deals (receipts, 90 days), newest first.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_plus_receipts(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    before: Option<String>,
+) -> CmdResult<PlusReceiptPage> {
+    let token = token(&state)?;
+    Ok(service(&app, &state)
+        .plus_receipts(&token, &id, before.as_deref())
         .await?)
 }
 
@@ -159,7 +311,8 @@ pub enum PlusAnswerOutcome {
     Closed { state: String },
 }
 
-/// "Onayla", "Reddet", or "Fiyatı düşür" (`approve` with `max_price` below the deal's price).
+/// "Onayla", "Reddet", "Fiyatı düşür" (`approve` with `max_price` below the deal's price), "Takas
+/// oldu" / "Olmadı" (a handoff), "Evet, bu" / "Hayır" (a first sight).
 #[tauri::command]
 #[specta::specta]
 pub async fn cloud_afk_plus_answer(
@@ -314,56 +467,6 @@ pub async fn cloud_afk_plus_hand_back(
         .await?)
 }
 
-/// How "Kural oluştur" (QoL Q2) ended.
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum PlusParseOutcome {
-    Draft {
-        draft: PlusParseDraft,
-        issues: Vec<String>,
-    },
-    /// Nothing could be read: `no_item`, `no_amount`, `many_items` or `unsafe`.
-    Failed { reason: String },
-    /// The day's typed rules are used up (`daily`), or too many in an hour.
-    Limited { daily: bool },
-    /// The account's machine is not connected now.
-    Offline,
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn cloud_afk_plus_parse(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-    text: String,
-) -> CmdResult<PlusParseOutcome> {
-    let token = token(&state)?;
-    let lang = Lang::current().pick("tr", "en");
-    match service(&app, &state)
-        .plus_parse(&token, &id, &text, lang)
-        .await
-    {
-        Ok(answer) => Ok(PlusParseOutcome::Draft {
-            draft: answer.draft,
-            issues: answer.issues,
-        }),
-        Err(CloudError::Invalid("typed rule")) => Ok(PlusParseOutcome::Failed {
-            reason: "no_item".into(),
-        }),
-        Err(error) => match error.code() {
-            "parse_failed" | "invalid" => Ok(PlusParseOutcome::Failed {
-                reason: error.reason().unwrap_or("no_item").to_owned(),
-            }),
-            "rate_limited" => Ok(PlusParseOutcome::Limited {
-                daily: error.reason() == Some("daily"),
-            }),
-            "host_offline" | "unavailable" => Ok(PlusParseOutcome::Offline),
-            _ => Err(error.into()),
-        },
-    }
-}
-
 /// "Ayar geçmişi" (QoL Q7), newest first.
 #[tauri::command]
 #[specta::specta]
@@ -385,10 +488,10 @@ pub async fn cloud_afk_plus_summary(
     id: String,
     from: Option<i64>,
     to: Option<i64>,
-) -> CmdResult<PlusDealSummary> {
+) -> CmdResult<PlusReceiptSummary> {
     let token = token(&state)?;
     Ok(service(&app, &state)
-        .plus_deal_summary(&token, &id, from, to)
+        .plus_receipt_summary(&token, &id, from, to)
         .await?)
 }
 
@@ -418,8 +521,8 @@ fn downloads() -> Option<PathBuf> {
     dirs::download_dir().or_else(|| dirs::home_dir().map(|home| home.join("Downloads")))
 }
 
-/// "Tabloyu indir": the range's deals as a CSV table in the Downloads folder (Turkish headers with
-/// `;` as Turkish Excel reads them, or English with `,`; UTF-8 with a byte order mark).
+/// "Tabloyu indir": the range's receipts as a CSV table in the Downloads folder (Turkish headers
+/// with `;` as Turkish Excel reads them, or English with `,`; UTF-8 with a byte order mark).
 #[tauri::command]
 #[specta::specta]
 pub async fn cloud_afk_plus_export(
@@ -433,7 +536,7 @@ pub async fn cloud_afk_plus_export(
     let token = token(&state)?;
     let lang = Lang::current().pick("tr", "en");
     let bytes = service(&app, &state)
-        .plus_deals_csv(&token, &id, from, to, lang)
+        .plus_receipts_csv(&token, &id, from, to, lang)
         .await?;
     let Some(dir) = downloads() else {
         return Err(export_error("no Downloads folder"));
@@ -501,13 +604,11 @@ pub async fn cloud_afk_set_notify_prefs(
         .await?)
 }
 
-/// The game mode whose catalog names the items of AFK notices until an AFK+ panel was opened (the
-/// only verified profile of v1; a mode the service does not offer just reads nothing).
-const NOTICE_MODE: &str = "projects-smp";
-
-/// An AFK notice about an item gets the item's names when a catalog this launcher read knows it
-/// (the page's toast and the in-game card say "Elytra", not an id). Without one the Projects
-/// mode's catalog is read for the next notice; this one goes on at once.
+/// An AFK notice about an item gets the item's names when this launcher knows them (the page's
+/// toast and the in-game card say "Elytra", not an id): a custom item by the account's settings
+/// as read, a game item by the item data read this session. Without them the account's item data
+/// is read for the next notice; this one goes on at once (the words fall back to the id read
+/// plainly, or "özel eşya").
 pub fn name_items(app: &AppHandle, notice: &mut pl_social::AfkNotice) {
     use tauri::Manager;
     let Some(item) = notice.get("item").map(str::to_owned) else {
@@ -517,13 +618,19 @@ pub fn name_items(app: &AppHandle, notice: &mut pl_social::AfkNotice) {
         return;
     };
     let cloud = service(app, &state);
-    if let Some((tr, en)) = cloud.cached_item_name(&item) {
+    let acct = notice.get("acct").map(str::to_owned);
+    if let Some((tr, en)) = cloud.plus_item_names(acct.as_deref(), &item) {
         notice.item_name = Some(pl_social::AfkItemName { tr, en });
         return;
     }
+    if item.starts_with("custom:") {
+        return;
+    }
+    let minecraft = acct.as_deref().and_then(|acct| cloud.plus_minecraft(acct));
+    let root = cache_root(&state);
     let cloud = cloud.clone();
     tauri::async_runtime::spawn(async move {
-        let _ = cloud.plus_catalog(NOTICE_MODE).await;
+        let _ = cloud.plus_item_data(&root, minecraft.as_deref()).await;
     });
 }
 
@@ -535,7 +642,8 @@ pub fn cloud_afk_notice_seen(state: State<'_, AppState>, id: String) {
     state.social.afk_seen(&id);
 }
 
-/// The AFK+ panel is on screen: the AI's state, feed and approvals stream as `cloud-afk-live`.
+/// The AFK+ panel is on screen: the AI's state, audit log entries, orders' progress and approvals
+/// stream as `cloud-afk-live`.
 #[tauri::command]
 #[specta::specta]
 pub async fn cloud_afk_plus_watch(
