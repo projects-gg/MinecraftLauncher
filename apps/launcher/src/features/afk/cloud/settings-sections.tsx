@@ -65,6 +65,8 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
   const { t } = useTranslation();
   return (issue: Issue | undefined): string | null => {
     if (!issue) return null;
+    // A stop for a wrong password, marked on the login line (SHEET-UX).
+    if (issue.problem === "wrongPassword") return t("afkPanel.wrongPassword");
     if (issue.problem.startsWith("placeholder_")) {
       const rule =
         issue.place === "rules" && issue.index !== null

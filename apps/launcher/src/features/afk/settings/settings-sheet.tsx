@@ -411,17 +411,14 @@ function Editor({
 export function AfkSettingsSheet({
   account,
   onClose,
-  onReopen,
 }: {
   account: AfkAccount | undefined;
   onClose: () => void;
-  /** Opens the panel of this account again (the toast's "Aç" after a close with edits waiting). */
-  onReopen: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const open = Boolean(account);
   const close = () => {
-    if (account) remindKept(t, draftKey("desktop", account.id), () => onReopen(account.id));
+    if (account) remindKept(t, draftKey("desktop", account.id), account.nickname);
     onClose();
   };
   const {

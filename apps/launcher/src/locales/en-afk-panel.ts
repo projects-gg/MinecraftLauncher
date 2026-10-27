@@ -11,12 +11,12 @@ export const enAfkPanel = {
   unsavedSection: "unsaved changes",
   settingsUnsaved: "Settings, unsaved changes",
   barLabel: "Unsaved changes",
-  portRange: "The port must be between 1 and 65535.",
+  portRange: "The number after the colon must be between 1 and 65535.",
   interval: "Every",
   saveOnly: "Save only",
   kept: {
-    title: "Your changes aren't saved",
-    body: "They'll be there when you open the settings again.",
-    open: "Open settings",
+    title: "{{name}} settings not saved",
+    body: "Your changes will be there when you open the settings again.",
   },
+  wrongPassword: "The server didn't accept this password. Type the right one.",
 };

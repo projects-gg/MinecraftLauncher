@@ -40,6 +40,7 @@ import {
   PARTS,
   type Part,
   partOf,
+  passwordIssue,
   serverChanges,
   toDraft,
   toEdit,
@@ -161,8 +162,8 @@ function Editor({
       : [];
     return [...own, ...reseal, ...serverIssues];
   }, [draft, submitted, serverIssues, view, rules]);
-  // Shown with the rest, never blocking: see heldIssue.
-  const held = heldIssue(view, draft);
+  // Shown with the rest, never blocking: see heldIssue and passwordIssue.
+  const held = heldIssue(view, draft) ?? passwordIssue(view, draft);
   const shown = held ? [...issues, held] : issues;
   const unsaved = unsavedParts(draft, baseline);
 
@@ -188,7 +189,11 @@ function Editor({
         hold(slot, null);
         storeAccount(queryClient, result.account);
         void queryClient.invalidateQueries({ queryKey: CLOUD_KEY });
-        toast.success(t("cloudAfk.settings.saved", { name: result.account.name }));
+        // A running account restarts with what was saved: the toast says so, as the desktop's does.
+        toast.success(
+          t("cloudAfk.settings.saved", { name: result.account.name }),
+          isCloudActive(account) ? { description: t("afkSettings.savedReconnecting") } : undefined,
+        );
         void onSaved().finally(() => {
           saved.current = false;
           setSettling(false);
@@ -352,17 +357,14 @@ function Editor({
 export function CloudSettingsSheet({
   account,
   onClose,
-  onReopen,
 }: {
   account: CloudAccount | undefined;
   onClose: () => void;
-  /** Opens the panel of this account again (the toast's "Aç" after a close with edits waiting). */
-  onReopen: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const open = Boolean(account);
   const close = () => {
-    if (account) remindKept(t, draftKey("cloud", account.id), () => onReopen(account.id));
+    if (account) remindKept(t, draftKey("cloud", account.id), account.name);
     onClose();
   };
   // Bumped once the stored settings were read again (after a save or a conflict).

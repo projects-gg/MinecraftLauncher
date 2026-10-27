@@ -1170,7 +1170,7 @@ export const en: DeepPartial<Strings> = {
       unlimited: "Retry without limit",
       retries: "Attempts",
       ignoreKick: "Reconnect after every disconnect",
-      ignoreKickHelp: "When off, it only reconnects after a kick whose message is on the list.",
+      ignoreKickHelp: "When off, it only reconnects after the kick messages you pick.",
       kickMessages: "Kick messages that trigger a reconnect",
       kickMessagesHelp:
         "One per line. After a kick, the account only reconnects if the server's message contains one of these.",
@@ -1179,7 +1179,7 @@ export const en: DeepPartial<Strings> = {
     eat: {
       threshold: "Hunger threshold",
       thresholdValue: "{{value}} / 20",
-      note: "While on, the connection uses a little more data.",
+      note: "Auto eat uses a little more data on the connection.",
     },
     respond: {
       enabled: "Use auto reply",

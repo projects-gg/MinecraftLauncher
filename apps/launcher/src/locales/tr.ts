@@ -840,7 +840,7 @@ export const tr = {
       login: "Giriş komutları",
       scheduler: "Zamanlayıcı",
       antiAfk: "AFK engelleme",
-      relog: "Otomatik yeniden bağlanma",
+      relog: "Otomatik yeniden bağlan",
       eat: "Otomatik yemek",
       respond: "Otomatik yanıt",
       chatLog: "Sohbet günlüğü",
@@ -928,7 +928,7 @@ export const tr = {
       unlimited: "Sınırsız dene",
       retries: "Deneme sayısı",
       ignoreKick: "Her kopuşta yeniden bağlan",
-      ignoreKickHelp: "Kapalıyken yalnız listedeki mesajlarla atılınca yeniden bağlanır.",
+      ignoreKickHelp: "Kapalıyken yalnız seçtiğin atılma mesajlarında yeniden bağlanır.",
       kickMessages: "Yeniden bağlanmayı tetikleyen atılma mesajları",
       kickMessagesHelp:
         "Her satıra bir tane. Atılınca yalnız sunucunun mesajı bunlardan birini içeriyorsa yeniden bağlanılır.",
@@ -937,7 +937,7 @@ export const tr = {
     eat: {
       threshold: "Açlık eşiği",
       thresholdValue: "{{value}} / 20",
-      note: "Açıkken bağlantı biraz daha fazla veri kullanır.",
+      note: "Otomatik yemek bağlantıda biraz daha fazla veri kullanır.",
     },
     respond: {
       enabled: "Otomatik yanıtı kullan",

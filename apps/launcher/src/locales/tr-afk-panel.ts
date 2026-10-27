@@ -17,15 +17,16 @@ export const trAfkPanel = {
   /** The change bar's region. */
   barLabel: "Kaydedilmemiş değişiklikler",
   /** Under the one address field ("mc.sunucu.net:25570"), when the port is out of range. */
-  portRange: "Port 1 ile 65535 arasında olmalı.",
+  portRange: "İki noktadan sonraki sayı 1 ile 65535 arasında olmalı.",
   /** A scheduled task's "every 300–600 sn". */
   interval: "Aralık",
   /** A running desktop account's plain save, beside "Kaydet ve yeniden bağlan". */
   saveOnly: "Yalnız kaydet",
   /** The toast after a close with edits waiting (a closed panel reads as a saved one). */
   kept: {
-    title: "Değişikliklerin kaydedilmedi",
-    body: "Ayarları yeniden açınca yerinde olacaklar.",
-    open: "Ayarları aç",
+    title: "{{name}} ayarları kaydedilmedi",
+    body: "Değişikliklerin, ayarları yeniden açınca yerinde olacak.",
   },
+  /** Under a cloud account's login line after the machine stopped it for a wrong password. */
+  wrongPassword: "Sunucu bu şifreyi kabul etmedi. Doğrusunu yaz.",
 };

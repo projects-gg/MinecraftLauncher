@@ -36,15 +36,17 @@ export function draftKey(kind: "desktop" | "cloud", id: string): string {
 }
 
 /**
- * A panel closed with edits in it says so once, quietly, with the way back (a closed panel is easy
- * to take for a saved one): "Değişikliklerin kaydedilmedi", "Ayarları aç".
+ * A panel closed with edits in it says so once, quietly, naming the account (a closed panel is
+ * easy to take for a saved one); the way back is the card's settings button, which keeps its dot.
+ * No button in the toast: it rests right above OYNA.
  */
-export function remindKept(t: (key: string) => string, key: string, reopen: () => void) {
+export function remindKept(
+  t: (key: string, values?: Record<string, string>) => string,
+  key: string,
+  name: string,
+) {
   if (!(key in useAfkDrafts.getState().held)) return;
-  toast(t("afkPanel.kept.title"), {
-    description: t("afkPanel.kept.body"),
-    action: { label: t("afkPanel.kept.open"), onClick: reopen },
-  });
+  toast(t("afkPanel.kept.title", { name }), { description: t("afkPanel.kept.body") });
 }
 
 /** Whether the account's panel was closed with edits in it (the dot on its settings button). */

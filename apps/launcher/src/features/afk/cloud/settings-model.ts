@@ -54,13 +54,45 @@ export function partOf(issue: Issue): Part {
  * düzelt" and the machine names no row): the section holding a login line, a command first.
  */
 export function loginPart(view: CloudEditData, draft: Draft): Part | null {
-  const hold = view.account.hold;
-  if (hold?.kind !== "cause" || hold.cause !== "wrongPassword") return null;
-  const login = (words: Words) =>
-    words.kind !== "plain" || looksSensitive(withoutLeadingIgnorable(words.text));
-  if (draft.config.commands.some((c) => login(c.words))) return "commands";
-  if (draft.config.rules.some((r) => login(r.reply))) return "replies";
-  return "commands";
+  if (!stoppedOnPassword(view)) return null;
+  return loginRow(draft)?.place === "rules" ? "replies" : "commands";
+}
+
+const stoppedOnPassword = (view: CloudEditData) =>
+  view.account.hold?.kind === "cause" && view.account.hold.cause === "wrongPassword";
+
+const isLogin = (words: Words) =>
+  words.kind !== "plain" || looksSensitive(withoutLeadingIgnorable(words.text));
+
+/** The first row holding a login: a command first, else a reply. */
+function loginRow(draft: Draft): { place: "commands" | "rules"; index: number } | null {
+  const command = draft.config.commands.findIndex((c) => isLogin(c.words));
+  if (command >= 0) return { place: "commands", index: command };
+  const rule = draft.config.rules.findIndex((r) => isLogin(r.reply));
+  return rule >= 0 ? { place: "rules", index: rule } : null;
+}
+
+/**
+ * The login line a stop for a wrong password points at (the machine names no row). Shown with
+ * the rest, never blocking (as `heldIssue`), while the line still has the stored words.
+ */
+export function passwordIssue(view: CloudEditData, draft: Draft): Issue | null {
+  if (!stoppedOnPassword(view)) return null;
+  const row = loginRow(draft);
+  if (!row) return null;
+  const same = (a: Words, b: Words | undefined) => JSON.stringify(a) === JSON.stringify(b);
+  if (row.place === "commands") {
+    const command = draft.config.commands[row.index];
+    const stored = view.config.commands.find((c) => c.id === command?.id)?.words;
+    return command && same(command.words, stored)
+      ? { place: "commands", index: row.index, field: "text", problem: "wrongPassword" }
+      : null;
+  }
+  const rule = draft.config.rules[row.index];
+  const stored = view.config.rules.find((r) => r.id === rule?.id)?.reply;
+  return rule && same(rule.reply, stored)
+    ? { place: "rules", index: row.index, field: "reply", problem: "wrongPassword" }
+    : null;
 }
 
 /** What each section edits (every field of the draft belongs to one). */

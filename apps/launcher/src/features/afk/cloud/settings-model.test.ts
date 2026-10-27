@@ -16,6 +16,7 @@ import {
   nextId,
   PARTS,
   partOf,
+  passwordIssue,
   portOf,
   serverChanges,
   textProblem,
@@ -475,5 +476,27 @@ describe("a wrong password opens where the login line is (SHEET-UX)", () => {
 
   it("says nothing without that stop", () => {
     expect(loginPart(view(), toDraft(view()))).toBeNull();
+    expect(passwordIssue(view(), toDraft(view()))).toBeNull();
+  });
+
+  it("marks the login line while it still has the stored words", () => {
+    const data = stopped();
+    const draft = toDraft(data);
+    expect(passwordIssue(data, draft)).toEqual({
+      place: "commands",
+      index: 0,
+      field: "text",
+      problem: "wrongPassword",
+    });
+    const retyped = {
+      ...draft,
+      config: {
+        ...draft.config,
+        commands: draft.config.commands.map((c, i) =>
+          i === 0 ? { ...c, words: { kind: "secret" as const, text: "/login Yeni456" } } : c,
+        ),
+      },
+    };
+    expect(passwordIssue(data, retyped)).toBeNull();
   });
 });
