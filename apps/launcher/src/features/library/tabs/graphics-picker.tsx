@@ -1,13 +1,15 @@
-import { Lightning, Scales, SlidersHorizontal, Sparkle } from "@phosphor-icons/react";
+import { Lightning, Mountains, Scales, SlidersHorizontal } from "@phosphor-icons/react";
 import { Segmented } from "@pl/ui";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { type GraphicsChoice, graphicsChoices } from "./settings-form";
 
+// Güzel is the far, full view (Settings → Grafik ve FPS draws the same mountains); no sparkle
+// imagery (projects-taste).
 const graphicsIcons: Record<GraphicsChoice, ReactNode> = {
   smooth: <Lightning size={15} />,
   balanced: <Scales size={15} />,
-  quality: <Sparkle size={15} />,
+  quality: <Mountains size={15} />,
   custom: <SlidersHorizontal size={15} />,
 };
 

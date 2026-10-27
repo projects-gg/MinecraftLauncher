@@ -4772,7 +4772,6 @@ dependencies = [
  "pl-overlay",
  "pl-social",
  "pl-worlds",
- "regex",
  "semver",
  "serde",
  "serde_json",

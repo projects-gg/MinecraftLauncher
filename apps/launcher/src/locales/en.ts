@@ -267,7 +267,6 @@ export const en: DeepPartial<Strings> = {
     },
     account: {
       row: "Friends",
-      connect: "Connect with Discord",
       connected_one: "{{count}} friend online",
       connected_other: "{{count}} friends online",
       noneOnline: "No one's online right now",
@@ -592,8 +591,8 @@ export const en: DeepPartial<Strings> = {
       afkRow: "Your AFK accounts",
       afkTotal_one: "{{count}} account",
       afkTotal_other: "{{count}} accounts",
-      afkOnline: "{{count}} online",
-      afkNoneOnline: "none online",
+      afkOnline: "{{count}} in game",
+      afkNoneOnline: "none in game",
       addTitle: "Add account",
       or: "or",
       addOffline: "Add",

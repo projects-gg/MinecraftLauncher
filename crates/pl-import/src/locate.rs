@@ -92,6 +92,27 @@ impl Locations {
         }
     }
 
+    /// The v1 Projects Launcher's folder, `%APPDATA%\.projects` (it ran on Windows only): its
+    /// premium session, AFK accounts and client, and the game data it ran.
+    pub fn projects_v1(&self) -> Option<PathBuf> {
+        match self.os {
+            Os::Windows => self.data_dir.as_ref().map(|d| d.join(".projects")),
+            Os::MacOs | Os::Linux => None,
+        }
+    }
+
+    /// Where the v1 launcher (a ClickOnce .NET app) kept its `user.config`, the offline nickname
+    /// among its settings: ClickOnce's data folder and the app's own, under `%LOCALAPPDATA%`.
+    pub fn projects_v1_settings(&self) -> Vec<PathBuf> {
+        match (self.os, self.local_data_dir.as_ref()) {
+            (Os::Windows, Some(local)) => vec![
+                local.join("Apps").join("2.0").join("Data"),
+                local.join("Projects"),
+            ],
+            _ => Vec::new(),
+        }
+    }
+
     /// TLauncher's own folder (`tlauncher-2.0.properties`).
     pub(crate) fn tlauncher(&self) -> Option<PathBuf> {
         match self.os {

@@ -393,7 +393,12 @@ pub async fn account_import_legacy(state: State<'_, AppState>) -> CmdResult<Lega
     #[cfg(windows)]
     {
         use pl_auth::LegacyImport;
-        Ok(match state.auth.import_legacy_premium().await? {
+        // Where the v1 scan looks (a pretend home in debug builds: `commands::import::locations`).
+        let imported = match crate::commands::migrate::legacy_premium_file() {
+            Some(path) => state.auth.import_legacy_premium_from(&path).await?,
+            None => LegacyImport::NotFound,
+        };
+        Ok(match imported {
             LegacyImport::Imported { account } => LegacyAccountImport::Imported {
                 account: view_of(&state, &account),
             },

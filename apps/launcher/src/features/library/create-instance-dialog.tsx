@@ -1,4 +1,4 @@
-import { Sparkle } from "@phosphor-icons/react";
+import { Plus } from "@phosphor-icons/react";
 import {
   Button,
   cn,
@@ -233,7 +233,7 @@ export function CreateInstanceDialog({
               </Button>
               <Button
                 variant="primary"
-                icon={<Sparkle size={16} weight="fill" />}
+                icon={<Plus size={16} weight="bold" />}
                 onClick={() => create.mutate()}
                 disabled={!canCreate}
               >

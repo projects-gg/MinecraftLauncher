@@ -12,6 +12,9 @@
 //!   resource packs, shader packs and screenshots into the Projects instance, and every chosen
 //!   profile or instance into an instance of its own (its mods become "Kendi modların").
 //!   Installed versions are not copied: the instances download them through the launcher.
+//! - [`Locations::projects_v1`] and [`projects_v1_nickname`] find the v1 Projects Launcher's data
+//!   for its own first-run step (the launcher's `commands::migrate` brings it over), under the same
+//!   pretend home as the rest in end-to-end runs.
 //!
 //! Rules every part keeps:
 //!
@@ -34,6 +37,7 @@ pub mod options;
 mod run;
 pub mod servers;
 mod sqlite;
+mod v1;
 mod version_json;
 mod worlds;
 
@@ -45,3 +49,4 @@ pub use measure::measure;
 pub use model::*;
 pub use run::{InstanceLocker, OfficialTarget, ProgressFn, RunContext, run_import};
 pub use tokio_util::sync::CancellationToken;
+pub use v1::projects_v1_nickname;
