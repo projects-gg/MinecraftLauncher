@@ -375,7 +375,11 @@ export function ReportSection({
           ) : report.isError ? (
             <QuietEmpty icon="logs">{t("afkPlus.report.failed")}</QuietEmpty>
           ) : week && (week.pms || week.bought || week.sold) ? (
-            <WeekStatement week={week} server={server} />
+            <>
+              <WeekStatement week={week} server={server} />
+              {/* The week is what the assistant did (27 Oct 2026: it can make mistakes). */}
+              <p className="mt-2 text-[12px] text-ash-400">{t("afkPlus.aiNote")}</p>
+            </>
           ) : (
             <QuietEmpty icon="logs">{t("afkPlus.report.weekEmpty")}</QuietEmpty>
           )}

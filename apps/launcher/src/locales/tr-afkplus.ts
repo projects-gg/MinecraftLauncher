@@ -6,6 +6,9 @@
 // Root key `afkPlus`.
 export const trAfkPlus = {
   name: "AFK+",
+  // Under what the assistant made or did: the order card, an approval, the feed, the week (27 Oct
+  // 2026, the owner: the assistant can make mistakes).
+  aiNote: "Asistan yapay zekâdır, hata yapabilir.",
   intro: {
     // The price beside it buys a whole account: the 24/7 machine comes with the assistant. The
     // product's name never breaks (a no-break space after "7/24").
@@ -399,7 +402,7 @@ export const trAfkPlus = {
       tckn: "Kimlik numarası paylaşılamaz.",
       card: "Kart numarası paylaşılamaz.",
       words: "Bu mesaj gönderilemez.",
-      marker: "[AFK+] ile başlayamaz; o işareti asistan koyar.",
+      marker: "[AFK+] ile başlayamaz; o etiket asistana ait.",
       length: "En çok 200 karakter olabilir.",
       form: "Bu mesaj gönderilemez.",
     },
@@ -689,6 +692,27 @@ export const trAfkPlus = {
       polite: "Merhaba, 32.000 sizin için uygun olur mu?",
       playful: "Selam, 32.000'e el sıkışalım mı?",
     },
+    // "Oyuncu gibi konuşsun" (27 Oct 2026): the wording only; the samples as it then writes them.
+    playerTalk: "Oyuncu gibi konuşsun",
+    playerTalkHelp: "Sohbette resmi dil yerine oyuncu gibi konuşur.",
+    samplesPlayer: {
+      friendly: "slm knk, 32k olur mu",
+      brief: "32k?",
+      polite: "merhaba, 32k olur mu?",
+      playful: "32k'ya anlaşalım mı xd",
+    },
+    // The tag before its lines: the player's choice, off by default; never staff or a player.
+    prefix: "Mesajlarının başına etiket koysun",
+    prefixLabel: "Etiket",
+    prefixErrors: {
+      empty: "Etiketi yaz ya da kapat.",
+      length: "En çok {{max}} karakter olabilir.",
+      form: "Yalnız harf, rakam, boşluk ve basit işaretler kullanılabilir.",
+      staff: "Etiket yetkili ya da sistem gibi görünemez.",
+      name: "Etikette başka bir oyuncunun adı olamaz.",
+      contact: "Etikette bağlantı, iletişim bilgisi ya da uygulama adı olamaz.",
+      words: "Bu etiket kullanılamaz.",
+    },
     intro: "Tanıtım",
     introHelp: "İlk mesajında kendini böyle tanıtır.",
     introPlaceholder: "Ahmet'in AFK+ asistanı",
@@ -715,7 +739,7 @@ export const trAfkPlus = {
     },
     text: {
       length: "En çok {{max}} karakter olabilir.",
-      marker: "[AFK+] yazılamaz; o işareti asistan koyar.",
+      marker: "[AFK+] yazılamaz; o etiket asistana ait.",
       link: "Bağlantı yazılamaz.",
       phone: "Telefon numarası yazılamaz.",
       email: "E-posta yazılamaz.",
@@ -728,8 +752,8 @@ export const trAfkPlus = {
       trade: "Ticaret konuşmalarına",
       off: "Yalnız hazır cevaplar",
     },
-    smallTalk: "Sohbete de katılsın",
-    smallTalkHelp: "Aynı oyuncuya saatte en çok 3 sohbet cevabı.",
+    // Small talk said as its opposite, on by default (27 Oct 2026).
+    offTopic: "Konu dışına çıkmasın",
     away: "Diğer mesajlara uzakta olduğunu söylesin",
     lang: "Dil",
     // The languages themselves are named in their own language in the code (design.md §7).

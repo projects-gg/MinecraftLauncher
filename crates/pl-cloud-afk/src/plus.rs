@@ -353,7 +353,12 @@ pub struct PlusPersona {
     pub status: String,
     /// `back_soon`, `back_evening`, `back_tomorrow`, `weekend`, `busy` (QoL Q3).
     pub status_preset: Option<String>,
+    /// Small talk; "Konu dışına çıkmasın" is its opposite (off by default since 27 Oct 2026).
     pub small_talk: bool,
+    /// "Oyuncu gibi konuşsun": chats like a player instead of in formal language.
+    pub player_talk: bool,
+    /// The tag before the assistant's lines: the player's choice, off by default.
+    pub prefix: PlusPrefix,
 }
 
 impl Default for PlusPersona {
@@ -363,7 +368,28 @@ impl Default for PlusPersona {
             intro: String::new(),
             status: String::new(),
             status_preset: None,
-            small_talk: true,
+            small_talk: false,
+            player_talk: false,
+            prefix: PlusPrefix::default(),
+        }
+    }
+}
+
+/// The tag before the assistant's lines (`persona.prefix`, the owner's decision of 27 Oct 2026):
+/// off, with `[AFK+]` as its text, until the player sets one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusPrefix {
+    pub on: bool,
+    /// 1-16 code points: Latin letters, digits, spaces and a few marks; never staff or a player.
+    pub text: String,
+}
+
+impl Default for PlusPrefix {
+    fn default() -> Self {
+        Self {
+            on: false,
+            text: crate::plus_check::PREFIX_DEFAULT_TEXT.into(),
         }
     }
 }
@@ -2225,7 +2251,8 @@ mod tests {
     /// The contract's defaults (README "AfkPlusConfig v2"), with one order and one custom item.
     fn document() -> serde_json::Value {
         json!({"v": 2, "enabled": true, "mode": "projects-smp", "lang": "auto",
-          "persona": {"preset": "friendly", "intro": "", "status": "", "statusPreset": null, "smallTalk": true},
+          "persona": {"preset": "friendly", "intro": "", "status": "", "statusPreset": null, "smallTalk": true,
+            "playerTalk": false, "prefix": {"on": false, "text": "[AFK+]"}},
           "replies": {"scope": "trade", "away": true, "saveAt": 80},
           "authority": "ask", "allow": {"buy": true, "sell": true}, "pay": "money",
           "who": {"mode": "all", "friends": []},

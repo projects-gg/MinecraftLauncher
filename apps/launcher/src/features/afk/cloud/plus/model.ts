@@ -319,6 +319,102 @@ export function personaTextProblem(text: string, max: number): PersonaTextProble
   return null;
 }
 
+/** The tag before the assistant's lines until the player sets one: off, "[AFK+]" (27 Oct 2026). */
+export const PREFIX_DEFAULT: Readonly<{ on: boolean; text: string }> = Object.freeze({
+  on: false,
+  text: "[AFK+]",
+});
+export const PREFIX_MAX = 16;
+
+export type PrefixProblem = "empty" | "length" | "form" | "staff" | "name";
+
+/** A tag's characters (the service's rule): Latin letters, ASCII digits, spaces and a few marks. */
+const PREFIX_CHARS = /^[\p{Script=Latin}0-9 [\]()+\-_.!?*#|~^=:']+$/u;
+/** Staff, system and server words, folded, anywhere in the tag's letters (the service's list). */
+const PREFIX_STAFF_WORDS = [
+  "yetkili",
+  "admin",
+  "moderator",
+  "sistem",
+  "system",
+  "server",
+  "sunucu",
+  "konsol",
+  "console",
+  "staff",
+  "kurucu",
+  "founder",
+  "owner",
+  "destek",
+  "support",
+  "rehber",
+  "helper",
+  "duyuru",
+  "bilgi",
+  "info",
+  "projects",
+  "operator",
+  "yonetic",
+  "yonetim",
+  "guvenlik",
+  "security",
+  "resmi",
+  "official",
+  "gelistirici",
+  "developer",
+];
+/** Short ones: whole words only (camel case split first). */
+const PREFIX_STAFF_SHORT = new Set(["mod", "adm", "op", "gm", "sys", "dev"]);
+const PREFIX_FOLD: Record<string, string> = {
+  ç: "c",
+  ğ: "g",
+  ı: "i",
+  ö: "o",
+  ş: "s",
+  ü: "u",
+  â: "a",
+  î: "i",
+  û: "u",
+  "0": "o",
+  "1": "i",
+  "3": "e",
+  "4": "a",
+  "5": "s",
+  "7": "t",
+  "!": "i",
+  "|": "i",
+};
+
+/**
+ * The panel's quick look at the tag as the player types it (README "AfkPlusConfig v2" →
+ * `persona.prefix`, the same look as the site's): empty, over 16 characters, other characters, a
+ * staff or system word (look-alike digits and camel case too), or a friend's or blocked player's
+ * name. `plus_check.rs` and the service have the last word (links, apps, words).
+ */
+export function prefixProblem(text: string, names: readonly string[] = []): PrefixProblem | null {
+  // Spaces as the chat cleaning leaves them: trimmed, runs as one.
+  const value = text.trim().replace(/\s+/gu, " ");
+  if (!value) return "empty";
+  if ([...value].length > PREFIX_MAX) return "length";
+  if (!PREFIX_CHARS.test(value)) return "form";
+  let form = "";
+  for (const char of value.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").toLocaleLowerCase("tr")) {
+    form += PREFIX_FOLD[char] ?? char;
+  }
+  if (form.split(/[^a-z]+/u).some((word) => PREFIX_STAFF_SHORT.has(word))) return "staff";
+  const letters = form.replace(/[^a-z]+/gu, "");
+  if (PREFIX_STAFF_WORDS.some((word) => letters.includes(word))) return "staff";
+  const known = new Set(names.map((name) => name.toLowerCase()));
+  if (
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9_]+/u)
+      .some((word) => known.has(word))
+  )
+    return "name";
+  return null;
+}
+
 /** Days Monday first (1 … 7). */
 export const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 
