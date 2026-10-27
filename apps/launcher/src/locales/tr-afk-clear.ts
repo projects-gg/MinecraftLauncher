@@ -24,7 +24,7 @@ export const trAfkClear = {
     stopHere: "Buradakileri durdur",
     connectHere: "Buradakileri bağla",
     /** On "Buradakileri bağla" while the list has an account the server stopped (a ban, a password). */
-    skipped: "Sunucunun durdurduğu hesap bağlanmaz.",
+    skipped: "Sunucunun durdurduğu hesap toplu bağlanmaz. Önce kartından düzelt.",
   },
   /** The 7/24 Bulut list's count while some of its accounts run on this computer (listed there). */
   cloud: {
@@ -45,6 +45,8 @@ export const trAfkClear = {
     timeLeft: "Bulutta {{time}}",
     hereSettings: "Bu bilgisayardaki ayarlar",
     cloudSettings: "Buluttaki ayarlar",
+    /** Its menu's "Ayarlarını kopyala": the copy takes the cloud's set. */
+    copyCloud: "Buluttaki ayarları kopyala",
     /** The settings panel's title: which of the two it is. */
     hereTitle: "Bu bilgisayardaki {{name}} ayarları",
     cloudTitle: "Buluttaki {{name}} ayarları",
@@ -57,6 +59,8 @@ export const trAfkClear = {
   copy: {
     refused:
       "Sunucu {{name}} hesabının şifresini kabul etmedi. Önce şifresini düzelt, sonra kopyala.",
+    /** Beside the waiting "Kopyala" while a password field is empty. */
+    typeFirst: "Önce şifreleri yaz.",
   },
   /** A secret line's field (the eye inside it, what a screen reader hears for a kept one). */
   secret: {

@@ -479,7 +479,14 @@ export function CloudCard({
         ]
       : []),
     ...(onCopy
-      ? [{ label: t("cloudAfkFeat.copy.menu"), icon: <Copy size={16} />, onSelect: onCopy }]
+      ? [
+          {
+            // A twin has two sets: the copy takes the cloud's, and says so.
+            label: here ? t("afkClear.twin.copyCloud") : t("cloudAfkFeat.copy.menu"),
+            icon: <Copy size={16} />,
+            onSelect: onCopy,
+          },
+        ]
       : []),
     ...(onPlus
       ? [{ label: t("afkPlus.card.open"), icon: <ChatsCircle size={16} />, onSelect: onPlus }]

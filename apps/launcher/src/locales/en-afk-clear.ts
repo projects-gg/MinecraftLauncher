@@ -12,9 +12,10 @@ export const enAfkClear = {
     noneRunning: "No account runs here now",
   },
   bulk: {
-    stopHere: "Stop all here",
-    connectHere: "Connect all here",
-    skipped: "Accounts the server stopped aren't connected.",
+    stopHere: "Stop all on this PC",
+    connectHere: "Connect all on this PC",
+    skipped:
+      "An account the server stopped isn't connected with the others. Fix it on its card first.",
   },
   cloud: {
     countHere_one: "{{count}} cloud account, {{here}} on this PC",
@@ -31,6 +32,7 @@ export const enAfkClear = {
     timeLeft: "{{time}} in the cloud",
     hereSettings: "Settings on this PC",
     cloudSettings: "Cloud settings",
+    copyCloud: "Copy cloud settings",
     hereTitle: "{{name}} settings on this PC",
     cloudTitle: "{{name}} cloud settings",
     removeHere: "Remove from this PC",
@@ -40,6 +42,7 @@ export const enAfkClear = {
   },
   copy: {
     refused: "The server turned down {{name}}'s password. Fix it first, then copy.",
+    typeFirst: "Type the passwords first.",
   },
   secret: {
     show: "Show",

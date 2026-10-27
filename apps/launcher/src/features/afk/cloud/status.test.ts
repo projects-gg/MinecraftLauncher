@@ -202,7 +202,7 @@ describe("cloudStatus", () => {
   it("counts down to the next try and then reads as connecting", () => {
     const waiting = account({ live: live("waiting", { retryAt: NOW + 11, attempt: 2 }) });
     const status = cloudStatus(waiting, NOW * 1000, t);
-    expect(status.text).toBe("Yeniden bağlanacak, 11 sn");
+    expect(status.text).toBe("11 sn sonra yeniden bağlanacak");
     expect(status.nextChangeMs).toBe(1000);
     const due = cloudStatus(waiting, (NOW + 10.5) * 1000, t);
     expect(due).toMatchObject({ signal: "pending", text: trCloudAfk.state.connecting });

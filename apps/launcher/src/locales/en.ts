@@ -1129,7 +1129,7 @@ export const en: DeepPartial<Strings> = {
       remove: "Remove command",
       empty: "No commands yet.",
       stored: "Saved",
-      storedHint: "Passwords are kept safely on this computer; saved ones are never shown here.",
+      storedHint: "Saved passwords aren't shown here.",
       replace: "Change",
       undoReplace: "Keep the old one",
       newSecret: "New password",
@@ -1166,7 +1166,7 @@ export const en: DeepPartial<Strings> = {
     },
     relog: {
       delay: "Wait time",
-      unlimited: "Retry without limit",
+      unlimited: "Keep trying until it connects",
       retries: "Attempts",
       when: "When",
       whenAny: "Any disconnect",

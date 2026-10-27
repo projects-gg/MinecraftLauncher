@@ -29,7 +29,7 @@ export const trCloudAfk = {
     runningNow: "Oyunda",
     connecting: "Bağlanıyor",
     waiting: "Yeniden bağlanacak",
-    waitingIn: "Yeniden bağlanacak, {{secs}} sn",
+    waitingIn: "{{secs}} sn sonra yeniden bağlanacak",
     queued: "Sırada",
     queuedFull: "Sırada: sunucunun bulut sınırı dolu",
     stopped: "Durduruldu",
