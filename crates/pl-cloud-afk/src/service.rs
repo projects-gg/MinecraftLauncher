@@ -22,13 +22,14 @@ use crate::config::{
 };
 use crate::copies::{Copies, RowCopies};
 use crate::error::{CloudError, Result};
+use crate::feat::{CloudFeatures, PlaceholderRules};
 use crate::live::{LiveHub, LiveSink};
 use crate::migrate::{CloudMovePlan, MoveContext, plan};
 use crate::model::{
     AccountPatch, CloudAccount, CloudAccountCount, CloudCanBuy, CloudLimits, CloudLocalized,
     CloudLogPage, CloudServer, CloudVersions, Me, Offer, ServiceMode, VaultKey,
 };
-use crate::plus::{MePlus, PlusCatalog, PlusOffer};
+use crate::plus::{MePlus, PlusOffer};
 use crate::seal::{CONSOLE_ROW, RevealKey, RevealTarget, SealTarget, seal};
 use crate::server::{CloudAddressProblem, normalize, same_server};
 use crate::text::{check_text, looks_sensitive};
@@ -76,6 +77,9 @@ pub struct CloudOverview {
     pub plus: Option<PlusOffer>,
     /// With a session: whether this player may buy AFK+ (an invite list, a restriction).
     pub plus_me: Option<MePlus>,
+    /// Studio's switches of the cloud features (CAFK-FEAT); None from a service before them, which
+    /// shows none of them (bulk management included).
+    pub features: Option<CloudFeatures>,
 }
 
 impl CloudOverview {
@@ -97,6 +101,7 @@ impl CloudOverview {
             now: 0,
             plus: None,
             plus_me: None,
+            features: None,
         }
     }
 }
@@ -191,8 +196,8 @@ pub(crate) struct Inner {
     pub(crate) known: Mutex<Known>,
     copies: Arc<Copies>,
     pub(crate) live: LiveHub,
-    /// AFK+ catalogs by game mode, with when they were read (an hour, as the service's caches).
-    pub(crate) catalogs: Mutex<HashMap<String, (Instant, PlusCatalog)>>,
+    /// AFK+: the item data and the settings read this session.
+    pub(crate) plus: crate::service_plus::PlusCache,
 }
 
 /// Cheap to clone.
@@ -237,7 +242,7 @@ impl CloudService {
                 known: Mutex::new(Known::default()),
                 copies: Arc::new(copies),
                 live,
-                catalogs: Mutex::new(HashMap::new()),
+                plus: crate::service_plus::PlusCache::default(),
             }),
         }
     }
@@ -247,7 +252,7 @@ impl CloudService {
     }
 
     /// The offer, cached (`force`: read it again now, "Tekrar dene").
-    async fn offer(&self, force: bool) -> Option<Offer> {
+    pub(crate) async fn offer(&self, force: bool) -> Option<Offer> {
         if !force && let Some(cached) = self.inner.offer.lock().fresh(OFFER_FRESH, OFFER_FAILED) {
             return cached;
         }
@@ -283,7 +288,7 @@ impl CloudService {
         }
     }
 
-    async fn vault_key(&self) -> Result<VaultKey> {
+    pub(crate) async fn vault_key(&self) -> Result<VaultKey> {
         if let Some(Some(key)) = self.inner.vault.lock().fresh(VAULT_FRESH, Duration::ZERO) {
             return Ok(key);
         }
@@ -292,7 +297,7 @@ impl CloudService {
         Ok(key)
     }
 
-    async fn owner(&self, token: &Bearer) -> Result<String> {
+    pub(crate) async fn owner(&self, token: &Bearer) -> Result<String> {
         if let Some(owner) = self.inner.known.lock().owner.clone() {
             return Ok(owner);
         }
@@ -317,7 +322,7 @@ impl CloudService {
         self.fresh_account(token, id).await
     }
 
-    async fn fresh_account(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
+    pub(crate) async fn fresh_account(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
         let account = self.inner.client.account(token, id).await?;
         self.remember(&account);
         Ok(account)
@@ -346,6 +351,7 @@ impl CloudService {
             renewal_window_days: offer.renewal_window_days,
             limits: offer.limits.clone(),
             plus: offer.plus.clone(),
+            features: offer.features.as_ref().map(CloudFeatures::from),
             ..CloudOverview::hidden()
         };
         let Some(token) = token else {
@@ -399,7 +405,7 @@ impl CloudService {
     pub async fn forget(&self) {
         self.inner.live.stop_all();
         *self.inner.known.lock() = Known::default();
-        self.inner.catalogs.lock().clear();
+        self.inner.plus.forget();
         let copies = self.inner.copies.clone();
         let _ = blocking(move || copies.forget_all()).await;
     }
@@ -492,13 +498,13 @@ impl CloudService {
         })
     }
 
-    async fn load_copies(&self, owner: &str, id: &str) -> Result<RowCopies> {
+    pub(crate) async fn load_copies(&self, owner: &str, id: &str) -> Result<RowCopies> {
         let copies = self.inner.copies.clone();
         let (owner, id) = (owner.to_owned(), id.to_owned());
         blocking(move || copies.load(&owner, &id)).await?
     }
 
-    async fn save_copies(&self, owner: &str, id: &str, rows: RowCopies) {
+    pub(crate) async fn save_copies(&self, owner: &str, id: &str, rows: RowCopies) {
         let copies = self.inner.copies.clone();
         let (owner, id) = (owner.to_owned(), id.to_owned());
         match blocking(move || copies.save(&owner, &id, &rows)).await {
@@ -541,11 +547,9 @@ impl CloudService {
             return Ok(CloudSaveOutcome::Conflict { account: current });
         }
         let owner = self.owner(token).await?;
-        let limits = self
-            .offer(false)
-            .await
-            .map(|offer| offer.limits)
-            .unwrap_or_default();
+        let offer = self.offer(false).await;
+        let placeholders = PlaceholderRules::of(offer.as_ref().and_then(|o| o.features.as_ref()));
+        let limits = offer.map(|offer| offer.limits).unwrap_or_default();
         let server = edit
             .server
             .clone()
@@ -566,7 +570,16 @@ impl CloudService {
             None if server_changed => Some(edit_config(&current.config, &before)),
             None => None,
         };
-        if let Some(config) = config {
+        if let Some(mut config) = config {
+            // A service before movement refuses the field: it goes only where the account has it.
+            if current
+                .features
+                .as_ref()
+                .and_then(|features| features.movement.as_ref())
+                .is_none()
+            {
+                config.movement = None;
+            }
             let key = self.vault_key().await?;
             let ctx = SealContext {
                 key: &key,
@@ -578,6 +591,7 @@ impl CloudService {
             match build(
                 &config,
                 &limits,
+                &placeholders,
                 &ctx,
                 &before,
                 &fingerprints(&current.config),
@@ -734,6 +748,21 @@ fn refusal_issues(error: &CloudError) -> Option<Vec<CloudIssue>> {
         "server_blocked" => CloudIssue::from_path("server", "blocked"),
         "server_full" => CloudIssue::from_path("server", "full"),
         "server_change_limit" => CloudIssue::from_path("server", "changeLimit"),
+        // No movement slot: another of the player's accounts has it (`player`), or the machine's
+        // slots are taken (`host`).
+        "limit_movement" => {
+            let scope = error.extra_str("scope").unwrap_or("host");
+            CloudIssue {
+                max: error
+                    .extra("max")
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|max| u32::try_from(max).ok()),
+                ..CloudIssue::from_path(
+                    "movement",
+                    if scope == "player" { "player" } else { "host" },
+                )
+            }
+        }
         _ => return None,
     };
     Some(vec![issue])
@@ -762,7 +791,8 @@ mod tests {
                 place: "commands".into(),
                 index: Some(1),
                 field: "text".into(),
-                problem: "variable".into()
+                problem: "variable".into(),
+                max: None,
             }])
         );
         let error = from_response(
@@ -781,6 +811,44 @@ mod tests {
                 .as_bytes(),
         );
         assert_eq!(refusal_issues(&error), None);
+        // Movement: no slot (with the player's number), or switched off meanwhile.
+        let error = from_response(
+            422,
+            None,
+            json!({"error": {"code": "limit_movement", "scope": "player", "max": 2}})
+                .to_string()
+                .as_bytes(),
+        );
+        assert_eq!(
+            refusal_issues(&error),
+            Some(vec![CloudIssue {
+                place: "general".into(),
+                index: None,
+                field: "movement".into(),
+                problem: "player".into(),
+                max: Some(2),
+            }])
+        );
+        let error = from_response(
+            422,
+            None,
+            json!({"error": {"code": "limit_movement", "scope": "host", "max": 10}})
+                .to_string()
+                .as_bytes(),
+        );
+        assert_eq!(refusal_issues(&error).unwrap()[0].problem, "host");
+        let error = from_response(
+            400,
+            None,
+            json!({"error": {"code": "invalid_config", "field": "movement.enabled", "reason": "off"}})
+                .to_string()
+                .as_bytes(),
+        );
+        let issue = &refusal_issues(&error).unwrap()[0];
+        assert_eq!(
+            (issue.field.as_str(), issue.problem.as_str()),
+            ("movement", "off")
+        );
     }
 
     #[test]

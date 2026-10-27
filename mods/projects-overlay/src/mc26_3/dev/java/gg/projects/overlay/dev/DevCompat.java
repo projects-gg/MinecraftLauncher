@@ -1,8 +1,10 @@
 package gg.projects.overlay.dev;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.platform.InputConstants;
 import java.util.function.Function;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
@@ -27,5 +29,13 @@ final class DevCompat {
     static Function<HolderLookup.Provider, WorldDimensions> normalWorld() {
         return registries -> registries.lookupOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.NORMAL).value()
             .createWorldDimensions();
+    }
+
+    /**
+     * Ctrl+E as this version's keyboard reports it: SDL's scancode, its keycode ("e") and Control (the emoji picker's
+     * old shortcut, which must do nothing now).
+     */
+    static KeyEvent ctrlE() {
+        return new KeyEvent(InputConstants.KEY_E, 'e', InputConstants.MOD_CONTROL);
     }
 }

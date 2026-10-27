@@ -42,6 +42,7 @@ import { platformName } from "@/features/home/community-links";
 import { EmojiRow, OverlayRow } from "@/features/overlay/settings-row";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
+import { UpdateChannelRow } from "@/features/updates/channel-row";
 import { UpdateSettingsAction } from "@/features/updates/update-settings";
 import { api } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
@@ -377,20 +378,8 @@ function Updates() {
   const { data: info } = useQuery({ queryKey: ["app-info"], queryFn: () => api.appInfo() });
   return (
     <>
-      <Row
-        title={t("settings.updates.channel")}
-        help={p.updateChannel === "beta" ? t("settings.updates.betaHelp") : undefined}
-      >
-        <Segmented
-          value={p.updateChannel}
-          onValueChange={(v) => p.set("updateChannel", v)}
-          label={t("settings.updates.channel")}
-          options={[
-            { value: "stable", label: t("settings.updates.stable") },
-            { value: "beta", label: t("settings.updates.beta") },
-          ]}
-        />
-      </Row>
+      {/* BETA-GATE: Beta asks first; a no says why under the title. */}
+      <UpdateChannelRow />
       <Row title={t("settings.updates.autoDownload")}>
         <Switch
           checked={p.autoDownloadUpdates}

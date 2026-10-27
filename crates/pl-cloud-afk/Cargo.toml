@@ -10,6 +10,10 @@ publish = false
 [dependencies]
 # The desktop AFK model ("Buluta taşı"), its password commands, pattern check and keychain store.
 pl-afk = { workspace = true }
+# AFK+'s item data (the format, the manifest's version choice, the names AFK notices use).
+pl-items = { workspace = true }
+# The audit log this computer keeps: closed days in one raw deflate block each.
+flate2 = "1.1"
 tokio = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }
@@ -22,6 +26,9 @@ sha2 = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
 parking_lot = { workspace = true }
+# "Dene" runs a rule's pattern as the launcher reads it (pl-afk's syntax), and the strict value
+# class of rule placeholders.
+regex = { workspace = true }
 # UI-facing views are exported to TypeScript by the launcher (tauri-specta).
 specta = { workspace = true }
 # Seals (pl1) and reveals (rv1): HPKE (RFC 9180) base mode, DHKEM(P-256, HKDF-SHA256) +

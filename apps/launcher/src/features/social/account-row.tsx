@@ -1,11 +1,14 @@
-// The account center's link to the friends feature: "Discord ile bağlan" while signed out, the
-// player's friends profile and who is online once signed in. Opens the friends panel (the account
-// center closes first). Hidden while the feature is off.
+// The account center's link to the friends feature: while signed out the opt-in's own invitation,
+// "Arkadaşlarınla birlikte oyna", on a quiet tile with the plain Discord mark (SMALL12: a Blurple
+// tile and "Discord ile giriş yap" read as a third way to add a game account, right above "Microsoft
+// ile giriş yap"; Blurple stays on the button that really opens Discord); the player's friends
+// profile and who is online once signed in. Opens the friends panel (the account center closes
+// first). Hidden while the feature is off.
 import { CaretRight } from "@phosphor-icons/react";
 import { springSnappy } from "@pl/ui";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { DiscordTile } from "./discord-button";
+import { DiscordMark } from "./discord-button";
 import { onlineFriends } from "./model";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -37,7 +40,9 @@ export function SocialAccountRow({ onOpen }: { onOpen: () => void }) {
             dnd={me.status === "dnd"}
           />
         ) : (
-          <DiscordTile size={36} />
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] opacity-80">
+            <DiscordMark height={14} />
+          </span>
         )}
         <span className="min-w-0 flex-1">
           <span className="block text-[14px] font-medium text-bone-50">
@@ -53,7 +58,7 @@ export function SocialAccountRow({ onOpen }: { onOpen: () => void }) {
                 t("social.account.noneOnline")
               )
             ) : (
-              t("social.account.connect")
+              t("social.consent.title")
             )}
           </span>
         </span>

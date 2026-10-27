@@ -16,17 +16,12 @@ import { useTranslation } from "react-i18next";
 import { useSocialUi } from "@/features/social/store";
 import { afkFailed } from "../errors";
 import { type CloudOverview, cloudApi } from "./api";
-import { formatPrice } from "./status";
+import { offerLine } from "./status";
 
-/** The price line ("Aylık 60 TL"), or the stock's word when nothing can be bought. */
-function useOfferLine(overview: CloudOverview): { text: string; soldOut: boolean } | null {
+/** The price line, or why nothing can be bought now (`offerLine`). */
+function useOfferLine(overview: CloudOverview): { text: string; closed: boolean } | null {
   const { t } = useTranslation();
-  if (overview.soldOut) return { text: t("cloudAfk.intro.soldOut"), soldOut: true };
-  if (!overview.monthPrice) return null;
-  return {
-    text: t("cloudAfk.intro.pricePerMonth", { price: formatPrice(overview.monthPrice) }),
-    soldOut: false,
-  };
+  return offerLine(overview, t);
 }
 
 /** The card on the AFK page; the whole card opens the panel. */
@@ -67,7 +62,7 @@ export function CloudIntroCard({
         <span
           className={cn(
             "shrink-0 text-[12.5px] whitespace-nowrap tabular-nums",
-            offer.soldOut ? "text-ash-300" : "font-display text-[13px] font-semibold text-gold-200",
+            offer.closed ? "text-ash-300" : "font-display text-[13px] font-semibold text-gold-200",
           )}
         >
           {offer.text}
@@ -103,6 +98,10 @@ export function CloudIntroDialog({
   const { reduce } = useMotionPrefs();
   const offer = useOfferLine(overview);
   const signedOut = overview.session === "signedOut";
+  // With the inventory live (CAFK-FEAT §6.4) the third point names it; the count stays three.
+  const inventoryLive = (overview.features?.inventory ?? "off") !== "off";
+  const inventoryPoint = (point: (typeof POINTS)[number]) =>
+    inventoryLive && point.key === "anywhere";
   const start = () =>
     cloudApi
       .open("start")
@@ -125,7 +124,7 @@ export function CloudIntroDialog({
             <span
               className={cn(
                 "mr-auto text-[13px] tabular-nums",
-                offer.soldOut ? "text-ash-300" : "font-display font-semibold text-gold-200",
+                offer.closed ? "text-ash-300" : "font-display font-semibold text-gold-200",
               )}
             >
               {offer.text}
@@ -134,7 +133,7 @@ export function CloudIntroDialog({
           <Button
             variant="primary"
             icon={<ArrowSquareOut size={16} weight="bold" />}
-            disabled={offer?.soldOut}
+            disabled={offer?.closed}
             onClick={() => void start()}
           >
             {t("cloudAfk.intro.start")}
@@ -160,9 +159,13 @@ export function CloudIntroDialog({
                 }}
               >
                 <span className="grid size-8 shrink-0 place-items-center rounded-md bg-white/[0.04]">
-                  <ContentIcon kind={point.icon} size={16} />
+                  <ContentIcon kind={inventoryPoint(point) ? "inventory" : point.icon} size={16} />
                 </span>
-                <span className="min-w-0">{t(`cloudAfk.intro.points.${point.key}`)}</span>
+                <span className="min-w-0">
+                  {inventoryPoint(point)
+                    ? t("cloudAfkFeat.intro.anywhere")
+                    : t(`cloudAfk.intro.points.${point.key}`)}
+                </span>
               </motion.li>
             ))}
           </ul>

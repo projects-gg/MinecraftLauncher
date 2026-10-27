@@ -3,9 +3,11 @@
 // "Bitir"; a teammate sees who calls, where, and three answers, "Geliyorum" in gold when it can
 // join the caller there. Under both, three boxes show who is coming, who comes soon and who
 // cannot. The same call sits under its crew's header in the friend list, on Home and in a toast
-// when it arrives; with several crews those name the crews it calls. Nothing moves by itself: the
-// minutes change once a minute, an answer fades in where it lands. A call from before CALL1 (an
-// older service) still shows as "Hazır mısın?".
+// when it arrives where neither shows it (SMALL12: Home's line and the toast said it twice); with
+// several crews those name the crews it calls. The toast's actions are secondary with the gold
+// play glyph: it sits right above OYNA. Nothing moves by itself: the minutes change once a minute,
+// an answer fades in where it lands. A call from before CALL1 (an older service) still shows as
+// "Hazır mısın?".
 import { Check, Clock, MegaphoneSimple, Play, UsersThree, X } from "@phosphor-icons/react";
 import { Button, ContextMenu, cn, IconButton, type MenuItem, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -71,14 +73,19 @@ export function MinutesLeft({ call, className }: { call: CrewCall; className?: s
   );
 }
 
-/** The three answers: "Geliyorum" leads (gold when it joins the caller), the chosen one is checked. */
+/** The three answers: "Geliyorum" leads (gold when it joins the caller), the chosen one is checked.
+ * `quiet` (the toast, right above OYNA): three secondary buttons, "Geliyorum" leading with the gold
+ * play glyph (the event card's form), since a gold fill there was a second gold block beside OYNA;
+ * ghost answers beside it read as words, not buttons (SMALL12). */
 export function AnswerButtons({
   call,
   size = "sm",
+  quiet = false,
   className,
 }: {
   call: CrewCall;
   size?: "sm" | "md";
+  quiet?: boolean;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -88,6 +95,7 @@ export function AnswerButtons({
    * Answered: the chosen one is checked and gold-edged, the others step back. */
   const variant = (answer: CallAnswer): "primary" | "secondary" | "ghost" => {
     if (answered) return answered === answer ? "secondary" : "ghost";
+    if (quiet) return "secondary";
     if (answer === "yes") return joinable ? "primary" : "secondary";
     return answer === "soon" ? "secondary" : "ghost";
   };
@@ -111,7 +119,7 @@ export function AnswerButtons({
               chosen ? (
                 <Check size={14} weight="bold" className="text-gold-300" />
               ) : joins ? (
-                <Play size={13} weight="fill" />
+                <Play size={13} weight="fill" className={quiet ? "text-gold-300" : undefined} />
               ) : undefined
             }
             onClick={() => void answerCall(call, answer)}
@@ -385,9 +393,11 @@ function CallToast({
         />
       </div>
       {joined ? (
+        // Secondary with the gold play glyph, as on Home: the toast sits right above OYNA.
         <Button
           size="sm"
-          variant="primary"
+          variant="secondary"
+          icon={<Play size={13} weight="fill" className="text-gold-300" />}
           className="mt-2.5 w-full"
           disabled={here}
           onClick={() => {
@@ -403,7 +413,7 @@ function CallToast({
           className="mt-2.5"
           onClickCapture={() => window.setTimeout(() => toast.dismiss(toastId), 0)}
         >
-          <AnswerButtons call={live} />
+          <AnswerButtons call={live} quiet />
         </div>
       )}
     </div>

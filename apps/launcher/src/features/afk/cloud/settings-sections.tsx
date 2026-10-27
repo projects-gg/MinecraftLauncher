@@ -1,6 +1,8 @@
 // The cloud settings sheet's three parts: Genel (name, server, version, console language,
-// anti-AFK, the player's own name), Komutlar (rows by trigger) and Otomatik yanıt (rules).
-import { ArrowDown, ArrowUp, Plus, Trash, X } from "@phosphor-icons/react";
+// anti-AFK, the player's own name), Komutlar (rows by trigger) and Otomatik yanıt (rules). With the
+// cloud features (only while the service offers them): the inventory view's switch, placeholders
+// in replies with their chips and "Dene", and a line while old rules still match the old way.
+import { ArrowDown, ArrowUp, Info, Plus, Trash, X } from "@phosphor-icons/react";
 import {
   Button,
   cn,
@@ -12,10 +14,14 @@ import {
   type SelectOption,
   Switch,
 } from "@pl/ui";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { CloudFeatures } from "@/bindings";
 import { ErrorText, inputClass, RangeRow, SectionIntro, ToggleRow } from "../settings/controls";
 import type { CloudEditData } from "./api";
+import { slotKey } from "./movement/model";
+import { hasPlaceholder, insertToken } from "./placeholders";
+import { ReplyTools } from "./reply-tools";
 import { WordsField } from "./secret-field";
 import {
   type Command,
@@ -23,12 +29,15 @@ import {
   type Issue,
   issueAt,
   issueKey,
+  missingPart,
   newCommand,
   newRule,
   type Rule,
+  replyProblem,
   SOURCES,
   TRIGGERS,
   type Trigger,
+  typed,
   withTrigger,
 } from "./settings-model";
 
@@ -37,20 +46,31 @@ export interface PartProps {
   setDraft: (update: (draft: Draft) => Draft) => void;
   view: CloudEditData;
   issues: Issue[];
+  /** Studio's switches of the cloud features (null: a service before them). */
+  features: CloudFeatures | null;
 }
 
 /** The words of an issue, with Studio's numbers where it names them. */
-export function useIssueText(view: CloudEditData) {
+export function useIssueText(view: CloudEditData, draft?: Draft) {
   const { t } = useTranslation();
-  return (issue: Issue | undefined): string | null =>
-    issue
-      ? t(`cloudAfk.settings.issues.${issueKey(issue)}`, {
-          min:
-            issue.field === "cooldown"
-              ? (view.limits.minRuleCooldownSec ?? 10)
-              : (view.limits.minIntervalSec ?? 60),
-        })
-      : null;
+  return (issue: Issue | undefined): string | null => {
+    if (!issue) return null;
+    if (issue.problem.startsWith("placeholder_")) {
+      const rule =
+        issue.place === "rules" && issue.index !== null
+          ? draft?.config.rules[issue.index]
+          : undefined;
+      return t(`cloudAfkFeat.settings.issues.${issue.problem}`, {
+        n: rule ? (missingPart(rule) ?? "") : "",
+      });
+    }
+    return t(`cloudAfk.settings.issues.${issueKey(issue)}`, {
+      min:
+        issue.field === "cooldown"
+          ? (view.limits.minRuleCooldownSec ?? 10)
+          : (view.limits.minIntervalSec ?? 60),
+    });
+  };
 }
 
 /**
@@ -125,9 +145,74 @@ function move<T>(list: T[], from: number, to: number): T[] {
 
 // --- Genel ------------------------------------------------------------------------------------
 
+/**
+ * "Hareket" (README "Movement"): only where the account may move (`features.movement.mode` on).
+ * Its one sentence says what turning it on means; while no slot is free the switch waits and the
+ * sentence says why (the words stay readable: only the switch dims). A save the service refused
+ * for it says so under it.
+ */
+function MovementRow({
+  draft,
+  setDraft,
+  view,
+  issues,
+}: Pick<PartProps, "draft" | "setDraft" | "view" | "issues">) {
+  const { t } = useTranslation();
+  const id = useId();
+  const movement = view.account.features?.movement;
+  if (movement?.mode !== "on") return null;
+  const on = draft.config.movement ?? movement.on ?? false;
+  // A slot is missing only for turning it on: the stored "on" never waits.
+  const waiting = !movement.on && movement.slot ? slotKey(movement.slot) : null;
+  const refused = issueAt(issues, "general", null, "movement");
+  const refusal = refused
+    ? refused.problem === "off"
+      ? { key: "serviceOff" }
+      : slotKey(refused.problem, refused.max)
+    : null;
+  const help =
+    waiting && !on
+      ? t(`cloudAfkMove.${waiting.key}`, waiting.values)
+      : t("cloudAfkMove.setting.line");
+  return (
+    <div className="border-t border-white/7 pt-1">
+      <div className="switch-row flex items-center justify-between gap-6 py-3">
+        <div className="min-w-0">
+          <label
+            htmlFor={id}
+            className={cn(
+              "block text-[13.5px] font-medium text-bone-50",
+              waiting && !on ? "cursor-default" : "cursor-pointer",
+            )}
+          >
+            {t("cloudAfkMove.setting.title")}
+          </label>
+          <p id={`${id}-help`} className="mt-0.5 max-w-[58ch] text-[12.5px] text-ash-400">
+            {help}
+          </p>
+        </div>
+        <Switch
+          id={id}
+          describedBy={`${id}-help`}
+          checked={on}
+          onCheckedChange={(enabled) =>
+            setDraft((d) => ({ ...d, config: { ...d.config, movement: enabled } }))
+          }
+          label={t("cloudAfkMove.setting.title")}
+          hideLabel
+          disabled={Boolean(waiting) && !on}
+        />
+      </div>
+      {refusal ? <ErrorText>{t(`cloudAfkMove.${refusal.key}`, refusal.values)}</ErrorText> : null}
+    </div>
+  );
+}
+
 export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
   const { t } = useTranslation();
-  const issueText = useIssueText(view);
+  const issueText = useIssueText(view, draft);
+  const inventory = view.account.features?.inventory;
+  const inventoryShown = (inventory?.mode ?? "off") !== "off";
   const general = (field: string) => issueText(issueAt(issues, "general", null, field));
   const versions: SelectOption<string>[] = [
     { value: "auto", label: t("cloudAfk.settings.versionAuto") },
@@ -233,7 +318,7 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
           }
         />
         {anti.enabled ? (
-          <RangeRow title={t("afkSettings.antiAfk.interval")}>
+          <RangeRow title={t("cloudAfk.settings.antiAfkInterval")}>
             <NumberField
               label={t("cloudAfk.settings.antiAfkMin")}
               value={anti.delayMin}
@@ -259,6 +344,16 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
           </RangeRow>
         ) : null}
         {general("antiAfk") ? <ErrorText>{general("antiAfk")}</ErrorText> : null}
+        {inventoryShown ? (
+          <ToggleRow
+            title={t("cloudAfkFeat.settings.inventory")}
+            help={t("cloudAfkFeat.settings.inventoryHelp")}
+            checked={draft.config.inventory ?? inventory?.on ?? false}
+            onCheckedChange={(enabled) =>
+              setDraft((d) => ({ ...d, config: { ...d.config, inventory: enabled } }))
+            }
+          />
+        ) : null}
       </div>
       <Field
         label={t("cloudAfk.settings.owner")}
@@ -279,6 +374,7 @@ export function GeneralPart({ draft, setDraft, view, issues }: PartProps) {
           className="max-w-[320px]"
         />
       </Field>
+      <MovementRow draft={draft} setDraft={setDraft} view={view} issues={issues} />
     </div>
   );
 }
@@ -370,7 +466,7 @@ function CommandRow({
   focus: boolean;
 }) {
   const { t } = useTranslation();
-  const issueText = useIssueText(part.view);
+  const issueText = useIssueText(part.view, part.draft);
   const at = (field: string) => issueText(issueAt(part.issues, "commands", index, field));
   const minInterval = part.view.limits.minIntervalSec ?? 60;
   const triggers: SelectOption<Trigger>[] = TRIGGERS.map((value) => ({
@@ -551,10 +647,40 @@ function RuleRow({
   focus: boolean;
 }) {
   const { t } = useTranslation();
-  const issueText = useIssueText(part.view);
+  const issueText = useIssueText(part.view, part.draft);
   const at = (field: string) => issueText(issueAt(part.issues, "rules", index, field));
   const regexId = useId();
   const ownerId = useId();
+  const replyRef = useRef<HTMLInputElement>(null);
+  const reply = rule.reply;
+  // Placeholders: chips and "Dene" while this account may use them. With Studio's switch on, a
+  // reply holding them is not sent while its machine cannot fill them or while it fails the save
+  // checks (one stored before the switch), which the row says until the check itself shows.
+  const placeholders = Boolean(part.view.account.features?.placeholders);
+  const problem = replyProblem(rule, {
+    on: Boolean(part.features?.placeholders),
+    commands: part.features?.placeholderCommands ?? [],
+  });
+  const problemText = problem
+    ? issueText({ place: "rules", index, field: "reply", problem: problem.reason })
+    : null;
+  const silenced =
+    Boolean(part.features?.placeholders) &&
+    reply.kind === "plain" &&
+    hasPlaceholder(reply.text) &&
+    (!placeholders || (problem !== null && !at("reply")));
+  const insert = (token: string) => {
+    if (reply.kind !== "plain") return;
+    const input = replyRef.current;
+    const start = input?.selectionStart ?? reply.text.length;
+    const end = input?.selectionEnd ?? start;
+    const next = insertToken(reply.text, start, end, token);
+    onChange({ ...rule, reply: typed(reply, next.text) });
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(next.caret, next.caret);
+    });
+  };
   const sources: SelectOption<string>[] = SOURCES.map((value) => ({
     value,
     label: t(`cloudAfk.settings.replies.sources.${value}`),
@@ -644,13 +770,28 @@ function RuleRow({
       ) : null}
       <WordsField
         words={rule.reply}
-        onChange={(reply) => onChange({ ...rule, reply })}
+        onChange={(next) => onChange({ ...rule, reply: next })}
         accountId={part.view.account.id}
         rowId={rule.id}
         label={t("cloudAfk.settings.replies.reply")}
         placeholder={t("cloudAfk.settings.replies.replyPlaceholder")}
         error={at("reply")}
+        inputRef={replyRef}
       />
+      {placeholders && reply.kind === "plain" ? (
+        <ReplyTools
+          rule={{ pattern: rule.pattern, regex: rule.regex, from: rule.from, reply: reply.text }}
+          sender={part.draft.config.owner || t("cloudAfkFeat.settings.sampleSender")}
+          blocked={problemText}
+          onInsert={insert}
+        />
+      ) : null}
+      {silenced ? (
+        <p className="flex items-center gap-1.5 text-[12.5px] text-ash-300">
+          <Info size={14} aria-hidden className="shrink-0 text-ash-400" />
+          {t("cloudAfkFeat.settings.silenced")}
+        </p>
+      ) : null}
     </li>
   );
 }
@@ -670,6 +811,12 @@ export function RepliesPart(part: PartProps) {
           {t("cloudAfk.settings.replies.count", { count: rules.length, max })}
         </span>
       </div>
+      {view.account.features?.legacyRules ? (
+        <p className="flex items-start gap-2 rounded-[var(--radius-panel)] bg-white/[0.035] px-3 py-2.5 text-[12.5px] text-bone-100 ring-1 ring-white/7">
+          <Info size={15} aria-hidden className="mt-px shrink-0 text-gold-300" />
+          <span>{t("cloudAfkFeat.settings.legacyRules")}</span>
+        </p>
+      ) : null}
       {rules.length ? (
         <ul className="flex flex-col gap-2">
           {rules.map((rule, index) => (

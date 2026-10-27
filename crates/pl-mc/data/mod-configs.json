@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "about": "Settings files the desktop launcher writes for a mod when a ready-made set puts the mod in place and the file does not exist yet (pl-mc instance::mod_configs). A file that exists is never touched, so the player's later changes and the mod's own file always win. Each entry holds only the values that matter; the mod keeps its defaults for the rest and writes its full file itself. Keys move so that nothing shares a key with the official pack's mappings in normal play (inventory: crates/pl-mc/testdata/key-bindings). `projects` are the Modrinth project ids (a set item's id or its Modrinth project); `path` is relative to the game folder and stays under config/.",
+  "about": "Settings files the desktop launcher writes for a mod when the official pack or a ready-made set puts the mod in place and the file does not exist yet (pl-mc instance::mod_configs). A file that exists is never touched, so the player's later changes and the mod's own file always win. Each entry holds only the values that matter; the mod keeps its defaults for the rest and writes its full file itself. Keys move so that nothing shares a key with the official pack's mappings in normal play (inventory: crates/pl-mc/testdata/key-bindings). `projects` are the Modrinth project ids (a set item's id or its Modrinth project); `path` is relative to the game folder and stays under config/. Files are written as plain JSON, which JSON5 readers (YACL's) read too.",
   "files": [
     {
       "projects": ["bEpr0Arc"],
@@ -41,6 +41,17 @@
         }
       },
       "why": "MaLiLib opens its settings with A then C: walking left and pressing the pack's zoom key (C) opened a menu mid-fight. Litematica's own settings stay on J then C, and Mod Menu, where installed, still opens MaLiLib's."
+    },
+    {
+      "projects": ["VC2NohMN"],
+      "mod": "Chest Tracker",
+      "path": "config/chesttracker.json5",
+      "json": {
+        "debug": {
+          "disable_container_names": true
+        }
+      },
+      "why": "Chest Tracker (the unofficial port, the only build for 26.x) keeps the title of every menu a player opens at a block and draws it above that block in the world, through walls. The Projects server's menus draw their pictures with resource pack glyphs in the title (ItemsAdder font images), so after opening one the menu's picture hung in the world. Its switch Disable Container Names (under Rendering in its settings, `debug.disable_container_names` in the file, off in the mod) is on; the player can turn the names back on there. YACL writes and reads the fields in snake_case (a camelCase key is ignored, seen in the game on 27 Oct) and keeps its defaults for every other field."
     }
   ]
 }

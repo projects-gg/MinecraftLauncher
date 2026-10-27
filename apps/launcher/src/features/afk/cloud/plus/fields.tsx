@@ -30,6 +30,7 @@ export function AmountField({
   invalid = false,
   describedBy,
   lineless = false,
+  extra,
 }: {
   label: string;
   value: AmountValue;
@@ -48,6 +49,8 @@ export function AmountField({
   describedBy?: string;
   /** No line under the field (the caller puts the shared line in its place). */
   lineless?: boolean;
+  /** Its own line under the field's (what the limit counted, what the amount does). */
+  extra?: ReactNode;
 }) {
   const id = useId();
   const { t } = useTranslation();
@@ -60,7 +63,7 @@ export function AmountField({
   const parsed = text.trim() === "" ? null : parseAmount(text);
   const bad = text.trim() !== "" && parsed === null;
   const words = parsed !== null && parsed > 0 ? amountWords(parsed, currentLang()) : null;
-  const line = error ?? (bad ? t("afkPlus.editor.errors.amount") : null);
+  const line = error ?? (bad ? t("afkPlus.form.errors.amount") : null);
   const flare = Boolean(line) || invalid;
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
@@ -112,7 +115,34 @@ export function AmountField({
           {line ?? words ?? help ?? ""}
         </p>
       )}
+      {extra}
     </div>
+  );
+}
+
+/** A quiet text action ("Formla ekle", "Envanterden seç", "Harcananı sıfırla"). */
+export function QuietLink({
+  children,
+  onClick,
+  disabled = false,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "cursor-pointer rounded-sm text-[12.5px] font-medium text-gold-300 underline-offset-2 outline-none",
+        "transition-[color,opacity] duration-150 hover:text-gold-200 hover:underline focus-visible:ring-2 focus-visible:ring-gold-300",
+        "disabled:cursor-not-allowed disabled:text-ash-500 disabled:no-underline",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -182,6 +212,7 @@ export function IntField({
   value,
   onChange,
   unit,
+  unitFirst = false,
   after,
   error,
   className,
@@ -191,6 +222,8 @@ export function IntField({
   value: number;
   onChange: (value: number | null) => void;
   unit?: string;
+  /** The unit before the number (Turkish "%90"). */
+  unitFirst?: boolean;
   after?: ReactNode;
   error?: string | null;
   className?: string;
@@ -223,13 +256,18 @@ export function IntField({
           className={cn(
             inputClass,
             "h-[34px] px-3 tabular-nums",
-            unit && "pr-10",
+            unit && (unitFirst ? "pl-8" : "pr-10"),
             error && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
             inputClassName,
           )}
         />
         {unit ? (
-          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[12.5px] text-ash-400">
+          <span
+            className={cn(
+              "pointer-events-none absolute top-1/2 -translate-y-1/2 text-[12.5px] text-ash-400",
+              unitFirst ? "left-3" : "right-3",
+            )}
+          >
             {unit}
           </span>
         ) : null}

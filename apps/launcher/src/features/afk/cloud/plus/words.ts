@@ -142,10 +142,29 @@ export function amountWords(value: number, lang: Lang = currentLang()): string {
 
 /**
  * So many of an item: "64 Elmas" (Turkish takes no plural after a number); the game's English
- * names are singular and their plurals cannot be guessed ("Totem of Undying"), so "64 × Diamond".
+ * names are singular and their plurals cannot be guessed ("Totem of Undying"), so "64 × Diamond",
+ * the count kept with its item by no-break spaces. A price counted in an item keeps its "1 ×".
  */
 export function qtyItem(qty: number | string, name: string, lang: Lang = currentLang()): string {
-  return lang === "en" ? `${qty} × ${name}` : `${qty} ${name}`;
+  return lang === "en" ? `${qty}\u00a0×\u00a0${name}` : `${qty} ${name}`;
+}
+
+/** What a deal is about, as its subject: in English a single one is bare ("Elytra"). */
+export function goodsText(qty: number | string, name: string, lang: Lang = currentLang()): string {
+  return lang === "en" && String(qty) === "1" ? name : qtyItem(qty, name, lang);
+}
+
+/**
+ * A deal in the notation every surface writes (the site, the phone, the in-game card): "1 Elytra =
+ * 37.500", "2 Netherit Külçesi = 9 Elmas", "Elytra = 37,500", "2 × Netherite Ingot = 1 × Diamond".
+ */
+export function dealText(
+  qty: number | string,
+  name: string,
+  price: string,
+  lang: Lang = currentLang(),
+): string {
+  return `${goodsText(qty, name, lang)} = ${price}`;
 }
 
 /**

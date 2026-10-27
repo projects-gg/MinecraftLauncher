@@ -1,7 +1,10 @@
-// "Rapor" (QoL Q4): last week for this account as a plain statement (label and figure, two columns;
-// no metric cards), then the trade history of the last 30 days: what each item went for (count,
-// average, lowest, highest), every trade with its receipt opened under its row, and "Tabloyu indir"
-// (a CSV in the Downloads folder, "Klasörde göster" in the toast). Buys and sales filter both lists.
+// "Rapor" (QoL Q4): last week for this account as a plain statement in three groups side by side
+// (what was bought, what was sold, what the assistant did; label and figure, no metric cards), then
+// the trades of the last 30 days from their receipts (afkplus-free.md §5.6:
+// only completed deals and those under review are kept): what each item went for (count, average,
+// lowest, highest; in money, or in the item that paid), every trade with its receipt opened under
+// its row, and "Tabloyu indir" (a CSV in the Downloads folder, "Klasörde göster" in the toast).
+// Buys and sales filter both lists.
 import { CaretDown, DownloadSimple } from "@phosphor-icons/react";
 import { Button, cn, enter, leave, Segmented, Skeleton, toast, useMotionPrefs } from "@pl/ui";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -12,121 +15,165 @@ import { useTranslation } from "react-i18next";
 import { formatPercent } from "@/lib/format";
 import { afkFailed } from "../../errors";
 import type { CloudAccount } from "../api";
-import { type PlusCatalog, type PlusDeal, type PlusWeeklyAccount, plusApi } from "./api";
-import { QuietEmpty } from "./feed-section";
+import { type PlusReceipt, type PlusServer, type PlusWeeklyAccount, plusApi } from "./api";
+import { QuietEmpty } from "./audit-section";
 import { GroupTitle } from "./fields";
-import { itemName, PlusItemIcon } from "./item-icon";
+import { PlusItemIcon } from "./item-icon";
+import { itemLabel, type Namer } from "./items";
+import { moneyText } from "./orders";
 import { clockText, dateTimeText, dayText, rangeText } from "./time";
 import { usePlusFeatures } from "./use-plus";
-import { amountWords, currentLang, formatAmount, qtyItem } from "./words";
+import { amountWords, currentLang, formatAmount, goodsText, type Lang, qtyItem } from "./words";
 
 type Filter = "all" | "buy" | "sell";
 
 const DAY = 86_400;
 
-/**
- * "alındı" only for a trade that happened; one that fell through is "alınamadı" (its status says
- * why). Lower case after the item's name; `upper` for a line of its own.
- */
-function sideWord(t: TFunction, deal: PlusDeal, upper = false): string {
-  const side = deal.side === "sell" ? "sell" : "buy";
-  const failed = deal.status === "failed" || deal.status === "cancelled";
-  const word = t(failed ? `afkPlus.report.sidesFailed.${side}` : `afkPlus.report.sides.${side}`);
-  return upper ? caseFirst(word, "upper") : word;
+/** A price as the receipt counts it: the server's money (its name when it is the account's), or an item. */
+function priceText(
+  price: number,
+  pay: string,
+  currency: string | null,
+  namer: Namer,
+  server: Pick<PlusServer, "money">,
+  lang: Lang,
+): string {
+  if (pay !== "money") return qtyItem(price, itemLabel(pay, namer, lang), lang);
+  return currency && currency === server.money.currency
+    ? moneyText(price, server, lang)
+    : formatAmount(price, lang);
 }
 
-/** The first letter in the interface's own case rules ("İptal" ↔ "iptal"). */
-function caseFirst(text: string, to: "upper" | "lower"): string {
-  const lang = currentLang() === "tr" ? "tr" : "en";
-  const first = text.charAt(0);
-  return (
-    (to === "upper" ? first.toLocaleUpperCase(lang) : first.toLocaleLowerCase(lang)) + text.slice(1)
-  );
+/** "alındı" / "satıldı" after the item's name. */
+function sideWord(t: TFunction, side: string): string {
+  return t(`afkPlus.report.sides.${side === "sell" ? "sell" : "buy"}`);
 }
 
-function WeekStatement({ week }: { week: PlusWeeklyAccount }) {
+function WeekStatement({
+  week,
+  server,
+}: {
+  week: PlusWeeklyAccount;
+  server: Pick<PlusServer, "money">;
+}) {
   const { t } = useTranslation();
+  const lang = currentLang();
+  const money = (value: number) => moneyText(value, server, lang);
   const blocked = week.blocked.scam + week.blocked.rmt + week.blocked.unsafe + week.blocked.fake;
-  // Row by row: buys on the left, sales on the right, then the conversations.
-  const rows: Array<[string, string]> = [
-    [t("afkPlus.report.rows.bought"), String(week.bought)],
-    [t("afkPlus.report.rows.sold"), String(week.sold)],
-    [t("afkPlus.report.rows.spent"), formatAmount(week.spent)],
-    [t("afkPlus.report.rows.earned"), formatAmount(week.earned)],
-    [t("afkPlus.report.rows.belowLimit"), formatAmount(week.belowLimit)],
-    [t("afkPlus.report.rows.aboveFloor"), formatAmount(week.aboveFloor)],
-    [t("afkPlus.report.rows.pms"), String(week.pms)],
-    [t("afkPlus.report.rows.blocked"), String(blocked)],
-    [t("afkPlus.report.rows.allowance"), formatPercent(week.allowancePct)],
+  // Three groups: one long list paired a buy's figure with a sale's ("Takas 2 | Takas 1").
+  const groups: Array<{ key: string; rows: Array<[string, string] | null> }> = [
+    {
+      key: "buy",
+      rows: [
+        [t("afkPlus.report.rows.bought"), String(week.bought)],
+        [t("afkPlus.report.rows.spent"), money(week.spent)],
+        week.belowLimit > 0 ? [t("afkPlus.report.rows.belowLimit"), money(week.belowLimit)] : null,
+      ],
+    },
+    {
+      key: "sell",
+      rows: [
+        [t("afkPlus.report.rows.sold"), String(week.sold)],
+        [t("afkPlus.report.rows.earned"), money(week.earned)],
+        week.aboveFloor > 0 ? [t("afkPlus.report.rows.aboveFloor"), money(week.aboveFloor)] : null,
+      ],
+    },
+    {
+      key: "assistant",
+      rows: [
+        [t("afkPlus.report.rows.pms"), String(week.pms)],
+        [t("afkPlus.report.rows.blocked"), String(blocked)],
+        [t("afkPlus.report.rows.allowance"), formatPercent(week.allowancePct)],
+      ],
+    },
   ];
   return (
-    <dl className="grid grid-cols-2 gap-x-8 rounded-[var(--radius-panel)] bg-white/[0.03] px-4 py-2">
-      {rows.map(([label, value]) => (
-        <div
-          key={label}
-          className="flex items-baseline justify-between gap-4 border-b border-white/[0.05] py-2 last:border-b-0 [&:nth-last-child(2)]:border-b-0"
-        >
-          <dt className="min-w-0 text-[12.5px] text-ash-300">{label}</dt>
-          <dd className="shrink-0 font-display text-[14px] font-semibold text-bone-50 tabular-nums">
-            {/* Tektur's % reads like a 7 ("%38" as "738"): the sign in the text face, as OYNA does. */}
-            {value.split("%").map((part, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: the parts of one short value, in order.
-              <span key={index}>
-                {index > 0 ? <span className="font-sans">%</span> : null}
-                {part}
-              </span>
-            ))}
-          </dd>
-        </div>
+    <div className="grid grid-cols-3 gap-x-6 rounded-[var(--radius-panel)] bg-white/[0.03] px-4 py-3">
+      {groups.map((group) => (
+        <section key={group.key} aria-label={t(`afkPlus.report.weekGroups.${group.key}`)}>
+          <h4 className="mb-0.5 text-[12px] font-semibold text-ash-300">
+            {t(`afkPlus.report.weekGroups.${group.key}`)}
+          </h4>
+          <dl>
+            {group.rows.map((row) =>
+              row ? (
+                <div
+                  key={row[0]}
+                  className="flex items-baseline justify-between gap-3 border-b border-white/[0.05] py-1.5 last:border-b-0"
+                >
+                  <dt className="min-w-0 text-[12.5px] text-pretty text-ash-300">{row[0]}</dt>
+                  <dd className="shrink-0 font-display text-[14px] font-semibold text-bone-50 tabular-nums">
+                    {/* Tektur's % reads like a 7 ("%38" as "738"): the sign in the text face, as
+                        OYNA does. */}
+                    {row[1].split("%").map((part, index) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: the parts of one short value, in order.
+                      <span key={index}>
+                        {index > 0 ? <span className="font-sans">%</span> : null}
+                        {part}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              ) : null,
+            )}
+          </dl>
+        </section>
       ))}
-    </dl>
+    </div>
   );
 }
 
 /**
  * A trade's receipt, opened under its own row: six read-only lines need neither a dialog over the
- * panel nor the blur behind it. Which way it went is a noun under the item ("Satış"); the outcome
- * is said once, in "Durum" ("Tamamlandı", or "Tamamlanamadı" with the reason).
+ * panel nor the blur behind it. Which way it went is a noun under the item ("Satış").
  */
 function ReceiptDetails({
-  deal,
-  catalog,
+  receipt,
+  namer,
+  server,
   id,
 }: {
-  deal: PlusDeal;
-  catalog: PlusCatalog | null;
+  receipt: PlusReceipt;
+  namer: Namer;
+  server: Pick<PlusServer, "money">;
   id: string;
 }) {
   const { t } = useTranslation();
   const lang = currentLang();
-  const failed = deal.status === "failed" || deal.status === "cancelled";
+  const at = Math.floor(receipt.at / 1000);
   const rows: Array<[string, string, string?]> = [
-    [t("afkPlus.report.time"), dateTimeText(deal.at, lang)],
-    [t("afkPlus.report.trader"), deal.counterpart],
+    [t("afkPlus.report.time"), dateTimeText(at, lang)],
+    [t("afkPlus.report.trader"), receipt.counterpart],
     [
       t("afkPlus.report.item"),
-      qtyItem(deal.qty, itemName(catalog, deal.item), lang),
-      t(`afkPlus.report.sideNouns.${deal.side === "sell" ? "sell" : "buy"}`),
+      goodsText(receipt.qty, itemLabel(receipt.item, namer, lang), lang),
+      t(`afkPlus.report.sideNouns.${receipt.side === "sell" ? "sell" : "buy"}`),
     ],
-    [t("afkPlus.report.amount"), formatAmount(deal.price), amountWords(deal.price, lang)],
+    [
+      t("afkPlus.report.amount"),
+      priceText(receipt.price, receipt.pay, receipt.currency, namer, server, lang),
+      receipt.pay === "money" ? amountWords(receipt.price, lang) : undefined,
+    ],
     [
       t("afkPlus.report.status"),
-      t(`afkPlus.report.statuses.${deal.status}`, {
-        defaultValue: t("afkPlus.report.statuses.failed"),
-      }),
-      failed
-        ? t(`afkPlus.report.reasons.${deal.reason ?? "other"}`, {
-            defaultValue: t("afkPlus.report.reasons.other"),
-          })
-        : undefined,
+      t(receipt.review ? "afkPlus.report.statuses.review" : "afkPlus.report.statuses.completed"),
+      receipt.review ? t("afkPlus.report.reviewNote") : undefined,
     ],
     [
       t("afkPlus.report.approval"),
-      t(`afkPlus.report.approvalKinds.${deal.approval === "approved" ? "approved" : "auto"}`),
+      t(
+        `afkPlus.report.approvalKinds.${
+          receipt.approval === "approved"
+            ? "approved"
+            : receipt.approval === "owner"
+              ? "owner"
+              : "auto"
+        }`,
+      ),
     ],
   ];
   return (
-    // Named by the expanded button above it ("Makbuz", or "Ayrıntı" for a trade that did not happen).
+    // Named by the expanded button above it ("Makbuz").
     <div
       id={id}
       className="mt-2 mb-1 ml-[44px] rounded-[var(--radius-panel)] bg-white/[0.03] px-4 py-3"
@@ -144,66 +191,57 @@ function ReceiptDetails({
           </div>
         ))}
       </dl>
+      {/* A "makbuz" with a bare figure could read as real money. */}
+      {receipt.pay === "money" ? (
+        <p className="mt-3 text-[12px] text-ash-400">{t("afkPlus.report.receiptMoney")}</p>
+      ) : null}
     </div>
   );
 }
 
-function DealRow({
-  deal,
-  catalog,
+function ReceiptRow({
+  receipt,
+  namer,
+  server,
   open,
   onToggle,
 }: {
-  deal: PlusDeal;
-  catalog: PlusCatalog | null;
+  receipt: PlusReceipt;
+  namer: Namer;
+  server: Pick<PlusServer, "money">;
   open: boolean;
   onToggle: () => void;
 }) {
   const { t } = useTranslation();
   const { layout } = useMotionPrefs();
   const lang = currentLang();
-  const done = deal.status === "completed";
-  const detailsId = `afk-plus-receipt-${deal.id}`;
+  const at = Math.floor(receipt.at / 1000);
+  const detailsId = `afk-plus-receipt-${receipt.at}-${receipt.counterpart}`;
   return (
     // The receipt fades in under the row and the rows below glide (design.md §5: never a height
     // animation).
     <motion.li layout={layout ? "position" : false} className="py-2">
       <div className="flex items-center gap-3">
-        <PlusItemIcon item={deal.item} size={32} className={cn(!done && "opacity-55")} />
+        <PlusItemIcon item={receipt.item} custom={namer.custom} size={32} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13.5px] text-bone-50">
             <span className="font-medium">
-              {qtyItem(deal.qty, itemName(catalog, deal.item), lang)}
+              {goodsText(receipt.qty, itemLabel(receipt.item, namer, lang), lang)}
             </span>
-            <span className="text-ash-300"> {sideWord(t, deal)}</span>
+            <span className="text-ash-300"> {sideWord(t, receipt.side)}</span>
           </p>
           <p className="truncate text-[12px] text-ash-400 tabular-nums">
-            {dayText(deal.at, lang)} {clockText(deal.at, lang)}, {deal.counterpart}
-            {/* A trade that did not happen says why ("süresi doldu"), not its status again. */}
-            {done
-              ? ""
-              : `, ${
-                  deal.reason
-                    ? t(`afkPlus.report.reasonsShort.${deal.reason}`, {
-                        defaultValue: t("afkPlus.report.reasonsShort.other"),
-                      })
-                    : caseFirst(
-                        t(`afkPlus.report.statuses.${deal.status}`, {
-                          defaultValue: t("afkPlus.report.statuses.failed"),
-                        }),
-                        "lower",
-                      )
-                }`}
+            {dayText(at, lang)} {clockText(at, lang)}, {receipt.counterpart}
+            {receipt.review ? `, ${t("afkPlus.report.reviewShort")}` : ""}
           </p>
         </div>
-        {/* A trade that did not happen keeps its amount quiet; struck through it read as a discount. */}
         <span
           className={cn(
             "shrink-0 font-display text-[14px] font-semibold tabular-nums",
-            done ? "text-bone-50" : "text-ash-400",
+            receipt.review ? "text-ash-300" : "text-bone-50",
           )}
         >
-          {formatAmount(deal.price)}
+          {priceText(receipt.price, receipt.pay, receipt.currency, namer, server, lang)}
         </span>
         <Button
           size="sm"
@@ -222,7 +260,7 @@ function DealRow({
           }
           onClick={onToggle}
         >
-          {t(done ? "afkPlus.report.receipt" : "afkPlus.report.details")}
+          {t("afkPlus.report.receipt")}
         </Button>
       </div>
       <AnimatePresence initial={false}>
@@ -233,7 +271,7 @@ function DealRow({
             animate={{ opacity: 1, transition: enter(0.22) }}
             exit={{ opacity: 0, transition: leave(0.15) }}
           >
-            <ReceiptDetails deal={deal} catalog={catalog} id={detailsId} />
+            <ReceiptDetails receipt={receipt} namer={namer} server={server} id={detailsId} />
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -243,10 +281,12 @@ function DealRow({
 
 export function ReportSection({
   account,
-  catalog,
+  namer,
+  server,
 }: {
   account: CloudAccount;
-  catalog: PlusCatalog | null;
+  namer: Namer;
+  server: Pick<PlusServer, "money">;
 }) {
   const { t } = useTranslation();
   const features = usePlusFeatures();
@@ -273,9 +313,9 @@ export function ReportSection({
     refetchOnWindowFocus: false,
     retry: false,
   });
-  const deals = useInfiniteQuery({
-    queryKey: ["afk-plus", account.id, "deals"],
-    queryFn: ({ pageParam }) => plusApi.deals(account.id, pageParam),
+  const receipts = useInfiniteQuery({
+    queryKey: ["afk-plus", account.id, "receipts"],
+    queryFn: ({ pageParam }) => plusApi.receipts(account.id, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next,
     staleTime: 60_000,
@@ -287,9 +327,10 @@ export function ReportSection({
   const items = (summary.data?.items ?? []).filter(
     (one) => filter === "all" || one.side === filter,
   );
-  const list = (deals.data?.pages.flatMap((page) => page.deals) ?? [])
-    .filter((deal) => deal.at >= from)
-    .filter((deal) => filter === "all" || deal.side === filter);
+  const list = (receipts.data?.pages.flatMap((page) => page.receipts) ?? [])
+    .filter((receipt) => receipt.at >= from * 1000)
+    .filter((receipt) => filter === "all" || receipt.side === filter);
+  const keyOf = (receipt: PlusReceipt) => `${receipt.at}-${receipt.counterpart}-${receipt.item}`;
 
   const download = async () => {
     setExporting(true);
@@ -334,7 +375,11 @@ export function ReportSection({
           ) : report.isError ? (
             <QuietEmpty icon="logs">{t("afkPlus.report.failed")}</QuietEmpty>
           ) : week && (week.pms || week.bought || week.sold) ? (
-            <WeekStatement week={week} />
+            <>
+              <WeekStatement week={week} server={server} />
+              {/* The week is what the assistant did (27 Oct 2026: it can make mistakes). */}
+              <p className="mt-2 text-[12px] text-ash-400">{t("afkPlus.aiNote")}</p>
+            </>
           ) : (
             <QuietEmpty icon="logs">{t("afkPlus.report.weekEmpty")}</QuietEmpty>
           )}
@@ -389,17 +434,21 @@ export function ReportSection({
             <ul>
               {items.map((one) => (
                 <li
-                  key={`${one.side}-${one.item}`}
+                  key={`${one.side}-${one.item}-${one.pay}`}
                   className="grid grid-cols-[minmax(0,1fr)_64px_80px_80px_80px] items-center gap-3 border-b border-white/[0.05] py-2 text-[13px] tabular-nums last:border-b-0"
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
-                    <PlusItemIcon item={one.item} size={24} />
-                    <span className="min-w-0 truncate text-bone-50">
-                      {itemName(catalog, one.item)}
-                      <span className="text-ash-400">
-                        {" "}
-                        {t(`afkPlus.report.sides.${one.side === "sell" ? "sell" : "buy"}`)}
+                    <PlusItemIcon item={one.item} custom={namer.custom} size={24} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-bone-50">
+                        {itemLabel(one.item, namer, lang)}
+                        <span className="text-ash-400"> {sideWord(t, one.side)}</span>
                       </span>
+                      {one.pay !== "money" ? (
+                        <span className="block truncate text-[11.5px] text-ash-400">
+                          {t("afkPlus.report.paidWith", { item: itemLabel(one.pay, namer, lang) })}
+                        </span>
+                      ) : null}
                     </span>
                   </span>
                   <span className="text-right text-bone-100">{one.qty}</span>
@@ -412,37 +461,40 @@ export function ReportSection({
           </div>
         ) : null}
 
-        {deals.isLoading ? (
+        {receipts.isLoading ? (
           <div className="space-y-2.5" aria-hidden>
             <Skeleton className="h-11 w-full" />
             <Skeleton className="h-11 w-full" />
             <Skeleton className="h-11 w-full" />
           </div>
-        ) : deals.isError ? (
+        ) : receipts.isError ? (
           <QuietEmpty icon="logs">{t("afkPlus.report.failed")}</QuietEmpty>
         ) : list.length ? (
           <>
             {/* The rows re-measure together when a receipt opens or closes under one of them. */}
-            <LayoutGroup id="afk-plus-deals">
+            <LayoutGroup id="afk-plus-receipts">
               <ul className="divide-y divide-white/[0.05]">
-                {list.map((deal) => (
-                  <DealRow
-                    key={deal.id}
-                    deal={deal}
-                    catalog={catalog}
-                    open={openId === deal.id}
-                    onToggle={() => setOpenId((last) => (last === deal.id ? null : deal.id))}
+                {list.map((receipt) => (
+                  <ReceiptRow
+                    key={keyOf(receipt)}
+                    receipt={receipt}
+                    namer={namer}
+                    server={server}
+                    open={openId === keyOf(receipt)}
+                    onToggle={() =>
+                      setOpenId((last) => (last === keyOf(receipt) ? null : keyOf(receipt)))
+                    }
                   />
                 ))}
               </ul>
             </LayoutGroup>
-            {deals.hasNextPage ? (
+            {receipts.hasNextPage ? (
               <Button
                 size="sm"
                 variant="ghost"
                 className="mt-2"
-                disabled={deals.isFetchingNextPage}
-                onClick={() => void deals.fetchNextPage()}
+                disabled={receipts.isFetchingNextPage}
+                onClick={() => void receipts.fetchNextPage()}
               >
                 {t("afkPlus.report.more")}
               </Button>

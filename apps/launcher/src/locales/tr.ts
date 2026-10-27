@@ -3,9 +3,13 @@ import { trAfkAlerts } from "./tr-afk-alerts";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
+import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
+import { trChatProd } from "./tr-chat-prod";
 import { trChat2 } from "./tr-chat2";
 import { trCloudAfk } from "./tr-cloud-afk";
+import { trCloudAfkFeat } from "./tr-cloud-afk-feat";
+import { trCloudAfkMove } from "./tr-cloud-afk-move";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
 import { trDisk } from "./tr-disk";
@@ -59,6 +63,7 @@ export const tr = {
   overview: trOverview,
   libraryDrop: trLibraryDrop,
   updates: trUpdates,
+  betaGate: trBetaGate,
   shortcuts: trShortcuts,
   prepare: trPrepare,
   social: trSocial,
@@ -95,12 +100,15 @@ export const tr = {
   team6: trTeam6,
   verify: trVerify,
   cloudAfk: trCloudAfk,
+  cloudAfkFeat: trCloudAfkFeat,
+  cloudAfkMove: trCloudAfkMove,
   projectsSkin: trProjectsSkin,
   host: trHost,
   afkPlus: trAfkPlus,
   newsColumn: trNewsColumn,
   worldEntry: trWorldEntry,
   playAcct: trPlayAcct,
+  chatProd: trChatProd,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
@@ -354,8 +362,8 @@ export const tr = {
       afkRow: "AFK hesapların",
       afkTotal_one: "{{count}} hesap",
       afkTotal_other: "{{count}} hesap",
-      afkOnline: "{{count}} açık",
-      afkNoneOnline: "hiçbiri açık değil",
+      afkOnline: "{{count}} tanesi oyunda",
+      afkNoneOnline: "hiçbiri oyunda değil",
       addTitle: "Hesap ekle",
       or: "ya da",
       addOffline: "Ekle",
@@ -1091,7 +1099,7 @@ export const tr = {
       channel: "Güncelleme kanalı",
       stable: "Kararlı",
       beta: "Beta",
-      betaHelp: "Yeni özellikleri herkesten önce dener; ara sıra hata görebilirsin.",
+      betaHelp: "Beta'da yeni özellikler önce gelir; ara sıra hata olabilir.",
       autoDownload: "Güncellemeleri arka planda indir",
       check: "Güncellemeleri denetle",
       checking: "Denetleniyor",

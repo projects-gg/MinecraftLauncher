@@ -1,24 +1,26 @@
 //! AFK+, the AI tier of a cloud account (`services/cloud-afk/README.md` in the Studio repository,
-//! "AFK+": the tier, the player's settings `AfkPlusConfig` v1, the player API, the live socket's AI
-//! messages, quotas and notifications; the reasons are in the maintainers' notes).
+//! "AFK+": the tier, the player's settings `AfkPlusConfig` v2 with their trade orders
+//! ("Siparişler") and custom items, the player API, the live socket's AI messages, quotas and
+//! notifications; the catalog-free design's reasons are in the maintainers' notes).
 //!
 //! The launcher shows and edits; the Worker and the account's machine decide. Nothing of AFK+ shows
 //! while the service's `plusMode` is `off`: `Offer.plus` is null then and every AFK+ write answers
 //! `409 plus_off`. Purchases, upgrades and plan changes happen on the site.
 //!
-//! - Objects: [`PlusOffer`], [`PlusAi`] (an account's AI state), [`PlusConfig`] and its rows,
-//!   [`PlusSettings`], [`PlusQuota`], [`PlusApproval`], [`PlusFeedItem`], [`PlusDeal`], the QoL v1
-//!   objects (messages, typed rules, the settings history, the trade summary and the weekly
-//!   report) and [`CloudNotifyPrefs`].
-//! - [`check_config`]: the rules the launcher checks before a `PUT /plus`, as issues on the
-//!   contract's field paths (`buy[2].max`), the paths the Worker's refusals name too.
+//! - Objects: [`PlusOffer`], [`PlusAi`] (an account's AI state), [`PlusConfig`] with its
+//!   [`PlusOrder`]s and [`PlusCustomItem`]s, [`PlusSettings`] (the settings view: the server's way
+//!   of working, Studio's rules, each order's [`PlusOrderView`]), [`PlusQuota`], [`PlusApproval`]
+//!   (a deal to OK, "Takas sende", a first sight), the audit log's [`PlusAuditEntry`], receipts,
+//!   the QoL v1 objects and [`CloudNotifyPrefs`].
+//! - The checks before a write are in `plus_check.rs` (the contract's reference, run on the
+//!   settings vectors).
 //! - The AFK+ routes of [`CloudClient`] (this module's `impl`).
 //!
 //! As everywhere in this crate, answers may gain fields (they are ignored) and values the launcher
-//! does not know yet are kept as text. Amounts are whole numbers of the game mode's money; times
-//! are Unix seconds.
+//! does not know yet are kept as text. Amounts are whole numbers of the game mode's money (or a
+//! paying item's count); times are Unix seconds unless a field says milliseconds.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use reqwest::Method;
 use reqwest::header::IF_MATCH;
@@ -43,8 +45,11 @@ pub struct PlusOffer {
     pub refund_window_hours: u32,
     pub terms_version: u32,
     pub allowance: PlusAllowance,
-    /// Studio's QoL switches: a feature that is off is not shown.
+    /// Studio's switches: a feature that is off is not shown.
     pub features: PlusFeatures,
+    /// Where AFK+ runs: `any` (Studio's `features.anyServer`), `verified` the server keys where the
+    /// bot trades itself (elsewhere it agrees and the player makes the trade).
+    pub servers: PlusOfferServers,
 }
 
 impl PlusOffer {
@@ -55,6 +60,13 @@ impl PlusOffer {
             .find(|price| price.plan == "month")
             .or_else(|| self.prices.first())
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusOfferServers {
+    pub any: bool,
+    pub verified: Vec<String>,
 }
 
 /// The two quota windows' caps (credits) per plan.
@@ -72,15 +84,23 @@ pub struct PlusWindowCaps {
     pub week: u64,
 }
 
-/// `Offer.plus.features` (README "AFK+ player API" → QoL v1): what to show. A switch an older
-/// service does not name reads as off.
+/// `Offer.plus.features` (README "AFK+ player API"): what to show. A switch an older service
+/// does not name reads as off.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusFeatures {
     /// "Mesajlar" (Q1).
     pub inbox: bool,
-    /// "Yazarak ekle" (Q2).
-    pub parse: bool,
+    /// Typed orders ("Kontrol et").
+    pub orders: bool,
+    /// The audit log ("Akış").
+    pub audit: bool,
+    /// Custom items: "Envanterden seç", fingerprints, first sight.
+    pub custom_items: bool,
+    /// Paying with items (swaps).
+    pub item_pay: bool,
+    /// AFK+ on servers other than Projects.
+    pub any_server: bool,
     /// "Çalışma saatleri", breaks and ready statuses (Q3).
     pub schedule: bool,
     /// The weekly report and the trade history (Q4).
@@ -138,7 +158,7 @@ pub struct PlusAi {
     pub quota: Option<PlusQuotaBrief>,
     /// Set when this is the machine's last snapshot, not a live answer.
     pub as_of: Option<i64>,
-    /// What the assistant spent (CAFK-W5): only with a live machine answer.
+    /// What the assistant spent: only with a live machine answer.
     pub spent: Option<PlusSpent>,
     /// "Mesajlar" (QoL Q1): the latest message the assistant left to the owner since they last
     /// opened the conversations; only in the player's own views.
@@ -160,18 +180,20 @@ impl PlusAi {
 }
 
 /// `AiView.trade`: `on: false` with `off: "mode"` (the bot is not in the profile's game mode) or
-/// `"profile"` (the mode's profile is not enabled); `buy: "notify"` without spending authority.
+/// `"profile"` (the mode's profile is not enabled); `by` who makes the trades of orders with
+/// `trade: "auto"` (`bot` or `owner`); `buy: "notify"` without spending authority.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
 pub struct PlusTradeState {
     pub on: bool,
     pub off: Option<String>,
+    pub by: String,
     pub buy: String,
 }
 
-/// What the assistant spent in the game's money: `total` since the player last reset it (against
-/// `limits.totalBudget`), `today` this AFK+ day (04:00 to 04:00 Turkey time, against
-/// `limits.dailySpendMax`).
+/// What the assistant spent on its own buys in the game's money: `total` since the player last
+/// reset it (against `limits.totalBudget`), `today` this AFK+ day (04:00 to 04:00 Turkey time,
+/// against `limits.dailySpendMax`). A trade the owner made is the owner's money and never counts.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
 pub struct PlusSpent {
@@ -193,7 +215,7 @@ pub struct PlusQuotaBrief {
     pub gifts_left: u64,
 }
 
-/// `GET /accounts/:id/plus/quota` (`QuotaView`).
+/// `GET /accounts/:id/plus/quota` (`QuotaView`). Players see the unit as "kontör" ("AI credits").
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusQuota {
@@ -203,7 +225,7 @@ pub struct PlusQuota {
     pub gifts: Vec<PlusGift>,
     pub promo: Option<PlusPromo>,
     pub frozen: bool,
-    /// "Yaklaşık N yanıt kaldı".
+    /// "Yaklaşık N yanıt kaldı" (gifts included).
     pub est_replies: u64,
     pub pct5: u32,
     pub pct_week: u32,
@@ -236,109 +258,36 @@ pub struct PlusPromo {
     pub until: i64,
 }
 
-// --- the catalog ----------------------------------------------------------------------------------
+// --- the player's settings (`AfkPlusConfig` v2) ----------------------------------------------------
 
-/// `GET /plus/catalog?mode=`: what a game mode trades, and its money's limits.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase", default)]
-pub struct PlusCatalog {
-    pub mode: String,
-    pub name: CloudLocalized,
-    pub items: Vec<PlusCatalogItem>,
-    pub enchantments: Vec<PlusEnchantment>,
-    pub money: PlusMoney,
-    pub limits: PlusCatalogLimits,
-    pub ad_templates: Vec<PlusAdTemplate>,
-}
-
-impl PlusCatalog {
-    pub fn item(&self, id: &str) -> Option<&PlusCatalogItem> {
-        self.items.iter().find(|item| item.id == id)
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
-pub struct PlusCatalogItem {
-    /// `minecraft:elytra`, or a profile's own item (`custom:spawner:zombie`).
-    pub id: String,
-    pub tr: String,
-    pub en: String,
-    /// The picture's key (the item's `minecraft:` path).
-    pub sprite: String,
-    pub stack: u32,
-    pub damageable: bool,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
-pub struct PlusEnchantment {
-    pub id: String,
-    pub tr: String,
-    pub en: String,
-    pub max: u8,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase", default)]
-pub struct PlusMoney {
-    pub currency: String,
-    pub max_deal: u64,
-}
-
-impl Default for PlusMoney {
-    fn default() -> Self {
-        Self {
-            currency: String::new(),
-            max_deal: DEFAULT_MAX_DEAL,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase", default)]
-pub struct PlusCatalogLimits {
-    pub list_max: u32,
-    /// `[lowest, highest]` minutes.
-    pub approval_timeout_min: Vec<u32>,
-}
-
-impl Default for PlusCatalogLimits {
-    fn default() -> Self {
-        Self {
-            list_max: LIST_MAX,
-            approval_timeout_min: vec![1, 60],
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
-pub struct PlusAdTemplate {
-    pub id: String,
-    pub tr: String,
-    pub en: String,
-}
-
-// --- the player's settings (`AfkPlusConfig` v1) ----------------------------------------------------
-
-/// The player's AFK+ settings of one account, written whole with `PUT /plus` and `If-Match`.
-/// Values with a closed set (`lang`, `persona.preset`, a row's `unit`, `style`, `approval`, …) are
-/// kept as text, so a value a newer service adds round-trips unchanged.
+/// The player's AFK+ settings of one account. `PUT /plus` writes everything but the orders and
+/// custom items (a settings screen never sends them back); orders go one at a time with the order
+/// routes. Values with a closed set (`lang`, `authority`, an order's `style`, …) are kept as text,
+/// so a value a newer service adds round-trips unchanged.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusConfig {
     pub v: u32,
     /// The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only.
     pub enabled: bool,
-    /// A server profile open for the account's server (`projects-smp`).
+    /// A server profile open for the account's server (`projects-smp`), or `generic`.
     pub mode: String,
     /// `auto` (English to players who write English, else Turkish), `tr`, `en`.
     pub lang: String,
     pub persona: PlusPersona,
     pub replies: PlusReplies,
-    pub buy: Vec<PlusBuyRow>,
-    pub sell: Vec<PlusSellRow>,
+    /// "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+    /// waits for the owner's OK; the default), `deal` (closes within the limits).
+    pub authority: String,
+    /// "Alış", "Satış": an order of a side switched off waits.
+    pub allow: PlusAllow,
+    /// What deals may be paid with: `money`, `items`, `both`.
+    pub pay: String,
+    /// "Kimlerle".
+    pub who: PlusWho,
+    /// At most `limits.orderStore` kept, `limits.orderMax` active.
+    pub orders: Vec<PlusOrder>,
+    pub custom_items: Vec<PlusCustomItem>,
     pub limits: PlusLimits,
     pub discovery: PlusDiscovery,
     pub trade: PlusTradeSettings,
@@ -356,14 +305,18 @@ impl Default for PlusConfig {
     /// The contract's defaults for a new AFK+ account (the mode as the service fills it).
     fn default() -> Self {
         Self {
-            v: 1,
+            v: 2,
             enabled: true,
             mode: String::new(),
             lang: "auto".into(),
             persona: PlusPersona::default(),
             replies: PlusReplies::default(),
-            buy: Vec::new(),
-            sell: Vec::new(),
+            authority: "ask".into(),
+            allow: PlusAllow::default(),
+            pay: "money".into(),
+            who: PlusWho::default(),
+            orders: Vec::new(),
+            custom_items: Vec::new(),
             limits: PlusLimits::default(),
             discovery: PlusDiscovery::default(),
             trade: PlusTradeSettings::default(),
@@ -376,9 +329,16 @@ impl Default for PlusConfig {
 }
 
 impl PlusConfig {
-    /// Whether the bot may buy at all: without both limits buy rows only report what they find.
+    /// Whether the bot may spend money itself: without both limits a buy for money it would trade
+    /// itself only reports what it finds (the owner's own trades need none).
     pub fn can_spend(&self) -> bool {
         self.limits.total_budget.is_some() && self.limits.per_deal_max.is_some()
+    }
+
+    /// The custom item a `custom:<k>` reference names.
+    pub fn custom_item(&self, reference: &str) -> Option<&PlusCustomItem> {
+        let key = reference.strip_prefix("custom:")?;
+        self.custom_items.iter().find(|item| item.k == key)
     }
 }
 
@@ -393,7 +353,12 @@ pub struct PlusPersona {
     pub status: String,
     /// `back_soon`, `back_evening`, `back_tomorrow`, `weekend`, `busy` (QoL Q3).
     pub status_preset: Option<String>,
+    /// Small talk; "Konu dışına çıkmasın" is its opposite (off by default since 27 Oct 2026).
     pub small_talk: bool,
+    /// "Oyuncu gibi konuşsun": chats like a player instead of in formal language.
+    pub player_talk: bool,
+    /// The tag before the assistant's lines: the player's choice, off by default.
+    pub prefix: PlusPrefix,
 }
 
 impl Default for PlusPersona {
@@ -403,7 +368,28 @@ impl Default for PlusPersona {
             intro: String::new(),
             status: String::new(),
             status_preset: None,
-            small_talk: true,
+            small_talk: false,
+            player_talk: false,
+            prefix: PlusPrefix::default(),
+        }
+    }
+}
+
+/// The tag before the assistant's lines (`persona.prefix`, the owner's decision of 27 Oct 2026):
+/// off, with `[AFK+]` as its text, until the player sets one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusPrefix {
+    pub on: bool,
+    /// 1-16 code points: Latin letters, digits, spaces and a few marks; never staff or a player.
+    pub text: String,
+}
+
+impl Default for PlusPrefix {
+    fn default() -> Self {
+        Self {
+            on: false,
+            text: crate::plus_check::PREFIX_DEFAULT_TEXT.into(),
         }
     }
 }
@@ -429,106 +415,158 @@ impl Default for PlusReplies {
     }
 }
 
-/// A buy row ("Alınacak").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase", default)]
-pub struct PlusBuyRow {
-    /// `^[a-z0-9]{1,8}$`, unique across buy and sell.
-    pub id: String,
-    /// A catalog id of the mode's profile.
-    pub item: String,
-    pub req: PlusRequirements,
-    pub qty: u32,
-    /// `each` or `total`: whether target and max are per item or for `qty` items.
-    pub unit: String,
-    pub target: u64,
-    /// Never exceeded.
-    pub max: u64,
-    /// `patient`, `balanced`, `quick`.
-    pub style: String,
-    /// `auto`, `above` (over `limits.approvalAbove`), `always`.
-    pub approval: String,
-    pub daily_qty: u32,
-    pub notify: bool,
-    pub enabled: bool,
+#[serde(default)]
+pub struct PlusAllow {
+    pub buy: bool,
+    pub sell: bool,
 }
 
-impl Default for PlusBuyRow {
+impl Default for PlusAllow {
     fn default() -> Self {
         Self {
-            id: String::new(),
-            item: String::new(),
-            req: PlusRequirements::default(),
-            qty: 1,
-            unit: "each".into(),
-            target: 1,
-            max: 1,
-            style: "balanced".into(),
-            approval: "above".into(),
-            daily_qty: 1,
-            notify: true,
-            enabled: true,
+            buy: true,
+            sell: true,
         }
     }
 }
 
-/// What a bought item must be: enchantments (id → lowest level), durability, an anvil name, curses.
+/// "Kimlerle": `all`, or `friends` (only the in-game names in `friends`, at most 50).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase", default)]
-pub struct PlusRequirements {
-    pub ench: BTreeMap<String, u8>,
-    pub min_durability_pct: u8,
-    pub allow_custom_name: bool,
-    pub allow_curses: bool,
+#[serde(default)]
+pub struct PlusWho {
+    pub mode: String,
+    pub friends: Vec<String>,
 }
 
-impl Default for PlusRequirements {
+impl Default for PlusWho {
+    fn default() -> Self {
+        Self {
+            mode: "all".into(),
+            friends: Vec::new(),
+        }
+    }
+}
+
+/// A trade order ("sipariş"): one kind of item, a quantity in all, a term. Its status and
+/// progress are never stored ([`PlusOrderView`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusOrder {
+    /// `^[a-z0-9]{1,8}$`, unique in the document (the Worker makes it).
+    pub id: String,
+    /// False: paused ("Durdur").
+    pub on: bool,
+    /// `buy` (the bot gets the item) or `sell` (the bot gives it).
+    pub side: String,
+    /// What changes hands: `minecraft:<path>` or `custom:<k>`.
+    pub item: String,
+    /// In all, 1-9999: the order is done when its progress reaches it.
+    pub qty: u32,
+    /// Conditions of what the bot receives (the item when buying, the paying item when selling for
+    /// one); None exactly when selling for money.
+    pub req: Option<PlusReq>,
+    /// `money`, or the paying item's reference (a swap).
+    pub pay: String,
+    /// `each` or `total`: whether target and limit are per item or for the whole quantity.
+    pub unit: String,
+    /// The hoped price (money, or the paying item's count).
+    pub target: u64,
+    /// Buying the most, selling the least; never passed.
+    pub limit: u64,
+    /// `patient`, `balanced`, `quick`.
+    pub style: String,
+    /// `auto` (the assistant trades where the server's profile lets it) or `owner`.
+    pub trade: String,
+    /// Unix seconds: the order expires then.
+    pub until: i64,
+    /// A typed order's words, cleaned and masked: shown to the player only.
+    pub note: String,
+    /// `text`, `form`, `inv`.
+    pub src: String,
+    /// Created (Unix seconds).
+    pub at: i64,
+}
+
+impl Default for PlusOrder {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            on: true,
+            side: "buy".into(),
+            item: String::new(),
+            qty: 1,
+            req: Some(PlusReq::default()),
+            pay: "money".into(),
+            unit: "total".into(),
+            target: 1,
+            limit: 1,
+            style: "balanced".into(),
+            trade: "auto".into(),
+            until: 0,
+            note: String::new(),
+            src: "form".into(),
+            at: 0,
+        }
+    }
+}
+
+/// What the bot must receive: enchantments (id → lowest level), durability, an anvil name, curses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusReq {
+    pub ench: BTreeMap<String, u8>,
+    /// Lowest durability %, 0-100 (0 for an item that does not wear out).
+    pub dur: u8,
+    /// An anvil name is fine.
+    pub named: bool,
+    /// A curse is fine.
+    pub cursed: bool,
+}
+
+impl Default for PlusReq {
     fn default() -> Self {
         Self {
             ench: BTreeMap::new(),
-            min_durability_pct: 90,
-            allow_custom_name: false,
-            allow_curses: false,
+            dur: 90,
+            named: false,
+            cursed: false,
         }
     }
 }
 
-/// A sell row ("Satılacak").
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase", default)]
-pub struct PlusSellRow {
-    pub id: String,
-    pub item: String,
-    pub qty: u32,
-    pub unit: String,
-    pub target: u64,
-    /// Never undercut.
-    pub min: u64,
-    pub style: String,
-    pub approval: String,
-    pub daily_qty: u32,
-    pub enabled: bool,
+/// An item a server made (ItemsAdder, …), known only by its fingerprint.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusCustomItem {
+    /// `^c[0-9a-z]{1,4}$`, chosen by the client that adds it.
+    pub k: String,
+    /// The player's name for it (1-32 code points, the persona text rule).
+    pub name: String,
+    /// Its material once seen (`minecraft:paper`).
+    pub base: Option<String>,
+    /// The identity fingerprint (32 hex); None: waits for its first sight.
+    pub fp: Option<String>,
+    /// How ItemSprite draws it (IA-ART's overlay).
+    pub look: Option<PlusLook>,
+    /// `inv`, `text`, `seen`.
+    pub from: String,
+    /// Added (Unix seconds).
+    pub at: i64,
 }
 
-impl Default for PlusSellRow {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            item: String::new(),
-            qty: 1,
-            unit: "each".into(),
-            target: 1,
-            min: 1,
-            style: "balanced".into(),
-            approval: "above".into(),
-            daily_qty: 1,
-            enabled: true,
-        }
-    }
+/// A custom item's picture keys: at least one of the two.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusLook {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cmd: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 /// Spending limits ("Harcama"). None: no limit, or for `per_deal_max` and `total_budget` no
-/// spending authority at all (buy rows then only notify).
+/// spending authority at all.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusLimits {
@@ -600,7 +638,10 @@ pub struct PlusWindow {
     pub to: String,
 }
 
-/// `GET /accounts/:id/plus`.
+// --- the settings view ---------------------------------------------------------------------------
+
+/// `GET /accounts/:id/plus`: the settings, how AFK+ works on the account's server, Studio's limits
+/// and each order's state.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusSettings {
@@ -608,18 +649,140 @@ pub struct PlusSettings {
     /// The revision (`If-Match` of the next write).
     pub ai_rev: u64,
     pub judge: PlusJudge,
-    /// The mode's profile: its name and whether it trades now. None for an unknown mode.
-    pub profile: Option<PlusProfile>,
-    /// What the assistant spent (CAFK-W5); None when the machine cannot say now.
+    pub server: PlusServer,
+    pub rules: PlusRules,
+    /// Each order's progress and live state, by order id.
+    pub orders: BTreeMap<String, PlusOrderView>,
+    /// What the assistant spent; None when the machine cannot say now.
     pub spent: Option<PlusSpent>,
+    /// The orders' states come from the machine's last snapshot of then.
+    pub as_of: Option<i64>,
+}
+
+/// How AFK+ works on the account's server (`PlusServer`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusServer {
+    /// `verified` (a Studio profile with a trade part: the bot trades), `profile` (a Studio profile
+    /// without one), `generic` (the built-in one).
+    pub kind: String,
+    /// The profile in use (`projects-smp`, `generic`).
+    pub mode: String,
+    /// The mode's name; None for the generic profile.
+    pub name: Option<CloudLocalized>,
+    /// Who makes the trades of orders with `trade: "auto"`: `bot` or `owner`.
+    pub trade: String,
+    pub money: PlusServerMoney,
+    /// The account's Minecraft version (its item data); None: the item data's default.
+    pub mc: Option<String>,
+    /// The mode's ad templates (none for the generic profile).
+    pub ads: Vec<PlusAdTemplate>,
+    /// False: AFK+ does not run here (`ai.reason` `server`).
+    pub on: bool,
+}
+
+/// The game mode's money: `label` the name to write after amounts ("Coin"); None: bare amounts and
+/// once "Oyundaki parayla".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusServerMoney {
+    pub label: Option<CloudLocalized>,
+    pub max_deal: u64,
+    /// The money's key (receipts carry it).
+    pub currency: String,
+}
+
+impl Default for PlusServerMoney {
+    fn default() -> Self {
+        Self {
+            label: None,
+            max_deal: GENERIC_MAX_DEAL,
+            currency: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
-pub struct PlusProfile {
+pub struct PlusAdTemplate {
     pub id: String,
-    pub name: CloudLocalized,
-    pub trade: bool,
+    pub tr: String,
+    pub en: String,
+}
+
+/// The Studio limits a client checks by before it sends (`PlusRules`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusRules {
+    pub order_max: u32,
+    pub order_store: u32,
+    pub custom_items_max: u32,
+    pub order_days_default: u32,
+    pub order_days_max: u32,
+    /// A buy order's most a day, in stacks of its item.
+    pub buy_stacks_per_day: u32,
+    pub checks_per_day: u32,
+    /// The typed checks left today, when the machine said.
+    pub checks_left: Option<u32>,
+    pub friends_max: u32,
+    pub note_max: u32,
+    pub text_max: u32,
+    /// `[lowest, highest]` minutes.
+    pub approval_timeout_min: Vec<u32>,
+    pub features: PlusRulesFeatures,
+}
+
+impl Default for PlusRules {
+    fn default() -> Self {
+        Self {
+            order_max: 10,
+            order_store: 20,
+            custom_items_max: 20,
+            order_days_default: 14,
+            order_days_max: 30,
+            buy_stacks_per_day: 1,
+            checks_per_day: 20,
+            checks_left: None,
+            friends_max: MAX_FRIENDS as u32,
+            note_max: MAX_NOTE as u32,
+            text_max: MAX_ORDER_TEXT as u32,
+            approval_timeout_min: vec![1, 60],
+            features: PlusRulesFeatures::default(),
+        }
+    }
+}
+
+/// `rules.features`: the order switches (a missing one reads as on, the service refuses in words).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusRulesFeatures {
+    pub orders: bool,
+    pub audit: bool,
+    pub custom_items: bool,
+    pub item_pay: bool,
+}
+
+impl Default for PlusRulesFeatures {
+    fn default() -> Self {
+        Self {
+            orders: true,
+            audit: true,
+            custom_items: true,
+            item_pay: false,
+        }
+    }
+}
+
+/// An order's state: `got` its progress, `at` when it last grew (0: never), `live` the machine's
+/// state of it (`waiting_ok`, `your_trade`, `trading`, `haggling`) and `status` the first of those,
+/// `done`, `expired`, `paused`, `side_off` that holds, else `looking`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusOrderView {
+    pub status: String,
+    pub got: u32,
+    pub at: i64,
+    pub live: Option<String>,
 }
 
 /// How the persona texts were judged: `ok`, `pending` (not used until judged) or `rejected`
@@ -646,6 +809,231 @@ pub struct PlusWritten {
     pub config: PlusConfig,
     pub ai_rev: u64,
     pub judge: PlusJudge,
+}
+
+/// An order route's answer: the order (none for a delete), the stored settings and their
+/// revision; `deferred` for a delete while the order's trade runs ("Takas bitince silinir.").
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusOrderWritten {
+    pub order: Option<PlusOrder>,
+    pub config: PlusConfig,
+    pub ai_rev: u64,
+    pub deferred: bool,
+}
+
+/// A new order as `POST …/plus/orders` takes it: without `id` and `at` (the Worker makes them),
+/// or with both to put a deleted order back ("Geri al").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlusNewOrder {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<i64>,
+    pub on: bool,
+    pub side: String,
+    pub item: String,
+    pub qty: u32,
+    pub req: Option<PlusReq>,
+    pub pay: String,
+    pub unit: String,
+    pub target: u64,
+    pub limit: u64,
+    pub style: String,
+    pub trade: String,
+    pub until: i64,
+    pub note: String,
+    pub src: String,
+}
+
+impl PlusNewOrder {
+    /// The order as stored, with the id and time it would get.
+    pub fn stored(&self, id: &str, now: i64) -> PlusOrder {
+        PlusOrder {
+            id: self.id.clone().unwrap_or_else(|| id.to_owned()),
+            on: self.on,
+            side: self.side.clone(),
+            item: self.item.clone(),
+            qty: self.qty,
+            req: self.req.clone(),
+            pay: self.pay.clone(),
+            unit: self.unit.clone(),
+            target: self.target,
+            limit: self.limit,
+            style: self.style.clone(),
+            trade: self.trade.clone(),
+            until: self.until,
+            note: self.note.clone(),
+            src: self.src.clone(),
+            at: self.at.unwrap_or(now),
+        }
+    }
+}
+
+/// A new custom item an order names, as the POST takes it (without `at`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct PlusNewCustomItem {
+    pub k: String,
+    pub name: String,
+    pub base: Option<String>,
+    pub fp: Option<String>,
+    pub look: Option<PlusLook>,
+    pub from: String,
+}
+
+/// A chip's settings change saved with the order in the same write (`pay`; the single-buy cap).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlusOrderSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pay: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_deal_max: Option<u64>,
+}
+
+impl PlusOrderSettings {
+    fn is_empty(&self) -> bool {
+        self.pay.is_none() && self.per_deal_max.is_none()
+    }
+
+    fn body(&self) -> serde_json::Value {
+        let mut out = serde_json::Map::new();
+        if let Some(pay) = &self.pay {
+            out.insert("pay".into(), serde_json::Value::String(pay.clone()));
+        }
+        if let Some(cap) = self.per_deal_max {
+            out.insert("limits".into(), serde_json::json!({ "perDealMax": cap }));
+        }
+        serde_json::Value::Object(out)
+    }
+}
+
+/// `PATCH …/plus/orders/:oid`: the fields that change ("Süreyi uzat" is `extend`); a field left
+/// out stays as stored. `no_req` sends `req: null` (an order now sold for money has no conditions).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusOrderPatch {
+    pub on: Option<bool>,
+    pub qty: Option<u32>,
+    pub req: Option<PlusReq>,
+    pub no_req: bool,
+    pub pay: Option<String>,
+    pub unit: Option<String>,
+    pub target: Option<u64>,
+    pub limit: Option<u64>,
+    pub style: Option<String>,
+    pub trade: Option<String>,
+    pub until: Option<i64>,
+    pub extend: bool,
+}
+
+impl PlusOrderPatch {
+    /// The PATCH body: only the fields that change.
+    pub fn body(&self) -> Result<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+        let mut put = |key: &str, value: serde_json::Value| {
+            out.insert(key.to_owned(), value);
+        };
+        if let Some(on) = self.on {
+            put("on", on.into());
+        }
+        if let Some(qty) = self.qty {
+            put("qty", qty.into());
+        }
+        if self.no_req {
+            put("req", serde_json::Value::Null);
+        } else if let Some(req) = &self.req {
+            put("req", to_body(req)?);
+        }
+        if let Some(pay) = &self.pay {
+            put("pay", pay.clone().into());
+        }
+        if let Some(unit) = &self.unit {
+            put("unit", unit.clone().into());
+        }
+        if let Some(target) = self.target {
+            put("target", target.into());
+        }
+        if let Some(limit) = self.limit {
+            put("limit", limit.into());
+        }
+        if let Some(style) = &self.style {
+            put("style", style.clone().into());
+        }
+        if let Some(trade) = &self.trade {
+            put("trade", trade.clone().into());
+        }
+        if let Some(until) = self.until {
+            put("until", until.into());
+        }
+        if self.extend {
+            put("extend", true.into());
+        }
+        Ok(serde_json::Value::Object(out))
+    }
+
+    /// The order as the patch leaves it (what the launcher checks before sending).
+    pub fn applied(&self, order: &PlusOrder, now: i64, extend_days: u32) -> PlusOrder {
+        let mut next = order.clone();
+        if let Some(on) = self.on {
+            next.on = on;
+        }
+        if let Some(qty) = self.qty {
+            next.qty = qty;
+        }
+        if self.no_req {
+            next.req = None;
+        } else if let Some(req) = &self.req {
+            next.req = Some(req.clone());
+        }
+        if let Some(pay) = &self.pay {
+            next.pay = pay.clone();
+        }
+        if let Some(unit) = &self.unit {
+            next.unit = unit.clone();
+        }
+        if let Some(target) = self.target {
+            next.target = target;
+        }
+        if let Some(limit) = self.limit {
+            next.limit = limit;
+        }
+        if let Some(style) = &self.style {
+            next.style = style.clone();
+        }
+        if let Some(trade) = &self.trade {
+            next.trade = trade.clone();
+        }
+        if let Some(until) = self.until {
+            next.until = until;
+        }
+        if self.extend {
+            next.until = now + i64::from(extend_days) * 86_400;
+        }
+        next
+    }
+}
+
+/// `POST …/plus/items/pick`: a plain vanilla item gives its id and its enchantments and
+/// durability as suggested conditions (`reference` + `req`); any other a custom item.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusPick {
+    #[serde(rename = "ref")]
+    pub reference: Option<String>,
+    pub req: Option<PlusReq>,
+    pub custom: Option<PlusPickedCustom>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusPickedCustom {
+    /// The item's shown name, cleaned; None for an item without one ("Adsız eşya").
+    pub name: Option<String>,
+    pub base: String,
+    pub fp: String,
+    pub look: Option<PlusLook>,
 }
 
 /// `POST /plus/control`: the AI's state after it, and the settings' revision.
@@ -675,19 +1063,28 @@ impl PlusAction {
     }
 }
 
-// --- approvals, the feed, deals ---------------------------------------------------------------------
+// --- approvals, the audit log, receipts -----------------------------------------------------------------
 
-/// A deal waiting for the player's OK (`state` `pending`), or one of the last 24 hours' answers.
+/// Something waiting for the player (`state` `pending`), or one of the last 24 hours' answers.
+/// `kind`: `deal` (OK the bot's deal), `handoff` ("Takas sende": the player makes the trade, open
+/// 24 hours) or `confirm_item` ("Bu eşya aradığın … mi?").
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusApproval {
     pub id: String,
     pub acct: String,
+    pub kind: String,
+    /// The order it is for.
+    pub order: Option<String>,
+    /// `confirm_item`: the custom item asked about, as the order's item or its payment.
+    pub custom: Option<PlusApprovalCustom>,
     pub deal: PlusApprovalDeal,
     /// In-game name.
     pub counterpart: String,
-    /// `above`, `new_counterpart`, `always`, `price_unusual`, `budget`, `daily`.
+    /// `deal`: `above`, `new_counterpart`, `authority`, `price_unusual`, `budget`, `daily`.
     pub why: Vec<String>,
+    /// `confirm_item`: the item in the window (plain text: the counterpart's words).
+    pub seen: Option<PlusSeenItem>,
     pub created_at: i64,
     pub expires_at: i64,
     /// `pending`, `approved`, `rejected`, `expired`, `closed`.
@@ -711,8 +1108,29 @@ pub struct PlusApprovalDeal {
     pub side: String,
     pub item: String,
     pub qty: u32,
+    /// Money, or the paying item's count.
     pub price: u64,
-    pub currency: String,
+    /// `money` or the paying item.
+    pub pay: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusApprovalCustom {
+    pub k: String,
+    /// `item` or `pay`.
+    pub field: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusSeenItem {
+    pub id: String,
+    pub cmd: Option<i64>,
+    pub model: Option<String>,
+    pub name: Option<String>,
+    /// Up to 4 lines of 80, plain and masked.
+    pub lore: Vec<String>,
 }
 
 /// `GET /accounts/:id/plus/approvals`.
@@ -722,59 +1140,100 @@ pub struct PlusApprovalList {
     pub approvals: Vec<PlusApproval>,
 }
 
-/// One line of the live feed. `kind`: `pm_in`, `pm_out`, `offer`, `counter`, `deal`, `approval`,
-/// `approval_answer`, `trade_started`, `trade_done`, `trade_failed`, `trade_cancelled`, `found`,
-/// `suspicious`, `ai_stopped`, `ai_resumed`, `summary`, `review` (kept as text).
+/// A step of the audit log ("Akış"): every step the assistant took and how it ended, from the
+/// machine (7 days), never from D1. Clients write the lines. `k`: `pm_in`, `reply`, `owner_msg`,
+/// `offer`, `counter`, `agree`, `ask_owner`, `owner_ok`, `owner_no`, `owner_timeout`,
+/// `trade_start`, `trade_done`, `trade_fail`, `handoff`, `handoff_done`, `handoff_no`, `cancel`,
+/// `refuse`, `found`, `confirm_item`, `order_done`, `order_expired`, `paused`, `resumed`, `quota`,
+/// `gate` (kept as text).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
-pub struct PlusFeedItem {
-    /// A ULID: time order.
-    pub id: String,
+pub struct PlusAuditEntry {
+    /// The account's sequence: the AFK+ day number × 1,000,000 + a counter.
+    pub s: i64,
+    /// Unix milliseconds.
+    pub t: i64,
+    pub k: String,
+    /// The counterpart's in-game name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub w: Option<String>,
+    /// The order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub o: Option<String>,
+    /// The item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub i: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub q: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub p: Option<u64>,
+    /// What the price counts: `money` or the paying item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub u: Option<String>,
+    /// Why it was refused, cancelled, failed or skipped.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r: Option<String>,
+    /// Text, masked (`pm_in`, `reply`, `owner_msg` only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x: Option<String>,
+    /// Unsuitable: shown folded ("Göster").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h: Option<bool>,
+    /// The approval it opened or closed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub a: Option<String>,
+}
+
+impl PlusAuditEntry {
+    /// The AFK+ day the entry belongs to (its sequence's day number).
+    pub fn day(&self) -> i64 {
+        self.s.div_euclid(AUDIT_DAY)
+    }
+}
+
+/// The sequence's day factor.
+pub const AUDIT_DAY: i64 = 1_000_000;
+
+/// `GET …/plus/audit`: newest first; `more` when older ones are left; `from` the oldest AFK+ day
+/// the machine keeps.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusAuditPage {
+    pub items: Vec<PlusAuditEntry>,
+    pub more: bool,
+    pub from: Option<i64>,
+}
+
+/// A completed deal (and an unclear trade under review): D1, 90 days.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusReceipt {
+    /// Unix milliseconds; with the account, its key.
     pub at: i64,
-    pub kind: String,
-    /// In-game name (the owner's own bot's messages show real names).
-    pub counterpart: Option<String>,
-    /// `pm_in`, `pm_out`: the masked text.
-    pub text: Option<String>,
-    pub item: Option<String>,
-    pub qty: Option<u32>,
-    pub price: Option<u64>,
-    pub currency: Option<String>,
-    /// A code the launcher words in one short sentence.
-    pub reason: Option<String>,
-}
-
-/// A page of the feed, newest first; `next` continues further back.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
-pub struct PlusFeedPage {
-    pub items: Vec<PlusFeedItem>,
-    pub next: Option<String>,
-}
-
-/// A finished deal (D1, 90 days).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
-pub struct PlusDeal {
-    pub id: String,
+    /// None: a deal from before orders.
+    pub order: Option<String>,
     pub side: String,
     pub item: String,
     pub qty: u32,
+    /// Money, or the paying item's count.
     pub price: u64,
-    pub currency: String,
+    /// `money` or the paying item.
+    pub pay: String,
+    /// The money's key (the label of `server.money` is written when they match); None for items.
+    pub currency: Option<String>,
     pub counterpart: String,
-    /// `completed`, `failed`, `cancelled`, `review`.
-    pub status: String,
-    pub reason: Option<String>,
-    /// `auto` or `approved`.
+    /// `auto`, `approved`, `owner` (the player reported the trade).
     pub approval: String,
-    pub at: i64,
+    /// Waiting for staff: does not count as progress.
+    pub review: bool,
+    /// The order's bound for the deal's quantity.
+    pub limit: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
-pub struct PlusDealPage {
-    pub deals: Vec<PlusDeal>,
+pub struct PlusReceiptPage {
+    pub receipts: Vec<PlusReceipt>,
     pub next: Option<String>,
 }
 
@@ -834,34 +1293,8 @@ pub(crate) struct PlusReplyAnswer {
     pub(crate) line: PlusInboxLine,
 }
 
-/// "Yazarak ekle" (Q2): a rule's draft, never stored by itself. `item` None with 2-5 `candidates`
-/// when the item is unclear.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
-pub struct PlusParseDraft {
-    pub side: String,
-    pub item: Option<String>,
-    pub candidates: Vec<String>,
-    pub qty: u32,
-    pub unit: String,
-    pub target: Option<u64>,
-    /// Buy rows.
-    pub max: Option<u64>,
-    /// Sell rows.
-    pub min: Option<u64>,
-    pub style: String,
-    pub approval: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
-pub struct PlusParseAnswer {
-    pub draft: PlusParseDraft,
-    pub issues: Vec<String>,
-}
-
 /// A saved revision of the settings (Q7). `by`: `site`, `launcher`, `phone`, `restore`, `studio`,
-/// `player` (kept as text).
+/// `confirm`, `player` (kept as text).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusHistoryEntry {
@@ -878,10 +1311,10 @@ pub struct PlusHistory {
     pub entries: Vec<PlusHistoryEntry>,
 }
 
-/// The trade summary of a range (Q4): completed deals by side, item and currency.
+/// The trade summary of a range (Q4): receipts by side, item and what paid.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
-pub struct PlusDealSummary {
+pub struct PlusReceiptSummary {
     pub from: i64,
     pub to: i64,
     pub items: Vec<PlusItemSummary>,
@@ -893,7 +1326,9 @@ pub struct PlusDealSummary {
 pub struct PlusItemSummary {
     pub side: String,
     pub item: String,
-    pub currency: String,
+    /// `money` or the paying item.
+    pub pay: String,
+    pub currency: Option<String>,
     pub deals: u32,
     pub qty: u64,
     pub total: u64,
@@ -905,7 +1340,7 @@ pub struct PlusItemSummary {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
 pub struct PlusTotals {
-    pub currency: String,
+    pub currency: Option<String>,
     pub buys: u32,
     pub sells: u32,
     pub spent: u64,
@@ -934,9 +1369,9 @@ pub struct PlusWeeklyAccount {
     pub sold: u32,
     pub spent: u64,
     pub earned: u64,
-    /// Buys: the rows' limits minus what was paid ("Alımlarda tasarruf").
+    /// Buys: the limits minus what was paid.
     pub below_limit: u64,
-    /// Sales: what came above the rows' floors ("Satışta fazladan").
+    /// Sales: what came above the floors.
     pub above_floor: u64,
     pub blocked: PlusBlockedCounts,
     pub allowance_pct: u32,
@@ -955,8 +1390,12 @@ pub struct PlusBlockedCounts {
 }
 
 impl PlusBlockedCounts {
+    /// All of them (the service's figures: never an overflow, however large).
     pub fn total(&self) -> u32 {
-        self.scam + self.rmt + self.unsafe_text + self.fake
+        self.scam
+            .saturating_add(self.rmt)
+            .saturating_add(self.unsafe_text)
+            .saturating_add(self.fake)
     }
 }
 
@@ -989,43 +1428,35 @@ impl Default for CloudQuietHours {
     }
 }
 
-// --- the checks before a write ---------------------------------------------------------------------
+// --- bounds -----------------------------------------------------------------------------------------
 
-/// The contract's fallback for a profile's `money.maxDeal`.
-pub const DEFAULT_MAX_DEAL: u64 = 10_000_000;
-/// Rows per list (Studio may set fewer: the catalog's `limits.listMax`).
-pub const LIST_MAX: u32 = 10;
+/// The generic profile's `money.maxDeal` (a Studio profile has its own).
+pub const GENERIC_MAX_DEAL: u64 = 100_000_000;
 pub const MAX_BLOCKED: usize = 100;
+pub const MAX_FRIENDS: usize = 50;
 pub const MAX_WINDOWS: usize = 7;
 pub const MAX_INTRO: usize = 60;
 pub const MAX_STATUS: usize = 80;
-pub const MAX_QTY: u32 = 9_999;
+/// Quantities and a paying item's counts.
+pub const MAX_COUNT: u32 = 9_999;
 /// A break reaches at most this far ahead.
 pub const MAX_PAUSE_SECONDS: i64 = 90 * 86_400;
 /// The owner's reply in "Mesajlar" (code points).
 pub const MAX_REPLY: usize = 200;
-/// A typed rule ("Yazarak ekle"), after cleaning.
-pub const MAX_PARSE: usize = 200;
+/// A typed order, after cleaning (code points).
+pub const MAX_ORDER_TEXT: usize = 200;
+/// The shortest typed order worth checking (code points).
+pub const MIN_ORDER_TEXT: usize = 3;
+/// An order's note (code points).
+pub const MAX_NOTE: usize = 200;
+/// A custom item's name (code points).
+pub const CUSTOM_NAME_MAX: usize = 32;
 
-const PRESETS: [&str; 4] = ["friendly", "brief", "polite", "playful"];
-const STATUS_PRESETS: [&str; 5] = [
-    "back_soon",
-    "back_evening",
-    "back_tomorrow",
-    "weekend",
-    "busy",
-];
-const SCOPES: [&str; 3] = ["all", "trade", "off"];
-const LANGS: [&str; 3] = ["auto", "tr", "en"];
-const UNITS: [&str; 2] = ["each", "total"];
-const STYLES: [&str; 3] = ["patient", "balanced", "quick"];
-const APPROVALS: [&str; 3] = ["auto", "above", "always"];
-
-/// One problem of a config, where the contract names it: `field` a path (`buy[2].max`,
+/// One problem of a config, where the contract names it: `field` a path (`orders[2].limit`,
 /// `limits.approvalAbove`, `persona.intro`, `schedule.windows[0].from`), `reason` the contract's
-/// (`range`, `order`, `id`, `item`, `limits`, `name`, `text`, `limit_rows`, `mode`, `row`,
-/// `missing`, `type`, `unknown`), `problem` the text rule's word with `text` (`length`, `marker`,
-/// `link`, `phone`, …).
+/// (`range`, `order`, `id`, `item`, `limits`, `name`, `text`, `limit_rows`, `limit_orders`,
+/// `mode`, `row`, `missing`, `type`, `unknown`, `pay`, `same`, `req`, `feature`, `until`,
+/// `blocked`, `fp`), `problem` the text rule's word with `text` (`length`, `marker`, `link`, …).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct PlusIssue {
     pub field: String,
@@ -1066,344 +1497,7 @@ pub fn is_player_name(name: &str) -> bool {
     (3..=16).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
-fn is_row_id(id: &str) -> bool {
-    (1..=8).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
-}
-
-fn is_template_id(id: &str) -> bool {
-    (1..=32).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-}
-
-fn one_of(value: &str, values: &[&str]) -> bool {
-    values.contains(&value)
-}
-
-/// A persona text's quick look: the length and the `[AFK+]` marker the bot's own lines carry. The
-/// rest of the text rule (links, numbers, listed words) and the judge are the service's.
-fn persona_text(field: &str, text: &str, max: usize, out: &mut Vec<PlusIssue>) {
-    if text.chars().count() > max {
-        out.push(PlusIssue::text(field, "length"));
-    } else if text.to_ascii_lowercase().contains("[afk+]") {
-        out.push(PlusIssue::text(field, "marker"));
-    }
-}
-
-/// The rules the launcher checks before `PUT /plus` (README "AfkPlusConfig v1" → Rules, in the
-/// Worker's terms), all of them at once so each field can say its own. `catalog`: the mode's
-/// (items, enchantments, `money.maxDeal`, `limits.listMax`); without it the catalog rules wait for
-/// the service. `now`: Unix seconds (a break's reach). The trade's return row and persona texts'
-/// full rule are the service's.
-pub fn check_config(
-    config: &PlusConfig,
-    catalog: Option<&PlusCatalog>,
-    now: i64,
-) -> Vec<PlusIssue> {
-    let mut out = Vec::new();
-    let max_deal = catalog.map_or(DEFAULT_MAX_DEAL, |c| c.money.max_deal.max(1));
-    let list_max = catalog.map_or(LIST_MAX, |c| c.limits.list_max.clamp(1, LIST_MAX)) as usize;
-    if config.v != 1 {
-        out.push(PlusIssue::new("v", "range"));
-    }
-    if !one_of(&config.lang, &LANGS) {
-        out.push(PlusIssue::new("lang", "range"));
-    }
-    let persona = &config.persona;
-    if !one_of(&persona.preset, &PRESETS) {
-        out.push(PlusIssue::new("persona.preset", "range"));
-    }
-    if persona
-        .status_preset
-        .as_deref()
-        .is_some_and(|preset| !one_of(preset, &STATUS_PRESETS))
-    {
-        out.push(PlusIssue::new("persona.statusPreset", "range"));
-    }
-    persona_text("persona.intro", &persona.intro, MAX_INTRO, &mut out);
-    // A ready status wins: the player's own text is not kept (nothing to check).
-    if persona.status_preset.is_none() {
-        persona_text("persona.status", &persona.status, MAX_STATUS, &mut out);
-    }
-    if !one_of(&config.replies.scope, &SCOPES) {
-        out.push(PlusIssue::new("replies.scope", "range"));
-    }
-    if config
-        .replies
-        .save_at
-        .is_some_and(|at| at != 50 && at != 80)
-    {
-        out.push(PlusIssue::new("replies.saveAt", "range"));
-    }
-
-    if config.buy.len() > list_max {
-        out.push(PlusIssue::new("buy", "limit_rows"));
-    }
-    if config.sell.len() > list_max {
-        out.push(PlusIssue::new("sell", "limit_rows"));
-    }
-    let mut ids = HashSet::new();
-    let ranged = |field: &str, value: u64, low: u64, high: u64, out: &mut Vec<PlusIssue>| {
-        if value < low || value > high {
-            out.push(PlusIssue::new(field, "range"));
-            false
-        } else {
-            true
-        }
-    };
-    let common = |field: &str,
-                  id: &str,
-                  item: &str,
-                  unit: &str,
-                  style: &str,
-                  approval: &str,
-                  ids: &mut HashSet<String>,
-                  out: &mut Vec<PlusIssue>| {
-        if !is_row_id(id) || !ids.insert(id.to_owned()) {
-            out.push(PlusIssue::new(format!("{field}.id"), "id"));
-        }
-        if catalog.is_some_and(|catalog| catalog.item(item).is_none()) || item.is_empty() {
-            out.push(PlusIssue::new(format!("{field}.item"), "item"));
-        }
-        if !one_of(unit, &UNITS) {
-            out.push(PlusIssue::new(format!("{field}.unit"), "range"));
-        }
-        if !one_of(style, &STYLES) {
-            out.push(PlusIssue::new(format!("{field}.style"), "range"));
-        }
-        if !one_of(approval, &APPROVALS) {
-            out.push(PlusIssue::new(format!("{field}.approval"), "range"));
-        }
-    };
-    for (i, row) in config.buy.iter().enumerate() {
-        let field = format!("buy[{i}]");
-        common(
-            &field,
-            &row.id,
-            &row.item,
-            &row.unit,
-            &row.style,
-            &row.approval,
-            &mut ids,
-            &mut out,
-        );
-        if row.req.ench.len() > 8 {
-            out.push(PlusIssue::new(format!("{field}.req.ench"), "range"));
-        }
-        for (key, level) in &row.req.ench {
-            let at = format!("{field}.req.ench.{key}");
-            match catalog.map(|c| c.enchantments.iter().find(|e| &e.id == key)) {
-                Some(None) => out.push(PlusIssue::new(at, "item")),
-                Some(Some(known)) => {
-                    ranged(
-                        &at,
-                        u64::from(*level),
-                        1,
-                        u64::from(known.max.clamp(1, 10)),
-                        &mut out,
-                    );
-                }
-                None => {
-                    ranged(&at, u64::from(*level), 1, 10, &mut out);
-                }
-            }
-        }
-        ranged(
-            &format!("{field}.req.minDurabilityPct"),
-            u64::from(row.req.min_durability_pct),
-            0,
-            100,
-            &mut out,
-        );
-        ranged(
-            &format!("{field}.qty"),
-            u64::from(row.qty),
-            1,
-            u64::from(MAX_QTY),
-            &mut out,
-        );
-        let target = ranged(
-            &format!("{field}.target"),
-            row.target,
-            1,
-            max_deal,
-            &mut out,
-        );
-        let max = ranged(&format!("{field}.max"), row.max, 1, max_deal, &mut out);
-        if target && max && row.target > row.max {
-            out.push(PlusIssue::new(format!("{field}.max"), "order"));
-        }
-        ranged(
-            &format!("{field}.dailyQty"),
-            u64::from(row.daily_qty),
-            1,
-            u64::from(MAX_QTY),
-            &mut out,
-        );
-    }
-    for (i, row) in config.sell.iter().enumerate() {
-        let field = format!("sell[{i}]");
-        common(
-            &field,
-            &row.id,
-            &row.item,
-            &row.unit,
-            &row.style,
-            &row.approval,
-            &mut ids,
-            &mut out,
-        );
-        ranged(
-            &format!("{field}.qty"),
-            u64::from(row.qty),
-            1,
-            u64::from(MAX_QTY),
-            &mut out,
-        );
-        let target = ranged(
-            &format!("{field}.target"),
-            row.target,
-            1,
-            max_deal,
-            &mut out,
-        );
-        let min = ranged(&format!("{field}.min"), row.min, 1, max_deal, &mut out);
-        if target && min && row.min > row.target {
-            out.push(PlusIssue::new(format!("{field}.min"), "order"));
-        }
-        ranged(
-            &format!("{field}.dailyQty"),
-            u64::from(row.daily_qty),
-            1,
-            u64::from(MAX_QTY),
-            &mut out,
-        );
-    }
-
-    let limits = &config.limits;
-    let amount = |field: &str, value: Option<u64>, low: u64, out: &mut Vec<PlusIssue>| match value {
-        Some(n) if n < low => {
-            out.push(PlusIssue::new(field, "range"));
-            false
-        }
-        Some(n) if n > max_deal => {
-            out.push(PlusIssue::new(field, "limits"));
-            false
-        }
-        _ => true,
-    };
-    let per_deal = amount("limits.perDealMax", limits.per_deal_max, 1, &mut out);
-    amount("limits.dailySpendMax", limits.daily_spend_max, 1, &mut out);
-    amount("limits.totalBudget", limits.total_budget, 1, &mut out);
-    amount(
-        "limits.balanceFloor",
-        Some(limits.balance_floor),
-        0,
-        &mut out,
-    );
-    let above = amount("limits.approvalAbove", limits.approval_above, 1, &mut out);
-    if per_deal
-        && above
-        && let (Some(ask_above), Some(deal_max)) = (limits.approval_above, limits.per_deal_max)
-        && ask_above > deal_max
-    {
-        out.push(PlusIssue::new("limits.approvalAbove", "limits"));
-    }
-    amount(
-        "limits.newCounterpartApprovalAbove",
-        limits.new_counterpart_approval_above,
-        1,
-        &mut out,
-    );
-    if !(1..=60).contains(&limits.approval_timeout_min) {
-        out.push(PlusIssue::new("limits.approvalTimeoutMin", "limits"));
-    }
-
-    if !is_template_id(&config.discovery.ad_template)
-        || (config.discovery.ads
-            && catalog.is_some_and(|c| {
-                !c.ad_templates
-                    .iter()
-                    .any(|t| t.id == config.discovery.ad_template)
-            }))
-    {
-        out.push(PlusIssue::new("discovery.adTemplate", "range"));
-    }
-    if config
-        .trade
-        .return_row
-        .as_deref()
-        .is_some_and(|row| row.is_empty() || row.len() > 16)
-    {
-        out.push(PlusIssue::new("trade.returnRow", "row"));
-    }
-    if !is_time(&config.summary_at) {
-        out.push(PlusIssue::new("summaryAt", "range"));
-    }
-
-    if config.blocked.len() > MAX_BLOCKED {
-        out.push(PlusIssue::new("blocked", "limit_rows"));
-    }
-    let mut names = HashSet::new();
-    for (i, name) in config.blocked.iter().enumerate() {
-        if !is_player_name(name) || !names.insert(name.to_ascii_lowercase()) {
-            out.push(PlusIssue::new(format!("blocked[{i}]"), "name"));
-        }
-    }
-
-    let schedule = &config.schedule;
-    if schedule.windows.len() > MAX_WINDOWS || (schedule.on && schedule.windows.is_empty()) {
-        out.push(PlusIssue::new("schedule.windows", "range"));
-    }
-    for (i, window) in schedule.windows.iter().enumerate() {
-        let field = format!("schedule.windows[{i}]");
-        let distinct: HashSet<u8> = window.days.iter().copied().collect();
-        if window.days.is_empty()
-            || window.days.len() > 7
-            || distinct.len() != window.days.len()
-            || window.days.iter().any(|day| !(1..=7).contains(day))
-        {
-            out.push(PlusIssue::new(format!("{field}.days"), "range"));
-        }
-        if !is_time(&window.from) {
-            out.push(PlusIssue::new(format!("{field}.from"), "range"));
-        }
-        if !is_time(&window.to) {
-            out.push(PlusIssue::new(format!("{field}.to"), "range"));
-        }
-    }
-    if config
-        .pause_until
-        .is_some_and(|until| until > now + MAX_PAUSE_SECONDS)
-    {
-        out.push(PlusIssue::new("pauseUntil", "range"));
-    }
-    out
-}
-
-/// The config as it is sent: a ready status clears the own text (the service stores it so), a
-/// break already over is no break, and a schedule's days are in order.
-pub fn normalized(mut config: PlusConfig, now: i64) -> PlusConfig {
-    if config.persona.status_preset.is_some() {
-        config.persona.status.clear();
-    }
-    config.persona.intro = config.persona.intro.trim().to_owned();
-    config.persona.status = config.persona.status.trim().to_owned();
-    if config.pause_until.is_some_and(|until| until <= now) {
-        config.pause_until = None;
-    }
-    for window in &mut config.schedule.windows {
-        window.days.sort_unstable();
-        window.days.dedup();
-    }
-    config
-}
-
-/// A refusal of `PUT /plus` (or a restore) about the settings' contents, as issues.
+/// A refusal of a settings or order write about its contents, as issues.
 pub fn refusal_issues(error: &CloudError) -> Option<Vec<PlusIssue>> {
     let field = error.extra_str("field").unwrap_or("").to_owned();
     match error.code() {
@@ -1418,12 +1512,18 @@ pub fn refusal_issues(error: &CloudError) -> Option<Vec<PlusIssue>> {
         }]),
         "limit_rows" => Some(vec![PlusIssue::new(
             if field.is_empty() {
-                "buy".into()
+                "orders".into()
             } else {
                 field
             },
             "limit_rows",
         )]),
+        // Too many active (`scope: active`) or kept (`stored`) orders.
+        "limit_orders" => Some(vec![PlusIssue {
+            field: "orders".into(),
+            reason: "limit_orders".into(),
+            problem: error.extra_str("scope").map(str::to_owned),
+        }]),
         // A persona text the judge found unsuitable: `reason` names why.
         "plus_text_rejected" => Some(vec![PlusIssue {
             field: if field.is_empty() {
@@ -1485,8 +1585,8 @@ pub fn is_table_file_name(name: &str) -> bool {
 
 // --- the routes ---------------------------------------------------------------------------------------
 
-/// `<id>` of an approval (a ULID) or a history revision, refusing anything that could leave the
-/// route.
+/// `<id>` of an approval (a ULID), an order or a history revision, refusing anything that could
+/// leave the route.
 fn path_part(text: &str, what: &'static str) -> Result<()> {
     let safe = !text.is_empty()
         && text.len() <= 40
@@ -1524,23 +1624,22 @@ fn is_week(text: &str) -> bool {
         && bytes[6..].iter().all(u8::is_ascii_digit)
 }
 
-impl CloudClient {
-    /// `GET /plus/catalog?mode=` (no session; caches keep it an hour).
-    pub async fn plus_catalog(&self, mode: &str) -> Result<PlusCatalog> {
-        path_part(mode, "game mode")?;
-        self.get(
-            None,
-            &format!("plus/catalog{}", query(&[("mode", Some(mode.into()))])),
-        )
-        .await
-    }
+fn if_match(rev: u64) -> [(reqwest::header::HeaderName, String); 1] {
+    [(IF_MATCH, format!("\"{rev}\""))]
+}
 
+fn to_body<T: Serialize>(value: &T) -> Result<serde_json::Value> {
+    serde_json::to_value(value).map_err(|e| CloudError::Protocol(e.to_string()))
+}
+
+impl CloudClient {
     /// `GET /accounts/:id/plus`.
     pub async fn plus_settings(&self, token: &Bearer, id: &str) -> Result<PlusSettings> {
         self.get(Some(token), &account_path(id, "/plus")?).await
     }
 
-    /// `PUT /accounts/:id/plus` with `If-Match: "<rev>"`. A stale `rev` is `412 rev_conflict`.
+    /// `PUT /accounts/:id/plus` with `If-Match: "<rev>"`: everything but the orders and custom
+    /// items (the stored ones stay). A stale `rev` is `412 rev_conflict`.
     pub async fn put_plus(
         &self,
         token: &Bearer,
@@ -1548,18 +1647,171 @@ impl CloudClient {
         rev: u64,
         config: &PlusConfig,
     ) -> Result<PlusWritten> {
-        let body = serde_json::to_value(config).map_err(|e| CloudError::Protocol(e.to_string()))?;
+        let mut body = to_body(config)?;
+        if let Some(object) = body.as_object_mut() {
+            object.remove("orders");
+            object.remove("customItems");
+        }
         self.send(
             Method::PUT,
             &account_path(id, "/plus")?,
             Some(token),
             Some(body),
-            &[(IF_MATCH, format!("\"{rev}\""))],
+            &if_match(rev),
             Repeat::Never,
         )
         .await?
         .into_result()?
         .json()
+    }
+
+    /// "Kontrol et": `POST /accounts/:id/plus/orders/check {text, lang}`. The answer's JSON as it
+    /// came (`{draft, questions, notes, left}`): the panel answers the questions on it locally, so
+    /// it must reach the page exactly as the service wrote it. Counted per minute and per day, so
+    /// never repeated.
+    pub async fn check_order(
+        &self,
+        token: &Bearer,
+        id: &str,
+        text: &str,
+        lang: &str,
+    ) -> Result<String> {
+        let lang = if lang == "en" { "en" } else { "tr" };
+        let reply = self
+            .send(
+                Method::POST,
+                &account_path(id, "/plus/orders/check")?,
+                Some(token),
+                Some(serde_json::json!({ "text": text, "lang": lang })),
+                &[],
+                Repeat::Never,
+            )
+            .await?
+            .into_result()?;
+        let answer: serde_json::Value = reply.json()?;
+        if !answer
+            .get("draft")
+            .is_some_and(serde_json::Value::is_object)
+        {
+            return Err(CloudError::Protocol("a check without a draft".into()));
+        }
+        Ok(answer.to_string())
+    }
+
+    /// `POST /accounts/:id/plus/orders` + `If-Match`: a new order (or a deleted one put back), the
+    /// new custom items it names and a chip's settings change, in one write.
+    pub async fn create_order(
+        &self,
+        token: &Bearer,
+        id: &str,
+        rev: u64,
+        order: &PlusNewOrder,
+        custom_items: &[PlusNewCustomItem],
+        settings: &PlusOrderSettings,
+    ) -> Result<PlusOrderWritten> {
+        let mut body = serde_json::json!({ "order": to_body(order)? });
+        if !custom_items.is_empty() {
+            body["customItems"] = to_body(&custom_items)?;
+        }
+        if !settings.is_empty() {
+            body["settings"] = settings.body();
+        }
+        self.send(
+            Method::POST,
+            &account_path(id, "/plus/orders")?,
+            Some(token),
+            Some(body),
+            &if_match(rev),
+            Repeat::Never,
+        )
+        .await?
+        .into_result()?
+        .json()
+    }
+
+    /// `PATCH /accounts/:id/plus/orders/:oid` + `If-Match`.
+    pub async fn patch_order(
+        &self,
+        token: &Bearer,
+        id: &str,
+        rev: u64,
+        order: &str,
+        patch: &PlusOrderPatch,
+    ) -> Result<PlusOrderWritten> {
+        path_part(order, "order")?;
+        self.send(
+            Method::PATCH,
+            &account_path(id, &format!("/plus/orders/{order}"))?,
+            Some(token),
+            Some(patch.body()?),
+            &if_match(rev),
+            Repeat::Never,
+        )
+        .await?
+        .into_result()?
+        .json()
+    }
+
+    /// `DELETE /accounts/:id/plus/orders/:oid` + `If-Match`; `deferred` while its trade runs.
+    pub async fn delete_order(
+        &self,
+        token: &Bearer,
+        id: &str,
+        rev: u64,
+        order: &str,
+    ) -> Result<PlusOrderWritten> {
+        path_part(order, "order")?;
+        self.send(
+            Method::DELETE,
+            &account_path(id, &format!("/plus/orders/{order}"))?,
+            Some(token),
+            None,
+            &if_match(rev),
+            Repeat::Never,
+        )
+        .await?
+        .into_result()?
+        .json()
+    }
+
+    /// "Envanterden seç": `POST /accounts/:id/plus/items/pick {slot, id, cmd?, model?}` (the slot
+    /// as the live inventory shows it, the item seen there and its look).
+    pub async fn pick_item(
+        &self,
+        token: &Bearer,
+        id: &str,
+        slot: u32,
+        item: &str,
+        cmd: Option<i64>,
+        model: Option<&str>,
+    ) -> Result<PlusPick> {
+        if !(5..=45).contains(&slot) {
+            return Err(CloudError::Invalid("inventory slot"));
+        }
+        let mut body = serde_json::json!({ "slot": slot, "id": item });
+        if let Some(cmd) = cmd {
+            body["cmd"] = serde_json::Value::from(cmd);
+        }
+        if let Some(model) = model {
+            body["model"] = serde_json::Value::String(model.to_owned());
+        }
+        #[derive(Deserialize)]
+        struct Answer {
+            pick: PlusPick,
+        }
+        let answer: Answer = self
+            .send(
+                Method::POST,
+                &account_path(id, "/plus/items/pick")?,
+                Some(token),
+                Some(body),
+                &[],
+                Repeat::Safe,
+            )
+            .await?
+            .into_result()?
+            .json()?;
+        Ok(answer.pick)
     }
 
     /// `POST /accounts/:id/plus/control {action, name?}`.
@@ -1591,36 +1843,43 @@ impl CloudClient {
         .json()
     }
 
-    /// `GET /accounts/:id/plus/feed` (live from the machine; `503 host_offline`).
-    pub async fn plus_feed(
+    /// `GET /accounts/:id/plus/audit` (live from the machine; `503 host_offline`): newest first;
+    /// `before` older than an entry's `s`, `after` the newest past one; `group` `deals`,
+    /// `messages` or `warnings`.
+    pub async fn plus_audit(
         &self,
         token: &Bearer,
         id: &str,
-        after: Option<&str>,
+        before: Option<i64>,
+        after: Option<i64>,
         limit: Option<u32>,
-    ) -> Result<PlusFeedPage> {
+        group: Option<&str>,
+    ) -> Result<PlusAuditPage> {
+        let group = group.filter(|group| matches!(*group, "deals" | "messages" | "warnings"));
         let path = format!(
             "{}{}",
-            account_path(id, "/plus/feed")?,
+            account_path(id, "/plus/audit")?,
             query(&[
-                ("after", after.map(str::to_owned)),
-                ("limit", limit.map(|n| n.clamp(1, 100).to_string())),
+                ("before", before.map(|s| s.to_string())),
+                ("after", after.map(|s| s.to_string())),
+                ("limit", limit.map(|n| n.clamp(1, 200).to_string())),
+                ("group", group.map(str::to_owned)),
             ])
         );
         self.get(Some(token), &path).await
     }
 
-    /// `GET /accounts/:id/plus/deals` (D1, 90 days).
-    pub async fn plus_deals(
+    /// `GET /accounts/:id/plus/receipts` (D1, 90 days), newest first.
+    pub async fn plus_receipts(
         &self,
         token: &Bearer,
         id: &str,
-        after: Option<&str>,
-    ) -> Result<PlusDealPage> {
+        before: Option<&str>,
+    ) -> Result<PlusReceiptPage> {
         let path = format!(
             "{}{}",
-            account_path(id, "/plus/deals")?,
-            query(&[("after", after.map(str::to_owned))])
+            account_path(id, "/plus/receipts")?,
+            query(&[("before", before.map(str::to_owned))])
         );
         self.get(Some(token), &path).await
     }
@@ -1764,36 +2023,14 @@ impl CloudClient {
         .map(|_| ())
     }
 
-    /// "Yazarak ekle" (Q2): `POST /accounts/:id/plus/parse {text, lang}`. Counted per day, so never
-    /// repeated.
-    pub async fn plus_parse(
-        &self,
-        token: &Bearer,
-        id: &str,
-        text: &str,
-        lang: &str,
-    ) -> Result<PlusParseAnswer> {
-        let lang = if lang == "en" { "en" } else { "tr" };
-        self.send(
-            Method::POST,
-            &account_path(id, "/plus/parse")?,
-            Some(token),
-            Some(serde_json::json!({ "text": text, "lang": lang })),
-            &[],
-            Repeat::Never,
-        )
-        .await?
-        .into_result()?
-        .json()
-    }
-
     /// "Ayar geçmişi" (Q7): newest first.
     pub async fn plus_history(&self, token: &Bearer, id: &str) -> Result<PlusHistory> {
         self.get(Some(token), &account_path(id, "/plus/history")?)
             .await
     }
 
-    /// "Bu hale dön": the revision `rev` becomes the next one (`If-Match: "<current>"`).
+    /// "Bu hale dön": the revision `rev` becomes the next one (`If-Match: "<current>"`). The
+    /// settings come back; the orders and custom items stay as they are now.
     pub async fn plus_restore(
         &self,
         token: &Bearer,
@@ -1806,7 +2043,7 @@ impl CloudClient {
             &account_path(id, &format!("/plus/history/{rev}/restore"))?,
             Some(token),
             None,
-            &[(IF_MATCH, format!("\"{current}\""))],
+            &if_match(current),
             Repeat::Never,
         )
         .await?
@@ -1815,16 +2052,16 @@ impl CloudClient {
     }
 
     /// The trade summary of `from..to` (Unix seconds; the service's default: the last 30 days).
-    pub async fn plus_deal_summary(
+    pub async fn plus_receipt_summary(
         &self,
         token: &Bearer,
         id: &str,
         from: Option<i64>,
         to: Option<i64>,
-    ) -> Result<PlusDealSummary> {
+    ) -> Result<PlusReceiptSummary> {
         let path = format!(
             "{}{}",
-            account_path(id, "/plus/deals/summary")?,
+            account_path(id, "/plus/receipts/summary")?,
             query(&[
                 ("from", from.map(|at| at.to_string())),
                 ("to", to.map(|at| at.to_string())),
@@ -1833,9 +2070,9 @@ impl CloudClient {
         self.get(Some(token), &path).await
     }
 
-    /// "Tabloyu indir": the deals of `from..to` as CSV (UTF-8 with a byte order mark; Turkish
+    /// "Tabloyu indir": the receipts of `from..to` as CSV (UTF-8 with a byte order mark; Turkish
     /// headers with `;`, or English with `,`).
-    pub async fn plus_deals_csv(
+    pub async fn plus_receipts_csv(
         &self,
         token: &Bearer,
         id: &str,
@@ -1846,7 +2083,7 @@ impl CloudClient {
         let lang = if lang == "en" { "en" } else { "tr" };
         let path = format!(
             "{}{}",
-            account_path(id, "/plus/deals.csv")?,
+            account_path(id, "/plus/receipts.csv")?,
             query(&[
                 ("from", from.map(|at| at.to_string())),
                 ("to", to.map(|at| at.to_string())),
@@ -1887,12 +2124,11 @@ impl CloudClient {
         token: &Bearer,
         prefs: &CloudNotifyPrefs,
     ) -> Result<CloudNotifyPrefs> {
-        let body = serde_json::to_value(prefs).map_err(|e| CloudError::Protocol(e.to_string()))?;
         self.send(
             Method::PUT,
             "me/notifications",
             Some(token),
-            Some(body),
+            Some(to_body(prefs)?),
             &[],
             Repeat::Safe,
         )
@@ -1924,7 +2160,7 @@ mod tests {
           "rev": 7, "serverChanges": {"used": 0, "limit": 6, "resetAt": null},
           "tier": "plus", "plusUntil": 1795000000,
           "ai": {"state": "paused", "reason": "quota", "until": 1792418400,
-            "trade": {"on": true, "buy": "notify"}, "pendingApprovals": 2,
+            "trade": {"on": true, "by": "owner", "buy": "notify"}, "pendingApprovals": 2,
             "quota": {"pct5": 100, "pctWeek": 41, "w5hResetAt": 1792418400,
               "weekResetAt": 1792807200, "exhaustedUntil": 1792418400, "giftsLeft": 0},
             "spent": {"total": 37500, "today": 0}, "newMessages": {"count": 2, "at": 1792400100},
@@ -1941,7 +2177,10 @@ mod tests {
         assert_eq!(ai.state, "paused");
         assert_eq!(ai.reason.as_deref(), Some("quota"));
         assert!(!ai.is_on());
-        assert_eq!(ai.trade.buy, "notify");
+        assert_eq!(
+            (ai.trade.by.as_str(), ai.trade.buy.as_str()),
+            ("owner", "notify")
+        );
         assert_eq!(ai.pending_approvals, 2);
         assert_eq!(ai.quota.unwrap().w5h_reset_at, Some(1792418400));
         assert_eq!(
@@ -1972,7 +2211,7 @@ mod tests {
     }
 
     #[test]
-    fn the_offer_says_whether_afk_plus_shows() {
+    fn the_offer_says_whether_afk_plus_shows_and_where() {
         let offer: Offer = serde_json::from_value(json!({
             "mode": "on", "plus": null
         }))
@@ -1986,15 +2225,19 @@ mod tests {
               "stock": {"soldOut": false, "remaining": 7}, "refundWindowHours": 24,
               "termsVersion": 1,
               "allowance": {"month": {"w5h": 5000, "week": 20000}, "year": {"w5h": 5000, "week": 20000}},
-              "features": {"inbox": true, "parse": true, "schedule": true, "report": false,
-                "history": true, "saver": true, "notifyDigest": false, "handoff": false, "watch": false}}
+              "features": {"inbox": true, "orders": true, "audit": true, "customItems": true,
+                "itemPay": false, "anyServer": false, "schedule": true, "report": false,
+                "history": true, "saver": true, "notifyDigest": false, "handoff": false, "watch": false},
+              "servers": {"any": false, "verified": ["projects.gg"]}}
         }))
         .unwrap();
         let plus = offer.plus.unwrap();
         assert_eq!(plus.mode, "invite");
         assert_eq!(plus.month_price().unwrap().price_tl, "200.00");
         assert_eq!(plus.stock.remaining, Some(7));
-        assert!(plus.features.inbox && !plus.features.report);
+        assert!(plus.features.inbox && plus.features.orders && !plus.features.report);
+        assert!(!plus.features.item_pay && !plus.servers.any);
+        assert_eq!(plus.servers.verified, ["projects.gg"]);
         let me: Me = serde_json::from_value(json!({
             "user": {"id": "1", "username": "ahmet"},
             "plus": {"canBuy": {"ok": false, "reason": "plus_invite_only"}, "restricted": null}
@@ -2005,11 +2248,25 @@ mod tests {
         assert_eq!(plus.can_buy.reason.as_deref(), Some("plus_invite_only"));
     }
 
-    /// The contract's defaults (README "AfkPlusConfig v1").
-    fn defaults() -> serde_json::Value {
-        json!({"v": 1, "enabled": true, "mode": "projects-smp", "lang": "auto",
-          "persona": {"preset": "friendly", "intro": "", "status": "", "statusPreset": null, "smallTalk": true},
-          "replies": {"scope": "trade", "away": true, "saveAt": 80}, "buy": [], "sell": [],
+    /// The contract's defaults (README "AfkPlusConfig v2"), with one order and one custom item.
+    fn document() -> serde_json::Value {
+        json!({"v": 2, "enabled": true, "mode": "projects-smp", "lang": "auto",
+          "persona": {"preset": "friendly", "intro": "", "status": "", "statusPreset": null, "smallTalk": true,
+            "playerTalk": false, "prefix": {"on": false, "text": "[AFK+]"}},
+          "replies": {"scope": "trade", "away": true, "saveAt": 80},
+          "authority": "ask", "allow": {"buy": true, "sell": true}, "pay": "money",
+          "who": {"mode": "all", "friends": []},
+          "orders": [{"id": "o1", "on": true, "side": "buy", "item": "minecraft:elytra", "qty": 1,
+            "req": {"ench": {"minecraft:unbreaking": 3}, "dur": 90, "named": false, "cursed": false},
+            "pay": "money", "unit": "total", "target": 32000, "limit": 40000, "style": "balanced",
+            "trade": "auto", "until": 1794109600, "note": "Elytra alırım, en fazla 40 bin",
+            "src": "text", "at": 1792900000},
+            {"id": "o2", "on": true, "side": "sell", "item": "custom:c1", "qty": 5, "req": null,
+            "pay": "money", "unit": "each", "target": 5000, "limit": 4500, "style": "patient",
+            "trade": "owner", "until": 1794109600, "note": "", "src": "inv", "at": 1792900000}],
+          "customItems": [{"k": "c1", "name": "Yakut", "base": "minecraft:paper",
+            "fp": "0123456789abcdef0123456789abcdef", "look": {"cmd": 10001}, "from": "inv",
+            "at": 1792900000}],
           "limits": {"perDealMax": null, "dailySpendMax": null, "totalBudget": null, "balanceFloor": 0,
             "approvalAbove": 50000, "newCounterpartApprovalAbove": null, "approvalTimeoutMin": 10},
           "discovery": {"scanChat": true, "proactivePm": true, "ads": false, "adTemplate": "buy-basic"},
@@ -2019,197 +2276,175 @@ mod tests {
 
     #[test]
     fn the_config_round_trips_in_the_contracts_form() {
-        let config: PlusConfig = serde_json::from_value(defaults()).unwrap();
-        assert_eq!(serde_json::to_value(&config).unwrap(), defaults());
+        let config: PlusConfig = serde_json::from_value(document()).unwrap();
+        assert_eq!(serde_json::to_value(&config).unwrap(), document());
         assert!(!config.can_spend());
-        // A stored document from before the QoL fields reads with their defaults.
-        let mut old = defaults();
-        for key in ["schedule", "pauseUntil"] {
-            old.as_object_mut().unwrap().remove(key);
-        }
-        old["persona"]
-            .as_object_mut()
-            .unwrap()
-            .remove("statusPreset");
-        old["replies"].as_object_mut().unwrap().remove("saveAt");
-        let config: PlusConfig = serde_json::from_value(old).unwrap();
-        assert_eq!(config.replies.save_at, Some(80));
-        assert_eq!(config.schedule, PlusSchedule::default());
-        let row: PlusBuyRow = serde_json::from_value(json!({
-            "id": "b1", "item": "minecraft:elytra",
-            "req": {"ench": {"minecraft:unbreaking": 3}, "minDurabilityPct": 90,
-              "allowCustomName": false, "allowCurses": false},
-            "qty": 1, "unit": "total", "target": 32000, "max": 40000, "style": "balanced",
-            "approval": "above", "dailyQty": 1, "notify": true, "enabled": true}))
-        .unwrap();
-        assert_eq!(row.req.ench.get("minecraft:unbreaking"), Some(&3));
+        assert_eq!(config.orders[1].req, None);
+        assert_eq!(config.custom_item("custom:c1").unwrap().name, "Yakut");
+        assert_eq!(config.custom_item("minecraft:paper"), None);
         assert_eq!(
-            serde_json::to_value(&row).unwrap()["req"]["minDurabilityPct"],
-            json!(90)
+            config.custom_items[0].look,
+            Some(PlusLook {
+                cmd: Some(10001),
+                model: None
+            })
+        );
+        // A look writes only the keys it has (`model: null` would be refused).
+        assert_eq!(
+            serde_json::to_value(&config.custom_items[0].look).unwrap(),
+            json!({"cmd": 10001})
         );
     }
 
-    fn catalog() -> PlusCatalog {
-        serde_json::from_value(json!({
-            "mode": "projects-smp", "name": {"tr": "SMP", "en": "SMP"},
-            "items": [
-              {"id": "minecraft:elytra", "tr": "Elytra", "en": "Elytra", "sprite": "elytra", "stack": 1, "damageable": true},
-              {"id": "minecraft:diamond", "tr": "Elmas", "en": "Diamond", "sprite": "diamond", "stack": 64, "damageable": false}
-            ],
-            "enchantments": [{"id": "minecraft:unbreaking", "tr": "Kırılmazlık", "en": "Unbreaking", "max": 3}],
-            "money": {"currency": "smp", "maxDeal": 10000000},
-            "limits": {"listMax": 10, "approvalTimeoutMin": [1, 60]},
-            "adTemplates": [{"id": "buy-basic", "tr": "Alıyorum", "en": "Buying"}]
+    #[test]
+    fn reads_the_settings_view() {
+        let settings: PlusSettings = serde_json::from_value(json!({
+            "config": document(), "aiRev": 4,
+            "judge": {"intro": {"state": "ok", "at": 1}, "status": {"state": "ok", "at": 1}},
+            "server": {"kind": "generic", "mode": "generic", "name": null, "trade": "owner",
+              "money": {"label": null, "maxDeal": 100000000, "currency": "money"}, "mc": "26.3",
+              "ads": [], "on": true},
+            "rules": {"orderMax": 10, "orderStore": 20, "customItemsMax": 20, "orderDaysDefault": 14,
+              "orderDaysMax": 30, "buyStacksPerDay": 1, "checksPerDay": 20, "checksLeft": 17,
+              "friendsMax": 50, "noteMax": 200, "textMax": 200, "approvalTimeoutMin": [1, 60],
+              "features": {"orders": true, "audit": true, "customItems": true, "itemPay": false}},
+            "orders": {"o1": {"status": "haggling", "got": 0, "at": 0, "live": "haggling"},
+              "o2": {"status": "your_trade", "got": 2, "at": 1792950000, "live": "your_trade"}},
+            "spent": null, "asOf": 1792950100
         }))
-        .unwrap()
-    }
-
-    fn fields(issues: &[PlusIssue]) -> Vec<(String, String)> {
-        issues
-            .iter()
-            .map(|issue| (issue.field.clone(), issue.reason.clone()))
-            .collect()
+        .unwrap();
+        assert_eq!(settings.server.trade, "owner");
+        assert_eq!(settings.server.money.label, None);
+        assert_eq!(settings.server.mc.as_deref(), Some("26.3"));
+        assert_eq!(settings.rules.checks_left, Some(17));
+        assert!(!settings.rules.features.item_pay);
+        assert_eq!(settings.orders["o2"].got, 2);
+        assert_eq!(settings.orders["o1"].live.as_deref(), Some("haggling"));
+        assert_eq!(settings.as_of, Some(1792950100));
+        // Without the newer parts (an older service), the defaults hold.
+        let settings: PlusSettings =
+            serde_json::from_value(json!({"config": document(), "aiRev": 1})).unwrap();
+        assert_eq!(settings.rules, PlusRules::default());
+        assert_eq!(settings.server.money.max_deal, GENERIC_MAX_DEAL);
     }
 
     #[test]
-    fn a_good_config_passes() {
-        let mut config: PlusConfig = serde_json::from_value(defaults()).unwrap();
-        config.buy.push(PlusBuyRow {
-            id: "b1".into(),
-            item: "minecraft:elytra".into(),
-            target: 32_000,
-            max: 40_000,
-            ..PlusBuyRow::default()
-        });
-        config.sell.push(PlusSellRow {
-            id: "s1".into(),
+    fn writes_orders_in_the_routes_form() {
+        let order = PlusNewOrder {
+            id: None,
+            at: None,
+            on: true,
+            side: "sell".into(),
             item: "minecraft:diamond".into(),
             qty: 64,
+            req: None,
+            pay: "money".into(),
+            unit: "each".into(),
             target: 120,
-            min: 100,
-            ..PlusSellRow::default()
-        });
-        config.limits.per_deal_max = Some(50_000);
-        config.limits.total_budget = Some(300_000);
-        config.schedule = PlusSchedule {
-            on: true,
-            windows: vec![PlusWindow {
-                days: vec![1, 2, 3, 4, 5],
-                from: "18:00".into(),
-                to: "02:00".into(),
-            }],
+            limit: 100,
+            style: "patient".into(),
+            trade: "auto".into(),
+            until: 1794109600,
+            note: String::new(),
+            src: "form".into(),
+        };
+        let body = to_body(&order).unwrap();
+        assert!(body.get("id").is_none() && body.get("at").is_none());
+        assert_eq!(body["req"], serde_json::Value::Null);
+        assert_eq!(order.stored("n1", 5).id, "n1");
+        assert_eq!(order.stored("n1", 5).at, 5);
+        let back = PlusNewOrder {
+            id: Some("o9".into()),
+            at: Some(3),
+            ..order
+        };
+        assert_eq!(to_body(&back).unwrap()["id"], json!("o9"));
+        assert_eq!(back.stored("n1", 5).id, "o9");
+
+        let patch = PlusOrderPatch {
+            on: Some(false),
+            ..PlusOrderPatch::default()
+        };
+        assert_eq!(patch.body().unwrap(), json!({"on": false}));
+        let patch = PlusOrderPatch {
+            pay: Some("money".into()),
+            no_req: true,
+            extend: true,
+            ..PlusOrderPatch::default()
         };
         assert_eq!(
-            check_config(&config, Some(&catalog()), 1_792_000_000),
-            vec![]
+            patch.body().unwrap(),
+            json!({"req": null, "pay": "money", "extend": true})
         );
-        assert!(config.can_spend());
+        let stored: PlusConfig = serde_json::from_value(document()).unwrap();
+        let next = patch.applied(&stored.orders[0], 100, 14);
+        assert_eq!((next.req, next.until), (None, 100 + 14 * 86_400));
+        assert_eq!(
+            PlusOrderSettings {
+                pay: Some("both".into()),
+                per_deal_max: Some(60000)
+            }
+            .body(),
+            json!({"pay": "both", "limits": {"perDealMax": 60000}})
+        );
+        assert!(PlusOrderSettings::default().is_empty());
     }
 
     #[test]
-    fn every_broken_rule_is_named_where_the_service_names_it() {
-        let mut config: PlusConfig = serde_json::from_value(defaults()).unwrap();
-        config.persona.intro = "x".repeat(61);
-        config.persona.status = "[AFK+] dönerim".into();
-        config.buy = vec![
-            PlusBuyRow {
-                id: "b1".into(),
-                item: "minecraft:elytra".into(),
-                target: 40_000,
-                max: 30_000,
-                ..PlusBuyRow::default()
-            },
-            PlusBuyRow {
-                id: "b1".into(),
-                item: "minecraft:netherite_sword".into(),
-                qty: 0,
-                target: 5,
-                max: 20_000_000,
-                ..PlusBuyRow::default()
-            },
-        ];
-        config.buy[0]
-            .req
-            .ench
-            .insert("minecraft:sharpness".into(), 5);
-        config.sell = vec![PlusSellRow {
-            id: "S1".into(),
-            item: "minecraft:diamond".into(),
-            target: 100,
-            min: 120,
-            ..PlusSellRow::default()
-        }];
-        config.limits.per_deal_max = Some(10_000);
-        config.limits.approval_above = Some(20_000);
-        config.limits.approval_timeout_min = 0;
-        config.blocked = vec!["Kaan_07".into(), "kaan_07".into(), "a!".into()];
-        config.schedule = PlusSchedule {
-            on: true,
-            windows: vec![PlusWindow {
-                days: vec![1, 1, 8],
-                from: "24:00".into(),
-                to: "7:00".into(),
-            }],
-        };
-        config.summary_at = "9:00".into();
-        config.pause_until = Some(1_792_000_000 + MAX_PAUSE_SECONDS + 1);
-        let issues = check_config(&config, Some(&catalog()), 1_792_000_000);
-        let want = [
-            ("persona.intro", "text"),
-            ("persona.status", "text"),
-            ("buy[0].req.ench.minecraft:sharpness", "item"),
-            ("buy[0].max", "order"),
-            ("buy[1].id", "id"),
-            ("buy[1].item", "item"),
-            ("buy[1].qty", "range"),
-            ("buy[1].max", "range"),
-            ("sell[0].id", "id"),
-            ("sell[0].min", "order"),
-            ("limits.approvalAbove", "limits"),
-            ("limits.approvalTimeoutMin", "limits"),
-            ("summaryAt", "range"),
-            ("blocked[1]", "name"),
-            ("blocked[2]", "name"),
-            ("schedule.windows[0].days", "range"),
-            ("schedule.windows[0].from", "range"),
-            ("schedule.windows[0].to", "range"),
-            ("pauseUntil", "range"),
-        ];
-        let found = fields(&issues);
-        for (field, reason) in want {
-            assert!(
-                found.contains(&(field.to_owned(), reason.to_owned())),
-                "{field} {reason} missing in {found:?}"
-            );
-        }
-        assert_eq!(found.len(), want.len(), "{found:?}");
-        assert_eq!(issues[0].problem.as_deref(), Some("length"));
-        assert_eq!(issues[1].problem.as_deref(), Some("marker"));
-    }
+    fn reads_picks_approvals_audit_and_receipts() {
+        let pick: PlusPick = serde_json::from_value(json!({"ref": "minecraft:diamond_sword",
+          "req": {"ench": {"minecraft:sharpness": 5}, "dur": 80, "named": false, "cursed": false}}))
+        .unwrap();
+        assert_eq!(pick.reference.as_deref(), Some("minecraft:diamond_sword"));
+        assert_eq!(pick.req.unwrap().dur, 80);
+        let pick: PlusPick = serde_json::from_value(json!({"custom": {"name": null,
+          "base": "minecraft:paper", "fp": "0123456789abcdef0123456789abcdef",
+          "look": {"model": "projects:ruby"}}}))
+        .unwrap();
+        let custom = pick.custom.unwrap();
+        assert_eq!(custom.name, None);
+        assert_eq!(custom.look.unwrap().model.as_deref(), Some("projects:ruby"));
 
-    #[test]
-    fn a_ready_status_wins_and_an_old_break_is_no_break() {
-        let mut config = PlusConfig::default();
-        config.persona.status_preset = Some("back_evening".into());
-        config.persona.status = "x".repeat(200);
-        config.persona.intro = "  Ahmet'in asistanı  ".into();
-        config.pause_until = Some(10);
-        config.schedule.windows.push(PlusWindow {
-            days: vec![5, 1, 5],
-            from: "08:00".into(),
-            to: "08:00".into(),
-        });
-        assert!(
-            !fields(&check_config(&config, None, 100))
-                .iter()
-                .any(|(field, _)| field == "persona.status"),
-            "a ready status is not the player's text"
+        let approval: PlusApproval = serde_json::from_value(json!({
+            "id": "01JBXK3D2E", "acct": "a_1", "kind": "confirm_item", "order": "o2",
+            "custom": {"k": "c1", "field": "item"},
+            "deal": {"side": "buy", "item": "custom:c1", "qty": 2, "price": 9000, "pay": "money"},
+            "counterpart": "Kaan_07", "why": [],
+            "seen": {"id": "minecraft:paper", "cmd": 10001, "name": "Yakut", "lore": ["Nadir"]},
+            "createdAt": 1, "expiresAt": 601, "state": "pending"
+        }))
+        .unwrap();
+        assert!(approval.is_pending());
+        assert_eq!(approval.kind, "confirm_item");
+        assert_eq!(approval.custom.unwrap().field, "item");
+        assert_eq!(approval.seen.unwrap().lore, ["Nadir"]);
+
+        let page: PlusAuditPage = serde_json::from_value(json!({
+            "items": [{"s": 20387000014i64, "t": 1792950000000i64, "k": "agree", "w": "Kaan_07",
+              "o": "o1", "i": "minecraft:elytra", "q": 1, "p": 37500, "u": "money"},
+              {"s": 20387000013i64, "t": 1792949000000i64, "k": "pm_in", "w": "Kaan_07",
+              "x": "elytra var 45k", "h": true}],
+            "more": true, "from": 20381
+        }))
+        .unwrap();
+        assert_eq!(page.items[0].day(), 20387);
+        assert_eq!(page.items[1].h, Some(true));
+        // The cache writes only the keys an entry has.
+        assert_eq!(
+            serde_json::to_value(&page.items[1]).unwrap(),
+            json!({"s": 20387000013i64, "t": 1792949000000i64, "k": "pm_in", "w": "Kaan_07",
+              "x": "elytra var 45k", "h": true})
         );
-        let sent = normalized(config, 100);
-        assert_eq!(sent.persona.status, "");
-        assert_eq!(sent.persona.intro, "Ahmet'in asistanı");
-        assert_eq!(sent.pause_until, None);
-        assert_eq!(sent.schedule.windows[0].days, vec![1, 5]);
+
+        let receipts: PlusReceiptPage = serde_json::from_value(json!({
+            "receipts": [{"at": 1792950000000i64, "order": "o2", "side": "sell", "item": "custom:c1",
+              "qty": 2, "price": 9000, "pay": "money", "currency": "money", "counterpart": "Kaan_07",
+              "approval": "owner", "review": false}],
+            "next": null
+        }))
+        .unwrap();
+        assert_eq!(receipts.receipts[0].approval, "owner");
+        assert_eq!(receipts.receipts[0].limit, None);
     }
 
     #[test]
@@ -2235,85 +2470,47 @@ mod tests {
 
     #[test]
     fn refusals_become_issues() {
-        let error = from_response(
-            400,
-            None,
-            json!({"error": {"code": "invalid_plus_config", "field": "persona.intro",
-                "reason": "text", "problem": "phone"}})
-            .to_string()
-            .as_bytes(),
+        let refusal = |status: u16, body: serde_json::Value| {
+            from_response(status, None, body.to_string().as_bytes())
+        };
+        assert_eq!(
+            refusal_issues(&refusal(
+                400,
+                json!({"error": {"code": "invalid_plus_config", "field": "orders[0].limit",
+                    "reason": "order"}})
+            )),
+            Some(vec![PlusIssue::new("orders[0].limit", "order")])
         );
         assert_eq!(
-            refusal_issues(&error),
-            Some(vec![PlusIssue::text("persona.intro", "phone")])
+            refusal_issues(&refusal(
+                400,
+                json!({"error": {"code": "invalid_plus_config", "field": "customItems[0].name",
+                    "reason": "text", "problem": "link"}})
+            )),
+            Some(vec![PlusIssue::text("customItems[0].name", "link")])
         );
-        let error = from_response(
+        let issues = refusal_issues(&refusal(
             422,
-            None,
-            json!({"error": {"code": "plus_text_rejected", "field": "persona.status",
-                "reason": "contact"}})
-            .to_string()
-            .as_bytes(),
+            json!({"error": {"code": "limit_orders", "scope": "active", "max": 10}}),
+        ))
+        .unwrap();
+        assert_eq!(
+            (issues[0].reason.as_str(), issues[0].problem.as_deref()),
+            ("limit_orders", Some("active"))
         );
-        let issues = refusal_issues(&error).unwrap();
+        let issues = refusal_issues(&refusal(
+            422,
+            json!({"error": {"code": "plus_text_rejected", "field": "persona.status",
+                "reason": "contact"}}),
+        ))
+        .unwrap();
         assert_eq!(issues[0].field, "persona.status");
         assert_eq!(issues[0].reason, "judged");
         assert_eq!(issues[0].problem.as_deref(), Some("contact"));
-        let error = from_response(
-            409,
-            None,
-            json!({"error": {"code": "plus_off"}})
-                .to_string()
-                .as_bytes(),
+        assert_eq!(
+            refusal_issues(&refusal(409, json!({"error": {"code": "plus_off"}}))),
+            None
         );
-        assert_eq!(refusal_issues(&error), None);
-    }
-
-    #[test]
-    fn reads_the_qol_objects() {
-        let page: PlusThreadPage = serde_json::from_value(json!({
-            "lines": [{"at": 1, "from": "them", "text": "elytra var 45k"},
-                      {"at": 2, "from": "them", "text": "…", "hidden": "unsafe"}],
-            "handoffUntil": null, "canReply": true, "next": null
-        }))
-        .unwrap();
-        assert!(page.can_reply);
-        assert_eq!(page.lines[1].hidden.as_deref(), Some("unsafe"));
-        let report: PlusWeeklyReport = serde_json::from_value(json!({
-            "week": "2026-W43", "from": 1, "to": 2,
-            "accounts": [{"id": "a_1", "name": "Ahmet_AFK", "pms": 14, "bought": 2, "sold": 1,
-              "spent": 75000, "earned": 7200, "belowLimit": 2500, "aboveFloor": 400,
-              "blocked": {"scam": 1, "rmt": 0, "unsafe": 2, "fake": 1}, "allowancePct": 38,
-              "currency": "smp"}]
-        }))
-        .unwrap();
-        assert_eq!(report.accounts[0].blocked.total(), 4);
-        assert_eq!(report.accounts[0].below_limit, 2500);
-        let draft: PlusParseAnswer = serde_json::from_value(json!({
-            "draft": {"side": "buy", "item": null, "candidates": ["minecraft:elytra", "minecraft:diamond"],
-              "qty": 1, "unit": "total", "target": 32000, "max": 40000, "style": "balanced",
-              "approval": "above"},
-            "issues": []
-        }))
-        .unwrap();
-        assert_eq!(draft.draft.item, None);
-        assert_eq!(draft.draft.candidates.len(), 2);
-        assert_eq!(draft.draft.min, None);
-        let prefs: CloudNotifyPrefs = serde_json::from_value(json!({
-            "events": {"approval": true, "quota_80": false},
-            "quiet": {"enabled": true, "from": "23:00", "to": "08:00"}
-        }))
-        .unwrap();
-        assert_eq!(prefs.events.get("quota_80"), Some(&false));
-        let approval: PlusApproval = serde_json::from_value(json!({
-            "id": "01JBXK3D2E", "acct": "a_1",
-            "deal": {"side": "buy", "item": "minecraft:elytra", "qty": 1, "price": 37500, "currency": "smp"},
-            "counterpart": "Kaan_07", "why": ["above"], "createdAt": 1, "expiresAt": 601,
-            "state": "pending"
-        }))
-        .unwrap();
-        assert!(approval.is_pending());
-        assert_eq!(approval.deal.price, 37500);
     }
 
     #[test]

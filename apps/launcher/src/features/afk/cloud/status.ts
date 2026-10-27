@@ -4,7 +4,7 @@
 import type { SignalState } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { formatDuration, uiLocale } from "@/lib/format";
-import type { CloudAccount } from "./api";
+import type { CloudAccount, CloudOverview } from "./api";
 
 export type CloudTone = "ok" | "muted" | "warn" | "error";
 
@@ -245,6 +245,24 @@ export function formatPrice(priceTl: string): string {
     maximumFractionDigits: 2,
   }).format(value);
   return `${number} TL`;
+}
+
+/**
+ * The 7/24 Bulut card's price line ("Aylık 60 TL"), or why nothing can be bought now: no free
+ * slot, or sales off (Studio's switch; SMALL12: the card showed the price while nothing was on
+ * sale). `closed` greys the line and turns the panel's start off; null: no line at all.
+ */
+export function offerLine(
+  overview: Pick<CloudOverview, "soldOut" | "salesOpen" | "monthPrice">,
+  t: TFunction,
+): { text: string; closed: boolean } | null {
+  if (overview.soldOut) return { text: t("cloudAfk.intro.soldOut"), closed: true };
+  if (!overview.salesOpen) return { text: t("cloudAfk.intro.salesClosed"), closed: true };
+  if (!overview.monthPrice) return null;
+  return {
+    text: t("cloudAfk.intro.pricePerMonth", { price: formatPrice(overview.monthPrice) }),
+    closed: false,
+  };
 }
 
 /** `play.projects.gg`, or `host:port` when a port other than the default is set. */

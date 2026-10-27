@@ -1,6 +1,8 @@
 //! Import from the v1 launcher (`%APPDATA%\.projects`, Windows only): premium session, offline
 //! nickname, AFK accounts + client, and game data into a new "Projects" instance. The legacy
 //! folder is only read, never modified, so the old launcher keeps working during the transition.
+//! Debug builds look under `PROJECTS_IMPORT_HOME` as the other launchers' import does
+//! (`commands::import::locations`), so an end-to-end run never reads the real player's v1 data.
 
 use std::path::{Path, PathBuf};
 
@@ -9,16 +11,22 @@ use pl_mc::loaders::LoaderKind;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::commands::import::locations;
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 use pl_lang::pick;
 
+/// The v1 launcher's folder, when it is there.
 fn legacy_root() -> Option<PathBuf> {
-    if !cfg!(windows) {
-        return None;
-    }
-    let root = dirs::data_dir()?.join(".projects");
-    root.is_dir().then_some(root)
+    locations().projects_v1().filter(|root| root.is_dir())
+}
+
+/// The v1 launcher's premium session file (it may be missing), where the scan looks for it.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn legacy_premium_file() -> Option<PathBuf> {
+    locations()
+        .projects_v1()
+        .map(|root| root.join("premium.dat"))
 }
 
 fn dir_stats(dir: &Path) -> (u32, u64) {
@@ -45,46 +53,9 @@ fn tree_size(path: &Path) -> u64 {
 
 /// The v1 launcher kept the nickname in a .NET `user.config` under LocalAppData.
 fn legacy_nickname() -> Option<String> {
-    let local = dirs::data_local_dir()?;
-    let re = regex::Regex::new(r#"(?s)<setting name="NickNames"[^>]*>\s*<value>([^<]*)</value>"#)
-        .ok()?;
-    let mut best: Option<(std::time::SystemTime, String)> = None;
-    for root in [
-        local.join("Apps").join("2.0").join("Data"),
-        local.join("Projects"),
-    ] {
-        for entry in walkdir::WalkDir::new(&root)
-            .max_depth(8)
-            .into_iter()
-            .flatten()
-        {
-            if entry.file_name() != "user.config" {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(entry.path()) else {
-                continue;
-            };
-            let Some(name) = re
-                .captures(&text)
-                .and_then(|c| c.get(1))
-                .map(|m| m.as_str().trim().to_owned())
-            else {
-                continue;
-            };
-            if !pl_auth::validate_offline_name(&name).is_ok() {
-                continue;
-            }
-            let modified = entry
-                .metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .unwrap_or(std::time::UNIX_EPOCH);
-            if best.as_ref().is_none_or(|(t, _)| modified > *t) {
-                best = Some((modified, name));
-            }
-        }
-    }
-    best.map(|(_, name)| name)
+    pl_import::projects_v1_nickname(&locations(), |name| {
+        pl_auth::validate_offline_name(name).is_ok()
+    })
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -239,13 +210,17 @@ pub async fn legacy_import(
     })?;
     let mut report = LegacyImportReport::default();
 
-    // Premium session (DPAPI-encrypted on Windows). Never in an end-to-end test run: it is a
-    // real Microsoft account.
+    // Premium session (DPAPI-encrypted on Windows), from the folder the scan found. Never in an
+    // end-to-end test run: it is a real Microsoft account.
     #[cfg(windows)]
     if request.premium && root.join("premium.dat").is_file() {
         match crate::commands::accounts::refuse_microsoft_in_tests() {
             Err(refused) => report.notes.push(refused.message),
-            Ok(()) => match state.auth.import_legacy_premium().await {
+            Ok(()) => match state
+                .auth
+                .import_legacy_premium_from(&root.join("premium.dat"))
+                .await
+            {
                 Ok(pl_auth::LegacyImport::Imported { .. }) => report.premium_imported = true,
                 Ok(_) => report.notes.push(
                     pick("Premium oturum okunamadı; Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin.", "Couldn't read the premium session; you can sign in again in Settings > Accounts.")

@@ -177,6 +177,9 @@ pub struct LogQuery {
     pub to: Option<i64>,
     pub after: Option<String>,
     pub limit: Option<u32>,
+    /// Only lines of these console kinds (`c` values, comma-separated: `chat,pm`); lines from
+    /// before console kinds match none (CAFK-FEAT).
+    pub kinds: Option<String>,
 }
 
 impl CloudClient {
@@ -203,6 +206,35 @@ impl CloudClient {
 
     pub fn user_agent(&self) -> &str {
         &self.inner.user_agent
+    }
+
+    /// A plain GET of a public file (AFK+'s item data on our CDN): the bytes, or None (also past
+    /// `max` bytes: what it says it is is never trusted for the size).
+    pub(crate) async fn fetch_public(&self, url: &str, max: usize) -> Option<Vec<u8>> {
+        let mut response = self
+            .inner
+            .http
+            .get(url)
+            .timeout(self.inner.timeout)
+            .header(reqwest::header::USER_AGENT, &self.inner.user_agent)
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success()
+            || response
+                .content_length()
+                .is_some_and(|length| length > u64::try_from(max).unwrap_or(u64::MAX))
+        {
+            return None;
+        }
+        let mut out = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if out.len() + chunk.len() > max {
+                return None;
+            }
+            out.extend_from_slice(&chunk);
+        }
+        Some(out)
     }
 
     /// A page of the site, on the API's origin (`https://afk.projects.gg/<path>`).
@@ -487,6 +519,9 @@ fn log_params(query: &LogQuery) -> String {
     }
     if let Some(limit) = query.limit {
         params.append_pair("limit", &limit.to_string());
+    }
+    if let Some(kinds) = &query.kinds {
+        params.append_pair("kinds", kinds);
     }
     params.finish()
 }

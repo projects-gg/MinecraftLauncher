@@ -1,6 +1,6 @@
 // "Ayar geçmişi" (QoL Q7): the last saved versions of the AFK+ settings, newest first, each with
-// when, where it was made and what it changed in words ("Elytra en fazla 40.000 yerine 45.000").
-// "Bu hale dön" asks once in one sentence; the version comes back as a new one, so nothing is lost.
+// when, where it was made and what it changed in words ("Elytra: sınır 40.000 yerine 45.000").
+// "Bu hâle dön" asks once in one sentence; the version comes back as a new one, so nothing is lost.
 import { Button, cn, Dialog, enter, leave, Skeleton, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { afkFailed } from "../../errors";
 import type { CloudAccount } from "../api";
 import { type PlusHistoryEntry, type PlusPanel, plusApi } from "./api";
-import { itemName } from "./item-icon";
+import { itemLabel, type Namer, usePlusItemData } from "./items";
 import { type ConfigChange, configChanges, type PlusLimits } from "./model";
 import { clockText, dayGroup, dayText } from "./time";
 import { plusKey } from "./use-plus";
@@ -28,32 +28,44 @@ const LIMIT_LABEL: Record<keyof PlusLimits, string> = {
 /** One change in words. */
 function useChangeText(panel: PlusPanel) {
   const { t } = useTranslation();
+  const items = usePlusItemData(panel.settings.server.mc);
+  const namer: Namer = {
+    data: items.data,
+    custom: panel.settings.config.customItems,
+    unnamed: t("afkPlus.items.unnamed"),
+  };
   return (change: ConfigChange): string => {
-    const item = "item" in change ? itemName(panel.catalog, change.item) : "";
+    const item = "item" in change ? itemLabel(change.item, namer) : "";
     switch (change.kind) {
-      case "row_added":
+      case "order_added":
         return t(
-          change.side === "buy" ? "afkPlus.history.rowAdded" : "afkPlus.history.rowAddedSell",
+          change.side === "buy" ? "afkPlus.history.orderAdded" : "afkPlus.history.orderAddedSell",
           { item },
         );
-      case "row_removed":
+      case "order_removed":
         return t(
-          change.side === "buy" ? "afkPlus.history.rowRemoved" : "afkPlus.history.rowRemovedSell",
-          {
-            item,
-          },
+          change.side === "buy"
+            ? "afkPlus.history.orderRemoved"
+            : "afkPlus.history.orderRemovedSell",
+          { item },
         );
-      case "row_amount":
-        return t("afkPlus.history.rowAmount", {
+      case "order_amount":
+        return t("afkPlus.history.orderAmount", {
           item,
           field: t(`afkPlus.history.fields.${change.field}`),
           from: formatAmount(change.from),
           to: formatAmount(change.to),
         });
-      case "row_toggled":
-        return t(change.enabled ? "afkPlus.history.rowOn" : "afkPlus.history.rowOff", { item });
-      case "row_other":
-        return t("afkPlus.history.rowOther", { item });
+      case "order_toggled":
+        return t(change.on ? "afkPlus.history.orderOn" : "afkPlus.history.orderOff", { item });
+      case "order_other":
+        return t("afkPlus.history.orderOther", { item });
+      case "authority":
+        return t("afkPlus.history.authority", {
+          to: t(`afkPlus.settings.authority.${change.to}`, {
+            defaultValue: t("afkPlus.settings.authority.ask"),
+          }),
+        });
       case "limit": {
         const value = (amount: number | null) =>
           amount === null
@@ -81,9 +93,9 @@ function useWhen() {
     const group = dayGroup(at, Date.now());
     const day =
       group === "today"
-        ? t("afkPlus.feed.today")
+        ? t("afkPlus.audit.today")
         : group === "yesterday"
-          ? t("afkPlus.feed.yesterday")
+          ? t("afkPlus.audit.yesterday")
           : dayText(at, lang);
     return `${day} ${clockText(at, lang)}`;
   };

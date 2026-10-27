@@ -53,13 +53,15 @@ impl CmdError {
     }
 
     /// Before a launch downloads anything: the disk cannot hold it (`needed` with the margin).
+    /// "yer yok" keeps a no-break space: split on a toast's lines, "Diskte yeterli yer" read
+    /// as its opposite (SMALL12).
     pub fn disk_short(needed: u64, free: u64, details: impl Into<String>) -> Self {
         let lang = Lang::current();
         let (needed, free) = (toast_size(needed, lang), toast_size(free, lang));
         Self::new(
             Self::DISK_FULL,
             lang.pick(
-                format!("Diskte yeterli yer yok. Oyun için {needed} gerekiyor, {free} boş."),
+                format!("Diskte yeterli yer\u{a0}yok. Oyun için {needed} gerekiyor, {free} boş."),
                 format!(
                     "There isn't enough space on the disk. The game needs {needed}, but only {free} is free."
                 ),
@@ -76,7 +78,7 @@ impl CmdError {
         Self::new(
             Self::DISK_FULL,
             lang.pick(
-                format!("Diskte yeterli yer yok. Bunun için {needed} gerekiyor, {free} boş."),
+                format!("Diskte yeterli yer\u{a0}yok. Bunun için {needed} gerekiyor, {free} boş."),
                 format!(
                     "There isn't enough space on the disk. This needs {needed}, but only {free} is free."
                 ),

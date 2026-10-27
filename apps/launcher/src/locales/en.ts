@@ -2,9 +2,13 @@ import { enAfkAlerts } from "./en-afk-alerts";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enAfkPlus } from "./en-afkplus";
+import { enBetaGate } from "./en-beta-gate";
 import { enChat } from "./en-chat";
+import { enChatProd } from "./en-chat-prod";
 import { enChat2 } from "./en-chat2";
 import { enCloudAfk } from "./en-cloud-afk";
+import { enCloudAfkFeat } from "./en-cloud-afk-feat";
+import { enCloudAfkMove } from "./en-cloud-afk-move";
 import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
@@ -68,6 +72,7 @@ export const en: DeepPartial<Strings> = {
   overview: enOverview,
   libraryDrop: enLibraryDrop,
   updates: enUpdates,
+  betaGate: enBetaGate,
   shortcuts: enShortcuts,
   prepare: enPrepare,
   social: {
@@ -262,7 +267,6 @@ export const en: DeepPartial<Strings> = {
     },
     account: {
       row: "Friends",
-      connect: "Connect with Discord",
       connected_one: "{{count}} friend online",
       connected_other: "{{count}} friends online",
       noneOnline: "No one's online right now",
@@ -301,12 +305,15 @@ export const en: DeepPartial<Strings> = {
   team6: enTeam6,
   verify: enVerify,
   cloudAfk: enCloudAfk,
+  cloudAfkFeat: enCloudAfkFeat,
+  cloudAfkMove: enCloudAfkMove,
   projectsSkin: enProjectsSkin,
   host: enHost,
   afkPlus: enAfkPlus,
   newsColumn: enNewsColumn,
   worldEntry: enWorldEntry,
   playAcct: enPlayAcct,
+  chatProd: enChatProd,
   nav: {
     home: "Home",
     library: "Library",
@@ -584,8 +591,8 @@ export const en: DeepPartial<Strings> = {
       afkRow: "Your AFK accounts",
       afkTotal_one: "{{count}} account",
       afkTotal_other: "{{count}} accounts",
-      afkOnline: "{{count}} online",
-      afkNoneOnline: "none online",
+      afkOnline: "{{count}} in game",
+      afkNoneOnline: "none in game",
       addTitle: "Add account",
       or: "or",
       addOffline: "Add",
@@ -1333,7 +1340,7 @@ export const en: DeepPartial<Strings> = {
       channel: "Update channel",
       stable: "Stable",
       beta: "Beta",
-      betaHelp: "Try new features before everyone else; you may run into the odd bug.",
+      betaHelp: "Beta gets new features first; you may run into the odd bug.",
       autoDownload: "Download updates in the background",
       check: "Check for updates",
       checking: "Checking",

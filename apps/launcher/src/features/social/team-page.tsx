@@ -3,11 +3,12 @@
 // fits); the page below shows one crew, sliding in from the side its mark sits on. Without a crew
 // (or on "Ekip kur ya da katıl"): invites to crews, "Ekip kur" (crew-editor: name, tag, motto and
 // look, with a live preview) and "Kodla katıl" (a code, then what it leads to); at the crew limit,
-// one line instead. In a crew: its card (the mark, name, tag, motto, size and founding day, a
-// month's or a year's anniversary that day, the emblem's faint watermark) whose strip shows who is
-// online with "Ekibi çağır" (this crew; "Birden çok ekibi çağır" beside it with several), or the
-// call that is on; where a call cannot start yet (CALL1) one line under the button says why. Then
-// the members grouped by where they are ("Projects'te 4", with "Katıl"); friends to invite; the
+// one line instead. In a crew: its card (the mark, name, tag, motto, size and founding day, which
+// says a month's or a year's anniversary that day) whose strip shows which teammates are online
+// with "Ekibi çağır" (this crew; "Birden çok ekibi çağır" beside it with several), or the call
+// that is on; where a call cannot start yet (CALL1) one line under the button says why. Then the
+// player's own row and the teammates grouped by where they are ("Projects'te 4", with "Katıl"; the
+// groups add up to the strip's count, SMALL12); friends to invite; the
 // crew code; the leader's "Yetkiler"; leaving. Every irreversible step asks once, in place, with
 // one sentence; nothing else asks. With chat (CHAT1) the crew has "Ekip" and "Sohbet" (its chat,
 // filling the panel); a crew whose name moderators reset says so on top while it stays locked
@@ -32,7 +33,6 @@ import {
   PencilSimple,
   ShieldWarning,
   SignOut,
-  Sparkle,
   Trash,
   UserPlus,
   UsersThree,
@@ -95,7 +95,7 @@ import { NameWithMark } from "./person-mark";
 import { PersonContextMenu } from "./person-menu";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { type CrewPane, useSocialUi } from "./store";
-import { CrewMark, CrewWatermark, TeamTag } from "./team-emblem";
+import { CrewMark, TeamTag } from "./team-emblem";
 import { RoleBadge, TeamMemberRow } from "./team-member";
 import { TeamInviteRow, useCrewItems } from "./team-section";
 import {
@@ -114,8 +114,10 @@ import {
 import { togetherTime } from "./together";
 import { useCallClock } from "./use-call-clock";
 
+/** A section of the crew page ("Planlar", "Üyeler", …): a step above the roster's group labels
+ * ("Projects'te 3"), which share its size otherwise (SMALL12). */
 function SectionTitle({ children }: { children: string }) {
-  return <h3 className="mb-2.5 text-[12.5px] font-medium text-ash-400">{children}</h3>;
+  return <h3 className="mb-2.5 text-[13px] font-semibold text-ash-300">{children}</h3>;
 }
 
 function useCrewFeatures() {
@@ -777,7 +779,6 @@ function CrewCard({
   const items = useCrewItems(team, { onOpen: false, sideways: true });
   return (
     <div className="relative">
-      <CrewWatermark look={team} />
       <ContextMenu items={items}>
         <div className="relative flex items-start gap-3.5">
           <CrewMark look={team} size={64} />
@@ -800,14 +801,25 @@ function CrewCard({
                 <UsersThree size={14} aria-hidden />
                 {t("teams.membersOf", { count: team.members.length, limit: team.limit })}
               </span>
+              {/* On the day of a month's or a year's anniversary the founding date says so, in the
+                  line's own words, a shade brighter (SMALL12: a gold line with a sparkle was a
+                  second loud thing on the card). */}
               {founded ? (
-                <span className="inline-flex items-center gap-1">
+                <span
+                  className={cn("inline-flex items-center gap-1", anniversary && "text-ash-300")}
+                >
                   <CalendarBlank size={14} aria-hidden />
-                  {t("teams.card.founded", {
-                    date: dateTimeFormat({ day: "numeric", month: "long", year: "numeric" }).format(
-                      founded,
-                    ),
-                  })}
+                  {anniversary
+                    ? "years" in anniversary
+                      ? t("teams.card.yearsToday", { count: anniversary.years })
+                      : t("teams.card.monthsToday", { count: anniversary.months })
+                    : t("teams.card.founded", {
+                        date: dateTimeFormat({
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        }).format(founded),
+                      })}
                 </span>
               ) : null}
               {together ? (
@@ -832,14 +844,6 @@ function CrewCard({
                 ) : null}
               </AnimatePresence>
             </p>
-            {anniversary ? (
-              <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-gold-300">
-                <Sparkle size={14} weight="fill" aria-hidden />
-                {"years" in anniversary
-                  ? t("teams.card.yearsToday", { count: anniversary.years })
-                  : t("teams.card.monthsToday", { count: anniversary.months })}
-              </p>
-            ) : null}
           </div>
           {canEdit ? (
             <IconButton
@@ -886,16 +890,19 @@ type RosterItem =
   | { key: string; kind: "member"; member: TeamMember };
 
 /**
- * Everyone, grouped by where they are; inside a group the leader, the moderators, then names. One
- * list, so someone who joins Projects glides into its group instead of vanishing and reappearing.
+ * The player's own row, then the teammates grouped by where they are; inside a group the leader,
+ * the moderators, then names. The groups count teammates only, as the card's strip does (SMALL12).
+ * One list, so someone who joins Projects glides into its group instead of vanishing and
+ * reappearing.
  */
 function CrewRoster({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
   const { reduce, layout } = useSocialMotion();
-  const activity = useSocialUi((s) => s.view.activity);
-  const items = useMemo<RosterItem[]>(
-    () =>
-      rosterGroups(team, activity).flatMap(({ where, members }) => [
+  const items = useMemo<RosterItem[]>(() => {
+    const me = team.members.find((member) => member.me);
+    return [
+      ...(me ? [{ key: `m:${me.id}`, kind: "member" as const, member: me }] : []),
+      ...rosterGroups(team).flatMap(({ where, members }) => [
         {
           key: `g:${where}`,
           kind: "group" as const,
@@ -904,40 +911,44 @@ function CrewRoster({ team }: { team: SocialTeam }) {
         },
         ...members.map((member) => ({ key: `m:${member.id}`, kind: "member" as const, member })),
       ]),
-    [team, activity, t],
-  );
+    ];
+  }, [team, t]);
   return (
-    <ul aria-label={team.name} className="relative flex flex-col">
-      <AnimatePresence initial={false} mode="popLayout">
-        {items.map((item) => (
-          <motion.li
-            key={item.key}
-            layout={layout ? "position" : false}
-            transition={{ layout: glide }}
-            initial={{ opacity: 0, y: reduce ? 0 : 6 }}
-            animate={{ opacity: 1, y: 0, transition: enter(0.26) }}
-            exit={{ opacity: 0, transition: leave(0.22) }}
-          >
-            {item.kind === "group" ? (
-              <h3 className="flex items-center gap-2 px-2 pt-3 pb-1 text-[12.5px] font-medium text-ash-400">
-                {item.label}
-                <span className="relative inline-flex font-display tabular-nums">
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.span key={item.count} {...swap(reduce, 0.18)}>
-                      {item.count}
-                    </motion.span>
-                  </AnimatePresence>
-                </span>
-              </h3>
-            ) : item.member.me ? (
-              <MeRow member={item.member} />
-            ) : (
-              <TeamMemberRow member={item.member} team={team} line="where" />
-            )}
-          </motion.li>
-        ))}
-      </AnimatePresence>
-    </ul>
+    <>
+      {/* Its own title: the player's row leads the list, under "Planlar" it read as a plan. */}
+      <SectionTitle>{t("teams.roster.title")}</SectionTitle>
+      <ul aria-label={team.name} className="relative flex flex-col">
+        <AnimatePresence initial={false} mode="popLayout">
+          {items.map((item) => (
+            <motion.li
+              key={item.key}
+              layout={layout ? "position" : false}
+              transition={{ layout: glide }}
+              initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+              animate={{ opacity: 1, y: 0, transition: enter(0.26) }}
+              exit={{ opacity: 0, transition: leave(0.22) }}
+            >
+              {item.kind === "group" ? (
+                <h3 className="flex items-center gap-2 px-2 pt-3 pb-1 text-[12.5px] font-medium text-ash-400">
+                  {item.label}
+                  <span className="relative inline-flex font-display tabular-nums">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.span key={item.count} {...swap(reduce, 0.18)}>
+                        {item.count}
+                      </motion.span>
+                    </AnimatePresence>
+                  </span>
+                </h3>
+              ) : item.member.me ? (
+                <MeRow member={item.member} />
+              ) : (
+                <TeamMemberRow member={item.member} team={team} line="where" />
+              )}
+            </motion.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+    </>
   );
 }
 
@@ -1225,7 +1236,7 @@ function CrewView({ team }: { team: SocialTeam }) {
           <CrewPlans team={team} />
         </motion.div>
 
-        <motion.section className="mt-3" {...glideBox}>
+        <motion.section className="mt-5" {...glideBox}>
           <CrewRoster team={team} />
         </motion.section>
 
@@ -1441,7 +1452,14 @@ export function TeamPage() {
   return (
     <div ref={root} className={fill ? "flex h-full min-h-0 flex-col" : undefined}>
       {rail ? <CrewRail crews={crews} shown={shownKey} canAdd={canAdd} limit={limit} /> : null}
-      <AnimatePresence mode="popLayout" initial={false} custom={side.side}>
+      {/* Not `presenceAffectsLayout`: with it every snapshot drew every motion of the crew
+          page again, its chat's rows too (CHAT-PROD). */}
+      <AnimatePresence
+        mode="popLayout"
+        initial={false}
+        custom={side.side}
+        presenceAffectsLayout={false}
+      >
         <motion.div
           key={shown === NEW_CREW_TAB ? "none" : `team:${shown.id}`}
           role={rail ? "tabpanel" : undefined}

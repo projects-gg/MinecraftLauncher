@@ -72,8 +72,16 @@ export interface InventoryViewProps {
   inventory: InvFrame | null;
   /** The latest open window, or null when none is open. */
   window?: WinFrame | null;
-  /** `full`: moves; `view`: looking only; `static`: a picture (no input, nothing live). */
+  /**
+   * `full`: moves; `view`: looking only; `pick`: one of the player's own items is chosen (nothing
+   * moves; a click, a tap or Enter on a filled slot of the player's inventory calls `onPick`);
+   * `static`: a picture (no input, nothing live).
+   */
   mode?: InventoryMode;
+  /** `pick`: a filled slot of the player's inventory (5-45) was chosen. */
+  onPick?: (slot: number) => void;
+  /** `pick`: the chosen slot (its highlight stays, the brackets mark it). */
+  picked?: number | null;
   /** An AFK+ trade holds the inventory (`invst.lock`): the view stays live, moves wait. */
   locked?: boolean;
   /** Sends a move over the live socket and resolves with the machine's answer (`invres`). */
@@ -152,6 +160,8 @@ export function InventoryView({
   mode = "full",
   locked = false,
   onOp,
+  onPick,
+  picked = null,
   lang = "tr",
   texts: overrides,
   titleGlyph,
@@ -500,6 +510,11 @@ export function InventoryView({
   const press = useCallback(
     (spot: SlotSpot, button: 0 | 1, shift: boolean) => {
       const state = planRef.current;
+      if (mode === "pick") {
+        // A pick takes one of the player's own items; nothing moves, a window's slots are not theirs.
+        if (spot.area === "inv" && state.inv.slots.get(spot.slot)) onPick?.(spot.slot);
+        return;
+      }
       if (!slotUsable(screen, spot)) return;
       const now = performance.now();
       const last = lastPress.current;
@@ -525,7 +540,7 @@ export function InventoryView({
       };
       act(shift ? planQuickMove(state, spot) : planClick(state, spot, button));
     },
-    [act, screen],
+    [act, mode, onPick, screen],
   );
 
   const keyAction = useCallback(
@@ -672,6 +687,10 @@ export function InventoryView({
       const spot = spotByKey.get(start.key);
       if (!spot) return;
       focusCell(spot.key, false);
+      if (mode === "pick") {
+        press(spot, 0, false);
+        return;
+      }
       // Where nothing moves, a tap is the touch screen's hover: the slot's tooltip, on and off. In a
       // trade, a tap that would move something brightens the lock's line too.
       if (!canMove || locked) {
@@ -685,7 +704,7 @@ export function InventoryView({
       }
       press(spot, 0, false);
     },
-    [canMove, endTouch, focusCell, locked, menuOpen, press, spotByKey],
+    [canMove, endTouch, focusCell, locked, menuOpen, mode, press, spotByKey],
   );
 
   // Never the browser's menu: a mouse right click is the game's right click (done on press), a
@@ -1071,6 +1090,8 @@ export function InventoryView({
                       lit={(menuOpen && menuKey === spot.key) || touchTip === spot.key}
                       nopeAt={nope?.key === spot.key ? nope.at : undefined}
                       live={live}
+                      selectable={mode === "pick" && spot.area === "inv"}
+                      picked={mode === "pick" && spot.area === "inv" && picked === spot.slot}
                     />
                   );
                 })}

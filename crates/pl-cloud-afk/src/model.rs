@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::feat::{CloudAccountFeatures, CloudInventorySetting, OfferFeatures};
+use crate::movement::CloudMovementSetting;
 use crate::plus::{MePlus, PlusAi, PlusOffer};
 
 /// Turkish and English words written in Studio (a maintenance note, a block list reason).
@@ -108,6 +110,8 @@ pub struct Offer {
     pub limits: CloudLimits,
     /// AFK+ as sold now; None while the service's `plusMode` is `off` (nothing of AFK+ shows).
     pub plus: Option<PlusOffer>,
+    /// Studio's switches of the cloud features (CAFK-FEAT); None from a service before them.
+    pub features: Option<OfferFeatures>,
 }
 
 impl Offer {
@@ -361,6 +365,10 @@ pub struct CloudConfigView {
     pub anti_afk: CloudAntiAfk,
     pub commands: Vec<CloudCommandView>,
     pub rules: Vec<CloudRuleView>,
+    /// The player's own inventory choice; None: never chosen (Studio's default applies).
+    pub inventory: Option<CloudInventorySetting>,
+    /// The player's movement switch, only when stored (absent: off).
+    pub movement: Option<CloudMovementSetting>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -410,6 +418,10 @@ pub struct CloudAccount {
     /// The assistant's state; None unless the tier is `plus`.
     #[serde(default)]
     pub ai: Option<PlusAi>,
+    /// What this account may use of the cloud features (CAFK-FEAT); None from a service before
+    /// them: then none shows.
+    #[serde(default)]
+    pub features: Option<CloudAccountFeatures>,
 }
 
 impl CloudAccount {
@@ -438,11 +450,17 @@ pub struct AccountList {
 }
 
 /// One masked console line: `k` is `n` (normal), `e` (a client error) or `s` (a command row).
+/// With console kinds (CAFK-FEAT) `c` says what it is (`chat`, `pm`, `sys`, `title`, `cli`, `err`;
+/// kept as text, an unknown one reads as `cli`), `who` the other player of a chat or private line,
+/// `goto: "inventory"` a machine line the console may link to the inventory. Older lines have none.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct CloudConsoleLine {
     pub at: i64,
     pub text: String,
     pub k: String,
+    pub c: Option<String>,
+    pub who: Option<String>,
+    pub goto: Option<String>,
 }
 
 /// `GET /accounts/:id/logs`: oldest first; `next` continues.
@@ -567,7 +585,9 @@ pub struct RuleInput {
     pub reply: PayloadInput,
 }
 
-/// `CloudAccountConfig` v1 in its input form.
+/// `CloudAccountConfig` v1 in its input form. The fields the features added (`inventory`, later
+/// `sequences` and `movement`) are kept by the service when a change leaves them out, so a field
+/// this launcher does not send is never erased.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigInput {
@@ -576,6 +596,13 @@ pub struct ConfigInput {
     pub anti_afk: CloudAntiAfk,
     pub commands: Vec<CommandInput>,
     pub rules: Vec<RuleInput>,
+    /// Sent only when the player changed it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inventory: Option<CloudInventorySetting>,
+    /// Sent only to a service whose `Account.features` has `movement` (an older one refuses the
+    /// field), and only when there is a choice.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub movement: Option<CloudMovementSetting>,
 }
 
 /// `PATCH /accounts/:id`: at least one field. A new `server` needs `config` with every secret row
@@ -762,6 +789,83 @@ mod tests {
             serde_json::json!({"name": "Afk_1"})
         );
         assert!(AccountPatch::default().is_empty());
+    }
+
+    #[test]
+    fn reads_the_features_and_an_account_from_before_them() {
+        let old: CloudAccount =
+            serde_json::from_str(&account_json("run", "null", r#"{"state": "running"}"#)).unwrap();
+        assert_eq!(old.features, None);
+        assert_eq!(old.config.inventory, None);
+        let json = account_json("run", "null", r#"{"state": "running"}"#)
+            .replace(
+                r#""commands": [], "rules": []"#,
+                r#""commands": [], "rules": [], "inventory": {"enabled": true}"#,
+            )
+            .replace(
+                r#""rev": 7"#,
+                r#""features": {"inventory": {"mode": "full", "on": true}, "consoleKinds": true,
+                  "placeholders": false, "legacyRules": true}, "rev": 7"#,
+            );
+        let account: CloudAccount = serde_json::from_str(&json).unwrap();
+        let features = account.features.unwrap();
+        assert_eq!(features.inventory.mode, "full");
+        assert!(features.inventory.on && features.console_kinds && features.legacy_rules);
+        assert_eq!(
+            account.config.inventory,
+            Some(CloudInventorySetting { enabled: true })
+        );
+        let line: CloudConsoleLine =
+            serde_json::from_str(r#"{"at": 1, "text": "selam", "k": "n"}"#).unwrap();
+        assert_eq!((line.c, line.who, line.goto), (None, None, None));
+        let line: CloudConsoleLine = serde_json::from_str(
+            r#"{"at": 1, "text": "✉ »» Kaan_07: selam", "k": "n", "c": "pm", "who": "Kaan_07"}"#,
+        )
+        .unwrap();
+        assert_eq!(line.c.as_deref(), Some("pm"));
+        let offer: Offer =
+            serde_json::from_str(r#"{"mode": "on", "features": {"inventory": "view"}}"#).unwrap();
+        assert_eq!(offer.features.unwrap().inventory, "view");
+        // A change that leaves the inventory alone does not name it: the service keeps it.
+        let config = ConfigInput {
+            v: 1,
+            owner: String::new(),
+            anti_afk: CloudAntiAfk::default(),
+            commands: vec![],
+            rules: vec![],
+            inventory: None,
+            movement: None,
+        };
+        let sent = serde_json::to_value(&config).unwrap();
+        assert!(sent.get("inventory").is_none() && sent.get("movement").is_none());
+    }
+
+    #[test]
+    fn reads_movement_and_a_service_before_it() {
+        let json = account_json("run", "null", r#"{"state": "running"}"#);
+        let old: CloudAccount = serde_json::from_str(&json).unwrap();
+        assert_eq!(old.config.movement, None);
+        let json = json
+            .replace(
+                r#""commands": [], "rules": []"#,
+                r#""commands": [], "rules": [], "movement": {"enabled": true}"#,
+            )
+            .replace(
+                r#""rev": 7"#,
+                r#""features": {"inventory": {"mode": "off", "on": false}, "consoleKinds": false,
+                  "placeholders": false, "legacyRules": false, "movement": {"mode": "on",
+                  "on": true, "slot": null, "follow": {"main": "Kaan_07", "own": ["AfkBot_2"]}}},
+                  "rev": 7"#,
+            );
+        let account: CloudAccount = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            account.config.movement,
+            Some(CloudMovementSetting { enabled: true })
+        );
+        let movement = account.features.unwrap().movement.unwrap();
+        assert!(movement.mode == "on" && movement.on);
+        assert_eq!(movement.follow.main.as_deref(), Some("Kaan_07"));
+        assert_eq!(movement.follow.own, ["AfkBot_2"]);
     }
 
     #[test]

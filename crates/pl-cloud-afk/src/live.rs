@@ -11,11 +11,20 @@
 //! ±20 %).
 //!
 //! AFK+ (README "AFK+ live socket"): the AFK+ panel watches its account with `ai: true`, which
-//! streams the account's AI state, feed and approvals as well (same lease). A console and the
+//! streams the account's AI state, new audit log entries, its orders' progress and approvals as
+//! well (same lease). A console and the
 //! panel watch the same account through one subscription: closing the panel while its console stays
 //! on screen watches the account again without `ai`.
+//!
+//! The inventory (README "Inventory", CAFK-FEAT): a view on screen watches with `inv: true` and
+//! stops it with `inv: false` (no new console snapshot); its moves go out as `invop` frames and
+//! come back as `invres`, both on the same socket. The status strip (`bars`) comes with the console.
+//!
+//! Movement (README "Movement"): the "Hareket" panel on screen watches with `move: true` (`movst`
+//! and `pos` stream) and stops it with `move: false`; its operations go out as `move` frames and
+//! come back as `movres`. Inventory and movement may stream together.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -35,8 +44,12 @@ use tokio_tungstenite::{Connector, connect_async_tls_with_config};
 use url::Url;
 
 use crate::client::Bearer;
+use crate::feat::{
+    CloudBarText, CloudBars, CloudBossBar, CloudInvError, CloudInvItem, CloudTitleBar, CloudWinOpen,
+};
 use crate::model::{CloudConsoleLine, CloudLiveState};
-use crate::plus::{PlusAi, PlusApproval, PlusFeedItem};
+use crate::movement::{CloudBlock, CloudMovementError, CloudMovementState, CloudPos};
+use crate::plus::{PlusAi, PlusApproval, PlusAuditEntry};
 use crate::tls;
 
 const PING: &str = r#"{"t":"ping"}"#;
@@ -67,7 +80,7 @@ pub enum CloudLiveStatus {
 }
 
 /// What the socket tells the launcher.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CloudLiveEvent {
     /// The socket of `host` is open; whether its machine is connected now.
@@ -93,12 +106,16 @@ pub enum CloudLiveEvent {
     },
     /// AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`).
     Ai { acct: String, ai: Option<PlusAi> },
-    /// AFK+: feed items in batches at least 2 s apart; `snapshot`: the latest 20 right after
-    /// `watch`.
-    Feed {
+    /// AFK+: new audit log entries, in batches at least 2 s apart (the backlog is read on
+    /// demand, from the last entry kept).
+    Audit {
         acct: String,
-        items: Vec<PlusFeedItem>,
-        snapshot: bool,
+        items: Vec<PlusAuditEntry>,
+    },
+    /// AFK+: orders whose progress or live state changed (clients derive the status).
+    Orders {
+        acct: String,
+        orders: BTreeMap<String, PlusOrderLive>,
     },
     /// AFK+: an approval came, was answered, expired or closed.
     Approval {
@@ -107,29 +124,123 @@ pub enum CloudLiveEvent {
     },
     /// AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again.
     Messages { acct: String, count: u32, at: i64 },
+    /// The inventory (watched with `inv`): whether it shows now (`state` `ok`, or `off` with
+    /// `reason` `not_running`, `setting`, `restart`, `version` or `service`); `lock: "trade"`
+    /// while an AFK+ trade holds it (the view stays live, moves wait).
+    InvState {
+        acct: String,
+        state: String,
+        reason: Option<String>,
+        lock: Option<String>,
+    },
+    /// The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
+    /// non-empty slot; `snap`: the first frame after a watch.
+    Inventory {
+        acct: String,
+        held: u32,
+        cursor: Option<CloudInvItem>,
+        items: Vec<CloudInvItem>,
+        snap: bool,
+    },
+    /// The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
+    /// names this opening (every move names the one the player sees).
+    Window {
+        acct: String,
+        wseq: i64,
+        open: Option<CloudWinOpen>,
+        items: Vec<CloudInvItem>,
+        closed: bool,
+    },
+    /// The answer to a move this launcher sent (`id` its own): `ok` means the account's client
+    /// sent it on; what the server did shows in the frames that follow.
+    InvResult {
+        id: String,
+        ok: bool,
+        error: Option<CloudInvError>,
+    },
+    /// A watched account's status strip: the action bar, a title and the boss bars (never in the
+    /// log).
+    Bars { acct: String, bars: CloudBars },
+    /// Movement (watched with `move`): whether the account can move now and what it does (also
+    /// once right after the watch, then on change).
+    MovementState {
+        acct: String,
+        state: CloudMovementState,
+    },
+    /// Where a watched account stands and looks: after the watch, then on change, at most once a
+    /// second, only while it can move.
+    Pos { acct: String, pos: CloudPos },
+    /// The answer to an operation this launcher sent (`id` its own): `ok` means the account started
+    /// it; what happens shows in the frames that follow.
+    MovementResult {
+        id: String,
+        ok: bool,
+        error: Option<CloudMovementError>,
+    },
+}
+
+/// An order's progress and live state as `aiord` brings them (`OrderView` without its status).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusOrderLive {
+    pub got: u32,
+    /// When `got` last grew (Unix seconds; 0: never).
+    pub at: i64,
+    /// `waiting_ok`, `your_trade`, `trading`, `haggling`, or none.
+    pub live: Option<String>,
 }
 
 pub type LiveSink = Arc<dyn Fn(CloudLiveEvent) + Send + Sync>;
 
 enum Command {
-    /// Watch the account (again), with its AI or without.
+    /// Watch the account (again), with its AI and its inventory or without.
     Watch {
         acct: String,
-        ai: bool,
+        streams: Streams,
     },
     Unwatch(String),
+    /// A move (`invop` frame, its `id`) for the account's machine.
+    InvOp {
+        id: String,
+        frame: String,
+    },
+    /// A movement operation (`move` frame, its `id`) for the account's machine.
+    MovementOp {
+        id: String,
+        frame: String,
+    },
 }
 
-/// Who watches an account: its console, the AFK+ panel, or both.
+/// What a socket streams of a watched account besides its console: the AI (the AFK+ panel), the
+/// inventory (a view on screen), movement (the "Hareket" panel on screen).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Streams {
+    ai: bool,
+    inv: bool,
+    movement: bool,
+}
+
+/// Who watches an account: its console, the AFK+ panel, an inventory view, the movement panel, or
+/// several.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Want {
     console: bool,
     ai: bool,
+    inv: bool,
+    movement: bool,
 }
 
 impl Want {
     fn any(self) -> bool {
-        self.console || self.ai
+        self.console || self.ai || self.inv || self.movement
+    }
+
+    fn streams(self) -> Streams {
+        Streams {
+            ai: self.ai,
+            inv: self.inv,
+            movement: self.movement,
+        }
     }
 }
 
@@ -182,6 +293,17 @@ impl LiveHub {
         self.start(url, token, host, acct, |want| want.ai = true);
     }
 
+    /// An inventory view is on screen: streams `acct`'s inventory too (`inv: true`).
+    pub fn watch_inventory(&self, url: Url, token: Bearer, host: &str, acct: &str) {
+        self.start(url, token, host, acct, |want| want.inv = true);
+    }
+
+    /// The movement panel is on screen: streams `acct`'s movement state and position too
+    /// (`move: true`).
+    pub fn watch_movement(&self, url: Url, token: Bearer, host: &str, acct: &str) {
+        self.start(url, token, host, acct, |want| want.movement = true);
+    }
+
     fn start(&self, url: Url, token: Bearer, host: &str, acct: &str, change: fn(&mut Want)) {
         let mut hosts = self.hub.hosts.lock();
         if let Some(task) = hosts.get_mut(host) {
@@ -189,7 +311,7 @@ impl LiveHub {
             change(&mut want);
             let command = Command::Watch {
                 acct: acct.to_owned(),
-                ai: want.ai,
+                streams: want.streams(),
             };
             if task.commands.send(command).is_ok() {
                 task.watched.insert(acct.to_owned(), want);
@@ -204,7 +326,7 @@ impl LiveHub {
         let (commands, receiver) = mpsc::unbounded_channel();
         let mut want = Want::default();
         change(&mut want);
-        let watched: HashMap<String, bool> = [(acct.to_owned(), want.ai)].into();
+        let watched: HashMap<String, Streams> = [(acct.to_owned(), want.streams())].into();
         hosts.insert(
             host.to_owned(),
             HostTask {
@@ -242,6 +364,56 @@ impl LiveHub {
         self.stop(acct, |want| want.ai = false);
     }
 
+    /// The inventory view left the screen (`inv: false`, or the socket closes with it).
+    pub fn unwatch_inventory(&self, acct: &str) {
+        self.stop(acct, |want| want.inv = false);
+    }
+
+    /// The movement panel left the screen (`move: false`, or the socket closes with it).
+    pub fn unwatch_movement(&self, acct: &str) {
+        self.stop(acct, |want| want.movement = false);
+    }
+
+    /// Sends a move (`op`, the app's `InvOp`, shape already checked) for `acct` with the app's own
+    /// `id`; its answer comes back as [`CloudLiveEvent::InvResult`]. False when no socket streams
+    /// that account's inventory (the caller answers `host_offline`).
+    pub fn inv_op(&self, acct: &str, id: &str, op: &serde_json::Value) -> bool {
+        let frame =
+            serde_json::json!({ "t": "invop", "acct": acct, "id": id, "op": op }).to_string();
+        let hosts = self.hub.hosts.lock();
+        hosts
+            .values()
+            .find(|task| task.watched.get(acct).is_some_and(|want| want.inv))
+            .is_some_and(|task| {
+                task.commands
+                    .send(Command::InvOp {
+                        id: id.to_owned(),
+                        frame,
+                    })
+                    .is_ok()
+            })
+    }
+
+    /// Sends a movement operation (`op`, the app's `MoveOp`, shape already checked) for `acct`
+    /// with the app's own `id`; its answer comes back as [`CloudLiveEvent::MovementResult`].
+    /// False when no socket streams that account's movement (the caller answers `host_offline`).
+    pub fn movement_op(&self, acct: &str, id: &str, op: &serde_json::Value) -> bool {
+        let frame =
+            serde_json::json!({ "t": "move", "acct": acct, "id": id, "op": op }).to_string();
+        let hosts = self.hub.hosts.lock();
+        hosts
+            .values()
+            .find(|task| task.watched.get(acct).is_some_and(|want| want.movement))
+            .is_some_and(|task| {
+                task.commands
+                    .send(Command::MovementOp {
+                        id: id.to_owned(),
+                        frame,
+                    })
+                    .is_ok()
+            })
+    }
+
     fn stop(&self, acct: &str, change: fn(&mut Want)) {
         let mut hosts = self.hub.hosts.lock();
         let mut emptied = None;
@@ -255,10 +427,10 @@ impl LiveHub {
                 continue;
             }
             if want.any() {
-                // Still watched, now without its AI (or the other way round).
+                // Still watched, now without its AI, its inventory or its movement (or with).
                 let _ = task.commands.send(Command::Watch {
                     acct: acct.to_owned(),
-                    ai: want.ai,
+                    streams: want.streams(),
                 });
                 continue;
             }
@@ -427,12 +599,15 @@ enum Incoming {
         #[serde(default)]
         ai: Option<PlusAi>,
     },
-    Aifeed {
+    Aud {
         acct: String,
         #[serde(default)]
-        items: Vec<PlusFeedItem>,
+        items: Vec<PlusAuditEntry>,
+    },
+    Aiord {
+        acct: String,
         #[serde(default)]
-        snapshot: bool,
+        orders: BTreeMap<String, PlusOrderLive>,
     },
     Aiapproval {
         acct: String,
@@ -445,10 +620,230 @@ enum Incoming {
         #[serde(default)]
         at: i64,
     },
+    Invst {
+        acct: String,
+        #[serde(default)]
+        state: String,
+        #[serde(default)]
+        reason: Option<String>,
+        #[serde(default)]
+        lock: Option<String>,
+    },
+    Inv {
+        acct: String,
+        #[serde(default)]
+        held: u32,
+        #[serde(default)]
+        cursor: Option<CloudInvItem>,
+        #[serde(default)]
+        items: Vec<CloudInvItem>,
+        #[serde(default)]
+        snap: bool,
+    },
+    Win {
+        acct: String,
+        #[serde(default)]
+        wseq: i64,
+        #[serde(default)]
+        open: Option<CloudWinOpen>,
+        #[serde(default)]
+        items: Vec<CloudInvItem>,
+        #[serde(default)]
+        closed: bool,
+    },
+    Invres {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        ok: bool,
+        #[serde(default)]
+        error: Option<CloudInvError>,
+    },
+    Bars {
+        acct: String,
+        #[serde(default)]
+        actionbar: Option<CloudBarText>,
+        #[serde(default)]
+        title: Option<CloudTitleBar>,
+        #[serde(default)]
+        boss: Vec<CloudBossBar>,
+    },
+    Movst {
+        acct: String,
+        #[serde(default)]
+        state: String,
+        #[serde(default)]
+        reason: Option<String>,
+        #[serde(default)]
+        doing: Option<String>,
+        #[serde(default)]
+        to: Option<CloudBlock>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        until: Option<i64>,
+        #[serde(default)]
+        ended: Option<String>,
+        #[serde(default)]
+        sneak: Option<bool>,
+        #[serde(default)]
+        lock: Option<String>,
+    },
+    Pos {
+        acct: String,
+        #[serde(default)]
+        x: i64,
+        #[serde(default)]
+        y: i64,
+        #[serde(default)]
+        z: i64,
+        #[serde(default)]
+        dim: String,
+        #[serde(default)]
+        facing: String,
+    },
+    Movres {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        ok: bool,
+        #[serde(default)]
+        error: Option<CloudMovementError>,
+    },
     Bye,
     Pong,
     #[serde(other)]
     Other,
+}
+
+impl Incoming {
+    /// The inventory's and the strip's messages as events (the others are matched where they
+    /// come).
+    fn feature_event(self) -> Option<CloudLiveEvent> {
+        Some(match self {
+            Self::Invst {
+                acct,
+                state,
+                reason,
+                lock,
+            } => CloudLiveEvent::InvState {
+                acct,
+                state,
+                reason,
+                lock,
+            },
+            Self::Inv {
+                acct,
+                held,
+                cursor,
+                items,
+                snap,
+            } => CloudLiveEvent::Inventory {
+                acct,
+                held,
+                cursor,
+                items,
+                snap,
+            },
+            Self::Win {
+                acct,
+                wseq,
+                open,
+                items,
+                closed,
+            } => CloudLiveEvent::Window {
+                acct,
+                wseq,
+                open,
+                items,
+                closed,
+            },
+            Self::Invres { id, ok, error } => CloudLiveEvent::InvResult {
+                id,
+                ok: ok && error.is_none(),
+                error,
+            },
+            Self::Bars {
+                acct,
+                actionbar,
+                title,
+                boss,
+            } => CloudLiveEvent::Bars {
+                acct,
+                bars: CloudBars {
+                    actionbar,
+                    title,
+                    boss,
+                },
+            },
+            Self::Movst {
+                acct,
+                state,
+                reason,
+                doing,
+                to,
+                name,
+                until,
+                ended,
+                sneak,
+                lock,
+            } => CloudLiveEvent::MovementState {
+                acct,
+                state: CloudMovementState {
+                    state,
+                    reason,
+                    doing,
+                    to,
+                    name,
+                    until,
+                    ended,
+                    sneak,
+                    lock,
+                },
+            },
+            Self::Pos {
+                acct,
+                x,
+                y,
+                z,
+                dim,
+                facing,
+            } => CloudLiveEvent::Pos {
+                acct,
+                pos: CloudPos {
+                    x,
+                    y,
+                    z,
+                    dim,
+                    facing,
+                },
+            },
+            Self::Movres { id, ok, error } => CloudLiveEvent::MovementResult {
+                id,
+                ok: ok && error.is_none(),
+                error,
+            },
+            _ => return None,
+        })
+    }
+}
+
+/// A move that could not go out (the machine's socket is away).
+fn unsent(id: String) -> CloudLiveEvent {
+    CloudLiveEvent::InvResult {
+        id,
+        ok: false,
+        error: Some(CloudInvError::new("host_offline")),
+    }
+}
+
+/// A movement operation that could not go out (the machine's socket is away).
+fn movement_unsent(id: String) -> CloudLiveEvent {
+    CloudLiveEvent::MovementResult {
+        id,
+        ok: false,
+        error: Some(CloudMovementError::new("host_offline")),
+    }
 }
 
 #[derive(Default, Deserialize)]
@@ -466,19 +861,42 @@ fn watch_frame(t: &str, acct: &str) -> String {
 }
 
 /// `watch`, with `ai: true` for the AFK+ panel.
+#[cfg(test)]
 fn watch_ai_frame(acct: &str, ai: bool) -> String {
+    watch_streams_frame(acct, ai, None, None)
+}
+
+/// `watch` with `ai: true` for the AFK+ panel, `inv` when the inventory stream starts (`true`)
+/// or stops (`false`), and `move` the same for movement (left out, a stream stays as it was).
+fn watch_streams_frame(acct: &str, ai: bool, inv: Option<bool>, movement: Option<bool>) -> String {
+    let mut frame = serde_json::json!({ "t": "watch", "acct": acct });
     if ai {
-        serde_json::json!({ "t": "watch", "acct": acct, "ai": true }).to_string()
-    } else {
-        watch_frame("watch", acct)
+        frame["ai"] = serde_json::Value::Bool(true);
     }
+    if let Some(inv) = inv {
+        frame["inv"] = serde_json::Value::Bool(inv);
+    }
+    if let Some(movement) = movement {
+        frame["move"] = serde_json::Value::Bool(movement);
+    }
+    frame.to_string()
+}
+
+/// The streams a new subscription asks for (only those that are on).
+fn first_watch_frame(acct: &str, streams: Streams) -> String {
+    watch_streams_frame(
+        acct,
+        streams.ai,
+        streams.inv.then_some(true),
+        streams.movement.then_some(true),
+    )
 }
 
 /// One machine's socket until nobody watches or it must not reopen.
 async fn run(
     endpoint: &Endpoint,
     host: &str,
-    mut watched: HashMap<String, bool>,
+    mut watched: HashMap<String, Streams>,
     mut commands: mpsc::UnboundedReceiver<Command>,
     sink: &LiveSink,
 ) {
@@ -537,13 +955,16 @@ async fn run(
                 () = sleep_until(until) => break,
                 command = commands.recv() => match command {
                     None => return,
-                    Some(Command::Watch { acct, ai }) => { watched.insert(acct, ai); }
+                    Some(Command::Watch { acct, streams }) => { watched.insert(acct, streams); }
                     Some(Command::Unwatch(acct)) => {
                         watched.remove(&acct);
                         if watched.is_empty() {
                             return;
                         }
                     }
+                    // Never queued for later: a move made now must not land in a later state.
+                    Some(Command::InvOp { id, .. }) => sink(unsent(id)),
+                    Some(Command::MovementOp { id, .. }) => sink(movement_unsent(id)),
                 },
             }
         }
@@ -553,13 +974,33 @@ async fn run(
 async fn connected(
     socket: &mut Socket,
     host: &str,
-    watched: &mut HashMap<String, bool>,
+    watched: &mut HashMap<String, Streams>,
     commands: &mut mpsc::UnboundedReceiver<Command>,
     sink: &LiveSink,
     backoff: &mut Duration,
 ) -> Outcome {
-    for (acct, ai) in watched.iter() {
-        if !send_text(socket, watch_ai_frame(acct, *ai)).await {
+    // What came while the socket opened: the watchers are followed, and a move made meanwhile is
+    // answered as not sent, never sent late against a state it was not made for.
+    loop {
+        match commands.try_recv() {
+            Ok(Command::Watch { acct, streams }) => {
+                watched.insert(acct, streams);
+            }
+            Ok(Command::Unwatch(acct)) => {
+                watched.remove(&acct);
+            }
+            Ok(Command::InvOp { id, .. }) => sink(unsent(id)),
+            Ok(Command::MovementOp { id, .. }) => sink(movement_unsent(id)),
+            Err(mpsc::error::TryRecvError::Empty) => break,
+            Err(mpsc::error::TryRecvError::Disconnected) => return Outcome::Done,
+        }
+    }
+    if watched.is_empty() {
+        return Outcome::Done;
+    }
+    for (acct, streams) in watched.iter() {
+        let frame = first_watch_frame(acct, *streams);
+        if !send_text(socket, frame).await {
             return Outcome::Retry(Duration::ZERO);
         }
     }
@@ -587,8 +1028,9 @@ async fn connected(
                         }
                         Ok(Incoming::Error { code, acct }) => sink(CloudLiveEvent::Problem { acct, code }),
                         Ok(Incoming::Aist { acct, ai }) => sink(CloudLiveEvent::Ai { acct, ai }),
-                        Ok(Incoming::Aifeed { acct, items, snapshot }) => {
-                            sink(CloudLiveEvent::Feed { acct, items, snapshot });
+                        Ok(Incoming::Aud { acct, items }) => sink(CloudLiveEvent::Audit { acct, items }),
+                        Ok(Incoming::Aiord { acct, orders }) => {
+                            sink(CloudLiveEvent::Orders { acct, orders });
                         }
                         Ok(Incoming::Aiapproval { acct, approval }) => {
                             sink(CloudLiveEvent::Approval { acct, approval });
@@ -597,6 +1039,11 @@ async fn connected(
                             sink(CloudLiveEvent::Messages { acct, count, at });
                         }
                         Ok(Incoming::Bye | Incoming::Pong | Incoming::Other) => {}
+                        Ok(message) => {
+                            if let Some(event) = message.feature_event() {
+                                sink(event);
+                            }
+                        }
                         Err(error) => tracing::debug!(%error, "unreadable live console message"),
                     }
                 }
@@ -618,18 +1065,41 @@ async fn connected(
                         .await;
                     return Outcome::Done;
                 }
-                Some(Command::Watch { acct, ai }) => {
-                    let before = watched.insert(acct.clone(), ai);
+                Some(Command::Watch { acct, streams }) => {
+                    let before = watched.insert(acct.clone(), streams);
                     let sent = match before {
-                        Some(same) if same == ai => true,
-                        // The AI's stream ends only with the subscription: watch again without it.
-                        Some(true) => {
+                        Some(same) if same == streams => true,
+                        // The AI's stream ends only with the subscription: watch again without it
+                        // (the inventory's and movement's come back with the new subscription).
+                        Some(old) if old.ai && !streams.ai => {
+                            let again = first_watch_frame(&acct, streams);
                             send_text(socket, watch_frame("unwatch", &acct)).await
-                                && send_text(socket, watch_ai_frame(&acct, false)).await
+                                && send_text(socket, again).await
                         }
-                        _ => send_text(socket, watch_ai_frame(&acct, ai)).await,
+                        // The inventory's and movement's streams start or stop on the same
+                        // subscription.
+                        Some(old) => {
+                            let inv = (old.inv != streams.inv).then_some(streams.inv);
+                            let movement =
+                                (old.movement != streams.movement).then_some(streams.movement);
+                            let frame = watch_streams_frame(&acct, streams.ai, inv, movement);
+                            send_text(socket, frame).await
+                        }
+                        None => send_text(socket, first_watch_frame(&acct, streams)).await,
                     };
                     if !sent {
+                        return Outcome::Retry(Duration::ZERO);
+                    }
+                }
+                Some(Command::InvOp { id, frame }) => {
+                    if !send_text(socket, frame).await {
+                        sink(unsent(id));
+                        return Outcome::Retry(Duration::ZERO);
+                    }
+                }
+                Some(Command::MovementOp { id, frame }) => {
+                    if !send_text(socket, frame).await {
+                        sink(movement_unsent(id));
                         return Outcome::Retry(Duration::ZERO);
                     }
                 }
@@ -739,8 +1209,18 @@ mod tests {
             Incoming::Aist { ai: Some(ai), .. } if ai.pending_approvals == 2
         ));
         assert!(matches!(
-            parse(r#"{"t":"aifeed","acct":"a_1","items":[{"id":"01J","at":5,"kind":"pm_in","counterpart":"Kaan_07","text":"elytra var 45k"}],"snapshot":true}"#),
-            Incoming::Aifeed { snapshot: true, items, .. } if items[0].kind == "pm_in"
+            parse(r#"{"t":"aud","acct":"a_1","items":[{"s":20387000013,"t":1792949000000,"k":"pm_in","w":"Kaan_07","x":"elytra var 45k"}]}"#),
+            Incoming::Aud { items, .. } if items[0].k == "pm_in" && items[0].day() == 20387
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"aiord","acct":"a_1","orders":{"o1":{"got":1,"at":9,"live":null},"o2":{"got":0,"at":0,"live":"haggling"}}}"#),
+            Incoming::Aiord { orders, .. }
+                if orders["o1"].got == 1 && orders["o2"].live.as_deref() == Some("haggling")
+        ));
+        // The old feed frame of a service before orders is no longer read.
+        assert!(matches!(
+            parse(r#"{"t":"aifeed","acct":"a_1","items":[],"snapshot":true}"#),
+            Incoming::Other
         ));
         assert!(matches!(
             parse(r#"{"t":"aiapproval","acct":"a_1","approval":{"id":"01J","state":"expired"}}"#),
@@ -883,9 +1363,11 @@ mod tests {
         let sink: LiveSink = Arc::new(|_| {});
         let hub = LiveHub::new(Handle::current(), "test", sink);
         hub.watch(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 1).await;
+        assert_eq!(frames[0], watch_frame("watch", "a_1"));
+        // The panel opens on the open socket: the same subscription gains the AI.
         hub.watch_ai(url, Bearer::new("pls_test"), "kz1", "a_1");
         let frames = heard(&sent, 2).await;
-        assert_eq!(frames[0], watch_frame("watch", "a_1"));
         assert_eq!(frames[1], watch_ai_frame("a_1", true));
         // The panel closes, the console stays: watched again without the AI.
         hub.unwatch_ai("a_1");
@@ -897,6 +1379,235 @@ mod tests {
         assert!(!hub.is_watching());
         let frames = heard(&sent, 5).await;
         assert_eq!(frames[4], watch_frame("unwatch", "a_1"));
+    }
+
+    #[test]
+    fn reads_the_inventory_and_the_strip() {
+        let event = |text: &str| {
+            serde_json::from_str::<Incoming>(text)
+                .unwrap()
+                .feature_event()
+                .unwrap()
+        };
+        assert_eq!(
+            event(r#"{"t":"invst","acct":"a_1","state":"ok","lock":"trade"}"#),
+            CloudLiveEvent::InvState {
+                acct: "a_1".into(),
+                state: "ok".into(),
+                reason: None,
+                lock: Some("trade".into()),
+            }
+        );
+        let CloudLiveEvent::Inventory {
+            held,
+            cursor,
+            items,
+            snap,
+            ..
+        } = event(
+            r#"{"t":"inv","acct":"a_1","held":2,"cursor":null,"snap":true,
+                "items":[{"slot":36,"id":"minecraft:bread","count":12,"label":{"tr":"Ekmek","en":"Bread"}}]}"#,
+        )
+        else {
+            panic!("not an inventory");
+        };
+        assert_eq!((held, cursor, snap), (2, None, true));
+        assert_eq!(items[0].label.tr, "Ekmek");
+        assert_eq!(
+            event(
+                r#"{"t":"win","acct":"a_1","wseq":1792000000123,"open":{"type":"generic_9x3","title":"Kitler","size":27},"items":[]}"#
+            ),
+            CloudLiveEvent::Window {
+                acct: "a_1".into(),
+                wseq: 1_792_000_000_123,
+                open: Some(CloudWinOpen {
+                    kind: "generic_9x3".into(),
+                    title: "Kitler".into(),
+                    size: 27,
+                }),
+                items: vec![],
+                closed: false,
+            }
+        );
+        assert_eq!(
+            event(r#"{"t":"invres","id":"m1","error":{"code":"rate_limited","retryAfter":2}}"#),
+            CloudLiveEvent::InvResult {
+                id: "m1".into(),
+                ok: false,
+                error: Some(CloudInvError {
+                    code: "rate_limited".into(),
+                    retry_after: Some(2),
+                    ..CloudInvError::default()
+                }),
+            }
+        );
+        let CloudLiveEvent::Bars { bars, .. } = event(
+            r#"{"t":"bars","acct":"a_1","actionbar":{"text":"Günlük ödüle 2 saat","untilMs":5},"title":null,
+                "boss":[{"id":"b1","text":"Etkinlik","progress":0.4,"color":"pink"}]}"#,
+        ) else {
+            panic!("not a strip");
+        };
+        assert_eq!(bars.actionbar.unwrap().text, "Günlük ödüle 2 saat");
+        assert_eq!(bars.boss[0].progress, 0.4);
+        assert!(
+            serde_json::from_str::<Incoming>(r#"{"t":"pong"}"#)
+                .unwrap()
+                .feature_event()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn the_inventory_streams_on_the_console_subscription_and_moves_go_out() {
+        let sent = Arc::new(StdMutex::new(Vec::new()));
+        let url = fake_service(sent.clone()).await;
+        let (events_tx, mut events) = mpsc::unbounded_channel();
+        let sink: LiveSink = Arc::new(move |event| {
+            let _ = events_tx.send(event);
+        });
+        let hub = LiveHub::new(Handle::current(), "test", sink);
+        let snapshot = serde_json::json!({ "action": "snapshot" });
+        assert!(!hub.inv_op("a_1", "m0", &snapshot), "nothing streams it");
+        hub.watch(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
+        hub.watch_inventory(url, Bearer::new("pls_test"), "kz1", "a_1");
+        // Both came while the socket opened: its first frame asks for both.
+        let frames = heard(&sent, 1).await;
+        assert_eq!(
+            frames[0],
+            watch_streams_frame("a_1", false, Some(true), None)
+        );
+        assert!(hub.inv_op("a_1", "m1", &snapshot));
+        let frames = heard(&sent, 2).await;
+        let op: serde_json::Value = serde_json::from_str(&frames[1]).unwrap();
+        assert_eq!(
+            op,
+            serde_json::json!({"t": "invop", "acct": "a_1", "id": "m1", "op": {"action": "snapshot"}})
+        );
+        // The view leaves, the console stays: the stream stops on the same subscription.
+        hub.unwatch_inventory("a_1");
+        let frames = heard(&sent, 3).await;
+        assert_eq!(
+            frames[2],
+            watch_streams_frame("a_1", false, Some(false), None)
+        );
+        assert!(!hub.inv_op("a_1", "m2", &snapshot));
+        assert!(hub.is_watching());
+        hub.unwatch("a_1");
+        assert!(!hub.is_watching());
+        let frames = heard(&sent, 4).await;
+        assert_eq!(frames[3], watch_frame("unwatch", "a_1"));
+        // Nothing answered a move here, and nothing failed.
+        while let Ok(event) = events.try_recv() {
+            assert!(!matches!(event, CloudLiveEvent::InvResult { .. }));
+        }
+    }
+
+    #[test]
+    fn reads_the_movement_frames() {
+        let event = |text: &str| {
+            serde_json::from_str::<Incoming>(text)
+                .unwrap()
+                .feature_event()
+                .unwrap()
+        };
+        assert_eq!(
+            event(
+                r#"{"t":"movst","acct":"a_1","state":"ok","doing":"goto","to":{"x":120,"y":64,"z":-40},"until":1793000120,"sneak":false}"#
+            ),
+            CloudLiveEvent::MovementState {
+                acct: "a_1".into(),
+                state: CloudMovementState {
+                    state: "ok".into(),
+                    doing: Some("goto".into()),
+                    to: Some(CloudBlock {
+                        x: 120,
+                        y: 64,
+                        z: -40
+                    }),
+                    until: Some(1_793_000_120),
+                    sneak: Some(false),
+                    ..CloudMovementState::default()
+                },
+            }
+        );
+        let CloudLiveEvent::MovementState { state, .. } =
+            event(r#"{"t":"movst","acct":"a_1","state":"off","reason":"restart"}"#)
+        else {
+            panic!("not a movement state");
+        };
+        assert_eq!(
+            (state.state.as_str(), state.reason.as_deref()),
+            ("off", Some("restart"))
+        );
+        assert_eq!(
+            event(
+                r#"{"t":"pos","acct":"a_1","x":-3,"y":70,"z":12,"dim":"minecraft:overworld","facing":"north"}"#
+            ),
+            CloudLiveEvent::Pos {
+                acct: "a_1".into(),
+                pos: CloudPos {
+                    x: -3,
+                    y: 70,
+                    z: 12,
+                    dim: "minecraft:overworld".into(),
+                    facing: "north".into(),
+                },
+            }
+        );
+        assert_eq!(
+            event(r#"{"t":"movres","id":"m3","ok":true}"#),
+            CloudLiveEvent::MovementResult {
+                id: "m3".into(),
+                ok: true,
+                error: None,
+            }
+        );
+        let CloudLiveEvent::MovementResult { ok, error, .. } =
+            event(r#"{"t":"movres","id":"m4","error":{"code":"loop","retryAfter":240}}"#)
+        else {
+            panic!("not an answer");
+        };
+        assert!(!ok);
+        assert_eq!(error.unwrap().retry_after, Some(240));
+    }
+
+    #[tokio::test]
+    async fn movement_streams_beside_the_inventory_and_operations_go_out() {
+        let sent = Arc::new(StdMutex::new(Vec::new()));
+        let url = fake_service(sent.clone()).await;
+        let sink: LiveSink = Arc::new(|_| {});
+        let hub = LiveHub::new(Handle::current(), "test", sink);
+        let step = serde_json::json!({ "action": "step", "dir": "forward", "n": 1 });
+        assert!(!hub.movement_op("a_1", "m0", &step), "nothing streams it");
+        hub.watch_movement(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 1).await;
+        assert_eq!(
+            frames[0],
+            watch_streams_frame("a_1", false, None, Some(true))
+        );
+        hub.watch_inventory(url, Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 2).await;
+        assert_eq!(
+            frames[1],
+            watch_streams_frame("a_1", false, Some(true), None)
+        );
+        assert!(hub.movement_op("a_1", "m1", &step));
+        let frames = heard(&sent, 3).await;
+        let op: serde_json::Value = serde_json::from_str(&frames[2]).unwrap();
+        assert_eq!(
+            op,
+            serde_json::json!({"t": "move", "acct": "a_1", "id": "m1", "op": step})
+        );
+        // The panel leaves, the inventory stays: movement stops on the same subscription.
+        hub.unwatch_movement("a_1");
+        let frames = heard(&sent, 4).await;
+        assert_eq!(
+            frames[3],
+            watch_streams_frame("a_1", false, None, Some(false))
+        );
+        assert!(!hub.movement_op("a_1", "m2", &step));
+        hub.unwatch_inventory("a_1");
+        assert!(!hub.is_watching());
     }
 
     #[test]

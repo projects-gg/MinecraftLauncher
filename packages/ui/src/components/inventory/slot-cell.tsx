@@ -61,6 +61,10 @@ export interface SlotCellProps {
   /** When a move tried here was held (looking only, a trade's lock): a lock shows for a moment. */
   nopeAt?: number;
   live: boolean;
+  /** A slot a pick can choose: it says whether it is the chosen one (`aria-selected`). */
+  selectable?: boolean;
+  /** The chosen slot of a pick: the game's highlight stays and the brand's brackets mark it. */
+  picked?: boolean;
 }
 
 export const SlotCell = memo(function SlotCell({
@@ -75,6 +79,8 @@ export const SlotCell = memo(function SlotCell({
   lit,
   nopeAt,
   live,
+  selectable = false,
+  picked = false,
 }: SlotCellProps) {
   return (
     // biome-ignore lint/a11y/useSemanticElements: a cell of the ARIA grid (positioned pixel art)
@@ -85,6 +91,8 @@ export const SlotCell = memo(function SlotCell({
       data-pending={pending ? "" : undefined}
       data-held={held ? "" : undefined}
       data-lit={lit ? "" : undefined}
+      data-picked={picked ? "" : undefined}
+      aria-selected={selectable || picked ? picked : undefined}
       tabIndex={live ? (tabbable ? 0 : -1) : undefined}
       aria-label={live ? label : undefined}
       aria-describedby={live ? describedBy : undefined}

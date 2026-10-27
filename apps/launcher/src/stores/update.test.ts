@@ -24,6 +24,9 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 vi.mock("@/lib/platform", () => ({ isTauri: () => true }));
 vi.mock("./prefs", () => ({ usePrefs: { getState: () => prefs } }));
+// BETA-GATE: the answer about the beta channel (beta-gate.test.ts covers it).
+const keepBeta = vi.fn();
+vi.mock("@/features/updates/beta-gate", () => ({ keepBeta: () => keepBeta() }));
 
 /** The first channel the store opened in this test (progress for a check, steps for an install). */
 function channel() {
@@ -118,6 +121,27 @@ describe("apply", () => {
 
 describe("check", () => {
   const found = { status: "ok", data: { state: "available", version: "2.6.0", notes: null } };
+
+  it("asks first on the beta channel and looks where the answer says (BETA-GATE)", async () => {
+    useUpdate.setState({ phase: "idle" });
+    updateCheck.mockResolvedValue({ status: "ok", data: { state: "upToDate", current: "2.5.0" } });
+    keepBeta.mockReset();
+    // Kararlı asks nobody.
+    prefs.updateChannel = "stable";
+    await useUpdate.getState().check();
+    expect(keepBeta).not.toHaveBeenCalled();
+    expect(updateCheck).toHaveBeenLastCalledWith("stable");
+    // Beta asks; a yes looks at beta, a no at Kararlı.
+    prefs.updateChannel = "beta";
+    keepBeta.mockResolvedValueOnce("beta");
+    await useUpdate.getState().check();
+    expect(updateCheck).toHaveBeenLastCalledWith("beta");
+    keepBeta.mockResolvedValueOnce("stable");
+    await useUpdate.getState().check();
+    expect(keepBeta).toHaveBeenCalledTimes(2);
+    expect(updateCheck).toHaveBeenLastCalledWith("stable");
+    prefs.updateChannel = "stable";
+  });
 
   it("offers an update without downloading it when background downloads are off", async () => {
     prefs.autoDownloadUpdates = false;

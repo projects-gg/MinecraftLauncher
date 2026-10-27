@@ -469,6 +469,28 @@ export const CONTENT_SPRITES = {
       "................",
     ],
   },
+  /** A laced boot with a folded cuff, toe forward: a cloud account walked by hand (movement). */
+  movement: {
+    shadow: "o",
+    rows: [
+      "................",
+      "....hhhhhh......",
+      "....llllll......",
+      "....ssssss......",
+      "....lmmmmd......",
+      "....lmmmhd......",
+      "....lmmmmd......",
+      "....lmmmhdd.....",
+      "....lmmmmmmdd...",
+      "...llmmmmmmmmd..",
+      "...lmmmmmmmmmmd.",
+      "...lmmmmmmmmhmd.",
+      "..sssssssssssss.",
+      "................",
+      "................",
+      "................",
+    ],
+  },
 } satisfies Record<string, Sprite>;
 
 export type ContentIconKind = keyof typeof CONTENT_SPRITES;

@@ -1,7 +1,11 @@
-// A cloud account's live console in a side sheet, as the desktop console: the machine's masked
+// A cloud account's panel in a side sheet. Its console, as the desktop console: the machine's masked
 // lines while the sheet is on screen (the socket closes when it is closed or the window leaves the
 // screen), earlier lines on request, and a command line. A password command is sealed by the
 // backend before it leaves the launcher; nothing typed is echoed, the server's answer shows.
+//
+// With the cloud features (CAFK-FEAT) and only while the service offers them: the console's kinds
+// (colours, the chips, "Adın geçenler", search, "İndir") and the status strip; the Envanter tab
+// beside Konsol, on a solid panel (inside glass Chromium resamples the inventory's pixels).
 import { ArrowDown, ArrowUp, LockSimple, PaperPlaneRight, X } from "@phosphor-icons/react";
 import {
   Button,
@@ -14,6 +18,8 @@ import {
   leave,
   scrimMotion,
   sheetMotion,
+  TabPanel,
+  Tabs,
   useInteractionMotion,
   useMotionPrefs,
 } from "@pl/ui";
@@ -29,18 +35,31 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import type { CloudBars } from "@/bindings";
 import { uiLocale } from "@/lib/format";
 import { useWindowAway } from "@/lib/window-away";
 import { AfkHead } from "../afk-head";
 import { isFriendly } from "../errors";
 import { type CloudAccount, type CloudLiveEvent, cloudApi } from "./api";
+import {
+  type KindFilter,
+  type KindLine,
+  kindTone,
+  splitAtName,
+  visibleLines,
+} from "./console-kinds";
+import { ConsoleStrip } from "./console-strip";
+import { ConsoleTools } from "./console-tools";
+import { InventoryPanel, useInventoryArt } from "./inventory/inventory-panel";
+import { MovementPanel } from "./movement/movement-panel";
+import { movementShown } from "./movement/use-cloud-movement";
 import { looksSensitive } from "./sensitive";
 import { issueKey, textProblem } from "./settings-model";
 import { CloudStateLine } from "./state-line";
 import { isInGame } from "./status";
-import { storeAccount } from "./use-cloud";
+import { type PanelTab, storeAccount, useCloudUi } from "./use-cloud";
 
-type Line = { at: number; text: string; k: string };
+type Line = KindLine;
 type LinkStatus = "connecting" | "live" | "reconnecting" | "replaced" | "ended" | "refused";
 
 /** The newest lines kept on screen. */
@@ -102,15 +121,57 @@ function Banner({
   );
 }
 
+/** One console line: its time, its words in its kind's colour, a private line's name standing out. */
+function LineText({
+  line,
+  clock,
+  onInventory,
+}: {
+  line: Line;
+  clock: string;
+  onInventory?: () => void;
+}) {
+  const { t } = useTranslation();
+  const parts = splitAtName(line);
+  return (
+    <p className={cn("break-words", kindTone(line))}>
+      <span className="mr-2 text-ash-400 tabular-nums select-none">{clock}</span>
+      {parts ? (
+        <>
+          {parts[0]}
+          <span className="text-gold-300">{parts[1]}</span>
+          {parts[2]}
+        </>
+      ) : (
+        line.text
+      )}
+      {line.goto === "inventory" && onInventory ? (
+        <button
+          type="button"
+          onClick={onInventory}
+          className="ml-2 cursor-pointer font-sans text-[12px] font-medium text-gold-300 underline-offset-2 outline-none select-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+        >
+          {t("cloudAfkFeat.console.showInInventory")}
+        </button>
+      ) : null}
+    </p>
+  );
+}
+
 export function CloudConsole({
   account,
   skewMs,
   onStart,
+  onRestart,
+  onOpenSettings,
   onClose,
 }: {
   account: CloudAccount | undefined;
   skewMs: number;
   onStart: (account: CloudAccount) => void;
+  /** "Şimdi yeniden bağla" (the inventory comes at the next connection). */
+  onRestart: (account: CloudAccount) => void;
+  onOpenSettings: (id: string) => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -118,9 +179,20 @@ export function CloudConsole({
   const { reduce } = useMotionPrefs();
   const away = useWindowAway();
   const queryClient = useQueryClient();
+  const tab = useCloudUi((s) => s.consoleTab);
+  const setTab = useCloudUi((s) => s.setConsoleTab);
   const open = Boolean(account);
   const id = account?.id;
   const host = account?.host ?? null;
+  const kinds = Boolean(account?.features?.consoleKinds);
+  const [inventoryGone, setInventoryGone] = useState(false);
+  const [movementGone, setMovementGone] = useState(false);
+  const inventory =
+    (account?.features?.inventory?.mode ?? "off") !== "off" && Boolean(host) && !inventoryGone;
+  const movement = movementShown(account) && !movementGone;
+  const tabbed = inventory || movement;
+  const shownTab: PanelTab =
+    (tab === "inventory" && inventory) || (tab === "movement" && movement) ? tab : "console";
   const [lines, setLines] = useState<Line[]>([]);
   const [status, setStatus] = useState<LinkStatus>("connecting");
   const [hostOnline, setHostOnline] = useState(true);
@@ -133,11 +205,17 @@ export function CloudConsole({
   const [recall, setRecall] = useState<number | null>(null);
   const [unseen, setUnseen] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [filter, setFilter] = useState<KindFilter>("all");
+  const [query, setQuery] = useState("");
+  const [bars, setBars] = useState<CloudBars | null>(null);
   const draft = useRef("");
   const listRef = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true);
   const accountRef = useRef(account);
   accountRef.current = account;
+  const art = useInventoryArt(account);
+  const inventoryUnavailable = useCallback(() => setInventoryGone(true), []);
+  const movementUnavailable = useCallback(() => setMovementGone(true), []);
 
   // Another account (or a fresh open) starts empty, at its newest line.
   // biome-ignore lint/correctness/useExhaustiveDependencies: resets when the account changes
@@ -151,6 +229,11 @@ export function CloudConsole({
     setUnseen(false);
     setStatus("connecting");
     setHostOnline(true);
+    setFilter("all");
+    setQuery("");
+    setBars(null);
+    setInventoryGone(false);
+    setMovementGone(false);
     atEnd.current = true;
   }, [id]);
 
@@ -163,6 +246,12 @@ export function CloudConsole({
           if (event.host === current.host) setStatus(event.status);
           break;
         case "hello":
+          // A new connection watches again: the machine sends the strip anew if it holds any.
+          if (event.host === current.host) {
+            setBars(null);
+            setHostOnline(event.online);
+          }
+          break;
         case "machine":
           if (event.host === current.host) setHostOnline(event.online);
           break;
@@ -177,6 +266,9 @@ export function CloudConsole({
             event.snapshot ? event.lines.slice(-KEEP) : [...old, ...event.lines].slice(-KEEP),
           );
           break;
+        case "bars":
+          if (event.acct === current.id) setBars(event.bars);
+          break;
         case "problem":
           if (event.code === "host_offline") setHostOnline(false);
           break;
@@ -190,11 +282,13 @@ export function CloudConsole({
     return cloudApi.onLive(onEvent);
   }, [open, onEvent]);
 
-  // The socket runs only while this console is on screen.
+  // The socket runs only while this panel is on screen.
   useEffect(() => {
     void attempt;
     if (!open || !id || !host || away) return;
     let alive = true;
+    // A watch brings the strip again when the server shows one: nothing stale stays.
+    setBars(null);
     cloudApi.watch(id).catch(() => {
       if (alive) setStatus("refused");
     });
@@ -204,17 +298,27 @@ export function CloudConsole({
     };
   }, [open, id, host, away, attempt]);
 
-  const last = lines.at(-1);
-  const lastKey = `${lines.length}|${last?.at ?? ""}|${last?.text ?? ""}`;
+  const shown = kinds ? visibleLines(lines, filter, account?.name ?? "", query) : lines;
+  const last = shown.at(-1);
+  const lastKey = `${shown.length}|${last?.at ?? ""}|${last?.text ?? ""}|${shownTab}`;
 
   // New lines are followed while the player reads the end; otherwise a button offers the way down.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs for every new line
   useLayoutEffect(() => {
     const list = listRef.current;
-    if (!list || !lines.length) return;
+    if (!list || !shown.length) return;
     if (atEnd.current) list.scrollTop = list.scrollHeight;
     else setUnseen(true);
   }, [lastKey]);
+
+  // A new chip or search, or coming back to the console, starts at the newest line.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the view changes
+  useLayoutEffect(() => {
+    atEnd.current = true;
+    setUnseen(false);
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [filter, query, shownTab]);
 
   const onScroll = () => {
     const list = listRef.current;
@@ -314,6 +418,171 @@ export function CloudConsole({
       second: "2-digit",
     });
 
+  const consoleBody = account ? (
+    <>
+      {kinds ? (
+        <>
+          <ConsoleTools
+            account={account}
+            filter={filter}
+            onFilter={setFilter}
+            query={query}
+            onQuery={setQuery}
+          />
+          <ConsoleStrip bars={running ? bars : null} skewMs={skewMs} />
+        </>
+      ) : null}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={listRef}
+          onScroll={onScroll}
+          className="absolute inset-0 overflow-y-auto px-5 py-3 font-mono text-[12.5px] leading-relaxed"
+          data-selectable
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
+          {!earlierDone && lines.length > 0 ? (
+            <div className="mb-2 flex justify-center font-sans">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<ArrowUp size={13} />}
+                disabled={earlierBusy}
+                onClick={() => void loadEarlier()}
+              >
+                {t("cloudAfk.console.earlier")}
+              </Button>
+            </div>
+          ) : null}
+          {shown.length ? (
+            shown.map((line, index) => (
+              <LineText
+                // biome-ignore lint/suspicious/noArrayIndexKey: lines arrive in order and are never edited
+                key={`${line.at}-${index}`}
+                line={line}
+                clock={clock(line.at)}
+                onInventory={inventory ? () => setTab("inventory") : undefined}
+              />
+            ))
+          ) : (
+            <p className="flex h-full items-center justify-center font-sans text-[13px] text-ash-400">
+              {lines.length
+                ? t("cloudAfkFeat.console.noMatch")
+                : status === "connecting" && host
+                  ? t("cloudAfk.console.connecting")
+                  : t("cloudAfk.console.empty")}
+            </p>
+          )}
+          {skipped ? (
+            <p className="mt-1 font-sans text-[12px] text-ash-400">
+              {t("cloudAfk.console.skipped", { count: skipped })}
+            </p>
+          ) : null}
+        </div>
+        <AnimatePresence>
+          {unseen ? (
+            <motion.div
+              key="unseen"
+              className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+              initial={{ opacity: 0, transform: reduce ? "none" : "translateY(6px)" }}
+              animate={{
+                opacity: 1,
+                transform: reduce ? "none" : "translateY(0px)",
+                transition: enter(0.2),
+              }}
+              exit={{ opacity: 0, transition: leave(0.14) }}
+            >
+              <button
+                type="button"
+                onClick={toEnd}
+                className="pointer-events-auto flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-obsidian-800/95 px-3 text-[12.5px] font-medium text-bone-50 shadow-[0_8px_24px_rgb(34_6_6/0.5)] ring-1 ring-white/12 transition-[background-color,transform,scale] duration-150 outline-none hover:bg-obsidian-700 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]"
+              >
+                <ArrowDown size={14} weight="bold" aria-hidden />
+                {t("cloudAfk.console.newMessages")}
+              </button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
+      <form
+        className="flex flex-col gap-2 border-t border-white/8 p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void send();
+        }}
+      >
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            {sensitive && running ? (
+              <LockSimple
+                size={15}
+                weight="fill"
+                aria-hidden
+                className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-gold-300"
+              />
+            ) : null}
+            <Input
+              aria-label={t("cloudAfk.console.input")}
+              placeholder={running ? t("cloudAfk.console.input") : t("cloudAfk.console.offline")}
+              value={text}
+              disabled={!running}
+              type={sensitive ? "password" : "text"}
+              maxLength={256}
+              onChange={(event) => {
+                setText(event.target.value);
+                setSendError(null);
+              }}
+              onKeyDown={onKeyDown}
+              spellCheck={false}
+              autoComplete="off"
+              data-1p-ignore=""
+              data-lpignore="true"
+              className={cn(
+                "disabled:opacity-60",
+                running && "font-mono text-[13px]",
+                sensitive && running && "pl-9",
+              )}
+            />
+          </div>
+          {running ? (
+            <IconButton
+              label={t("cloudAfk.console.send")}
+              icon={<PaperPlaneRight size={18} weight="fill" />}
+              type="submit"
+              disabled={sending || !text.trim()}
+              className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink"
+            />
+          ) : account.desired !== "run" || account.hold?.kind === "cause" ? (
+            <Button variant="primary" onClick={() => onStart(account)}>
+              {t("cloudAfk.actions.start")}
+            </Button>
+          ) : null}
+        </div>
+        {/* One reserved line: the note or the error fades in place, nothing moves. */}
+        <div className="grid min-h-[18px]">
+          <AnimatePresence initial={false}>
+            {sendError || (sensitive && running) ? (
+              <motion.p
+                key={sendError ? "error" : "sealed"}
+                role={sendError ? "alert" : "status"}
+                className={cn(
+                  "[grid-area:1/1] text-[12.5px] leading-[18px]",
+                  sendError ? "text-flare-400" : "text-gold-300",
+                )}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: enter(0.15) }}
+                exit={{ opacity: 0, transition: leave(0.1) }}
+              >
+                {sendError ?? t("cloudAfk.console.sealed")}
+              </motion.p>
+            ) : null}
+          </AnimatePresence>
+        </div>
+      </form>
+    </>
+  ) : null;
+
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <AnimatePresence>
@@ -333,21 +602,35 @@ export function CloudConsole({
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
                   const sheet = event.currentTarget as HTMLElement;
-                  (sheet.querySelector<HTMLElement>("input:not(:disabled)") ?? sheet).focus({
+                  // Opened on Hareket: the panel itself, so W, A, S, D walk at once.
+                  (
+                    sheet.querySelector<HTMLElement>("[data-movement-panel]") ??
+                    sheet.querySelector<HTMLElement>("input:not(:disabled)") ??
+                    sheet
+                  ).focus({
                     preventScroll: true,
                   });
                 }}
               >
                 <GatedMotion.aside
                   tabIndex={-1}
-                  className="glass-strong fixed top-0 right-0 bottom-0 z-50 flex w-[min(560px,92vw)] flex-col shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"
+                  className={cn(
+                    "fixed top-0 right-0 bottom-0 z-50 flex w-[min(560px,92vw)] flex-col shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none",
+                    // The inventory's pixels stay crisp only on a solid surface: obsidian with the
+                    // glass edge, no blur (docs/design.md §6 "Cloud inventory").
+                    inventory
+                      ? "border-l border-white/7 bg-obsidian-900 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),-30px_0_80px_rgb(34_6_6/0.5)]"
+                      : "glass-strong",
+                  )}
                   {...sheetMotion(!animate)}
                 >
                   <header className="flex items-center gap-3 border-b border-white/8 px-5 py-4">
                     <AfkHead nickname={account.name} size={36} />
                     <div className="min-w-0 flex-1">
                       <Dialog.Title className="truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
-                        {t("cloudAfk.console.title", { name: account.name })}
+                        {tabbed
+                          ? account.name
+                          : t("cloudAfk.console.title", { name: account.name })}
                       </Dialog.Title>
                       <CloudStateLine account={account} skewMs={skewMs} className="mt-0.5" />
                     </div>
@@ -364,162 +647,59 @@ export function CloudConsole({
                       setAttempt((n) => n + 1);
                     }}
                   />
-                  <div className="relative min-h-0 flex-1">
-                    <div
-                      ref={listRef}
-                      onScroll={onScroll}
-                      className="absolute inset-0 overflow-y-auto px-5 py-3 font-mono text-[12.5px] leading-relaxed"
-                      data-selectable
-                      role="log"
-                      aria-live="polite"
-                      aria-relevant="additions"
+                  {tabbed ? (
+                    <Tabs
+                      value={shownTab}
+                      onValueChange={setTab}
+                      label={t("cloudAfkFeat.tabs.label")}
+                      items={[
+                        { value: "console", label: t("cloudAfkFeat.tabs.console") },
+                        ...(inventory
+                          ? [
+                              {
+                                value: "inventory" as const,
+                                label: t("cloudAfkFeat.tabs.inventory"),
+                              },
+                            ]
+                          : []),
+                        ...(movement
+                          ? [{ value: "movement" as const, label: t("cloudAfkMove.tab") }]
+                          : []),
+                      ]}
+                      className="[&>[role=tablist]]:px-3.5"
                     >
-                      {!earlierDone && lines.length > 0 ? (
-                        <div className="mb-2 flex justify-center font-sans">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={<ArrowUp size={13} />}
-                            disabled={earlierBusy}
-                            onClick={() => void loadEarlier()}
-                          >
-                            {t("cloudAfk.console.earlier")}
-                          </Button>
-                        </div>
-                      ) : null}
-                      {lines.length ? (
-                        lines.map((line, index) => (
-                          <p
-                            // biome-ignore lint/suspicious/noArrayIndexKey: lines arrive in order and are never edited
-                            key={`${line.at}-${index}`}
-                            className={cn(
-                              "break-words",
-                              line.k === "e" && "text-flare-400",
-                              line.k === "s" && "text-gold-300/80",
-                              line.k !== "e" && line.k !== "s" && "text-bone-100",
-                            )}
-                          >
-                            <span className="mr-2 text-ash-400 tabular-nums select-none">
-                              {clock(line.at)}
-                            </span>
-                            {line.text}
-                          </p>
-                        ))
-                      ) : (
-                        <p className="flex h-full items-center justify-center font-sans text-[13px] text-ash-400">
-                          {status === "connecting" && host
-                            ? t("cloudAfk.console.connecting")
-                            : t("cloudAfk.console.empty")}
-                        </p>
-                      )}
-                      {skipped ? (
-                        <p className="mt-1 font-sans text-[12px] text-ash-400">
-                          {t("cloudAfk.console.skipped", { count: skipped })}
-                        </p>
-                      ) : null}
-                    </div>
-                    <AnimatePresence>
-                      {unseen ? (
-                        <motion.div
-                          key="unseen"
-                          className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
-                          initial={{ opacity: 0, transform: reduce ? "none" : "translateY(6px)" }}
-                          animate={{
-                            opacity: 1,
-                            transform: reduce ? "none" : "translateY(0px)",
-                            transition: enter(0.2),
-                          }}
-                          exit={{ opacity: 0, transition: leave(0.14) }}
-                        >
-                          <button
-                            type="button"
-                            onClick={toEnd}
-                            className="pointer-events-auto flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-obsidian-800/95 px-3 text-[12.5px] font-medium text-bone-50 shadow-[0_8px_24px_rgb(34_6_6/0.5)] ring-1 ring-white/12 transition-[background-color,transform,scale] duration-150 outline-none hover:bg-obsidian-700 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]"
-                          >
-                            <ArrowDown size={14} weight="bold" aria-hidden />
-                            {t("cloudAfk.console.newMessages")}
-                          </button>
-                        </motion.div>
-                      ) : null}
-                    </AnimatePresence>
-                  </div>
-                  <form
-                    className="flex flex-col gap-2 border-t border-white/8 p-4"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void send();
-                    }}
-                  >
-                    <div className="flex gap-2">
-                      <div className="relative min-w-0 flex-1">
-                        {sensitive && running ? (
-                          <LockSimple
-                            size={15}
-                            weight="fill"
-                            aria-hidden
-                            className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-gold-300"
+                      <TabPanel value="console" className="flex flex-col overflow-hidden pt-1">
+                        {consoleBody}
+                      </TabPanel>
+                      {inventory ? (
+                        <TabPanel value="inventory" className="px-5 pt-5">
+                          <InventoryPanel
+                            account={account}
+                            active={shownTab === "inventory"}
+                            link={attempt}
+                            art={art.art}
+                            titleGlyph={art.titleGlyph}
+                            onReconnect={() => onRestart(account)}
+                            onOpenSettings={() => onOpenSettings(account.id)}
+                            onUnavailable={inventoryUnavailable}
                           />
-                        ) : null}
-                        <Input
-                          aria-label={t("cloudAfk.console.input")}
-                          placeholder={
-                            running ? t("cloudAfk.console.input") : t("cloudAfk.console.offline")
-                          }
-                          value={text}
-                          disabled={!running}
-                          type={sensitive ? "password" : "text"}
-                          maxLength={256}
-                          onChange={(event) => {
-                            setText(event.target.value);
-                            setSendError(null);
-                          }}
-                          onKeyDown={onKeyDown}
-                          spellCheck={false}
-                          autoComplete="off"
-                          data-1p-ignore=""
-                          data-lpignore="true"
-                          className={cn(
-                            "disabled:opacity-60",
-                            running && "font-mono text-[13px]",
-                            sensitive && running && "pl-9",
-                          )}
-                        />
-                      </div>
-                      {running ? (
-                        <IconButton
-                          label={t("cloudAfk.console.send")}
-                          icon={<PaperPlaneRight size={18} weight="fill" />}
-                          type="submit"
-                          disabled={sending || !text.trim()}
-                          className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink"
-                        />
-                      ) : account.desired !== "run" || account.hold?.kind === "cause" ? (
-                        <Button variant="primary" onClick={() => onStart(account)}>
-                          {t("cloudAfk.actions.start")}
-                        </Button>
+                        </TabPanel>
                       ) : null}
-                    </div>
-                    {/* One reserved line: the note or the error fades in place, nothing moves. */}
-                    <div className="grid min-h-[18px]">
-                      <AnimatePresence initial={false}>
-                        {sendError || (sensitive && running) ? (
-                          <motion.p
-                            key={sendError ? "error" : "sealed"}
-                            role={sendError ? "alert" : "status"}
-                            className={cn(
-                              "[grid-area:1/1] text-[12.5px] leading-[18px]",
-                              sendError ? "text-flare-400" : "text-gold-300",
-                            )}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1, transition: enter(0.15) }}
-                            exit={{ opacity: 0, transition: leave(0.1) }}
-                          >
-                            {sendError ?? t("cloudAfk.console.sealed")}
-                          </motion.p>
-                        ) : null}
-                      </AnimatePresence>
-                    </div>
-                  </form>
+                      {movement ? (
+                        <TabPanel value="movement" className="px-5 pt-5">
+                          <MovementPanel
+                            account={account}
+                            active={shownTab === "movement"}
+                            link={attempt}
+                            onReconnect={() => onRestart(account)}
+                            onUnavailable={movementUnavailable}
+                          />
+                        </TabPanel>
+                      ) : null}
+                    </Tabs>
+                  ) : (
+                    consoleBody
+                  )}
                 </GatedMotion.aside>
               </Dialog.Content>
             </Dialog.Portal>

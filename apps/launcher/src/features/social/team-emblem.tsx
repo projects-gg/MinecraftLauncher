@@ -192,26 +192,3 @@ export function TeamTag({
     </Chip>
   );
 }
-
-/** The emblem alone, large and faint, behind the crew card's corner (it carries the crew's sign). */
-export function CrewWatermark({
-  look,
-  size = 150,
-  className = "-top-6 -right-7",
-}: {
-  look: CrewLook;
-  size?: number;
-  className?: string;
-}) {
-  const Glyph = emblemIcon(look.emblem);
-  return (
-    <Glyph
-      aria-hidden
-      size={size}
-      weight="fill"
-      className={cn("pointer-events-none absolute select-none", className)}
-      color={CREW_COLORS[crewColor(look.color)].edge}
-      style={{ opacity: 0.07 }}
-    />
-  );
-}

@@ -535,7 +535,15 @@ interface SegmentedOption<T extends string> {
 const optionCut = { "--cut": `${PLATE_CUT}px` } as CSSProperties;
 
 /**
- * An option's gold plate, shown under the chosen one at rest. While the plate glides
+ * The plate's fill and the labels' ink over it: gold in the launcher. An app restyles them with
+ * `--segmented-plate` and `--segmented-ink` (Studio's chosen option is a quiet plate: its one gold
+ * is the top bar's Yayınla, docs/design.md §9).
+ */
+const PLATE_FILL = "bg-[color:var(--segmented-plate,var(--color-gold-500))]";
+const PLATE_INK = "text-[color:var(--segmented-ink,var(--color-gold-ink))]";
+
+/**
+ * An option's plate, shown under the chosen one at rest. While the plate glides
  * (`data-gliding` on the control) the window over the row takes its place (glide.ts).
  */
 function OptionPlate({ on }: { on: boolean }) {
@@ -543,7 +551,10 @@ function OptionPlate({ on }: { on: boolean }) {
     <span
       aria-hidden
       data-on={on ? "" : undefined}
-      className="chamfer pointer-events-none absolute inset-0 -z-10 hidden bg-gold-500 data-[on]:block group-data-[gliding]/control:invisible"
+      className={cn(
+        "chamfer pointer-events-none absolute inset-0 -z-10 hidden data-[on]:block group-data-[gliding]/control:invisible",
+        PLATE_FILL,
+      )}
     />
   );
 }
@@ -635,10 +646,21 @@ export function Segmented<T extends string>({
           )}
         >
           <OptionPlate on={current === o.value} />
-          <span
-            aria-hidden
-            className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_2px_var(--color-gold-300)] group-focus-visible/option:opacity-100"
-          />
+          {/* The keyboard ring never touches gold. Around the chosen option's plate it sits outside,
+              as on buttons (`chamfer-ring`, its 2 px gap over the control's padding and border); an
+              option without the plate keeps it inside, 1 px in from the edge, so a dark line parts
+              it from a neighbour's plate. */}
+          {current === o.value ? (
+            <span
+              aria-hidden
+              className="chamfer-ring pointer-events-none absolute -z-10 bg-gold-300 opacity-0 group-focus-visible/option:opacity-100"
+            />
+          ) : (
+            <span
+              aria-hidden
+              className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_1px_var(--color-obsidian-900),inset_0_0_0_3px_var(--color-gold-300)] group-focus-visible/option:opacity-100"
+            />
+          )}
           {/* The label twice in one cell: in its own colour and in the plate's ink. */}
           <span className="grid">
             <OptionLabel option={o} />
@@ -655,8 +677,8 @@ export function Segmented<T extends string>({
         className="pointer-events-none invisible absolute inset-0 z-10 group-data-[gliding]/control:visible"
       >
         <span data-glide-right="" className="chamfer-end absolute">
-          <span data-glide-left="" className="chamfer-start absolute h-full bg-gold-500">
-            <span data-glide-ink="" className="absolute text-[13px] font-medium text-gold-ink">
+          <span data-glide-left="" className={cn("chamfer-start absolute h-full", PLATE_FILL)}>
+            <span data-glide-ink="" className={cn("absolute text-[13px] font-medium", PLATE_INK)}>
               {options.map((o) => (
                 <span
                   key={o.value}
@@ -693,7 +715,10 @@ function OptionLabel<T extends string>({
       className={cn(
         "flex items-center gap-1.5 whitespace-nowrap [grid-area:1/1] motion-reduce:transition-opacity motion-reduce:duration-150",
         ink
-          ? "text-gold-ink opacity-0 group-data-[state=on]/option:opacity-100 group-data-[gliding]/control:opacity-0!"
+          ? cn(
+              PLATE_INK,
+              "opacity-0 group-data-[state=on]/option:opacity-100 group-data-[gliding]/control:opacity-0!",
+            )
           : "group-data-[state=on]/option:opacity-0 group-data-[gliding]/control:opacity-100!",
       )}
     >
@@ -712,6 +737,20 @@ function LabelContent<T extends string>({ option }: { option: SegmentedOption<T>
           {option.hint}
         </span>
       ) : null}
+    </>
+  );
+}
+
+/** A slider's value with its "%" in the UI font: Tektur's sign reads like a slash (the launcher's
+ * live percentages set it the same way). */
+function SliderValue({ text }: { text: string }) {
+  const at = text.indexOf("%");
+  if (at < 0) return text;
+  return (
+    <>
+      {text.slice(0, at)}
+      <span className="font-sans font-medium">%</span>
+      {text.slice(at + 1)}
     </>
   );
 }
@@ -749,7 +788,7 @@ export function Slider({
           {label}
         </span>
         <span className="font-display text-[15px] font-semibold text-gold-300 tabular-nums">
-          {format ? format(value) : value}
+          {format ? <SliderValue text={format(value)} /> : value}
         </span>
       </div>
       <RadixSlider.Root

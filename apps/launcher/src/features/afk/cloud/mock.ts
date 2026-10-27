@@ -2,14 +2,17 @@
 // - (none) or `off`: the service does not answer; the AFK page looks exactly as without it;
 // - `intro`: signed in, no cloud account yet (the intro card);
 // - `signedout`: the service answers, the friends session is missing;
-// - `soldout`: no free slots;
+// - `soldout`: no free slots; `closed`: sales off (Studio's switch), no account yet;
 // - `accounts`: three accounts (one in game, one reconnecting with its time running out, one
 //   stopped for a wrong password), `Madenci07` also on this computer (its "Bilgisayarda / Bulutta");
 // - `expired`: `accounts` plus one whose time is up;
 // - `paused`: maintenance (Studio's note, the accounts held);
 // - `failed`: signed in, the accounts could not be read.
 // `&reveal=offline|retype|limited` makes "Göster" fail that way. AFK+ adds `&plus=<scenario>`
-// (plus/mock-data.ts); without it AFK+ is off, as the service is until its release.
+// (plus/mock-data.ts); without it AFK+ is off, as the service is until its release. The cloud
+// features add `&feat=on|view` and their own switches (mock-feat.ts); without them the service is
+// one from before the features. `&link=down`: the machine is not connected. Movement adds
+// `&move=<scenario>` (mock-move.ts).
 import { api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
@@ -18,6 +21,7 @@ import { trCloudAfk } from "@/locales/tr-cloud-afk";
 import type {
   CloudAccount,
   CloudApi,
+  CloudCopyResult,
   CloudEdit,
   CloudEditData,
   CloudLiveEvent,
@@ -25,7 +29,27 @@ import type {
   CloudMovePlan,
   CloudPageData,
 } from "./api";
+import {
+  accountFeatures,
+  barsEvent,
+  featScenario,
+  inventoryMove,
+  kindLines,
+  liveKindLine,
+  mockTryReply,
+  offerFeatures,
+  unwatchInventory,
+  watchInventory,
+} from "./mock-feat";
 import { mockLive } from "./mock-live";
+import {
+  GECE,
+  geceRunning,
+  movementFeature,
+  moveOperation,
+  unwatchMovement,
+  watchMovement,
+} from "./mock-move";
 import {
   mockMe as mockPlusMe,
   mockOffer as mockPlusOffer,
@@ -41,6 +65,7 @@ type Scenario =
   | "intro"
   | "signedout"
   | "soldout"
+  | "closed"
   | "accounts"
   | "expired"
   | "paused"
@@ -61,6 +86,7 @@ const SCENARIOS: Scenario[] = [
   "intro",
   "signedout",
   "soldout",
+  "closed",
   "accounts",
   "expired",
   "paused",
@@ -101,7 +127,7 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
   });
   return {
     v: 1,
-    owner: "KasaBekcisi",
+    owner: "EjderAvcisi",
     antiAfk: { enabled: true, delayMin: 60, delayMax: 90 },
     commands:
       rows === "full"
@@ -144,8 +170,36 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
         cooldown: 60,
         reply: { secret: false, text: "Selam! Şu an AFK'yım.", preview: null, fp: null },
       },
+      // With the cloud features: a rule whose reply names the sender and a part of its pattern.
+      ...(featScenario === "off"
+        ? []
+        : [
+            {
+              id: "r3",
+              enabled: true,
+              match: String.raw`^!davet (\w+)$`,
+              regex: true,
+              from: "any",
+              ownerOnly: false,
+              cooldown: 30,
+              reply: {
+                secret: false,
+                text: "/msg {u} {1} davet listene eklendi.",
+                preview: null,
+                fp: null,
+              },
+            },
+          ]),
     ],
+    inventory: null,
+    movement: null,
   };
+}
+
+/** The account's features with movement's preview (`&move=…`), while the features are on. */
+function withMovement(id: string): CloudAccount["features"] {
+  const features = accountFeatures(id);
+  return features ? { ...features, movement: movementFeature(id) } : features;
 }
 
 function account(
@@ -187,6 +241,7 @@ function account(
     tier: plusScenario === "off" ? "" : "plain",
     plusUntil: null,
     ai: null,
+    features: withMovement(id),
     ...overrides,
   };
 }
@@ -214,9 +269,14 @@ function plainAccounts(which: Scenario): CloudAccount[] {
     account("a_7KQ2MZ3P9TW4XB1C", "Madenci07", "mc.madenciler.net", 25570, {
       version: "1.21.4",
     }),
-    account("a_8XH4N2RT6WQ9PB3D", "GeceBekcisi", "play.projects.gg", 0, {
+    account(GECE, "GeceBekcisi", "play.projects.gg", 0, {
       expiresAt: now + 5 * DAY + 4 * 3_600,
-      live: { state: "waiting", since: now - 30, reason: null, attempt: 2, retryAt: now + 14 },
+      live: geceRunning
+        ? { state: "running", since: now - 52 * 60, reason: null, attempt: null, retryAt: null }
+        : { state: "waiting", since: now - 30, reason: null, attempt: 2, retryAt: now + 14 },
+      ...(movementFeature(GECE)?.on
+        ? { config: { ...config("full"), movement: { enabled: true } } }
+        : {}),
       rev: 9,
     }),
     account("a_3MCV7Y1KD5HS8FQ2", "Tuccar_Ali", "play.projects.gg", 0, {
@@ -345,7 +405,7 @@ async function overview(): Promise<CloudPageData> {
       monthPrice: hidden ? null : "60.00",
       soldOut: which === "soldout",
       remaining: null,
-      salesOpen: which !== "paused",
+      salesOpen: which !== "paused" && which !== "closed",
       renewalWindowDays: 7,
       limits: LIMITS,
       session:
@@ -359,6 +419,7 @@ async function overview(): Promise<CloudPageData> {
       now,
       plus: hidden ? null : mockPlusOffer(),
       plusMe: which === "signedout" || hidden ? null : mockPlusMe(),
+      features: hidden ? null : offerFeatures(),
     },
     twins,
   };
@@ -387,9 +448,10 @@ const CHAT: string[] = [
 const watching = new Map<string, number>();
 
 function lines(id: string, count: number, endAt: number) {
+  if (featScenario !== "off") return kindLines(count, endAt, find(id).name);
   return Array.from({ length: count }, (_, i) => {
     const [k, text] = CONSOLE[i % CONSOLE.length] ?? ["n", ""];
-    return { at: endAt - (count - i) * 37, text, k };
+    return { at: endAt - (count - i) * 37, text, k, c: null, who: null, goto: null };
   }).map((line) => ({ ...line, text: line.text.replace("Madenci07", find(id).name) }));
 }
 
@@ -424,6 +486,8 @@ function editView(cloud: CloudAccount): CloudEditData {
           ? { kind: "sealed" as const, preview: rule.reply.preview ?? "******" }
           : { kind: "plain" as const, text: rule.reply.text ?? "" },
       })),
+      inventory: cloud.config.inventory?.enabled ?? null,
+      movement: cloud.config.movement?.enabled ?? null,
     },
     versions: {
       versions: [
@@ -447,7 +511,7 @@ function plan(name: string, server: string): CloudMovePlan {
     serverProblem: null,
     version: "26.3",
     config: {
-      owner: "KasaBekcisi",
+      owner: "EjderAvcisi",
       antiAfk: { enabled: true, delayMin: 60, delayMax: 90 },
       commands: [
         {
@@ -490,6 +554,8 @@ function plan(name: string, server: string): CloudMovePlan {
           reply: { kind: "plain", text: "Selam! Şu an AFK'yım." },
         },
       ],
+      inventory: null,
+      movement: null,
     },
     dropped: [
       { what: "walking", count: 1 },
@@ -550,7 +616,16 @@ export const mockCloudApi: CloudApi = {
       emit({
         kind: "lines",
         acct: id,
-        lines: [{ at: nowSecs(), text: `[Projects] Komut alındı: ${line.split(" ")[0]}`, k: "n" }],
+        lines: [
+          {
+            at: nowSecs(),
+            text: `[Projects] Komut alındı: ${line.split(" ")[0]}`,
+            k: "n",
+            c: featScenario === "off" ? null : "sys",
+            who: null,
+            goto: null,
+          },
+        ],
         skipped: 0,
         snapshot: false,
       });
@@ -566,7 +641,8 @@ export const mockCloudApi: CloudApi = {
     emit({ kind: "status", host: "kz1", status: "connecting" });
     setTimeout(() => {
       emit({ kind: "status", host: "kz1", status: "live" });
-      emit({ kind: "hello", host: "kz1", online: true });
+      // `&link=down`: the account's machine is away (the panel says so above its tabs).
+      emit({ kind: "hello", host: "kz1", online: param("link") !== "down" });
       const cloud = find(id);
       emit({ kind: "state", acct: id, live: cloud.live });
       emit({
@@ -576,6 +652,8 @@ export const mockCloudApi: CloudApi = {
         skipped: 0,
         snapshot: true,
       });
+      const bars = cloud.live.state === "running" ? barsEvent(id) : null;
+      if (bars) emit(bars);
     }, 260);
     let n = 0;
     window.clearInterval(watching.get(id));
@@ -583,10 +661,15 @@ export const mockCloudApi: CloudApi = {
       id,
       window.setInterval(() => {
         if (find(id).live.state !== "running") return;
+        const at = nowSecs();
         emit({
           kind: "lines",
           acct: id,
-          lines: [{ at: nowSecs(), text: CHAT[n++ % CHAT.length] ?? "", k: "n" }],
+          lines: [
+            featScenario === "off"
+              ? { at, text: CHAT[n++ % CHAT.length] ?? "", k: "n", c: null, who: null, goto: null }
+              : liveKindLine(n++, at, find(id).name),
+          ],
           skipped: 0,
           snapshot: false,
         });
@@ -626,6 +709,24 @@ export const mockCloudApi: CloudApi = {
       ];
       if (issues.length) return { kind: "invalid", issues };
     }
+    const inventory = edit.config?.inventory;
+    const movement = edit.config?.movement;
+    const movementNow = current.features?.movement;
+    // The service's slot check (README "Movement slots"): `&move=player|host` keep it off.
+    if (movement === true && movementNow && !movementNow.on && movementNow.slot) {
+      return {
+        kind: "invalid",
+        issues: [
+          {
+            place: "general",
+            index: null,
+            field: "movement",
+            problem: movementNow.slot,
+            max: movementNow.slot === "player" ? 1 : 10,
+          },
+        ],
+      };
+    }
     const next = replace({
       ...current,
       name: edit.name ?? current.name,
@@ -633,6 +734,23 @@ export const mockCloudApi: CloudApi = {
       version: edit.version ?? current.version,
       lang: edit.lang ?? current.lang,
       rev: current.rev + 1,
+      config: {
+        ...current.config,
+        ...(typeof inventory === "boolean" ? { inventory: { enabled: inventory } } : {}),
+        ...(typeof movement === "boolean" ? { movement: { enabled: movement } } : {}),
+      },
+      features:
+        (typeof inventory === "boolean" || typeof movement === "boolean") && current.features
+          ? {
+              ...current.features,
+              ...(typeof inventory === "boolean"
+                ? { inventory: { mode: current.features.inventory?.mode ?? "off", on: inventory } }
+                : {}),
+              ...(typeof movement === "boolean" && current.features.movement
+                ? { movement: { ...current.features.movement, on: movement, slot: null } }
+                : {}),
+            }
+          : current.features,
     });
     return { kind: "saved", account: next };
   },
@@ -673,5 +791,105 @@ export const mockCloudApi: CloudApi = {
   },
   async open(page, account) {
     console.info("[cloud-afk mock] open afk.projects.gg", page, account ?? "");
+  },
+  async inventoryWatch(id) {
+    await delay(60);
+    watchInventory(id, find(id).live.state === "running", emit);
+  },
+  async inventoryUnwatch(id) {
+    unwatchInventory(id);
+  },
+  async invOp(id, opId, op) {
+    void inventoryMove(id, op).then((result) =>
+      emit({
+        kind: "invResult",
+        id: opId,
+        ok: result.ok === true,
+        error:
+          result.ok === true
+            ? null
+            : {
+                code: result.error.code,
+                reason: result.error.reason ?? null,
+                field: result.error.field ?? null,
+                retryAfter: result.error.retryAfter ?? null,
+              },
+      }),
+    );
+    return null;
+  },
+  async movementWatch(id) {
+    await delay(60);
+    watchMovement(id, find(id).live.state === "running", emit);
+  },
+  async movementUnwatch(id) {
+    unwatchMovement(id);
+  },
+  async movementOp(id, opId, op) {
+    const refused = moveOperation(id, op);
+    window.setTimeout(
+      () => emit({ kind: "movementResult", id: opId, ok: refused === null, error: refused }),
+      40,
+    );
+    return null;
+  },
+  async setInventory(id, enabled) {
+    await delay(380);
+    const current = find(id);
+    const next = replace({
+      ...current,
+      rev: current.rev + 1,
+      config: { ...current.config, inventory: { enabled } },
+      features: current.features
+        ? {
+            ...current.features,
+            inventory: { mode: current.features.inventory?.mode ?? "off", on: enabled },
+          }
+        : current.features,
+    });
+    // The running client started without it: it comes at the next connection.
+    setTimeout(
+      () => emit({ kind: "invState", acct: id, state: "off", reason: "restart", lock: null }),
+      120,
+    );
+    return { kind: "saved", account: next };
+  },
+  async tryReply(rule, sample, sender) {
+    return mockTryReply(rule, sample, sender);
+  },
+  async download(id) {
+    await delay(500);
+    const day = new Date().toISOString().slice(0, 10);
+    return { fileName: `${find(id).name}-konsol-${day}.txt` };
+  },
+  async showDownload(fileName) {
+    console.info("[cloud-afk mock] show", fileName);
+  },
+  async copySource(id) {
+    await delay(200);
+    const source = find(id);
+    // The site's seal (r1): this computer has no words for it; its own copy (c1) it has.
+    const toType = source.config.rules
+      .filter((rule) => rule.reply.secret && rule.reply.fp !== "KEPTKEPTKEPTKEPT")
+      .map((rule) => ({ row: rule.id, place: "rules", preview: rule.reply.preview ?? "******" }));
+    return { id, toType };
+  },
+  async copySettings(source, targets) {
+    await delay(700);
+    const from = find(source);
+    return targets.map((target): CloudCopyResult => {
+      const current = find(target);
+      if (current.expired) return { id: target, account: null, code: "BULUT-SURE" };
+      const next = replace({
+        ...current,
+        config: {
+          ...from.config,
+          inventory: current.config.inventory,
+          movement: current.config.movement,
+        },
+        rev: current.rev + 1,
+      });
+      return { id: target, account: next, code: null };
+    });
   },
 };

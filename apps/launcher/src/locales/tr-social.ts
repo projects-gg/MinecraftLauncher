@@ -190,7 +190,6 @@ export const trSocial = {
   },
   account: {
     row: "Arkadaşlar",
-    connect: "Discord ile bağlan",
     connected_one: "{{count}} arkadaşın çevrimiçi",
     connected_other: "{{count}} arkadaşın çevrimiçi",
     noneOnline: "Şu an kimse çevrimiçi değil",

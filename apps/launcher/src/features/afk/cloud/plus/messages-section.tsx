@@ -4,7 +4,13 @@
 // goes only to someone who wrote in the last 24 hours. Unsafe lines come folded. Read live from the
 // machine: when it is away, one quiet sentence. The conversation slides in from the side it
 // belongs to; the composer is the chat's (rounded field, the send button turning gold).
-import { CaretLeft, DotsThreeVertical, PaperPlaneRight, Prohibit } from "@phosphor-icons/react";
+import {
+  CaretLeft,
+  DotsThreeVertical,
+  PaperPlaneRight,
+  Prohibit,
+  UserPlus,
+} from "@phosphor-icons/react";
 import {
   Button,
   cn,
@@ -26,14 +32,23 @@ import {
   type PlusInboxLine,
   type PlusInboxPage,
   type PlusInboxThread,
+  type PlusPanel,
   type PlusThreadPage,
   plusApi,
 } from "./api";
-import { QuietEmpty } from "./feed-section";
+import { QuietEmpty } from "./audit-section";
 import { GroupTitle } from "./fields";
 import { PLUS_LIMITS } from "./model";
 import { clockText, dayGroup, dayText, untilPhrase } from "./time";
-import { inboxKey, storeUnread, threadKey, usePlusControl, usePlusUi } from "./use-plus";
+import {
+  inboxKey,
+  plusKey,
+  storeUnread,
+  threadKey,
+  usePlusControl,
+  usePlusInstantSave,
+  usePlusUi,
+} from "./use-plus";
 import { currentLang } from "./words";
 
 /** "14:05" today, "Dün", else the day: when a conversation last moved. */
@@ -43,7 +58,7 @@ function useWhen() {
   return (at: number) => {
     const group = dayGroup(at, Date.now());
     if (group === "today") return clockText(at, lang);
-    if (group === "yesterday") return t("afkPlus.feed.yesterday");
+    if (group === "yesterday") return t("afkPlus.audit.yesterday");
     return dayText(at, lang);
   };
 }
@@ -70,26 +85,31 @@ function ThreadRow({ thread, onOpen }: { thread: PlusInboxThread; onOpen: () => 
         <PlayerHead name={thread.name} size={32} className="shrink-0" />
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-3">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-[13.5px] font-medium text-bone-50">{thread.name}</span>
-              {thread.state === "blocked" ? (
-                <Prohibit size={13} className="shrink-0 text-ash-400" aria-hidden />
-              ) : null}
+            <span className="min-w-0 truncate text-[13.5px] font-medium text-bone-50">
+              {thread.name}
             </span>
             <span className="shrink-0 text-[12px] text-ash-400 tabular-nums">
               {when(thread.lastAt)}
             </span>
           </span>
           <span className="mt-0.5 flex items-center justify-between gap-3">
-            <span
-              className={cn(
-                "truncate text-[12.5px]",
-                thread.unread ? "text-bone-100" : "text-ash-300",
-              )}
-            >
-              {who}
-              {thread.last.text}
-            </span>
+            {/* A blocked player's last line says nothing worth reading: the state, in words. */}
+            {thread.state === "blocked" ? (
+              <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ash-400">
+                <Prohibit size={13} className="shrink-0" aria-hidden />
+                <span className="truncate">{t("afkPlus.messages.blockedTag")}</span>
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "truncate text-[12.5px]",
+                  thread.unread ? "text-bone-100" : "text-ash-300",
+                )}
+              >
+                {who}
+                {thread.last.text}
+              </span>
+            )}
             {thread.unread ? (
               <span className="shrink-0 font-display text-[12.5px] font-semibold text-gold-200 tabular-nums">
                 <span aria-hidden>{thread.unread}</span>
@@ -200,7 +220,7 @@ function Composer({
       } else if (outcome.kind === "limited") {
         setReason(t("afkPlus.messages.limited"));
       } else {
-        setReason(t("afkPlus.messages.offline"));
+        setReason(t("afkPlus.messages.sendAway"));
       }
     } catch (error) {
       afkFailed(error, t("afkPlus.messages.sendFailed"));
@@ -355,6 +375,27 @@ function Conversation({
     }
   };
 
+  // "Arkadaşlarıma ekle": the name joins "Kimlerle"'s list (afkplus-free.md §7.6), saved at once.
+  const instant = usePlusInstantSave(accountId);
+  const { data: panel } = useQuery<PlusPanel>({
+    queryKey: plusKey(accountId),
+    queryFn: () => plusApi.panel(accountId),
+    enabled: false,
+  });
+  const friends = panel?.settings.config.who.friends ?? [];
+  const same = (other: string) => other.toLowerCase() === name.toLowerCase();
+  const friendsMax = panel?.settings.rules.friendsMax || PLUS_LIMITS.friendsMax;
+  const canAddFriend =
+    Boolean(panel) && !blocked && !friends.some(same) && friends.length < friendsMax;
+  const addFriend = async () => {
+    const done = await instant((latest) =>
+      latest.who.friends.some(same)
+        ? latest
+        : { ...latest, who: { ...latest.who, friends: [...latest.who.friends, name] } },
+    );
+    if (done) toast.success(t("afkPlus.messages.friendAdded", { name }));
+  };
+
   const toggleBlock = async () => {
     const done = await control(blocked ? "unblock" : "block", name);
     if (done) {
@@ -389,6 +430,15 @@ function Conversation({
             />
           }
           items={[
+            ...(canAddFriend
+              ? [
+                  {
+                    label: t("afkPlus.messages.addFriend"),
+                    icon: <UserPlus size={16} />,
+                    onSelect: () => void addFriend(),
+                  },
+                ]
+              : []),
             {
               label: blocked ? t("afkPlus.messages.unblock") : t("afkPlus.messages.block"),
               icon: <Prohibit size={16} />,
@@ -505,7 +555,7 @@ export function MessagesSection({ accountId }: { accountId: string }) {
               <Skeleton className="h-12 w-full" />
             </div>
           ) : query.isError ? (
-            // The rail already says the assistant can't be reached: here, what still works.
+            // The panel's notice says the machine is away; here, what waits and what still works.
             <QuietEmpty icon="server">{t("afkPlus.messages.offlineBody")}</QuietEmpty>
           ) : threads.length ? (
             <ul className="-mx-3 flex flex-col">

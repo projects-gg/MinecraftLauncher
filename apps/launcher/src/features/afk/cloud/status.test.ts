@@ -12,6 +12,7 @@ import {
   isCloudActive,
   isInGame,
   localized,
+  offerLine,
   serverLabel,
   timeLeft,
 } from "./status";
@@ -59,12 +60,15 @@ function account(overrides: Partial<CloudAccount> = {}): CloudAccount {
       antiAfk: { enabled: true, delayMin: 60, delayMax: 90 },
       commands: [],
       rules: [],
+      inventory: null,
+      movement: null,
     },
     rev: 4,
     serverChanges: { used: 0, limit: 6, resetAt: null },
     tier: "plain",
     plusUntil: null,
     ai: null,
+    features: null,
     ...overrides,
   };
 }
@@ -274,11 +278,28 @@ describe("endsSoon", () => {
   });
 });
 
-describe("formatPrice, serverLabel and localized", () => {
+describe("formatPrice, offerLine, serverLabel and localized", () => {
   it("drops zero kuruş and writes the rest the Turkish way", () => {
     expect(formatPrice("60.00")).toBe("60 TL");
     expect(formatPrice("59.90")).toBe("59,90 TL");
     expect(formatPrice("abc")).toBe("abc TL");
+  });
+
+  it("prices the card only while something can be bought (SMALL12)", () => {
+    const open = { soldOut: false, salesOpen: true, monthPrice: "60.00" };
+    expect(offerLine(open, t)).toEqual({ text: "Aylık 60 TL", closed: false });
+    expect(offerLine({ ...open, salesOpen: false }, t)).toEqual({
+      text: "Şu an satışta değil",
+      closed: true,
+    });
+    expect(offerLine({ ...open, soldOut: true }, t)).toEqual({
+      text: "Şu an boş yer yok",
+      closed: true,
+    });
+    expect(offerLine({ ...open, soldOut: true, salesOpen: false }, t)?.text).toBe(
+      "Şu an boş yer yok",
+    );
+    expect(offerLine({ ...open, monthPrice: null }, t)).toBeNull();
   });
 
   it("shows a port only when it is not the default", () => {

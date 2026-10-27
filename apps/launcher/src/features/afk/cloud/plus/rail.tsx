@@ -2,17 +2,16 @@
 // one sentence with its one control (Durdur / Başlat), the sections with what waits in them (gold
 // figures, no badges), and the AI allowance: two bars, when each renews, about how many replies
 // are left. The bars move only when a number changes.
-import { ArrowSquareOut, Play, Stop } from "@phosphor-icons/react";
+import { Play, Stop } from "@phosphor-icons/react";
 import { Button, cn, enter, leave, toast, usePressGuard } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { formatPercent } from "@/lib/format";
-import { afkFailed } from "../../errors";
-import { type CloudAccount, cloudApi } from "../api";
+import type { CloudAccount } from "../api";
 import type { PlusQuota } from "./api";
 import { aiState, giftReplies, tradeNoteKey } from "./model";
-import { atPhrase, clockText, untilPhrase } from "./time";
+import { atPhrase, clockText, dayText, untilPhrase } from "./time";
 import { plusAi } from "./types";
 import {
   type PlusFeatureFlags,
@@ -20,9 +19,9 @@ import {
   usePlusControl,
   usePlusFeatures,
 } from "./use-plus";
-import { currentLang } from "./words";
+import { currentLang, trWith } from "./words";
 
-export const SECTIONS: PlusSection[] = ["feed", "messages", "lists", "settings", "report"];
+export const SECTIONS: PlusSection[] = ["feed", "messages", "orders", "settings", "report"];
 
 /** The sections Studio has not switched off (Mesajlar is QoL Q1, Rapor Q4). */
 export function visibleSections(features: PlusFeatureFlags): PlusSection[] {
@@ -42,7 +41,14 @@ export const AI_TONE = {
 const TONE = AI_TONE;
 
 /** The assistant's state in one sentence, with its "when" in the language's own phrase. */
-export function useAiSentence(account: CloudAccount): { text: string; tone: keyof typeof TONE } {
+/**
+ * The assistant's state in one sentence. `afterLabel`: the line follows the "AFK+" label (the
+ * account's card), so a state that names AFK+ says it without the name ("AFK+ Bakımda").
+ */
+export function useAiSentence(
+  account: CloudAccount,
+  afterLabel = false,
+): { text: string; tone: keyof typeof TONE } {
   const { t } = useTranslation();
   const state = aiState(plusAi(account));
   const lang = currentLang();
@@ -51,7 +57,11 @@ export function useAiSentence(account: CloudAccount): { text: string; tone: keyo
       ? atPhrase(state.until.at, Date.now(), lang, t("afkPlus.time.tomorrow"))
       : untilPhrase(state.until.at, Date.now(), lang)
     : undefined;
-  return { text: t(`afkPlus.ai.${state.key}`, { when }), tone: state.tone };
+  const text = t(`afkPlus.ai.${state.key}`, { when });
+  return {
+    text: afterLabel ? t(`afkPlus.ai.line.${state.key}`, { when, defaultValue: text }) : text,
+    tone: state.tone,
+  };
 }
 
 function StateBlock({ account, onSetup }: { account: CloudAccount; onSetup?: () => void }) {
@@ -135,17 +145,19 @@ function Nav({
   onSection,
   approvals,
   messages,
+  orders,
   settingsDirty,
 }: {
   section: PlusSection;
   onSection: (section: PlusSection) => void;
   approvals: number;
   messages: number;
+  orders: number;
   settingsDirty: boolean;
 }) {
   const { t } = useTranslation();
   const features = usePlusFeatures();
-  const counts: Partial<Record<PlusSection, number>> = { feed: approvals, messages };
+  const counts: Partial<Record<PlusSection, number>> = { feed: approvals, messages, orders };
   return (
     <nav aria-label={t("afkPlus.panel.sectionsLabel")}>
       <ul className="space-y-0.5">
@@ -261,33 +273,39 @@ function upperFirst(text: string, lang: string): string {
 /** A date phrase that never breaks between its day and month ("31 Ekim'e kadar"). */
 const unbroken = (text: string) => text.replace(/ /g, " ");
 
-/** The gift's line under "about N replies left": all of them, or about how many, and until when. */
+/**
+ * The gift's line under "about N replies left": all of them, or about how many, and the day the
+ * first one ends (the site's own words: "Yaklaşık 40 tanesi hediye, 1 Kasım'a kadar geçerli").
+ */
 function giftLine(quota: PlusQuota, t: TFunction, lang: "tr" | "en"): string | null {
   const count = giftReplies(quota);
   if (count <= 0) return null;
   const end = quota.gifts.find((g) => g.expiresAt !== null)?.expiresAt ?? null;
   const which = count >= quota.estReplies ? "giftAll" : "giftSome";
-  return end
-    ? t(`afkPlus.quota.${which}Until`, {
-        count,
-        when: unbroken(untilPhrase(end, Date.now(), lang)),
-      })
-    : t(`afkPlus.quota.${which}`, { count });
+  if (!end) return t(`afkPlus.quota.${which}`, { count });
+  const day = dayText(end, lang);
+  return t(`afkPlus.quota.${which}Until`, {
+    count,
+    day: unbroken(lang === "tr" ? trWith(day, "dat") : day),
+  });
 }
 
-function QuotaBlock({ quota }: { quota: PlusQuota }) {
+function QuotaBlock({ quota, saverAt }: { quota: PlusQuota; saverAt: number | null }) {
   const { t } = useTranslation();
   const lang = currentLang();
   // Only under the replies line: a frozen or used-up allowance has no "of them".
   const gift = !quota.frozen && quota.estReplies > 0 ? giftLine(quota, t, lang) : null;
   const stale = Date.now() / 1000 - quota.asOf > 90;
+  // Past the player's share (README "Saving"): small talk and chat scans stop, deals go on.
+  const used = Math.max(quota.pct5, quota.pctWeek);
+  const saving = saverAt !== null && used >= saverAt && used < 100;
   return (
     <div className="flex flex-col gap-3">
       <Window title={t("afkPlus.quota.w5h")} pct={quota.pct5} resetAt={quota.w5h.resetAt} />
       <Window title={t("afkPlus.quota.week")} pct={quota.pctWeek} resetAt={quota.week.resetAt} />
       <div className="flex flex-col gap-1 text-[12.5px]">
         {quota.frozen ? (
-          <p className="text-gold-200">{t("afkPlus.quota.frozen")}</p>
+          <p className="text-flare-300">{t("afkPlus.quota.frozen")}</p>
         ) : quota.estReplies > 0 ? (
           // Used up, the state sentence above says so; "about 0 replies" would say nothing.
           <p className="text-bone-100 tabular-nums">
@@ -295,11 +313,13 @@ function QuotaBlock({ quota }: { quota: PlusQuota }) {
           </p>
         ) : null}
         {gift ? <p className="-mt-0.5 text-[12px] text-ash-300 tabular-nums">{gift}</p> : null}
+        {/* A promotion is news, not an action: plain words, no gold. */}
         {quota.promo ? (
-          <p className="text-gold-200">
+          <p className="text-bone-100">
             {lang === "en" ? quota.promo.label.en : quota.promo.label.tr}
           </p>
         ) : null}
+        {saving ? <p className="text-ash-300">{t("afkPlus.quota.saver")}</p> : null}
         {stale ? (
           <p className="text-ash-400">
             {t("afkPlus.quota.asOf", { time: clockText(quota.asOf, lang) })}
@@ -316,7 +336,9 @@ export function PlusRail({
   onSection,
   approvals,
   messages,
+  orders,
   quota,
+  saverAt = null,
   settingsDirty = false,
   onSetup,
 }: {
@@ -325,18 +347,18 @@ export function PlusRail({
   onSection: (section: PlusSection) => void;
   approvals: number;
   messages: number;
+  /** Orders that wait for the player (an OK, a trade to make). */
+  orders: number;
   /** Null while the machine cannot be asked: the state line says so once, the block is not shown. */
   quota: PlusQuota | null;
+  /** The share of the allowance after which small talk stops (Studio's `saver` on), or null. */
+  saverAt?: number | null;
   /** "Ayarlar" holds unsaved edits. */
   settingsDirty?: boolean;
   /** The account was never set up: the state block offers the setup instead of the switch. */
   onSetup?: () => void;
 }) {
   const { t } = useTranslation();
-  const openSite = () =>
-    void cloudApi
-      .open("plusAccount", account.id)
-      .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
   return (
     <aside className="flex w-[232px] shrink-0 flex-col gap-5 overflow-y-auto border-r border-white/7 px-4 py-4 [scrollbar-width:thin]">
       <StateBlock account={account} onSetup={onSetup} />
@@ -346,6 +368,7 @@ export function PlusRail({
           onSection={onSection}
           approvals={approvals}
           messages={messages}
+          orders={orders}
           settingsDirty={settingsDirty}
         />
       </div>
@@ -354,17 +377,9 @@ export function PlusRail({
           <h3 className="mb-3 font-display text-[14px] font-semibold text-bone-50">
             {t("afkPlus.quota.title")}
           </h3>
-          <QuotaBlock quota={quota} />
+          <QuotaBlock quota={quota} saverAt={saverAt} />
         </section>
       ) : null}
-      <button
-        type="button"
-        onClick={openSite}
-        className="mt-auto inline-flex cursor-pointer items-center gap-1.5 self-start rounded-sm text-[12.5px] font-medium text-ash-300 underline-offset-2 outline-none transition-colors duration-150 hover:text-gold-200 hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
-      >
-        {t("afkPlus.panel.site")}
-        <ArrowSquareOut size={12} weight="bold" aria-hidden />
-      </button>
     </aside>
   );
 }

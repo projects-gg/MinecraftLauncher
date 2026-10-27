@@ -1,5 +1,6 @@
-// "Ayarlar": how the assistant talks, when it works, what it may spend, how it finds things, what it
-// does after a trade, who it ignores, and the notices. The form is one draft (design.md G6-P): edits
+// "Ayarlar": what the assistant may do ("İnce ayar": its authority, buying and selling, how deals are
+// paid, whom it deals with; afkplus-free.md §3), how it talks, when it works, what it may spend, how
+// it finds things, what it does after a trade, who it ignores, and the notices. The form is one draft (design.md G6-P): edits
 // wait across sections and the panel closing, the docked change bar saves or drops them, Ctrl+S saves.
 // Saving puts only the player's own edits on top of the latest settings, so a rule added meanwhile
 // or a change made on the site stays. A break, a blocked player, "Harcananı sıfırla" and the
@@ -20,6 +21,7 @@ import {
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { RadioGroup } from "radix-ui";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { afkFailed, isFriendly } from "../../errors";
@@ -27,22 +29,25 @@ import { Hint, inputClass, ToggleRow } from "../../settings/controls";
 import type { CloudAccount } from "../api";
 import { type CloudNotifyPrefs, type PlusPanel, plusApi } from "./api";
 import { DOCK_HEIGHT, PlusChangeDock } from "./change-dock";
-import { AmountField, GroupTitle, IntField, TimeField } from "./fields";
+import { AmountField, GroupTitle, IntField, QuietLink, TimeField } from "./fields";
 import { HistoryDialog } from "./history-dialog";
 import {
+  AUTHORITIES,
   applyDraft,
   blockedNameProblem,
   canSpend,
   editDraft,
   isTime,
   limitProblems,
-  maxDealOf,
   type PersonaTextProblem,
   PLUS_LIMITS,
   type PlusLimits,
   type PlusWindow,
+  PREFIX_DEFAULT,
+  PREFIX_MAX,
   PRESETS,
   personaTextProblem,
+  prefixProblem,
   type SettingsPart,
   STATUS_PRESETS,
   sortedDays,
@@ -190,12 +195,54 @@ function PersonaText({
 
 // --- Asistan ----------------------------------------------------------------------------------------
 
+/** The tag before the assistant's lines (27 Oct 2026): the player's own, under its switch. */
+function TagField({
+  value,
+  line,
+  onChange,
+}: {
+  value: string;
+  line: string | null;
+  onChange: (value: string) => void;
+}) {
+  const { t } = useTranslation();
+  const id = useId();
+  // One step in under its switch: the field belongs to that row (the AFK sheets' rule).
+  return (
+    <div className="flex flex-col gap-1.5 pb-2.5 pl-5">
+      <input
+        id={id}
+        value={value}
+        maxLength={PREFIX_MAX + 4}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={PREFIX_DEFAULT.text}
+        aria-label={t("afkPlus.settings.prefixLabel")}
+        aria-invalid={line ? true : undefined}
+        aria-describedby={line ? `${id}-line` : undefined}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(
+          inputClass,
+          "h-[34px] max-w-[220px] px-3",
+          line && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
+        )}
+      />
+      {line ? (
+        <p id={`${id}-line`} role="alert" className="text-[12px] leading-[17px] text-flare-300">
+          {line}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function AssistantGroup({
   shown,
   set,
   panel,
   submitted,
   saver,
+  serverIssues,
   aside,
 }: {
   shown: SettingsPart;
@@ -203,6 +250,7 @@ function AssistantGroup({
   panel: PlusPanel;
   submitted: boolean;
   saver: boolean;
+  serverIssues: ReadonlySet<string>;
   aside?: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -215,6 +263,20 @@ function AssistantGroup({
   const statusProblem = personaTextProblem(persona.status, PLUS_LIMITS.statusMax);
   const setPersona = (parts: Partial<SettingsPart["persona"]>) =>
     set((s) => ({ ...s, persona: { ...s.persona, ...parts } }));
+  // The tag (27 Oct 2026): the player's choice, off by default. The service checks its text also
+  // while it is off, so a bad text switched off goes back to the saved one.
+  const tag = persona.prefix;
+  const tagProblem = prefixProblem(tag.text, [
+    ...shown.who.friends,
+    ...panel.settings.config.blocked,
+  ]);
+  const tagEdited = tag.text !== savedPersona.prefix.text || tag.on !== savedPersona.prefix.on;
+  const tagLine =
+    tagProblem && (submitted || (tagProblem !== "empty" && tagEdited))
+      ? t(`afkPlus.settings.prefixErrors.${tagProblem}`, { max: PREFIX_MAX })
+      : serverIssues.has("persona.prefix.text")
+        ? t("afkPlus.settings.prefixErrors.words")
+        : null;
   return (
     <Group id="assistant" title={t("afkPlus.settings.groups.assistant")} aside={aside}>
       <Labeled label={t("afkPlus.settings.persona")}>
@@ -228,15 +290,46 @@ function AssistantGroup({
           }))}
           className="self-start"
         />
-        {/* What a reply sounds like: the bot's own line, its mark first (every bot line has it). */}
+        {/* What a reply sounds like, as it would write it: the tag first only while it is on, the
+            player's words while "Oyuncu gibi konuşsun" is. */}
         <p className="mt-1 flex items-baseline gap-2 text-[12px] text-ash-400">
           <span className="shrink-0">{t("afkPlus.settings.sample")}</span>
           <span className="rounded-[10px] bg-obsidian-700/70 px-2.5 py-1 text-[13px] text-bone-50 ring-1 ring-white/8 ring-inset">
-            <span className="font-semibold text-gold-200">[AFK+]</span>{" "}
-            {t(`afkPlus.settings.samples.${preset}`)}
+            {tag.on && tag.text.trim() && !tagProblem ? (
+              <>
+                <span className="font-semibold text-gold-200">{tag.text.trim()}</span>{" "}
+              </>
+            ) : null}
+            {t(`afkPlus.settings.${persona.playerTalk ? "samplesPlayer" : "samples"}.${preset}`)}
           </span>
         </p>
       </Labeled>
+      <ToggleRow
+        title={t("afkPlus.settings.playerTalk")}
+        help={t("afkPlus.settings.playerTalkHelp")}
+        checked={persona.playerTalk}
+        onCheckedChange={(playerTalk) => setPersona({ playerTalk })}
+      />
+      <ToggleRow
+        title={t("afkPlus.settings.prefix")}
+        checked={tag.on}
+        onCheckedChange={(on) =>
+          setPersona({
+            prefix: { on, text: on || !tagProblem ? tag.text : savedPersona.prefix.text },
+          })
+        }
+      />
+      {tag.on ? (
+        <TagField
+          value={tag.text}
+          line={tagLine}
+          onChange={(text) => setPersona({ prefix: { on: true, text } })}
+        />
+      ) : tagLine ? (
+        <p role="alert" className="pb-2.5 text-[12px] text-flare-300">
+          {tagLine}
+        </p>
+      ) : null}
       <PersonaText
         label={t("afkPlus.settings.intro")}
         value={persona.intro}
@@ -262,11 +355,11 @@ function AssistantGroup({
           className="max-w-[300px]"
         />
       </Labeled>
+      {/* Small talk said as its opposite, on by default (27 Oct 2026). */}
       <ToggleRow
-        title={t("afkPlus.settings.smallTalk")}
-        help={t("afkPlus.settings.smallTalkHelp")}
-        checked={persona.smallTalk}
-        onCheckedChange={(smallTalk) => setPersona({ smallTalk })}
+        title={t("afkPlus.settings.offTopic")}
+        checked={!persona.smallTalk}
+        onCheckedChange={(onTopic) => setPersona({ smallTalk: !onTopic })}
       />
       <ToggleRow
         title={t("afkPlus.settings.away")}
@@ -655,6 +748,240 @@ function HoursGroup({
   );
 }
 
+// --- İnce ayar --------------------------------------------------------------------------------------
+
+/** "Kimlerle → Yalnız arkadaşlarım": the in-game names it deals with (part of the draft). */
+function FriendsList({
+  shown,
+  set,
+  panel,
+  refused,
+}: {
+  shown: SettingsPart;
+  set: Change;
+  panel: PlusPanel;
+  /** The places of names the service refused at the last save. */
+  refused: ReadonlySet<number>;
+}) {
+  const { t } = useTranslation();
+  const { layout } = useMotionPrefs();
+  const id = useId();
+  const [name, setName] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  const friends = shown.who.friends;
+  const max = panel.settings.rules.friendsMax || PLUS_LIMITS.friendsMax;
+  const add = () => {
+    const value = name.trim();
+    const found = blockedNameProblem(value, friends, panel.settings.config.blocked);
+    if (found) {
+      setProblem(t(`afkPlus.settings.friendsErrors.${found}`));
+      return;
+    }
+    if (friends.length >= max) {
+      setProblem(t("afkPlus.settings.friendsErrors.full", { count: max }));
+      return;
+    }
+    set((s) => ({ ...s, who: { ...s.who, friends: [...s.who.friends, value] } }));
+    setName("");
+  };
+  return (
+    <div className="flex flex-col gap-2 pb-2.5">
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={id} className="sr-only">
+          {t("afkPlus.settings.friendsPlaceholder")}
+        </label>
+        <div className="flex gap-2">
+          <input
+            id={id}
+            value={name}
+            maxLength={16}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={t("afkPlus.settings.friendsPlaceholder")}
+            aria-invalid={problem ? true : undefined}
+            aria-describedby={problem ? `${id}-error` : undefined}
+            onChange={(event) => {
+              setName(event.target.value);
+              setProblem(null);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                add();
+              }
+            }}
+            className={cn(
+              inputClass,
+              "h-[34px] max-w-[240px] px-3",
+              problem && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
+            )}
+          />
+          <Button variant="secondary" disabled={!name.trim()} onClick={add}>
+            {t("afkPlus.settings.friendsAdd")}
+          </Button>
+        </div>
+        {problem ? (
+          <p id={`${id}-error`} role="alert" className="text-[12px] text-flare-300">
+            {problem}
+          </p>
+        ) : null}
+      </div>
+      {refused.size ? (
+        <p role="alert" className="text-[12px] text-flare-300">
+          {t("afkPlus.settings.friendsErrors.refused")}
+        </p>
+      ) : null}
+      {friends.length ? (
+        <ul className="flex flex-wrap gap-1.5">
+          <AnimatePresence initial={false}>
+            {friends.map((entry, index) => (
+              <motion.li
+                key={entry}
+                layout={layout ? "position" : false}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: enter(0.2) }}
+                exit={{ opacity: 0, transition: leave(0.14) }}
+                className={cn(
+                  "flex items-center gap-1 rounded-md bg-white/[0.05] py-0.5 pr-0.5 pl-2.5 text-[13px] text-bone-100",
+                  refused.has(index) && "ring-1 ring-flare-400/60",
+                )}
+              >
+                <span data-selectable>{entry}</span>
+                <IconButton
+                  label={t("afkPlus.settings.friendsRemove", { name: entry })}
+                  icon={<X size={13} />}
+                  size="sm"
+                  onClick={() =>
+                    set((s) => ({
+                      ...s,
+                      who: { ...s.who, friends: s.who.friends.filter((f) => f !== entry) },
+                    }))
+                  }
+                />
+              </motion.li>
+            ))}
+          </AnimatePresence>
+        </ul>
+      ) : (
+        <p className="text-[12.5px] text-ash-300">{t("afkPlus.settings.friendsEmpty")}</p>
+      )}
+    </div>
+  );
+}
+
+function FineTuneGroup({
+  shown,
+  set,
+  panel,
+  aside,
+  serverIssues,
+}: {
+  shown: SettingsPart;
+  set: Change;
+  panel: PlusPanel;
+  submitted?: boolean;
+  aside?: ReactNode;
+  /** The service's refusals of the last save (`who.friends[2]`, `pay`, …). */
+  serverIssues: ReadonlySet<string>;
+}) {
+  const { t } = useTranslation();
+  const id = useId();
+  const itemPay = panel.settings.rules.features.itemPay;
+  const authority = AUTHORITIES.find((a) => a === shown.authority) ?? "ask";
+  const pay = (["money", "items", "both"] as const).find((p) => p === shown.pay) ?? "money";
+  const who = shown.who.mode === "friends" ? "friends" : "all";
+  const refusedFriends = new Set<number>();
+  let refusedHere = false;
+  for (const field of serverIssues) {
+    const friend = /^who\.friends\[(\d+)\]/.exec(field);
+    if (friend) refusedFriends.add(Number(friend[1]));
+    else if (/^(authority|allow|pay|who)\b/.test(field)) refusedHere = true;
+  }
+  return (
+    <Group id="fine" title={t("afkPlus.settings.groups.fine")} aside={aside}>
+      {refusedHere ? (
+        <p role="alert" className="pt-2.5 text-[12.5px] text-flare-300">
+          {t("afkPlus.settings.fineRefused")}
+        </p>
+      ) : null}
+      <div className="flex flex-col gap-2 py-2.5">
+        <span id={`${id}-authority`} className="text-[13px] font-medium text-bone-100">
+          {t("afkPlus.settings.authorityLabel")}
+        </span>
+        <RadioGroup.Root
+          aria-labelledby={`${id}-authority`}
+          value={authority}
+          onValueChange={(value) => set((s) => ({ ...s, authority: value }))}
+          className="flex flex-col gap-1.5"
+        >
+          {AUTHORITIES.map((value) => (
+            <RadioGroup.Item
+              key={value}
+              value={value}
+              className="group flex w-full cursor-pointer items-start gap-3 rounded-[var(--radius-panel)] px-3 py-2.5 text-left outline-none ring-1 ring-white/[0.07] transition-[background-color,box-shadow] duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=checked]:bg-gold-500/[0.07] data-[state=checked]:ring-gold-400/40"
+            >
+              <span
+                aria-hidden
+                className="mt-[3px] flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-gold-400"
+              >
+                <RadioGroup.Indicator className="size-2 rounded-full bg-gold-400" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13.5px] font-medium text-bone-50">
+                  {t(`afkPlus.settings.authority.${value}`)}
+                </span>
+                <span className="block text-[12.5px] text-ash-300">
+                  {t(`afkPlus.settings.authorityHelp.${value}`)}
+                </span>
+              </span>
+            </RadioGroup.Item>
+          ))}
+        </RadioGroup.Root>
+      </div>
+      <ToggleRow
+        title={t("afkPlus.settings.allowBuy")}
+        checked={shown.allow.buy}
+        onCheckedChange={(buy) => set((s) => ({ ...s, allow: { ...s.allow, buy } }))}
+      />
+      <ToggleRow
+        title={t("afkPlus.settings.allowSell")}
+        checked={shown.allow.sell}
+        onCheckedChange={(sell) => set((s) => ({ ...s, allow: { ...s.allow, sell } }))}
+      />
+      {itemPay ? (
+        <Labeled label={t("afkPlus.settings.pay")}>
+          <Segmented
+            label={t("afkPlus.settings.pay")}
+            value={pay}
+            onValueChange={(next) => set((s) => ({ ...s, pay: next }))}
+            className="self-start"
+            options={[
+              { value: "money", label: t("afkPlus.settings.pays.money") },
+              { value: "items", label: t("afkPlus.settings.pays.items") },
+              { value: "both", label: t("afkPlus.settings.pays.both") },
+            ]}
+          />
+        </Labeled>
+      ) : null}
+      <Labeled label={t("afkPlus.settings.who")}>
+        <Segmented
+          label={t("afkPlus.settings.who")}
+          value={who}
+          onValueChange={(mode) => set((s) => ({ ...s, who: { ...s.who, mode } }))}
+          className="self-start"
+          options={[
+            { value: "all", label: t("afkPlus.settings.whoAll") },
+            { value: "friends", label: t("afkPlus.settings.whoFriends") },
+          ]}
+        />
+      </Labeled>
+      {who === "friends" ? (
+        <FriendsList shown={shown} set={set} panel={panel} refused={refusedFriends} />
+      ) : null}
+    </Group>
+  );
+}
+
 // --- Harcama -----------------------------------------------------------------------------------------
 
 function LimitsGroup({
@@ -677,7 +1004,7 @@ function LimitsGroup({
   const control = usePlusControl(account.id);
   const [confirmReset, setConfirmReset] = useState(false);
   const limits = shown.limits;
-  const maxDeal = maxDealOf(panel.catalog);
+  const maxDeal = panel.settings.server.money.maxDeal;
   const problems = limitProblems(limits, maxDeal);
   const spent = panel.settings.spent ?? plusAi(account)?.spent ?? null;
   const setLimit = (key: keyof PlusLimits, value: number | null | undefined) => {
@@ -695,17 +1022,23 @@ function LimitsGroup({
     }
     return t(`afkPlus.settings.limitErrors.${problem}`, { max: formatAmount(maxDeal) });
   };
-  const amount = (key: keyof PlusLimits, label: string, optional: boolean, help?: ReactNode) => (
+  const amount = (
+    key: keyof PlusLimits,
+    label: string,
+    optional: boolean,
+    more: { empty?: string; extra?: ReactNode } = {},
+  ) => (
     <AmountField
       label={label}
       value={limits[key] as number | null}
       optional={optional}
-      placeholder={optional ? t("afkPlus.settings.noLimitShort") : undefined}
+      placeholder={optional ? (more.empty ?? t("afkPlus.settings.noLimitShort")) : undefined}
       error={error(key)}
-      help={help}
+      extra={more.extra}
       onChange={(value) => setLimit(key, value)}
     />
   );
+  const note = (text: string) => <p className="-mt-1 text-[12px] text-ash-400">{text}</p>;
   const reset = async () => {
     setConfirmReset(false);
     const done = await control("reset_spent");
@@ -724,46 +1057,47 @@ function LimitsGroup({
           {t("afkPlus.settings.needed")}
         </Hint>
       ) : null}
-      {/* A field's label, box and words sit close; the next field starts a clear step lower. */}
+      {/* A field's label, box and words sit close; the next field starts a clear step lower. Each
+          counter sits under the limit it counts against (the site's): the total counts since the
+          last reset and a reset empties it only, so it never reads as today's figure gone down. */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-4 pt-1.5">
         {amount("perDealMax", t("afkPlus.settings.perDealMax"), true)}
-        {amount(
-          "dailySpendMax",
-          t("afkPlus.settings.dailySpendMax"),
-          true,
-          spent
-            ? t("afkPlus.settings.spentToday", { spent: formatAmount(spent.today) })
-            : undefined,
-        )}
-        {amount("totalBudget", t("afkPlus.settings.totalBudget"), true)}
+        {amount("totalBudget", t("afkPlus.settings.totalBudget"), true, {
+          extra:
+            spent && spent.total > 0 ? (
+              <p className="-mt-1 flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-bone-100">
+                <span className="tabular-nums">
+                  {t(
+                    limits.totalBudget === null
+                      ? "afkPlus.settings.spentNoBudget"
+                      : "afkPlus.settings.spentTotal",
+                    { amount: formatAmount(spent.total) },
+                  )}
+                </span>
+                <QuietLink onClick={() => setConfirmReset(true)}>
+                  {t("afkPlus.settings.resetSpent")}
+                </QuietLink>
+              </p>
+            ) : null,
+        })}
+        {amount("dailySpendMax", t("afkPlus.settings.dailySpendMax"), true, {
+          extra:
+            spent && spent.today > 0 ? (
+              <p className="-mt-1 text-[12.5px] text-bone-100 tabular-nums">
+                {t("afkPlus.settings.spentToday", { amount: formatAmount(spent.today) })}
+              </p>
+            ) : null,
+        })}
         {amount("balanceFloor", t("afkPlus.settings.balanceFloor"), false)}
-        {amount("approvalAbove", t("afkPlus.settings.approvalAbove"), true)}
-        {amount("newCounterpartApprovalAbove", t("afkPlus.settings.newCounterpart"), true)}
+        {amount("approvalAbove", t("afkPlus.settings.approvalAbove"), true, {
+          empty: t("afkPlus.settings.noAskShort"),
+          extra: note(t("afkPlus.settings.approvalHelp")),
+        })}
+        {amount("newCounterpartApprovalAbove", t("afkPlus.settings.newCounterpart"), true, {
+          empty: t("afkPlus.settings.noAskShort"),
+          extra: note(t("afkPlus.settings.newCounterpartHelp")),
+        })}
       </div>
-      {spent ? (
-        // What the assistant spent, beside the cap it counts against (lead b7's decision).
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel)] bg-white/[0.03] px-3.5 py-2.5">
-          <div className="min-w-0">
-            <p className="text-[13.5px] font-medium text-bone-50 tabular-nums">
-              {limits.totalBudget !== null
-                ? t("afkPlus.settings.spent", {
-                    spent: formatAmount(spent.total),
-                    budget: formatAmount(limits.totalBudget),
-                  })
-                : t("afkPlus.settings.spentNoBudget", { spent: formatAmount(spent.total) })}
-            </p>
-            <p className="text-[12px] text-ash-400">{t("afkPlus.settings.spentNote")}</p>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={spent.total === 0}
-            onClick={() => setConfirmReset(true)}
-          >
-            {t("afkPlus.settings.resetSpent")}
-          </Button>
-        </div>
-      ) : null}
       <IntField
         label={t("afkPlus.settings.timeout")}
         value={limits.approvalTimeoutMin}
@@ -777,6 +1111,8 @@ function LimitsGroup({
         className="pt-3"
         inputClassName="w-[72px] text-center"
       />
+      {/* afkplus-free.md §3.5: the one quiet line, never a switch. */}
+      <p className="pt-3 text-[12.5px] text-ash-400">{t("afkPlus.settings.secret")}</p>
       <Dialog
         open={confirmReset}
         onOpenChange={setConfirmReset}
@@ -805,7 +1141,7 @@ function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; pa
   const { t } = useTranslation();
   const d = shown.discovery;
   const lang = currentLang();
-  const templates = panel.catalog?.adTemplates ?? [];
+  const templates = panel.settings.server.ads;
   const setD = (parts: Partial<SettingsPart["discovery"]>) =>
     set((s) => ({ ...s, discovery: { ...s.discovery, ...parts } }));
   return (
@@ -1101,11 +1437,12 @@ function NotifyGroup() {
 // --- The section ---------------------------------------------------------------------------------------
 
 /** Every problem the launcher can see before sending, so "Kaydet" never sends what will be refused. */
-function hasProblems(shown: SettingsPart, maxDeal: number): boolean {
+function hasProblems(shown: SettingsPart, maxDeal: number, blocked: readonly string[]): boolean {
   const limits = limitProblems(shown.limits, maxDeal);
   return (
     Object.keys(limits).length > 0 ||
     personaTextProblem(shown.persona.intro, PLUS_LIMITS.introMax) !== null ||
+    prefixProblem(shown.persona.prefix.text, [...shown.who.friends, ...blocked]) !== null ||
     (shown.persona.statusPreset === null &&
       personaTextProblem(shown.persona.status, PLUS_LIMITS.statusMax) !== null) ||
     (shown.schedule.on && shown.schedule.windows.some((w) => windowProblems(w).length > 0)) ||
@@ -1138,7 +1475,7 @@ export function SettingsSection({
   const saved = panel.settings.config;
   const shown = useMemo(() => applyDraft(saved, draft), [saved, draft]);
   const dirty = draft !== null;
-  const maxDeal = maxDealOf(panel.catalog);
+  const maxDeal = panel.settings.server.money.maxDeal;
 
   const set: Change = (update) => {
     setDraft(account.id, editDraft(saved, usePlusUi.getState().drafts[account.id], update));
@@ -1149,7 +1486,7 @@ export function SettingsSection({
   const submit = async () => {
     if (!draft || saving) return;
     setSubmitted(true);
-    if (hasProblems(shown, maxDeal)) return;
+    if (hasProblems(shown, maxDeal, panel.settings.config.blocked)) return;
     setSaving(true);
     try {
       const sent = draft;
@@ -1196,15 +1533,27 @@ export function SettingsSection({
     setFocusGroup(null);
   }, [focusGroup, setFocusGroup]);
 
-  const blocking = submitted && hasProblems(shown, maxDeal);
+  // A problem the form shows blocks the save at once (the AFK sheets' rule, SHEET-UX decision 27):
+  // after "Kaydet", or while an edited tag reads wrong (its line shows as it is typed).
+  const savedTag = panel.settings.config.persona.prefix;
+  const tagProblem = prefixProblem(shown.persona.prefix.text, [
+    ...shown.who.friends,
+    ...panel.settings.config.blocked,
+  ]);
+  const tagShown =
+    tagProblem !== null &&
+    tagProblem !== "empty" &&
+    (shown.persona.prefix.text !== savedTag.text || shown.persona.prefix.on !== savedTag.on);
+  const blocking =
+    (submitted && hasProblems(shown, maxDeal, panel.settings.config.blocked)) || tagShown;
   const props = { shown, set, panel, submitted };
 
   return (
     <>
       <div className="flex flex-col gap-8">
-        <AssistantGroup
+        <FineTuneGroup
           {...props}
-          saver={features.saver}
+          serverIssues={serverIssues}
           aside={
             features.history ? (
               <Button
@@ -1218,6 +1567,7 @@ export function SettingsSection({
             ) : null
           }
         />
+        <AssistantGroup {...props} saver={features.saver} serverIssues={serverIssues} />
         {features.schedule ? <HoursGroup {...props} account={account} /> : null}
         <LimitsGroup {...props} account={account} serverIssues={serverIssues} />
         <FindGroup {...props} />
@@ -1255,7 +1605,7 @@ export function SettingsSection({
         >
           {t("afkPlus.settings.discard")}
         </Button>
-        <Button variant="primary" disabled={saving} onClick={() => void submit()}>
+        <Button variant="primary" disabled={saving || blocking} onClick={() => void submit()}>
           {saving ? t("afkPlus.settings.saving") : t("afkPlus.settings.save")}
         </Button>
       </PlusChangeDock>

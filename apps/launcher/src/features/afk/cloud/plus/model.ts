@@ -1,48 +1,37 @@
-// AFK+ settings on the launcher: the contract's defaults, the checks made before a `PUT /plus`
-// (README "AfkPlusConfig v1" → Rules, in the Worker's words: `buy[2].max` + `order`; the Worker and
-// the agent have the last word), new row ids, rows from a typed rule's draft (QoL Q2), the AI
-// state's sentence, and what changed between two saved versions (QoL Q7). The same rules as
-// afk.projects.gg's, so the three surfaces agree.
-import type {
-  PlusAi,
-  PlusBuyRow,
-  PlusCatalog,
-  PlusConfig,
-  PlusLimits,
-  PlusParseDraft,
-  PlusQuota,
-  PlusSellRow,
-  PlusWindow,
-} from "./types";
+// AFK+ settings on the launcher (AfkPlusConfig v2, afkplus-free.md §1.2, §3): the contract's
+// defaults, the checks made before a `PUT /plus` (README "AfkPlusConfig v2" → Rules, in the Worker's
+// words; the Worker and the agent have the last word), the "Ayarlar" draft, the AI state's sentence,
+// and what changed between two saved versions (QoL Q7). The same rules as afk.projects.gg's, so the
+// three surfaces agree. Orders have their own module (order-draft.ts, orders.ts).
+import type { PlusAi, PlusConfig, PlusLimits, PlusOrder, PlusQuota, PlusWindow } from "./types";
 
-export type { PlusAi, PlusBuyRow, PlusCatalog, PlusConfig, PlusLimits, PlusSellRow, PlusWindow };
+export type { PlusAi, PlusConfig, PlusLimits, PlusWindow };
 
-/** The contract's limits until the catalog says its profile's own. */
+/** The contract's limits. */
 export const PLUS_LIMITS = {
-  listMax: 10,
-  maxDeal: 10_000_000,
-  qtyMax: 9999,
+  /** The generic mode's money cap (`money.maxDeal`); a profile's own comes with `server.money`. */
+  maxDeal: 100_000_000,
   blockedMax: 100,
+  /** "Kimlerle": in-game names, at most 50. */
+  friendsMax: 50,
   windowsMax: 7,
   introMax: 60,
   statusMax: 80,
   replyMax: 200,
-  parseMax: 200,
-  /** "max > 10 × target": confirmed once (a zero too many). */
-  wideFactor: 10,
   /** A break reaches at most 90 days ahead. */
   breakDays: [1, 3, 7, 14, 30] as const,
 } as const;
 
 export type Side = "buy" | "sell";
 export type Style = "patient" | "balanced" | "quick";
-export type ApprovalRule = "auto" | "above" | "always";
 export type Scope = "all" | "trade" | "off";
 export type Preset = "friendly" | "brief" | "polite" | "playful";
 export type StatusPreset = "back_soon" | "back_evening" | "back_tomorrow" | "weekend" | "busy";
+/** "Asistan ne yapsın?": answer only, haggle and ask (the default), haggle and finish. */
+export type Authority = "reply" | "ask" | "deal";
 
 export const STYLES: Style[] = ["patient", "balanced", "quick"];
-export const APPROVALS: ApprovalRule[] = ["auto", "above", "always"];
+export const AUTHORITIES: Authority[] = ["reply", "ask", "deal"];
 export const PRESETS: Preset[] = ["friendly", "brief", "polite", "playful"];
 export const STATUS_PRESETS: StatusPreset[] = [
   "back_soon",
@@ -52,159 +41,54 @@ export const STATUS_PRESETS: StatusPreset[] = [
   "busy",
 ];
 
-export function maxDealOf(catalog: PlusCatalog | null | undefined): number {
-  return catalog?.money.maxDeal ?? PLUS_LIMITS.maxDeal;
-}
-
-export function listMaxOf(catalog: PlusCatalog | null | undefined): number {
-  return Math.min(PLUS_LIMITS.listMax, catalog?.limits.listMax ?? PLUS_LIMITS.listMax);
-}
-
-/** Whether the bot may spend at all (without it buy rows only report what they find). */
+/** Whether the bot may spend at all (without it buy orders for money only tell what they find). */
 export function canSpend(limits: PlusLimits): boolean {
   return limits.totalBudget !== null && limits.perDealMax !== null;
 }
 
-/** A new row id: ^[a-z0-9]{1,8}$, not taken in either list. */
-export function newRowId(
-  config: Pick<PlusConfig, "buy" | "sell">,
-  random: () => number = Math.random,
-): string {
-  const taken = new Set([...config.buy, ...config.sell].map((row) => row.id));
-  for (;;) {
-    let id = "";
-    for (let i = 0; i < 8; i++)
-      id += "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(random() * 36)];
-    if (!taken.has(id)) return id;
-  }
-}
+// --- The "Ayarlar" draft ---------------------------------------------------------------------------
 
-export function newBuyRow(id: string, item: string, parts: Partial<PlusBuyRow> = {}): PlusBuyRow {
-  return {
-    id,
-    item,
-    req: { ench: {}, minDurabilityPct: 90, allowCustomName: false, allowCurses: false },
-    qty: 1,
-    unit: "each",
-    target: 1,
-    max: 1,
-    style: "balanced",
-    approval: "above",
-    dailyQty: 1,
-    notify: true,
-    enabled: true,
-    ...parts,
-  };
-}
-
-export function newSellRow(
-  id: string,
-  item: string,
-  parts: Partial<PlusSellRow> = {},
-): PlusSellRow {
-  return {
-    id,
-    item,
-    qty: 1,
-    unit: "each",
-    target: 1,
-    min: 1,
-    style: "balanced",
-    approval: "above",
-    dailyQty: 1,
-    enabled: true,
-    ...parts,
-  };
-}
-
-/** A typed rule's draft (QoL Q2) as a row, once its item is known. */
-export function rowFromDraft(
-  draft: PlusParseDraft,
-  item: string,
-  id: string,
-): { side: "buy"; row: PlusBuyRow } | { side: "sell"; row: PlusSellRow } {
-  const qty = Math.max(1, Math.min(PLUS_LIMITS.qtyMax, draft.qty || 1));
-  const style = (STYLES as string[]).includes(draft.style) ? draft.style : "balanced";
-  const approval = (APPROVALS as string[]).includes(draft.approval) ? draft.approval : "above";
-  const unit = draft.unit === "total" ? "total" : "each";
-  if (draft.side === "sell") {
-    const target = draft.target ?? draft.min ?? 1;
-    return {
-      side: "sell",
-      row: newSellRow(id, item, {
-        qty,
-        unit,
-        target,
-        min: Math.min(draft.min ?? target, target),
-        style,
-        approval,
-        dailyQty: qty,
-      }),
-    };
-  }
-  const max = draft.max ?? draft.target ?? 1;
-  return {
-    side: "buy",
-    row: newBuyRow(id, item, {
-      qty,
-      unit,
-      target: Math.min(draft.target ?? max, max),
-      max,
-      style,
-      approval,
-      dailyQty: qty,
-    }),
-  };
-}
-
-// --- List and settings changes ---------------------------------------------------------------------
-// Each change gives the same result when it runs twice: it runs on the shown copy at once and again
-// on what is sent (use-plus.ts `usePlusInstantSave`).
-
-type RuleRow = { side: "buy"; row: PlusBuyRow } | { side: "sell"; row: PlusSellRow };
-
-/** Adds the rule, or puts it in place of the one with its id (at `index` when it is new). */
-export function putRule(config: PlusConfig, rule: RuleRow, index?: number): PlusConfig {
-  if (rule.side === "buy") {
-    const at = config.buy.findIndex((row) => row.id === rule.row.id);
-    const buy = config.buy.filter((row) => row.id !== rule.row.id);
-    buy.splice(at >= 0 ? at : (index ?? buy.length), 0, rule.row);
-    return { ...config, buy };
-  }
-  const at = config.sell.findIndex((row) => row.id === rule.row.id);
-  const sell = config.sell.filter((row) => row.id !== rule.row.id);
-  sell.splice(at >= 0 ? at : (index ?? sell.length), 0, rule.row);
-  return { ...config, sell };
-}
-
-export function removeRule(config: PlusConfig, side: Side, id: string): PlusConfig {
-  return side === "buy"
-    ? { ...config, buy: config.buy.filter((row) => row.id !== id) }
-    : { ...config, sell: config.sell.filter((row) => row.id !== id) };
-}
-
-export function setRuleEnabled(
-  config: PlusConfig,
-  side: Side,
-  id: string,
-  enabled: boolean,
-): PlusConfig {
-  return side === "buy"
-    ? { ...config, buy: config.buy.map((row) => (row.id === id ? { ...row, enabled } : row)) }
-    : { ...config, sell: config.sell.map((row) => (row.id === id ? { ...row, enabled } : row)) };
-}
-
-/** What "Ayarlar" edits as one draft; the lists, the switch and a break are saved at once. */
+/** What "Ayarlar" edits as one draft; orders, the switch, a break and blocked names save at once. */
 export type SettingsPart = Pick<
   PlusConfig,
-  "lang" | "persona" | "replies" | "limits" | "discovery" | "trade" | "summaryAt" | "schedule"
+  | "lang"
+  | "persona"
+  | "replies"
+  | "authority"
+  | "allow"
+  | "pay"
+  | "who"
+  | "limits"
+  | "discovery"
+  | "trade"
+  | "summaryAt"
+  | "schedule"
 >;
+
+const SETTINGS_KEYS = [
+  "lang",
+  "persona",
+  "replies",
+  "authority",
+  "allow",
+  "pay",
+  "who",
+  "limits",
+  "discovery",
+  "trade",
+  "summaryAt",
+  "schedule",
+] as const;
 
 export function settingsPart(config: SettingsPart): SettingsPart {
   return {
     lang: config.lang,
     persona: config.persona,
     replies: config.replies,
+    authority: config.authority,
+    allow: config.allow,
+    pay: config.pay,
+    who: config.who,
     limits: config.limits,
     discovery: config.discovery,
     trade: config.trade,
@@ -239,24 +123,31 @@ export interface SettingsDraft {
   value: SettingsPart;
 }
 
-const SETTINGS_KEYS = [
-  "lang",
-  "persona",
-  "replies",
-  "limits",
-  "discovery",
-  "trade",
-  "summaryAt",
-  "schedule",
-] as const;
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+const isNames = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((entry) => typeof entry === "string");
+
+/**
+ * A list of names edited in the draft (`who.friends`) on top of the latest one: only the draft's
+ * own additions and removals, so a name added elsewhere meanwhile ("Arkadaşlarıma ekle") stays.
+ * Names compare as the game does, without case. Null when these are not lists of names.
+ */
+function mergeNames(before: unknown, after: unknown, latest: unknown): string[] | null {
+  if (!isNames(before) || !isNames(after) || !isNames(latest)) return null;
+  const has = (list: string[], name: string) =>
+    list.some((entry) => entry.toLowerCase() === name.toLowerCase());
+  const out = latest.filter((name) => !has(before, name) || has(after, name));
+  for (const name of after) if (!has(before, name) && !has(out, name)) out.push(name);
+  return out;
+}
+
 /**
  * The player's own edits on top of `latest`: a field (one level into the groups: `limits.perDealMax`,
- * `persona.intro`) comes from the draft only where the draft differs from its base, so what changed
- * elsewhere meanwhile (the site, the phone) stays.
+ * `allow.sell`) comes from the draft only where the draft differs from its base, so what changed
+ * elsewhere meanwhile (the site, the phone) stays; a list of names takes only the draft's own
+ * additions and removals.
  */
 export function applyDraft(
   latest: SettingsPart,
@@ -272,7 +163,9 @@ export function applyDraft(
         ...(latest[key] as unknown as Record<string, unknown>),
       };
       for (const sub of Object.keys(after)) {
-        if (stable(after[sub]) !== stable(before[sub])) merged[sub] = after[sub];
+        if (stable(after[sub]) !== stable(before[sub])) {
+          merged[sub] = mergeNames(before[sub], after[sub], merged[sub]) ?? after[sub];
+        }
       }
       out[key] = merged;
     } else if (stable(after) !== stable(before)) {
@@ -293,52 +186,6 @@ export function editDraft(
 }
 
 // --- Checks ------------------------------------------------------------------------------------------
-
-export type RowProblem = "qty" | "target" | "order" | "maxDeal" | "dailyQty" | "durability";
-
-export function buyRowProblems(
-  row: PlusBuyRow,
-  maxDeal: number = PLUS_LIMITS.maxDeal,
-): RowProblem[] {
-  const found: RowProblem[] = [];
-  if (!Number.isInteger(row.qty) || row.qty < 1 || row.qty > PLUS_LIMITS.qtyMax) found.push("qty");
-  if (!Number.isInteger(row.target) || row.target < 1) found.push("target");
-  else if (row.target > row.max) found.push("order");
-  if (row.max > maxDeal || row.target > maxDeal) found.push("maxDeal");
-  if (!Number.isInteger(row.dailyQty) || row.dailyQty < 1 || row.dailyQty > PLUS_LIMITS.qtyMax)
-    found.push("dailyQty");
-  if (row.req.minDurabilityPct < 0 || row.req.minDurabilityPct > 100) found.push("durability");
-  return found;
-}
-
-export function sellRowProblems(
-  row: PlusSellRow,
-  maxDeal: number = PLUS_LIMITS.maxDeal,
-): RowProblem[] {
-  const found: RowProblem[] = [];
-  if (!Number.isInteger(row.qty) || row.qty < 1 || row.qty > PLUS_LIMITS.qtyMax) found.push("qty");
-  if (!Number.isInteger(row.min) || row.min < 1) found.push("target");
-  else if (row.min > row.target) found.push("order");
-  if (row.target > maxDeal) found.push("maxDeal");
-  if (!Number.isInteger(row.dailyQty) || row.dailyQty < 1 || row.dailyQty > PLUS_LIMITS.qtyMax)
-    found.push("dailyQty");
-  return found;
-}
-
-/** "max > 10 × target": the row is saved only after the player confirms it once. */
-export function isWide(row: { target: number; max?: number }): boolean {
-  return row.max !== undefined && row.max > PLUS_LIMITS.wideFactor * row.target;
-}
-
-/**
- * A sale's amounts the trade window can show exactly (AFKPLUS-A2): under 1,000, or whole thousands,
- * or above a million whole millions. The bot rounds anything else, so the editor says so.
- */
-export function isProvableSale(amount: number): boolean {
-  if (amount < 1_000) return true;
-  if (amount > 1_000_000) return amount % 1_000_000 === 0;
-  return amount % 1_000 === 0;
-}
 
 export type LimitProblem = "approvalAbove" | "maxDeal" | "timeout" | "amount";
 
@@ -424,29 +271,147 @@ export function windowProblems(window: PlusWindow): WindowProblem[] {
   return found;
 }
 
-export type NameProblem = "format" | "duplicate";
+export type NameProblem = "format" | "duplicate" | "blocked";
 
-export function blockedNameProblem(name: string, list: readonly string[]): NameProblem | null {
+/**
+ * An in-game name for a list ("Engellenenler", "Kimlerle"): its form, once ignoring case, and for
+ * the friends list not a blocked name (the Worker's `blocked`).
+ */
+export function blockedNameProblem(
+  name: string,
+  list: readonly string[],
+  blocked: readonly string[] = [],
+): NameProblem | null {
   if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) return "format";
   const lower = name.toLowerCase();
   if (list.some((entry) => entry.toLowerCase() === lower)) return "duplicate";
+  if (blocked.some((entry) => entry.toLowerCase() === lower)) return "blocked";
   return null;
 }
 
-export type PersonaTextProblem = "length" | "marker" | "link" | "phone" | "email";
+export type PersonaTextProblem = "form" | "length" | "marker" | "link" | "phone" | "email";
+
+/**
+ * The service's form rule for the texts AFK+ says (a persona text, a custom item's name): one line,
+ * no command or format code first, no colour code ("&a", "§l"), no client variable ("%username%").
+ */
+export function breaksForm(text: string): boolean {
+  return /\n|^[/\\&§]|§|&[0-9a-fk-or]|%[\p{L}\p{N}_]+%/iu.test(text);
+}
+
+/** The `[AFK+]` marker however it is spaced, cased or widened. */
+export function hasMarker(text: string): boolean {
+  return /\[\s*afk\s*\+\s*\]/iu.test(text.normalize("NFKC"));
+}
 
 /** The launcher's quick look at a persona text; the Worker's text rule and its judge decide. */
 export function personaTextProblem(text: string, max: number): PersonaTextProblem | null {
   const value = text.trim();
   if (!value) return null;
+  if (breaksForm(value)) return "form";
   if ([...value].length > max) return "length";
-  if (/\[afk\+\]/i.test(value)) return "marker";
+  if (hasMarker(value)) return "marker";
   if (/@[a-z0-9-]+\.[a-z]{2,}/i.test(value)) return "email";
-  // The one address a persona text may carry is the server's own (README "AFK text form").
-  const scanned = value.replace(/\bprojects\.gg\b/gi, "");
-  if (/(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|gg|io|me|tr|xyz)\b)/i.test(scanned))
+  // AFK+ sends no link at all: projects.gg counts like any other address (the service's rule).
+  if (/(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|gg|io|me|tr|xyz)\b)/i.test(value))
     return "link";
   if ((value.match(/\d/g) ?? []).length >= 10) return "phone";
+  return null;
+}
+
+/** The tag before the assistant's lines until the player sets one: off, "[AFK+]" (27 Oct 2026). */
+export const PREFIX_DEFAULT: Readonly<{ on: boolean; text: string }> = Object.freeze({
+  on: false,
+  text: "[AFK+]",
+});
+export const PREFIX_MAX = 16;
+
+export type PrefixProblem = "empty" | "length" | "form" | "staff" | "name";
+
+/** A tag's characters (the service's rule): Latin letters, ASCII digits, spaces and a few marks. */
+const PREFIX_CHARS = /^[\p{Script=Latin}0-9 [\]()+\-_.!?*#|~^=:']+$/u;
+/** Staff, system and server words, folded, anywhere in the tag's letters (the service's list). */
+const PREFIX_STAFF_WORDS = [
+  "yetkili",
+  "admin",
+  "moderator",
+  "sistem",
+  "system",
+  "server",
+  "sunucu",
+  "konsol",
+  "console",
+  "staff",
+  "kurucu",
+  "founder",
+  "owner",
+  "destek",
+  "support",
+  "rehber",
+  "helper",
+  "duyuru",
+  "bilgi",
+  "info",
+  "projects",
+  "operator",
+  "yonetic",
+  "yonetim",
+  "guvenlik",
+  "security",
+  "resmi",
+  "official",
+  "gelistirici",
+  "developer",
+];
+/** Short ones: whole words only (camel case split first). */
+const PREFIX_STAFF_SHORT = new Set(["mod", "adm", "op", "gm", "sys", "dev"]);
+const PREFIX_FOLD: Record<string, string> = {
+  ç: "c",
+  ğ: "g",
+  ı: "i",
+  ö: "o",
+  ş: "s",
+  ü: "u",
+  â: "a",
+  î: "i",
+  û: "u",
+  "0": "o",
+  "1": "i",
+  "3": "e",
+  "4": "a",
+  "5": "s",
+  "7": "t",
+  "!": "i",
+  "|": "i",
+};
+
+/**
+ * The panel's quick look at the tag as the player types it (README "AfkPlusConfig v2" →
+ * `persona.prefix`, the same look as the site's): empty, over 16 characters, other characters, a
+ * staff or system word (look-alike digits and camel case too), or a friend's or blocked player's
+ * name. `plus_check.rs` and the service have the last word (links, apps, words).
+ */
+export function prefixProblem(text: string, names: readonly string[] = []): PrefixProblem | null {
+  // Spaces as the chat cleaning leaves them: trimmed, runs as one.
+  const value = text.trim().replace(/\s+/gu, " ");
+  if (!value) return "empty";
+  if ([...value].length > PREFIX_MAX) return "length";
+  if (!PREFIX_CHARS.test(value)) return "form";
+  let form = "";
+  for (const char of value.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").toLocaleLowerCase("tr")) {
+    form += PREFIX_FOLD[char] ?? char;
+  }
+  if (form.split(/[^a-z]+/u).some((word) => PREFIX_STAFF_SHORT.has(word))) return "staff";
+  const letters = form.replace(/[^a-z]+/gu, "");
+  if (PREFIX_STAFF_WORDS.some((word) => letters.includes(word))) return "staff";
+  const known = new Set(names.map((name) => name.toLowerCase()));
+  if (
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9_]+/u)
+      .some((word) => known.has(word))
+  )
+    return "name";
   return null;
 }
 
@@ -461,19 +426,21 @@ export function sortedDays(days: readonly number[]): number[] {
 // --- What changed (QoL Q7) --------------------------------------------------------------------------
 
 export type ConfigChange =
-  | { kind: "row_added"; side: Side; item: string }
-  | { kind: "row_removed"; side: Side; item: string }
+  | { kind: "order_added"; side: Side; item: string }
+  | { kind: "order_removed"; side: Side; item: string }
   | {
-      kind: "row_amount";
+      kind: "order_amount";
       side: Side;
       item: string;
-      field: "target" | "max" | "min" | "qty" | "dailyQty";
+      field: "target" | "limit" | "qty";
       from: number;
       to: number;
     }
-  | { kind: "row_toggled"; side: Side; item: string; enabled: boolean }
-  | { kind: "row_other"; side: Side; item: string }
+  | { kind: "order_toggled"; side: Side; item: string; on: boolean }
+  | { kind: "order_other"; side: Side; item: string }
+  | { kind: "authority"; from: string; to: string }
   | { kind: "limit"; field: keyof PlusLimits; from: number | null; to: number | null }
+  | { kind: "fineTune" }
   | { kind: "persona" }
   | { kind: "replies" }
   | { kind: "schedule" }
@@ -481,49 +448,57 @@ export type ConfigChange =
   | { kind: "blocked" }
   | { kind: "other" };
 
-type AnyRow = PlusBuyRow | PlusSellRow;
+const sideOf = (order: PlusOrder): Side => (order.side === "sell" ? "sell" : "buy");
 
-function diffRows(
-  side: Side,
-  before: readonly AnyRow[],
-  after: readonly AnyRow[],
+function diffOrders(
+  before: readonly PlusOrder[],
+  after: readonly PlusOrder[],
   out: ConfigChange[],
 ) {
-  const old = new Map(before.map((row) => [row.id, row]));
-  const next = new Map(after.map((row) => [row.id, row]));
-  for (const row of after) {
-    const was = old.get(row.id);
+  const old = new Map(before.map((order) => [order.id, order]));
+  const next = new Map(after.map((order) => [order.id, order]));
+  for (const order of after) {
+    const side = sideOf(order);
+    const was = old.get(order.id);
     if (!was) {
-      out.push({ kind: "row_added", side, item: row.item });
+      out.push({ kind: "order_added", side, item: order.item });
       continue;
     }
     let told = false;
-    for (const field of ["target", "max", "min", "qty", "dailyQty"] as const) {
-      const from = (was as unknown as Record<string, unknown>)[field];
-      const to = (row as unknown as Record<string, unknown>)[field];
-      if (typeof from === "number" && typeof to === "number" && from !== to) {
-        out.push({ kind: "row_amount", side, item: row.item, field, from, to });
+    for (const field of ["target", "limit", "qty"] as const) {
+      if (was[field] !== order[field]) {
+        out.push({
+          kind: "order_amount",
+          side,
+          item: order.item,
+          field,
+          from: was[field],
+          to: order[field],
+        });
         told = true;
       }
     }
-    if (was.enabled !== row.enabled) {
-      out.push({ kind: "row_toggled", side, item: row.item, enabled: row.enabled });
+    if (was.on !== order.on) {
+      out.push({ kind: "order_toggled", side, item: order.item, on: order.on });
       told = true;
     }
-    if (!told && JSON.stringify(was) !== JSON.stringify(row)) {
-      out.push({ kind: "row_other", side, item: row.item });
+    if (!told && JSON.stringify(was) !== JSON.stringify(order)) {
+      out.push({ kind: "order_other", side, item: order.item });
     }
   }
-  for (const row of before) {
-    if (!next.has(row.id)) out.push({ kind: "row_removed", side, item: row.item });
+  for (const order of before) {
+    if (!next.has(order.id))
+      out.push({ kind: "order_removed", side: sideOf(order), item: order.item });
   }
 }
 
 /** What a saved version changed against the one before it, most telling first. */
 export function configChanges(before: PlusConfig, after: PlusConfig): ConfigChange[] {
   const out: ConfigChange[] = [];
-  diffRows("buy", before.buy, after.buy, out);
-  diffRows("sell", before.sell, after.sell, out);
+  diffOrders(before.orders, after.orders, out);
+  if (before.authority !== after.authority) {
+    out.push({ kind: "authority", from: before.authority, to: after.authority });
+  }
   for (const field of Object.keys(after.limits) as Array<keyof PlusLimits>) {
     if (before.limits[field] !== after.limits[field]) {
       out.push({
@@ -535,6 +510,8 @@ export function configChanges(before: PlusConfig, after: PlusConfig): ConfigChan
     }
   }
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  if (!same(before.allow, after.allow) || before.pay !== after.pay || !same(before.who, after.who))
+    out.push({ kind: "fineTune" });
   if (!same(before.persona, after.persona) || before.lang !== after.lang)
     out.push({ kind: "persona" });
   if (!same(before.replies, after.replies)) out.push({ kind: "replies" });
@@ -546,6 +523,7 @@ export function configChanges(before: PlusConfig, after: PlusConfig): ConfigChan
     !out.length &&
     (before.summaryAt !== after.summaryAt ||
       !same(before.trade, after.trade) ||
+      !same(before.customItems, after.customItems) ||
       before.enabled !== after.enabled ||
       before.mode !== after.mode)
   ) {
@@ -649,6 +627,8 @@ export function aiState(ai: PlusAi | null | undefined): AiState {
 /** What trading can do now, when it is not everything (the bot in the lobby, no spending limit). */
 export function tradeNoteKey(ai: PlusAi | null | undefined): string | null {
   if (ai?.state !== "on") return null;
+  // A server without a trade profile: it chats and agrees, the player makes the trades.
+  if (ai.trade.by === "owner") return "tradeOwner";
   if (!ai.trade.on) return ai.trade.off === "profile" ? "tradeProfile" : "tradeLobby";
   if (ai.trade.buy === "notify") return "notifyOnly";
   return null;

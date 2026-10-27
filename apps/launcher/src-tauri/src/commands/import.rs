@@ -24,9 +24,10 @@ const RESERVE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// The Projects instance's name (`commands::official`).
 const PROJECTS_NAME: &str = "Projects";
 
-/// Where the other launchers are looked for. Debug builds take `PROJECTS_IMPORT_HOME` as a
-/// pretend home folder, so end-to-end runs never read a real launcher's folders.
-fn locations() -> Locations {
+/// Where the other launchers are looked for, the v1 Projects Launcher too (`commands::migrate`).
+/// Debug builds take `PROJECTS_IMPORT_HOME` as a pretend home folder, so end-to-end runs never
+/// read a real launcher's folders.
+pub(crate) fn locations() -> Locations {
     #[cfg(debug_assertions)]
     if let Some(home) = std::env::var_os("PROJECTS_IMPORT_HOME").filter(|h| !h.is_empty()) {
         return Locations::under(std::path::Path::new(&home), pl_import::Os::current());

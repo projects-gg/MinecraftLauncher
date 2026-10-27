@@ -7,10 +7,12 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::copies::{RowCopies, RowCopy};
+use crate::feat::{CloudInventorySetting, PlaceholderRow, PlaceholderRules, placeholder_problem};
 use crate::model::{
     CloudAntiAfk, CloudConfigView, CloudEvery, CloudLimits, CloudPayloadView, CloudServer,
     CommandInput, ConfigInput, PayloadInput, RuleInput, VaultKey,
 };
+use crate::movement::CloudMovementSetting;
 use crate::seal::{SealError, SealTarget, fingerprint, seal};
 use crate::text::{check_text, looks_sensitive, preview};
 
@@ -78,13 +80,19 @@ pub struct CloudEditConfig {
     pub anti_afk: CloudAntiAfk,
     pub commands: Vec<CloudEditCommand>,
     pub rules: Vec<CloudEditRule>,
+    /// The inventory view (CAFK-FEAT): the player's choice; None: never chosen (Studio's default
+    /// applies), and then nothing about it is sent.
+    pub inventory: Option<bool>,
+    /// Movement (README "Movement"): the player's switch; None: nothing stored, and then nothing
+    /// about it is sent. A change restarts a running client.
+    pub movement: Option<bool>,
 }
 
 /// Where a problem is and what it is. `place` is `general`, `commands` or `rules`; `index` the
 /// row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
 /// `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
 /// (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
-/// `owner`, `server`).
+/// `owner`, `server`; for `movement`: `off`, `player`, `host`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudIssue {
@@ -92,6 +100,10 @@ pub struct CloudIssue {
     pub index: Option<u32>,
     pub field: String,
     pub problem: String,
+    /// The number a refusal names, where the words need it (`limit_movement`'s `max`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub max: Option<u32>,
 }
 
 impl CloudIssue {
@@ -101,6 +113,7 @@ impl CloudIssue {
             index: None,
             field: field.into(),
             problem: problem.into(),
+            max: None,
         }
     }
 
@@ -110,6 +123,7 @@ impl CloudIssue {
             index: Some(index as u32),
             field: field.into(),
             problem: problem.into(),
+            max: None,
         }
     }
 
@@ -132,6 +146,7 @@ impl CloudIssue {
                 index: Some(index),
                 field: field.into(),
                 problem: problem.into(),
+                max: None,
             };
         }
         match head {
@@ -140,6 +155,7 @@ impl CloudIssue {
                 index: None,
                 field: "count".into(),
                 problem: problem.into(),
+                max: None,
             },
             _ => Self::general(head.split(['.', '[']).next().unwrap_or(head), problem),
         }
@@ -195,6 +211,8 @@ pub fn edit_config(view: &CloudConfigView, copies: &RowCopies) -> CloudEditConfi
                 reply: words(&rule.id, &rule.reply),
             })
             .collect(),
+        inventory: view.inventory.map(|setting| setting.enabled),
+        movement: view.movement.map(|setting| setting.enabled),
     }
 }
 
@@ -232,8 +250,59 @@ fn check_words(
 }
 
 /// Everything the service would refuse, found before anything is sent (Studio's numbers from
-/// `/offer`).
+/// `/offer`), with placeholders off.
 pub fn validate(config: &CloudEditConfig, limits: &CloudLimits) -> Vec<CloudIssue> {
+    validate_with(config, limits, &PlaceholderRules::off())
+}
+
+/// The placeholder checks of a plain row (CAFK-FEAT "Rule placeholders"), only while Studio has them
+/// on. A row the launcher seals (a secret, a password command) is never read; neither is a reply
+/// whose words or pattern have a problem of their own already.
+fn check_placeholders(
+    config: &CloudEditConfig,
+    rules: &PlaceholderRules,
+    issues: &mut Vec<CloudIssue>,
+) {
+    let plain = |words: &CloudRowText| match words {
+        CloudRowText::Plain { text } if !looks_sensitive(text) && check_text(text).is_ok() => {
+            Some(text.clone())
+        }
+        _ => None,
+    };
+    for (index, row) in config.commands.iter().enumerate() {
+        if let Some(text) = plain(&row.words)
+            && let Some(problem) =
+                placeholder_problem(PlaceholderRow::Command(&text), &rules.commands)
+        {
+            issues.push(CloudIssue::row("commands", index, "text", problem.reason));
+        }
+    }
+    for (index, rule) in config.rules.iter().enumerate() {
+        let pattern = rule.pattern.trim();
+        if pattern.is_empty() || pl_afk::check_pattern(pattern, rule.regex).is_some() {
+            continue;
+        }
+        let Some(text) = plain(&rule.reply) else {
+            continue;
+        };
+        let row = PlaceholderRow::Reply {
+            text: &text,
+            pattern,
+            regex: rule.regex,
+            from: &rule.from,
+        };
+        if let Some(problem) = placeholder_problem(row, &rules.commands) {
+            issues.push(CloudIssue::row("rules", index, "reply", problem.reason));
+        }
+    }
+}
+
+/// [`validate`], with the placeholder checks while Studio has them on.
+pub fn validate_with(
+    config: &CloudEditConfig,
+    limits: &CloudLimits,
+    placeholders: &PlaceholderRules,
+) -> Vec<CloudIssue> {
     let mut issues = Vec::new();
     if !config.owner.is_empty() && !pl_afk::is_valid_nickname(&config.owner) {
         issues.push(CloudIssue::general("owner", "format"));
@@ -252,6 +321,7 @@ pub fn validate(config: &CloudEditConfig, limits: &CloudLimits) -> Vec<CloudIssu
             index: None,
             field: "count".into(),
             problem: "limit".into(),
+            max: None,
         });
     }
     let max_rules = (limits.max_rules as usize).min(HARD_MAX_ROWS);
@@ -261,6 +331,7 @@ pub fn validate(config: &CloudEditConfig, limits: &CloudLimits) -> Vec<CloudIssu
             index: None,
             field: "count".into(),
             problem: "limit".into(),
+            max: None,
         });
     }
     let mut ids = HashSet::new();
@@ -332,6 +403,9 @@ pub fn validate(config: &CloudEditConfig, limits: &CloudLimits) -> Vec<CloudIssu
         }
         check_words(&rule.reply, "rules", index, "reply", &mut issues);
     }
+    if placeholders.on {
+        check_placeholders(config, placeholders, &mut issues);
+    }
     issues
 }
 
@@ -372,11 +446,12 @@ pub enum BuildError {
 pub fn build(
     config: &CloudEditConfig,
     limits: &CloudLimits,
+    placeholders: &PlaceholderRules,
     ctx: &SealContext<'_>,
     copies: &RowCopies,
     fps: &std::collections::HashMap<String, String>,
 ) -> Result<Built, BuildError> {
-    let mut issues = validate(config, limits);
+    let mut issues = validate_with(config, limits, placeholders);
     if ctx.server_changed {
         for (index, row) in config.commands.iter().enumerate() {
             if matches!(row.words, CloudRowText::Sealed { .. }) {
@@ -472,6 +547,12 @@ pub fn build(
             anti_afk: config.anti_afk.clone(),
             commands,
             rules,
+            inventory: config
+                .inventory
+                .map(|enabled| CloudInventorySetting { enabled }),
+            movement: config
+                .movement
+                .map(|enabled| CloudMovementSetting { enabled }),
         },
         sealed,
         kept,
@@ -547,6 +628,8 @@ mod tests {
             },
             commands,
             rules,
+            inventory: None,
+            movement: None,
         }
     }
 
@@ -658,8 +741,134 @@ mod tests {
                 place: "commands".into(),
                 index: None,
                 field: "count".into(),
-                problem: "limit".into()
+                problem: "limit".into(),
+                max: None,
             }]
+        );
+    }
+
+    #[test]
+    fn placeholders_are_checked_only_while_studio_has_them_on() {
+        let on = PlaceholderRules {
+            on: true,
+            commands: vec!["msg".into()],
+        };
+        let edit = config(
+            vec![command("c1", "join", plain("/msg {u} selam"))],
+            vec![
+                CloudEditRule {
+                    pattern: r"^!davet (\w+)$".into(),
+                    regex: true,
+                    ..rule("r1", plain("/msg {u} {1} eklendi."))
+                },
+                rule("r2", plain("Selam {2}")),
+                CloudEditRule {
+                    from: "server".into(),
+                    ..rule("r3", plain("{u} tamam"))
+                },
+                rule("r4", plain("/pay {u} 5")),
+                rule("r5", secret("/msg {u} {9}")),
+                CloudEditRule {
+                    pattern: "(a+)+$".into(),
+                    regex: true,
+                    ..rule("r6", plain("{1}"))
+                },
+            ],
+        );
+        let issues = validate_with(&edit, &limits(), &on);
+        let found: Vec<(&str, Option<u32>, &str)> = issues
+            .iter()
+            .filter(|i| i.problem.starts_with("placeholder"))
+            .map(|i| (i.place.as_str(), i.index, i.problem.as_str()))
+            .collect();
+        assert_eq!(
+            found,
+            vec![
+                ("commands", Some(0), "placeholder_row"),
+                ("rules", Some(1), "placeholder_part"),
+                ("rules", Some(2), "placeholder_sender"),
+                ("rules", Some(3), "placeholder_command"),
+            ],
+            "a secret reply and a refused pattern's reply are not read"
+        );
+        // Off: braces are plain text, as before.
+        assert!(
+            validate(&edit, &limits())
+                .iter()
+                .all(|i| !i.problem.starts_with("placeholder"))
+        );
+    }
+
+    #[test]
+    fn the_inventory_and_movement_choices_go_only_when_there_is_one() {
+        let server = CloudServer::new("play.projects.gg", 0);
+        let key = test_key();
+        let ctx = SealContext {
+            key: &key,
+            discord_id: "1",
+            account_id: "a_1",
+            server: &server,
+            server_changed: false,
+        };
+        let mut edit = config(vec![], vec![]);
+        let off = PlaceholderRules::off();
+        let built = build(
+            &edit,
+            &limits(),
+            &off,
+            &ctx,
+            &RowCopies::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(built.config.inventory, None);
+        edit.inventory = Some(true);
+        let built = build(
+            &edit,
+            &limits(),
+            &off,
+            &ctx,
+            &RowCopies::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            built.config.inventory,
+            Some(CloudInventorySetting { enabled: true })
+        );
+        let view = CloudConfigView {
+            inventory: Some(CloudInventorySetting { enabled: false }),
+            ..CloudConfigView::default()
+        };
+        assert_eq!(edit_config(&view, &RowCopies::new()).inventory, Some(false));
+        assert_eq!(
+            edit_config(&CloudConfigView::default(), &RowCopies::new()).inventory,
+            None
+        );
+        // Movement the same way: only a stored or chosen switch goes out.
+        assert_eq!(built.config.movement, None);
+        edit.movement = Some(true);
+        let built = build(
+            &edit,
+            &limits(),
+            &off,
+            &ctx,
+            &RowCopies::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            built.config.movement,
+            Some(CloudMovementSetting { enabled: true })
+        );
+        let view = CloudConfigView {
+            movement: Some(CloudMovementSetting { enabled: false }),
+            ..CloudConfigView::default()
+        };
+        assert_eq!(edit_config(&view, &RowCopies::new()).movement, Some(false));
+        assert_eq!(
+            edit_config(&CloudConfigView::default(), &RowCopies::new()).movement,
+            None
         );
     }
 
@@ -682,7 +891,15 @@ mod tests {
             ],
             vec![rule("r1", plain("Şu an AFK'yım"))],
         );
-        let built = build(&edit, &limits(), &ctx, &RowCopies::new(), &HashMap::new()).unwrap();
+        let built = build(
+            &edit,
+            &limits(),
+            &PlaceholderRules::off(),
+            &ctx,
+            &RowCopies::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
         let c1 = &built.config.commands[0].payload;
         assert!(c1.secret && c1.sealed.as_deref().unwrap().starts_with("pl1.k1."));
         assert_eq!(c1.preview.as_deref(), Some("/login ******"));
@@ -747,14 +964,30 @@ mod tests {
             ],
             vec![],
         );
-        let built = build(&edit, &limits(), &ctx, &copies, &fps).unwrap();
+        let built = build(
+            &edit,
+            &limits(),
+            &PlaceholderRules::off(),
+            &ctx,
+            &copies,
+            &fps,
+        )
+        .unwrap();
         assert_eq!(built.config.commands[0].payload, PayloadInput::keep());
         assert_eq!(built.config.commands[1].payload, PayloadInput::keep());
         assert!(built.sealed.is_empty());
         assert_eq!(built.kept, vec!["c1".to_owned(), "c2".to_owned()]);
         // Changed words are sealed again.
         let edit = config(vec![command("c1", "join", secret("/login yeni"))], vec![]);
-        let built = build(&edit, &limits(), &ctx, &copies, &fps).unwrap();
+        let built = build(
+            &edit,
+            &limits(),
+            &PlaceholderRules::off(),
+            &ctx,
+            &copies,
+            &fps,
+        )
+        .unwrap();
         assert!(built.config.commands[0].payload.sealed.is_some());
     }
 
@@ -782,7 +1015,15 @@ mod tests {
             vec![command("c1", "join", secret("/login hunter2"))],
             vec![],
         );
-        let built = build(&edit, &limits(), &ctx, &copies, &fps).unwrap();
+        let built = build(
+            &edit,
+            &limits(),
+            &PlaceholderRules::off(),
+            &ctx,
+            &copies,
+            &fps,
+        )
+        .unwrap();
         assert!(
             built.config.commands[0].payload.sealed.is_some(),
             "sealed for the new server"
@@ -796,14 +1037,22 @@ mod tests {
                 },
             )],
         );
-        match build(&edit, &limits(), &ctx, &copies, &fps) {
+        match build(
+            &edit,
+            &limits(),
+            &PlaceholderRules::off(),
+            &ctx,
+            &copies,
+            &fps,
+        ) {
             Err(BuildError::Invalid(issues)) => assert_eq!(
                 issues,
                 vec![CloudIssue {
                     place: "rules".into(),
                     index: Some(0),
                     field: "reply".into(),
-                    problem: "reseal".into()
+                    problem: "reseal".into(),
+                    max: None,
                 }]
             ),
             other => panic!("expected reseal, got {other:?}"),
@@ -847,6 +1096,8 @@ mod tests {
                 },
                 ..CloudRuleView::default()
             }],
+            inventory: None,
+            movement: None,
         };
         let mut copies = RowCopies::new();
         for id in ["c1", "c2"] {
@@ -885,7 +1136,8 @@ mod tests {
                 place: "commands".into(),
                 index: Some(2),
                 field: "every".into(),
-                problem: "range".into()
+                problem: "range".into(),
+                max: None,
             }
         );
         assert_eq!(

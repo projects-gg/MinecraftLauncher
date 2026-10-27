@@ -4,7 +4,7 @@ import type { TFunction } from "i18next";
 import type { AfkNotice } from "@/lib/api/social-types";
 import { atPhrase } from "./time";
 import type { PlusSection } from "./use-plus";
-import { formatAmount, type Lang, qtyItem } from "./words";
+import { dealText, formatAmount, goodsText, type Lang } from "./words";
 
 /** Where a notice's "Aç" (or a click on its Windows notification) leads. */
 export type Target = { panel: PlusSection } | { page: true };
@@ -15,12 +15,17 @@ export interface NoticeWords {
   target: Target;
 }
 
-/** The item's name: the catalog's when the launcher knew it, else its id made readable. */
+/**
+ * The item's name: the item data's (or the account's own for a custom item) when the launcher knew
+ * it, else its id made readable; a custom item whose name was not read yet is "Özel eşya" (never
+ * its key), as on the in-game card.
+ */
 function itemOf(notice: AfkNotice, lang: Lang): string | null {
   const named = notice.itemName ? (lang === "en" ? notice.itemName.en : notice.itemName.tr) : "";
   if (named.trim()) return named.trim();
   const id = notice.data.item;
   if (!id) return null;
+  if (id.startsWith("custom:")) return lang === "en" ? "Custom item" : "Özel eşya";
   const words = (id.split(":").pop() ?? id).replace(/_/g, " ").trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : null;
 }
@@ -28,13 +33,21 @@ function itemOf(notice: AfkNotice, lang: Lang): string | null {
 const whole = (text: string | undefined): number | null =>
   text !== undefined && /^\d+$/.test(text.trim()) ? Number(text.trim()) : null;
 
-/** "1 Elytra, 37.500" / "1 × Elytra, 37,500": what a deal or an approval is about. */
+/**
+ * "1 Elytra = 37.500" / "Elytra = 37,500": what a deal or an approval is about, in the deal's
+ * notation. A deal paid with an item (`pay` not `money`: `price` counts that item) says only what
+ * changes hands.
+ */
 function dealOf(notice: AfkNotice, lang: Lang): string | null {
   const item = itemOf(notice, lang);
   if (!item) return null;
-  const what = qtyItem(notice.data.qty?.trim() || "1", item, lang);
+  const qty = notice.data.qty?.trim() || "1";
+  const pay = notice.data.pay?.trim();
+  if (pay && pay !== "money") return goodsText(qty, item, lang);
   const price = whole(notice.data.price);
-  return price === null ? what : `${what}, ${formatAmount(price, lang)}`;
+  return price === null
+    ? goodsText(qty, item, lang)
+    : dealText(qty, item, formatAmount(price, lang), lang);
 }
 
 /**
@@ -55,6 +68,14 @@ export function noticeWords(notice: AfkNotice, t: TFunction, lang: Lang): Notice
   const data = notice.data;
   switch (notice.event) {
     case "approval": {
+      // An order's handoff and first sight wait in its row (never the counterpart's name).
+      if (data.approvalKind === "handoff") {
+        return at(t("afkPlus.notices.handoff"), { panel: "orders" });
+      }
+      if (data.approvalKind === "confirm_item") {
+        const item = itemOf(notice, lang);
+        return at(item && t("afkPlus.notices.confirmItem", { item }), { panel: "orders" });
+      }
       const deal = dealOf(notice, lang);
       return at(deal && t("afkPlus.notices.approval", { deal }), { panel: "feed" });
     }
