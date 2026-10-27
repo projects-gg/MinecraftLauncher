@@ -248,7 +248,7 @@ mod tests {
     fn scenarios() {
         let file = testdata::json("manifest/match.json");
         let scenarios = file["scenarios"].as_array().unwrap();
-        assert_eq!(scenarios.len(), 11);
+        assert_eq!(scenarios.len(), 12);
         for scenario in scenarios {
             let case = scenario["case"].as_str().unwrap();
             let host: Manifest = serde_json::from_value(scenario["host"].clone()).unwrap();

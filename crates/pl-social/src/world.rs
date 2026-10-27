@@ -8,7 +8,7 @@
 //!   answers go through [`crate::SocialService::world_request`] (an `ack`: [`WorldAnswer`], or an
 //!   `error`: [`WorldError`]); the others through [`crate::SocialService::world_send`].
 //! - [`WorldEvent`]: service → client, plus the connection's own moments (the service took
-//!   `worlds` or not, Studio's switch, the socket dropped). The launcher's host hears them all
+//!   `worlds2` or not, Studio's switch, the socket dropped). The launcher's host hears them all
 //!   ([`crate::SocialService::on_world`]).
 //!
 //! Secrets: an invite's `join` (its PSK), TURN usernames and credentials, relay addresses and
@@ -22,8 +22,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 /// The presence capability of world sessions: asked for while the signed config's
-/// `features.worlds` is on, named in `hello.caps` when the service took it.
-pub const WORLDS_CAP: &str = "worlds";
+/// `features.worlds` is on, named in `hello.caps` when the service took it. Not `worlds`: launchers
+/// before HOST1-E asked for that and crashed on "Katıl", so the service never gives it any more.
+pub const WORLDS_CAP: &str = "worlds2";
 
 /// Adds [`WORLDS_CAP`] to a presence address's `caps` query.
 pub(crate) fn ask_for_worlds(url: &mut url::Url) {
@@ -405,7 +406,7 @@ pub struct WorldInvite {
 /// What the presence socket says about world sessions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorldEvent {
-    /// After every connect: whether the service took `worlds` on it, and Studio's switch.
+    /// After every connect: whether the service took `worlds2` on it, and Studio's switch.
     Hello { taken: bool, status: WorldsStatus },
     /// Studio's switch or the guest limit changed (`world_state`).
     Status(WorldsStatus),
@@ -456,7 +457,7 @@ pub type WorldSink = Arc<dyn Fn(WorldEvent) + Send + Sync>;
 #[derive(Default)]
 pub(crate) struct WorldsHub {
     sink: Mutex<Option<WorldSink>>,
-    /// The current connection took `worlds`, with Studio's switch (None: not taken, or no
+    /// The current connection took `worlds2`, with Studio's switch (None: not taken, or no
     /// connection).
     status: Mutex<Option<WorldsStatus>>,
 }
@@ -672,12 +673,14 @@ mod tests {
     fn worlds_join_the_capabilities_once() {
         let mut url = url::Url::parse("wss://x.test/v1/presence?caps=callServer,crews").unwrap();
         ask_for_worlds(&mut url);
-        assert_eq!(url.query(), Some("caps=callServer,crews,worlds"));
+        assert_eq!(url.query(), Some("caps=callServer,crews,worlds2"));
         ask_for_worlds(&mut url);
-        assert_eq!(url.query(), Some("caps=callServer,crews,worlds"));
+        assert_eq!(url.query(), Some("caps=callServer,crews,worlds2"));
         let mut bare = url::Url::parse("wss://x.test/v1/presence").unwrap();
         ask_for_worlds(&mut bare);
-        assert_eq!(bare.query(), Some("caps=worlds"));
+        assert_eq!(bare.query(), Some("caps=worlds2"));
+        // The name launchers before HOST1-E asked for is never asked for again.
+        assert_ne!(WORLDS_CAP, "worlds");
     }
 
     #[test]

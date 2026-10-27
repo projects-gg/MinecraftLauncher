@@ -45,6 +45,13 @@ impl Resolver {
         Self(Arc::new(resolve))
     }
 
+    /// Every name resolves to `ip` (a local test rig's relays all live on one machine). Debug
+    /// builds only (HOST1-E's rig, `pl_worlds::rig`).
+    #[cfg(debug_assertions)]
+    pub fn fixed(ip: IpAddr) -> Self {
+        Self::custom(move |_, port| Box::pin(async move { Ok(vec![SocketAddr::new(ip, port)]) }))
+    }
+
     /// The addresses for `host`, IPv4 first (the relays hand out IPv4 addresses). An IP literal is
     /// its own answer.
     pub(crate) async fn resolve(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
@@ -80,6 +87,19 @@ pub enum Trust {
     Platform,
     /// Only these roots (tests with local relays).
     Roots(Vec<CertificateDer<'static>>),
+}
+
+impl Trust {
+    /// Only the certificates of this PEM text (a local test rig's own CA); `None` when it holds
+    /// none. Debug builds only (HOST1-E's rig, `pl_worlds::rig`).
+    #[cfg(debug_assertions)]
+    pub fn from_pem(pem: &[u8]) -> Option<Self> {
+        use rustls::pki_types::pem::PemObject;
+        let roots: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(pem)
+            .filter_map(Result::ok)
+            .collect();
+        (!roots.is_empty()).then_some(Self::Roots(roots))
+    }
 }
 
 impl fmt::Debug for Trust {
@@ -236,6 +256,48 @@ mod tests {
         });
         let addresses = resolver.resolve("relay.example", 9).await.unwrap();
         assert!(addresses[0].is_ipv4());
+    }
+
+    #[cfg(debug_assertions)]
+    #[tokio::test]
+    async fn a_fixed_resolver_sends_every_name_to_one_address() {
+        let resolver = Resolver::fixed(IpAddr::from([127, 0, 0, 1]));
+        let addresses = resolver.resolve("eu.e4mc.link", 25575).await.unwrap();
+        assert_eq!(addresses, vec![SocketAddr::from(([127, 0, 0, 1], 25575))]);
+        let addresses = resolver.resolve("10.0.0.7", 3478).await.unwrap();
+        assert_eq!(addresses, vec![SocketAddr::from(([10, 0, 0, 7], 3478))]);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn trust_from_pem_takes_the_certificates_and_nothing_else() {
+        use base64::Engine;
+        let pem_of = |der: &[u8]| {
+            let body = base64::engine::general_purpose::STANDARD.encode(der);
+            let lines: Vec<&str> = body
+                .as_bytes()
+                .chunks(64)
+                .map(|line| std::str::from_utf8(line).unwrap())
+                .collect();
+            format!(
+                "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n",
+                lines.join("\n")
+            )
+        };
+        let first = rcgen::generate_simple_self_signed(vec!["a.test".into()]).unwrap();
+        let second = rcgen::generate_simple_self_signed(vec!["b.test".into()]).unwrap();
+        let text = format!(
+            "{}-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n{}",
+            pem_of(first.cert.der()),
+            pem_of(second.cert.der())
+        );
+        let Some(Trust::Roots(roots)) = Trust::from_pem(text.as_bytes()) else {
+            panic!("two certificates");
+        };
+        assert_eq!(roots.len(), 2);
+        assert_eq!(&roots[0][..], &first.cert.der()[..]);
+        assert!(client_tls(&Trust::Roots(roots), true).is_ok());
+        assert!(Trust::from_pem(b"no certificate here").is_none());
     }
 
     #[test]

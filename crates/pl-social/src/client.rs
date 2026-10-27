@@ -1030,7 +1030,7 @@ impl Session {
     }
 
     /// The presence connection with chat when `chat` is given (CHAT1) and world sessions when
-    /// `worlds` (HOST1: `worlds` in the capabilities; its frames flow once the service took it).
+    /// `worlds` (HOST1: `worlds2` in the capabilities; its frames flow once the service took it).
     pub fn connect_presence_with(
         &self,
         options: PresenceOptions,

@@ -268,6 +268,13 @@ impl Harness {
     }
 
     fn with(adjust: impl FnOnce(&mut FakeLauncher)) -> Self {
+        Self::configured(adjust, |_| {})
+    }
+
+    fn configured(
+        adjust: impl FnOnce(&mut FakeLauncher),
+        configure: impl FnOnce(&mut WorldsConfig),
+    ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let service = Arc::new(FakeService::default());
         let bridge = Arc::new(FakeBridge::default());
@@ -276,13 +283,15 @@ impl Harness {
         adjust(&mut launcher);
         let ui = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&ui);
+        let mut config = WorldsConfig::new("2.1.0-test", dir.path().to_path_buf());
+        configure(&mut config);
         let worlds = Worlds::new(
             service.clone(),
             bridge.clone(),
             Arc::new(launcher),
             together.clone(),
             Arc::new(move |event| sink.lock().unwrap().push(event)),
-            WorldsConfig::new("2.1.0-test", dir.path().to_path_buf()),
+            config,
         );
         Self {
             worlds,
@@ -853,6 +862,44 @@ async fn a_mismatch_line_right_after_the_connection_ended_still_counts() {
         .game_log("Received unknown remote registry entries from server");
     assert!(h.worlds.view().invites[0].join.is_none());
     assert_eq!(mods_failures(&h), 1);
+}
+
+/// "Katıl" (and "Vazgeç") come from the launcher's synchronous commands, on its main thread outside
+/// any Tokio runtime: the join runs on the launcher's runtime instead of panicking there (HOST1-E:
+/// the launcher crashed on its first "Katıl").
+#[tokio::test]
+async fn katil_from_a_thread_outside_any_runtime_runs_on_the_launchers_runtime() {
+    let h = Harness::configured(
+        |_| {},
+        |config| {
+            config.runtime = Some(tokio::runtime::Handle::current());
+            // No relay is ever reached: no name resolves.
+            let nowhere = pl_host::transport::net::Resolver::custom(|_, _| {
+                Box::pin(async { Err(std::io::ErrorKind::NotFound.into()) })
+            });
+            config.transports.e4mc.resolver = nowhere.clone();
+            config.transports.turn.resolver = nowhere;
+        },
+    )
+    .switched_on();
+    h.worlds.on_friends(friends(true), false);
+    h.worlds.on_service(WorldEvent::Invite {
+        invite: invite("f-ayse"),
+        quiet: false,
+    });
+    let worlds = h.worlds.clone();
+    std::thread::spawn(move || worlds.join(SESSION, None))
+        .join()
+        .expect("Katıl from the main thread must not panic");
+    // The join ran on the runtime: the service's empty order is no way in.
+    eventually("the join ended as unreachable", || {
+        h.worlds.view().invites[0].join
+            == Some(WorldJoinStage::Failed {
+                failure: WorldJoinFailure::Unreachable,
+            })
+    })
+    .await;
+    assert!(h.service.kinds().contains(&"turn_creds"));
 }
 
 #[tokio::test]
