@@ -192,6 +192,7 @@ function Editor({
           draft.config.antiAfk,
           draft.config.owner,
           draft.config.inventory,
+          draft.config.movement,
         ]) !==
         JSON.stringify([
           baseline.name,
@@ -202,6 +203,7 @@ function Editor({
           baseline.config.antiAfk,
           baseline.config.owner,
           baseline.config.inventory,
+          baseline.config.movement,
         ])
       : p === "commands"
         ? JSON.stringify(draft.config.commands) !== JSON.stringify(baseline.config.commands)

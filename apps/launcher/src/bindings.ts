@@ -440,6 +440,24 @@ export const commands = {
 	retryAfter?: number | null,
 } | null>("cloud_afk_inv_op", { id, opId, op }),
 	/**
+	 *  The movement panel is on screen: the account's movement state and position stream as
+	 *  `cloud-afk-live` events (`movementState`, `pos`).
+	 */
+	cloudAfkMovementWatch: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_movement_watch", { id })),
+	/**  The movement panel left the screen (closed, another tab, the window hidden). */
+	cloudAfkMovementUnwatch: (id: string) => __TAURI_INVOKE<void>("cloud_afk_movement_unwatch", { id }),
+	/**
+	 *  A movement operation (`op`: the panel's `MoveOp` as JSON, `opId` its own id). Null: sent, its
+	 *  answer comes as a `movementResult` event; else why it could not go out (its shape, or
+	 *  `host_offline`).
+	 */
+	cloudAfkMovementOp: (id: string, opId: string, op: string) => __TAURI_INVOKE<{
+	code?: string,
+	reason?: string | null,
+	field?: string | null,
+	retryAfter?: number | null,
+} | null>("cloud_afk_movement_op", { id, opId, op }),
+	/**
 	 *  The inventory view on or off for this account ("Aç"; the settings' switch saves with the rest).
 	 *  It applies at the client's next start.
 	 */
@@ -2336,6 +2354,11 @@ export type CloudAccountFeatures = {
 	 *  old way until its settings are saved once.
 	 */
 	legacyRules?: boolean,
+	/**
+	 *  Movement (README "Movement"); None from a service before it: nothing of it shows and the
+	 *  account's `config.movement` is never sent.
+	 */
+	movement?: CloudMovementFeature | null,
 };
 
 /**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
@@ -2462,6 +2485,13 @@ export type CloudBars = {
 	boss?: CloudBossBar[],
 };
 
+/**  A block's coordinates. */
+export type CloudBlock = {
+	x: number,
+	y: number,
+	z: number,
+};
+
 /**  A boss bar: `id` the machine's own (`b1`), `progress` 0–1, `color` the game's name of it. */
 export type CloudBossBar = {
 	id?: string,
@@ -2506,6 +2536,8 @@ export type CloudConfigView = {
 	rules: CloudRuleView[],
 	/**  The player's own inventory choice; None: never chosen (Studio's default applies). */
 	inventory: CloudInventorySetting | null,
+	/**  The player's movement switch, only when stored (absent: off). */
+	movement: CloudMovementSetting | null,
 };
 
 /**  A console download written to the Downloads folder. */
@@ -2643,6 +2675,11 @@ export type CloudEditConfig = {
 	 *  applies), and then nothing about it is sent.
 	 */
 	inventory: boolean | null,
+	/**
+	 *  Movement (README "Movement"): the player's switch; None: nothing stored, and then nothing
+	 *  about it is sent. A change restarts a running client.
+	 */
+	movement: boolean | null,
 };
 
 /**  An auto-reply rule: `from` is `any`, `player`, `private` or `server`. */
@@ -2861,13 +2898,40 @@ export type CloudInventorySetting = {
  *  row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
  *  `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
  *  (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
- *  `owner`, `server`).
+ *  `owner`, `server`; for `movement`: `off`, `player`, `host`).
  */
-export type CloudIssue = {
+export type CloudIssue = CloudIssue_Serialize | CloudIssue_Deserialize;
+
+/**
+ *  Where a problem is and what it is. `place` is `general`, `commands` or `rules`; `index` the
+ *  row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
+ *  `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
+ *  (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
+ *  `owner`, `server`; for `movement`: `off`, `player`, `host`).
+ */
+export type CloudIssue_Deserialize = {
 	place: string,
 	index: number | null,
 	field: string,
 	problem: string,
+	/**  The number a refusal names, where the words need it (`limit_movement`'s `max`). */
+	max?: number | null,
+};
+
+/**
+ *  Where a problem is and what it is. `place` is `general`, `commands` or `rules`; `index` the
+ *  row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
+ *  `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
+ *  (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
+ *  `owner`, `server`; for `movement`: `off`, `player`, `host`).
+ */
+export type CloudIssue_Serialize = {
+	place: string,
+	index: number | null,
+	field: string,
+	problem: string,
+	/**  The number a refusal names, where the words need it (`limit_movement`'s `max`). */
+	max?: number | null,
 };
 
 /**  The Studio numbers the launcher's editor checks against before the service does. */
@@ -3084,6 +3148,76 @@ export type CloudMoveResult_Serialize = {
 };
 
 /**
+ *  Why an operation was refused (`movres.error`): `invalid` (`reason`, `field`), `movement_off`
+ *  (`reason`), `not_running`, `busy_trade`, `too_far`, `not_allowed`, `not_visible`, `blocked`,
+ *  `loop` and `rate_limited` (`retryAfter` seconds), `stale`, `not_found`, `host_offline`.
+ */
+export type CloudMovementError = {
+	code?: string,
+	reason?: string | null,
+	field?: string | null,
+	retryAfter?: number | null,
+};
+
+/**
+ *  `Account.features.movement`: Studio's switch while the account's machine can move it (else
+ *  `off`: nothing of movement shows), the account's own setting, why it cannot be turned on now,
+ *  and whom it may walk to.
+ */
+export type CloudMovementFeature = {
+	/**  `off` or `on`. */
+	mode?: string,
+	/**  `config.movement.enabled`: the "Hareket" panel shows. */
+	on?: boolean,
+	/**
+	 *  Only while `mode` is on and `on` false: `player` (another of the player's accounts has
+	 *  movement on) or `host` (the machine's movement slots are taken); the switch waits.
+	 */
+	slot?: string | null,
+	follow?: CloudMovementFollow,
+};
+
+/**
+ *  Whom the account may walk to or follow (`Account.features.movement.follow`): the player's
+ *  verified main name (only on a server whose login proves names), and their other cloud accounts
+ *  on the same machine and server, in the list's order. Never a name typed by anyone.
+ */
+export type CloudMovementFollow = {
+	main?: string | null,
+	own?: string[],
+};
+
+/**  The account's own movement choice (`config.movement`; absent: off). */
+export type CloudMovementSetting = {
+	enabled: boolean,
+};
+
+/**
+ *  `movst`: whether the account can move now (`state` `ok`) and what it does, or why it cannot
+ *  (`off` with `reason`: `not_running`, `setting`, `restart`, `slots`, `version`, `service`).
+ */
+export type CloudMovementState = {
+	state?: string,
+	reason?: string | null,
+	/**  With `ok`: `idle`, `step`, `goto`, `approach` or `follow`. */
+	doing?: string | null,
+	/**  `goto`: the target block. */
+	to?: CloudBlock | null,
+	/**  `approach` and `follow`: the account it walks to. */
+	name?: string | null,
+	/**  `goto`, `approach`, `follow`: when the machine stops it by itself (Unix seconds). */
+	until?: number | null,
+	/**
+	 *  `idle`: how the last activity ended by itself (`arrived`, `blocked`, `no_path`, `timeout`,
+	 *  `limit`, `out_of_sight`, `reset`, `service`, `trade`); none after a stop.
+	 */
+	ended?: string | null,
+	sneak?: boolean | null,
+	/**  `trade` while an AFK+ deal is open: everything but `stop` waits. */
+	lock?: string | null,
+};
+
+/**
  *  `GET`/`PUT /me/notifications`: the player's switches per event (all their cloud accounts) and
  *  quiet hours ("HH:MM" Turkey time). Events: `stopped`, `renewal`, `expired`, `found`,
  *  `approval`, `deal_done`, `deal_failed`, `quota_full`, `quota_80`, `gift_ending`, `summary`,
@@ -3210,6 +3344,19 @@ export type CloudPlanPrice = {
 	days?: number,
 };
 
+/**
+ *  `pos`: the block the account stands in, its dimension (`minecraft:overworld`, …, or a server's
+ *  own) and where it looks (`north`, `south`, `east`, `west`: what the direction buttons are
+ *  relative to).
+ */
+export type CloudPos = {
+	x: number,
+	y: number,
+	z: number,
+	dim: string,
+	facing: string,
+};
+
 export type CloudQuietHours = {
 	enabled?: boolean,
 	from?: string,
@@ -3276,14 +3423,14 @@ export type CloudSaveOutcome = CloudSaveOutcome_Serialize | CloudSaveOutcome_Des
 /**  How a save ended. Problems are worded by the UI where they are. */
 export type CloudSaveOutcome_Deserialize = ({ kind: "saved"; account: CloudAccount_Deserialize }) & { issues?: never } | 
 /**  Something the service would refuse, found here or said by it. */
-({ kind: "invalid"; issues: CloudIssue[] }) & { account?: never } | 
+({ kind: "invalid"; issues: CloudIssue_Deserialize[] }) & { account?: never } | 
 /**  The account changed elsewhere since the editor read it: its newer state. */
 ({ kind: "conflict"; account: CloudAccount_Deserialize }) & { issues?: never };
 
 /**  How a save ended. Problems are worded by the UI where they are. */
 export type CloudSaveOutcome_Serialize = ({ kind: "saved"; account: CloudAccount_Serialize }) & { issues?: never } | 
 /**  Something the service would refuse, found here or said by it. */
-({ kind: "invalid"; issues: CloudIssue[] }) & { account?: never } | 
+({ kind: "invalid"; issues: CloudIssue_Serialize[] }) & { account?: never } | 
 /**  The account changed elsewhere since the editor read it: its newer state. */
 ({ kind: "conflict"; account: CloudAccount_Serialize }) & { issues?: never };
 

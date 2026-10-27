@@ -23,15 +23,14 @@
   --pl-inv-min: 1;
   --pl-inv-max: 3;
   /* ITEMART's light edge for dark icons is for our dark slots; the game's grey needs none. Its
-     stand-ins (an item without a picture) are one flat tone, lighter than the slot so they never
-     read as the game's empty-slot hints (flat #555555 and darker, panel-art.tsx `GUI.ghost`), and
-     clearly so (2.4:1 on #8b8b8b): a step lighter (#a0a0a0, 1.3:1) left a filled slot looking
-     emptier than the empty armour slots beside it (ITEMART3's second look). Under the game's
-     highlight (lit slot about #c0c0c0) they stay a shade lighter (1.27:1), where #b4b4b4 vanished;
-     the game's white counts read on them by their shadow, as over the game's own white items. The
-     hand slot and the carried stack set the same. */
+     stand-ins (an item without a picture) are one flat tone a shade lighter than the slot (#a0a0a0,
+     1.3:1 on #8b8b8b), so they never read as the game's empty-slot hints (flat #555555 and darker,
+     panel-art.tsx `GUI.ghost`) and the game's white counts read on them (2.6:1 plus their shadow,
+     where #d8d8d8 drowned them; docs/design.md, the lead's decision of 27 Oct). Under the game's
+     highlight (a lit slot about #c0c0c0) they stay a shade darker (1.4:1), where #b4b4b4 vanished.
+     The hand slot and the carried stack set the same. */
   --pl-item-rim: transparent;
-  --pl-item-standin: #d8d8d8;
+  --pl-item-standin: #a0a0a0;
   position: relative;
   min-width: 0;
   /* A menu picture wider than the window reaches past it, as in the game, but never past us. */
@@ -305,7 +304,7 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   --pl-item-rim: transparent;
-  --pl-item-standin: #d8d8d8;
+  --pl-item-standin: #a0a0a0;
 }
 .pl-inv-hand:focus-visible {
   outline: 2px solid var(--color-gold-300, #f6d58e);
@@ -387,7 +386,7 @@
   z-index: 70;
   transition: opacity 120ms ease;
   --pl-item-rim: transparent;
-  --pl-item-standin: #d8d8d8;
+  --pl-item-standin: #a0a0a0;
 }
 /* Carried past the component (onto the rest of the page): out of sight until the pointer is back. */
 .pl-inv-cursor[data-away] {

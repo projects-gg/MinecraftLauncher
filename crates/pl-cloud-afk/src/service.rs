@@ -570,7 +570,16 @@ impl CloudService {
             None if server_changed => Some(edit_config(&current.config, &before)),
             None => None,
         };
-        if let Some(config) = config {
+        if let Some(mut config) = config {
+            // A service before movement refuses the field: it goes only where the account has it.
+            if current
+                .features
+                .as_ref()
+                .and_then(|features| features.movement.as_ref())
+                .is_none()
+            {
+                config.movement = None;
+            }
             let key = self.vault_key().await?;
             let ctx = SealContext {
                 key: &key,
@@ -739,6 +748,21 @@ fn refusal_issues(error: &CloudError) -> Option<Vec<CloudIssue>> {
         "server_blocked" => CloudIssue::from_path("server", "blocked"),
         "server_full" => CloudIssue::from_path("server", "full"),
         "server_change_limit" => CloudIssue::from_path("server", "changeLimit"),
+        // No movement slot: another of the player's accounts has it (`player`), or the machine's
+        // slots are taken (`host`).
+        "limit_movement" => {
+            let scope = error.extra_str("scope").unwrap_or("host");
+            CloudIssue {
+                max: error
+                    .extra("max")
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|max| u32::try_from(max).ok()),
+                ..CloudIssue::from_path(
+                    "movement",
+                    if scope == "player" { "player" } else { "host" },
+                )
+            }
+        }
         _ => return None,
     };
     Some(vec![issue])
@@ -767,7 +791,8 @@ mod tests {
                 place: "commands".into(),
                 index: Some(1),
                 field: "text".into(),
-                problem: "variable".into()
+                problem: "variable".into(),
+                max: None,
             }])
         );
         let error = from_response(
@@ -786,6 +811,44 @@ mod tests {
                 .as_bytes(),
         );
         assert_eq!(refusal_issues(&error), None);
+        // Movement: no slot (with the player's number), or switched off meanwhile.
+        let error = from_response(
+            422,
+            None,
+            json!({"error": {"code": "limit_movement", "scope": "player", "max": 2}})
+                .to_string()
+                .as_bytes(),
+        );
+        assert_eq!(
+            refusal_issues(&error),
+            Some(vec![CloudIssue {
+                place: "general".into(),
+                index: None,
+                field: "movement".into(),
+                problem: "player".into(),
+                max: Some(2),
+            }])
+        );
+        let error = from_response(
+            422,
+            None,
+            json!({"error": {"code": "limit_movement", "scope": "host", "max": 10}})
+                .to_string()
+                .as_bytes(),
+        );
+        assert_eq!(refusal_issues(&error).unwrap()[0].problem, "host");
+        let error = from_response(
+            400,
+            None,
+            json!({"error": {"code": "invalid_config", "field": "movement.enabled", "reason": "off"}})
+                .to_string()
+                .as_bytes(),
+        );
+        let issue = &refusal_issues(&error).unwrap()[0];
+        assert_eq!(
+            (issue.field.as_str(), issue.problem.as_str()),
+            ("movement", "off")
+        );
     }
 
     #[test]

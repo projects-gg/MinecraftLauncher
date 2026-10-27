@@ -25,6 +25,9 @@
 //!   ([`CloudFeatures`], [`CloudAccountFeatures`]), the live inventory ([`CloudInvItem`],
 //!   [`check_inv_op`]), the console's kinds, strip and download ([`CloudBars`], [`console_text`]),
 //!   and the placeholders of auto-replies ([`placeholder_problem`], [`strict_value`], [`try_reply`]).
+//! - Movement (README "Movement"): what an account may do ([`CloudMovementFeature`]), its switch,
+//!   the live frames ([`CloudMovementState`], [`CloudPos`]) and the shape of an operation
+//!   ([`check_move_op`]).
 //!
 //! Nothing polls: the gate is read when the AFK page opens (cached a minute), the accounts with it
 //! and after an action, and the socket runs only while a console is on screen.
@@ -37,6 +40,7 @@ mod feat;
 mod live;
 mod migrate;
 mod model;
+mod movement;
 mod plus;
 mod plus_audit;
 mod plus_check;
@@ -76,6 +80,11 @@ pub use model::{
     CloudRenewal, CloudRestriction, CloudRuleView, CloudSales, CloudServer, CloudServerChanges,
     CloudStock, CloudVersionOption, CloudVersions, CommandInput, ConfigInput, Me, MeUser, Offer,
     PayloadInput, RevealAnswer, RuleInput, ServiceMode, VaultKey,
+};
+pub use movement::{
+    CloudBlock, CloudMovementError, CloudMovementFeature, CloudMovementFollow,
+    CloudMovementSetting, CloudMovementState, CloudPos, MOVE_GOTO_MAX_BLOCKS, MOVE_STEP_MAX,
+    check_move_op,
 };
 pub use plus::{
     AUDIT_DAY, CUSTOM_NAME_MAX, CloudNotifyPrefs, CloudQuietHours, GENERIC_MAX_DEAL, MAX_BLOCKED,

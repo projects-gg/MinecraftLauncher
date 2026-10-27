@@ -1,8 +1,8 @@
 // A cloud account on the AFK page, the desktop card's twin: face, name and server, the state line,
 // the paid time with "Süreyi uzat" once renewal opens, and one main button (Başlat, Durdur, or
 // "Yeniden etkinleştir" on the site once the time is up), the console and the settings. With the
-// cloud features: "Envanter" in its menu (the panel's tab), "Ayarlarını kopyala", and a box while
-// several accounts are chosen (the chosen card carries the brand's pixel brackets).
+// cloud features: "Envanter" and "Hareket" in its menu (the panel's tabs), "Ayarlarını kopyala", and
+// a box while several accounts are chosen (the chosen card carries the brand's pixel brackets).
 import {
   ArrowSquareOut,
   ArrowsClockwise,
@@ -13,6 +13,7 @@ import {
   DotsThreeVertical,
   GearSix,
   Play,
+  SneakerMove,
   Stop,
   Terminal,
 } from "@phosphor-icons/react";
@@ -198,6 +199,17 @@ function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => vo
   );
 }
 
+/** Menu items with a separator (null) only between groups: none first or last, never two in a row. */
+function separated(items: Array<MenuItem | null>): Array<MenuItem | null> {
+  const out: Array<MenuItem | null> = [];
+  for (const item of items) {
+    if (item === null && (out.length === 0 || out[out.length - 1] === null)) continue;
+    out.push(item);
+  }
+  if (out[out.length - 1] === null) out.pop();
+  return out;
+}
+
 export function CloudCard({
   account,
   skewMs,
@@ -210,6 +222,7 @@ export function CloudCard({
   onPlus,
   onUpgrade,
   onInventory,
+  onMovement,
   onCopy,
   selecting = false,
   selected = false,
@@ -230,6 +243,8 @@ export function CloudCard({
   onUpgrade?: () => void;
   /** While the service shows this account's inventory: the panel opens on it. */
   onInventory?: () => void;
+  /** While this account's movement is on: the panel opens on Hareket. */
+  onMovement?: () => void;
   /** "Ayarlarını kopyala" (several accounts, the cloud features on). */
   onCopy?: () => void;
   /** Several accounts are being chosen: a box instead of the menu, the card toggles it. */
@@ -247,7 +262,9 @@ export function CloudCard({
       .open("account", account.id)
       .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
 
-  const items: Array<MenuItem | null> = [
+  // Groups: the account itself, its panel's tabs, its settings, then the site. A separator stands
+  // only between groups (never first, last or twice: the first group may be empty).
+  const items = separated([
     action === "start"
       ? { label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }
       : action === "stop"
@@ -262,6 +279,7 @@ export function CloudCard({
           },
         ]
       : []),
+    null,
     { label: t("cloudAfk.actions.console"), icon: <Terminal size={16} />, onSelect: onConsole },
     ...(onInventory
       ? [
@@ -272,6 +290,10 @@ export function CloudCard({
           },
         ]
       : []),
+    ...(onMovement
+      ? [{ label: t("cloudAfkMove.tab"), icon: <SneakerMove size={16} />, onSelect: onMovement }]
+      : []),
+    null,
     { label: t("cloudAfk.actions.settings"), icon: <GearSix size={16} />, onSelect: onSettings },
     ...(onCopy
       ? [{ label: t("cloudAfkFeat.copy.menu"), icon: <Copy size={16} />, onSelect: onCopy }]
@@ -306,7 +328,7 @@ export function CloudCard({
       icon: <ArrowSquareOut size={16} />,
       onSelect: openSite,
     },
-  ];
+  ]);
 
   return (
     <motion.li
