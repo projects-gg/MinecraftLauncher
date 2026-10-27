@@ -1,4 +1,5 @@
 import { enAfkAlerts } from "./en-afk-alerts";
+import { enAfkClear } from "./en-afk-clear";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkPanel } from "./en-afk-panel";
 import { enAfkReconnect } from "./en-afk-reconnect";
@@ -309,6 +310,7 @@ export const en: DeepPartial<Strings> = {
   cloudAfkFeat: enCloudAfkFeat,
   cloudAfkMove: enCloudAfkMove,
   afkPanel: enAfkPanel,
+  afkClear: enAfkClear,
   projectsSkin: enProjectsSkin,
   host: enHost,
   afkPlus: enAfkPlus,
