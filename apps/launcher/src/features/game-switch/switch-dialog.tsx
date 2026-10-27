@@ -79,7 +79,17 @@ export function GameSwitchDialog() {
       : oneMoreWords(kind, Boolean(shown.request.memoryShort));
   if (!words) return null;
   const title = say(t, words.title);
-  const body = words.body.map((line) => say(t, line)).join(" ");
+  // One sentence per line: the memory sentence, then the owner's question (a line break inside
+  // either reads badly in the narrow panel).
+  const lines = words.body.map((line) => say(t, line));
+  const body =
+    lines.length > 1
+      ? lines.map((line) => (
+          <span key={line} className="block text-pretty">
+            {line}
+          </span>
+        ))
+      : lines[0];
   const asking = !shown.stepping;
   const footer =
     asking && words.confirm ? (

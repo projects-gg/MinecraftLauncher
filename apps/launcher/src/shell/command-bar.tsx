@@ -369,14 +369,27 @@ function LaunchStatus({ phase }: { phase: LaunchPhase }) {
 
 /**
  * "EjderAvcisi oyunda" (PLAY-AGAIN): with another account selected, who is in game while this one
- * is not, so OYNA reads as one more game beside theirs. Quiet: plain words, no dot or glow.
+ * is not, so OYNA reads as one more game beside theirs. Quiet: two small lines like "Devam et"'s
+ * ("Oyunda" over the names), no dot or glow; read out as the sentence.
  */
-function othersLine(t: TFunction, names: readonly string[]): string | null {
+function othersWords(
+  t: TFunction,
+  names: readonly string[],
+): { sentence: string; who: string } | null {
   const [first, second] = names;
   if (!first) return null;
-  if (!second) return t("playAgain.othersOne", { name: first });
-  if (names.length === 2) return t("playAgain.othersTwo", { first, second });
-  return t("playAgain.othersMany", { total: String(names.length) });
+  if (!second) return { sentence: t("playAgain.othersOne", { name: first }), who: first };
+  if (names.length === 2) {
+    return {
+      sentence: t("playAgain.othersTwo", { first, second }),
+      who: t("playAgain.namesTwo", { first, second }),
+    };
+  }
+  const total = String(names.length);
+  return {
+    sentence: t("playAgain.othersMany", { total }),
+    who: t("playAgain.namesMany", { total }),
+  };
 }
 
 function StatusArea({
@@ -394,7 +407,7 @@ function StatusArea({
   const reduce = useReducedMotion() ?? false;
   const autoJoin = usePrefs((s) => s.autoJoin);
   const setAutoJoin = usePrefs((s) => s.setAutoJoin);
-  const othersText = othersLine(t, others);
+  const othersText = othersWords(t, others);
   // "Devam et" only while nothing runs (a click would start nothing otherwise).
   const target = useResumeTarget(selected);
   const resume = phase.kind === "idle" ? target : target === undefined ? undefined : null;
@@ -415,7 +428,9 @@ function StatusArea({
             {...swapIn(reduce)}
           >
             {/* "Devam et" and the last-played line share one cell and cross-fade in place. */}
-            <div className="grid min-w-0 flex-1 *:[grid-area:1/1]">
+            {/* "Devam et" keeps its width; the quiet "X oyunda" beside the switch gives way first
+                (PLAY-AGAIN: at 1024 px the two would squeeze it to nothing). */}
+            <div className="grid min-w-[148px] flex-1 *:[grid-area:1/1]">
               <AnimatePresence initial={false}>
                 {selected && resume ? (
                   <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
@@ -447,18 +462,24 @@ function StatusArea({
                 ) : null}
               </AnimatePresence>
             </div>
-            <div className="flex min-w-0 shrink items-center gap-6">
+            <div className="flex min-w-0 shrink items-center gap-4">
               <AnimatePresence initial={false}>
                 {othersText ? (
-                  <motion.span
+                  <motion.p
                     key="others"
-                    className="block max-w-[240px] min-w-0 truncate text-[12px] text-ash-300"
+                    className="max-w-[200px] min-w-0 leading-tight"
+                    aria-label={othersText.sentence}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.24, ease: easeOutExpo } }}
                     exit={{ opacity: 0, transition: { duration: 0.12, ease: easeOutExpo } }}
                   >
-                    {othersText}
-                  </motion.span>
+                    <span aria-hidden className="block text-[12px] text-ash-400">
+                      {t("playAcct.inGame")}
+                    </span>
+                    <span aria-hidden className="block truncate text-[13px] text-ash-300">
+                      {othersText.who}
+                    </span>
+                  </motion.p>
                 ) : null}
               </AnimatePresence>
               {selected?.autoJoin ? (

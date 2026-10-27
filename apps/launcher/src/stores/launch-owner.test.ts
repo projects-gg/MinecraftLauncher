@@ -114,7 +114,15 @@ describe("ownLaunch (PLAY-AGAIN): what the bar shows for the selected account", 
   });
 
   it("keeps the store's own phase when nothing runs (the last launch's error)", () => {
-    expect(ownLaunch(starting(failed, null), "a1")).toMatchObject({ owner: "none", phase: failed });
+    expect(ownLaunch(starting(failed, null), "a1")).toMatchObject({ owner: "mine", phase: failed });
+  });
+
+  it("tells this account's failed launch while other games run (the bar shows it once)", () => {
+    const view = starting(failed, kor, "projects", game(1));
+    expect(ownLaunch(view, "a2")).toMatchObject({ owner: "mine", phase: failed });
+    // EjderAvcisi's bar shows its own game, not KorAtesi_'s error.
+    expect(ownLaunch(view, "a1")).toMatchObject({ owner: "mine", phase: { kind: "running" } });
+    expect(ownLaunch(starting(failed, kor, "x", game(1, kor)), "a3").owner).toBe("other");
   });
 
   it("gives the same phase object for the same game (views draw only on a change)", () => {

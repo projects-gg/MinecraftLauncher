@@ -11,5 +11,7 @@ export const enPlayAgain = {
   othersOne: "{{name}} is playing",
   othersTwo: "{{first}} and {{second}} are playing",
   othersMany: "{{total}} accounts are playing",
+  namesTwo: "{{first}} and {{second}}",
+  namesMany: "{{total}} accounts",
   crashBody: "Click to see what happened.",
 };

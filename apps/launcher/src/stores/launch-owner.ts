@@ -110,7 +110,9 @@ const IDLE: LaunchPhase = { kind: "idle" };
  * its newest game on screen, else nothing (while other accounts play, "other").
  */
 export function ownLaunch(view: LaunchView, selected: string | null | undefined): OwnLaunch {
-  if (inProgress(view.phase) && isMine(view.account, selected)) {
+  // The launch on its way, or the error it just ended with (the bar tells it once, then resets).
+  const pending = inProgress(view.phase) || view.phase.kind === "error";
+  if (pending && isMine(view.account, selected)) {
     return { owner: "mine", phase: view.phase, instanceId: view.instanceId, game: null };
   }
   const mine = ownGames(view, selected).at(-1);

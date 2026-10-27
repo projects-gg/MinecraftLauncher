@@ -633,6 +633,17 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
         }
         case "error":
           if (!current) break;
+          playSound("error");
+          tellIfAway(i18n.t("attention.failed.title"), event.message);
+          // Another account is selected now, and games run (PLAY-AGAIN): its bar never shows this
+          // launch, so the error is told here and the store follows the games again.
+          if (get().games.length > 0 && !isMine(get().account, get().selected)) {
+            set({ progress: 0 });
+            follow(newestGame());
+            toast.error(event.message);
+            break;
+          }
+          // The bar of the account it was for tells it (its toast and its action), then resets.
           set({
             progress: 0,
             phase: {
@@ -642,8 +653,6 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
               details: event.details,
             },
           });
-          playSound("error");
-          tellIfAway(i18n.t("attention.failed.title"), event.message);
           break;
         case "cancelled":
           // Stopped from somewhere else than `cancel` (it already moved on): no message.

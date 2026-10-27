@@ -18,6 +18,9 @@ export const trPlayAgain = {
   othersOne: "{{name}} oyunda",
   othersTwo: "{{first}} ve {{second}} oyunda",
   othersMany: "{{total}} hesap oyunda",
+  /** The same, as the two lines show it: "Oyunda" over the names. */
+  namesTwo: "{{first}} ve {{second}}",
+  namesMany: "{{total}} hesap",
   /** A game crashed while another game is on screen: the notification that brings the help. */
   crashBody: "Ne olduğunu görmek için tıkla.",
 };

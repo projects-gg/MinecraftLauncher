@@ -379,7 +379,7 @@ export function PlayButton({
           {pressableRunning ? (
             <span
               aria-hidden
-              className="absolute inset-0 bg-[linear-gradient(180deg,rgb(95_203_142/0.13),rgb(95_203_142/0.02)_70%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
+              className="absolute inset-0 bg-[linear-gradient(180deg,rgb(95_203_142/0.18),rgb(95_203_142/0.03)_70%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
             />
           ) : null}
           {/* Ready: the gold face. */}
