@@ -285,6 +285,8 @@ function AfkCard({
                 />
               }
               items={items}
+              // Turned upwards it would sit under the "⋯" of the card above.
+              besideWhenNoRoom
             />
           </div>
 

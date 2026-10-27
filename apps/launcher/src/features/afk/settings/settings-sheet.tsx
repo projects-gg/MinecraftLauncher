@@ -26,6 +26,7 @@ import {
   Skeleton,
   scrimMotion,
   sheetMotion,
+  sheetOutside,
   toast,
   useInteractionMotion,
 } from "@pl/ui";
@@ -529,10 +530,9 @@ export function AfkSettingsSheet({
                   event.preventDefault();
                   focusPanel(event.currentTarget as HTMLElement);
                 }}
-                // A form saved as a whole: a stray click beside the panel never closes it (Esc
-                // and the close button still do, asking first when something changed).
-                onPointerDownOutside={(event) => event.preventDefault()}
-                onInteractOutside={(event) => event.preventDefault()}
+                // A press outside closes it as Esc does (asking first when something changed);
+                // a toast's button does not.
+                {...sheetOutside}
               >
                 <GatedMotion.aside
                   tabIndex={-1}

@@ -9,7 +9,15 @@
 // (icon, site, address) at the same size. The computer never fetches anything from a linked site:
 // the hub makes the card, pictures only from the trusted sites' own picture hosts.
 import { Cube, Globe, Package, Play } from "@phosphor-icons/react";
-import { type Brand, BrandMark, Button, easeOutExpo, Tooltip, useMotionPrefs } from "@pl/ui";
+import {
+  type Brand,
+  BrandMark,
+  Button,
+  easeOutExpo,
+  swallowDismissClick,
+  Tooltip,
+  useMotionPrefs,
+} from "@pl/ui";
 import { motion } from "motion/react";
 import { Popover } from "radix-ui";
 import { type ReactElement, type ReactNode, useState } from "react";
@@ -104,6 +112,7 @@ function LinkOpener({
       <Popover.Anchor asChild>{children(open)}</Popover.Anchor>
       <Popover.Portal>
         <Popover.Content
+          onPointerDownOutside={swallowDismissClick}
           side="top"
           align="start"
           sideOffset={6}

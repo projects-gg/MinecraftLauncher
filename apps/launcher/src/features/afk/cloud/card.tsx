@@ -418,6 +418,8 @@ export function CloudCard({
                   />
                 }
                 items={items}
+                // Turned upwards it sat under the "⋯" of the card above (FEAT-L).
+                besideWhenNoRoom
               />
             )}
           </div>

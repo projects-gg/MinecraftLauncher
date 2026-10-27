@@ -2,7 +2,7 @@
 // account is new. Hovering or pressing it opens what is limited and until when ("Bu sınırlar
 // kendiliğinden kalkar."). Nobody else ever sees it.
 import { LockSimple } from "@phosphor-icons/react";
-import { easeOutExpo } from "@pl/ui";
+import { easeOutExpo, swallowDismissClick } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
 import { useRef, useState } from "react";
@@ -54,6 +54,7 @@ export function LimitedChip({ me }: { me: SocialMe }) {
         {open ? (
           <Popover.Portal forceMount>
             <Popover.Content
+              onPointerDownOutside={swallowDismissClick}
               forceMount
               asChild
               side="bottom"

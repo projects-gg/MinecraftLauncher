@@ -26,6 +26,7 @@ import {
   IconButton,
   Menu,
   returnFocusAfterKeys,
+  swallowDismissClick,
   toast,
 } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -476,6 +477,7 @@ function MemberCard({
                   {menu ? (
                     <DropdownMenu.Portal forceMount>
                       <DropdownMenu.Content
+                        onPointerDownOutside={swallowDismissClick}
                         onCloseAutoFocus={returnFocusAfterKeys}
                         forceMount
                         asChild
@@ -657,6 +659,7 @@ export function TeamMemberRow({
             {open ? (
               <Popover.Portal forceMount>
                 <Popover.Content
+                  onPointerDownOutside={swallowDismissClick}
                   forceMount
                   asChild
                   side="left"

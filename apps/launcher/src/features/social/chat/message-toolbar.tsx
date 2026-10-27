@@ -6,7 +6,7 @@
 // reactions and "+", the whole picker), ↩ "Yanıtla" and "…" (the message's menu, the same rows
 // as its right click). One Tab stop; the arrows move inside it.
 import { ArrowBendUpLeft, DotsThree, Plus, Smiley } from "@phosphor-icons/react";
-import { cn, IconButton, Menu, type MenuItem } from "@pl/ui";
+import { cn, IconButton, Menu, type MenuItem, swallowDismissClick } from "@pl/ui";
 import { Popover } from "radix-ui";
 import { type KeyboardEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -101,6 +101,7 @@ export function MessageToolbar({
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content
+              onPointerDownOutside={swallowDismissClick}
               side="top"
               align={mine ? "start" : "end"}
               sideOffset={6}
