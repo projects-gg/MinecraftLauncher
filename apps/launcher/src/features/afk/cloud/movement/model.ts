@@ -148,6 +148,8 @@ export function refusalKey(
       return { key: "loop" };
     case "rate_limited":
       return { key: "slow" };
+    case "host_offline":
+      return { key: "machineAway" };
     default:
       return { key: "unreachable" };
   }

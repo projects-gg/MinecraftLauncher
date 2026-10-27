@@ -134,6 +134,11 @@ describe("movement", () => {
     expect(
       refusalKey({ code: "host_offline", reason: null, field: null, retryAfter: null }, null, null),
     ).toEqual({
+      key: "machineAway",
+    });
+    expect(
+      refusalKey({ code: "not_found", reason: null, field: null, retryAfter: null }, null, null),
+    ).toEqual({
       key: "unreachable",
     });
   });

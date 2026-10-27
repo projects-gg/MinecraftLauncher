@@ -78,6 +78,7 @@ export const trCloudAfkMove = {
   reset: "Hesap ışınlandı ya da yeniden doğdu, durdu.",
   serviceOff: "Hareket şu an kapalı.",
   tradeStarted: "Takas başladı, durdu.",
+  machineAway: "Makinemize şu an ulaşılamıyor.",
   unreachable: "Hesaba şu an ulaşılamıyor.",
   reconnect: "Şimdi yeniden bağlan",
 };

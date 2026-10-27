@@ -75,6 +75,7 @@ export const enCloudAfkMove = {
   reset: "The account was teleported or respawned; it stopped.",
   serviceOff: "Movement is off right now.",
   tradeStarted: "A trade started; it stopped.",
+  machineAway: "Can't reach our machine right now.",
   unreachable: "Can't reach the account right now.",
   reconnect: "Reconnect now",
 };
