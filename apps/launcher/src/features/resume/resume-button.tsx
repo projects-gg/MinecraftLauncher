@@ -108,8 +108,10 @@ export function ResumeButton({
           ? t("playAgain.worldBusyAria", { world: target.name, reason: whose })
           : t("resume.aria", { name: target.name })
       }
+      // The cap counts the hover plate's negative margin: `max-w-full` clamped the button 8 px
+      // under its own width, so a name that fits ("Ejderha Adası") lost its last letters at 1280.
       className={cn(
-        "group -my-1 -ml-2 flex w-fit max-w-full min-w-0 items-center gap-3 rounded-[var(--radius-panel)] py-1 pr-3 pl-2 text-left transition-[background-color,transform,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none",
+        "group -my-1 -ml-2 flex w-fit max-w-[calc(100%+0.5rem)] min-w-0 items-center gap-3 rounded-[var(--radius-panel)] py-1 pr-3 pl-2 text-left transition-[background-color,transform,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none",
         reason ? "cursor-default" : "cursor-pointer hover:bg-white/6 active:scale-[0.98]",
       )}
     >
