@@ -18,7 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { copyErrorDetails } from "@/features/content/jobs";
-import { isFriendly } from "../errors";
+import { afkFailed, isFriendly } from "../errors";
 import { SectionTitle } from "../settings/controls";
 import {
   draftKey,
@@ -54,8 +54,8 @@ import {
   RepliesPart,
   ruleLimit,
 } from "./settings-sections";
-import { isCloudActive, serverLabel } from "./status";
-import { CLOUD_KEY, storeAccount, useCloudPage } from "./use-cloud";
+import { isCloudActive, serverLabel, stoppedOnPassword } from "./status";
+import { CLOUD_KEY, startOrAsk, storeAccount, useCloudPage } from "./use-cloud";
 
 const ICONS: Record<Part, Icon> = {
   connection: Globe,
@@ -101,7 +101,8 @@ function Editor({
   const [serverIssues, setServerIssues] = useState<Issue[]>([]);
   const [failure, setFailure] = useState<{ message: string; error: unknown } | null>(null);
   const [conflict, setConflict] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // Which save runs: "start" also starts an account stopped on its password (AFK-CLEAR).
+  const [saving, setSaving] = useState<"save" | "start" | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
   // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
@@ -172,7 +173,7 @@ function Editor({
     scroller.current?.scrollTo({ top: 0 });
   };
 
-  const save = async () => {
+  const save = async (start = false) => {
     setSubmitted(true);
     const found = [...localIssues(draft, view.limits, rules), ...issues];
     if (found.length) {
@@ -180,7 +181,7 @@ function Editor({
       if (first && !found.some((i) => partOf(i) === part)) goTo(partOf(first));
       return;
     }
-    setSaving(true);
+    setSaving(start ? "start" : "save");
     try {
       const result = await cloudApi.save(account.id, toEdit(draft, baseline, view));
       if (result.kind === "saved") {
@@ -190,9 +191,20 @@ function Editor({
         storeAccount(queryClient, result.account);
         void queryClient.invalidateQueries({ queryKey: CLOUD_KEY });
         // A running account restarts with what was saved: the toast says so, as the desktop's does.
+        let description = isCloudActive(account) ? t("afkSettings.savedReconnecting") : null;
+        if (start) {
+          // The start clears the stop (the service lifts it on the next start).
+          try {
+            if (await startOrAsk(queryClient, result.account)) {
+              description = t("afkClear.savedStarting");
+            }
+          } catch (error) {
+            afkFailed(error, t("cloudAfk.actions.failed"));
+          }
+        }
         toast.success(
           t("cloudAfk.settings.saved", { name: result.account.name }),
-          isCloudActive(account) ? { description: t("afkSettings.savedReconnecting") } : undefined,
+          description ? { description } : undefined,
         );
         void onSaved().finally(() => {
           saved.current = false;
@@ -212,7 +224,7 @@ function Editor({
         error,
       });
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
@@ -227,7 +239,7 @@ function Editor({
   // Ctrl+S saves, as in the desktop settings.
   const shortcut = useRef(() => {});
   shortcut.current = () => {
-    if (savable && !saving && !settling) void save();
+    if (savable && saving === null && !settling) void save();
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -242,12 +254,19 @@ function Editor({
 
   const props = { draft, setDraft, view, issues: shown, features };
   const blocking = submitted && issues.length > 0;
+  // Stopped on a password the server refused: saving alone left the stop in place, so the main
+  // button starts it too ("Yalnız kaydet" beside it, as on a running desktop account).
+  const startAfter = stoppedOnPassword(account);
   // A running account restarts with what is saved: the button says so (no sentence in gold).
-  const label = saving
-    ? t("cloudAfk.settings.saving")
-    : isCloudActive(account)
-      ? t("afkSettings.saveReconnect")
-      : t("cloudAfk.settings.save");
+  const label =
+    saving === (startAfter ? "start" : "save")
+      ? t("cloudAfk.settings.saving")
+      : isCloudActive(account)
+        ? t("afkSettings.saveReconnect")
+        : startAfter
+          ? t("afkClear.saveStart")
+          : t("cloudAfk.settings.save");
+  const busy = saving !== null;
   const count =
     part === "commands"
       ? t("cloudAfk.settings.commands.count", {
@@ -302,15 +321,24 @@ function Editor({
         ) : null}
       </div>
       {dirty ? (
-        <Button variant="ghost" onClick={discard} disabled={saving || settling}>
+        <Button variant="ghost" onClick={discard} disabled={busy || settling}>
           {t("cloudAfk.settings.cancel")}
+        </Button>
+      ) : null}
+      {startAfter ? (
+        <Button
+          variant="secondary"
+          onClick={() => void save(false)}
+          disabled={!savable || blocking || busy || settling}
+        >
+          {saving === "save" ? t("cloudAfk.settings.saving") : t("afkPanel.saveOnly")}
         </Button>
       ) : null}
       {/* While the bar says to fix the marked fields first, saving waits (SHEET-UX). */}
       <Button
         variant="primary"
-        onClick={() => void save()}
-        disabled={!savable || blocking || saving || settling}
+        onClick={() => void save(startAfter)}
+        disabled={!savable || blocking || busy || settling}
       >
         {label}
       </Button>

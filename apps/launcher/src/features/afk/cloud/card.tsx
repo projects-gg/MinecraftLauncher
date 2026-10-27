@@ -1,8 +1,14 @@
-// A cloud account on the AFK page, the desktop card's twin: face, name and server, the state line,
-// the paid time with "Süreyi uzat" once renewal opens, and one main button (Başlat, Durdur, or
-// "Yeniden etkinleştir" on the site once the time is up), the console and the settings. With the
-// cloud features: "Envanter" and "Hareket" in its menu (the panel's tabs), "Ayarlarını kopyala", and
-// a box while several accounts are chosen (the chosen card carries the brand's pixel brackets).
+// A cloud account on the AFK page: face, name and server, the state line, the paid time with
+// "Süreyi uzat" once renewal opens, and one main button (Başlat, Durdur, "Şifreyi düzelt" after the
+// server turned its password down, or "Yeniden etkinleştir" on the site once the time is up), the
+// console and the settings. With the cloud features: "Envanter" and "Hareket" in its menu (the
+// panel's tabs), "Ayarlarını kopyala", and a box while several accounts are chosen (the chosen card
+// carries the brand's pixel brackets).
+//
+// One card per account (AFK-CLEAR): when this computer has the same account (its twin), this card is
+// its only one. It says where the account runs ("Bulutta oyunda", "Bu bilgisayarda oyunda"), its
+// main button, console and settings are those of that place (the cloud's while it runs nowhere),
+// and one line moves it: "Bu bilgisayarda çalıştır" / "Bulutta çalıştır" stops the other place.
 import {
   ArrowSquareOut,
   ArrowsClockwise,
@@ -10,12 +16,16 @@ import {
   CaretRight,
   ChatsCircle,
   Copy,
+  Desktop,
   DotsThreeVertical,
   GearSix,
+  Key,
   Play,
   SneakerMove,
   Stop,
   Terminal,
+  Trash,
+  X,
 } from "@phosphor-icons/react";
 import {
   Button,
@@ -34,12 +44,17 @@ import {
   usePressGuard,
 } from "@pl/ui";
 import { AnimatePresence, motion, type Transition } from "motion/react";
-import type { MouseEvent, Ref } from "react";
+import { type MouseEvent, type Ref, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check } from "@/features/settings/cleanup/check";
+import { type AfkAccount, api } from "@/lib/api";
 import { AfkHead } from "../afk-head";
-import { afkFailed } from "../errors";
+import { ClientRow, LiveStats } from "../card-parts";
+import { afkFailed, runAfk } from "../errors";
+import { AfkPrimaryAction, primaryAction } from "../primary-action";
 import { SettingsButton } from "../settings/settings-button";
+import { useAfkReconnect } from "../settings/settings-sheet";
+import { StateLine } from "../state-line";
 import { type CloudAccount, cloudApi } from "./api";
 import { AI_TONE, useAiSentence } from "./plus/rail";
 import { plusAi } from "./plus/types";
@@ -52,10 +67,12 @@ import {
   serverLabel,
   timeLeft,
 } from "./status";
+import { type TwinPlace, twinPlace } from "./twins";
+import { useGuardedConnect, useRunHere, useRunInCloud } from "./use-cloud";
 
 const glide: Transition = { type: "spring", stiffness: 420, damping: 36, mass: 0.9 };
 const REST = "translateY(0px) scale(1)";
-const ORDER: CloudPrimary[] = ["start", "stop", "renew"];
+const ORDER: CloudPrimary[] = ["start", "stop", "renew", "fixPassword"];
 
 /**
  * The paid time, brighter in its last week, with "Süreyi uzat" beside it while renewal is open,
@@ -93,15 +110,67 @@ function TimeRow({ account, skewMs }: { account: CloudAccount; skewMs: number })
   );
 }
 
+/**
+ * The line of an account this computer has too: that it does, and the move to the other place in
+ * one plain phrase ("Bu bilgisayarda çalıştır" stops the cloud one first; "Bulutta çalıştır" the
+ * one here). A quiet text button, not gold: the card's gold is its main button.
+ */
+function PlaceRow({
+  account,
+  here,
+  place,
+}: {
+  account: CloudAccount;
+  here: AfkAccount;
+  place: TwinPlace;
+}) {
+  const { t } = useTranslation();
+  const runHere = useRunHere();
+  const runInCloud = useRunInCloud();
+  const [busy, setBusy] = useState(false);
+  // The cloud one can take over only while nothing holds it (a stop to fix, the time up).
+  const toCloud = place === "here" && !account.hold && !account.expired;
+  const toHere = place === "cloud" && here.state.kind !== "stopping";
+  const move = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await (toHere ? runHere(account, here) : runInCloud(account, here));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <p className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 pl-[23px] text-[12px]">
+      <span className="inline-flex items-center gap-1.5 text-ash-300">
+        <Desktop size={13} weight="bold" aria-hidden className="shrink-0 text-ash-400" />
+        {t("afkClear.twin.also")}
+      </span>
+      {toHere || toCloud ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void move()}
+          className="inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium text-bone-100 underline-offset-2 transition-opacity duration-150 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-default disabled:opacity-60"
+        >
+          {toHere ? t("afkClear.twin.runHere") : t("afkClear.twin.runInCloud")}
+        </button>
+      ) : null}
+    </p>
+  );
+}
+
 function PrimaryButton({
   account,
   onStart,
   onStop,
+  onFixPassword,
   className,
 }: {
   account: CloudAccount;
   onStart: () => void;
   onStop: () => void;
+  onFixPassword: () => void;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -112,7 +181,8 @@ function PrimaryButton({
   if (action === "none") return null;
   // Stopped until something is fixed (the state line's hint says what, "… düzelt, sonra başlat"):
   // "Başlat" steps back from gold, which called for a start that would stop again (SMALL11).
-  // After a plain disconnect ("other") starting again is the fix, and it stays gold.
+  // After a plain disconnect ("other") starting again is the fix, and it stays gold. A refused
+  // password has its own button, "Şifreyi düzelt" (AFK-CLEAR).
   const hold = account.hold;
   const fixFirst =
     action === "start" &&
@@ -121,16 +191,19 @@ function PrimaryButton({
     start: t("cloudAfk.actions.start"),
     stop: t("cloudAfk.actions.stop"),
     renew: t("cloudAfk.actions.reactivate"),
+    fixPassword: t("afkClear.fixPassword"),
   };
   const icons = {
     start: <Play size={14} weight="fill" />,
     stop: <Stop size={14} weight="fill" />,
     renew: <ArrowSquareOut size={14} weight="bold" />,
+    fixPassword: <Key size={14} weight="bold" />,
   };
   const press = (event: MouseEvent) => {
     if (!guard.take(event)) return;
     if (action === "start") onStart();
     else if (action === "stop") onStop();
+    else if (action === "fixPassword") onFixPassword();
     else
       void cloudApi
         .open("renew", account.id)
@@ -215,6 +288,42 @@ function separated(items: Array<MenuItem | null>): Array<MenuItem | null> {
   return out;
 }
 
+/** What the copy here offers while the card speaks for this computer (its menu's first group). */
+function useHereItems(here: AfkAccount | null, onFixPassword: () => void): MenuItem[] {
+  const { t } = useTranslation();
+  const connect = useGuardedConnect();
+  const reconnect = useAfkReconnect();
+  if (!here) return [];
+  const stop = () => runAfk(api.afkStop(here.id), t("afk.stopFailed"));
+  const items: Record<ReturnType<typeof primaryAction>, MenuItem> = {
+    connect: { label: t("afk.connect"), icon: <Play size={16} />, onSelect: () => connect(here) },
+    stop: { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop },
+    cancel: { label: t("afkConnect.cancel"), icon: <X size={16} />, onSelect: stop },
+    retry: {
+      label: t("common.retry"),
+      icon: <ArrowsClockwise size={16} />,
+      onSelect: () => connect(here),
+    },
+    fixPassword: {
+      label: t("afkClear.fixPassword"),
+      icon: <Key size={16} />,
+      onSelect: onFixPassword,
+    },
+  };
+  return [
+    items[primaryAction(here.state)],
+    ...(here.state.kind === "connected"
+      ? [
+          {
+            label: t("afk.reconnect"),
+            icon: <ArrowsClockwise size={16} />,
+            onSelect: () => reconnect.mutate(here.id),
+          },
+        ]
+      : []),
+  ];
+}
+
 export function CloudCard({
   account,
   skewMs,
@@ -229,6 +338,10 @@ export function CloudCard({
   onInventory,
   onMovement,
   onCopy,
+  here = null,
+  onHereConsole,
+  onHereSettings,
+  onHereRemove,
   selecting = false,
   selected = false,
   onSelect,
@@ -252,6 +365,12 @@ export function CloudCard({
   onMovement?: () => void;
   /** "Ayarlarını kopyala" (several accounts, the cloud features on). */
   onCopy?: () => void;
+  /** The same account on this computer (one card for both; AFK-CLEAR). */
+  here?: AfkAccount | null;
+  /** The copy here: its console, its settings, its removal (the cloud account stays). */
+  onHereConsole?: () => void;
+  onHereSettings?: () => void;
+  onHereRemove?: () => void;
   /** Several accounts are being chosen: a box instead of the menu, the card toggles it. */
   selecting?: boolean;
   selected?: boolean;
@@ -260,32 +379,58 @@ export function CloudCard({
 }) {
   const { t } = useTranslation();
   const { reduce, layout } = useMotionPrefs();
-  const inGame = isInGame(account);
+  const place: TwinPlace = here ? twinPlace(account, here) : "cloud";
+  // The card speaks for the copy on this computer (its state, button, console and settings).
+  const local = place === "here" ? here : null;
+  const inGame = local ? local.state.kind === "connected" : isInGame(account);
   const action = cloudPrimary(account);
+  const hereConsole = onHereConsole ?? onConsole;
+  const hereSettings = onHereSettings ?? onSettings;
+  const hereItems = useHereItems(local, hereSettings);
   const openSite = () =>
     void cloudApi
       .open("account", account.id)
       .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
+  const settingsLabel = here ? t("afkClear.twin.cloudSettings") : t("cloudAfk.actions.settings");
 
-  // Groups: the account itself, its panel's tabs, its settings, then the site. A separator stands
-  // only between groups (never first, last or twice: the first group may be empty).
+  // Groups: the account itself, where it runs, its panel's tabs, its settings, then the site, and
+  // last the copy here's removal. A separator stands only between groups (never first, last or
+  // twice: a group may be empty).
   const items = separated([
-    action === "start"
-      ? { label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }
-      : action === "stop"
-        ? { label: t("cloudAfk.actions.stop"), icon: <Stop size={16} />, onSelect: onStop }
-        : null,
-    ...(inGame
-      ? [
-          {
-            label: t("cloudAfk.actions.reconnect"),
-            icon: <ArrowsClockwise size={16} />,
-            onSelect: onRestart,
-          },
-        ]
-      : []),
+    ...(local
+      ? hereItems
+      : [
+          action === "start"
+            ? { label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }
+            : action === "stop"
+              ? { label: t("cloudAfk.actions.stop"), icon: <Stop size={16} />, onSelect: onStop }
+              : action === "fixPassword"
+                ? {
+                    label: t("afkClear.fixPassword"),
+                    icon: <Key size={16} />,
+                    onSelect: onSettings,
+                  }
+                : null,
+          // Fixed elsewhere (the site, another computer): starting stays one press away.
+          ...(action === "fixPassword"
+            ? [{ label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }]
+            : []),
+          ...(isInGame(account)
+            ? [
+                {
+                  label: t("cloudAfk.actions.reconnect"),
+                  icon: <ArrowsClockwise size={16} />,
+                  onSelect: onRestart,
+                },
+              ]
+            : []),
+        ]),
     null,
-    { label: t("cloudAfk.actions.console"), icon: <Terminal size={16} />, onSelect: onConsole },
+    {
+      label: t("cloudAfk.actions.console"),
+      icon: <Terminal size={16} />,
+      onSelect: local ? hereConsole : onConsole,
+    },
     ...(onInventory
       ? [
           {
@@ -299,7 +444,16 @@ export function CloudCard({
       ? [{ label: t("cloudAfkMove.tab"), icon: <SneakerMove size={16} />, onSelect: onMovement }]
       : []),
     null,
-    { label: t("cloudAfk.actions.settings"), icon: <GearSix size={16} />, onSelect: onSettings },
+    { label: settingsLabel, icon: <GearSix size={16} />, onSelect: onSettings },
+    ...(here
+      ? [
+          {
+            label: t("afkClear.twin.hereSettings"),
+            icon: <Desktop size={16} />,
+            onSelect: hereSettings,
+          },
+        ]
+      : []),
     ...(onCopy
       ? [{ label: t("cloudAfkFeat.copy.menu"), icon: <Copy size={16} />, onSelect: onCopy }]
       : []),
@@ -333,6 +487,17 @@ export function CloudCard({
       icon: <ArrowSquareOut size={16} />,
       onSelect: openSite,
     },
+    null,
+    ...(here && onHereRemove
+      ? [
+          {
+            label: t("afkClear.twin.removeHere"),
+            icon: <Trash size={16} />,
+            danger: true,
+            onSelect: onHereRemove,
+          },
+        ]
+      : []),
   ]);
 
   return (
@@ -432,23 +597,63 @@ export function CloudCard({
           </div>
 
           <div className="mt-3 flex min-h-5 items-center gap-3">
-            <CloudStateLine account={account} skewMs={skewMs} className="flex-1" showHint />
+            {local ? (
+              <>
+                <StateLine state={local.state} where="here" className="flex-1" />
+                <LiveStats account={local} />
+              </>
+            ) : (
+              <CloudStateLine
+                account={account}
+                skewMs={skewMs}
+                className="flex-1"
+                // "Şifreyi düzelt" says what the hint would ("Ayarlar'da giriş şifresini düzelt").
+                showHint={action !== "fixPassword"}
+                where={here ? "cloud" : undefined}
+              />
+            )}
           </div>
+          {local ? <ClientRow account={local} /> : null}
           <TimeRow account={account} skewMs={skewMs} />
+          {here ? <PlaceRow account={account} here={here} place={place} /> : null}
           {onPlus ? <PlusLine account={account} onOpen={onPlus} /> : null}
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
           <div className="mt-auto flex gap-2 pt-3">
-            <PrimaryButton account={account} onStart={onStart} onStop={onStop} className="flex-1" />
-            <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
+            {local ? (
+              <AfkPrimaryAction account={local} onFixPassword={hereSettings} className="flex-1" />
+            ) : (
+              <PrimaryButton
+                account={account}
+                onStart={onStart}
+                onStop={onStop}
+                onFixPassword={onSettings}
+                className="flex-1"
+              />
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Terminal size={15} />}
+              onClick={local ? hereConsole : onConsole}
+            >
               {t("cloudAfk.actions.console")}
             </Button>
-            <SettingsButton
-              kind="cloud"
-              id={account.id}
-              label={t("cloudAfk.actions.settings")}
-              onClick={onSettings}
-            />
+            {local ? (
+              <SettingsButton
+                kind="desktop"
+                id={local.id}
+                label={t("afkClear.twin.hereSettings")}
+                onClick={hereSettings}
+              />
+            ) : (
+              <SettingsButton
+                kind="cloud"
+                id={account.id}
+                label={settingsLabel}
+                onClick={onSettings}
+              />
+            )}
           </div>
         </div>
       </ContextMenu>

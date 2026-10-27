@@ -27,6 +27,9 @@ export function useIssueText() {
     if (!issue) return null;
     // Under the one address field a bare range would not say it is about the port.
     if (issue.field === "serverPort" && issue.code === "range") return t("afkPanel.portRange");
+    // A stop for a refused password, on its line (the 7/24 Bulut panel's words).
+    if (issue.code === "wrongPassword") return t("afkPanel.wrongPassword");
+    if (issue.code === "wrongPasswordKept") return t("afkPanel.wrongPasswordSealed");
     return t(`afkSettings.errors.${issue.code}`, {
       min: issue.limit ? formatCount(issue.limit.min) : undefined,
       max: issue.limit ? formatCount(issue.limit.max) : undefined,

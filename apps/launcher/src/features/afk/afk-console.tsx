@@ -5,7 +5,6 @@ import {
   enter,
   GatedMotion,
   IconButton,
-  Input,
   leave,
   Switch,
   scrimMotion,
@@ -22,8 +21,10 @@ import { useTranslation } from "react-i18next";
 import { type AfkAccount, api } from "@/lib/api";
 import { uiLocale } from "@/lib/format";
 import { AfkHead } from "./afk-head";
+import { looksSensitive } from "./cloud/sensitive";
 import { afkFailed } from "./errors";
 import { AfkPrimaryAction } from "./primary-action";
+import { SecretField } from "./secret";
 import { StateLine } from "./state-line";
 
 /** Lines typed per account this session, newest last: ↑ and ↓ walk through them. */
@@ -42,9 +43,12 @@ function isLive(account: AfkAccount): boolean {
 export function AfkConsole({
   account,
   onClose,
+  onFixPassword,
 }: {
   account: AfkAccount | undefined;
   onClose: () => void;
+  /** "Şifreyi düzelt" after the server turned the password down: the settings open instead. */
+  onFixPassword?: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const animate = useInteractionMotion();
@@ -139,7 +143,8 @@ export function AfkConsole({
     const text = line.trim();
     if (!text || !account || !live) return;
     const list = histories.get(account.id) ?? [];
-    if (list.at(-1) !== text) list.push(text);
+    // A password line is never kept for ↑ (it is masked while typed, as in the cloud console).
+    if (list.at(-1) !== text && !looksSensitive(text)) list.push(text);
     if (list.length > HISTORY_MAX) list.splice(0, list.length - HISTORY_MAX);
     histories.set(account.id, list);
     setRecall(null);
@@ -290,17 +295,19 @@ export function AfkConsole({
                       send();
                     }}
                   >
-                    <Input
+                    {/* A password command turns secret as it is typed: the AFK surfaces' one
+                        look for secret lines (secret.tsx). */}
+                    <SecretField
                       aria-label={t("afk.consoleInput")}
                       placeholder={live ? t("afk.consoleInput") : t("afk.consoleOffline")}
                       value={line}
+                      secret={live && looksSensitive(line)}
+                      mono={live}
                       disabled={!live}
-                      onChange={(e) => setLine(e.target.value)}
+                      onChange={setLine}
                       onKeyDown={onKeyDown}
-                      spellCheck={false}
-                      autoComplete="off"
                       // The shared disabled look, a little brighter: the placeholder says why.
-                      className={cn("disabled:opacity-60", live && "font-mono text-[13px]")}
+                      className="h-[34px] disabled:opacity-60"
                     />
                     {live ? (
                       <IconButton
@@ -311,7 +318,11 @@ export function AfkConsole({
                       />
                     ) : (
                       // Bağla; İptal while its client is fetched; Tekrar dene after it could not be.
-                      <AfkPrimaryAction account={account} size="md" />
+                      <AfkPrimaryAction
+                        account={account}
+                        size="md"
+                        onFixPassword={onFixPassword ? () => onFixPassword(account.id) : undefined}
+                      />
                     )}
                   </form>
                 </GatedMotion.aside>

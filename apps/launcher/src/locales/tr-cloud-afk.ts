@@ -105,9 +105,6 @@ export const trCloudAfk = {
     failed: "İşlem yapılamadı. Tekrar dene.",
   },
   location: {
-    label: "Nerede çalışsın",
-    here: "Bilgisayarda",
-    cloud: "Bulutta",
     toCloud: "{{name}} bulutta çalışıyor",
     toHere: "{{name}} bu bilgisayarda çalışıyor",
   },
@@ -118,8 +115,6 @@ export const trCloudAfk = {
     stopCloud: "Buluttakini durdur",
     stopHere: "Bilgisayardakini durdur",
     cancel: "Vazgeç",
-    skipped_one: "Bulutta çalışan {{count}} hesap atlandı.",
-    skipped_other: "Bulutta çalışan {{count}} hesap atlandı.",
   },
   move: {
     action: "Buluta taşı",

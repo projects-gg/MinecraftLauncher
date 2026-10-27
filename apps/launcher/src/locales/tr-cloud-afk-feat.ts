@@ -24,7 +24,9 @@ export const trCloudAfkFeat = {
     },
     search: "Konsolda ara",
     searchClose: "Aramayı kapat",
-    noMatch: "Bu süzgeçte satır yok.",
+    /** A kind chip with nothing to show (no search typed). */
+    noMatch: "Bu türde satır yok.",
+    noSearchMatch: "Aramana uyan satır yok.",
     download: "İndir",
     ranges: {
       hour: "Son 1 saat",

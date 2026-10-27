@@ -26,6 +26,7 @@ import { plusMe, plusOffer } from "./plus/types";
 import { isPlusAccount, plusShown, usePlusUi } from "./plus/use-plus";
 import { CloudSettingsSheet } from "./settings";
 import { localized } from "./status";
+import { hereCopy } from "./twins";
 import {
   useCloudAction,
   useCloudPage,
@@ -67,11 +68,21 @@ function revealChosen(list: HTMLElement | null, head: HTMLElement | null, reduce
 export function CloudSection({
   desktop,
   centered = false,
+  onHereConsole,
+  onHereSettings,
+  onHereRemove,
 }: {
-  /** The desktop AFK accounts (the guard and "Buluta taşı" read them). */
+  /** The desktop AFK accounts (the guard, "Buluta taşı" and the twins read them). */
   desktop: AfkAccount[];
   /** The page has no desktop account yet: the intro sits under its centred form. */
   centered?: boolean;
+  /**
+   * The copy on this computer of an account in both places (its card is the cloud one here,
+   * AFK-CLEAR): its console, its settings and its removal live on the page.
+   */
+  onHereConsole: (desktopId: string) => void;
+  onHereSettings: (desktopId: string) => void;
+  onHereRemove: (desktop: AfkAccount) => void;
 }) {
   const { t, i18n } = useTranslation();
   useCloudSync();
@@ -259,12 +270,18 @@ export function CloudSection({
           <motion.p
             key="maintenance"
             role="status"
-            className="mb-3 flex items-start gap-2 rounded-[var(--radius-panel)] bg-gold-500/10 px-3.5 py-2.5 text-[12.5px] text-gold-200 ring-1 ring-gold-400/20"
+            // A quiet panel, the tone only on its mark (projects-taste: no coloured boxes).
+            className="mb-3 flex items-start gap-2 rounded-[var(--radius-panel)] bg-white/[0.035] px-3.5 py-2.5 text-[12.5px] text-bone-100 ring-1 ring-white/7"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: enter(0.2) }}
             exit={{ opacity: 0, transition: leave(0.14) }}
           >
-            <WarningCircle size={15} weight="fill" className="mt-px shrink-0" aria-hidden />
+            <WarningCircle
+              size={15}
+              weight="fill"
+              className="mt-px shrink-0 text-gold-300"
+              aria-hidden
+            />
             <span>{maintenance}</span>
           </motion.p>
         ) : null}
@@ -285,48 +302,57 @@ export function CloudSection({
       ) : accounts.length > 0 ? (
         <ul ref={listRef} className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           <AnimatePresence initial={false} mode="popLayout">
-            {accounts.map((account, index) => (
-              <CloudCard
-                key={account.id}
-                account={account}
-                skewMs={skewMs}
-                index={index}
-                onStart={() => void guardedStart(account, desktop)}
-                onStop={() => void stop(account)}
-                onRestart={() => void restart(account)}
-                onConsole={() => ui.openConsole(account.id)}
-                onSettings={() => ui.openSettings(account.id)}
-                onPlus={plus && isPlusAccount(account) ? () => openPlus(account.id) : undefined}
-                onUpgrade={
-                  canBuyPlus && !isPlusAccount(account) && !account.expired
-                    ? () => void upgrade(account.id)
-                    : undefined
-                }
-                onInventory={
-                  (account.features?.inventory?.mode ?? "off") !== "off" && account.host
-                    ? () => ui.openConsole(account.id, "inventory")
-                    : undefined
-                }
-                onMovement={
-                  movementShown(account) ? () => ui.openConsole(account.id, "movement") : undefined
-                }
-                onCopy={
-                  bulk
-                    ? () =>
-                        setCopy({
-                          source: account.id,
-                          sources: [account.id],
-                          targets: chosenAccounts
-                            .map((one) => one.id)
-                            .filter((id) => id !== account.id),
-                        })
-                    : undefined
-                }
-                selecting={selecting}
-                selected={chosen.has(account.id)}
-                onSelect={(on) => choose(account.id, on)}
-              />
-            ))}
+            {accounts.map((account, index) => {
+              const here = hereCopy(data, account.id, desktop);
+              return (
+                <CloudCard
+                  key={account.id}
+                  account={account}
+                  here={here}
+                  onHereConsole={here ? () => onHereConsole(here.id) : undefined}
+                  onHereSettings={here ? () => onHereSettings(here.id) : undefined}
+                  onHereRemove={here ? () => onHereRemove(here) : undefined}
+                  skewMs={skewMs}
+                  index={index}
+                  onStart={() => void guardedStart(account, desktop)}
+                  onStop={() => void stop(account)}
+                  onRestart={() => void restart(account)}
+                  onConsole={() => ui.openConsole(account.id)}
+                  onSettings={() => ui.openSettings(account.id)}
+                  onPlus={plus && isPlusAccount(account) ? () => openPlus(account.id) : undefined}
+                  onUpgrade={
+                    canBuyPlus && !isPlusAccount(account) && !account.expired
+                      ? () => void upgrade(account.id)
+                      : undefined
+                  }
+                  onInventory={
+                    (account.features?.inventory?.mode ?? "off") !== "off" && account.host
+                      ? () => ui.openConsole(account.id, "inventory")
+                      : undefined
+                  }
+                  onMovement={
+                    movementShown(account)
+                      ? () => ui.openConsole(account.id, "movement")
+                      : undefined
+                  }
+                  onCopy={
+                    bulk
+                      ? () =>
+                          setCopy({
+                            source: account.id,
+                            sources: [account.id],
+                            targets: chosenAccounts
+                              .map((one) => one.id)
+                              .filter((id) => id !== account.id),
+                          })
+                      : undefined
+                  }
+                  selecting={selecting}
+                  selected={chosen.has(account.id)}
+                  onSelect={(on) => choose(account.id, on)}
+                />
+              );
+            })}
           </AnimatePresence>
         </ul>
       ) : plusIntroCard ? (

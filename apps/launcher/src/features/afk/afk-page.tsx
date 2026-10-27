@@ -1,17 +1,20 @@
+// The AFK page: the accounts this computer runs, then 7/24 Bulut. Every game account is one card
+// (AFK-CLEAR): an account also in 7/24 Bulut (the same name on the same server) is its cloud card,
+// which says where it runs. Once the player has cloud accounts the page is two lists, "Bu
+// bilgisayarda" and "7/24 Bulut", each with its own count and its own buttons, so "Tümünü bağla"
+// stands under the list it connects.
 import {
   ArrowsClockwise,
   DotsThreeVertical,
   FolderOpen,
-  ForkKnife,
   GearSix,
-  Heart,
+  Key,
   Play,
   Stop,
   StopCircle,
   Terminal,
   Trash,
   UserPlus,
-  UsersThree,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -22,14 +25,11 @@ import {
   Dialog,
   EmptyState,
   easeOutExpo,
-  enter,
   Field,
   IconButton,
   Input,
-  leave,
   Menu,
   type MenuItem,
-  Progress,
   useMotionPrefs,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -40,16 +40,11 @@ import { isAfkIdle } from "@/features/accounts/afk-match";
 import { type AfkAccount, api } from "@/lib/api";
 import { AfkConsole } from "./afk-console";
 import { AfkHead } from "./afk-head";
-import { CloudLocation, useCloudPlaces, useMoveMenuItem } from "./cloud/location";
+import { ClientRow, LiveStats } from "./card-parts";
+import { useCloudPlaces, useMoveMenuItem } from "./cloud/location";
 import { CloudSection } from "./cloud/section";
-import { CloudStateLine } from "./cloud/state-line";
-import {
-  runsInCloud,
-  twinOf,
-  useCloudPage,
-  useConnectAll,
-  useGuardedConnect,
-} from "./cloud/use-cloud";
+import { foldedIds } from "./cloud/twins";
+import { useCloudPage, useConnectAll, useGuardedConnect } from "./cloud/use-cloud";
 import { afkFailed, isFriendly, runAfk } from "./errors";
 import { AfkPrimaryAction, primaryAction } from "./primary-action";
 import { draftKey, useAfkDrafts } from "./settings/drafts";
@@ -69,90 +64,6 @@ const REST = "translateY(0px) scale(1)";
  * included).
  */
 const isActive = (account: AfkAccount) => !isAfkIdle(account.state);
-
-/**
- * Under the state line while the account's client is fetched (its progress) or after it could not
- * be had (what to do). One slot: the outgoing line fades where it was while the new one takes its
- * place.
- */
-function ClientRow({ account }: { account: AfkAccount }) {
-  const { t } = useTranslation();
-  const { reduce } = useMotionPrefs();
-  const { state } = account;
-  const from = reduce ? "translateY(0px)" : "translateY(3px)";
-  return (
-    <AnimatePresence initial={false} mode="popLayout">
-      {state.kind === "preparing" ? (
-        <motion.div
-          key="progress"
-          className="mt-2.5"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1, transition: enter(0.22) }}
-          exit={{ opacity: 0, transition: leave(0.16) }}
-        >
-          <Progress
-            value={state.percent}
-            label={t(
-              state.step === "downloading" ? "afkConnect.downloading" : "afkConnect.preparing",
-            )}
-            className="h-1"
-          />
-        </motion.div>
-      ) : state.kind === "clientFailed" ? (
-        <motion.p
-          key={`hint-${state.problem}`}
-          // Said once when it appears; the state line above already shows what happened.
-          role="status"
-          className="mt-1.5 pl-[23px] text-[12px] leading-snug text-ash-300"
-          initial={{ opacity: 0, transform: from }}
-          animate={{ opacity: 1, transform: "translateY(0px)", transition: enter(0.24) }}
-          exit={{ opacity: 0, transition: leave(0.16) }}
-        >
-          <span className="sr-only">{t(`afkConnect.problem.${state.problem}.title`)}. </span>
-          {t(`afkConnect.problem.${state.problem}.hint`)}
-        </motion.p>
-      ) : null}
-    </AnimatePresence>
-  );
-}
-
-/** Health, food and players of a connected account, beside its state (no extra row). */
-function Stats({ account }: { account: AfkAccount }) {
-  const { t } = useTranslation();
-  const stats = [
-    {
-      key: "health",
-      label: t("afk.stats.health"),
-      value: account.health,
-      icon: <Heart size={14} weight="fill" className="text-flare-400" />,
-    },
-    {
-      key: "food",
-      label: t("afk.stats.food"),
-      value: account.food,
-      icon: <ForkKnife size={14} weight="fill" className="text-gold-400" />,
-    },
-    {
-      key: "players",
-      label: t("afk.stats.players"),
-      value: account.players,
-      icon: <UsersThree size={14} weight="fill" className="text-ash-300" />,
-    },
-  ];
-  return (
-    <span className="flex shrink-0 items-center gap-3 text-[12.5px] text-ash-300 tabular-nums">
-      {stats.map((stat) => (
-        <span key={stat.key} className="flex items-center gap-1" title={stat.label}>
-          <span aria-hidden className="flex">
-            {stat.icon}
-          </span>
-          <span className="sr-only">{stat.label}</span>
-          {stat.value ?? "-"}
-        </span>
-      ))}
-    </span>
-  );
-}
 
 function AfkCard({
   account,
@@ -180,32 +91,30 @@ function AfkCard({
   // Asks first when the same account runs in 7/24 Bulut (cloud/use-cloud.ts).
   const guardedConnect = useGuardedConnect();
   const connect = () => guardedConnect(account);
-  const places = useCloudPlaces();
-  // Idle here while its twin runs in the cloud: the card says the cloud's state, and "Bağla"
-  // steps back from gold (it would ask to stop the cloud first; SMALL10).
-  const { data: cloud, skewMs } = useCloudPage();
-  const twin = twinOf(cloud, account.id);
-  const inCloud = runsInCloud(twin) && isAfkIdle(account.state) ? twin : null;
   const moveItem = useMoveMenuItem(account);
   const stop = () => runAfk(api.afkStop(account.id), t("afk.stopFailed"));
   const openFolder = () => runAfk(api.afkOpenFolder(account.id), t("afk.openFolderFailed"));
 
   // The main button's action leads the menu too.
   const main: Record<ReturnType<typeof primaryAction>, MenuItem> = {
-    connect: {
-      // The button's own words: "Burada bağla" while the account runs in the cloud.
-      label: inCloud ? t("small10.afk.connectHere") : t("afk.connect"),
-      icon: <Play size={16} />,
-      onSelect: connect,
-    },
+    connect: { label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect },
     stop: { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop },
     cancel: { label: t("afkConnect.cancel"), icon: <X size={16} />, onSelect: stop },
     retry: { label: t("common.retry"), icon: <ArrowsClockwise size={16} />, onSelect: connect },
+    fixPassword: {
+      label: t("afkClear.fixPassword"),
+      icon: <Key size={16} />,
+      onSelect: onSettings,
+    },
   };
 
   // One list for the "more" button and the right click.
   const items: Array<MenuItem | null> = [
     main[primaryAction(account.state)],
+    // Fixed in another way (on the server's site): connecting stays one press away.
+    ...(primaryAction(account.state) === "fixPassword"
+      ? [{ label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect }]
+      : []),
     ...(connected
       ? [
           {
@@ -285,36 +194,21 @@ function AfkCard({
           </div>
 
           <div className="mt-3 flex min-h-5 items-center gap-3">
-            {inCloud ? (
-              <CloudStateLine account={inCloud} skewMs={skewMs} onDesktopCard className="flex-1" />
-            ) : (
-              <StateLine state={account.state} autoStart={account.autoStart} className="flex-1" />
-            )}
-            <AnimatePresence initial={false}>
-              {connected ? (
-                <motion.span
-                  key="stats"
-                  className="flex"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1, transition: enter(0.22) }}
-                  exit={{ opacity: 0, transition: leave(0.16) }}
-                >
-                  <Stats account={account} />
-                </motion.span>
-              ) : null}
-            </AnimatePresence>
+            <StateLine state={account.state} autoStart={account.autoStart} className="flex-1" />
+            <LiveStats account={account} />
           </div>
           <ClientRow account={account} />
 
           {stale ? (
-            <div className="mt-3 flex items-center gap-2 rounded-md bg-gold-500/10 py-1.5 pr-1.5 pl-2.5 ring-1 ring-gold-400/20">
-              <p className="min-w-0 flex-1 text-[12px] leading-snug text-gold-200">
+            // A quiet note, the gold only on its mark (projects-taste: no coloured boxes).
+            <div className="mt-3 flex items-center gap-2 rounded-md bg-white/[0.035] py-1.5 pr-1.5 pl-2.5 ring-1 ring-white/7">
+              <ArrowsClockwise size={14} aria-hidden className="shrink-0 text-gold-300" />
+              <p className="min-w-0 flex-1 text-[12px] leading-snug text-bone-100">
                 {t("afk.settingsChanged")}
               </p>
               <Button
                 size="sm"
                 variant="ghost"
-                icon={<ArrowsClockwise size={14} />}
                 disabled={reconnect.isPending}
                 onClick={() => reconnect.mutate(account.id)}
               >
@@ -323,12 +217,9 @@ function AfkCard({
             </div>
           ) : null}
 
-          {/* Where it runs, once the player has 7/24 Bulut accounts. */}
-          {places ? <CloudLocation account={account} /> : null}
-
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
           <div className="mt-auto flex gap-2 pt-3">
-            <AfkPrimaryAction account={account} quiet={inCloud !== null} className="flex-1" />
+            <AfkPrimaryAction account={account} onFixPassword={onSettings} className="flex-1" />
             <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
               {t("afk.console")}
             </Button>
@@ -422,6 +313,47 @@ function AddForm({
   );
 }
 
+/**
+ * "Tümünü durdur" and "Tümünü bağla": the accounts of the list they stand over ("Bu bilgisayarda"
+ * once there are two lists; an account also in 7/24 Bulut is a card of the other list and keeps
+ * its own buttons there).
+ */
+function DesktopBulk({
+  list,
+  folded,
+}: {
+  list: AfkAccount[];
+  /** Some desktop accounts are cards of the cloud list: they are left alone. */
+  folded: boolean;
+}) {
+  const { t } = useTranslation();
+  const connectAll = useConnectAll();
+  const active = list.filter(isActive);
+  const stopAll = () => {
+    if (!folded) return runAfk(api.afkStopAll(), t("afk.stopFailed"));
+    // One by one: each also leaves a running "Tümünü bağla" (pl-afk `disconnect`).
+    for (const account of active) runAfk(api.afkStop(account.id), t("afk.stopFailed"));
+  };
+  return (
+    <div className="flex gap-2">
+      {active.length ? (
+        // On a ghost button a filled square reads as a checkbox: the outlined stop sign.
+        <Button variant="ghost" icon={<StopCircle size={16} />} onClick={stopAll}>
+          {t("afk.stopAll")}
+        </Button>
+      ) : null}
+      <Button
+        variant="secondary"
+        icon={<Play size={15} weight="fill" className="text-gold-300" />}
+        onClick={connectAll}
+        disabled={active.length === list.length}
+      >
+        {t("afk.connectAll")}
+      </Button>
+    </div>
+  );
+}
+
 export function AfkPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -432,18 +364,27 @@ export function AfkPage() {
   const [consoleId, setConsoleId] = useState<string | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<AfkAccount | null>(null);
-  const connectAll = useConnectAll();
+  const { data: cloud } = useCloudPage();
+  // Two lists once the player has 7/24 Bulut accounts; an account in both places is its cloud card.
+  const sectioned = useCloudPlaces();
+  const folded = foldedIds(cloud);
+  const here = accounts.filter((a) => !folded.has(a.id));
 
   useEffect(
     () => api.onAfkChange(() => void queryClient.invalidateQueries({ queryKey: ["afk"] })),
     [queryClient],
   );
 
-  const anyActive = accounts.some(isActive);
-  const anyIdle = accounts.some((a) => !isActive(a));
-  const online = accounts.filter((a) => a.state.kind === "connected").length;
+  const online = here.filter((a) => a.state.kind === "connected").length;
   const consoleAccount = accounts.find((a) => a.id === consoleId);
   const settingsAccount = accounts.find((a) => a.id === settingsId);
+  const count = isPending
+    ? t("common.loading")
+    : sectioned && here.length === 0
+      ? t("afkClear.here.none")
+      : online > 0
+        ? t("afk.countOnline", { count: here.length, online })
+        : t("afk.count", { count: here.length });
 
   // Adding or removing an account sends no session event, so the list is asked again here.
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["afk"] });
@@ -458,60 +399,52 @@ export function AfkPage() {
       .catch((error: unknown) => afkFailed(error, t("afk.removeFailed")))
       .finally(refresh);
   };
+  const removingTwin = removing !== null && folded.has(removing.id);
+  const bulk = here.length > 0 ? <DesktopBulk list={here} folded={folded.size > 0} /> : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-page pt-3">
       <header className="flex flex-wrap items-end justify-between gap-3 pb-4">
         <div>
           <h1 className="page-title">{t("afk.title")}</h1>
-          {/* A count like the library's: what the page is for is said by the empty state. */}
-          <p className="mt-0.5 text-[13px] text-ash-300 tabular-nums">
-            {isPending
-              ? t("common.loading")
-              : online > 0
-                ? t("afk.countOnline", { count: accounts.length, online })
-                : t("afk.count", { count: accounts.length })}
-          </p>
+          {/* A count like the library's: what the page is for is said by the empty state. With two
+              lists each says its own. */}
+          {sectioned ? null : (
+            <p className="mt-0.5 text-[13px] text-ash-300 tabular-nums">{count}</p>
+          )}
         </div>
-        {accounts.length ? (
-          <div className="flex gap-2">
-            {anyActive ? (
-              // On a ghost button a filled square reads as a checkbox: the outlined stop sign.
-              <Button
-                variant="ghost"
-                icon={<StopCircle size={16} />}
-                onClick={() => runAfk(api.afkStopAll(), t("afk.stopFailed"))}
-              >
-                {t("afk.stopAll")}
-              </Button>
-            ) : null}
-            <Button
-              variant="secondary"
-              icon={<Play size={15} weight="fill" className="text-gold-300" />}
-              onClick={connectAll}
-              disabled={!anyIdle}
-            >
-              {t("afk.connectAll")}
-            </Button>
-          </div>
-        ) : null}
+        {sectioned ? null : bulk}
       </header>
 
       {/* Positioned: a removed card pops out of the flow here, so it fades where it was even
           when the list is scrolled, clipped with the list. */}
       <div className="page-scroll relative min-h-0 flex-1 pb-5">
+        {/* The first list's heading, once there are two (the cloud list has its own). */}
+        {sectioned && !isPending ? (
+          <header className="mb-3 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-section font-semibold text-bone-50">
+                {t("afkClear.here.title")}
+              </h2>
+              <p className="mt-0.5 text-[13px] text-ash-300 tabular-nums">{count}</p>
+            </div>
+            {bulk}
+          </header>
+        ) : null}
         {/* The list answers within a frame: nothing (rather than a jumping form) until then. */}
-        {isPending ? null : accounts.length === 0 ? (
-          <EmptyState
-            icon={<ContentIcon kind="afk" />}
-            title={t("afk.empty.title")}
-            body={t("afk.empty.body")}
-            className="pt-[8vh] pb-5"
-          />
+        {isPending ? null : here.length === 0 ? (
+          sectioned ? null : (
+            <EmptyState
+              icon={<ContentIcon kind="afk" />}
+              title={t("afk.empty.title")}
+              body={t("afk.empty.body")}
+              className="pt-[8vh] pb-5"
+            />
+          )
         ) : (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
             <AnimatePresence initial={false} mode="popLayout">
-              {accounts.map((a, i) => (
+              {here.map((a, i) => (
                 <AfkCard
                   key={a.id}
                   account={a}
@@ -525,19 +458,43 @@ export function AfkPage() {
           </ul>
         )}
         {isPending ? null : (
-          <AddForm accounts={accounts} centered={accounts.length === 0} onAdded={refresh} />
+          <AddForm
+            accounts={accounts}
+            centered={!sectioned && accounts.length === 0}
+            onAdded={refresh}
+          />
         )}
         {/* Nothing of it shows unless 7/24 Bulut answers. */}
-        {isPending ? null : <CloudSection desktop={accounts} centered={accounts.length === 0} />}
+        {isPending ? null : (
+          <CloudSection
+            desktop={accounts}
+            centered={!sectioned && accounts.length === 0}
+            onHereConsole={setConsoleId}
+            onHereSettings={setSettingsId}
+            onHereRemove={setRemoving}
+          />
+        )}
       </div>
 
-      <AfkConsole account={consoleAccount} onClose={() => setConsoleId(null)} />
+      <AfkConsole
+        account={consoleAccount}
+        onClose={() => setConsoleId(null)}
+        onFixPassword={(id) => {
+          setConsoleId(null);
+          setSettingsId(id);
+        }}
+      />
       <AfkSettingsSheet account={settingsAccount} onClose={() => setSettingsId(null)} />
       <Dialog
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={t("afk.removeConfirm.title", { name: removing?.nickname ?? "" })}
-        description={t("afk.removeConfirm.body")}
+        // The copy here of an account also in 7/24 Bulut: the cloud account stays.
+        title={
+          removingTwin
+            ? t("afkClear.twin.removeTitle", { name: removing?.nickname ?? "" })
+            : t("afk.removeConfirm.title", { name: removing?.nickname ?? "" })
+        }
+        description={removingTwin ? t("afkClear.twin.removeBody") : t("afk.removeConfirm.body")}
         closeLabel={t("common.close")}
         width={440}
         footer={
@@ -552,7 +509,7 @@ export function AfkPage() {
                 setRemoving(null);
               }}
             >
-              {t("afk.removeConfirm.confirm")}
+              {removingTwin ? t("afkClear.twin.removeHere") : t("afk.removeConfirm.confirm")}
             </Button>
           </>
         }

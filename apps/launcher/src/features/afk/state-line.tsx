@@ -104,22 +104,36 @@ export function stateText(state: AfkState, now: number, t: TFunction, autoStart 
   }
 }
 
+/** "Oyunda, 1 sa 5 dk" → "oyunda, 1 sa 5 dk", to follow a place ("Bu bilgisayarda …"). */
+export function lowerFirst(text: string, lang: "tr" | "en"): string {
+  return text.charAt(0).toLocaleLowerCase(lang) + text.slice(1);
+}
+
 export function StateLine({
   state,
   autoStart = false,
+  where,
   className,
 }: {
   state: AfkState;
   /** The account connects by itself when the launcher opens (its card says so while stopped). */
   autoStart?: boolean;
+  /**
+   * The line stands on the 7/24 Bulut card of the same account (one card for both, AFK-CLEAR): it
+   * says where ("Bu bilgisayarda oyunda, 1 sa 5 dk").
+   */
+  where?: "here";
   className?: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { unseen } = usePerf();
   const [ticks, tick] = useState(0);
   // The clock is read on every render, so a new state never shows with an old time.
   const now = Date.now();
-  const text = stateText(state, now, t, autoStart);
+  const words = stateText(state, now, t, autoStart);
+  const lang = i18n.language === "en" ? "en" : "tr";
+  const text =
+    where === "here" ? t("afkClear.twin.hereState", { state: lowerFirst(words, lang) }) : words;
   // Only the uptime and the reconnect countdown tick, and only while somebody can see them.
   const wait = unseen ? null : nextChangeMs(state, now);
   useEffect(() => {

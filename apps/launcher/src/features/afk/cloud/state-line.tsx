@@ -3,15 +3,16 @@
 import { cn, SignalBars, usePerf } from "@pl/ui";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { lowerFirst } from "../state-line";
 import type { CloudAccount } from "./api";
-import { cloudStatus } from "./status";
+import { cloudStatus, isCloudActive } from "./status";
 
 export function CloudStateLine({
   account,
   skewMs,
   className,
   showHint = false,
-  onDesktopCard = false,
+  where,
 }: {
   account: CloudAccount;
   /** The service's clock minus this computer's. */
@@ -19,21 +20,20 @@ export function CloudStateLine({
   className?: string;
   showHint?: boolean;
   /**
-   * The line stands on the desktop card of the same account while it runs in the cloud: it says
-   * where ("Bulutta oyunda, 3 sa 12 dk"; SMALL10).
+   * The account is on this computer too (one card for both, AFK-CLEAR): while it runs in the cloud
+   * the line says where ("Bulutta oyunda, 3 sa 12 dk").
    */
-  onDesktopCard?: boolean;
+  where?: "cloud";
 }) {
   const { t, i18n } = useTranslation();
   const { unseen } = usePerf();
   const [ticks, tick] = useState(0);
   const lang = i18n.language === "en" ? "en" : "tr";
   const status = cloudStatus(account, Date.now() + skewMs, t, lang);
-  const text = onDesktopCard
-    ? t("small10.afk.inCloud", {
-        state: status.text.charAt(0).toLocaleLowerCase(lang) + status.text.slice(1),
-      })
-    : status.text;
+  const text =
+    where === "cloud" && isCloudActive(account)
+      ? t("afkClear.twin.cloudState", { state: lowerFirst(status.text, lang) })
+      : status.text;
   const wait = unseen ? null : status.nextChangeMs;
   useEffect(() => {
     void ticks;

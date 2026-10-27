@@ -304,6 +304,21 @@ export function hasMarker(text: string): boolean {
   return /\[\s*afk\s*\+\s*\]/iu.test(text.normalize("NFKC"));
 }
 
+/**
+ * Fields the settings mark while they are edited, before any "Kaydet": a persona text longer than
+ * its room, an approval line above the per-deal limit. While one is marked the change bar's
+ * "Kaydet" waits (AFK-CLEAR, as the AFK settings bar since SHEET-UX).
+ */
+export function liveProblems(shown: SettingsPart, maxDeal: number): boolean {
+  const persona = shown.persona;
+  return (
+    personaTextProblem(persona.intro, PLUS_LIMITS.introMax) === "length" ||
+    (persona.statusPreset === null &&
+      personaTextProblem(persona.status, PLUS_LIMITS.statusMax) === "length") ||
+    limitProblems(shown.limits, maxDeal).approvalAbove === "approvalAbove"
+  );
+}
+
 /** The launcher's quick look at a persona text; the Worker's text rule and its judge decide. */
 export function personaTextProblem(text: string, max: number): PersonaTextProblem | null {
   const value = text.trim();

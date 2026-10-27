@@ -3,12 +3,13 @@
 // inventory choice. Secret rows are sealed again for every target: from this computer's copy, or
 // from what the player types here (once for all, or per account). Each target restarts with the
 // new settings, as after any change.
-import { Button, Dialog, Field, Input, Segmented, Select } from "@pl/ui";
+import { Button, Dialog, Field, Segmented, Select } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check } from "@/features/settings/cleanup/check";
 import { AfkHead } from "../afk-head";
+import { SecretField } from "../secret";
 import { type CloudAccount, type CloudCopySecret, type CloudCopySource, cloudApi } from "./api";
 import { commandOf, lineOf, rowName } from "./bulk";
 import { useBulkToast } from "./bulk-bar";
@@ -153,6 +154,7 @@ export function CopyDialog({
     return (
       <Field
         key={key(row, target?.id ?? null)}
+        htmlFor={`copy-secret-${key(row, target?.id ?? null)}`}
         error={tried && empty ? t("cloudAfkFeat.copy.secretMissing") : undefined}
         label={
           target
@@ -160,36 +162,24 @@ export function CopyDialog({
             : t("cloudAfkFeat.copy.secretField", { row: rowName(preview) })
         }
       >
-        <div className="relative">
-          {command ? (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-3 flex items-center font-mono text-[13px] text-ash-300"
-            >
-              {command}
-            </span>
-          ) : null}
-          <Input
-            data-copy-secret=""
-            data-empty={empty ? "" : undefined}
-            invalid={tried && empty}
-            type="password"
-            autoComplete="new-password"
-            spellCheck={false}
-            data-1p-ignore=""
-            data-lpignore="true"
-            maxLength={256 - (command ? command.length + 1 : 0)}
-            value={typed[key(row, target?.id ?? null)] ?? ""}
-            onChange={(event) =>
-              setTyped((current) => ({
-                ...current,
-                [key(row, target?.id ?? null)]: event.target.value,
-              }))
-            }
-            style={command ? { paddingLeft: `calc(0.75rem + ${command.length + 1}ch)` } : undefined}
-            className="font-mono text-[13px]"
-          />
-        </div>
+        {/* The AFK surfaces' one look for secret lines (secret.tsx): the command before the
+            field, only the password typed. */}
+        <SecretField
+          id={`copy-secret-${key(row, target?.id ?? null)}`}
+          data-copy-secret=""
+          data-empty={empty ? "" : undefined}
+          invalid={tried && empty}
+          prefix={command}
+          maxLength={256 - (command ? command.length + 1 : 0)}
+          value={typed[key(row, target?.id ?? null)] ?? ""}
+          onChange={(text) =>
+            setTyped((current) => ({
+              ...current,
+              [key(row, target?.id ?? null)]: text,
+            }))
+          }
+          className="h-[34px]"
+        />
       </Field>
     );
   };

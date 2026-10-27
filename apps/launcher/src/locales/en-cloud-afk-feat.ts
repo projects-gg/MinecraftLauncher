@@ -22,7 +22,8 @@ export const enCloudAfkFeat = {
     },
     search: "Search the console",
     searchClose: "Close search",
-    noMatch: "No lines for this filter.",
+    noMatch: "No lines of this kind.",
+    noSearchMatch: "No lines match your search.",
     download: "Download",
     ranges: {
       hour: "Last hour",

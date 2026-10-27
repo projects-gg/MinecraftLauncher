@@ -213,7 +213,11 @@ export type IssueCode =
   | "ruleReply"
   | "patternInvalid"
   | "patternComplex"
-  | "patternLong";
+  | "patternLong"
+  /** A stop for a password the server refused, on the line that types it (never blocking). */
+  | "wrongPassword"
+  /** The same on a kept line: "Değiştir" first. */
+  | "wrongPasswordKept";
 
 export interface Issue {
   section: SectionId;
@@ -392,4 +396,44 @@ export function isSecretLine(
   const [name = "", ...rest] = trimmed.split(/[ \t]+/);
   const upper = name.toUpperCase();
   return rest.join("").length > 0 && sensitive.some((s) => s.toUpperCase() === upper);
+}
+
+/**
+ * The line a stop for a password the server refused points at (the client names none): the first
+ * login command holding a password (kept or typed), else the first auto-reply that types one, while
+ * it still has its saved words. Shown with the rest, never blocking; a line being replaced is being
+ * fixed already (AFK-CLEAR).
+ */
+export function passwordIssue(
+  draft: Draft,
+  baseline: Draft,
+  sensitive: AfkSettingsView["sensitiveCommands"],
+): Issue | null {
+  if (draft.page.loginCommands.enabled) {
+    for (const row of draft.login) {
+      if (row.kind === "replace") return null;
+      if (row.kind === "stored") {
+        return { section: "login", field: `login.${row.key}`, code: "wrongPasswordKept" };
+      }
+      if (isSecretLine(row.text, sensitive)) {
+        const saved = baseline.login.find((r) => r.key === row.key);
+        return saved?.kind === "text" && saved.text === row.text
+          ? { section: "login", field: `login.${row.key}`, code: "wrongPassword" }
+          : null;
+      }
+    }
+  }
+  if (draft.page.autoRespond.enabled) {
+    for (const rule of draft.rules) {
+      const field = (["reply", "privateReply", "otherReply"] as const).find((f) =>
+        isSecretLine(rule[f], sensitive),
+      );
+      if (!field) continue;
+      const saved = baseline.rules.find((r) => r.key === rule.key);
+      return saved && saved[field] === rule[field]
+        ? { section: "respond", field: `rule.${rule.key}.reply`, code: "wrongPassword" }
+        : null;
+    }
+  }
+  return null;
 }

@@ -106,9 +106,6 @@ export const enCloudAfk = {
     failed: "Couldn't do that. Try again.",
   },
   location: {
-    label: "Where it runs",
-    here: "This PC",
-    cloud: "Cloud",
     toCloud: "{{name}} runs in the cloud",
     toHere: "{{name}} runs on this PC",
   },
@@ -119,8 +116,6 @@ export const enCloudAfk = {
     stopCloud: "Stop the cloud one",
     stopHere: "Stop the one on this PC",
     cancel: "Cancel",
-    skipped_one: "Skipped {{count}} account that runs in the cloud.",
-    skipped_other: "Skipped {{count}} accounts that run in the cloud.",
   },
   move: {
     action: "Move to the cloud",

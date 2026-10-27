@@ -39,6 +39,7 @@ import {
   editDraft,
   isTime,
   limitProblems,
+  liveProblems,
   type PersonaTextProblem,
   PLUS_LIMITS,
   type PlusLimits,
@@ -1534,7 +1535,9 @@ export function SettingsSection({
   }, [focusGroup, setFocusGroup]);
 
   // A problem the form shows blocks the save at once (the AFK sheets' rule, SHEET-UX decision 27):
-  // after "Kaydet", or while an edited tag reads wrong (its line shows as it is typed).
+  // after "Kaydet", while an edited tag reads wrong (its line shows as it is typed), while a field
+  // is marked as it is typed (a text too long, an approval above the per-deal limit), and while the
+  // service's marks stand (any edit takes them away).
   const savedTag = panel.settings.config.persona.prefix;
   const tagProblem = prefixProblem(shown.persona.prefix.text, [
     ...shown.who.friends,
@@ -1545,7 +1548,10 @@ export function SettingsSection({
     tagProblem !== "empty" &&
     (shown.persona.prefix.text !== savedTag.text || shown.persona.prefix.on !== savedTag.on);
   const blocking =
-    (submitted && hasProblems(shown, maxDeal, panel.settings.config.blocked)) || tagShown;
+    (submitted && hasProblems(shown, maxDeal, panel.settings.config.blocked)) ||
+    tagShown ||
+    liveProblems(shown, maxDeal) ||
+    serverIssues.size > 0;
   const props = { shown, set, panel, submitted };
 
   return (

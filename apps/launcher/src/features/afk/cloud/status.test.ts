@@ -14,6 +14,7 @@ import {
   localized,
   offerLine,
   serverLabel,
+  stoppedOnPassword,
   timeLeft,
 } from "./status";
 
@@ -228,11 +229,22 @@ describe("cloudPrimary", () => {
     expect(cloudPrimary(account())).toBe("stop");
     expect(cloudPrimary(account({ desired: "stop", live: live("stopped") }))).toBe("start");
     expect(
-      cloudPrimary(
-        account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null } }),
-      ),
+      cloudPrimary(account({ hold: { kind: "cause", cause: "banned", at: NOW, row: null } })),
     ).toBe("start");
     expect(cloudPrimary(account({ hold: { kind: "paused", mode: "paused" } }))).toBe("stop");
+  });
+
+  it("sends a stop on a refused password to the settings, not to a start", () => {
+    const refused = account({
+      desired: "stop",
+      live: live("stopped"),
+      hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null },
+    });
+    expect(cloudPrimary(refused)).toBe("fixPassword");
+    expect(stoppedOnPassword(refused)).toBe(true);
+    // The time ran out meanwhile: renewing comes first.
+    expect(cloudPrimary({ ...refused, expired: true })).toBe("renew");
+    expect(stoppedOnPassword(account())).toBe(false);
   });
 });
 

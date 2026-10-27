@@ -10,6 +10,7 @@ import { afkFailed } from "@/features/afk/errors";
 import { useSocialUi } from "@/features/social/store";
 import { type AfkAccount, api } from "@/lib/api";
 import { type CloudAccount, type CloudPageData, cloudApi } from "./api";
+import { foldedIds } from "./twins";
 
 export const CLOUD_KEY = ["cloud-afk"] as const;
 
@@ -139,6 +140,27 @@ export function useGuardedConnect() {
   };
 }
 
+/**
+ * Starts a cloud account, or asks first (the two-places question) while the same account runs on
+ * this computer; true once it started. Says nothing itself: the caller's toast does ("Kaydet ve
+ * başlat" says it with the save's).
+ */
+export async function startOrAsk(
+  queryClient: QueryClient,
+  account: CloudAccount,
+): Promise<boolean> {
+  const data = queryClient.getQueryData<CloudPageData>(CLOUD_KEY);
+  const twin = data?.twins.find((t) => t.cloudId === account.id);
+  const desktop = queryClient.getQueryData<AfkAccount[]>(["afk"]) ?? [];
+  const here = twin ? desktop.find((d) => d.id === twin.desktopId) : undefined;
+  if (here && activeHere(here)) {
+    useCloudUi.getState().setGuard({ where: "here", desktop: here, cloud: account });
+    return false;
+  }
+  storeAccount(queryClient, await cloudApi.start(account.id));
+  return true;
+}
+
 /** "Başlat" on a cloud account: asks first when the same account runs on this computer. */
 export function useGuardedStart() {
   const queryClient = useQueryClient();
@@ -155,26 +177,53 @@ export function useGuardedStart() {
   };
 }
 
-/** "Tümünü bağla": the accounts that run in the cloud stay there (said in a toast). */
+/**
+ * "Tümünü bağla" of the "Bu bilgisayarda" list: the accounts it shows. An account that is also a
+ * 7/24 Bulut account has its card in the cloud list (AFK-CLEAR), so it is left out whatever it does
+ * there (the backend's `cloud_afk_connect_here` leaves out every twin).
+ */
 export function useConnectAll() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   return () => {
     const data = queryClient.getQueryData<CloudPageData>(CLOUD_KEY);
-    const anyInCloud = Boolean(
-      data?.overview.available &&
-        data.twins.some((twin) => runsInCloud(twinOf(data, twin.desktopId))),
-    );
-    if (!anyInCloud) {
-      api.afkConnectAll().catch((error: unknown) => afkFailed(error, t("afk.connectFailed")));
-      return;
+    const connect = foldedIds(data).size > 0 ? cloudApi.connectHere() : api.afkConnectAll();
+    connect.catch((error: unknown) => afkFailed(error, t("afk.connectFailed")));
+  };
+}
+
+/**
+ * "Bu bilgisayarda çalıştır" on the card of an account in both places: the cloud one stops if it
+ * runs, then this computer connects. The button says it, so nothing asks (AFK-CLEAR).
+ */
+export function useRunHere() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+  return async (cloud: CloudAccount, here: AfkAccount) => {
+    try {
+      if (runsInCloud(cloud)) storeAccount(queryClient, await cloudApi.stop(cloud.id));
+      await api.afkConnect(here.id);
+      toast.success(t("cloudAfk.location.toHere", { name: here.nickname }));
+    } catch (error) {
+      afkFailed(error, t("cloudAfk.actions.failed"));
+      void queryClient.invalidateQueries({ queryKey: CLOUD_KEY });
     }
-    cloudApi
-      .connectHere()
-      .then((skipped) => {
-        if (skipped > 0) toast(t("cloudAfk.guard.skipped", { count: skipped }));
-      })
-      .catch((error: unknown) => afkFailed(error, t("afk.connectFailed")));
+  };
+}
+
+/** "Bulutta çalıştır": the copy here stops if it is busy, then the cloud one starts. */
+export function useRunInCloud() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+  return async (cloud: CloudAccount, here: AfkAccount) => {
+    try {
+      if (activeHere(here)) await api.afkStop(here.id);
+      storeAccount(queryClient, await cloudApi.start(cloud.id));
+      toast.success(t("cloudAfk.location.toCloud", { name: cloud.name }));
+    } catch (error) {
+      afkFailed(error, t("cloudAfk.actions.failed"));
+      void queryClient.invalidateQueries({ queryKey: CLOUD_KEY });
+    }
   };
 }
 
