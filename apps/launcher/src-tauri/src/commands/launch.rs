@@ -1378,6 +1378,14 @@ async fn prepare_and_spawn(
         });
         leads
     };
+    tracing::info!(
+        game = game_id,
+        instance = %instance.id,
+        pid = ?process.pid(),
+        beside,
+        leads,
+        "the game runs"
+    );
     // World sharing follows the oldest game (HOST1): this one when no other game of this start
     // runs; one started beside it gets none while it runs.
     if leads {
@@ -1451,6 +1459,7 @@ async fn prepare_and_spawn(
             });
             (led, next, games.any())
         };
+        tracing::info!(game = game_id, led, games_left, "a game ended");
         // Its overlay bridge goes with it (the mod is gone already).
         crate::overlay::game_ended(&state, overlay_port).await;
         if led {
