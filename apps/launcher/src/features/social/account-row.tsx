@@ -1,6 +1,6 @@
-// The account center's link to the friends feature: "Discord ile bağlan" while signed out, the
-// player's friends profile and who is online once signed in. Opens the friends panel (the account
-// center closes first). Hidden while the feature is off.
+// The account center's link to the friends feature: "Discord ile giriş yap" while signed out (the
+// opt-in screen's words, as on Home), the player's friends profile and who is online once signed
+// in. Opens the friends panel (the account center closes first). Hidden while the feature is off.
 import { CaretRight } from "@phosphor-icons/react";
 import { springSnappy } from "@pl/ui";
 import { motion } from "motion/react";
@@ -53,7 +53,7 @@ export function SocialAccountRow({ onOpen }: { onOpen: () => void }) {
                 t("social.account.noneOnline")
               )
             ) : (
-              t("social.account.connect")
+              t("social.consent.signIn")
             )}
           </span>
         </span>

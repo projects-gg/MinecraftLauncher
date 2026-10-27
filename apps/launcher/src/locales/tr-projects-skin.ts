@@ -40,7 +40,7 @@ export const trProjectsSkin = {
   reset: "Varsayılana dön",
   note: {
     unreachable: "Şu an bağlanılamıyor. Biraz sonra yeniden dene.",
-    session: "Discord oturumun kapandı. Yeniden bağlan.",
+    session: "Discord oturumun kapandı. Yeniden giriş yap.",
     off: "Projects skini şu an kapalı.",
     linkFirst: "Önce hesabını eşle",
     otherAccount: "Discord hesabın {{name}} hesabına eşli.",
@@ -85,10 +85,10 @@ export const trProjectsSkin = {
     unlinked: "Eşleme kaldırıldı",
   },
   connect: {
-    title: "Projects skini için Discord ile bağlan",
+    title: "Projects skini için Discord ile giriş yap",
     body: "Skinin, Discord eşlemenle Projects'te uygulanır.",
-    action: "Discord ile bağlan",
-    again: "Yeniden bağlan",
+    action: "Discord ile giriş yap",
+    again: "Yeniden giriş yap",
   },
   link: {
     title: "Hesabını eşle",

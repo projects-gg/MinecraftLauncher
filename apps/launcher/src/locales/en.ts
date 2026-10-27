@@ -265,7 +265,6 @@ export const en: DeepPartial<Strings> = {
     },
     account: {
       row: "Friends",
-      connect: "Connect with Discord",
       connected_one: "{{count}} friend online",
       connected_other: "{{count}} friends online",
       noneOnline: "No one's online right now",
