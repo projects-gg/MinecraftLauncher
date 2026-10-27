@@ -14,6 +14,7 @@ import {
   Crosshair,
   HandPalm,
   type Icon,
+  LockSimple,
 } from "@phosphor-icons/react";
 import { Button, ContentIcon, cn, EmptyState, enter, Input, leave } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
@@ -211,12 +212,15 @@ function WalkButton({
   label,
   ariaLabel,
   pressed,
+  refused,
   disabled,
   onClick,
 }: {
   label: string;
   ariaLabel: string;
   pressed: boolean;
+  /** The machine refused this walk: a flare edge while the line says why. */
+  refused?: boolean;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -226,6 +230,7 @@ function WalkButton({
       aria-label={ariaLabel}
       aria-pressed={pressed}
       data-on={pressed ? "" : undefined}
+      data-refused={refused ? "" : undefined}
       disabled={disabled}
       onClick={onClick}
       className={cn(
@@ -240,7 +245,7 @@ function WalkButton({
       />
       <span
         aria-hidden
-        className="chamfer absolute inset-0 -z-10 bg-white/12 transition-colors duration-150 group-hover:bg-white/20 group-data-[on]:bg-gold-500/70"
+        className="chamfer absolute inset-0 -z-10 bg-white/12 transition-colors duration-150 group-hover:bg-white/20 group-data-[on]:bg-gold-500/70 group-data-[refused]:bg-flare-400/70"
       />
       <span
         aria-hidden
@@ -264,6 +269,7 @@ function WalkAccount({
   followLabel,
   going,
   following,
+  refused,
   disabled,
   onGo,
   onFollow,
@@ -276,6 +282,8 @@ function WalkAccount({
   followLabel: string;
   going: boolean;
   following: boolean;
+  /** Which of its walks the machine just refused, if one. */
+  refused?: "approach" | "follow" | null;
   disabled?: boolean;
   onGo: () => void;
   onFollow: () => void;
@@ -295,6 +303,7 @@ function WalkAccount({
           label={t("cloudAfkMove.walk.go")}
           ariaLabel={goLabel}
           pressed={going}
+          refused={refused === "approach"}
           disabled={disabled}
           onClick={going ? onStop : onGo}
         />
@@ -302,6 +311,7 @@ function WalkAccount({
           label={t("cloudAfkMove.walk.follow")}
           ariaLabel={followLabel}
           pressed={following}
+          refused={refused === "follow"}
           disabled={disabled}
           onClick={following ? onStop : onFollow}
         />
@@ -348,6 +358,7 @@ export function MovementPanel({
   const inGame = account.live.state === "running";
 
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [refusedWalk, setRefusedWalk] = useState<string | null>(null);
   const [held, setHeld] = useState<MoveDir | null>(null);
   // Typed axes only: an empty field means "where it stands now" (its placeholder, the live figure).
   const [coords, setCoords] = useState({ x: "", y: "", z: "" });
@@ -377,10 +388,14 @@ export function MovementPanel({
     [t],
   );
 
-  const refuse = useCallback((text: string) => {
+  const refuse = useCallback((text: string, walk: string | null = null) => {
     setRefusal(text);
+    setRefusedWalk(walk);
     if (refusalTimer.current !== null) window.clearTimeout(refusalTimer.current);
-    refusalTimer.current = window.setTimeout(() => setRefusal(null), REFUSAL_MS);
+    refusalTimer.current = window.setTimeout(() => {
+      setRefusal(null);
+      setRefusedWalk(null);
+    }, REFUSAL_MS);
   }, []);
   useEffect(
     () => () => {
@@ -395,7 +410,11 @@ export function MovementPanel({
       const result = await send(op);
       if (result.ok) return;
       const text = words(refusalKey(result.error, name ?? askedName.current, main));
-      if (text) refuse(text);
+      const walk =
+        op.action === "approach" || op.action === "follow"
+          ? `${op.action}:${op.name.toLowerCase()}`
+          : null;
+      if (text) refuse(text, walk);
     },
     [send, words, main, refuse],
   );
@@ -513,6 +532,12 @@ export function MovementPanel({
     />
   );
 
+  // Nothing typed, or the typed target is where it already stands: "Git" has nowhere to go.
+  const nowhere = (["x", "y", "z"] as const).every((axis) => {
+    const typed = coords[axis].trim();
+    if (typed === "") return true;
+    return pos !== null && coordinate(typed, axis) === pos[axis];
+  });
   const go = () => {
     const axis = (name: "x" | "y" | "z") =>
       coords[name].trim() === "" ? (pos ? pos[name] : null) : coordinate(coords[name], name);
@@ -555,6 +580,12 @@ export function MovementPanel({
   const going = isGoing(move);
   const walkingTo = (kind: "approach" | "follow", name: string) =>
     ok && move?.doing === kind && (move.name ?? "").toLowerCase() === name.toLowerCase();
+  const refusedOf = (name: string): "approach" | "follow" | null => {
+    const lower = name.toLowerCase();
+    if (refusedWalk === `approach:${lower}`) return "approach";
+    if (refusedWalk === `follow:${lower}`) return "follow";
+    return null;
+  };
   const stopWalk = () => {
     cancel();
     void act({ action: "stop" });
@@ -566,11 +597,11 @@ export function MovementPanel({
       ? t(move.sneak ? "cloudAfkMove.sneaking" : "cloudAfkMove.idle")
       : null);
   const line = refusal
-    ? { text: refusal, tone: "text-flare-400" }
+    ? { text: refusal, tone: "text-flare-400", lock: false }
     : activity
-      ? { text: activity, tone: locked ? "text-bone-100" : "text-gold-300" }
+      ? { text: activity, tone: locked ? "text-ash-300" : "text-gold-300", lock: locked }
       : rest
-        ? { text: rest, tone: "text-ash-300" }
+        ? { text: rest, tone: "text-ash-300", lock: false }
         : null;
   const dim = pos ? dimension(pos.dim) : null;
   const dimText = dim ? ("key" in dim ? t(`cloudAfkMove.dims.${dim.key}`) : dim.text) : "";
@@ -580,7 +611,7 @@ export function MovementPanel({
   const figure = (axis: "x" | "y" | "z") => (
     <span className="flex items-baseline gap-1.5">
       <span className="text-[12px] font-medium text-ash-400">{axis.toUpperCase()}</span>
-      <span className="min-w-[3ch] font-display text-[17px] font-semibold text-bone-50 tabular-nums">
+      <span className="min-w-[4ch] text-right font-display text-[17px] font-semibold text-bone-50 tabular-nums">
         {pos ? pos[axis] : ""}
       </span>
     </span>
@@ -606,7 +637,7 @@ export function MovementPanel({
           {figure("z")}
         </div>
         <div className="flex shrink-0 items-baseline gap-4">
-          <span className="text-[13.5px] font-medium text-bone-100">{dimText}</span>
+          <span className="text-[12.5px] text-ash-300">{dimText}</span>
           <span className="text-[12.5px] text-ash-300">{facing}</span>
         </div>
       </section>
@@ -620,12 +651,23 @@ export function MovementPanel({
             {line ? (
               <motion.p
                 key={line.text}
-                className={cn("[grid-area:1/1] truncate text-[13.5px] leading-5", line.tone)}
+                className={cn(
+                  "flex min-w-0 items-center gap-1.5 [grid-area:1/1] text-[13.5px] leading-5",
+                  line.tone,
+                )}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1, transition: enter(0.15) }}
                 exit={{ opacity: 0, transition: leave(0.1) }}
               >
-                {line.text}
+                {line.lock ? (
+                  <LockSimple
+                    size={14}
+                    weight="bold"
+                    aria-hidden
+                    className="shrink-0 text-ash-400"
+                  />
+                ) : null}
+                <span className="truncate">{line.text}</span>
               </motion.p>
             ) : null}
           </AnimatePresence>
@@ -735,7 +777,7 @@ export function MovementPanel({
                 size="md"
                 variant="secondary"
                 icon={<Crosshair size={15} />}
-                disabled={!ok}
+                disabled={!ok || nowhere}
               >
                 {t("cloudAfkMove.goto.go")}
               </Button>
@@ -752,6 +794,7 @@ export function MovementPanel({
                   followLabel={t("cloudAfkMove.main.follow")}
                   going={walkingTo("approach", main)}
                   following={walkingTo("follow", main)}
+                  refused={refusedOf(main)}
                   disabled={!ok}
                   onGo={() => void act({ action: "approach", name: main }, main)}
                   onFollow={() => void act({ action: "follow", name: main }, main)}
@@ -769,6 +812,7 @@ export function MovementPanel({
                     followLabel={t("cloudAfkMove.own.followNamed", { name })}
                     going={walkingTo("approach", name)}
                     following={walkingTo("follow", name)}
+                    refused={refusedOf(name)}
                     disabled={!ok || waiting}
                     onGo={() => void act({ action: "approach", name }, name)}
                     onFollow={() => void act({ action: "follow", name }, name)}
