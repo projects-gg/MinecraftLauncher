@@ -599,6 +599,16 @@ export const commands = {
 	/**  The page the player was on, set right after the restart. */
 	route: string | null,
 } | null>("update_restart_info"),
+	/**
+	 *  BETA-GATE: the player picked "Beta" in Settings → Güncellemeler. `allowed`: switch to it;
+	 *  otherwise why not (not on the Ar-Ge team, sign in first, cannot ask now) and the page to apply.
+	 */
+	updateBetaJoin: () => typedError<BetaAccess, CmdError>(__TAURI_INVOKE("update_beta_join")),
+	/**
+	 *  BETA-GATE: before an update look on the beta channel: `allowed` stays on it; otherwise the
+	 *  launcher goes back to the stable channel (it never installs an older version) and says why.
+	 */
+	updateBetaKeep: () => typedError<BetaAccess, CmdError>(__TAURI_INVOKE("update_beta_keep")),
 	officialStatus: () => typedError<OfficialStatus, CmdError>(__TAURI_INVOKE("official_status")),
 	/**
 	 *  The Projects instance, made when there is none. It follows the official pack family when one
@@ -1844,6 +1854,23 @@ export type BannerView = {
 	/**  When it stops being shown (the UI drops it then without a refresh). */
 	endsAt: string | null,
 };
+
+/**  The verdict and the page "Ar-Ge'ye başvur" opens (`https://` only). */
+export type BetaAccess = {
+	verdict: BetaVerdict,
+	apply: string,
+};
+
+/**  What the launcher does about the beta channel, as the UI shows it. */
+export type BetaVerdict = 
+/**  Beta: switch to it, or stay on it. */
+"allowed" | 
+/**  Not on the team: "Ar-Ge'ye başvur". */
+"notMember" | 
+/**  Sign in with Discord first. */
+"signIn" | 
+/**  Cannot ask now: try again later. */
+"unknown";
 
 /**  An answer to a crew call: "Geliyorum", "Birazdan", "Gelemem". */
 export type CallAnswer = "yes" | "soon" | "no";
