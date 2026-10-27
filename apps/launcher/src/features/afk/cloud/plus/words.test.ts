@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { atPhrase, dayGroup, durationParts, minutesLeft, rangeText, untilPhrase } from "./time";
-import { enWords, formatAmount, parseAmount, qtyItem, trEnding, trWith, trWords } from "./words";
+import {
+  dealText,
+  enWords,
+  formatAmount,
+  goodsText,
+  parseAmount,
+  qtyItem,
+  trEnding,
+  trWith,
+  trWords,
+} from "./words";
 
 describe("AFK+ amounts", () => {
   it("are grouped by the language", () => {
@@ -11,8 +21,22 @@ describe("AFK+ amounts", () => {
 
   it("count items without guessing an English plural", () => {
     expect(qtyItem(64, "Elmas", "tr")).toBe("64 Elmas");
-    expect(qtyItem(64, "Diamond", "en")).toBe("64 × Diamond");
-    expect(qtyItem("1", "Totem of Undying", "en")).toBe("1 × Totem of Undying");
+    expect(qtyItem(64, "Diamond", "en")).toBe("64\u00a0×\u00a0Diamond");
+    expect(qtyItem("1", "Totem of Undying", "en")).toBe("1\u00a0×\u00a0Totem of Undying");
+    // A deal's subject alone drops a single one's count; a price never does.
+    expect(goodsText("1", "Totem of Undying", "en")).toBe("Totem of Undying");
+    expect(goodsText(1, "Elytra", "tr")).toBe("1 Elytra");
+  });
+
+  it("write a deal as the site and the in-game card do", () => {
+    expect(dealText(1, "Elytra", "37.500", "tr")).toBe("1 Elytra = 37.500");
+    expect(dealText(1, "Elytra", "37,500", "en")).toBe("Elytra = 37,500");
+    expect(dealText(2, "Netherite Ingot", qtyItem(9, "Diamond", "en"), "en")).toBe(
+      "2\u00a0×\u00a0Netherite Ingot = 9\u00a0×\u00a0Diamond",
+    );
+    expect(dealText(2, "Netherite Ingot", qtyItem(1, "Diamond", "en"), "en")).toBe(
+      "2\u00a0×\u00a0Netherite Ingot = 1\u00a0×\u00a0Diamond",
+    );
   });
 
   it("say a span of days once", () => {
