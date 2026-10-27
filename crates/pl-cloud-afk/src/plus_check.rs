@@ -464,6 +464,122 @@ fn form_problem(cleaned: &str) -> bool {
         || !shows
 }
 
+/// The tag's most code points (README "AfkPlusConfig v2" → `persona.prefix`).
+pub const PREFIX_MAX: usize = 16;
+/// The tag's text until the player sets one (the tag itself is off).
+pub const PREFIX_DEFAULT_TEXT: &str = "[AFK+]";
+
+/// Staff, system and server words, folded, anywhere in a tag's letters (the reference's list).
+const PREFIX_STAFF_WORDS: [&str; 30] = [
+    "yetkili",
+    "admin",
+    "moderator",
+    "sistem",
+    "system",
+    "server",
+    "sunucu",
+    "konsol",
+    "console",
+    "staff",
+    "kurucu",
+    "founder",
+    "owner",
+    "destek",
+    "support",
+    "rehber",
+    "helper",
+    "duyuru",
+    "bilgi",
+    "info",
+    "projects",
+    "operator",
+    "yonetic",
+    "yonetim",
+    "guvenlik",
+    "security",
+    "resmi",
+    "official",
+    "gelistirici",
+    "developer",
+];
+/// Short staff words: whole words only (camel case split first).
+const PREFIX_STAFF_SHORT: [&str; 6] = ["mod", "adm", "op", "gm", "sys", "dev"];
+
+/// A tag's letters folded the way the reference reads them: lower case, Turkish letters plain,
+/// look-alike digits and marks as letters (`4dm1n`), camel case split (`ModBot` → `mod bot`).
+fn staff_form(text: &str) -> String {
+    let mut split = String::with_capacity(text.len() + 4);
+    let mut previous_lower = false;
+    for c in text.chars() {
+        if previous_lower && c.is_uppercase() {
+            split.push(' ');
+        }
+        previous_lower = c.is_lowercase();
+        split.push(c);
+    }
+    split
+        .chars()
+        .flat_map(char::to_lowercase)
+        .filter(|c| !is_mark(*c))
+        .map(|c| match c {
+            'ç' => 'c',
+            'ğ' => 'g',
+            'ı' => 'i',
+            'ö' => 'o',
+            'ş' => 's',
+            'ü' => 'u',
+            'â' => 'a',
+            'î' => 'i',
+            'û' => 'u',
+            '0' => 'o',
+            '1' | '!' | '|' => 'i',
+            '3' => 'e',
+            '4' => 'a',
+            '5' => 's',
+            '7' => 't',
+            other => other,
+        })
+        .collect()
+}
+
+/// The tag before the assistant's lines, as the launcher checks it (the reference's
+/// `checkPrefix`): the cleaned text, or why not, in its order: `length` (empty), `form` (one line,
+/// no code, only Latin letters, digits, spaces and `[]()+-_.!?*#|~^=:'`), `length` (over 16),
+/// `staff` (a staff, system or server word) and `name` (one of `names`: the document's friends and
+/// blocked players). Links, contact data, apps and listed words are the service's.
+pub fn check_prefix(raw: &str, names: &[String]) -> Result<String, &'static str> {
+    static CHARS: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"^[\p{Script=Latin}0-9 \[\]()+\-_.!?*#|~^=:']+$")
+            .expect("a valid pattern")
+    });
+    let cleaned = clean_text(raw);
+    if cleaned.is_empty() {
+        return Err("length");
+    }
+    if form_problem(&cleaned) || !CHARS.is_match(&cleaned) {
+        return Err("form");
+    }
+    if cp(&cleaned) > PREFIX_MAX {
+        return Err("length");
+    }
+    let form = staff_form(&cleaned);
+    let short = form
+        .split(|c: char| !c.is_ascii_lowercase())
+        .any(|word| PREFIX_STAFF_SHORT.contains(&word));
+    let letters: String = form.chars().filter(char::is_ascii_lowercase).collect();
+    if short || PREFIX_STAFF_WORDS.iter().any(|word| letters.contains(word)) {
+        return Err("staff");
+    }
+    let lower = cleaned.to_lowercase();
+    let named = lower
+        .split(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'))
+        .any(|word| !word.is_empty() && names.iter().any(|name| name.to_lowercase() == word));
+    if named {
+        return Err("name");
+    }
+    Ok(cleaned)
+}
+
 /// The persona text rule's part the launcher knows (README "Persona texts"; a custom item's name
 /// too): the cleaned text, or why not (`form`, `length`, `marker`, in the reference's order).
 /// Links, contact data and listed words are the service's.
@@ -566,7 +682,15 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     let persona_in = object(config.get("persona"), "persona")?;
     only(
         persona_in,
-        &["preset", "intro", "status", "statusPreset", "smallTalk"],
+        &[
+            "preset",
+            "intro",
+            "status",
+            "statusPreset",
+            "smallTalk",
+            "playerTalk",
+            "prefix",
+        ],
         "persona",
     )?;
     let preset = one_of(
@@ -598,6 +722,43 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
         }
     }
     let small_talk = boolean(persona_in.get("smallTalk"), "persona.smallTalk")?;
+    // "Oyuncu gibi konuşsun" and the tag (27 Oct 2026): a write without them keeps the stored ones,
+    // so a client that does not know them yet changes nothing.
+    let stored_persona = stored.and_then(|doc| doc.get("persona"));
+    let player_talk = match persona_in.get("playerTalk") {
+        None => stored_persona
+            .and_then(|persona| persona.get("playerTalk"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        other => boolean(other, "persona.playerTalk")?,
+    };
+    let tag_refusal = |problem: &'static str| PlusRefusal::Invalid {
+        field: "persona.prefix.text".into(),
+        reason: "text".into(),
+        problem: Some(problem.into()),
+    };
+    let (prefix_on, prefix_text) = match persona_in.get("prefix") {
+        None => stored_persona
+            .and_then(|persona| persona.get("prefix"))
+            .map(|prefix| {
+                (
+                    prefix.get("on").and_then(Value::as_bool).unwrap_or(false),
+                    prefix
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or(PREFIX_DEFAULT_TEXT)
+                        .to_owned(),
+                )
+            })
+            .unwrap_or((false, PREFIX_DEFAULT_TEXT.to_owned())),
+        Some(value) => {
+            let prefix_in = object(Some(value), "persona.prefix")?;
+            only(prefix_in, &["on", "text"], "persona.prefix")?;
+            let on = boolean(prefix_in.get("on"), "persona.prefix.on")?;
+            let raw = string(prefix_in.get("text"), "persona.prefix.text")?;
+            (on, check_prefix(raw, &[]).map_err(tag_refusal)?)
+        }
+    };
 
     let replies_in = object(config.get("replies"), "replies")?;
     only(replies_in, &["scope", "away", "saveAt"], "replies")?;
@@ -830,6 +991,9 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
             return Err(PlusRefusal::invalid(format!("who.friends[{i}]"), "blocked"));
         }
     }
+    // The tag may not name a player the document knows (a friend or a blocked player).
+    let known: Vec<String> = friends.iter().chain(blocked.iter()).cloned().collect();
+    check_prefix(&prefix_text, &known).map_err(tag_refusal)?;
 
     let schedule = parse_schedule(config.get("schedule"))?;
     let pause_until = match config.get("pauseUntil") {
@@ -916,7 +1080,8 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
         "mode": mode,
         "lang": lang,
         "persona": {"preset": preset, "intro": intro, "status": status,
-            "statusPreset": status_preset, "smallTalk": small_talk},
+            "statusPreset": status_preset, "smallTalk": small_talk, "playerTalk": player_talk,
+            "prefix": {"on": prefix_on, "text": prefix_text}},
         "replies": {"scope": scope, "away": away, "saveAt": save_at},
         "authority": authority,
         "allow": {"buy": allow_buy, "sell": allow_sell},
@@ -1290,7 +1455,11 @@ mod tests {
 
     /// Cases that hang on the parts of the rule that are the service's: the text rule's links,
     /// contact data and listed words (the order form says them in TypeScript).
-    const SERVICE_ONLY: [&str; 1] = ["a custom name with a link"];
+    const SERVICE_ONLY: [&str; 3] = [
+        "a custom name with a link",
+        "a tag naming another app",
+        "a tag with a link",
+    ];
 
     #[test]
     fn every_settings_vector_holds() {

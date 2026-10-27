@@ -171,8 +171,8 @@ function AssistantStep({
           }))}
           className="self-start"
         />
+        {/* As it would write it with the new account's defaults: no tag (27 Oct 2026). */}
         <p className="mt-1.5 self-start rounded-[10px] bg-obsidian-700/70 px-3 py-1.5 text-[13.5px] text-bone-50 ring-1 ring-white/8 ring-inset">
-          <span className="font-semibold text-gold-200">[AFK+]</span>{" "}
           {t(`afkPlus.settings.samples.${choices.preset}`)}
         </p>
       </div>

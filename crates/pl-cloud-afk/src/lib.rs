@@ -96,18 +96,20 @@ pub use plus::{
     PlusInboxLast, PlusInboxLine, PlusInboxPage, PlusInboxThread, PlusIssue, PlusItemSummary,
     PlusJudge, PlusJudgeState, PlusLimits, PlusLook, PlusNewCustomItem, PlusNewMessages,
     PlusNewOrder, PlusOffer, PlusOfferServers, PlusOrder, PlusOrderPatch, PlusOrderSettings,
-    PlusOrderView, PlusOrderWritten, PlusPersona, PlusPick, PlusPickedCustom, PlusPromo, PlusQuota,
-    PlusQuotaBrief, PlusQuotaWindow, PlusReceipt, PlusReceiptPage, PlusReceiptSummary, PlusReplies,
-    PlusReq, PlusRestriction, PlusRules, PlusRulesFeatures, PlusSchedule, PlusSeenItem, PlusServer,
-    PlusServerMoney, PlusSettings, PlusSpent, PlusThreadPage, PlusTotals, PlusTradeSettings,
-    PlusTradeState, PlusWeeklyAccount, PlusWeeklyReport, PlusWho, PlusWindow, PlusWindowCaps,
-    PlusWritten, TABLE_PREFIX, is_player_name, is_table_file_name, is_time,
-    refusal_issues as plus_refusal_issues, table_file_name,
+    PlusOrderView, PlusOrderWritten, PlusPersona, PlusPick, PlusPickedCustom, PlusPrefix,
+    PlusPromo, PlusQuota, PlusQuotaBrief, PlusQuotaWindow, PlusReceipt, PlusReceiptPage,
+    PlusReceiptSummary, PlusReplies, PlusReq, PlusRestriction, PlusRules, PlusRulesFeatures,
+    PlusSchedule, PlusSeenItem, PlusServer, PlusServerMoney, PlusSettings, PlusSpent,
+    PlusThreadPage, PlusTotals, PlusTradeSettings, PlusTradeState, PlusWeeklyAccount,
+    PlusWeeklyReport, PlusWho, PlusWindow, PlusWindowCaps, PlusWritten, TABLE_PREFIX,
+    is_player_name, is_table_file_name, is_time, refusal_issues as plus_refusal_issues,
+    table_file_name,
 };
 pub use plus_audit::{AUDIT_KEEP_DAYS, AUDIT_MAX_BYTES};
 pub use plus_check::{
-    PlusCheckContext, PlusCheckFeatures, PlusCheckLimits, PlusModeFacts, PlusProgress, PlusRefusal,
-    check_config_value, check_persona, clean_text, is_custom_key, is_order_id, is_vanilla_id,
+    PREFIX_DEFAULT_TEXT, PREFIX_MAX, PlusCheckContext, PlusCheckFeatures, PlusCheckLimits,
+    PlusModeFacts, PlusProgress, PlusRefusal, check_config_value, check_persona, check_prefix,
+    clean_text, is_custom_key, is_order_id, is_vanilla_id,
 };
 pub use plus_items::PlusItemData;
 pub use seal::{
