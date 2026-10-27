@@ -3,6 +3,7 @@ import {
   Chip,
   cn,
   easeOutExpo,
+  isCut,
   OverflowTooltip,
   PlayButton,
   type PlayState,
@@ -413,8 +414,15 @@ function OthersInGame({
 }) {
   const { t } = useTranslation();
   const whoRef = useRef<HTMLSpanElement>(null);
+  // Measured when the pointer comes, as OverflowTooltip does; one tooltip either way, so the tree
+  // stays when the count changes (design.md §5).
+  const [cut, setCut] = useState(false);
   const body = (
-    <span aria-hidden className="flex min-w-0 items-center gap-2.5">
+    <span
+      aria-hidden
+      className="flex min-w-0 items-center gap-2.5"
+      onPointerEnter={() => setCut(isCut(whoRef.current))}
+    >
       {faces.length > 0 ? (
         <span className="flex shrink-0 -space-x-2">
           {faces.map((account) => (
@@ -438,13 +446,9 @@ function OthersInGame({
   return (
     <>
       <span className="sr-only">{sentence}</span>
-      {many ? (
-        <Tooltip content={sentence}>{body}</Tooltip>
-      ) : (
-        <OverflowTooltip text={sentence} of={whoRef}>
-          {body}
-        </OverflowTooltip>
-      )}
+      <Tooltip content={sentence} disabled={!many && !cut}>
+        {body}
+      </Tooltip>
     </>
   );
 }
