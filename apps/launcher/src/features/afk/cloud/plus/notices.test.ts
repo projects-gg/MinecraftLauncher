@@ -48,7 +48,7 @@ describe("AFK notices in words", () => {
       t,
       "tr",
     );
-    expect(words?.body).toBe('afkPlus.notices.approval {"deal":"1 Elytra, 37.500"}');
+    expect(words?.body).toBe('afkPlus.notices.approval {"deal":"1 Elytra = 37.500"}');
     expect(words?.target).toEqual({ panel: "feed" });
     const english = noticeWords(
       notice("approval", { item: "minecraft:elytra", price: "37500" }),
@@ -56,10 +56,53 @@ describe("AFK notices in words", () => {
       "en",
     );
     // English names are singular: the count reads "×", never "64 Diamond".
-    expect(english?.body).toBe('afkPlus.notices.approval {"deal":"1 × Elytra, 37,500"}');
+    expect(english?.body).toBe('afkPlus.notices.approval {"deal":"Elytra = 37,500"}');
   });
 
-  it("read an item without a catalog name from its id", () => {
+  it("say an order's handoff without the counterpart and a first sight with the item", () => {
+    const handoff = noticeWords(
+      notice("approval", {
+        name: "Ahmet_AFK",
+        approvalKind: "handoff",
+        item: "custom:c1",
+        qty: "2",
+      }),
+      t,
+      "tr",
+    );
+    expect(handoff).toMatchObject({ body: "afkPlus.notices.handoff", target: { panel: "orders" } });
+    const seen = noticeWords(
+      notice(
+        "approval",
+        { approvalKind: "confirm_item", item: "custom:c2" },
+        { itemName: { tr: "Ejder Kılıcı", en: "Ejder Kılıcı" } },
+      ),
+      t,
+      "en",
+    );
+    expect(seen?.body).toBe('afkPlus.notices.confirmItem {"item":"Ejder Kılıcı"}');
+    // Its name not read yet: never the key.
+    const unread = noticeWords(
+      notice("approval", { approvalKind: "confirm_item", item: "custom:c2" }),
+      t,
+      "tr",
+    );
+    expect(unread?.body).toBe('afkPlus.notices.confirmItem {"item":"Özel eşya"}');
+    // Paid with an item: what changes hands, never the count as money.
+    const swap = noticeWords(
+      notice("approval", {
+        item: "minecraft:netherite_ingot",
+        qty: "2",
+        price: "9",
+        pay: "minecraft:diamond",
+      }),
+      t,
+      "tr",
+    );
+    expect(swap?.body).toBe('afkPlus.notices.approval {"deal":"2 Netherite ingot"}');
+  });
+
+  it("read an item without a known name from its id", () => {
     const words = noticeWords(notice("deal_failed", { item: "minecraft:diamond_sword" }), t, "tr");
     expect(words?.body).toBe('afkPlus.notices.dealFailed {"item":"Diamond sword"}');
   });
@@ -70,7 +113,7 @@ describe("AFK notices in words", () => {
       t,
       "tr",
     );
-    expect(sold?.body).toBe('afkPlus.notices.dealSold {"deal":"64 Diamond, 7.680"}');
+    expect(sold?.body).toBe('afkPlus.notices.dealSold {"deal":"64 Diamond = 7.680"}');
   });
 
   it("count new messages and open the messages", () => {

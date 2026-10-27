@@ -1,36 +1,35 @@
 import { describe, expect, it } from "vitest";
 import {
   aiState,
+  applyDraft,
   blockedNameProblem,
-  buyRowProblems,
   canSpend,
   configChanges,
+  editDraft,
   giftReplies,
-  isProvableSale,
-  isWide,
   limitProblems,
-  newBuyRow,
-  newRowId,
-  newSellRow,
   personaTextProblem,
   readTime,
-  rowFromDraft,
-  sellRowProblems,
+  settingsPart,
   tradeNoteKey,
   windowProblems,
 } from "./model";
-import type { PlusAi, PlusConfig, PlusParseDraft, PlusQuota } from "./types";
+import type { PlusAi, PlusConfig, PlusOrder, PlusQuota } from "./types";
 
 function config(parts: Partial<PlusConfig> = {}): PlusConfig {
   return {
-    v: 1,
+    v: 2,
     enabled: true,
     mode: "projects-smp",
     lang: "auto",
     persona: { preset: "friendly", intro: "", status: "", statusPreset: null, smallTalk: true },
     replies: { scope: "trade", away: true, saveAt: 80 },
-    buy: [],
-    sell: [],
+    authority: "ask",
+    allow: { buy: true, sell: true },
+    pay: "money",
+    who: { mode: "all", friends: [] },
+    orders: [],
+    customItems: [],
     limits: {
       perDealMax: null,
       dailySpendMax: null,
@@ -50,13 +49,35 @@ function config(parts: Partial<PlusConfig> = {}): PlusConfig {
   };
 }
 
+function order(parts: Partial<PlusOrder> = {}): PlusOrder {
+  return {
+    id: "o1",
+    on: true,
+    side: "buy",
+    item: "minecraft:elytra",
+    qty: 1,
+    req: { ench: {}, dur: 90, named: false, cursed: false },
+    pay: "money",
+    unit: "total",
+    target: 32_000,
+    limit: 40_000,
+    style: "balanced",
+    trade: "auto",
+    until: 1_800_000_000,
+    note: "",
+    src: "text",
+    at: 1_790_000_000,
+    ...parts,
+  };
+}
+
 function ai(parts: Partial<PlusAi>): PlusAi {
   return {
     state: "on",
     reason: null,
     staffReason: null,
     until: null,
-    trade: { on: true, off: null, buy: "on" },
+    trade: { on: true, off: null, by: "bot", buy: "on" },
     pendingApprovals: 0,
     quota: null,
     asOf: null,
@@ -65,67 +86,6 @@ function ai(parts: Partial<PlusAi>): PlusAi {
     ...parts,
   };
 }
-
-describe("AFK+ rows", () => {
-  it("get new ids that are not taken", () => {
-    const taken = config({ buy: [newBuyRow("aaaaaaaa", "minecraft:elytra")] });
-    let n = 0;
-    // The first draw repeats the taken id, the second does not.
-    const random = () => (n++ < 8 ? 0 : 0.5);
-    const id = newRowId(taken, random);
-    expect(id).toMatch(/^[a-z0-9]{8}$/);
-    expect(id).not.toBe("aaaaaaaa");
-  });
-
-  it("are checked as the Worker checks them", () => {
-    expect(
-      buyRowProblems(newBuyRow("b1", "minecraft:elytra", { target: 32_000, max: 40_000 })),
-    ).toEqual([]);
-    expect(buyRowProblems(newBuyRow("b1", "x", { target: 40_000, max: 30_000 }))).toEqual([
-      "order",
-    ]);
-    expect(buyRowProblems(newBuyRow("b1", "x", { qty: 0, target: 1, max: 20_000_000 }))).toEqual([
-      "qty",
-      "maxDeal",
-    ]);
-    expect(sellRowProblems(newSellRow("s1", "x", { target: 100, min: 120 }))).toEqual(["order"]);
-    expect(isWide({ target: 4_000, max: 40_001 })).toBe(true);
-    expect(isWide({ target: 4_000, max: 40_000 })).toBe(false);
-  });
-
-  it("say which sale prices the trade window shows exactly", () => {
-    expect(isProvableSale(950)).toBe(true);
-    expect(isProvableSale(37_000)).toBe(true);
-    expect(isProvableSale(37_500)).toBe(false);
-    expect(isProvableSale(3_000_000)).toBe(true);
-    expect(isProvableSale(3_500_000)).toBe(false);
-  });
-
-  it("come from a typed rule's draft", () => {
-    const draft: PlusParseDraft = {
-      side: "buy",
-      item: null,
-      candidates: [],
-      qty: 1,
-      unit: "total",
-      target: 32_000,
-      max: 40_000,
-      min: null,
-      style: "balanced",
-      approval: "above",
-    };
-    const buy = rowFromDraft(draft, "minecraft:elytra", "b1");
-    expect(buy.side).toBe("buy");
-    expect(buy.row).toMatchObject({ item: "minecraft:elytra", target: 32_000, max: 40_000 });
-    const sell = rowFromDraft(
-      { ...draft, side: "sell", target: 120, max: null, min: 100, qty: 64, unit: "each" },
-      "minecraft:diamond",
-      "s1",
-    );
-    expect(sell.side).toBe("sell");
-    expect(sell.row).toMatchObject({ qty: 64, target: 120, min: 100, dailyQty: 64 });
-  });
-});
 
 describe("AFK+ limits and fields", () => {
   it("need both limits to buy", () => {
@@ -140,7 +100,11 @@ describe("AFK+ limits and fields", () => {
     expect(limitProblems({ ...config().limits, approvalTimeoutMin: 0 })).toEqual({
       approvalTimeoutMin: "timeout",
     });
-    expect(limitProblems({ ...config().limits, totalBudget: 20_000_000 })).toEqual({
+    // The generic mode's cap is 100 million; a profile's own comes with the server.
+    expect(limitProblems({ ...config().limits, totalBudget: 200_000_000 })).toEqual({
+      totalBudget: "maxDeal",
+    });
+    expect(limitProblems({ ...config().limits, totalBudget: 20_000_000 }, 10_000_000)).toEqual({
       totalBudget: "maxDeal",
     });
   });
@@ -160,36 +124,86 @@ describe("AFK+ limits and fields", () => {
     expect(blockedNameProblem("Kaan_07", ["kaan_07"])).toBe("duplicate");
     expect(blockedNameProblem("Ka", [])).toBe("format");
     expect(blockedNameProblem("Kaan_07", [])).toBeNull();
+    // A friend who is also blocked: the Worker's `blocked`.
+    expect(blockedNameProblem("Kaan_07", [], ["KAAN_07"])).toBe("blocked");
     expect(personaTextProblem("[AFK+] selam", 60)).toBe("marker");
+    expect(personaTextProblem("［ＡＦＫ＋］ selam", 60)).toBe("marker");
     expect(personaTextProblem("discord.gg/abc", 60)).toBe("link");
-    expect(personaTextProblem("projects.gg'de oynuyorum", 60)).toBeNull();
+    // AFK+ says no address at all, ours too (the service's text vectors).
+    expect(personaTextProblem("play.projects.gg'deyim", 60)).toBe("link");
+    for (const bad of ["/spawn", "&aYeşil", "Merhaba §lkalın", "Selam %username%"]) {
+      expect(personaTextProblem(bad, 60)).toBe("form");
+    }
+    expect(personaTextProblem("%50 indirim", 60)).toBeNull();
+    expect(personaTextProblem("Tom & Jerry", 60)).toBeNull();
     expect(personaTextProblem("0555 555 55 55", 80)).toBe("phone");
     expect(personaTextProblem("x".repeat(61), 60)).toBe("length");
   });
 });
 
+describe("the Ayarlar draft", () => {
+  it("keeps the fine-tune settings and puts only the player's edits on the latest", () => {
+    const saved = settingsPart(config());
+    const draft = editDraft(saved, null, (shown) => ({
+      ...shown,
+      authority: "deal",
+      allow: { ...shown.allow, sell: false },
+    }));
+    expect(draft?.value.authority).toBe("deal");
+    // Meanwhile the site switched buying off and added a friend.
+    const latest = settingsPart(
+      config({ allow: { buy: false, sell: true }, who: { mode: "friends", friends: ["Ece_"] } }),
+    );
+    const merged = applyDraft(latest, draft);
+    expect(merged.authority).toBe("deal");
+    expect(merged.allow).toEqual({ buy: false, sell: false });
+    expect(merged.who).toEqual({ mode: "friends", friends: ["Ece_"] });
+    // An edit undone is no draft.
+    expect(editDraft(saved, draft, () => saved)).toBeNull();
+  });
+
+  it("takes only the draft's own friends added and removed", () => {
+    const saved = settingsPart(config({ who: { mode: "friends", friends: ["Ece_", "Mert"] } }));
+    const draft = editDraft(saved, null, (shown) => ({
+      ...shown,
+      who: { ...shown.who, friends: ["Ece_", "Kaan_07"] },
+    }));
+    // Meanwhile "Arkadaşlarıma ekle" added one (and the same name in another case).
+    const latest = settingsPart(
+      config({ who: { mode: "friends", friends: ["Ece_", "Mert", "Baris_TR", "kaan_07"] } }),
+    );
+    expect(applyDraft(latest, draft).who.friends).toEqual(["Ece_", "Baris_TR", "kaan_07"]);
+  });
+});
+
 describe("AFK+ settings history", () => {
   it("says what changed, most telling first", () => {
-    const before = config({
-      buy: [newBuyRow("b1", "minecraft:elytra", { target: 32_000, max: 40_000 })],
-    });
+    const before = config({ orders: [order()] });
     const after = config({
-      buy: [newBuyRow("b1", "minecraft:elytra", { target: 32_000, max: 45_000 })],
-      sell: [newSellRow("s1", "minecraft:diamond")],
+      orders: [
+        order({ limit: 45_000 }),
+        order({ id: "o2", side: "sell", item: "minecraft:diamond" }),
+      ],
+      authority: "deal",
       limits: { ...before.limits, perDealMax: 50_000 },
     });
     expect(configChanges(before, after)).toEqual([
       {
-        kind: "row_amount",
+        kind: "order_amount",
         side: "buy",
         item: "minecraft:elytra",
-        field: "max",
+        field: "limit",
         from: 40_000,
         to: 45_000,
       },
-      { kind: "row_added", side: "sell", item: "minecraft:diamond" },
+      { kind: "order_added", side: "sell", item: "minecraft:diamond" },
+      { kind: "authority", from: "ask", to: "deal" },
       { kind: "limit", field: "perDealMax", from: null, to: 50_000 },
     ]);
+    expect(configChanges(before, config({ orders: [] }))).toEqual([
+      { kind: "order_removed", side: "buy", item: "minecraft:elytra" },
+    ]);
+    expect(configChanges(before, { ...before, pay: "both" })).toEqual([{ kind: "fineTune" }]);
     expect(configChanges(before, { ...before, summaryAt: "22:00" })).toEqual([{ kind: "other" }]);
   });
 });
@@ -243,8 +257,15 @@ describe("the AI's state", () => {
 
   it("says what trading can do now", () => {
     expect(tradeNoteKey(ai({}))).toBeNull();
-    expect(tradeNoteKey(ai({ trade: { on: false, off: "mode", buy: "on" } }))).toBe("tradeLobby");
-    expect(tradeNoteKey(ai({ trade: { on: true, off: null, buy: "notify" } }))).toBe("notifyOnly");
+    expect(tradeNoteKey(ai({ trade: { on: false, off: "mode", by: "bot", buy: "on" } }))).toBe(
+      "tradeLobby",
+    );
+    expect(tradeNoteKey(ai({ trade: { on: false, off: "profile", by: "owner", buy: "on" } }))).toBe(
+      "tradeOwner",
+    );
+    expect(tradeNoteKey(ai({ trade: { on: true, off: null, by: "bot", buy: "notify" } }))).toBe(
+      "notifyOnly",
+    );
   });
 
   it("counts the gifts' share of the replies left (the room holds both)", () => {

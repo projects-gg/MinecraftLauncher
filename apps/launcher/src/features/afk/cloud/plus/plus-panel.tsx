@@ -5,7 +5,7 @@
 // (`usePlusLive`), and nothing runs once it closes. An account never set up opens the setup
 // wizard over it; "Sonra" leaves the panel usable. Unsaved "Ayarlar" edits wait in the store, so
 // a click outside may close the panel at any time.
-import { X } from "@phosphor-icons/react";
+import { ArrowSquareOut, CloudSlash, Wrench, X } from "@phosphor-icons/react";
 import {
   Button,
   EntranceGate,
@@ -19,23 +19,29 @@ import {
 } from "@pl/ui";
 import { AnimatePresence } from "motion/react";
 import { Dialog } from "radix-ui";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AfkHead } from "../../afk-head";
-import { isFriendly } from "../../errors";
-import type { CloudAccount } from "../api";
+import { afkFailed, isFriendly } from "../../errors";
+import { type CloudAccount, cloudApi } from "../api";
 import { serverLabel } from "../status";
 import { useCloudPage } from "../use-cloud";
-import { FeedSection } from "./feed-section";
+import { type PlusApproval, plusApi } from "./api";
+import { useJoinForTrade } from "./approval-card";
+import { useApprovalNow, waitsNow } from "./approval-clock";
+import { AuditSection } from "./audit-section";
 import { PlusItemArt } from "./item-icon";
-import { ListsSection } from "./lists-section";
+import { type Namer, usePlusItemData } from "./items";
 import { MessagesSection } from "./messages-section";
+import { OrdersSection } from "./orders-section";
 import { PlusRail, visibleSections } from "./rail";
 import { ReportSection } from "./report-section";
 import { SettingsSection } from "./settings-section";
 import { PlusSetupWizard } from "./setup-wizard";
 import { plusAi } from "./types";
-import { usePlusFeatures, usePlusLive, usePlusPanel, usePlusUi } from "./use-plus";
+import { isPlusAccount, usePlusFeatures, usePlusLive, usePlusPanel, usePlusUi } from "./use-plus";
+
+const NONE: PlusApproval[] = [];
 
 function PanelSkeleton() {
   return (
@@ -62,6 +68,35 @@ function PanelSkeleton() {
   );
 }
 
+/**
+ * Said once above the section, in the site's words: the machine cannot be reached (what still
+ * works and what waits for it), or AFK+ is under maintenance. A quiet box, never a coloured one.
+ */
+function PanelNotice({
+  icon,
+  title,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="status"
+      className="mb-5 flex items-start gap-3 rounded-[var(--radius-panel)] bg-white/[0.04] px-3.5 py-3 ring-1 ring-white/7 ring-inset"
+    >
+      <span aria-hidden className="mt-px shrink-0 text-ash-300">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[13.5px] font-medium text-bone-50">{title}</p>
+        <p className="mt-0.5 text-[12.5px] text-pretty text-ash-300">{children}</p>
+      </div>
+    </div>
+  );
+}
+
 function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () => void }) {
   const { t } = useTranslation();
   const features = usePlusFeatures();
@@ -78,6 +113,13 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
   const link = usePlusLive(account.id);
   const panel = query.data;
   const needsSetup = panel?.settings.aiRev === 0;
+  const items = usePlusItemData(panel?.settings.server.mc ?? null);
+  const namer: Namer = {
+    data: items.data,
+    custom: panel?.settings.config.customItems ?? [],
+    unnamed: t("afkPlus.items.unnamed"),
+  };
+  const join = useJoinForTrade(account);
   // "Ayarlar"'s change bar docks here (change-dock.tsx).
   const [dock, setDock] = useState<HTMLDivElement | null>(null);
 
@@ -86,11 +128,38 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
     if (needsSetup && !putOff) setWizard(account.id);
   }, [needsSetup, putOff, account.id, setWizard]);
 
-  const pending =
-    panel?.approvals.filter((a) => a.state === "pending").length ??
-    account.ai?.pendingApprovals ??
-    0;
+  // What still waits (its time not run out), as the feed and the rows count it.
+  const now = useApprovalNow(panel?.approvals ?? NONE);
+  const waitingNow = panel?.approvals.filter((a) => waitsNow(a, now)) ?? null;
+  const pending = waitingNow?.length ?? account.ai?.pendingApprovals ?? 0;
   const unread = account.ai?.newMessages?.count ?? 0;
+  const ai = plusAi(account);
+  const away = Boolean(panel?.machineAway) || ai?.state === "unknown";
+  const maintenance = ai?.reason === "service" && ai.state === "paused";
+  const awayNotice =
+    away && (section === "feed" || section === "messages" || section === "orders") ? (
+      <PanelNotice icon={<CloudSlash size={18} />} title={t("afkPlus.panel.away.title")}>
+        {[
+          t("afkPlus.panel.away.body"),
+          // The messages say their own line in their section (no blank pane under its title).
+          pending && section !== "messages" ? t("afkPlus.panel.away.approvals") : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      </PanelNotice>
+    ) : null;
+  const serviceNotice =
+    maintenance && (section === "feed" || section === "orders") ? (
+      <PanelNotice icon={<Wrench size={18} />} title={t("afkPlus.panel.service.title")}>
+        {t("afkPlus.panel.service.body")}
+      </PanelNotice>
+    ) : null;
+  // The orders that wait for the player (an OK, a first sight, a trade to make): those with
+  // something waiting under their row, as the rows say it.
+  const waitingOrders = new Set((waitingNow ?? []).map((a) => a.order));
+  const waiting = panel
+    ? panel.settings.config.orders.filter((order) => waitingOrders.has(order.id)).length
+    : 0;
 
   return (
     <>
@@ -104,6 +173,20 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
             {serverLabel(account.server)}
           </p>
         </div>
+        {/* The site's page of this account: here, always on screen (in the rail it fell below the
+            fold at 1024x640). */}
+        <button
+          type="button"
+          onClick={() =>
+            void cloudApi
+              .open("plusAccount", account.id)
+              .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")))
+          }
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm text-[12.5px] font-medium text-ash-300 underline-offset-2 outline-none transition-colors duration-150 hover:text-gold-200 hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+        >
+          {t("afkPlus.panel.site")}
+          <ArrowSquareOut size={12} weight="bold" aria-hidden />
+        </button>
         <IconButton label={t("common.close")} icon={<X size={18} />} size="sm" onClick={onClose} />
       </header>
 
@@ -115,7 +198,9 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
             onSection={setSection}
             approvals={pending}
             messages={unread}
+            orders={waiting}
             quota={panel.quota}
+            saverAt={features.saver ? (panel.settings.config.replies.saveAt ?? null) : null}
             settingsDirty={dirty}
             onSetup={needsSetup ? () => setWizard(account.id) : undefined}
           />
@@ -124,23 +209,28 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
             className="min-w-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] [scrollbar-width:thin]"
           >
             <div key={section} className="panel-in flex min-h-full flex-col px-6 pt-5 pb-6">
+              {awayNotice ?? serviceNotice}
               {section === "feed" ? (
-                <FeedSection
+                <AuditSection
                   accountId={account.id}
                   approvals={panel.approvals}
-                  catalog={panel.catalog}
+                  namer={namer}
+                  server={panel.settings.server}
                   link={link}
                   machineAway={panel.machineAway}
-                  canLower={plusAi(account)?.state === "on"}
+                  enabled={features.audit && panel.settings.rules.features.audit}
+                  canLower={ai?.state === "on"}
+                  maintenance={maintenance}
+                  onJoin={join.ask}
                 />
               ) : section === "messages" ? (
                 <MessagesSection accountId={account.id} />
-              ) : section === "lists" ? (
-                <ListsSection account={account} panel={panel} />
+              ) : section === "orders" ? (
+                <OrdersSection account={account} panel={panel} />
               ) : section === "settings" ? (
                 <SettingsSection account={account} panel={panel} dock={dock} />
               ) : (
-                <ReportSection account={account} catalog={panel.catalog} />
+                <ReportSection account={account} namer={namer} server={panel.settings.server} />
               )}
             </div>
             {/* Stuck to the scroller's bottom edge, as wide as its content (not over the scroll bar). */}
@@ -168,6 +258,7 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
         <PanelSkeleton />
       )}
 
+      {join.dialog}
       <PlusSetupWizard
         account={account}
         panel={panel}
@@ -193,6 +284,20 @@ export function PlusPanel() {
   const closePanel = usePlusUi((s) => s.closePanel);
   const account = data?.overview.accounts.find((a) => a.id === panelId);
   const open = Boolean(account);
+
+  // The audit logs kept on this computer for accounts no longer on AFK+ go, once the accounts were
+  // read (`now`: a failed read lists none and says nothing about them).
+  const plusIds = data?.overview.now
+    ? data.overview.accounts
+        .filter(isPlusAccount)
+        .map((a) => a.id)
+        .sort()
+        .join(" ")
+    : null;
+  useEffect(() => {
+    if (plusIds === null) return;
+    void plusApi.auditPrune(plusIds ? plusIds.split(" ") : []).catch(() => undefined);
+  }, [plusIds]);
 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && closePanel()}>
@@ -221,8 +326,13 @@ export function PlusPanel() {
                   {...sheetMotion(!animate)}
                 >
                   {/* The game's item pictures for every row, card and dialog of the panel. */}
-                  <PlusItemArt>
-                    <PanelBody account={account} onClose={closePanel} />
+                  <PlusItemArt
+                    minecraft={account.version === "auto" ? null : account.version}
+                    server={serverLabel(account.server)}
+                  >
+                    {/* Another account (a notice opens it in place) starts afresh: no card, typed
+                        text, form or picker of the one before. */}
+                    <PanelBody key={account.id} account={account} onClose={closePanel} />
                   </PlusItemArt>
                 </GatedMotion.aside>
               </Dialog.Content>

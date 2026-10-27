@@ -11,7 +11,8 @@
 //! ±20 %).
 //!
 //! AFK+ (README "AFK+ live socket"): the AFK+ panel watches its account with `ai: true`, which
-//! streams the account's AI state, feed and approvals as well (same lease). A console and the
+//! streams the account's AI state, new audit log entries, its orders' progress and approvals as
+//! well (same lease). A console and the
 //! panel watch the same account through one subscription: closing the panel while its console stays
 //! on screen watches the account again without `ai`.
 //!
@@ -23,7 +24,7 @@
 //! and `pos` stream) and stops it with `move: false`; its operations go out as `move` frames and
 //! come back as `movres`. Inventory and movement may stream together.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -48,7 +49,7 @@ use crate::feat::{
 };
 use crate::model::{CloudConsoleLine, CloudLiveState};
 use crate::movement::{CloudBlock, CloudMovementError, CloudMovementState, CloudPos};
-use crate::plus::{PlusAi, PlusApproval, PlusFeedItem};
+use crate::plus::{PlusAi, PlusApproval, PlusAuditEntry};
 use crate::tls;
 
 const PING: &str = r#"{"t":"ping"}"#;
@@ -105,12 +106,16 @@ pub enum CloudLiveEvent {
     },
     /// AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`).
     Ai { acct: String, ai: Option<PlusAi> },
-    /// AFK+: feed items in batches at least 2 s apart; `snapshot`: the latest 20 right after
-    /// `watch`.
-    Feed {
+    /// AFK+: new audit log entries, in batches at least 2 s apart (the backlog is read on
+    /// demand, from the last entry kept).
+    Audit {
         acct: String,
-        items: Vec<PlusFeedItem>,
-        snapshot: bool,
+        items: Vec<PlusAuditEntry>,
+    },
+    /// AFK+: orders whose progress or live state changed (clients derive the status).
+    Orders {
+        acct: String,
+        orders: BTreeMap<String, PlusOrderLive>,
     },
     /// AFK+: an approval came, was answered, expired or closed.
     Approval {
@@ -172,6 +177,17 @@ pub enum CloudLiveEvent {
         ok: bool,
         error: Option<CloudMovementError>,
     },
+}
+
+/// An order's progress and live state as `aiord` brings them (`OrderView` without its status).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusOrderLive {
+    pub got: u32,
+    /// When `got` last grew (Unix seconds; 0: never).
+    pub at: i64,
+    /// `waiting_ok`, `your_trade`, `trading`, `haggling`, or none.
+    pub live: Option<String>,
 }
 
 pub type LiveSink = Arc<dyn Fn(CloudLiveEvent) + Send + Sync>;
@@ -583,12 +599,15 @@ enum Incoming {
         #[serde(default)]
         ai: Option<PlusAi>,
     },
-    Aifeed {
+    Aud {
         acct: String,
         #[serde(default)]
-        items: Vec<PlusFeedItem>,
+        items: Vec<PlusAuditEntry>,
+    },
+    Aiord {
+        acct: String,
         #[serde(default)]
-        snapshot: bool,
+        orders: BTreeMap<String, PlusOrderLive>,
     },
     Aiapproval {
         acct: String,
@@ -1009,8 +1028,9 @@ async fn connected(
                         }
                         Ok(Incoming::Error { code, acct }) => sink(CloudLiveEvent::Problem { acct, code }),
                         Ok(Incoming::Aist { acct, ai }) => sink(CloudLiveEvent::Ai { acct, ai }),
-                        Ok(Incoming::Aifeed { acct, items, snapshot }) => {
-                            sink(CloudLiveEvent::Feed { acct, items, snapshot });
+                        Ok(Incoming::Aud { acct, items }) => sink(CloudLiveEvent::Audit { acct, items }),
+                        Ok(Incoming::Aiord { acct, orders }) => {
+                            sink(CloudLiveEvent::Orders { acct, orders });
                         }
                         Ok(Incoming::Aiapproval { acct, approval }) => {
                             sink(CloudLiveEvent::Approval { acct, approval });
@@ -1189,8 +1209,18 @@ mod tests {
             Incoming::Aist { ai: Some(ai), .. } if ai.pending_approvals == 2
         ));
         assert!(matches!(
-            parse(r#"{"t":"aifeed","acct":"a_1","items":[{"id":"01J","at":5,"kind":"pm_in","counterpart":"Kaan_07","text":"elytra var 45k"}],"snapshot":true}"#),
-            Incoming::Aifeed { snapshot: true, items, .. } if items[0].kind == "pm_in"
+            parse(r#"{"t":"aud","acct":"a_1","items":[{"s":20387000013,"t":1792949000000,"k":"pm_in","w":"Kaan_07","x":"elytra var 45k"}]}"#),
+            Incoming::Aud { items, .. } if items[0].k == "pm_in" && items[0].day() == 20387
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"aiord","acct":"a_1","orders":{"o1":{"got":1,"at":9,"live":null},"o2":{"got":0,"at":0,"live":"haggling"}}}"#),
+            Incoming::Aiord { orders, .. }
+                if orders["o1"].got == 1 && orders["o2"].live.as_deref() == Some("haggling")
+        ));
+        // The old feed frame of a service before orders is no longer read.
+        assert!(matches!(
+            parse(r#"{"t":"aifeed","acct":"a_1","items":[],"snapshot":true}"#),
+            Incoming::Other
         ));
         assert!(matches!(
             parse(r#"{"t":"aiapproval","acct":"a_1","approval":{"id":"01J","state":"expired"}}"#),
