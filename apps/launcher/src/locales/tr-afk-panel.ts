@@ -25,10 +25,25 @@ export const trAfkPanel = {
   interval: "Aralık",
   /** A running desktop account's plain save, beside "Kaydet ve yeniden bağlan". */
   saveOnly: "Yalnız kaydet",
-  /** The toast after a close with edits waiting (a closed panel reads as a saved one). */
+  /**
+   * The toast after a close with edits waiting (a closed panel reads as a saved one); waiting, not
+   * failed ("kaydedilmedi" read as an error).
+   */
   kept: {
-    title: "{{name}} ayarları kaydedilmedi",
-    body: "Değişikliklerin, ayarları yeniden açınca yerinde olacak.",
+    title: "{{name}} ayarlarındaki değişiklikler bekliyor",
+    body: "Kaydetmek için ayarları yeniden aç.",
+  },
+  /** A desktop scheduler task (the client's "send" stays out of sight). */
+  task: {
+    line: "Komut ya da mesaj",
+    linePlaceholder: "/kit günlük",
+    /** An action of the client's own kind ("log …", "script …"), kept as written. */
+    raw: "İstemci komutu",
+    onJoin: "Girişte",
+    every: "Her seferinde",
+    first: "Yalnız ilkinde",
+    never: "Çalışmasın",
+    neverRuns: "Bu görev hiç çalışmaz: girişte ya da aralıkla çalışmasını seç.",
   },
   /** Under a cloud account's login line after the machine stopped it for a wrong password. */
   wrongPassword: "Sunucu bu şifreyi kabul etmedi. Doğrusunu yaz.",
@@ -52,5 +67,10 @@ export const trAfkPanel = {
     ownerFirst: "Önce yukarıda oynadığın hesabın adını yaz.",
     /** The desktop: the client takes the launcher's account as its owner. */
     ownerDesktop: "Yalnız launcher'da oynadığın hesap yazınca çalışır.",
+    /** The desktop's three replies, each to its own kind of message. */
+    emptyReply: "Boş bıraktığın yerde yanıt verilmez.",
+    insert: "Yanıta ekle",
+    sender: "Yazanın adı",
+    insertSender: "Yanıta yazanın adını ekle",
   },
 };

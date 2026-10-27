@@ -2,10 +2,10 @@
 // rows (words on the left, the control on the right edge, a hairline between rows), one block per
 // feature led by its switch, and folds that show a feature's fields only while its switch is on
 // (they fade in place and the rows below glide, never a height animation; docs/design.md §5).
-import { Info, WarningCircle } from "@phosphor-icons/react";
+import { Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatCount } from "@/lib/format";
 import { joinAddress, splitAddress } from "../address";
@@ -555,6 +555,126 @@ export function TriggerField({
       <TextAction onClick={switchWay}>
         {regex ? t("afkPanel.rule.toPlain") : t("afkPanel.rule.writeMyself")}
       </TextAction>
+    </div>
+  );
+}
+
+/**
+ * A reply's placeholders as small chips with their names ("Yazanın adı", "1. parça") while its
+ * field is not being typed in; typing shows the words as they are sent (`{u}`, `$u`), so the caret,
+ * copy and paste stay plain text. Laid over the field, its text hidden meanwhile (SHEET-UX).
+ * `split` has one capturing group: the whole token.
+ */
+export function TokenText({
+  text,
+  split,
+  name,
+}: {
+  text: string;
+  split: RegExp;
+  name: (token: string) => string;
+}) {
+  const pieces = text.split(split);
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-0 flex items-center overflow-hidden px-3"
+    >
+      <span className="block min-w-0 truncate text-[13.5px] leading-5 whitespace-pre text-bone-50">
+        {pieces.map((piece, i) =>
+          i % 2 === 1 ? (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: the pieces of one text, in order
+              key={i}
+              className="relative isolate mx-px inline-flex h-5 items-center px-1.5 align-top text-[12px] font-semibold text-bone-50 [--cut:3px]"
+            >
+              <span aria-hidden className="chamfer absolute inset-0 -z-10 bg-white/12" />
+              {name(piece)}
+            </span>
+          ) : (
+            piece
+          ),
+        )}
+      </span>
+    </span>
+  );
+}
+
+/** A chip that puts a placeholder where the reply's caret is ("+ Yazanın adı"). */
+export function InsertChip({
+  label,
+  onClick,
+  children,
+}: {
+  /** Its accessible name, when the words alone do not say they add something. */
+  label?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="group relative isolate inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 px-2 text-[12px] font-semibold whitespace-nowrap text-bone-100 transition-[transform,scale] duration-150 ease-out [--cut:4px] focus-visible:outline-none active:scale-[0.97]"
+    >
+      <span
+        aria-hidden
+        className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
+      />
+      <span
+        aria-hidden
+        className="chamfer absolute inset-0 -z-10 bg-white/7 transition-colors duration-150 group-hover:bg-white/12"
+      />
+      <Plus size={11} weight="bold" aria-hidden className="text-ash-300" />
+      {children}
+    </button>
+  );
+}
+
+/** A plain reply field whose placeholders read as chips while it is not typed in (`TokenText`). */
+export function TokenInput({
+  id,
+  value,
+  onChange,
+  split,
+  name,
+  placeholder,
+  invalid,
+  inputRef,
+  onFocus,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  split: RegExp;
+  name: (token: string) => string;
+  placeholder?: string;
+  invalid?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
+  onFocus?: () => void;
+}) {
+  const [typing, setTyping] = useState(false);
+  // A fresh test each time: `split` carries no state (no /g), but a shared one could.
+  const chips = !typing && new RegExp(split.source, split.flags).test(value);
+  return (
+    <div className="relative min-w-0">
+      <Input
+        ref={inputRef}
+        id={id}
+        value={value}
+        placeholder={placeholder}
+        spellCheck={false}
+        invalid={invalid}
+        onFocus={() => {
+          setTyping(true);
+          onFocus?.();
+        }}
+        onBlur={() => setTyping(false)}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn("h-9", chips && "text-transparent")}
+      />
+      {chips ? <TokenText text={value} split={split} name={name} /> : null}
     </div>
   );
 }

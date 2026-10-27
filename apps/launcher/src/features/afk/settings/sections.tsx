@@ -292,10 +292,12 @@ function AntiAfkBlock({ draft, setDraft, errorFor }: SectionProps) {
           checked={a.useTerrainHandling}
           onCheckedChange={(v) => page.patch("antiAfk", { useTerrainHandling: v })}
         />
+        {/* The client's tries to find a spot to walk to stay as they are: a number with no
+            meaning for a player ("Deneme sayısı 20"; SHEET-UX). */}
         <Fold open={a.useTerrainHandling}>
           <SettingRow
             title={t("afkSettings.antiAfk.walkRange")}
-            error={errorFor("antiAfk.walkRange")}
+            error={errorFor("antiAfk.walkRange") ?? errorFor("antiAfk.walkRetries")}
           >
             <NumberField
               label={t("afkSettings.antiAfk.walkRange")}
@@ -305,18 +307,6 @@ function AntiAfkBlock({ draft, setDraft, errorFor }: SectionProps) {
               unit={t("afkSettings.antiAfk.blocks")}
               invalid={Boolean(errorFor("antiAfk.walkRange"))}
               className="w-[116px]"
-            />
-          </SettingRow>
-          <SettingRow
-            title={t("afkSettings.antiAfk.walkRetries")}
-            error={errorFor("antiAfk.walkRetries")}
-          >
-            <NumberField
-              label={t("afkSettings.antiAfk.walkRetries")}
-              value={a.walkRetries}
-              onChange={(v) => page.patch("antiAfk", { walkRetries: v })}
-              limit={LIMITS.walkRetries}
-              invalid={Boolean(errorFor("antiAfk.walkRetries"))}
             />
           </SettingRow>
         </Fold>
@@ -377,37 +367,21 @@ function AlertsBlock({ draft, setDraft, onOpenFolder }: SectionProps) {
   const page = usePage(setDraft);
   const a = draft.page.alerts;
   const noWords = !a.matches.some((m) => m.trim());
+  // Words are the client's only trigger here: one switch for both (a second "Kelimelerde
+  // tetikle" switched the same thing on), the words first, then what an alert does (SHEET-UX).
+  const on = a.enabled && a.triggerByWords;
   return (
     <Block>
       <ToggleRow
         lead
         title={t("afkSettings.sections.alerts")}
         help={t("afkSettings.intro.alerts")}
-        checked={a.enabled}
-        onCheckedChange={(v) => page.patch("alerts", { enabled: v })}
+        checked={on}
+        onCheckedChange={(v) =>
+          page.patch("alerts", v ? { enabled: true, triggerByWords: true } : { enabled: false })
+        }
       />
-      <Fold open={a.enabled}>
-        <ToggleRow
-          title={t("afkSettings.alerts.beep")}
-          checked={a.beepEnabled}
-          onCheckedChange={(v) => page.patch("alerts", { beepEnabled: v })}
-        />
-        <ToggleRow
-          title={t("afkSettings.alerts.words")}
-          help={t("afkSettings.alerts.wordsHelp")}
-          checked={a.triggerByWords}
-          onCheckedChange={(v) => page.patch("alerts", { triggerByWords: v })}
-        />
-        <ToggleRow
-          title={t("afkSettings.alerts.file")}
-          help={
-            <>
-              {t("afkSettings.alerts.fileHelp")} <FolderLink onOpen={onOpenFolder} />
-            </>
-          }
-          checked={a.logToFile}
-          onCheckedChange={(v) => page.patch("alerts", { logToFile: v })}
-        />
+      <Fold open={on}>
         <WideRow>
           <div className="grid grid-cols-2 gap-4">
             <LinesField
@@ -425,12 +399,27 @@ function AlertsBlock({ draft, setDraft, onOpenFolder }: SectionProps) {
               rows={5}
             />
           </div>
-          {a.triggerByWords && noWords ? (
+          {noWords ? (
             <Hint tone="warn" className="mt-2">
               {t("afkSettings.alerts.noWords")}
             </Hint>
           ) : null}
         </WideRow>
+        <ToggleRow
+          title={t("afkSettings.alerts.beep")}
+          checked={a.beepEnabled}
+          onCheckedChange={(v) => page.patch("alerts", { beepEnabled: v })}
+        />
+        <ToggleRow
+          title={t("afkSettings.alerts.file")}
+          help={
+            <>
+              {t("afkSettings.alerts.fileHelp")} <FolderLink onOpen={onOpenFolder} />
+            </>
+          }
+          checked={a.logToFile}
+          onCheckedChange={(v) => page.patch("alerts", { logToFile: v })}
+        />
       </Fold>
     </Block>
   );

@@ -55,7 +55,8 @@ export const trCloudAfkFeat = {
   },
   settings: {
     inventory: "Envanter görünümü",
-    inventoryHelp: "Bir sonraki bağlanmada geçerli olur.",
+    inventoryHelp:
+      "Açıkken hesabın envanterini launcher'da görürsün. Bir sonraki bağlanmada açılır.",
     legacyRules:
       "Yanıt kuralların eski eşleşmeyle çalışıyor. Ayarları bir kez kaydet, sunucunun sohbet biçimiyle eşleşsin.",
     chips: {

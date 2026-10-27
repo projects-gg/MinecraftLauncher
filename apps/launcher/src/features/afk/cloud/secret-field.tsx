@@ -10,6 +10,7 @@ import { Button, cn, enter, IconButton, Input, leave, useMotionPrefs } from "@pl
 import { AnimatePresence, motion } from "motion/react";
 import { type Ref, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TokenText } from "../settings/controls";
 import { cloudApi } from "./api";
 import { hasPlaceholder } from "./placeholders";
 import { looksSensitive } from "./sensitive";
@@ -164,38 +165,8 @@ function Stored({
   );
 }
 
-/**
- * A reply's placeholders as chips with their names ("Yazanın adı", "1. parça") while the field is
- * not being typed in; typing shows the words as they are sent (`{u}`), so the caret, copy and paste
- * stay plain text. Over the field, as wide as its words: the field's own text is hidden meanwhile.
- */
-function TokenView({ text, name }: { text: string; name: (token: string) => string }) {
-  const pieces = text.split(/(\{(?:u|[1-9])\})/);
-  return (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute inset-0 flex items-center overflow-hidden px-3"
-    >
-      <span className="block min-w-0 truncate text-[13.5px] leading-5 whitespace-pre text-bone-50">
-        {pieces.map((piece, i) => {
-          const token = /^\{(u|[1-9])\}$/.exec(piece)?.[1];
-          return token ? (
-            <span
-              // biome-ignore lint/suspicious/noArrayIndexKey: the pieces of one text, in order
-              key={i}
-              className="relative isolate mx-px inline-flex h-5 items-center px-1.5 align-top text-[12px] font-semibold text-bone-50 [--cut:3px]"
-            >
-              <span aria-hidden className="chamfer absolute inset-0 -z-10 bg-white/12" />
-              {name(token)}
-            </span>
-          ) : (
-            piece
-          );
-        })}
-      </span>
-    </span>
-  );
-}
+/** A 7/24 Bulut reply's placeholders (`{u}`, `{1}`…), each piece of a split. */
+const CLOUD_TOKENS = /(\{(?:u|[1-9])\})/;
 
 export function WordsField({
   words,
@@ -313,7 +284,13 @@ export function WordsField({
               chips && "text-transparent",
             )}
           />
-          {chips && tokenName ? <TokenView text={words.text} name={tokenName} /> : null}
+          {chips && tokenName ? (
+            <TokenText
+              text={words.text}
+              split={CLOUD_TOKENS}
+              name={(piece) => tokenName(piece.slice(1, -1))}
+            />
+          ) : null}
           {secret ? (
             <IconButton
               label={

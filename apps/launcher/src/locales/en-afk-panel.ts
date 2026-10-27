@@ -15,8 +15,18 @@ export const enAfkPanel = {
   interval: "Every",
   saveOnly: "Save only",
   kept: {
-    title: "{{name}} settings not saved",
-    body: "Your changes will be there when you open the settings again.",
+    title: "Your changes to {{name}}'s settings are waiting",
+    body: "Open the settings again to save them.",
+  },
+  task: {
+    line: "Command or message",
+    linePlaceholder: "/kit daily",
+    raw: "Client command",
+    onJoin: "On joining",
+    every: "Every time",
+    first: "First time only",
+    never: "Never",
+    neverRuns: "This task never runs: pick joining or a repeat.",
   },
   wrongPassword: "The server didn't accept this password. Type the right one.",
   wrongPasswordSealed:
@@ -32,6 +42,10 @@ export const enAfkPanel = {
     ownerOnly: "Only reply to me",
     ownerOnlyHelp: "Works only when {{name}} writes.",
     ownerFirst: "First write the name you play with above.",
-    ownerDesktop: "Works only when the account you play with in the launcher writes.",
+    ownerDesktop: "Works only when your launcher account writes.",
+    emptyReply: "Where you leave it empty, there's no reply.",
+    insert: "Add to the reply",
+    sender: "Sender's name",
+    insertSender: "Add the sender's name to the reply",
   },
 };

@@ -10,17 +10,21 @@ import {
   Plus,
   Trash,
 } from "@phosphor-icons/react";
-import { Button, Chip, cn, Field, IconButton, Input, Switch } from "@pl/ui";
-import { useState } from "react";
+import { Button, cn, Field, IconButton, Input, Segmented } from "@pl/ui";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { insertToken } from "../cloud/placeholders";
 import {
   Block,
   ErrorText,
   Fold,
   Hint,
+  InsertChip,
   NumberField,
+  RangeRow,
   SettingRow,
   ToggleRow,
+  TokenInput,
   TriggerField,
   WideRow,
 } from "./controls";
@@ -143,15 +147,15 @@ function StoredLine({
   const { t } = useTranslation();
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      {/* The padlock, the hidden password and "Değiştir" say it is kept: no gold "Kayıtlı" pill
+          beside them (SHEET-UX). */}
       <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-white/7 bg-obsidian-850/80 px-3">
         <LockSimple size={15} weight="fill" className="shrink-0 text-gold-300" />
         <span className="truncate font-mono text-[13px] text-bone-100">{row.command}</span>
         <span aria-hidden className="font-mono text-[13px] tracking-widest text-ash-400">
           ••••••
         </span>
-        <Chip tone="gold" className="ml-auto">
-          {t("afkSettings.login.stored")}
-        </Chip>
+        <span className="sr-only">{t("afkSettings.login.stored")}</span>
       </div>
       <Button size="sm" variant="secondary" icon={<PencilSimple size={14} />} onClick={onReplace}>
         {t("afkSettings.login.replace")}
@@ -328,9 +332,17 @@ function TaskCard({
   const actionId = `task-${task.key}-action`;
   const minError = errorFor(`task.${task.key}.min`);
   const maxError = errorFor(`task.${task.key}.max`);
+  const actionError = errorFor(`task.${task.key}.action`);
+  // The client's own syntax stays out of sight: the field holds what goes into the chat and the
+  // launcher writes "send" before it. An action of another kind ("log …", "script …") stays as
+  // written, the advanced way (SHEET-UX; the fourth look's P1).
+  const chat = task.action === "" || SEND.test(task.action);
+  const shown = chat ? task.action.replace(SEND, "") : task.action;
+  const join = task.onLogin ? "every" : task.onFirstLogin ? "first" : "never";
+  const never = join === "never" && !task.intervalEnabled;
   return (
-    <li className={cn(rowPanel, "p-3.5")}>
-      <div className="flex items-start gap-3">
+    <li className={cn(rowPanel, "px-3.5 pt-3.5 pb-0.5")}>
+      <div className="flex items-start gap-3 pb-3">
         <Field label={t("afkSettings.scheduler.name")} htmlFor={nameId} className="w-[180px]">
           <Input
             id={nameId}
@@ -341,20 +353,28 @@ function TaskCard({
           />
         </Field>
         <Field
-          label={t("afkSettings.scheduler.action")}
+          label={chat ? t("afkPanel.task.line") : t("afkPanel.task.raw")}
           htmlFor={actionId}
-          error={errorFor(`task.${task.key}.action`)}
+          error={actionError}
           className="min-w-0 flex-1"
         >
           <Input
             id={actionId}
-            value={task.action}
-            placeholder="send /kit"
+            value={shown}
+            placeholder={t("afkPanel.task.linePlaceholder")}
             spellCheck={false}
             autoComplete="off"
-            invalid={Boolean(errorFor(`task.${task.key}.action`))}
+            invalid={Boolean(actionError)}
             className="h-9 font-mono text-[13px]"
-            onChange={(e) => set({ action: e.target.value })}
+            onChange={(e) =>
+              set({
+                action: !chat
+                  ? e.target.value
+                  : e.target.value.trim()
+                    ? `send ${e.target.value}`
+                    : "",
+              })
+            }
           />
         </Field>
         <IconButton
@@ -365,57 +385,56 @@ function TaskCard({
           onClick={onRemove}
         />
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-        <Switch
-          checked={task.onLogin}
-          onCheckedChange={(v) => set({ onLogin: v })}
-          label={t("afkSettings.scheduler.onLogin")}
+      {/* When it runs: one choice for joining (every one or only the first, never both), and a
+          repeat on its own switch, both on the card's right edge (three like switches overlapped). */}
+      <SettingRow title={t("afkPanel.task.onJoin")}>
+        <Segmented<"every" | "first" | "never">
+          value={join}
+          onValueChange={(v) => set({ onLogin: v === "every", onFirstLogin: v === "first" })}
+          label={t("afkPanel.task.onJoin")}
+          options={[
+            { value: "every", label: t("afkPanel.task.every") },
+            { value: "first", label: t("afkPanel.task.first") },
+            { value: "never", label: t("afkPanel.task.never") },
+          ]}
         />
-        <Switch
-          checked={task.onFirstLogin}
-          onCheckedChange={(v) => set({ onFirstLogin: v })}
-          label={t("afkSettings.scheduler.onFirstLogin")}
-        />
-        <Switch
-          checked={task.intervalEnabled}
-          onCheckedChange={(v) => set({ intervalEnabled: v })}
-          label={t("afkSettings.scheduler.interval")}
-        />
-      </div>
-      {task.intervalEnabled ? (
-        <div className="mt-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] text-ash-300">{t("afkPanel.interval")}</span>
-            <NumberField
-              label={t("afkSettings.min")}
-              value={task.minSeconds}
-              onChange={(v) => set({ minSeconds: v })}
-              limit={LIMITS.taskSeconds}
-              unit={sec}
-              invalid={Boolean(minError)}
-            />
-            <span aria-hidden className="text-ash-400">
-              –
-            </span>
-            <NumberField
-              label={t("afkSettings.max")}
-              value={task.maxSeconds}
-              onChange={(v) => set({ maxSeconds: v })}
-              limit={LIMITS.taskSeconds}
-              unit={sec}
-              invalid={Boolean(maxError)}
-            />
-          </div>
-          {minError || maxError ? (
-            <div className="mt-1.5">
-              <ErrorText>{minError ?? maxError}</ErrorText>
-            </div>
-          ) : null}
-        </div>
+      </SettingRow>
+      <ToggleRow
+        title={t("afkSettings.scheduler.interval")}
+        checked={task.intervalEnabled}
+        onCheckedChange={(v) => set({ intervalEnabled: v })}
+      />
+      <Fold open={task.intervalEnabled}>
+        <RangeRow title={t("afkPanel.interval")} errors={[minError, maxError]}>
+          <NumberField
+            label={t("afkSettings.min")}
+            value={task.minSeconds}
+            onChange={(v) => set({ minSeconds: v })}
+            limit={LIMITS.taskSeconds}
+            unit={sec}
+            invalid={Boolean(minError)}
+          />
+          <NumberField
+            label={t("afkSettings.max")}
+            value={task.maxSeconds}
+            onChange={(v) => set({ maxSeconds: v })}
+            limit={LIMITS.taskSeconds}
+            unit={sec}
+            invalid={Boolean(maxError)}
+          />
+        </RangeRow>
+      </Fold>
+      {never ? (
+        <Hint tone="warn" className="pb-3">
+          {t("afkPanel.task.neverRuns")}
+        </Hint>
       ) : null}
     </li>
   );
 }
+
+/** The client's chat action: what follows it goes into the chat. */
+const SEND = /^send\s+/i;
 
 function SchedulerBlock({ draft, setDraft, errorFor }: SectionProps) {
   const { t } = useTranslation();
@@ -487,6 +506,12 @@ export function CommandsSection(props: SectionProps) {
 
 // --- Auto respond ----------------------------------------------------------------------------
 
+/** A rule's three replies: to public chat, to private messages, to the server's own lines. */
+type ReplyField = "reply" | "privateReply" | "otherReply";
+
+/** The desktop client's placeholder: `$u` is the sender's name. */
+const DESKTOP_TOKENS = /(\$u)/;
+
 function RuleCard({
   rule,
   onChange,
@@ -504,9 +529,48 @@ function RuleCard({
   const patternError = errorFor(`rule.${rule.key}.pattern`);
   const replyError = errorFor(`rule.${rule.key}.reply`);
   const cooldownError = errorFor(`rule.${rule.key}.cooldown`);
+  // The client answers each kind of message with its own line, and stays quiet where it is empty
+  // (MCC's action / actionprivate / actionother). "Yazanın adı" goes where the caret last was.
+  const refs = {
+    reply: useRef<HTMLInputElement>(null),
+    privateReply: useRef<HTMLInputElement>(null),
+    otherReply: useRef<HTMLInputElement>(null),
+  };
+  const [last, setLast] = useState<ReplyField>("reply");
+  const sender = () => t("afkPanel.rule.sender");
+  const insertSender = () => {
+    const input = refs[last].current;
+    const text = rule[last];
+    const start = input?.selectionStart ?? text.length;
+    const end = input?.selectionEnd ?? start;
+    const next = insertToken(text, start, end, "$u");
+    set({ [last]: next.text } as Partial<RuleRow>);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+  const replyField = (field: ReplyField, label: string) => (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={id(field)} className="text-[13px] font-medium text-bone-100">
+        {label}
+      </label>
+      <TokenInput
+        id={id(field)}
+        value={rule[field]}
+        onChange={(value) => set({ [field]: value } as Partial<RuleRow>)}
+        split={DESKTOP_TOKENS}
+        name={sender}
+        placeholder={field === "reply" ? t("afkSettings.respond.replyPlaceholder") : undefined}
+        invalid={Boolean(replyError)}
+        inputRef={refs[field]}
+        onFocus={() => setLast(field)}
+      />
+    </div>
+  );
   return (
     <li className={cn(rowPanel, "px-3.5 pt-3.5 pb-0.5")}>
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-start gap-3">
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] items-start gap-x-4">
         {/* A plain phrase; a pattern is the advanced way under it (SHEET-UX). */}
         <TriggerField
           id={id("pattern")}
@@ -517,18 +581,26 @@ function RuleCard({
           error={patternError}
           maxLength={MAX_PATTERN_CHARS}
         />
-        {/* What "$u" does is said once, under the list. */}
-        <Field label={t("afkSettings.respond.reply")} htmlFor={id("reply")} error={replyError}>
-          <Input
-            id={id("reply")}
-            value={rule.reply}
-            placeholder={t("afkSettings.respond.replyPlaceholder")}
-            spellCheck={false}
-            invalid={Boolean(replyError)}
-            className="h-9"
-            onChange={(e) => set({ reply: e.target.value })}
-          />
-        </Field>
+        <div className="flex min-w-0 flex-col gap-3">
+          {replyField("reply", t("afkSettings.respond.reply"))}
+          {replyField("privateReply", t("afkSettings.respond.privateReply"))}
+          {replyField("otherReply", t("afkSettings.respond.otherReply"))}
+          <div className="-mt-1 flex flex-col gap-2">
+            {replyError ? (
+              <ErrorText>{replyError}</ErrorText>
+            ) : (
+              <p className="text-[12px] text-ash-400">{t("afkPanel.rule.emptyReply")}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span aria-hidden className="mr-0.5 text-[12px] text-ash-400">
+                {t("afkPanel.rule.insert")}
+              </span>
+              <InsertChip label={t("afkPanel.rule.insertSender")} onClick={insertSender}>
+                {t("afkPanel.rule.sender")}
+              </InsertChip>
+            </div>
+          </div>
+        </div>
         <IconButton
           label={t("afkSettings.respond.remove")}
           icon={<Trash size={15} />}
@@ -536,35 +608,6 @@ function RuleCard({
           className="mt-6 hover:text-flare-400"
           onClick={onRemove}
         />
-      </div>
-      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-3">
-        <Field
-          label={t("afkSettings.respond.privateReply")}
-          htmlFor={id("private")}
-          help={t("afkSettings.respond.privateReplyHelp")}
-        >
-          <Input
-            id={id("private")}
-            value={rule.privateReply}
-            spellCheck={false}
-            className="h-9"
-            onChange={(e) => set({ privateReply: e.target.value })}
-          />
-        </Field>
-        <Field
-          label={t("afkSettings.respond.otherReply")}
-          htmlFor={id("other")}
-          help={t("afkSettings.respond.otherReplyHelp")}
-        >
-          <Input
-            id={id("other")}
-            value={rule.otherReply}
-            spellCheck={false}
-            className="h-9"
-            onChange={(e) => set({ otherReply: e.target.value })}
-          />
-        </Field>
-        <span className="w-8" />
       </div>
       <div className="mt-3 flex items-center gap-2 pb-3">
         <span className="text-[13px] text-ash-300">{t("afkPanel.rule.cooldown")}</span>

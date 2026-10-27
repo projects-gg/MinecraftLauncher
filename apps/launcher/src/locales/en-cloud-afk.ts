@@ -283,7 +283,7 @@ export const enCloudAfk = {
     resealTitle: "Type the secret lines again for the new server",
     save: "Save",
     saving: "Saving",
-    cancel: "Cancel",
+    cancel: "Discard",
     saved: "{{name}} settings saved",
     conflict: "The account changed somewhere else.",
     loadLatest: "Load the latest",
