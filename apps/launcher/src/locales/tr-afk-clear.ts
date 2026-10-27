@@ -10,6 +10,8 @@ export const trAfkClear = {
   /** The save toast's second line after "Kaydet ve bağla" / "Kaydet ve başlat". */
   savedConnecting: "Hesap bağlanıyor.",
   savedStarting: "Hesap başlatılıyor.",
+  /** A desktop account the server turned away for good, as the cloud cards say it. */
+  stoppedBecause: "Durdu: {{reason}}",
   /** The first list once the player has 7/24 Bulut accounts too. */
   here: {
     title: "Bu bilgisayarda",
@@ -17,7 +19,6 @@ export const trAfkClear = {
   },
   /** An account in both places: its 7/24 Bulut card is its only one. */
   twin: {
-    also: "Bu bilgisayarda da var",
     /** Moves it: the other place stops first. */
     runHere: "Bu bilgisayarda çalıştır",
     runInCloud: "Bulutta çalıştır",

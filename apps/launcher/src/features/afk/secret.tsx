@@ -30,7 +30,7 @@ type FieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" |
    */
   secret?: boolean;
   /** The command in front of the words (`/login`), shown but never typed. */
-  prefix?: string | null;
+  command?: string | null;
   invalid?: boolean;
   /** Commands look like what is typed into the game; a reply is a sentence. */
   mono?: boolean;
@@ -45,7 +45,7 @@ export const SecretField = forwardRef<HTMLInputElement, FieldProps>(function Sec
     value,
     onChange,
     secret = true,
-    prefix = null,
+    command = null,
     invalid,
     mono = true,
     reveal = true,
@@ -58,7 +58,7 @@ export const SecretField = forwardRef<HTMLInputElement, FieldProps>(function Sec
 ) {
   const { t } = useTranslation();
   const [shown, setShown] = useState(false);
-  const lead = secret && prefix ? prefix : null;
+  const lead = secret && command ? command : null;
   // The command and one space before the words, in the field's own monospace.
   const room: CSSProperties | undefined = lead
     ? { paddingLeft: `calc(${LOCK_ROOM} + ${lead.length + 1}ch)` }
@@ -95,7 +95,9 @@ export const SecretField = forwardRef<HTMLInputElement, FieldProps>(function Sec
         style={room || style ? { ...style, ...room } : undefined}
         className={cn(
           "h-9",
-          mono ? "font-mono text-[13px]" : "text-[13.5px]",
+          // A command in front is a command line: its words in the same monospace (the room
+          // left for it is counted in that face's `ch`).
+          mono || lead ? "font-mono text-[13px]" : "text-[13.5px]",
           secret && "pl-9",
           secret && reveal && "pr-10",
           className,

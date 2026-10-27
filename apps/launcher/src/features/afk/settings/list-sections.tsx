@@ -104,7 +104,7 @@ function ReplaceLine({
         <SecretField
           aria-label={t("afkClear.secret.newFor", { command: row.command })}
           value={row.args}
-          prefix={row.command}
+          command={row.command}
           placeholder={t("afkSettings.login.newSecret")}
           invalid={Boolean(error)}
           autoFocus={autoFocus}

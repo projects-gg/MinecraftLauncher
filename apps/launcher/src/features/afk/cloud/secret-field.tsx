@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { SecretField, SecretKept } from "../secret";
 import { TokenField, type TokenSet } from "../settings/controls";
 import { cloudApi } from "./api";
+import { commandOf } from "./bulk";
 import { looksSensitive } from "./sensitive";
 import { typed, type Words } from "./settings-model";
 
@@ -199,6 +200,9 @@ export function WordsField({
 
   const secret = words.kind === "secret";
   const forced = looksSensitive(words.text);
+  // Being typed again over a kept line: its command (`/login`), shown before the field.
+  const command = replaced.current?.kind === "sealed" ? commandOf(replaced.current.preview) : "";
+  const withCommand = command !== "" && (words.text === "" || words.text.startsWith(`${command} `));
   const kept = words.kind === "secret" && words.kept;
   return (
     <div className="min-w-0 flex-1">
@@ -224,14 +228,31 @@ export function WordsField({
               ref={inputRef}
               id={fieldId}
               aria-label={showLabel ? undefined : label}
-              value={words.text}
+              value={withCommand ? words.text.slice(command.length + 1) : words.text}
               secret={secret}
+              // "Değiştir" on a kept `/login` line: the command stays in front, only the password is
+              // typed again, as on the desktop and in "Ayarları kopyala" (a whole command typed
+              // over it is taken as it is).
+              command={withCommand ? command : null}
               mono={mono}
-              placeholder={replaced.current ? t("cloudAfk.settings.secret.newValue") : placeholder}
-              maxLength={256}
+              placeholder={
+                replaced.current
+                  ? command
+                    ? t("afkSettings.login.newSecret")
+                    : t("cloudAfk.settings.secret.newValue")
+                  : placeholder
+              }
+              maxLength={256 - (withCommand ? command.length + 1 : 0)}
               invalid={Boolean(error)}
               autoFocus={autoFocus || focusNext}
-              onChange={(text) => onChange(typed(words, text))}
+              onChange={(text) =>
+                onChange(
+                  typed(
+                    words,
+                    command && text !== "" && !text.startsWith("/") ? `${command} ${text}` : text,
+                  ),
+                )
+              }
             />
           )}
         </div>

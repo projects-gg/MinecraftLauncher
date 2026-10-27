@@ -160,7 +160,12 @@ export function CloudSection({
   const signedIn = overview.session === "signedIn";
   const failed = overview.session === "failed";
   const accounts = signedIn ? overview.accounts : [];
-  const online = accounts.filter((a) => a.live.state === "running" && !a.hold).length;
+  // In game in the cloud, or here: the card of an account in both places says where.
+  const online = accounts.filter(
+    (a) =>
+      (a.live.state === "running" && !a.hold) ||
+      hereCopy(data, a.id, desktop)?.state.kind === "connected",
+  ).length;
   const maintenance =
     overview.mode === "paused"
       ? (localized(overview.maintenance, lang) ?? t("cloudAfk.maintenance"))

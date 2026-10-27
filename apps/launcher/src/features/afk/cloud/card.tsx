@@ -15,6 +15,8 @@ import {
   Backpack,
   CaretRight,
   ChatsCircle,
+  Cloud,
+  CloudArrowUp,
   Copy,
   Desktop,
   DotsThreeVertical,
@@ -110,28 +112,18 @@ function TimeRow({ account, skewMs }: { account: CloudAccount; skewMs: number })
   );
 }
 
-/**
- * The line of an account this computer has too: that it does, and the move to the other place in
- * one plain phrase ("Bu bilgisayarda çalıştır" stops the cloud one first; "Bulutta çalıştır" the
- * one here). A quiet text button, not gold: the card's gold is its main button.
- */
-function PlaceRow({
-  account,
-  here,
-  place,
-}: {
-  account: CloudAccount;
-  here: AfkAccount;
-  place: TwinPlace;
-}) {
+/** The move of an account in both places to the other one: its words and its run, or null. */
+function useTwinMove(account: CloudAccount, here: AfkAccount | null, place: TwinPlace) {
   const { t } = useTranslation();
   const runHere = useRunHere();
   const runInCloud = useRunInCloud();
   const [busy, setBusy] = useState(false);
-  // The cloud one can take over only while nothing holds it (a stop to fix, the time up).
+  if (!here) return null;
+  // The cloud one takes over only while nothing holds it (a stop to fix, the time up).
   const toCloud = place === "here" && !account.hold && !account.expired;
   const toHere = place === "cloud" && here.state.kind !== "stopping";
-  const move = async () => {
+  if (!toHere && !toCloud) return null;
+  const run = async () => {
     if (busy) return;
     setBusy(true);
     try {
@@ -140,22 +132,32 @@ function PlaceRow({
       setBusy(false);
     }
   };
+  return {
+    toHere,
+    busy,
+    run,
+    label: toHere ? t("afkClear.twin.runHere") : t("afkClear.twin.runInCloud"),
+  };
+}
+
+/**
+ * The line of an account this computer has too: its move to the other place in one plain phrase,
+ * the place's mark before it ("Bu bilgisayarda çalıştır" stops the cloud one first; "Bulutta
+ * çalıştır" the one here). A quiet text button, not gold: the card's gold is its main button.
+ */
+function PlaceRow({ move }: { move: NonNullable<ReturnType<typeof useTwinMove>> }) {
+  const Mark = move.toHere ? Desktop : Cloud;
   return (
-    <p className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 pl-[23px] text-[12px]">
-      <span className="inline-flex items-center gap-1.5 text-ash-300">
-        <Desktop size={13} weight="bold" aria-hidden className="shrink-0 text-ash-400" />
-        {t("afkClear.twin.also")}
-      </span>
-      {toHere || toCloud ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void move()}
-          className="inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium text-bone-100 underline-offset-2 transition-opacity duration-150 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-default disabled:opacity-60"
-        >
-          {toHere ? t("afkClear.twin.runHere") : t("afkClear.twin.runInCloud")}
-        </button>
-      ) : null}
+    <p className="mt-1.5 flex min-h-5 items-center pl-[23px] text-[12px]">
+      <button
+        type="button"
+        disabled={move.busy}
+        onClick={() => void move.run()}
+        className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm font-medium text-bone-100 underline-offset-2 transition-opacity duration-150 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-default disabled:opacity-60"
+      >
+        <Mark size={13} weight="bold" aria-hidden className="shrink-0 text-ash-300" />
+        {move.label}
+      </button>
     </p>
   );
 }
@@ -387,6 +389,7 @@ export function CloudCard({
   const hereConsole = onHereConsole ?? onConsole;
   const hereSettings = onHereSettings ?? onSettings;
   const hereItems = useHereItems(local, hereSettings);
+  const move = useTwinMove(account, here, place);
   const openSite = () =>
     void cloudApi
       .open("account", account.id)
@@ -425,6 +428,15 @@ export function CloudCard({
               ]
             : []),
         ]),
+    ...(move
+      ? [
+          {
+            label: move.label,
+            icon: move.toHere ? <Desktop size={16} /> : <CloudArrowUp size={16} />,
+            onSelect: () => void move.run(),
+          },
+        ]
+      : []),
     null,
     {
       label: t("cloudAfk.actions.console"),
@@ -615,7 +627,7 @@ export function CloudCard({
           </div>
           {local ? <ClientRow account={local} /> : null}
           <TimeRow account={account} skewMs={skewMs} />
-          {here ? <PlaceRow account={account} here={here} place={place} /> : null}
+          {move ? <PlaceRow move={move} /> : null}
           {onPlus ? <PlusLine account={account} onOpen={onPlus} /> : null}
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}

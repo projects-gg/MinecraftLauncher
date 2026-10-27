@@ -34,6 +34,10 @@ export function stateSignal(state: AfkState): SignalState {
 export function failedText(state: AfkState, t: TFunction): string | null {
   switch (state.kind) {
     case "error":
+      // A refusal stopped it for good: "Durdu: Giriş şifresi yanlış", as on the 7/24 Bulut cards.
+      if (state.cause && !state.standalone) {
+        return t("afkClear.stoppedBecause", { reason: state.reason });
+      }
       return state.standalone ? state.reason : `${t("afk.states.error")}: ${state.reason}`;
     case "clientFailed":
       return t(`afkConnect.problem.${state.problem}.title`);

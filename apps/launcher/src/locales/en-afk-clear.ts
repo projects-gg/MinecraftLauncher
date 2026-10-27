@@ -5,12 +5,12 @@ export const enAfkClear = {
   saveStart: "Save and start",
   savedConnecting: "The account is connecting.",
   savedStarting: "The account is starting.",
+  stoppedBecause: "Stopped: {{reason}}",
   here: {
     title: "On this PC",
     none: "No accounts",
   },
   twin: {
-    also: "Also on this PC",
     runHere: "Run on this PC",
     runInCloud: "Run in the cloud",
     hereState: "This PC: {{state}}",

@@ -169,7 +169,7 @@ export function CopyDialog({
           data-copy-secret=""
           data-empty={empty ? "" : undefined}
           invalid={tried && empty}
-          prefix={command}
+          command={command}
           maxLength={256 - (command ? command.length + 1 : 0)}
           value={typed[key(row, target?.id ?? null)] ?? ""}
           onChange={(text) =>
