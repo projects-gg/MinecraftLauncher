@@ -11,7 +11,9 @@
 //! - `PROJECTS_HOST_RIG_IP`: where every relay name resolves (the e4mc relays and the TURN servers);
 //! - `PROJECTS_HOST_TEST_CA`: a PEM file with the only roots the relays' TLS may chain to;
 //! - `PROJECTS_HOST_GUEST_ANY=1`: any program on this computer may come in through a join's local
-//!   endpoint (the rig's light guest, an AFK client, stands in for the game).
+//!   endpoint (the rig's light guest, an AFK client, stands in for the game);
+//! - `PROJECTS_HOST_REAL_TURN=1`: the rig's IP and CA stay with e4mc and TURN keeps the real
+//!   resolver and trust (the lead's smoke of Cloudflare's real TURN through the local service).
 //!
 //! The TURN servers themselves come from the (local) friends service as always.
 
@@ -28,9 +30,10 @@ pub const PLAYER_PORT: &str = "PROJECTS_E4MC_PLAYER_PORT";
 pub const RIG_IP: &str = "PROJECTS_HOST_RIG_IP";
 pub const TEST_CA: &str = "PROJECTS_HOST_TEST_CA";
 pub const GUEST_ANY: &str = "PROJECTS_HOST_GUEST_ANY";
+pub const REAL_TURN: &str = "PROJECTS_HOST_REAL_TURN";
 
 /// Every variable the rig reads.
-pub const VARIABLES: [&str; 7] = [
+pub const VARIABLES: [&str; 8] = [
     BROKER,
     RELAYS,
     RELAY_PORT,
@@ -38,12 +41,14 @@ pub const VARIABLES: [&str; 7] = [
     RIG_IP,
     TEST_CA,
     GUEST_ANY,
+    REAL_TURN,
 ];
 
 /// The rig's relays in `transports`, from the variables `var` reads (an empty value counts as
 /// unset). True when the paths now lead to the rig.
 pub fn apply(transports: &mut Transports, var: impl Fn(&str) -> Option<String>) -> bool {
     let var = |name: &str| var(name).filter(|value| !value.trim().is_empty());
+    let real_turn = var(REAL_TURN).is_some_and(|value| value.trim() == "1");
     let mut rig = false;
     if let Some(url) = var(BROKER) {
         transports.e4mc.broker_url = url.trim().to_owned();
@@ -66,7 +71,9 @@ pub fn apply(transports: &mut Transports, var: impl Fn(&str) -> Option<String>) 
     }
     if let Some(ip) = var(RIG_IP).and_then(|ip| ip.trim().parse::<IpAddr>().ok()) {
         transports.e4mc.resolver = Resolver::fixed(ip);
-        transports.turn.resolver = Resolver::fixed(ip);
+        if !real_turn {
+            transports.turn.resolver = Resolver::fixed(ip);
+        }
         rig = true;
     }
     if let Some(file) = var(TEST_CA) {
@@ -75,8 +82,10 @@ pub fn apply(transports: &mut Transports, var: impl Fn(&str) -> Option<String>) 
             .and_then(|pem| Trust::from_pem(&pem))
         {
             Some(trust) => {
-                transports.e4mc.trust = trust.clone();
-                transports.turn.trust = trust;
+                if !real_turn {
+                    transports.turn.trust = trust.clone();
+                }
+                transports.e4mc.trust = trust;
                 rig = true;
             }
             None => tracing::warn!("the rig's test CA file holds no certificate"),
@@ -196,6 +205,22 @@ mod tests {
         let mut transports = Transports::new("2.0.0");
         assert!(!apply(&mut transports, vars(&[(TEST_CA, &empty)])));
         assert!(matches!(transports.e4mc.trust, Trust::Platform));
+
+        // The real-TURN smoke: e4mc still goes to the rig, TURN keeps the platform's trust.
+        let mut transports = Transports::new("2.0.0");
+        assert!(apply(
+            &mut transports,
+            vars(&[(RIG_IP, "127.0.0.1"), (TEST_CA, &ca), (REAL_TURN, "1")])
+        ));
+        assert!(matches!(transports.e4mc.trust, Trust::Roots(_)));
+        assert!(matches!(transports.turn.trust, Trust::Platform));
+        // Only "1" means it.
+        let mut transports = Transports::new("2.0.0");
+        assert!(apply(
+            &mut transports,
+            vars(&[(TEST_CA, &ca), (REAL_TURN, "yes")])
+        ));
+        assert!(matches!(transports.turn.trust, Trust::Roots(_)));
     }
 
     /// The repository's root (this crate sits in `crates/pl-worlds`).
