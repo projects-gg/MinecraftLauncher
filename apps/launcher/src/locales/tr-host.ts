@@ -140,7 +140,7 @@ export const trHost = {
     restartBody: "Oyun kapanıp arkadaşının dünyasında yeniden açılır.",
     reopenBody: "Oyun baştan açılıp arkadaşının dünyasına bağlanacak.",
     movingBody: "Arkadaşının dünyasına geçiliyor.",
-    closingBody: "Kapanınca arkadaşının dünyasında yeniden açılacak.",
+    closingBody: "Oyun kapanınca arkadaşının dünyasında yeniden açılacak.",
     connecting: "Arkadaşının dünyasına bağlanılıyor",
   },
   menu: {
