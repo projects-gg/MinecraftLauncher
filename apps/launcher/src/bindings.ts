@@ -7333,7 +7333,12 @@ export type PlusPersona = {
 	status?: string,
 	/**  `back_soon`, `back_evening`, `back_tomorrow`, `weekend`, `busy` (QoL Q3). */
 	statusPreset?: string | null,
+	/**  Small talk; "Konu dışına çıkmasın" is its opposite (off by default since 27 Oct 2026). */
 	smallTalk?: boolean,
+	/**  "Oyuncu gibi konuşsun": chats like a player instead of in formal language. */
+	playerTalk?: boolean,
+	/**  The tag before the assistant's lines: the player's choice, off by default. */
+	prefix?: PlusPrefix,
 };
 
 /**
@@ -7391,6 +7396,16 @@ export type PlusPickedCustom_Serialize = {
 	base: string,
 	fp: string,
 	look: PlusLook_Serialize | null,
+};
+
+/**
+ *  The tag before the assistant's lines (`persona.prefix`, the owner's decision of 27 Oct 2026):
+ *  off, with `[AFK+]` as its text, until the player sets one.
+ */
+export type PlusPrefix = {
+	on?: boolean,
+	/**  1-16 code points: Latin letters, digits, spaces and a few marks; never staff or a player. */
+	text?: string,
 };
 
 /**  A promotion's multiplier (100-500 %), its words and its end. */

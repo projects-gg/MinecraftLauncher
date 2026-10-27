@@ -40,7 +40,12 @@
         "intro": "",
         "status": "",
         "statusPreset": null,
-        "smallTalk": true
+        "smallTalk": false,
+        "playerTalk": false,
+        "prefix": {
+          "on": false,
+          "text": "[AFK+]"
+        }
       },
       "replies": {
         "scope": "trade",
@@ -95,7 +100,12 @@
         "intro": "",
         "status": "",
         "statusPreset": null,
-        "smallTalk": true
+        "smallTalk": false,
+        "playerTalk": false,
+        "prefix": {
+          "on": false,
+          "text": "[AFK+]"
+        }
       },
       "replies": {
         "scope": "trade",
@@ -142,7 +152,7 @@
     }
   },
   "counts": {
-    "cases": 111,
+    "cases": 132,
     "v1": 4
   },
   "cases": [
@@ -158,7 +168,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -221,7 +236,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -286,7 +306,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -391,7 +416,12 @@
           "intro": "Ahmet'in AFK+ asistanı",
           "status": "",
           "statusPreset": "back_evening",
-          "smallTalk": false
+          "smallTalk": true,
+          "playerTalk": true,
+          "prefix": {
+            "on": true,
+            "text": "[Çılgın Ömer]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -595,7 +625,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -700,7 +735,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -810,7 +850,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -865,7 +910,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -970,7 +1020,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -1076,7 +1131,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -1155,7 +1215,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -1267,7 +1332,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -1362,7 +1432,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -1460,7 +1535,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -1566,7 +1646,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -1691,7 +1776,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -1789,7 +1879,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -1877,7 +1972,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -1980,7 +2080,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -2062,7 +2167,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -2145,7 +2255,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -2248,7 +2363,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -2335,7 +2455,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -2447,7 +2572,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -2530,7 +2660,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -2647,7 +2782,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -2763,7 +2903,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -3087,7 +3232,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -3627,7 +3777,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -3755,7 +3910,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -4275,7 +4435,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -4355,7 +4520,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -4442,7 +4612,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -4565,7 +4740,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -4678,7 +4858,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -4777,7 +4962,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -4859,7 +5049,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -4942,7 +5137,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -5042,7 +5242,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -5143,7 +5348,12 @@
           "intro": "",
           "status": "Akşam dönerim",
           "statusPreset": "back_soon",
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -5243,7 +5453,12 @@
             "intro": "",
             "status": "",
             "statusPreset": "back_soon",
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -5333,6 +5548,2781 @@
       }
     },
     {
+      "name": "a tag is cleaned",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "  [Ejder   Bot]  "
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": true,
+        "config": {
+          "v": 2,
+          "enabled": true,
+          "mode": "projects-smp",
+          "lang": "auto",
+          "persona": {
+            "preset": "friendly",
+            "intro": "",
+            "status": "",
+            "statusPreset": null,
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": true,
+              "text": "[Ejder Bot]"
+            }
+          },
+          "replies": {
+            "scope": "trade",
+            "away": true,
+            "saveAt": 80
+          },
+          "authority": "ask",
+          "allow": {
+            "buy": true,
+            "sell": true
+          },
+          "pay": "money",
+          "who": {
+            "mode": "all",
+            "friends": []
+          },
+          "orders": [
+            {
+              "id": "a1",
+              "on": true,
+              "side": "buy",
+              "item": "minecraft:elytra",
+              "qty": 1,
+              "req": {
+                "ench": {},
+                "dur": 90,
+                "named": false,
+                "cursed": false
+              },
+              "pay": "money",
+              "unit": "total",
+              "target": 32000,
+              "limit": 40000,
+              "style": "balanced",
+              "trade": "auto",
+              "until": 1794109600,
+              "note": "",
+              "src": "form",
+              "at": 1792813600
+            },
+            {
+              "id": "s1",
+              "on": true,
+              "side": "sell",
+              "item": "minecraft:diamond",
+              "qty": 64,
+              "req": null,
+              "pay": "money",
+              "unit": "each",
+              "target": 120,
+              "limit": 100,
+              "style": "balanced",
+              "trade": "auto",
+              "until": 1794109600,
+              "note": "",
+              "src": "form",
+              "at": 1792813600
+            }
+          ],
+          "customItems": [],
+          "limits": {
+            "perDealMax": 50000,
+            "dailySpendMax": null,
+            "totalBudget": 300000,
+            "balanceFloor": 0,
+            "approvalAbove": 50000,
+            "newCounterpartApprovalAbove": null,
+            "approvalTimeoutMin": 10
+          },
+          "discovery": {
+            "scanChat": true,
+            "proactivePm": true,
+            "ads": false,
+            "adTemplate": "buy-basic"
+          },
+          "trade": {
+            "returnRow": null
+          },
+          "summaryAt": "21:00",
+          "blocked": [],
+          "schedule": {
+            "on": false,
+            "windows": []
+          },
+          "pauseUntil": null
+        }
+      }
+    },
+    {
+      "name": "a tag that is off is still checked",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[Yetkili]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "staff"
+      }
+    },
+    {
+      "name": "a write without the new persona fields keeps the stored ones",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": true
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {
+        "stored": {
+          "v": 2,
+          "enabled": true,
+          "mode": "projects-smp",
+          "lang": "auto",
+          "persona": {
+            "preset": "friendly",
+            "intro": "",
+            "status": "",
+            "statusPreset": null,
+            "smallTalk": false,
+            "playerTalk": true,
+            "prefix": {
+              "on": true,
+              "text": "[Ejder]"
+            }
+          },
+          "replies": {
+            "scope": "trade",
+            "away": true,
+            "saveAt": 80
+          },
+          "authority": "ask",
+          "allow": {
+            "buy": true,
+            "sell": true
+          },
+          "pay": "money",
+          "who": {
+            "mode": "all",
+            "friends": []
+          },
+          "orders": [
+            {
+              "id": "a1",
+              "on": true,
+              "side": "buy",
+              "item": "minecraft:elytra",
+              "qty": 1,
+              "req": {
+                "ench": {},
+                "dur": 90,
+                "named": false,
+                "cursed": false
+              },
+              "pay": "money",
+              "unit": "total",
+              "target": 32000,
+              "limit": 40000,
+              "style": "balanced",
+              "trade": "auto",
+              "until": 1794109600,
+              "note": "",
+              "src": "form",
+              "at": 1792813600
+            },
+            {
+              "id": "s1",
+              "on": true,
+              "side": "sell",
+              "item": "minecraft:diamond",
+              "qty": 64,
+              "req": null,
+              "pay": "money",
+              "unit": "each",
+              "target": 120,
+              "limit": 100,
+              "style": "balanced",
+              "trade": "auto",
+              "until": 1794109600,
+              "note": "",
+              "src": "form",
+              "at": 1792813600
+            }
+          ],
+          "customItems": [],
+          "limits": {
+            "perDealMax": 50000,
+            "dailySpendMax": null,
+            "totalBudget": 300000,
+            "balanceFloor": 0,
+            "approvalAbove": 50000,
+            "newCounterpartApprovalAbove": null,
+            "approvalTimeoutMin": 10
+          },
+          "discovery": {
+            "scanChat": true,
+            "proactivePm": true,
+            "ads": false,
+            "adTemplate": "buy-basic"
+          },
+          "trade": {
+            "returnRow": null
+          },
+          "summaryAt": "21:00",
+          "blocked": [],
+          "schedule": {
+            "on": false,
+            "windows": []
+          },
+          "pauseUntil": null
+        }
+      },
+      "result": {
+        "ok": true,
+        "config": {
+          "v": 2,
+          "enabled": true,
+          "mode": "projects-smp",
+          "lang": "auto",
+          "persona": {
+            "preset": "polite",
+            "intro": "",
+            "status": "",
+            "statusPreset": null,
+            "smallTalk": true,
+            "playerTalk": true,
+            "prefix": {
+              "on": true,
+              "text": "[Ejder]"
+            }
+          },
+          "replies": {
+            "scope": "trade",
+            "away": true,
+            "saveAt": 80
+          },
+          "authority": "ask",
+          "allow": {
+            "buy": true,
+            "sell": true
+          },
+          "pay": "money",
+          "who": {
+            "mode": "all",
+            "friends": []
+          },
+          "orders": [
+            {
+              "id": "a1",
+              "on": true,
+              "side": "buy",
+              "item": "minecraft:elytra",
+              "qty": 1,
+              "req": {
+                "ench": {},
+                "dur": 90,
+                "named": false,
+                "cursed": false
+              },
+              "pay": "money",
+              "unit": "total",
+              "target": 32000,
+              "limit": 40000,
+              "style": "balanced",
+              "trade": "auto",
+              "until": 1794109600,
+              "note": "",
+              "src": "form",
+              "at": 1792813600
+            },
+            {
+              "id": "s1",
+              "on": true,
+              "side": "sell",
+              "item": "minecraft:diamond",
+              "qty": 64,
+              "req": null,
+              "pay": "money",
+              "unit": "each",
+              "target": 120,
+              "limit": 100,
+              "style": "balanced",
+              "trade": "auto",
+              "until": 1794109600,
+              "note": "",
+              "src": "form",
+              "at": 1792813600
+            }
+          ],
+          "customItems": [],
+          "limits": {
+            "perDealMax": 50000,
+            "dailySpendMax": null,
+            "totalBudget": 300000,
+            "balanceFloor": 0,
+            "approvalAbove": 50000,
+            "newCounterpartApprovalAbove": null,
+            "approvalTimeoutMin": 10
+          },
+          "discovery": {
+            "scanChat": true,
+            "proactivePm": true,
+            "ads": false,
+            "adTemplate": "buy-basic"
+          },
+          "trade": {
+            "returnRow": null
+          },
+          "summaryAt": "21:00",
+          "blocked": [],
+          "schedule": {
+            "on": false,
+            "windows": []
+          },
+          "pauseUntil": null
+        }
+      }
+    },
+    {
+      "name": "a write without the new persona fields on a new account takes the defaults",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": true,
+        "config": {
+          "v": 2,
+          "enabled": true,
+          "mode": "projects-smp",
+          "lang": "auto",
+          "persona": {
+            "preset": "friendly",
+            "intro": "",
+            "status": "",
+            "statusPreset": null,
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
+          },
+          "replies": {
+            "scope": "trade",
+            "away": true,
+            "saveAt": 80
+          },
+          "authority": "ask",
+          "allow": {
+            "buy": true,
+            "sell": true
+          },
+          "pay": "money",
+          "who": {
+            "mode": "all",
+            "friends": []
+          },
+          "orders": [
+            {
+              "id": "a1",
+              "on": true,
+              "side": "buy",
+              "item": "minecraft:elytra",
+              "qty": 1,
+              "req": {
+                "ench": {},
+                "dur": 90,
+                "named": false,
+                "cursed": false
+              },
+              "pay": "money",
+              "unit": "total",
+              "target": 32000,
+              "limit": 40000,
+              "style": "balanced",
+              "trade": "auto",
+              "until": 1794109600,
+              "note": "",
+              "src": "form",
+              "at": 1792813600
+            },
+            {
+              "id": "s1",
+              "on": true,
+              "side": "sell",
+              "item": "minecraft:diamond",
+              "qty": 64,
+              "req": null,
+              "pay": "money",
+              "unit": "each",
+              "target": 120,
+              "limit": 100,
+              "style": "balanced",
+              "trade": "auto",
+              "until": 1794109600,
+              "note": "",
+              "src": "form",
+              "at": 1792813600
+            }
+          ],
+          "customItems": [],
+          "limits": {
+            "perDealMax": 50000,
+            "dailySpendMax": null,
+            "totalBudget": 300000,
+            "balanceFloor": 0,
+            "approvalAbove": 50000,
+            "newCounterpartApprovalAbove": null,
+            "approvalTimeoutMin": 10
+          },
+          "discovery": {
+            "scanChat": true,
+            "proactivePm": true,
+            "ads": false,
+            "adTemplate": "buy-basic"
+          },
+          "trade": {
+            "returnRow": null
+          },
+          "summaryAt": "21:00",
+          "blocked": [],
+          "schedule": {
+            "on": false,
+            "windows": []
+          },
+          "pauseUntil": null
+        }
+      }
+    },
+    {
+      "name": "a tag posing as staff",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[Yetkili]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "staff"
+      }
+    },
+    {
+      "name": "a tag posing as staff in digits",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[4dm1n]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "staff"
+      }
+    },
+    {
+      "name": "a tag posing as staff in camel case",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[ModBot]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "staff"
+      }
+    },
+    {
+      "name": "a tag posing as the system with spaces",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[S i s t e m]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "staff"
+      }
+    },
+    {
+      "name": "a tag posing as the server",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "(Sunucu)"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "staff"
+      }
+    },
+    {
+      "name": "a tag with a colour code",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "&a[Bot]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "form"
+      }
+    },
+    {
+      "name": "a tag with a look-alike letter",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[Аdmin]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "form"
+      }
+    },
+    {
+      "name": "a tag in angle brackets",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "<Bot>"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "form"
+      }
+    },
+    {
+      "name": "a tag over 16 characters",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[Ejderin Botu Burada]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "length"
+      }
+    },
+    {
+      "name": "an empty tag",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "   "
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "length"
+      }
+    },
+    {
+      "name": "a tag naming another app",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[Discord]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "platform"
+      }
+    },
+    {
+      "name": "a tag with a link",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[ejder.net]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "link"
+      }
+    },
+    {
+      "name": "a tag naming a friend",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[kaan_07]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "friends",
+          "friends": ["Kaan_07"]
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "name"
+      }
+    },
+    {
+      "name": "a tag naming a blocked player",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "Spammer1:"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": ["Spammer1"],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.text",
+        "reason": "text",
+        "problem": "name"
+      }
+    },
+    {
+      "name": "an unknown key in the tag",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": true,
+            "text": "[Bot]",
+            "color": "red"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.color",
+        "reason": "unknown"
+      }
+    },
+    {
+      "name": "a tag without its switch",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "text": "[Bot]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.prefix.on",
+        "reason": "missing"
+      }
+    },
+    {
+      "name": "player talk as a word",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-smp",
+        "lang": "auto",
+        "persona": {
+          "preset": "friendly",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": "yes",
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": false,
+          "adTemplate": "buy-basic"
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "persona.playerTalk",
+        "reason": "type"
+      }
+    },
+    {
       "name": "a version 1 document",
       "input": {
         "v": 1,
@@ -5357,7 +8347,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -5464,7 +8459,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -5572,7 +8572,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -5681,7 +8686,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -5790,7 +8800,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -5898,7 +8913,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6006,7 +9026,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6113,7 +9138,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6221,7 +9251,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6334,7 +9369,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6442,7 +9482,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6602,7 +9647,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6710,7 +9760,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6818,7 +9873,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -6926,7 +9986,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -7046,7 +10111,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -7177,7 +10247,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -7298,7 +10373,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -7419,7 +10499,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -7540,7 +10625,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -7660,7 +10750,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -7780,7 +10875,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -7911,7 +11011,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8029,7 +11134,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8149,7 +11259,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8269,7 +11384,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8389,7 +11509,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8509,7 +11634,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8599,7 +11729,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8707,7 +11842,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8787,7 +11927,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -8878,7 +12023,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -8969,7 +12119,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9059,7 +12214,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9149,7 +12309,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9239,7 +12404,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9329,7 +12499,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9419,7 +12594,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9526,7 +12706,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9616,7 +12801,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9706,7 +12896,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9796,7 +12991,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9880,7 +13080,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -9965,7 +13170,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10055,7 +13265,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10140,7 +13355,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10240,7 +13460,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10332,7 +13557,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10424,7 +13654,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10514,7 +13749,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10605,7 +13845,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10695,7 +13940,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10785,7 +14035,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10875,7 +14130,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -10965,7 +14225,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11060,7 +14325,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11150,7 +14420,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11240,7 +14515,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11330,7 +14610,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11417,7 +14702,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11507,7 +14797,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11597,7 +14892,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11682,7 +14982,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11772,7 +15077,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11862,7 +15172,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -11952,7 +15267,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12042,7 +15362,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12129,7 +15454,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12209,7 +15539,12 @@
             "intro": "",
             "status": "",
             "statusPreset": null,
-            "smallTalk": true
+            "smallTalk": false,
+            "playerTalk": false,
+            "prefix": {
+              "on": false,
+              "text": "[AFK+]"
+            }
           },
           "replies": {
             "scope": "trade",
@@ -12299,7 +15634,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12389,7 +15729,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12479,7 +15824,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12569,7 +15919,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12677,7 +16032,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12785,7 +16145,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -12893,7 +16258,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -13001,7 +16371,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -13109,7 +16484,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -13217,7 +16597,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -13325,7 +16710,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -13535,7 +16925,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -13643,7 +17038,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -13751,7 +17151,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -13859,7 +17264,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -14179,7 +17589,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -14588,7 +18003,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -15138,7 +18558,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -15478,7 +18903,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -15645,7 +19075,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -16404,7 +19839,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": true,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -16564,7 +20004,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": false
+          "smallTalk": false,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "all",
@@ -16691,7 +20136,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": true,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
@@ -16833,7 +20283,12 @@
           "intro": "",
           "status": "",
           "statusPreset": null,
-          "smallTalk": true
+          "smallTalk": true,
+          "playerTalk": false,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
         },
         "replies": {
           "scope": "trade",
