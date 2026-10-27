@@ -20,12 +20,15 @@ export interface ZoomHudHandle {
   show: () => void;
 }
 
-/** A live percentage (design.md: Tektur digits), the sign in the UI font (modcenter's Percent). */
+/**
+ * A live percentage (design.md: Tektur digits), the sign in the UI font (modcenter's Percent). It
+ * is as wide as the widest size ("%150"), so "Sıfırla" after it stays put while the size changes.
+ */
 function Level({ value }: { value: number }) {
   const { figure, signFirst } = percentParts(value);
   const sign = <span className="font-sans font-medium">%</span>;
   return (
-    <span className="font-display text-[12.5px] font-semibold text-gold-300 tabular-nums">
+    <span className="inline-block min-w-[2.9em] font-display text-[12.5px] font-semibold text-gold-300 tabular-nums">
       {signFirst ? sign : null}
       {figure}
       {signFirst ? null : sign}

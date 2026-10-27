@@ -741,6 +741,20 @@ function LabelContent<T extends string>({ option }: { option: SegmentedOption<T>
   );
 }
 
+/** A slider's value with its "%" in the UI font: Tektur's sign reads like a slash (the launcher's
+ * live percentages set it the same way). */
+function SliderValue({ text }: { text: string }) {
+  const at = text.indexOf("%");
+  if (at < 0) return text;
+  return (
+    <>
+      {text.slice(0, at)}
+      <span className="font-sans font-medium">%</span>
+      {text.slice(at + 1)}
+    </>
+  );
+}
+
 /** Slider with a visible label and live value. `disabled` shows a value chosen elsewhere
  * (e.g. "Otomatik") on the same track, so unlocking it keeps the thumb in place. */
 export function Slider({
@@ -774,7 +788,7 @@ export function Slider({
           {label}
         </span>
         <span className="font-display text-[15px] font-semibold text-gold-300 tabular-nums">
-          {format ? format(value) : value}
+          {format ? <SliderValue text={format(value)} /> : value}
         </span>
       </div>
       <RadixSlider.Root

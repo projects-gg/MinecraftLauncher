@@ -1,6 +1,6 @@
 // A conversation: its messages from this computer's history, newest at the bottom (older pages
 // come when the player scrolls up, keeping their place), day lines, "Yeni mesajlar" over what was
-// unread when it opened, "En yeni mesajlar" when new ones come while the player reads back, and the
+// unread when it opened, "Son mesajlara in" when new ones come while the player reads back, and the
 // composer. Only messages that land while the conversation is open rise in; a message deleted for
 // everyone turns into its quiet tombstone in place, saying who deleted it (FIX2; the player's own
 // deletion shows at once). The conversation is read once it is on screen at its newest message. A
@@ -78,9 +78,9 @@ const BOTTOM_SLACK = 56;
 const TOP_SLACK = 160;
 /** A message this much older than the newest shown still rises in (clocks differ a little). */
 const FRESH_SLACK_MS = 5_000;
-/** Read back farther than this many screens, "En yeni mesajlar" shows without a new message. */
+/** Read back farther than this many screens, "Son mesajlara in" shows without a new message. */
 const FAR_SCREENS = 1.5;
-/** "En yeni mesajlar" glides down at most this many screens; from farther it jumps. */
+/** "Son mesajlara in" glides down at most this many screens; from farther it jumps. */
 const GLIDE_SCREENS = 3;
 /** PageUp and PageDown scroll this share of a screen (a line of the last one stays in view). */
 const PAGE_SHARE = 0.85;
