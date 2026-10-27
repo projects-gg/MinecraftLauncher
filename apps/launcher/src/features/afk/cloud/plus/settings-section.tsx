@@ -1556,7 +1556,9 @@ export function SettingsSection({
 
   return (
     <>
-      <div className="flex flex-col gap-8">
+      {/* Every choice here has the quiet plate, as in the account's settings panel: gold stays the
+          save button's (AFK-CLEAR; the custom properties reach each `Segmented` inside). */}
+      <div className="flex flex-col gap-8 [--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]">
         <FineTuneGroup
           {...props}
           serverIssues={serverIssues}
