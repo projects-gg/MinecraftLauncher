@@ -74,9 +74,9 @@ export function MinutesLeft({ call, className }: { call: CrewCall; className?: s
 }
 
 /** The three answers: "Geliyorum" leads (gold when it joins the caller), the chosen one is checked.
- * `quiet` (the toast, right above OYNA): "Geliyorum" in the event card's form, secondary with the
- * gold play glyph, the other two ghost, since a gold fill there was a second gold block beside
- * OYNA (SMALL12). */
+ * `quiet` (the toast, right above OYNA): three secondary buttons, "Geliyorum" leading with the gold
+ * play glyph (the event card's form), since a gold fill there was a second gold block beside OYNA;
+ * ghost answers beside it read as words, not buttons (SMALL12). */
 export function AnswerButtons({
   call,
   size = "sm",
@@ -95,8 +95,9 @@ export function AnswerButtons({
    * Answered: the chosen one is checked and gold-edged, the others step back. */
   const variant = (answer: CallAnswer): "primary" | "secondary" | "ghost" => {
     if (answered) return answered === answer ? "secondary" : "ghost";
-    if (answer === "yes") return joinable && !quiet ? "primary" : "secondary";
-    return answer === "soon" && !quiet ? "secondary" : "ghost";
+    if (quiet) return "secondary";
+    if (answer === "yes") return joinable ? "primary" : "secondary";
+    return answer === "soon" ? "secondary" : "ghost";
   };
   return (
     <fieldset className={cn("m-0 flex min-w-0 gap-1.5 border-0 p-0", className)}>
