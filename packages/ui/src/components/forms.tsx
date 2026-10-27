@@ -646,12 +646,21 @@ export function Segmented<T extends string>({
           )}
         >
           <OptionPlate on={current === o.value} />
-          {/* The keyboard ring outside the option, as on buttons (`chamfer-ring`): around the
-              plate too, never gold on gold. A 1 px gap keeps it inside the control's padding. */}
-          <span
-            aria-hidden
-            className="chamfer-ring pointer-events-none absolute -z-10 bg-gold-300 opacity-0 [--chamfer-ring-gap:1px] group-focus-visible/option:opacity-100"
-          />
+          {/* The keyboard ring never touches gold. Around the chosen option's plate it sits outside,
+              as on buttons (`chamfer-ring`, its 2 px gap over the control's padding and border); an
+              option without the plate keeps it inside, 1 px in from the edge, so a dark line parts
+              it from a neighbour's plate. */}
+          {current === o.value ? (
+            <span
+              aria-hidden
+              className="chamfer-ring pointer-events-none absolute -z-10 bg-gold-300 opacity-0 group-focus-visible/option:opacity-100"
+            />
+          ) : (
+            <span
+              aria-hidden
+              className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_1px_var(--color-obsidian-900),inset_0_0_0_3px_var(--color-gold-300)] group-focus-visible/option:opacity-100"
+            />
+          )}
           {/* The label twice in one cell: in its own colour and in the plate's ink. */}
           <span className="grid">
             <OptionLabel option={o} />
