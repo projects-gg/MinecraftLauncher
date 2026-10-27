@@ -110,13 +110,18 @@ pub fn create(
             UiEvent::Notice(notice) => emitter.emit(NOTICE_EVENT, notice),
         };
     });
+    let mut config = WorldsConfig::new(version, root.to_path_buf());
+    // Synchronous commands ("Katıl", "Vazgeç") run on the main thread, outside any runtime: world
+    // sharing's tasks go to the app's own (a bare `tokio::spawn` there crashed the launcher).
+    config.runtime = Some(tauri::async_runtime::handle().inner().clone());
+    rig_transports(&mut config);
     let worlds = Worlds::new(
         Arc::new(SocialLink(social.clone())),
         Arc::new(OverlayLink(overlay.clone())),
         Arc::new(AppLauncher { app: app.clone() }),
         Arc::new(Together(social.clone())),
         ui,
-        WorldsConfig::new(version, root.to_path_buf()),
+        config,
     );
     let hears = worlds.clone();
     social.on_world(move |event| hears.on_service(event));
@@ -143,6 +148,33 @@ fn debug_worlds() -> bool {
     #[cfg(debug_assertions)]
     {
         std::env::var("PROJECTS_SOCIAL_WORLDS").is_ok_and(|value| value == "1")
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
+}
+
+/// Debug builds only: the end-to-end rig's own relays (HOST1-E, `pl_worlds::rig`), so test
+/// launchers share worlds over a local e4mc relay and a local TURN server and never reach the real
+/// ones. `pl_worlds::rig` does not exist in a release build.
+fn rig_transports(config: &mut WorldsConfig) {
+    #[cfg(debug_assertions)]
+    {
+        pl_worlds::rig::apply_env(&mut config.transports);
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = config;
+    }
+}
+
+/// Debug builds only (`pl_worlds::rig`): any program on this computer may come in through a join's
+/// local endpoint, so the rig's light guest (an AFK client) stands in for the game.
+fn rig_any_guest() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        pl_worlds::rig::any_guest_env()
     }
     #[cfg(not(debug_assertions))]
     {
@@ -312,6 +344,24 @@ async fn install_manifest(state: &AppState, instance_id: &str) -> Option<(Manife
             },
             id: pack.pack_id.clone(),
             version: pack.version_id.clone(),
+        })
+        // An install that follows a pack it has not installed yet (a new launcher's "Projects"
+        // before its first OYNA): that pack at no version, so matching syncs it at the game's start
+        // instead of offering a copy of every mod (PROTOCOL.md §10.2, HOST1-E).
+        .or_else(|| {
+            let managed = instance.managed_pack.as_ref()?;
+            let family = snapshot.as_ref().and_then(|snapshot| {
+                crate::commands::official::instance_family(
+                    &snapshot.index,
+                    &instance,
+                    Some(game_dir.as_path()),
+                )
+            })?;
+            Some(PackRef {
+                family,
+                id: managed.pack_id.clone(),
+                version: String::new(),
+            })
         });
     // The ready-made sets installed here: a friend's copy adds the same ones (their both-side
     // mods are in `mods` too).
@@ -722,6 +772,9 @@ impl Launcher for AppLauncher {
     /// `hooks.wrapper` starts the game through another program), when Windows tells who owns it.
     /// With several games (PLAY-AGAIN) the one that joins may be any of them.
     fn accept_filter(&self) -> Option<pl_host::guest::local::AcceptFilter> {
+        if rig_any_guest() {
+            return None;
+        }
         let app = self.app.clone();
         Some(Arc::new(move |remote: std::net::SocketAddr| {
             let Some(state) = app.try_state::<AppState>() else {

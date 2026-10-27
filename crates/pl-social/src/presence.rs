@@ -317,7 +317,7 @@ pub enum PresenceEvent {
     /// The task ended and will not reconnect.
     Stopped(StopReason),
     /// World sessions (HOST1): after every connect whether the service took them, then their
-    /// frames (only on a connection that took `worlds`).
+    /// frames (only on a connection that took `worlds2`).
     World(WorldEvent),
 }
 
@@ -676,7 +676,7 @@ impl PresenceControl {
 
     /// A world frame (HOST1, `crate::world`) the service answers by `rid`: its `ack`, or its
     /// `error` as [`WorldError::Refused`]. Fails at once with [`WorldError::Off`] on a connection
-    /// that did not take `worlds`, with [`WorldError::Unavailable`] while disconnected or when no
+    /// that did not take `worlds2`, with [`WorldError::Unavailable`] while disconnected or when no
     /// answer came within `wait`.
     pub async fn world_request(&self, frame: WorldFrame, wait: Duration) -> WorldResult {
         let (reply, answer) = oneshot::channel();
@@ -694,7 +694,7 @@ impl PresenceControl {
     }
 
     /// A world frame nobody answers (HOST1: counts, path answers, credentials let go, telemetry):
-    /// dropped while disconnected or on a connection that did not take `worlds`.
+    /// dropped while disconnected or on a connection that did not take `worlds2`.
     pub fn world_send(&self, frame: WorldFrame) {
         let command = Command::World { frame, reply: None };
         if let Err(mpsc::error::TrySendError::Full(command)) = self.commands.try_send(command)
@@ -3553,10 +3553,10 @@ mod tests {
             .connect_presence_with(fast(), None, true);
         let mut server = accept(&listener, None, seen.clone()).await.unwrap();
         assert!(seen.lock().unwrap().iter().any(|(name, value)| {
-            name == ":uri" && value.contains("caps=") && value.ends_with(",worlds")
+            name == ":uri" && value.contains("caps=") && value.ends_with(",worlds2")
         }));
         let mut hello = hello();
-        hello["caps"] = serde_json::json!(["worlds"]);
+        hello["caps"] = serde_json::json!(["worlds2"]);
         hello["worlds"] = serde_json::json!({"on": true, "maxGuests": 5});
         send_json(&mut server, hello).await;
         assert!(matches!(

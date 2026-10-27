@@ -107,6 +107,34 @@ export function readZipEntry(zip, name) {
   return null;
 }
 
+/** Every entry name of a zip, in its directory's order. */
+export function zipEntryNames(zip) {
+  let eocd = -1;
+  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 65_557); i--) {
+    if (zip.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error("not a zip file");
+  const names = [];
+  const count = zip.readUInt16LE(eocd + 10);
+  let p = zip.readUInt32LE(eocd + 16);
+  for (let n = 0; n < count; n++) {
+    if (zip.readUInt32LE(p) !== 0x02014b50) throw new Error("broken zip directory");
+    const nameLength = zip.readUInt16LE(p + 28);
+    names.push(zip.toString("utf8", p + 46, p + 46 + nameLength));
+    p += 46 + nameLength + zip.readUInt16LE(p + 30) + zip.readUInt16LE(p + 32);
+  }
+  return names;
+}
+
+/**
+ * The scenario driver of local test runs (build.gradle's `dev` source set: scripted scenarios, the
+ * end-to-end rigs' hooks) is never part of a jar the launcher ships.
+ */
+export const DEV_ENTRIES = [/^gg\/projects\/overlay\/dev\//, /^projects_overlay_dev\./];
+
 /** The jar's own `fabric.mod.json`. */
 export function modJson(jar) {
   const entry = readZipEntry(jar, "fabric.mod.json");
@@ -129,6 +157,8 @@ export function describeJar(file, bytes, target) {
   if (!license?.toString("utf8").includes("GNU GENERAL PUBLIC LICENSE")) {
     throw new Error(`${file}: no GPL text (${LICENSE_ENTRY})`);
   }
+  const dev = zipEntryNames(bytes).find((name) => DEV_ENTRIES.some((re) => re.test(name)));
+  if (dev) throw new Error(`${file}: carries the test scenario driver (${dev})`);
   return {
     minecraft: target.minecraft,
     range,

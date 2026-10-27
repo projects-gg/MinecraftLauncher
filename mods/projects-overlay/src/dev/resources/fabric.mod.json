@@ -18,7 +18,8 @@
       "gg.projects.overlay.dev.LangScenario",
       "gg.projects.overlay.dev.ResumeScenario",
       "gg.projects.overlay.dev.SettingsScenario",
-      "gg.projects.overlay.dev.EmojiScenario"
+      "gg.projects.overlay.dev.EmojiScenario",
+      "gg.projects.overlay.dev.H1eScenario"
     ]
   },
   "mixins": [

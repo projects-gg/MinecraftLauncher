@@ -12,6 +12,9 @@ mod link;
 mod manager;
 pub mod manifest;
 mod mismatch;
+/// The end-to-end rig's relays and light guest (HOST1-E): never in a release build.
+#[cfg(debug_assertions)]
+pub mod rig;
 pub mod view;
 
 #[cfg(test)]

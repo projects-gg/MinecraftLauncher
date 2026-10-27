@@ -9,6 +9,7 @@ import { crc32, deflateRawSync } from "node:zlib";
 
 import {
   checkBundle,
+  DEV_ENTRIES,
   describeJar,
   INDEX_FILE,
   LICENSE_ENTRY,
@@ -20,6 +21,7 @@ import {
   sha1,
   sourceFiles,
   sourceStamp,
+  zipEntryNames,
 } from "./overlay-jars.mjs";
 
 /** A zip of `[name, content, stored?]` entries (deflated unless stored). */
@@ -167,6 +169,56 @@ test("a jar without the GPL text is refused", () => {
   assert.match(gradle, /from\(file\('\.\.\/\.\.\/LICENSE'\)\)/);
   assert.equal(LICENSE_ENTRY, "LICENSE_projects-overlay");
   assert.match(readFileSync(join(ROOT, "LICENSE"), "utf8"), /GNU GENERAL PUBLIC LICENSE/);
+});
+
+test("a jar with the test scenario driver is refused", () => {
+  const json = JSON.stringify({
+    schemaVersion: 1,
+    id: "projects_overlay",
+    version: "0.1.0+26.2",
+    depends: { minecraft: "~26.2" },
+  });
+  for (const entry of [
+    "gg/projects/overlay/dev/H1eScenario.class",
+    "gg/projects/overlay/dev/mixin/WindowNoFocusMixin.class",
+    "projects_overlay_dev.mixins.json",
+  ]) {
+    const jar = makeZip([
+      ["fabric.mod.json", json],
+      [LICENSE_ENTRY, GPL],
+      [entry, "x"],
+    ]);
+    assert.throws(() => describeJar("x.jar", jar, TARGETS[1]), /test scenario driver/);
+  }
+  assert.deepEqual(zipEntryNames(overlayJar("0.1.0+26.2", "~26.2")), [
+    "fabric.mod.json",
+    "build.txt",
+    LICENSE_ENTRY,
+  ]);
+  assert.throws(() => zipEntryNames(Buffer.from("not a zip at all".repeat(3))), /not a zip/);
+
+  // The driver is build.gradle's own `dev` source set (never the shipped jar's), and everything
+  // it registers sits where DEV_ENTRIES looks.
+  const gradle = readFileSync(join(MOD_DIR, "build.gradle"), "utf8");
+  assert.match(gradle, /projects_overlay \{\s+sourceSet sourceSets\.main\s+\}/);
+  assert.match(gradle, /projects_overlay_dev \{\s+sourceSet sourceSets\.dev\s+\}/);
+  const dev = JSON.parse(
+    readFileSync(join(MOD_DIR, "src", "dev", "resources", "fabric.mod.json"), "utf8"),
+  );
+  const classes = dev.entrypoints.client.map((name) => `${name.replaceAll(".", "/")}.class`);
+  assert.ok(classes.length >= 1);
+  for (const { config } of dev.mixins) {
+    const mixins = JSON.parse(
+      readFileSync(join(MOD_DIR, "src", "dev", "resources", config), "utf8"),
+    );
+    classes.push(`${mixins.package.replaceAll(".", "/")}/${mixins.client[0]}.class`);
+  }
+  for (const name of [...classes, ...dev.mixins.map((mixin) => mixin.config)]) {
+    assert.ok(
+      DEV_ENTRIES.some((re) => re.test(name)),
+      name,
+    );
+  }
 });
 
 test("the folder check finds every way a release could ship a wrong overlay", () => {
