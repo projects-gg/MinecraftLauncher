@@ -50,6 +50,27 @@ pub struct PlusOffer {
     /// Where AFK+ runs: `any` (Studio's `features.anyServer`), `verified` the server keys where the
     /// bot trades itself (elsewhere it agrees and the player makes the trade).
     pub servers: PlusOfferServers,
+    /// AFK+ extra credits ("Ek kontör"): the packs on sale; None while Studio has them off. The
+    /// launcher only shows that they exist: buying happens on afk.projects.gg.
+    pub topup: Option<PlusOfferTopup>,
+}
+
+/// `Offer.plus.topup` (cloud-afk README "AFK+ extra credits").
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusOfferTopup {
+    /// Packs can be bought now.
+    pub sales: bool,
+    pub packs: Vec<PlusTopupPack>,
+    pub refund_window_hours: u32,
+    pub max_balance: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusTopupPack {
+    pub price_tl: String,
+    pub credits: u64,
 }
 
 impl PlusOffer {
@@ -213,6 +234,8 @@ pub struct PlusQuotaBrief {
     pub exhausted_until: Option<i64>,
     /// Credits of unexpired gifts.
     pub gifts_left: u64,
+    /// Bought credits left (AFK+ extra credits); 0 from an older service.
+    pub bought_left: u64,
 }
 
 /// `GET /accounts/:id/plus/quota` (`QuotaView`). Players see the unit as "kontör" ("AI credits").
@@ -223,9 +246,12 @@ pub struct PlusQuota {
     pub week: PlusQuotaWindow,
     /// In spending order.
     pub gifts: Vec<PlusGift>,
+    /// Bought packs with credits left, oldest first (AFK+ extra credits): spent after the windows
+    /// and every gift.
+    pub bought: PlusBought,
     pub promo: Option<PlusPromo>,
     pub frozen: bool,
-    /// "Yaklaşık N yanıt kaldı" (gifts included).
+    /// "Yaklaşık N yanıt kaldı" (gifts and bought credits included).
     pub est_replies: u64,
     pub pct5: u32,
     pub pct_week: u32,
@@ -247,6 +273,21 @@ pub struct PlusGift {
     pub id: String,
     pub remaining: u64,
     pub expires_at: Option<i64>,
+}
+
+/// The bought packs with credits left and their sum (cloud-afk README "AFK+ extra credits").
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusBought {
+    pub remaining: u64,
+    pub packs: Vec<PlusPack>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct PlusPack {
+    pub id: String,
+    pub remaining: u64,
 }
 
 /// A promotion's multiplier (100-500 %), its words and its end.
@@ -2208,6 +2249,38 @@ mod tests {
             (account.tier.as_str(), account.plus_until, account.ai),
             ("", None, None)
         );
+    }
+
+    #[test]
+    fn reads_bought_credits_and_the_packs_on_sale() {
+        // cloud-afk README "AFK+ extra credits": the view's packs, the brief's sum, the offer's packs.
+        let quota: PlusQuota = serde_json::from_value(json!({
+            "w5h": {"used": 5000, "cap": 5000, "resetAt": 1792418400},
+            "week": {"used": 12800, "cap": 20000, "resetAt": 1792807200},
+            "gifts": [], "promo": null, "frozen": false, "estReplies": 615,
+            "bought": {"remaining": 12300, "packs": [{"id": "gr_0P8Y9A0BUY01", "remaining": 12300}]},
+            "pct5": 100, "pctWeek": 64, "asOf": 1792400000
+        }))
+        .unwrap();
+        assert_eq!(quota.bought.remaining, 12_300);
+        assert_eq!(quota.bought.packs[0].id, "gr_0P8Y9A0BUY01");
+        // An older service says nothing of them: none.
+        let old: PlusQuotaBrief = serde_json::from_value(json!({
+            "pct5": 100, "pctWeek": 41, "w5hResetAt": null, "weekResetAt": 1792807200,
+            "exhaustedUntil": null, "giftsLeft": 0
+        }))
+        .unwrap();
+        assert_eq!(old.bought_left, 0);
+        let offer: Offer = serde_json::from_value(json!({
+            "mode": "on",
+            "plus": {"mode": "on", "sales": true, "prices": [], "features": {},
+              "topup": {"sales": true, "packs": [{"priceTl": "10.00", "credits": 14500}],
+                "refundWindowHours": 336, "maxBalance": 1000000}}
+        }))
+        .unwrap();
+        let topup = offer.plus.unwrap().topup.unwrap();
+        assert!(topup.sales);
+        assert_eq!(topup.packs[0].credits, 14_500);
     }
 
     #[test]
