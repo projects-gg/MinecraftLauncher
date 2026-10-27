@@ -1555,7 +1555,7 @@ export type AdoptedGameExit = {
 };
 
 /**
- *  The game an earlier start of the launcher left running, followed again by this start
+ *  A game an earlier start of the launcher left running, followed again by this start
  *  ([`adopt_detached`]): the page shows it as "Oyunda" from its first paint.
  */
 export type AdoptedGameView = {
@@ -6312,7 +6312,7 @@ export type OverlayStateView = {
 };
 
 /**
- *  Whether the mod in the running game is connected (`overlay-status`): while it is, its toasts
+ *  Whether the mod in a running game is connected (`overlay-status`): while one is, its toasts
  *  stand in for the launcher's system notifications of the same events.
  */
 export type OverlayStatus = {
@@ -10126,9 +10126,7 @@ export type WorldOpenRequest = {
 	invite: string[],
 };
 
-/**
- *  Whether a world is open in a game now ([`game_world_open`]), and whose game it is.
- */
+/**  Whether a world is open in a game now ([`game_world_open`]), and whose game it is. */
 export type WorldOpenView = {
 	/**  A game holds the world's lock. */
 	open: boolean,
