@@ -7,6 +7,7 @@ import { enChat } from "./en-chat";
 import { enChat2 } from "./en-chat2";
 import { enCloudAfk } from "./en-cloud-afk";
 import { enCloudAfkFeat } from "./en-cloud-afk-feat";
+import { enCloudAfkMove } from "./en-cloud-afk-move";
 import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
@@ -305,6 +306,7 @@ export const en: DeepPartial<Strings> = {
   verify: enVerify,
   cloudAfk: enCloudAfk,
   cloudAfkFeat: enCloudAfkFeat,
+  cloudAfkMove: enCloudAfkMove,
   projectsSkin: enProjectsSkin,
   host: enHost,
   afkPlus: enAfkPlus,

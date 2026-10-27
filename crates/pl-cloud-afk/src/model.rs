@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::feat::{CloudAccountFeatures, CloudInventorySetting, OfferFeatures};
+use crate::movement::CloudMovementSetting;
 use crate::plus::{MePlus, PlusAi, PlusOffer};
 
 /// Turkish and English words written in Studio (a maintenance note, a block list reason).
@@ -366,6 +367,8 @@ pub struct CloudConfigView {
     pub rules: Vec<CloudRuleView>,
     /// The player's own inventory choice; None: never chosen (Studio's default applies).
     pub inventory: Option<CloudInventorySetting>,
+    /// The player's movement switch, only when stored (absent: off).
+    pub movement: Option<CloudMovementSetting>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -596,6 +599,10 @@ pub struct ConfigInput {
     /// Sent only when the player changed it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inventory: Option<CloudInventorySetting>,
+    /// Sent only to a service whose `Account.features` has `movement` (an older one refuses the
+    /// field), and only when there is a choice.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub movement: Option<CloudMovementSetting>,
 }
 
 /// `PATCH /accounts/:id`: at least one field. A new `server` needs `config` with every secret row
@@ -827,13 +834,38 @@ mod tests {
             commands: vec![],
             rules: vec![],
             inventory: None,
+            movement: None,
         };
-        assert!(
-            serde_json::to_value(&config)
-                .unwrap()
-                .get("inventory")
-                .is_none()
+        let sent = serde_json::to_value(&config).unwrap();
+        assert!(sent.get("inventory").is_none() && sent.get("movement").is_none());
+    }
+
+    #[test]
+    fn reads_movement_and_a_service_before_it() {
+        let json = account_json("run", "null", r#"{"state": "running"}"#);
+        let old: CloudAccount = serde_json::from_str(&json).unwrap();
+        assert_eq!(old.config.movement, None);
+        let json = json
+            .replace(
+                r#""commands": [], "rules": []"#,
+                r#""commands": [], "rules": [], "movement": {"enabled": true}"#,
+            )
+            .replace(
+                r#""rev": 7"#,
+                r#""features": {"inventory": {"mode": "off", "on": false}, "consoleKinds": false,
+                  "placeholders": false, "legacyRules": false, "movement": {"mode": "on",
+                  "on": true, "slot": null, "follow": {"main": "Kaan_07", "own": ["AfkBot_2"]}}},
+                  "rev": 7"#,
+            );
+        let account: CloudAccount = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            account.config.movement,
+            Some(CloudMovementSetting { enabled: true })
         );
+        let movement = account.features.unwrap().movement.unwrap();
+        assert!(movement.mode == "on" && movement.on);
+        assert_eq!(movement.follow.main.as_deref(), Some("Kaan_07"));
+        assert_eq!(movement.follow.own, ["AfkBot_2"]);
     }
 
     #[test]

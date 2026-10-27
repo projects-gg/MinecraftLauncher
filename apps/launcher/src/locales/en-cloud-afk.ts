@@ -217,6 +217,7 @@ export const enCloudAfk = {
     serverChanges: "{{used}}/{{limit}} server changes this hour",
     antiAfk: "Anti-AFK",
     antiAfkHelp: "Sneaks now and then so the server doesn't count you as AFK.",
+    antiAfkInterval: "Sneak interval",
     antiAfkMin: "At least",
     antiAfkMax: "At most",
     owner: "Your own in-game name",

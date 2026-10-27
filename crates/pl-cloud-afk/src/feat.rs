@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::model::{CloudConsoleLine, CloudLocalized};
+use crate::movement::CloudMovementFeature;
 use crate::text::{MAX_TEXT_UNITS, without_leading_ignorable};
 
 /// Studio's default allow list of commands a reply with placeholders may start with
@@ -119,6 +120,9 @@ pub struct CloudAccountFeatures {
     /// Console kinds are on, but this account's player, private or server rules still match the
     /// old way until its settings are saved once.
     pub legacy_rules: bool,
+    /// Movement (README "Movement"); None from a service before it: nothing of it shows and the
+    /// account's `config.movement` is never sent.
+    pub movement: Option<CloudMovementFeature>,
 }
 
 /// The account's own inventory choice (`config.inventory`; absent: never chosen).
@@ -257,7 +261,7 @@ fn inv_fields(action: &str) -> (&'static [&'static str], &'static [&'static str]
 }
 
 /// A JSON number that is a whole number JavaScript holds exactly.
-fn safe_int(value: &Value) -> Option<i64> {
+pub(crate) fn safe_int(value: &Value) -> Option<i64> {
     const MAX_SAFE: i64 = (1 << 53) - 1;
     let n = value.as_i64().or_else(|| {
         let f = value.as_f64()?;
