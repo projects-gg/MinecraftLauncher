@@ -74,7 +74,7 @@ pub fn cloud_afk_movement_unwatch(app: AppHandle, state: State<'_, AppState>, id
 }
 
 /// A movement operation (`op`: the panel's `MoveOp` as JSON, `opId` its own id). Null: sent, its
-/// answer comes as a `moveResult` event; else why it could not go out (its shape, or
+/// answer comes as a `movementResult` event; else why it could not go out (its shape, or
 /// `host_offline`).
 #[tauri::command]
 #[specta::specta]

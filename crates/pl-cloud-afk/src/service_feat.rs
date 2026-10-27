@@ -100,7 +100,7 @@ impl CloudService {
     }
 
     /// A movement operation: `op` is the app's `MoveOp` as JSON, `op_id` its own id. None: sent,
-    /// the answer follows as `moveResult`; Some: refused here (its shape, or no socket:
+    /// the answer follows as `movementResult`; Some: refused here (its shape, or no socket:
     /// `host_offline`).
     pub fn movement_op(&self, id: &str, op_id: &str, op: &str) -> Option<CloudMovementError> {
         if !is_inv_op_id(op_id) || op.len() > 768 {
