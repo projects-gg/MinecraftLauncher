@@ -5,6 +5,7 @@ import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
 import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
+import { trChatProd } from "./tr-chat-prod";
 import { trChat2 } from "./tr-chat2";
 import { trCloudAfk } from "./tr-cloud-afk";
 import { trCloudAfkFeat } from "./tr-cloud-afk-feat";
@@ -107,6 +108,7 @@ export const tr = {
   newsColumn: trNewsColumn,
   worldEntry: trWorldEntry,
   playAcct: trPlayAcct,
+  chatProd: trChatProd,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
