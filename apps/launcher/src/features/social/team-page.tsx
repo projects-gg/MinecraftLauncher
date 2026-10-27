@@ -114,8 +114,10 @@ import {
 import { togetherTime } from "./together";
 import { useCallClock } from "./use-call-clock";
 
+/** A section of the crew page ("Planlar", "Üyeler", …): a step above the roster's group labels
+ * ("Projects'te 3"), which share its size otherwise (SMALL12). */
 function SectionTitle({ children }: { children: string }) {
-  return <h3 className="mb-2.5 text-[12.5px] font-medium text-ash-400">{children}</h3>;
+  return <h3 className="mb-2.5 text-[13px] font-semibold text-ash-300">{children}</h3>;
 }
 
 function useCrewFeatures() {

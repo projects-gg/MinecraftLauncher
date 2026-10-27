@@ -1041,7 +1041,7 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
   return (
     <section className="mt-5">
       <div className="mb-2.5 flex min-h-8 items-center gap-2">
-        <h3 className="min-w-0 flex-1 text-[12.5px] font-medium text-ash-400">
+        <h3 className="min-w-0 flex-1 text-[13px] font-semibold text-ash-300">
           {t("crewWave2.plans.title")}
         </h3>
         {may && !forming && !full && !limit ? (
