@@ -2,7 +2,7 @@
 // - (none) or `off`: the service does not answer; the AFK page looks exactly as without it;
 // - `intro`: signed in, no cloud account yet (the intro card);
 // - `signedout`: the service answers, the friends session is missing;
-// - `soldout`: no free slots;
+// - `soldout`: no free slots; `closed`: sales off (Studio's switch), no account yet;
 // - `accounts`: three accounts (one in game, one reconnecting with its time running out, one
 //   stopped for a wrong password), `Madenci07` also on this computer (its "Bilgisayarda / Bulutta");
 // - `expired`: `accounts` plus one whose time is up;
@@ -65,6 +65,7 @@ type Scenario =
   | "intro"
   | "signedout"
   | "soldout"
+  | "closed"
   | "accounts"
   | "expired"
   | "paused"
@@ -85,6 +86,7 @@ const SCENARIOS: Scenario[] = [
   "intro",
   "signedout",
   "soldout",
+  "closed",
   "accounts",
   "expired",
   "paused",
@@ -403,7 +405,7 @@ async function overview(): Promise<CloudPageData> {
       monthPrice: hidden ? null : "60.00",
       soldOut: which === "soldout",
       remaining: null,
-      salesOpen: which !== "paused",
+      salesOpen: which !== "paused" && which !== "closed",
       renewalWindowDays: 7,
       limits: LIMITS,
       session:

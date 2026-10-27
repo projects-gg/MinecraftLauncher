@@ -4,12 +4,11 @@
 // crew's days. The look's data lives in crew-look.ts.
 import type {
   PermissionLevel,
-  SocialActivity,
   SocialTeam,
   TeamMember,
   TeamPermissions,
 } from "@/lib/api/social-types";
-import { isJoinable, isProjectsHost } from "./model";
+import { isJoinable } from "./model";
 
 export { EMBLEMS, type Emblem } from "./crew-look";
 
@@ -162,19 +161,13 @@ export function rosterOrder(team: Pick<SocialTeam, "members">): TeamMember[] {
   return [...founder, ...me, ...others];
 }
 
-/** Where a member is, as the crew page groups them. */
+/** Where a teammate is, as the crew page groups them. */
 export type Whereabouts = "projects" | "playing" | "launcher" | "offline";
 
 const WHERE_ORDER: Whereabouts[] = ["projects", "playing", "launcher", "offline"];
 
-/** The player's own place: what this launcher tells friends (they are in the launcher at least). */
-function myWhereabouts(activity: SocialActivity): Whereabouts {
-  if (activity.state === "launcher") return "launcher";
-  return activity.state === "playing" && isProjectsHost(activity.host) ? "projects" : "playing";
-}
-
-export function whereabouts(member: TeamMember, activity: SocialActivity): Whereabouts {
-  if (member.me) return myWhereabouts(activity);
+/** Where a teammate is (someone blocked shows offline, as everywhere). */
+export function whereabouts(member: TeamMember): Whereabouts {
   if (member.blocked || member.state === "offline") return "offline";
   if (member.state === "launcher") return "launcher";
   return isJoinable(member.game) ? "projects" : "playing";
@@ -184,17 +177,20 @@ export function whereabouts(member: TeamMember, activity: SocialActivity): Where
 const rank = (m: TeamMember) => (m.role === "founder" ? 0 : m.moderator ? 1 : 2);
 
 /**
- * The crew page's groups ("Projects'te 4", "Oyunda 1", "Launcher'da 3", "Çevrimdışı 4"), empty
- * ones left out; inside each the leader, the moderators, then names in Turkish order.
+ * The crew page's groups of teammates ("Projects'te 4", "Oyunda 1", "Launcher'da 3",
+ * "Çevrimdışı 4"), empty ones left out; inside each the leader, the moderators, then names in
+ * Turkish order. The player is in none (their own row sits above them): the groups other than
+ * "Çevrimdışı" add up to the card's "4 çevrimiçi" and the list header's count (SMALL12: the card
+ * said "4 çevrimiçi" over groups of 3 and 2, the player counted in one).
  */
 export function rosterGroups(
   team: Pick<SocialTeam, "members">,
-  activity: SocialActivity,
 ): Array<{ where: Whereabouts; members: TeamMember[] }> {
+  const crewmates = team.members.filter((m) => !m.me);
   return WHERE_ORDER.map((where) => ({
     where,
-    members: team.members
-      .filter((m) => whereabouts(m, activity) === where)
+    members: crewmates
+      .filter((m) => whereabouts(m) === where)
       .sort((a, b) => rank(a) - rank(b) || collator.compare(a.name, b.name)),
   })).filter((group) => group.members.length > 0);
 }

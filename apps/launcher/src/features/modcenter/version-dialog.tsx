@@ -3,7 +3,7 @@ import {
   ArrowCounterClockwise,
   CloudArrowDown,
   Package,
-  Sparkle,
+  Signpost,
 } from "@phosphor-icons/react";
 import { Button, Chip, cn, Dialog, SearchInput, Skeleton, Switch, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -383,7 +383,7 @@ export function VersionDialog({
           content: t("modCenter.switch.restored", { version: p.to, count: p.restoredMods }),
         });
       } else if (firstVisitLines.length > 0) {
-        lines.push({ key: "first", icon: <Sparkle size={20} />, content: firstVisitLines });
+        lines.push({ key: "first", icon: <Signpost size={20} />, content: firstVisitLines });
       }
       lines.push({
         key: "downloads",

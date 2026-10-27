@@ -75,7 +75,7 @@ import { badgeMenu, rowsOf } from "./menus";
 import { useSocialMotion } from "./motion";
 import { markedName, PersonMark } from "./person-mark";
 import { useSocialUi } from "./store";
-import { CrewMark, CrewWatermark, type TagSize, TeamTag } from "./team-emblem";
+import { CrewMark, type TagSize, TeamTag } from "./team-emblem";
 import { useCrewItems } from "./team-section";
 import { localDay } from "./teams";
 
@@ -517,7 +517,6 @@ function BadgeCard({ badge, wearer, chip }: { badge: CrewBadge; wearer: string; 
 
   return (
     <div ref={rootRef} className="relative">
-      <CrewWatermark look={badge} size={96} className="-top-7 -right-8" />
       <div className="relative flex items-start gap-3 pr-6">
         <CrewMark look={badge} size={44} />
         <div className="min-w-0 flex-1">

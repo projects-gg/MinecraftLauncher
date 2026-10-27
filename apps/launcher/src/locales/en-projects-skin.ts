@@ -37,7 +37,7 @@ export const enProjectsSkin = {
   reset: "Back to default",
   note: {
     unreachable: "Can't connect right now. Try again in a moment.",
-    session: "Your Discord session ended. Connect again.",
+    session: "Your Discord session ended. Sign in again.",
     off: "Projects skins are off right now.",
     linkFirst: "Link your account first",
     otherAccount: "Your Discord is linked to {{name}}.",
@@ -83,10 +83,10 @@ export const enProjectsSkin = {
     unlinked: "Link removed",
   },
   connect: {
-    title: "Connect with Discord to use a Projects skin",
-    body: "Your skin is applied on Projects through your Discord link.",
-    action: "Connect with Discord",
-    again: "Connect again",
+    title: "Projects skins work with your Discord account",
+    sessionTitle: "Your Discord session ended",
+    action: "Sign in with Discord",
+    again: "Sign in again",
   },
   link: {
     title: "Link your account",

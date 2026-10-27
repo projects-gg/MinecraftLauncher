@@ -14,7 +14,13 @@ import { WorldShareHost } from "@/features/host/host";
 import { shownInGame } from "@/features/overlay/store";
 import { useOverlaySync } from "@/features/overlay/use-overlay-sync";
 import { api } from "@/lib/api";
-import type { BackupMeta, Friend, SocialNotice, TeamMember } from "@/lib/api/social-types";
+import type {
+  BackupMeta,
+  CrewCall,
+  Friend,
+  SocialNotice,
+  TeamMember,
+} from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
@@ -31,6 +37,7 @@ import { CrewCallDialog } from "./crew-call-picker";
 import { planWhen, withPlanNote } from "./crew-plans";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
+import { homeShowsCall } from "./home-strip";
 import { showInviteToast } from "./invite-toast";
 import { gameBusy, joinProjects } from "./join";
 import { JoinDialog } from "./join-dialog";
@@ -286,8 +293,9 @@ function handleNotice(notice: SocialNotice) {
         void notifyOutside(text, { onClick: () => showCalledCrew(notice.call.crews) });
       }
       announce(text);
-      // The open panel shows it already, with its answers (the crew page and the list).
-      if (!callInView()) showCallToast(notice.call);
+      // The open panel shows it already, with its answers (the crew page and the list), or
+      // Home's line does.
+      if (!callInView(notice.call)) showCallToast(notice.call);
       break;
     }
     case "crewCallJoin": {
@@ -451,10 +459,12 @@ function listInView(): boolean {
   return ui.open && ui.page === "list";
 }
 
-/** A crew call is on screen: the panel is open on the list or the crew page. */
-function callInView(): boolean {
+/** A crew call is on screen with its answers: the panel is open on the list or the crew page, or
+ * Home's line shows it (SMALL12: the line and a toast said the same call twice). */
+function callInView(call: CrewCall): boolean {
   const ui = useSocialUi.getState();
-  return ui.open && (ui.page === "list" || ui.page === "team");
+  if (ui.open) return ui.page === "list" || ui.page === "team";
+  return homeShowsCall(call);
 }
 
 /** Set by the mounted restore dialog: opens it with a backup's details. */
