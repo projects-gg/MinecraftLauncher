@@ -13,7 +13,7 @@ export const enPlayAgain = {
   othersTwo: "{{first}} and {{second}} are playing",
   othersMany: "{{total}} accounts are playing",
   othersCount: "{{total}} accounts",
-  worldBusy: "Open in another game",
+  worldBusy: "In another game",
   worldBusyName: "{{name}} is in this world",
   worldBusyAria: "{{world}}: {{reason}}",
   worldOpen: "This world is open in your other game.",

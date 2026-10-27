@@ -450,7 +450,10 @@ function OthersInGame({
         >
           {who}
         </span>
-        <span className="block text-[12px] text-jade-400">{t("playAcct.inGame")}</span>
+        {/* One word that never breaks (round 4: "Oyund / a" when the bar was full). */}
+        <span className="block whitespace-nowrap text-[12px] text-jade-400">
+          {t("playAcct.inGame")}
+        </span>
       </span>
     </span>
   );
@@ -542,7 +545,9 @@ function StatusArea({
                 {othersText ? (
                   <motion.div
                     key="others"
-                    className="flex max-w-[200px] min-w-0 shrink items-center border-l border-white/8 pl-4"
+                    // In a narrow bar it is only faces and "Oyunda": it keeps that room, the world's
+                    // name gives first.
+                    className="flex max-w-[200px] min-w-0 shrink items-center border-l border-white/8 pl-4 @max-[560px]/bar:shrink-0"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.24, ease: easeOutExpo } }}
                     exit={{ opacity: 0, transition: { duration: 0.12, ease: easeOutExpo } }}

@@ -23,9 +23,10 @@ export const trPlayAgain = {
   othersMany: "{{total}} hesap oyunda",
   /** The same as the bar shows it: the name (or the count) over "Oyunda", as the account menu. */
   othersCount: "{{total}} hesap",
-  /** "Devam et" while its world is open in a game: where it is (in its label's place), and under
-   * the pointer whose game has it when that is one account. */
-  worldBusy: "Başka oyunda açık",
+  /** "Devam et" while its world is open in a game: where it is (in its label's place; short, so the
+   * world's name keeps its room at 1024 px), and under the pointer whose game has it when that is
+   * one account. */
+  worldBusy: "Başka oyunda",
   worldBusyName: "{{name}} bu dünyada",
   worldBusyAria: "{{world}}: {{reason}}",
   /** A world's "Oyna" while the world is open in a game (said before any question). */

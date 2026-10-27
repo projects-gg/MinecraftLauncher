@@ -82,7 +82,7 @@ export function ResumeButton({
   const [broken, setBroken] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const busy = useWorldBusy(instance, target);
-  // Where the world is, in the label's place ("Başka oyunda açık"; third look: "Kullanımda" told a
+  // Where the world is, in the label's place ("Başka oyunda"; third look: "Kullanımda" told a
   // player nothing); whose game has it under the pointer when that is one account.
   const reason = busy.open ? t("playAgain.worldBusy") : null;
   const whose =
