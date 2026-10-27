@@ -284,11 +284,16 @@ async fn connect_all_leaves_an_account_stopped_for_good() {
     let outcome = manager.connect_all().await.unwrap();
     assert_eq!(outcome.skipped, vec![refused.clone()]);
     assert_eq!(outcome.started, vec![other.clone()]);
-    assert_eq!(
-        s.launch_count(),
-        2,
-        "the refused password was not tried again"
-    );
+    // The client starts a moment after the connect returns.
+    until("the other one runs", LONG, || s.launch_count() >= 2).await;
+    let refused_dir = env.account_dir(&refused);
+    let tries = s
+        .launches
+        .lock()
+        .iter()
+        .filter(|launch| launch.spec.cwd == refused_dir)
+        .count();
+    assert_eq!(tries, 1, "the refused password was not tried again");
     manager.shutdown().await;
 }
 
