@@ -19,6 +19,8 @@
 //   keeps only those, `&extras=none` a service with none of them on): replies, reactions, a
 //   sticker, links with their cards, "Görüldü" under the player's message to KorAteşi;
 //   `chat2Live`: Ayşe writes ("yazıyor…") and sends a sticker, then reacts, a crewmate writes too.
+// Long histories (CHAT-PROD): `&crewHistory=<n>` puts n older lines in the crew's chat (84 by
+// default), `&crewUnread=<n>` leaves the last n of it unread (3 by default).
 // A message with "hata" or "fail" in it does not go (`&sendFails=<reason>` fails every one with
 // that reason); a friend online answers a direct message (`&noReply=1` keeps them quiet): with
 // CHAT2 they see it first ("Görüldü") and write ("yazıyor…"). A message deleted for everyone stays
@@ -364,8 +366,9 @@ export function mockChat(host: ChatHost) {
 
     // Two days of the crew's chat, then this evening's plan, the last three unread.
     const crew: ChatMessage[] = [];
-    const start = t0 - 2 * DAY - 6 * HOUR;
-    for (let i = 0; i < 84; i += 1) {
+    const history = Math.min(5_000, Math.max(0, Number(host.param("crewHistory") ?? 84) || 0));
+    const start = history === 84 ? t0 - 2 * DAY - 6 * HOUR : t0 - 22 * HOUR - history * 23 * MINUTE;
+    for (let i = 0; i < history; i += 1) {
       const [tr, en] = CREW_LINES[i % CREW_LINES.length] ?? ["", ""];
       const from = CREW_SPEAKERS[(i * 3) % CREW_SPEAKERS.length] ?? "701";
       crew.push(message(CREW_CONV, from, pick(tr, en), start + i * 23 * MINUTE));
@@ -401,7 +404,7 @@ export function mockChat(host: ChatHost) {
     // The limited preview has no crew.
     if (host.scenario !== "limited") {
       threads.set(CREW_CONV, crew);
-      unread.set(CREW_CONV, 3);
+      unread.set(CREW_CONV, Math.max(0, Number(host.param("crewUnread") ?? 3) || 0));
     }
 
     if (host.scenario === "chatTombstones") {

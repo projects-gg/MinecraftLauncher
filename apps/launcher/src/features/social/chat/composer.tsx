@@ -13,6 +13,10 @@
 // through can go; for one that cannot, the reason says which rule ("Kısaltılmış bağlantılar
 // gönderilemez."); a link the player writes shows its card over the field after a moment. While
 // the player writes, "yazıyor" goes out (typing.ts).
+//
+// CHAT-PROD: the words in the field grow with the chat's text size (never shrink below 100 %); the
+// send button leaves the focus in the field (the next message can be written at once); PageUp and
+// PageDown scroll the messages.
 import { Check, Info, LockSimple, PaperPlaneRight, PencilSimple, X } from "@phosphor-icons/react";
 import type { Sticker as StickerData } from "@pl/stickers";
 import { cn, IconButton } from "@pl/ui";
@@ -48,6 +52,8 @@ import {
   messageLinks,
   messageProblem,
 } from "./text";
+import { useChatTextSize } from "./text-size";
+import { writingZoomOf } from "./text-zoom";
 import { typingSender } from "./typing";
 
 /** What the composer may do here. */
@@ -147,6 +153,7 @@ export function Composer({
   onCancelEdit,
   onEditLast,
   onSent,
+  onPage,
   replyTo = null,
   replyQuote = null,
   onCancelReply = () => {},
@@ -168,6 +175,8 @@ export function Composer({
   onEditLast: () => void;
   /** Something was sent: the list goes to its newest message. */
   onSent: () => void;
+  /** PageUp (-1) or PageDown (1) in the field: the messages scroll a screen. */
+  onPage?: (direction: 1 | -1) => void;
   /** CHAT2: someone else in the conversation is online ("yazıyor…" goes only then). */
   othersOnline?: boolean;
   /** CHAT2: the message the next one answers (sent: it has its id). */
@@ -196,6 +205,9 @@ export function Composer({
   const limitedLinks = useSocialUi(
     (s) => limitOf(s.view.me, "chatLinks", Date.now())?.until ?? null,
   );
+  // The field's words follow the chat's text size (a zoom: its lines, padding and height in its
+  // own pixels stay as measured below).
+  const writingZoom = useChatTextSize((s) => writingZoomOf(s.size));
   // A reply waits only while the player writes a new message (an edit keeps its own link).
   const reply = editing ? null : replyTo;
 
@@ -238,15 +250,16 @@ export function Composer({
     );
   }, [editing, reply]);
 
-  // The field grows with its lines (up to five), measured before paint.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measured when the text changes
+  // The field grows with its lines (up to five), measured before paint; a bigger text size wraps
+  // the words sooner.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measured when the text or its size changes
   useLayoutEffect(() => {
     const element = field.current;
     if (!element) return;
     element.style.height = "auto";
     const max = LINE * 5 + PAD * 2;
     element.style.height = `${Math.min(max, Math.max(LINE + PAD * 2, element.scrollHeight))}px`;
-  }, [text]);
+  }, [text, writingZoom]);
 
   const problem = problemOf(text, links, hasExtras, limitedLinks);
   const length = chatLength(text);
@@ -368,12 +381,20 @@ export function Composer({
     if (event.key === "ArrowUp" && !editing && !text) {
       event.preventDefault();
       onEditLast();
+      return;
+    }
+    const pageKey = event.key === "PageUp" ? -1 : event.key === "PageDown" ? 1 : 0;
+    if (pageKey && onPage && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      onPage(pageKey);
     }
   };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (ready) void send(text);
+    // Sent with the button: the field keeps the focus for the next message.
+    field.current?.focus({ preventScroll: true });
   };
 
   const reason =
@@ -521,7 +542,7 @@ export function Composer({
           placeholder={crew ? t("chat.composer.placeholderCrew") : t("chat.composer.placeholder")}
           maxLength={4_000}
           className="min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3.5 text-[13.5px] leading-5 text-bone-50 outline-none placeholder:text-ash-500 [scrollbar-width:thin]"
-          style={{ height: LINE + PAD * 2 }}
+          style={{ height: LINE + PAD * 2, zoom: writingZoom }}
         />
         <span className="mb-[3px] flex">
           <EmojiPickerButton
@@ -536,6 +557,8 @@ export function Composer({
         <button
           type="submit"
           disabled={!ready}
+          // A press leaves the focus (and the caret) in the field.
+          onMouseDown={(event) => event.preventDefault()}
           aria-label={editing ? t("chat.actions.save") : t("chat.actions.send")}
           className={cn(
             "group/send relative mb-[3px] inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md outline-none",

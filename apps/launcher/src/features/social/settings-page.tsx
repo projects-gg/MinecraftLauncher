@@ -3,9 +3,10 @@
 // this computer only, deleted when turned off or with "Süreleri sil", TEAM5), world sharing's
 // privacy by its name (HOST1), favourite
 // notifications, the settings backup, sessions, blocked players, sign-out and "Verilerimi sil". The
-// same component shows in the panel and in Settings → Arkadaşlar.
+// same component shows in the panel and in Settings → Arkadaşlar. With chat, "Sohbet" holds the
+// chat's text size (CHAT-PROD), for players who do not use Ctrl + wheel.
 import { Desktop, SignOut, Trash } from "@phosphor-icons/react";
-import { Button, Dialog, Select, Skeleton, Switch } from "@pl/ui";
+import { Button, Dialog, Select, Skeleton, Slider, Switch } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useCallback, useState } from "react";
@@ -15,10 +16,12 @@ import { AvatarPicker } from "@/features/avatars/avatar-picker";
 import { useHostUi } from "@/features/host/store";
 import { api } from "@/lib/api";
 import type { SocialMe, SocialSession } from "@/lib/api/social-types";
-import { formatRelative } from "@/lib/format";
+import { formatPercent, formatRelative } from "@/lib/format";
 import { attempt } from "./actions";
 import { wearTag } from "./badge-actions";
 import { tagChoices } from "./badges";
+import { useChatTextSize } from "./chat/text-size";
+import { DEFAULT_TEXT_SIZE, TEXT_SIZES, zoomOf } from "./chat/text-zoom";
 import { CrewNotifyGroup } from "./crew-notify";
 import { dayMonth, limitOf } from "./limits";
 import { rise, useSocialMotion } from "./motion";
@@ -278,6 +281,53 @@ function PrivacySection({ me }: { me: SocialMe }) {
         ) : null}
         {crews ? <TogetherSetting /> : null}
       </div>
+    </Section>
+  );
+}
+
+/**
+ * Two bubbles at the chosen text size (the conversation is not on screen here). The box is as tall
+ * as the largest size needs: nothing below it moves while the slider moves.
+ */
+function TextSizeSample({ size }: { size: number }) {
+  const { t } = useTranslation();
+  return (
+    <div
+      aria-hidden
+      className="mt-3 flex h-[132px] flex-col justify-center overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/45 px-3 ring-1 ring-white/8"
+    >
+      <div className="flex flex-col gap-1" style={{ zoom: zoomOf(size) }}>
+        <span className="max-w-[85%] self-start rounded-[10px] bg-obsidian-800/85 px-3 py-[7px] text-[13.5px] leading-[1.45] text-bone-100 ring-1 ring-white/7 ring-inset">
+          {t("chatProd.settings.sampleTheirs")}
+        </span>
+        <span className="max-w-[85%] self-end rounded-[10px] bg-[color-mix(in_oklab,var(--color-gold-500)_17%,var(--color-obsidian-800))] px-3 py-[7px] text-[13.5px] leading-[1.45] text-bone-50 ring-1 ring-gold-400/20 ring-inset">
+          {t("chatProd.settings.sampleMine")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** "Sohbet" (with chat): the chat's text size, the same one Ctrl + wheel and Ctrl + "+"/"-" set. */
+function ChatSection() {
+  const { t } = useTranslation();
+  const chat = useSocialUi((s) => s.view.chat !== undefined);
+  const size = useChatTextSize((s) => s.size);
+  const setSize = useChatTextSize((s) => s.setSize);
+  if (!chat) return null;
+  const sizeAt = (index: number) => TEXT_SIZES[index] ?? DEFAULT_TEXT_SIZE;
+  return (
+    <Section title={t("chatProd.settings.title")}>
+      <Slider
+        label={t("chatProd.zoom.label")}
+        value={TEXT_SIZES.indexOf(size)}
+        onValueChange={(index) => setSize(sizeAt(index))}
+        min={0}
+        max={TEXT_SIZES.length - 1}
+        step={1}
+        format={(index) => formatPercent(sizeAt(index))}
+      />
+      <TextSizeSample size={size} />
     </Section>
   );
 }
@@ -591,6 +641,7 @@ export function SocialSettings() {
     <div>
       <PictureSection me={me} />
       <PrivacySection me={me} />
+      <ChatSection />
       <WorldsSection />
       <NotificationSection />
       <BackupSection me={me} />

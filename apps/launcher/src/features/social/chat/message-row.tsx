@@ -17,6 +17,9 @@
 // (it moves once when it arrives and when the pointer comes onto it), a message of one to three
 // emoji large and without a bubble. Links that pass the rules can be pressed and the first one
 // gets its card. Under the player's last message the friend has seen: "Görüldü".
+//
+// CHAT-PROD: "Kopyala" copies the words the player selected in the message, else all of it; the
+// sender's name read to screen readers never ends up in a copied selection.
 import {
   ArrowBendUpLeft,
   ArrowClockwise,
@@ -112,6 +115,26 @@ const CHAT2_FAILURES = new Set(["stickers", "links", "limitedLinks", "featureOff
 const RADIUS = 10;
 /** The bubble gliding to its new size: the list's entrance curve, a little longer. */
 const MORPH = { duration: 0.36, ease: easeOutExpo };
+
+/** What a message's time allows now: editing (15 minutes), deleting for everyone (7 days),
+ * reactions and a card (a week). */
+export function rowWindows(message: ChatMessage, nowMs: number) {
+  return {
+    editOpen: (message.editUntil ?? 0) > nowMs,
+    deleteOpen: (message.deleteUntil ?? 0) > nowMs,
+    reactOpen: takesReactions(message, nowMs),
+    weekOpen: nowMs - message.at < REACTION_WINDOW_MS,
+  };
+}
+
+/** The words selected inside `element`, if the player selected some there. */
+function selectedIn(element: HTMLElement | null): string | null {
+  const selection = window.getSelection();
+  if (!element || !selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+  if (!element.contains(selection.getRangeAt(0).commonAncestorContainer)) return null;
+  const words = selection.toString().trim();
+  return words || null;
+}
 
 /** Cards are asked for once per message and session (the backend keeps them with the message). */
 const unfurled = new Set<string>();
@@ -249,7 +272,10 @@ function MessageRowView({
   place,
   personPlace,
   actions,
-  nowMs,
+  editOpen,
+  deleteOpen,
+  reactOpen,
+  weekOpen,
   shared,
   quoted,
   reactions,
@@ -267,7 +293,11 @@ function MessageRowView({
   /** Where the sender's own menu opens from (their face and name, a right click; FIX2). */
   personPlace?: PersonPlace;
   actions: RowActions;
-  nowMs: number;
+  /** Its windows (rowWindows): the row draws again only when one of them closes, not every minute. */
+  editOpen: boolean;
+  deleteOpen: boolean;
+  reactOpen: boolean;
+  weekOpen: boolean;
   shared: RowShared;
   /** The quote over a reply, resolved from this computer's history. */
   quoted: Quoted | null;
@@ -289,8 +319,8 @@ function MessageRowView({
   const gone = tombstone !== null;
   const sent = message.state === "sent";
   const sticker = message.sticker;
-  const editable = !gone && sent && !sticker && (message.editUntil ?? 0) > nowMs;
-  const deletable = !gone && sent && (message.deleteUntil ?? 0) > nowMs;
+  const editable = !gone && sent && !sticker && editOpen;
+  const deletable = !gone && sent && deleteOpen;
   const failed = message.state === "failed";
   const time = timeFormat().format(new Date(message.at));
   const { extras } = shared;
@@ -316,14 +346,13 @@ function MessageRowView({
     [found, refused],
   );
   const firstLink = links.find((link) => link.ok);
-  const reactable = !gone && extras.reactions && shared.writable && takesReactions(message, nowMs);
+  const reactable = !gone && extras.reactions && shared.writable && reactOpen;
   const repliable = !gone && sent && extras.replies && shared.writable;
   const big = !gone && !sticker && !message.reply ? bigEmojiCount(text) : 0;
 
   // A card is asked for once, when the message comes on screen (and is younger than a week).
   const content = useRef<HTMLDivElement>(null);
-  const wantsCard =
-    Boolean(cardLink) && !message.card && sent && nowMs - message.at < REACTION_WINDOW_MS;
+  const wantsCard = Boolean(cardLink) && !message.card && sent && weekOpen;
   useEffect(() => {
     const element = content.current;
     if (!wantsCard || !element || unfurled.has(message.key)) return;
@@ -352,7 +381,7 @@ function MessageRowView({
       label: t("chat.actions.copy"),
       icon: <Copy size={16} />,
       onSelect: () => {
-        void copyText(message.text).then((copied) => {
+        void copyText(selectedIn(content.current) ?? message.text).then((copied) => {
           if (copied) toast.success(t("chat.actions.copied"));
         });
       },
@@ -443,7 +472,7 @@ function MessageRowView({
           exit={{ opacity: 0, transition: leave(0.12) }}
         >
           <Prohibit size={14} weight="bold" className="shrink-0 text-ash-400" aria-hidden />
-          <span className="sr-only">{speaker}</span>
+          <span className="sr-only select-none">{speaker}</span>
           {tombstone}
         </motion.span>
       ) : (
@@ -457,7 +486,7 @@ function MessageRowView({
           animate={{ opacity: 1, transition: enter(0.2) }}
           exit={{ opacity: 0, transition: { duration: 0.1, ease: easeOutExpo } }}
         >
-          <span className="sr-only">{speaker}</span>
+          <span className="sr-only select-none">{speaker}</span>
           <MessageText text={text} links={links} />
           {cardLink && extras.links ? (
             <LinkCard
@@ -490,7 +519,7 @@ function MessageRowView({
       )
     ) : big ? (
       <p className="px-0.5 text-[32px] leading-[1.2] break-words" data-selectable>
-        <span className="sr-only">{speaker}</span>
+        <span className="sr-only select-none">{speaker}</span>
         {text}
       </p>
     ) : (
