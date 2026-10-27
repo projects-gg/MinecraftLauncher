@@ -150,9 +150,14 @@ function NumberField({
             const typedText = e.target.value.trim();
             onChange(/^\d{1,6}$/.test(typedText) ? Number(typedText) : Number.NaN);
           }}
-          className={cn(inputClass, "h-[34px] px-3 pr-9 tabular-nums")}
+          // A longer unit ("sn sonra") keeps the digits clear of it.
+          className={cn(
+            inputClass,
+            "h-[34px] px-3 tabular-nums",
+            unit.length > 3 ? "pr-[68px]" : "pr-9",
+          )}
         />
-        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[12.5px] text-ash-400">
+        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[12.5px] whitespace-nowrap text-ash-400">
           {unit}
         </span>
       </div>
@@ -496,63 +501,18 @@ function CommandRow({
     ? (command.on as Trigger)
     : "join";
   const triggerError = at("delay") ?? at("every") ?? at("at");
+  const ids = useId();
   return (
-    <li className={cn(rowPanel, "flex flex-col gap-2.5 p-3", !command.enabled && "opacity-70")}>
-      <div className="flex flex-wrap items-center gap-2">
-        <Switch
-          checked={command.enabled}
-          onCheckedChange={(enabled) => onChange({ ...command, enabled })}
-          label={t("cloudAfk.settings.commands.use")}
-          hideLabel
-        />
-        <Select
-          value={on}
-          onValueChange={(next) => onChange(withTrigger(command, next, minInterval))}
-          options={triggers}
-          label={t("cloudAfk.settings.commands.trigger")}
-          className="w-[196px]"
-        />
-        {on === "interval" ? (
-          <div className="flex items-center gap-1.5">
-            <NumberField
-              label={t("cloudAfk.settings.commands.everyMin")}
-              hideLabel
-              value={command.every?.min ?? minInterval}
-              unit={t("cloudAfk.settings.seconds")}
-              className="w-[110px]"
-              onChange={(min) =>
-                onChange({ ...command, every: { min, max: command.every?.max ?? min } })
-              }
-            />
-            <span className="text-ash-400">–</span>
-            <NumberField
-              label={t("cloudAfk.settings.commands.everyMax")}
-              hideLabel
-              value={command.every?.max ?? minInterval}
-              unit={t("cloudAfk.settings.seconds")}
-              className="w-[110px]"
-              onChange={(max) =>
-                onChange({ ...command, every: { min: command.every?.min ?? max, max } })
-              }
-            />
-          </div>
-        ) : on === "daily" ? (
-          <Times
-            at={command.at ?? []}
-            invalid={Boolean(at("at"))}
-            onChange={(times) => onChange({ ...command, at: times })}
-          />
-        ) : (
-          <NumberField
-            label={t("cloudAfk.settings.commands.delay")}
-            hideLabel
-            value={command.delay ?? 0}
-            unit={t("cloudAfk.settings.seconds")}
-            className="w-[96px]"
-            onChange={(delay) => onChange({ ...command, delay })}
-          />
-        )}
-        <div className="ml-auto flex items-center gap-0.5">
+    <li className={cn(rowPanel, "flex flex-col px-3.5 pt-2 pb-3")}>
+      {/* The row's own switch in words on the right edge, as a reply rule's (SHEET-UX). */}
+      <div className="switch-row flex items-center gap-3 py-1">
+        <label
+          htmlFor={`${ids}-use`}
+          className="min-w-0 flex-1 cursor-pointer text-[13.5px] font-semibold text-bone-50"
+        >
+          {t("cloudAfk.settings.commands.use")}
+        </label>
+        <div className="flex items-center gap-0.5">
           <IconButton
             label={t("cloudAfk.settings.commands.moveUp")}
             icon={<ArrowUp size={15} />}
@@ -574,23 +534,92 @@ function CommandRow({
             onClick={onRemove}
           />
         </div>
+        <Switch
+          id={`${ids}-use`}
+          checked={command.enabled}
+          onCheckedChange={(enabled) => onChange({ ...command, enabled })}
+          label={t("cloudAfk.settings.commands.use")}
+          hideLabel
+        />
       </div>
-      {triggerError ? <ErrorText>{triggerError}</ErrorText> : null}
-      {on === "daily" ? (
-        <p className="-mt-1 text-[12px] text-ash-400">
-          {t("cloudAfk.settings.commands.timesHelp")}
-        </p>
-      ) : null}
-      <WordsField
-        words={command.words}
-        onChange={(words) => onChange({ ...command, words })}
-        accountId={part.view.account.id}
-        rowId={command.id}
-        label={t("cloudAfk.settings.commands.text")}
-        placeholder={t("cloudAfk.settings.commands.textPlaceholder")}
-        error={at("text")}
-        autoFocus={focus}
-      />
+      <div
+        className={cn(
+          "flex flex-col gap-2.5 pt-2 transition-opacity duration-150",
+          !command.enabled && "opacity-60",
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] text-ash-300">
+            {t("cloudAfk.settings.commands.trigger")}
+          </span>
+          <Select
+            value={on}
+            onValueChange={(next) => onChange(withTrigger(command, next, minInterval))}
+            options={triggers}
+            label={t("cloudAfk.settings.commands.trigger")}
+            className="w-[196px]"
+          />
+          {on === "interval" ? (
+            <div className="flex items-center gap-1.5">
+              <NumberField
+                label={t("cloudAfk.settings.commands.everyMin")}
+                hideLabel
+                value={command.every?.min ?? minInterval}
+                unit={t("cloudAfk.settings.seconds")}
+                className="w-[110px]"
+                onChange={(min) =>
+                  onChange({ ...command, every: { min, max: command.every?.max ?? min } })
+                }
+              />
+              <span className="text-ash-400">–</span>
+              <NumberField
+                label={t("cloudAfk.settings.commands.everyMax")}
+                hideLabel
+                value={command.every?.max ?? minInterval}
+                unit={t("cloudAfk.settings.seconds")}
+                className="w-[110px]"
+                onChange={(max) =>
+                  onChange({ ...command, every: { min: command.every?.min ?? max, max } })
+                }
+              />
+            </div>
+          ) : on === "daily" ? (
+            <Times
+              at={command.at ?? []}
+              invalid={Boolean(at("at"))}
+              onChange={(times) => onChange({ ...command, at: times })}
+            />
+          ) : (
+            // "3 sn sonra", as the site says it: the wait before the line is sent.
+            <NumberField
+              label={t("cloudAfk.settings.commands.delay")}
+              hideLabel
+              value={command.delay ?? 0}
+              unit={t("cloudAfk.settings.commands.later")}
+              className="w-[124px]"
+              onChange={(delay) => onChange({ ...command, delay })}
+            />
+          )}
+        </div>
+        {triggerError ? <ErrorText>{triggerError}</ErrorText> : null}
+        {on === "daily" ? (
+          <p className="-mt-1 text-[12px] text-ash-400">
+            {t("cloudAfk.settings.commands.timesHelp")}
+          </p>
+        ) : null}
+        <WordsField
+          id={`${ids}-text`}
+          showLabel
+          words={command.words}
+          onChange={(words) => onChange({ ...command, words })}
+          accountId={part.view.account.id}
+          rowId={command.id}
+          label={t("cloudAfk.settings.commands.text")}
+          placeholder={t("cloudAfk.settings.commands.textPlaceholder")}
+          error={at("text")}
+          autoFocus={focus}
+        />
+      </div>
     </li>
   );
 }

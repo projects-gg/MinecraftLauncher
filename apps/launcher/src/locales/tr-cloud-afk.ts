@@ -229,6 +229,8 @@ export const trCloudAfk = {
         daily: "Her gün belli saatlerde",
       },
       delay: "Bekleme",
+      /** The wait's unit inside its field, as on the site: "3 sn sonra". */
+      later: "sn sonra",
       everyMin: "En az",
       everyMax: "En çok",
       times: "Saatler",

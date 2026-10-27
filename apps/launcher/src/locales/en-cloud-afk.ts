@@ -230,6 +230,7 @@ export const enCloudAfk = {
         daily: "Every day at set times",
       },
       delay: "Wait",
+      later: "s later",
       everyMin: "At least",
       everyMax: "At most",
       times: "Times",
