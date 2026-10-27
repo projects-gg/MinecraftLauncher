@@ -99,6 +99,25 @@ pub fn check_pattern(pattern: &str, is_regex: bool) -> Option<PatternProblem> {
     (factors > MAX_LINE_FACTORS).then_some(PatternProblem::TooComplex)
 }
 
+/// The capturing groups of a regular expression (trimmed) as Rust's `regex` numbers them: every
+/// capturing group by its opening parenthesis, named or not (`captures_len() - 1`); `(?:…)` and
+/// flag groups do not count. None when the pattern does not parse. Cloud AFK's auto-replies may
+/// name only these parts (`{1}`…`{9}`, the contract's "Rule placeholders"; the Worker's
+/// `pattern.wasm` exports this same function).
+pub fn capture_count(pattern: &str) -> Option<usize> {
+    let pattern = pattern.trim();
+    let ast = ParserBuilder::new()
+        .nest_limit(NEST_LIMIT)
+        .build()
+        .parse(pattern)
+        .ok()?;
+    let hir = TranslatorBuilder::new()
+        .build()
+        .translate(pattern, &ast)
+        .ok()?;
+    Some(hir.properties().explicit_captures_len())
+}
+
 /// The match can only begin at the start of the line (`^`, `\A`), or begins with an unbounded
 /// loop, after which .NET skips the positions the loop already covered. A capturing group around
 /// that loop turns the skip off (measured).
@@ -845,6 +864,18 @@ mod tests {
         );
         assert_eq!(check_pattern("", true), None);
         assert_eq!(check_pattern("   ", true), None);
+    }
+
+    #[test]
+    fn counts_capturing_groups_as_rust_numbers_them() {
+        assert_eq!(capture_count("selam"), Some(0));
+        assert_eq!(capture_count(r"^!davet (\w+)$"), Some(1));
+        assert_eq!(capture_count(r"(?<oyuncu>\w+) (?P<b>\d+) (x)"), Some(3));
+        assert_eq!(capture_count(r"(?i)(?:a|b)(?m:c)"), Some(0));
+        assert_eq!(capture_count(r"\(a\) [(b)] (c)"), Some(1));
+        assert_eq!(capture_count(r"  (a)(b)  "), Some(2), "trimmed as saved");
+        assert_eq!(capture_count("(a"), None);
+        assert_eq!(capture_count(r"\p{Nope}(a)"), None);
     }
 
     #[test]

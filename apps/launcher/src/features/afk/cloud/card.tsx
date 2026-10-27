@@ -1,11 +1,15 @@
 // A cloud account on the AFK page, the desktop card's twin: face, name and server, the state line,
 // the paid time with "Süreyi uzat" once renewal opens, and one main button (Başlat, Durdur, or
-// "Yeniden etkinleştir" on the site once the time is up), the console and the settings.
+// "Yeniden etkinleştir" on the site once the time is up), the console and the settings. With the
+// cloud features: "Envanter" in its menu (the panel's tab), "Ayarlarını kopyala", and a box while
+// several accounts are chosen (the chosen card carries the brand's pixel brackets).
 import {
   ArrowSquareOut,
   ArrowsClockwise,
+  Backpack,
   CaretRight,
   ChatsCircle,
+  Copy,
   DotsThreeVertical,
   GearSix,
   Play,
@@ -18,16 +22,20 @@ import {
   ContextMenu,
   cn,
   easeOutExpo,
+  enter,
   IconButton,
+  leave,
   Menu,
   type MenuItem,
+  PixelBrackets,
   SwapLabel,
   useMotionPrefs,
   usePressGuard,
 } from "@pl/ui";
-import { motion, type Transition } from "motion/react";
+import { AnimatePresence, motion, type Transition } from "motion/react";
 import type { MouseEvent, Ref } from "react";
 import { useTranslation } from "react-i18next";
+import { Check } from "@/features/settings/cleanup/check";
 import { AfkHead } from "../afk-head";
 import { afkFailed } from "../errors";
 import { type CloudAccount, cloudApi } from "./api";
@@ -201,6 +209,11 @@ export function CloudCard({
   onSettings,
   onPlus,
   onUpgrade,
+  onInventory,
+  onCopy,
+  selecting = false,
+  selected = false,
+  onSelect,
   ref,
 }: {
   account: CloudAccount;
@@ -215,6 +228,14 @@ export function CloudCard({
   onPlus?: () => void;
   /** A plain account the player may upgrade (the site does it). */
   onUpgrade?: () => void;
+  /** While the service shows this account's inventory: the panel opens on it. */
+  onInventory?: () => void;
+  /** "Ayarlarını kopyala" (several accounts, the cloud features on). */
+  onCopy?: () => void;
+  /** Several accounts are being chosen: a box instead of the menu, the card toggles it. */
+  selecting?: boolean;
+  selected?: boolean;
+  onSelect?: (selected: boolean) => void;
   ref?: Ref<HTMLLIElement>;
 }) {
   const { t } = useTranslation();
@@ -242,7 +263,19 @@ export function CloudCard({
         ]
       : []),
     { label: t("cloudAfk.actions.console"), icon: <Terminal size={16} />, onSelect: onConsole },
+    ...(onInventory
+      ? [
+          {
+            label: t("cloudAfkFeat.tabs.inventory"),
+            icon: <Backpack size={16} />,
+            onSelect: onInventory,
+          },
+        ]
+      : []),
     { label: t("cloudAfk.actions.settings"), icon: <GearSix size={16} />, onSelect: onSettings },
+    ...(onCopy
+      ? [{ label: t("cloudAfkFeat.copy.menu"), icon: <Copy size={16} />, onSelect: onCopy }]
+      : []),
     ...(onPlus
       ? [{ label: t("afkPlus.card.open"), icon: <ChatsCircle size={16} />, onSelect: onPlus }]
       : []),
@@ -294,12 +327,38 @@ export function CloudCard({
       className="flex"
     >
       <ContextMenu items={items}>
+        {/* While choosing, a press on the card (not on its buttons) toggles it. */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: the box is the control; the card only widens its target */}
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: the box takes the keyboard */}
         <div
+          onClick={
+            selecting && onSelect
+              ? (event) => {
+                  const target = event.target as HTMLElement;
+                  if (target.closest("button, a, input, [role=checkbox]")) return;
+                  onSelect(!selected);
+                }
+              : undefined
+          }
           className={cn(
             "glass relative flex w-full flex-col rounded-[var(--radius-panel)] p-3.5",
             inGame && "shadow-[inset_0_0_0_1px_rgb(95_203_142/0.22)]",
+            selecting && "cursor-pointer",
           )}
         >
+          <AnimatePresence initial={false}>
+            {selecting && selected ? (
+              <motion.span
+                key="chosen"
+                className="pointer-events-none absolute inset-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: enter(0.16) }}
+                exit={{ opacity: 0, transition: leave(0.12) }}
+              >
+                <PixelBrackets />
+              </motion.span>
+            ) : null}
+          </AnimatePresence>
           <div className="flex items-start gap-3">
             <AfkHead nickname={account.name} size={40} />
             <div className="min-w-0 flex-1">
@@ -319,16 +378,26 @@ export function CloudCard({
                 {serverLabel(account.server)}
               </p>
             </div>
-            <Menu
-              trigger={
-                <IconButton
-                  label={t("cloudAfk.actions.more")}
-                  icon={<DotsThreeVertical size={18} weight="bold" />}
-                  size="sm"
+            {selecting && onSelect ? (
+              <span className="flex size-8 shrink-0 items-center justify-center">
+                <Check
+                  checked={selected}
+                  onCheckedChange={onSelect}
+                  label={t("cloudAfkFeat.bulk.pick", { name: account.name })}
                 />
-              }
-              items={items}
-            />
+              </span>
+            ) : (
+              <Menu
+                trigger={
+                  <IconButton
+                    label={t("cloudAfk.actions.more")}
+                    icon={<DotsThreeVertical size={18} weight="bold" />}
+                    size="sm"
+                  />
+                }
+                items={items}
+              />
+            )}
           </div>
 
           <div className="mt-3 flex min-h-5 items-center gap-3">

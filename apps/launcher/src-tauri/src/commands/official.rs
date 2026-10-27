@@ -34,7 +34,7 @@ use tauri::State;
 
 use crate::commands::instances::{InstanceView, seed_default_server_once, view};
 use crate::commands::launch::{EventSink, LaunchEventView, ProgressView};
-use crate::commands::modcenter;
+use crate::commands::{modcenter, modsets};
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 
@@ -737,6 +737,9 @@ pub(crate) async fn sync_pack_files(
                 .map_err(pack_error)?;
             changed = report.downloaded + report.deleted + report.restored;
             failed = report.issues.len();
+            // Mods this sync put in place get their first settings before the game starts
+            // (Chest Tracker's container names off, CHEST-TRACKER).
+            modsets::seed_mod_settings(game_dir, &plan.placed_mods(&manifest.projects.items)).await;
         }
     }
     if let Some(notice) = modcenter::notice(&plan, manifest, failed) {

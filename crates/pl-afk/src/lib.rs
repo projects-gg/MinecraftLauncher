@@ -79,7 +79,7 @@ pub use orphans::RECORD_FILE_NAME;
 pub use pacing::{ConnectPacer, MIN_CONNECT_SPACING, connect_destination};
 pub use page::{LoginCommandLine, LoginCommandsPage, SettingsPage, secret_command_name};
 pub use paths::{ALERTS_FILE_NAME, AfkPaths, CHAT_LOG_FILE_NAME, CONSOLE_LOG_FILE_NAME};
-pub use pattern::{MAX_PATTERN_CHARS, PatternProblem, check_pattern, matches_line};
+pub use pattern::{MAX_PATTERN_CHARS, PatternProblem, capture_count, check_pattern, matches_line};
 pub use process::{
     BoxedReader, BoxedWriter, CONSOLE_MODE_ARG, ClientProcess, ClientSpawner, ExitFuture,
     LaunchSpec, ProcessExit, ProcessSpawner,

@@ -804,6 +804,11 @@ impl RepairHost for LauncherHost<'_> {
         )
         .await
         .map_err(pack_failure)?;
+        crate::commands::modsets::seed_mod_settings(
+            &self.game_dir,
+            &plan.placed_mods(&manifest.projects.items),
+        )
+        .await;
         tracing::info!(instance = %self.instance_id, summary = %plan.summary().describe_tr(), "pack synced for a mod repair");
         Ok(())
     }

@@ -381,6 +381,8 @@ pub fn plan(
             },
             commands: plan.commands,
             rules: plan.rules,
+            // The cloud account's own inventory choice stays as it is.
+            inventory: None,
         },
         dropped: plan.dropped,
         adjusted: plan.adjusted,
