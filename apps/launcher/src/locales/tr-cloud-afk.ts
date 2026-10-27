@@ -13,6 +13,7 @@ export const trCloudAfk = {
     pricePerMonth: "Aylık {{price}}",
     start: "afk.projects.gg'de başla",
     soldOut: "Şu an boş yer yok",
+    salesClosed: "Şu an satışta değil",
     remaining: "Son {{count}} yer",
     signIn: "Bulut hesabın varsa görmek için Arkadaşlar'a Discord ile giriş yap.",
     signInAction: "Giriş yap",

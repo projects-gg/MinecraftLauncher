@@ -11,6 +11,7 @@ export const enCloudAfk = {
     pricePerMonth: "{{price}} a month",
     start: "Start on afk.projects.gg",
     soldOut: "No free slots right now",
+    salesClosed: "Not on sale right now",
     remaining_one: "Last {{count}} slot",
     remaining_other: "Last {{count}} slots",
     signIn: "Have cloud accounts? Sign in to Friends with Discord to see them.",
