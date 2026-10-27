@@ -178,6 +178,7 @@ export const enTeams: typeof trTeams = {
     yearsToday_other: "Your crew is {{count}} years old today",
   },
   roster: {
+    title: "Members",
     projects: "On Projects",
     playing: "In game",
     launcher: "In the launcher",

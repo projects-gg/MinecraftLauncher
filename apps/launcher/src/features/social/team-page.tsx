@@ -912,37 +912,41 @@ function CrewRoster({ team }: { team: SocialTeam }) {
     ];
   }, [team, t]);
   return (
-    <ul aria-label={team.name} className="relative flex flex-col">
-      <AnimatePresence initial={false} mode="popLayout">
-        {items.map((item) => (
-          <motion.li
-            key={item.key}
-            layout={layout ? "position" : false}
-            transition={{ layout: glide }}
-            initial={{ opacity: 0, y: reduce ? 0 : 6 }}
-            animate={{ opacity: 1, y: 0, transition: enter(0.26) }}
-            exit={{ opacity: 0, transition: leave(0.22) }}
-          >
-            {item.kind === "group" ? (
-              <h3 className="flex items-center gap-2 px-2 pt-3 pb-1 text-[12.5px] font-medium text-ash-400">
-                {item.label}
-                <span className="relative inline-flex font-display tabular-nums">
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.span key={item.count} {...swap(reduce, 0.18)}>
-                      {item.count}
-                    </motion.span>
-                  </AnimatePresence>
-                </span>
-              </h3>
-            ) : item.member.me ? (
-              <MeRow member={item.member} />
-            ) : (
-              <TeamMemberRow member={item.member} team={team} line="where" />
-            )}
-          </motion.li>
-        ))}
-      </AnimatePresence>
-    </ul>
+    <>
+      {/* Its own title: the player's row leads the list, under "Planlar" it read as a plan. */}
+      <SectionTitle>{t("teams.roster.title")}</SectionTitle>
+      <ul aria-label={team.name} className="relative flex flex-col">
+        <AnimatePresence initial={false} mode="popLayout">
+          {items.map((item) => (
+            <motion.li
+              key={item.key}
+              layout={layout ? "position" : false}
+              transition={{ layout: glide }}
+              initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+              animate={{ opacity: 1, y: 0, transition: enter(0.26) }}
+              exit={{ opacity: 0, transition: leave(0.22) }}
+            >
+              {item.kind === "group" ? (
+                <h3 className="flex items-center gap-2 px-2 pt-3 pb-1 text-[12.5px] font-medium text-ash-400">
+                  {item.label}
+                  <span className="relative inline-flex font-display tabular-nums">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.span key={item.count} {...swap(reduce, 0.18)}>
+                        {item.count}
+                      </motion.span>
+                    </AnimatePresence>
+                  </span>
+                </h3>
+              ) : item.member.me ? (
+                <MeRow member={item.member} />
+              ) : (
+                <TeamMemberRow member={item.member} team={team} line="where" />
+              )}
+            </motion.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+    </>
   );
 }
 
@@ -1230,7 +1234,7 @@ function CrewView({ team }: { team: SocialTeam }) {
           <CrewPlans team={team} />
         </motion.div>
 
-        <motion.section className="mt-3" {...glideBox}>
+        <motion.section className="mt-5" {...glideBox}>
           <CrewRoster team={team} />
         </motion.section>
 

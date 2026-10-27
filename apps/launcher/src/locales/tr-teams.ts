@@ -179,6 +179,7 @@ export const trTeams = {
     yearsToday_other: "Ekibin bugün {{count}} yaşında",
   },
   roster: {
+    title: "Üyeler",
     projects: "Projects'te",
     playing: "Oyunda",
     launcher: "Launcher'da",
