@@ -47,14 +47,14 @@ describe("placeBelowOrBeside", () => {
     // GeceBekcisi's "⋯" in the second row of cards at 1280 x 760.
     expect(placeBelowOrBeside({ bottom: 516 }, 760, height, "end", 6)).toEqual({
       side: "left",
-      align: "start",
+      align: "end",
     });
   });
 
   it("opens to the right of a trigger at the start", () => {
     expect(placeBelowOrBeside({ bottom: 600 }, 640, height, "start", 6)).toEqual({
       side: "right",
-      align: "start",
+      align: "end",
     });
   });
 

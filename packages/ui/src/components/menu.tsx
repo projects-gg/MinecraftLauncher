@@ -217,9 +217,10 @@ export function menuHeight(
 
 /**
  * Where a menu opens below its trigger, or beside it when the whole menu has no room below: to
- * the trigger's left for a menu aligned to its end, else to its right, its top level with the
- * trigger's and pushed up as far as the window needs. A menu turned upwards over a grid of cards
- * sat under the next card's own "⋯" and read as that card's (FEAT-L).
+ * the trigger's left for a menu aligned to its end, else to its right, its bottom level with the
+ * trigger's, so it grows upwards from the trigger (pushed down only where the window ends). A menu
+ * turned upwards over a grid of cards sat under the next card's own "⋯" and read as that card's
+ * (FEAT-L); shifted to fit, its top floated far above the trigger (SHEET-UX second look).
  */
 export function placeBelowOrBeside(
   trigger: { bottom: number },
@@ -230,7 +231,7 @@ export function placeBelowOrBeside(
 ): { side: "bottom" | "left" | "right"; align: "start" | "center" | "end" } {
   const room = viewportHeight - trigger.bottom - sideOffset - MENU_MARGIN;
   if (room >= height) return { side: "bottom", align };
-  return { side: align === "start" ? "right" : "left", align: "start" };
+  return { side: align === "start" ? "right" : "left", align: "end" };
 }
 
 /** Action menu for "more" buttons and instance cards. Use `null` for a separator. */
