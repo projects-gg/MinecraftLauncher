@@ -6,6 +6,7 @@ import { trAfkPlus } from "./tr-afkplus";
 import { trChat } from "./tr-chat";
 import { trChat2 } from "./tr-chat2";
 import { trCloudAfk } from "./tr-cloud-afk";
+import { trCloudAfkFeat } from "./tr-cloud-afk-feat";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
 import { trDisk } from "./tr-disk";
@@ -95,6 +96,7 @@ export const tr = {
   team6: trTeam6,
   verify: trVerify,
   cloudAfk: trCloudAfk,
+  cloudAfkFeat: trCloudAfkFeat,
   projectsSkin: trProjectsSkin,
   host: trHost,
   afkPlus: trAfkPlus,

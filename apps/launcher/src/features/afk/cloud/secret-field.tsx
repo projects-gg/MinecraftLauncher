@@ -8,7 +8,7 @@
 import { Eye, EyeSlash, LockSimple, LockSimpleOpen } from "@phosphor-icons/react";
 import { Button, cn, enter, IconButton, Input, leave, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { type Ref, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cloudApi } from "./api";
 import { looksSensitive } from "./sensitive";
@@ -160,6 +160,7 @@ export function WordsField({
   placeholder,
   error,
   autoFocus,
+  inputRef,
 }: {
   words: Words;
   onChange: (words: Words) => void;
@@ -169,6 +170,8 @@ export function WordsField({
   placeholder: string;
   error: string | null;
   autoFocus?: boolean;
+  /** The words' field (a reply's placeholder chips type where its caret is). */
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
@@ -209,6 +212,7 @@ export function WordsField({
             />
           ) : null}
           <Input
+            ref={inputRef}
             aria-label={label}
             value={words.text}
             placeholder={replaced.current ? t("cloudAfk.settings.secret.newValue") : placeholder}

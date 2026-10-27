@@ -59,12 +59,14 @@ function account(overrides: Partial<CloudAccount> = {}): CloudAccount {
       antiAfk: { enabled: true, delayMin: 60, delayMax: 90 },
       commands: [],
       rules: [],
+      inventory: null,
     },
     rev: 4,
     serverChanges: { used: 0, limit: 6, resetAt: null },
     tier: "plain",
     plusUntil: null,
     ai: null,
+    features: null,
     ...overrides,
   };
 }

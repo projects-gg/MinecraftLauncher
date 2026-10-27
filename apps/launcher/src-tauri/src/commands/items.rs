@@ -180,3 +180,59 @@ fn forget_older(cache: &Path, version: &str, keep: &str) {
         }
     }
 }
+
+/// One picture of the item art document, on this computer.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemArtLocalFile {
+    /// The document's own path (`itemart/atlas-16.<sha256>.png`).
+    pub path: String,
+    /// Where it is on disk; the UI loads it with `convertFileSrc` (`cache/` is allowed).
+    pub local: String,
+}
+
+/// IA-ART's signed `itemArt` document (the Projects server's own item looks and menu pictures,
+/// `docs/content-format.md` "Item art") with its pictures downloaded and verified.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemArtOverlayFiles {
+    /// The document as JSON text, as the content index publishes it.
+    pub doc: String,
+    pub files: Vec<ItemArtLocalFile>,
+}
+
+/// The content index's item art document, for the 7/24 Bulut inventory on the servers it names:
+/// read from the signed tree (cached), its pictures fetched once and verified by SHA-256. `None`
+/// without a document or while the tree cannot be read (items keep the game's pictures). Never an
+/// error.
+#[tauri::command]
+#[specta::specta]
+pub async fn items_overlay(state: State<'_, AppState>) -> CmdResult<Option<ItemArtOverlayFiles>> {
+    let Ok(snapshot) = state.content.load_cached().await else {
+        return Ok(None);
+    };
+    let art = match state.content.item_art(&snapshot.index).await {
+        Ok(Some(art)) => art,
+        Ok(None) => return Ok(None),
+        Err(error) => {
+            tracing::debug!(%error, "the item art document is not readable now");
+            return Ok(None);
+        }
+    };
+    let mut files = Vec::new();
+    for file in art.files() {
+        match state.content.item_art_file(file).await {
+            Ok(local) => files.push(ItemArtLocalFile {
+                path: file.path.clone(),
+                local: local.to_string_lossy().into_owned(),
+            }),
+            Err(error) => {
+                tracing::debug!(%error, path = %file.path, "an item art picture is missing")
+            }
+        }
+    }
+    let Ok(doc) = serde_json::to_string(&art) else {
+        return Ok(None);
+    };
+    Ok(Some(ItemArtOverlayFiles { doc, files }))
+}
