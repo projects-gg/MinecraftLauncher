@@ -98,6 +98,8 @@ function Editor({
   );
 
   const dirty = isDirty(draft, baseline);
+  // "Ayarları bir kez kaydet" (old rules): saving is worth it even with nothing changed.
+  const savable = dirty || Boolean(view.account.features?.legacyRules);
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
 
   const setDraft = (update: (d: Draft) => Draft) => {
@@ -166,7 +168,7 @@ function Editor({
   // Ctrl+S saves, as in the desktop settings.
   const shortcut = useRef(() => {});
   shortcut.current = () => {
-    if (dirty && !saving) void save();
+    if (savable && !saving) void save();
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -276,7 +278,7 @@ function Editor({
         <Button variant="ghost" onClick={onCancel} disabled={saving}>
           {dirty ? t("cloudAfk.settings.cancel") : t("cloudAfk.settings.close")}
         </Button>
-        <Button variant="primary" onClick={() => void save()} disabled={!dirty || saving}>
+        <Button variant="primary" onClick={() => void save()} disabled={!savable || saving}>
           {saving ? t("cloudAfk.settings.saving") : t("cloudAfk.settings.save")}
         </Button>
       </footer>

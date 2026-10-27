@@ -3,7 +3,7 @@
 // items are the game's own pictures from the player's installed Minecraft (ITEMART), with the
 // Projects server's own looks and menu pictures on its servers (IA-ART). It sits on a solid panel:
 // inside glass Chromium resamples its pixels at 125 % (docs/design.md §6 "Cloud inventory").
-import { Button, ContentIcon, EmptyState } from "@pl/ui";
+import { Button, ContentIcon, cn, EmptyState } from "@pl/ui";
 import { InventoryView, type TitleGlyph } from "@pl/ui/inventory";
 import { hostMatches, type ItemArt, ItemArtProvider } from "@pl/ui/items";
 import { useQueryClient } from "@tanstack/react-query";
@@ -183,7 +183,11 @@ export function InventoryPanel({
       <ItemArtProvider value={art}>
         {/* The view is a size container: it needs the width (it centres its own art). */}
         <InventoryView
-          className="w-full"
+          // Until the first frame the grid is a stand-in: dimmed, so it never reads as empty.
+          className={cn(
+            "w-full transition-opacity duration-200",
+            state.status === "waiting" && "opacity-55",
+          )}
           inventory={state.inventory}
           window={state.window}
           mode={mode === "view" ? "view" : "full"}
@@ -194,7 +198,12 @@ export function InventoryPanel({
           maxScale={3}
         />
       </ItemArtProvider>
-      <p className="text-center text-[12px] text-ash-400">{t("cloudAfkFeat.inventory.privacy")}</p>
+      {/* Until the first frame the empty grid is a stand-in: the line says it is coming. */}
+      <p role="status" className="text-center text-[12px] text-ash-400">
+        {state.status === "waiting"
+          ? t("cloudAfkFeat.inventory.loading")
+          : t("cloudAfkFeat.inventory.privacy")}
+      </p>
     </div>
   );
 }

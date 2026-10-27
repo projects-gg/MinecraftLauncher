@@ -45,6 +45,8 @@ export function CopyDialog({
   const [mode, setMode] = useState<SecretMode>("same");
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  // "Kopyala" with a password still to type says so at the field (a dim button said nothing).
+  const [tried, setTried] = useState(false);
   const serverId = useId();
 
   // A fresh open starts from what the caller chose.
@@ -56,6 +58,7 @@ export function CopyDialog({
     setWithServer(false);
     setMode("same");
     setTyped({});
+    setTried(false);
   }, [open]);
 
   // The source's secret rows this computer has no words for.
@@ -85,6 +88,7 @@ export function CopyDialog({
       : !(typed[key(row.row, null)] ?? "").trim(),
   );
   const ready = Boolean(source && plan && chosen.length > 0 && !missing && !busy);
+  const blocked = !source || !plan || chosen.length === 0 || busy;
 
   const toggle = (id: string, on: boolean) =>
     setTargets((current) => {
@@ -95,6 +99,11 @@ export function CopyDialog({
     });
 
   const copy = async () => {
+    if (missing && !blocked) {
+      setTried(true);
+      document.querySelector<HTMLInputElement>("[data-copy-secret][data-empty]")?.focus();
+      return;
+    }
     if (!source || !ready) return;
     setBusy(true);
     const secrets = toType.flatMap((row): CloudCopySecret[] =>
@@ -140,9 +149,11 @@ export function CopyDialog({
   const secretField = (row: string, preview: string, target: CloudAccount | null) => {
     // The command stays in view before the field (`/login`), so only the password is typed.
     const command = commandOf(preview);
+    const empty = !(typed[key(row, target?.id ?? null)] ?? "").trim();
     return (
       <Field
         key={key(row, target?.id ?? null)}
+        error={tried && empty ? t("cloudAfkFeat.copy.secretMissing") : undefined}
         label={
           target
             ? t("cloudAfkFeat.copy.secretFor", { name: target.name, row: rowName(preview) })
@@ -159,6 +170,9 @@ export function CopyDialog({
             </span>
           ) : null}
           <Input
+            data-copy-secret=""
+            data-empty={empty ? "" : undefined}
+            invalid={tried && empty}
             type="password"
             autoComplete="new-password"
             spellCheck={false}
@@ -193,7 +207,7 @@ export function CopyDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             {t("cloudAfkFeat.copy.cancel")}
           </Button>
-          <Button variant="primary" disabled={!ready} onClick={() => void copy()}>
+          <Button variant="primary" disabled={blocked} onClick={() => void copy()}>
             {t("cloudAfkFeat.copy.action")}
           </Button>
         </>

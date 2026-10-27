@@ -1333,9 +1333,11 @@ mod tests {
         let sink: LiveSink = Arc::new(|_| {});
         let hub = LiveHub::new(Handle::current(), "test", sink);
         hub.watch(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 1).await;
+        assert_eq!(frames[0], watch_frame("watch", "a_1"));
+        // The panel opens on the open socket: the same subscription gains the AI.
         hub.watch_ai(url, Bearer::new("pls_test"), "kz1", "a_1");
         let frames = heard(&sent, 2).await;
-        assert_eq!(frames[0], watch_frame("watch", "a_1"));
         assert_eq!(frames[1], watch_ai_frame("a_1", true));
         // The panel closes, the console stays: watched again without the AI.
         hub.unwatch_ai("a_1");
@@ -1438,32 +1440,32 @@ mod tests {
         assert!(!hub.inv_op("a_1", "m0", &snapshot), "nothing streams it");
         hub.watch(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
         hub.watch_inventory(url, Bearer::new("pls_test"), "kz1", "a_1");
-        let frames = heard(&sent, 2).await;
-        assert_eq!(frames[0], watch_frame("watch", "a_1"));
+        // Both came while the socket opened: its first frame asks for both.
+        let frames = heard(&sent, 1).await;
         assert_eq!(
-            frames[1],
+            frames[0],
             watch_streams_frame("a_1", false, Some(true), None)
         );
         assert!(hub.inv_op("a_1", "m1", &snapshot));
-        let frames = heard(&sent, 3).await;
-        let op: serde_json::Value = serde_json::from_str(&frames[2]).unwrap();
+        let frames = heard(&sent, 2).await;
+        let op: serde_json::Value = serde_json::from_str(&frames[1]).unwrap();
         assert_eq!(
             op,
             serde_json::json!({"t": "invop", "acct": "a_1", "id": "m1", "op": {"action": "snapshot"}})
         );
         // The view leaves, the console stays: the stream stops on the same subscription.
         hub.unwatch_inventory("a_1");
-        let frames = heard(&sent, 4).await;
+        let frames = heard(&sent, 3).await;
         assert_eq!(
-            frames[3],
+            frames[2],
             watch_streams_frame("a_1", false, Some(false), None)
         );
         assert!(!hub.inv_op("a_1", "m2", &snapshot));
         assert!(hub.is_watching());
         hub.unwatch("a_1");
         assert!(!hub.is_watching());
-        let frames = heard(&sent, 5).await;
-        assert_eq!(frames[4], watch_frame("unwatch", "a_1"));
+        let frames = heard(&sent, 4).await;
+        assert_eq!(frames[3], watch_frame("unwatch", "a_1"));
         // Nothing answered a move here, and nothing failed.
         while let Ok(event) = events.try_recv() {
             assert!(!matches!(event, CloudLiveEvent::InvResult { .. }));
