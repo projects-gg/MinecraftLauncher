@@ -84,6 +84,10 @@ function focusBackAfterKeys(event: Event, own?: (event: Event) => void) {
 const rowClass =
   "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-45";
 
+/** Whose rows they are, above them (`title`): quiet words, never a row. */
+const titleClass =
+  "max-w-[240px] truncate px-2.5 pt-1.5 pb-1 text-[12px] leading-[16px] font-semibold text-ash-300 select-none";
+
 interface MenuParts {
   Item: typeof DropdownMenu.Item | typeof RadixContextMenu.Item;
   Separator: typeof DropdownMenu.Separator | typeof RadixContextMenu.Separator;
@@ -202,6 +206,8 @@ const SEPARATOR_PX = 13;
 const PANEL_PX = 10;
 /** The strip of small actions with the line under it. */
 const STRIP_PX = 50;
+/** The title line (`titleClass`). */
+const TITLE_PX = 25;
 /** How far a menu keeps from the window's edges when it opens beside its trigger. */
 const MENU_MARGIN = 8;
 
@@ -209,10 +215,17 @@ const MENU_MARGIN = 8;
 export function menuHeight(
   items: ReadonlyArray<MenuItem | null>,
   strip?: readonly MenuStripItem[],
+  title?: string,
 ): number {
   const rows = items.filter((item) => item !== null).length;
   const separators = items.length - rows;
-  return PANEL_PX + rows * ROW_PX + separators * SEPARATOR_PX + (strip?.length ? STRIP_PX : 0);
+  return (
+    PANEL_PX +
+    rows * ROW_PX +
+    separators * SEPARATOR_PX +
+    (strip?.length ? STRIP_PX : 0) +
+    (title ? TITLE_PX : 0)
+  );
 }
 
 /**
@@ -247,6 +260,7 @@ export function Menu({
   onOpenChange,
   onCloseAutoFocus,
   header,
+  title,
   label,
   className,
   besideWhenNoRoom = false,
@@ -255,6 +269,12 @@ export function Menu({
   items: Array<MenuItem | null>;
   /** Small actions in a row above the rows. */
   strip?: readonly MenuStripItem[];
+  /**
+   * Whose rows they are, in quiet words at the top (an account's name on its card's menu: opened
+   * beside its button, a menu can sit over the next card; SHEET-UX). Also its accessible name
+   * unless `label` is given.
+   */
+  title?: string;
   align?: "start" | "center" | "end";
   side?: "top" | "right" | "bottom" | "left";
   sideOffset?: number;
@@ -296,7 +316,7 @@ export function Menu({
         placeBelowOrBeside(
           element.getBoundingClientRect(),
           view?.innerHeight ?? Number.POSITIVE_INFINITY,
-          menuHeight(items, strip),
+          menuHeight(items, strip, title),
           align,
           sideOffset,
         ),
@@ -305,6 +325,7 @@ export function Menu({
     onOpenChange?.(next);
   };
   const at = besideWhenNoRoom ? placed : null;
+  const name = label ?? title;
   return (
     <DropdownMenu.Root open={open} onOpenChange={changeOpen}>
       <DropdownMenu.Trigger asChild ref={triggerRef}>
@@ -318,9 +339,14 @@ export function Menu({
           collisionPadding={at && at.side !== "bottom" ? MENU_MARGIN : collisionPadding}
           className={cn(contentClass, className)}
           // Radix names the menu after its trigger; a label of its own replaces that name.
-          {...(label ? { "aria-label": label, "aria-labelledby": undefined } : {})}
+          {...(name ? { "aria-label": name, "aria-labelledby": undefined } : {})}
           onCloseAutoFocus={(event) => focusBackAfterKeys(event, onCloseAutoFocus)}
         >
+          {title ? (
+            <DropdownMenu.Label aria-hidden className={titleClass}>
+              {title}
+            </DropdownMenu.Label>
+          ) : null}
           {header}
           {stripRow(strip, DROPDOWN)}
           {menuRows(items, DROPDOWN)}
@@ -348,6 +374,7 @@ export function ContextMenu({
   children,
   items,
   strip,
+  title,
   disabled,
   wrapTrigger,
   onCloseAutoFocus,
@@ -358,6 +385,8 @@ export function ContextMenu({
   items: Array<MenuItem | null>;
   /** Small actions in a row above the rows (a chat message's quick reactions). */
   strip?: readonly MenuStripItem[];
+  /** Whose rows they are, at the top and as the menu's name, as on `Menu`. */
+  title?: string;
   disabled?: boolean;
   /**
    * Puts something around the trigger that also needs the element, such as a `Tooltip`: the
@@ -381,8 +410,14 @@ export function ContextMenu({
         <RadixContextMenu.Content
           collisionPadding={8}
           className={contentClass}
+          {...(title ? { "aria-label": title } : {})}
           onCloseAutoFocus={(event) => focusBackAfterKeys(event, onCloseAutoFocus)}
         >
+          {title ? (
+            <RadixContextMenu.Label aria-hidden className={titleClass}>
+              {title}
+            </RadixContextMenu.Label>
+          ) : null}
           {stripRow(strip, CONTEXT)}
           {menuRows(items, CONTEXT)}
         </RadixContextMenu.Content>

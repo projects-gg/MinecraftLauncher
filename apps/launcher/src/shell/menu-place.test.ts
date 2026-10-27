@@ -31,6 +31,11 @@ describe("menuHeight", () => {
     const strip = [{ key: "a", label: "a", content: null, onSelect: () => undefined }];
     expect(menuHeight([row("Yanıtla")], strip)).toBe(10 + 33 + 50);
   });
+
+  it("counts the title line with the account's name", () => {
+    expect(menuHeight(cloudCard, undefined, "Tuccar_Ali")).toBe(menuHeight(cloudCard) + 25);
+    expect(menuHeight(cloudCard, undefined, "")).toBe(menuHeight(cloudCard));
+  });
 });
 
 describe("placeBelowOrBeside", () => {
