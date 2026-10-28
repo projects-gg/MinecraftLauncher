@@ -1511,9 +1511,12 @@ mod tests {
     }
 
     /// Cases that hang on the parts of the rule that are the service's: the text rule's links,
-    /// contact data and listed words (the order form says them in TypeScript).
-    const SERVICE_ONLY: [&str; 3] = [
+    /// contact data, other apps and listed words (a custom name's the order form says in
+    /// TypeScript too).
+    const SERVICE_ONLY: [&str; 5] = [
         "a custom name with a link",
+        "a money name naming another app",
+        "a money name that is a domain",
         "a tag naming another app",
         "a tag with a link",
     ];
