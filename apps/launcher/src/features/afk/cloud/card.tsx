@@ -64,7 +64,7 @@ import { ModerationLine, openAppeal } from "./moderation-bits";
 import { AI_TONE, useAiSentence } from "./plus/rail";
 import { plusAi } from "./plus/types";
 import { firstClause } from "./plus/words";
-import { useAccountReach } from "./reach";
+import { useAccountReach, useMachineAway } from "./reach";
 import { CloudStateLine } from "./state-line";
 import {
   type CloudPrimary,
@@ -195,7 +195,7 @@ function PlaceRow({
 
 function PrimaryButton({
   account,
-  stale,
+  away,
   onStart,
   onStop,
   onFixPassword,
@@ -203,7 +203,7 @@ function PrimaryButton({
 }: {
   account: CloudAccount;
   /** Its machine is out of reach (CLOUD-STALE). */
-  stale: boolean;
+  away: boolean;
   onStart: () => void;
   onStop: () => void;
   onFixPassword: () => void;
@@ -260,9 +260,10 @@ function PrimaryButton({
         .open("renew", account.id)
         .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
   };
-  // Its machine out of reach: a start or a stop could not take effect there (its client keeps
-  // running offline), so it waits until the machine is back (CLOUD-STALE).
-  const waits = stale && (action === "start" || action === "stop");
+  // Its machine out of reach: a start, a stop or a password fix could not take effect there (its
+  // client keeps running offline), so each waits until the machine is back, as the line over the
+  // list says (CLOUD-STALE). Renewing and an appeal happen on the site and never wait.
+  const waits = away && (action === "start" || action === "stop" || action === "fixPassword");
   return (
     // A disabled button takes no pointer: the reason hangs on its wrapper (afk-page.tsx).
     <Tooltip content={t("cloudStale.waits")} disabled={!waits}>
@@ -443,8 +444,10 @@ export function CloudCard({
   const place: TwinPlace = here ? twinPlace(account, here) : "cloud";
   // The card speaks for the copy on this computer (its state, button, console and settings).
   const local = place === "here" ? here : null;
-  // Its machine out of reach, the card makes no live claim: the line says what was known last.
+  // Its machine out of reach, the card makes no live claim (the line says what was known last) and
+  // what needs the machine waits.
   const stale = useAccountReach(account).stale;
+  const away = useMachineAway(account);
   const inGame = local ? local.state.kind === "connected" : isInGame(account) && !stale;
   const action = cloudPrimary(account);
   const hereConsole = onHereConsole ?? onConsole;
@@ -470,25 +473,33 @@ export function CloudCard({
                 label: t("cloudAfk.actions.start"),
                 icon: <Play size={16} />,
                 onSelect: onStart,
-                disabled: stale,
+                disabled: away,
               }
             : action === "stop"
               ? {
                   label: t("cloudAfk.actions.stop"),
                   icon: <StopCircle size={16} />,
                   onSelect: onStop,
-                  disabled: stale,
+                  disabled: away,
                 }
               : action === "fixPassword"
                 ? {
                     label: t("afkClear.fixPassword"),
                     icon: <Key size={16} />,
                     onSelect: onSettings,
+                    disabled: away,
                   }
                 : null,
           // Fixed elsewhere (the site, another computer): starting stays one press away.
           ...(action === "fixPassword"
-            ? [{ label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }]
+            ? [
+                {
+                  label: t("cloudAfk.actions.start"),
+                  icon: <Play size={16} />,
+                  onSelect: onStart,
+                  disabled: away,
+                },
+              ]
             : []),
           ...(isInGame(account)
             ? [
@@ -496,7 +507,7 @@ export function CloudCard({
                   label: t("cloudAfk.actions.reconnect"),
                   icon: <ArrowsClockwise size={16} />,
                   onSelect: onRestart,
-                  disabled: stale,
+                  disabled: away,
                 },
               ]
             : []),
@@ -507,7 +518,7 @@ export function CloudCard({
             label: move.label,
             icon: move.toHere ? <Desktop size={16} /> : <Cloud size={16} />,
             onSelect: () => void move.run(),
-            disabled: stale,
+            disabled: away,
           },
         ]
       : []),
@@ -709,7 +720,7 @@ export function CloudCard({
           {local ? <ClientRow account={local} /> : null}
           <TimeRow account={account} skewMs={skewMs} here={local !== null} />
           <ModerationLine account={account} />
-          {move ? <PlaceRow move={move} waits={stale} /> : null}
+          {move ? <PlaceRow move={move} waits={away} /> : null}
           {onPlus ? <PlusLine account={account} onOpen={onPlus} /> : null}
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
@@ -719,7 +730,7 @@ export function CloudCard({
             ) : (
               <PrimaryButton
                 account={account}
-                stale={stale}
+                away={away}
                 onStart={onStart}
                 onStop={onStop}
                 onFixPassword={onSettings}

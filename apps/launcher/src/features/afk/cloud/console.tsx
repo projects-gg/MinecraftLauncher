@@ -20,6 +20,7 @@ import {
   sheetOutside,
   TabPanel,
   Tabs,
+  Tooltip,
   useInteractionMotion,
   useMotionPrefs,
 } from "@pl/ui";
@@ -54,7 +55,7 @@ import { ConsoleTools } from "./console-tools";
 import { InventoryPanel, useInventoryArt } from "./inventory/inventory-panel";
 import { MovementPanel } from "./movement/movement-panel";
 import { movementShown } from "./movement/use-cloud-movement";
-import { useAccountReach } from "./reach";
+import { useAccountReach, useMachineAway } from "./reach";
 import { looksSensitive } from "./sensitive";
 import { issueKey, textProblem } from "./settings-model";
 import { CloudStateLine } from "./state-line";
@@ -366,8 +367,10 @@ export function CloudConsole({
 
   const running = account ? isInGame(account) : false;
   // Its machine out of reach (CLOUD-STALE): the title says what was known last, the strip goes, and
-  // the line waits for the connection, since nothing typed could reach the game.
+  // the line waits for the connection, since nothing typed could reach the game; so do a start and
+  // a password fix, as on the card.
   const stale = useAccountReach(account).stale;
+  const unreachable = useMachineAway(account);
   const canType = running && !stale;
   const sensitive = looksSensitive(text);
 
@@ -563,15 +566,21 @@ export function CloudConsole({
               className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink"
             />
           ) : stoppedOnPassword(account) ? (
-            // A start would stop again: the settings open on the login line (AFK-CLEAR).
-            <Button
-              variant="primary"
-              icon={<Key size={15} weight="bold" />}
-              onClick={() => onOpenSettings(account.id)}
-            >
-              {t("afkClear.fixPassword")}
-            </Button>
-          ) : !stale && (account.desired !== "run" || account.hold?.kind === "cause") ? (
+            // A start would stop again: the settings open on the login line (AFK-CLEAR). Its machine
+            // out of reach, it waits with its reason one hover away (CLOUD-STALE).
+            <Tooltip content={t("cloudStale.waits")} disabled={!unreachable}>
+              <span className="inline-flex">
+                <Button
+                  variant="primary"
+                  icon={<Key size={15} weight="bold" />}
+                  disabled={unreachable}
+                  onClick={() => onOpenSettings(account.id)}
+                >
+                  {t("afkClear.fixPassword")}
+                </Button>
+              </span>
+            </Tooltip>
+          ) : !unreachable && (account.desired !== "run" || account.hold?.kind === "cause") ? (
             // Its machine out of reach, a start waits as on the card (CLOUD-STALE).
             <Button variant="primary" onClick={() => onStart(account)}>
               {t("cloudAfk.actions.start")}

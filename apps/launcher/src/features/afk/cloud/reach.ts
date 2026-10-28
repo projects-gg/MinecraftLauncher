@@ -99,6 +99,15 @@ export function withBack(state: ReachState, host: string): ReachState {
 }
 
 /**
+ * The account's machine cannot be reached now: a read could not ask it, or a socket said it went
+ * away. What needs the machine waits then, whatever the state words say.
+ */
+export function machineAway(account: CloudAccount, state: ReachState): boolean {
+  if (!isKnown(account.live)) return true;
+  return account.host !== null && state.away[account.host] !== undefined;
+}
+
+/**
  * What may be said of the account's live state now. A hold or an expired account says the
  * service's own words, which never need the machine, and so does one the player stopped that was
  * stopped (nothing runs it, whatever the machine does).
@@ -106,8 +115,7 @@ export function withBack(state: ReachState, host: string): ReachState {
 export function reachOf(account: CloudAccount, state: ReachState): AccountReach {
   if (account.hold || account.expired) return LIVE_REACH;
   if (account.desired !== "run" && account.live.state === "stopped") return LIVE_REACH;
-  const away = account.host !== null && state.away[account.host] !== undefined;
-  if (isKnown(account.live) && !away) return LIVE_REACH;
+  if (!machineAway(account, state)) return LIVE_REACH;
   return { stale: true, known: state.known[account.id] ?? null };
 }
 
@@ -144,6 +152,13 @@ export const useCloudReach = create<ReachState>()(() => NO_REACH);
 
 export function updateReach(update: (state: ReachState) => ReachState) {
   useCloudReach.setState((state) => update(state), true);
+}
+
+/** Whether the account's machine is out of reach now (`machineAway`), for its actions. */
+export function useMachineAway(account: CloudAccount | undefined): boolean {
+  const host = account?.host ?? null;
+  const away = useCloudReach((s) => host !== null && s.away[host] !== undefined);
+  return account ? away || !isKnown(account.live) : false;
 }
 
 /** The account's reach (re-renders only when its machine's or its own entry changes). */

@@ -6,6 +6,7 @@ import { trCloudStale } from "@/locales/tr-cloud-stale";
 import type { CloudAccount, CloudPageData } from "./api";
 import {
   lastKnownText,
+  machineAway,
   NO_REACH,
   type ReachState,
   reachOf,
@@ -177,6 +178,15 @@ describe("an account's reach", () => {
     expect(reachOf(account({ desired: "stop", live: stopped }), away)).toEqual({ stale: false });
     // Stopped while the machine was away: its client may still be in game.
     expect(reachOf(account({ desired: "stop" }), away).stale).toBe(true);
+  });
+
+  it("holds every account's actions while its machine is away, a hold's too", () => {
+    const away = withAway(known, "kz1", AT + 1);
+    const held = account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null } });
+    expect(machineAway(held, away)).toBe(true);
+    expect(machineAway(held, known)).toBe(false);
+    expect(machineAway(account({ live: UNKNOWN }), NO_REACH)).toBe(true);
+    expect(machineAway(account({ host: null }), away)).toBe(false);
   });
 });
 

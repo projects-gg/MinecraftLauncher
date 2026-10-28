@@ -26,7 +26,7 @@ import { PlusIntroCard, PlusIntroDialog } from "./plus/intro";
 import { PlusPanel } from "./plus/plus-panel";
 import { plusMe, plusOffer } from "./plus/types";
 import { isPlusAccount, plusShown, usePlusUi } from "./plus/use-plus";
-import { reachOf, useCloudReach } from "./reach";
+import { machineAway, useCloudReach } from "./reach";
 import { CloudSettingsSheet } from "./settings";
 import { localized } from "./status";
 import { hereCopy, twinsHere } from "./twins";
@@ -215,9 +215,9 @@ export function CloudSection({
   // Every cloud account counts; those running on this computer have their card in its list.
   const all = signedIn ? overview.accounts : [];
   const accounts = all.filter((account) => !away.has(account.id));
-  // A machine out of reach: the cards say what was known last, so the count claims no one in game
-  // and one line says why (CLOUD-STALE).
-  const unreachable = accounts.some((account) => reachOf(account, reach).stale);
+  // A machine out of reach: the cards say what was known last and their actions wait, so the count
+  // claims no one in game and one line says why (CLOUD-STALE).
+  const unreachable = accounts.some((account) => machineAway(account, reach));
   const online = unreachable
     ? 0
     : accounts.filter((a) => a.live.state === "running" && !a.hold).length;
