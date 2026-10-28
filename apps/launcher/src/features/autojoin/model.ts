@@ -9,7 +9,7 @@ import type { SubServerView } from "@/bindings";
 export interface RouteRow {
   id: string | null;
   label: string;
-  /** The narrow command bar's words for it: "→ SkyBlock" (none for the lobby). */
+  /** The narrow command bar's words for it: "SkyBlock" (none for the lobby: the picker says "Lobi"). */
   short: string | null;
 }
 
@@ -35,7 +35,7 @@ export function routeRows(
     ...shown.map((sub) => ({
       id: sub.id,
       label: routeLabel(address, sub.name),
-      short: `→ ${sub.name}`,
+      short: sub.name,
     })),
   ];
 }

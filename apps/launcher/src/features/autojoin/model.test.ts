@@ -17,7 +17,7 @@ describe("the address picker (AUTOJOIN)", () => {
       "play.projects.gg → SkyBlock",
       "play.projects.gg → SMP",
     ]);
-    expect(rows.map((row) => row.short)).toEqual([null, "→ SkyBlock", "→ SMP"]);
+    expect(rows.map((row) => row.short)).toEqual([null, "SkyBlock", "SMP"]);
     expect(rows[0]?.id).toBeNull();
   });
 

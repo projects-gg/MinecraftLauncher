@@ -51,9 +51,10 @@ export function RoutePicker({
           className="group -mx-1 flex max-w-[280px] cursor-pointer items-center gap-1 rounded-sm px-1 text-[12px] text-ash-400 transition-colors duration-150 ease-out hover:text-bone-100 disabled:cursor-default disabled:opacity-45 disabled:hover:text-ash-400 data-[state=open]:text-bone-100"
         >
           <span className="truncate @max-[560px]/bar:hidden">{current.label}</span>
-          {current.short ? (
-            <span className="hidden truncate @max-[560px]/bar:inline">{current.short}</span>
-          ) : null}
+          {/* The narrow bar drops the address: "SkyBlock", or "Lobi" for the lobby. */}
+          <span className="hidden truncate @max-[560px]/bar:inline">
+            {current.short ?? t("autojoin.lobby")}
+          </span>
           <CaretUpDown size={12} aria-hidden className="shrink-0" />
         </button>
       }

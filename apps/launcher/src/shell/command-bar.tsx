@@ -586,7 +586,7 @@ function StatusArea({
  * words on one line (design.md §3; QA-TASTE). A narrow bar (1024 px) says it shorter and drops the
  * address (it is in the instance's settings), so "who is in game" keeps a whole name. While Studio
  * offers Projects' sub-servers (AUTOJOIN), the address line picks where the join goes after the
- * lobby's login ("play.projects.gg → SkyBlock"); the narrow bar keeps only "→ SkyBlock".
+ * lobby's login ("play.projects.gg → SkyBlock"); the narrow bar keeps only "SkyBlock" ("Lobi").
  */
 function AutoJoinSwitch({
   checked,
