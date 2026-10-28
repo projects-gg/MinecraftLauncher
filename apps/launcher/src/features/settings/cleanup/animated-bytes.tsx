@@ -1,5 +1,4 @@
-import { usePerf } from "@pl/ui";
-import { useReducedMotion } from "motion/react";
+import { usePerf, useReduceMotion } from "@pl/ui";
 import { useEffect, useRef } from "react";
 import { formatBytes } from "@/lib/format";
 
@@ -21,7 +20,7 @@ export function AnimatedBytes({
   className?: string;
   duration?: number;
 }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   const { performanceMode } = usePerf();
   const ref = useRef<HTMLSpanElement>(null);
   const shown = useRef(from ?? value);

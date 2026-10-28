@@ -1,5 +1,5 @@
 import { X } from "@phosphor-icons/react";
-import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Dialog as RadixDialog } from "radix-ui";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { EntranceGate, GatedMotion } from "../entrance";
@@ -7,6 +7,7 @@ import { focusPanel } from "../input-modality";
 import { onToast } from "../layer-dismiss";
 import { cn } from "../lib/cn";
 import { dialogMotion, easeOutExpo, scrimMotion } from "../motion";
+import { useReduceMotion } from "../reduced-motion";
 import { IconButton } from "./button";
 
 /** How the panel follows a change of its content's size when `morph` is on. */
@@ -99,7 +100,7 @@ export function Dialog({
     if (!dismissible || !dismissOnOutsideClick || onToast(event.target)) event.preventDefault();
   };
   const position = morph ? ("position" as const) : false;
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   // A long body fades out over its last 28 px while more of it waits below, so content cut at
   // the footer reads as "scroll", not as the end. A mask on the body itself: no layer over it.
   const [moreBelow, bodyRef] = useMoreBelow();
@@ -140,7 +141,7 @@ export function Dialog({
                     style={{ maxWidth: width }}
                     {...dialogMotion(reduce)}
                   >
-                    <MotionConfig reducedMotion="user">
+                    <MotionConfig reducedMotion={reduce ? "always" : "never"}>
                       <motion.div
                         layout={morph}
                         transition={morphTransition}
