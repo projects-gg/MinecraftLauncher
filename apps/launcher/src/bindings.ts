@@ -6813,7 +6813,7 @@ export type PlusCheckOutcome =
  *  `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`; or asked first:
  *  `question` with `rule: "rmt"` (money that may be the game's: checked again with `in_game`).
  */
-{ kind: "rejected"; reason: string; rule: string | null } |
+{ kind: "rejected"; reason: string; rule: string | null } | 
 /**  `rate` (a fourth check within a minute) or `daily` (the AFK+ day's checks used). */
 { kind: "limited"; reason: string; retry_after: number | null } | 
 /**  The machine's AI cannot read it now: `agent`, `paused`, `off`, `budget`, `timeout`. */
