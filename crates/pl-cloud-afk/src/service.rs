@@ -735,6 +735,12 @@ fn refusal_issues(error: &CloudError) -> Option<Vec<CloudIssue>> {
             if field.is_empty() { "config" } else { field },
             if reason.is_empty() { "format" } else { reason },
         ),
+        // README "Saving": a clear hit in an enforced category; the problem carries the category
+        // ("content:advertising") for the editor's words.
+        "invalid_command" if reason == "content" => CloudIssue::from_path(
+            field,
+            &format!("content:{}", error.extra_str("category").unwrap_or("other")),
+        ),
         "invalid_command" => {
             CloudIssue::from_path(field, if reason.is_empty() { "format" } else { reason })
         }
@@ -775,6 +781,66 @@ mod tests {
     use super::*;
     use crate::client::api_url;
     use crate::error::from_response;
+
+    #[test]
+    fn a_content_refusal_names_its_category_and_moderation_reads() {
+        use crate::model::CloudHold;
+        // README "Saving": no punishment, the editor says which kind of content (MOD-B).
+        let error = from_response(
+            400,
+            None,
+            json!({"error": {"code": "invalid_command", "field": "rules[0].reply.text",
+                             "reason": "content", "category": "advertising"}})
+            .to_string()
+            .as_bytes(),
+        );
+        let issues = refusal_issues(&error).unwrap();
+        assert_eq!(
+            (
+                issues[0].place.as_str(),
+                issues[0].index,
+                issues[0].problem.as_str()
+            ),
+            ("rules", Some(0), "content:advertising")
+        );
+        // The account's step in force, a moderation suspension and a paused row (README "Moderation
+        // player API"); an older service says none of it.
+        let account: CloudAccount = serde_json::from_value(json!({
+            "id": "a_1", "name": "Ahmet_AFK", "server": {"host": "play.projects.gg", "port": 0},
+            "version": "26.3", "lang": "tr", "host": null, "createdAt": 1, "expiresAt": 2,
+            "expired": false, "graceUntil": 3, "renewal": {"open": false, "opensAt": 0},
+            "desired": "run",
+            "hold": {"kind": "suspended", "until": null, "reason": "abuse",
+                     "case": "mc_01JBQ7XK2M9RPV4TNW8HD3CFGZ", "category": "scam", "auto": true},
+            "live": {"state": "stopped"}, "everJoined": true,
+            "config": {"v": 1, "owner": "", "antiAfk": {"enabled": true, "delayMin": 60, "delayMax": 90},
+                       "commands": [{"id": "c1", "enabled": true, "on": "join", "delay": 2,
+                                     "secret": false, "text": "gel", "preview": null, "fp": null,
+                                     "paused": {"case": "mc_1", "category": "advertising"}}],
+                       "rules": []},
+            "rev": 4, "serverChanges": {"used": 0, "limit": 6, "resetAt": null},
+            "moderation": {"case": "mc_01JBQ7XK2M9RPV4TNW8HD3CFGZ", "step": "suspend",
+                           "category": "scam", "at": 10, "until": null,
+                           "appeal": {"can": true, "until": 20, "state": "none"}}
+        }))
+        .unwrap();
+        assert!(matches!(
+            &account.hold,
+            Some(CloudHold::Suspended { case: Some(case), auto: true, .. }) if case.starts_with("mc_")
+        ));
+        assert_eq!(
+            account.config.commands[0]
+                .paused
+                .as_ref()
+                .map(|p| p.category.as_str()),
+            Some("advertising")
+        );
+        let moderation = account.moderation.unwrap();
+        assert_eq!(
+            (moderation.step.as_str(), moderation.appeal.can),
+            ("suspend", true)
+        );
+    }
 
     #[test]
     fn refusals_point_at_the_field() {

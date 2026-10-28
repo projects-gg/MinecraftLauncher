@@ -229,10 +229,15 @@ pub const CLOUD_CAUSES: &[&str] = &[
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CloudHold {
-    /// Staff stopped it; `reason` is a reason key.
+    /// Staff stopped it; `reason` is a reason key. A moderation suspension names its case and
+    /// category (only that case lifts it; `auto`: the system took the step).
     Suspended {
         until: Option<i64>,
         reason: String,
+        case: Option<String>,
+        category: Option<String>,
+        #[serde(default)]
+        auto: bool,
     },
     /// The player is banned from Cloud AFK.
     Restricted {
@@ -328,6 +333,8 @@ pub struct CloudCommandView {
     pub text: Option<String>,
     pub preview: Option<String>,
     pub fp: Option<String>,
+    /// Paused by a moderation case (`restrict_rows`): it does not run until edited and saved.
+    pub paused: Option<CloudModPaused>,
 }
 
 impl CloudCommandView {
@@ -354,6 +361,40 @@ pub struct CloudRuleView {
     pub owner_only: bool,
     pub cooldown: u32,
     pub reply: CloudPayloadView,
+    /// Paused by a moderation case (`restrict_rows`).
+    pub paused: Option<CloudModPaused>,
+}
+
+/// A row a moderation case paused (the config view's `paused`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct CloudModPaused {
+    pub case: String,
+    pub category: String,
+}
+
+/// The moderation step in force on an account (README "Moderation player API",
+/// `AccountModeration`): one sentence on its card and "İtiraz et" while `appeal.can`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudModeration {
+    pub case: String,
+    /// `warn`, `restrict_rows`, `pause_ai`, `suspend` (kept as text).
+    pub step: String,
+    pub category: String,
+    pub at: i64,
+    /// A suspension's end; None: none set (yet).
+    pub until: Option<i64>,
+    pub appeal: CloudModAppeal,
+}
+
+/// Whether, and until when, the player may appeal the step in force.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudModAppeal {
+    pub can: bool,
+    pub until: Option<i64>,
+    /// `none`, `open`, `upheld`, `overturned`.
+    pub state: String,
 }
 
 /// `Account.config`: the account's commands and auto-replies, secrets as their preview only.
@@ -422,6 +463,10 @@ pub struct CloudAccount {
     /// them: then none shows.
     #[serde(default)]
     pub features: Option<CloudAccountFeatures>,
+    /// A moderation step in force (phase B); None in observe mode, when nothing applies, and from
+    /// older services.
+    #[serde(default)]
+    pub moderation: Option<CloudModeration>,
 }
 
 impl CloudAccount {

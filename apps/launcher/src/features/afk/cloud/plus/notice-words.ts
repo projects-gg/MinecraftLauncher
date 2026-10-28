@@ -2,6 +2,7 @@
 // name over one line about what happened, and where "Aç" leads. Pure, so tests read it directly.
 import type { TFunction } from "i18next";
 import type { AfkNotice } from "@/lib/api/social-types";
+import { moderationNoticeText } from "../moderation";
 import { atPhrase } from "./time";
 import type { PlusSection } from "./use-plus";
 import { dealText, formatAmount, goodsText, type Lang } from "./words";
@@ -55,7 +56,7 @@ function dealOf(notice: AfkNotice, lang: Lang): string | null {
  * the cloud's name), never "AFK+" (AFK+ that is off shows nowhere). The assistant's own events say
  * whose assistant it is, as its panel does ("Ahmet_AFK asistanı").
  */
-const PLAIN_EVENTS = new Set(["stopped", "expired", "renewal", "night"]);
+const PLAIN_EVENTS = new Set(["stopped", "expired", "renewal", "night", "moderation"]);
 
 /** A notice in words, or null for one this launcher does not show (an unknown event). */
 export function noticeWords(notice: AfkNotice, t: TFunction, lang: Lang): NoticeWords | null {
@@ -158,6 +159,9 @@ export function noticeWords(notice: AfkNotice, t: TFunction, lang: Lang): Notice
       });
     case "night":
       return { title: fallback, body: t("afkPlus.notices.night"), target: { page: true } };
+    // Moderation (README "Moderation player API" → Notices): one line, the account's card.
+    case "moderation":
+      return at(moderationNoticeText(data, t), { page: true });
     default:
       return null;
   }

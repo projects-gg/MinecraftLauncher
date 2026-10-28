@@ -124,6 +124,7 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
     text,
     preview: null,
     fp: null,
+    paused: null,
   });
   return {
     v: 1,
@@ -143,6 +144,7 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
               text: null,
               preview: "/login ******",
               fp: "KEPTKEPTKEPTKEPT",
+              paused: null,
             },
             plain("c2", "join", "/warp maden"),
             plain("c3", "interval", "/afk"),
@@ -159,6 +161,7 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
         ownerOnly: false,
         cooldown: 30,
         reply: { secret: true, text: null, preview: "/login ******", fp: "SITESITESITESITE" },
+        paused: null,
       },
       {
         id: "r2",
@@ -169,6 +172,7 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
         ownerOnly: false,
         cooldown: 60,
         reply: { secret: false, text: "Selam! Şu an AFK'yım.", preview: null, fp: null },
+        paused: null,
       },
       // With the cloud features: a rule whose reply names the sender and a part of its pattern.
       ...(featScenario === "off"
@@ -188,6 +192,7 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
                 preview: null,
                 fp: null,
               },
+              paused: null,
             },
           ]),
     ],
@@ -242,12 +247,68 @@ function account(
     plusUntil: null,
     ai: null,
     features: withMovement(id),
+    moderation: null,
     ...overrides,
   };
 }
 
+// Moderation (README "Moderation player API"): `&mod=warn|rows|suspend|appealed` gives the first
+// account a step in force (`&mod=refuse` turns a save away instead); without it nothing applies,
+// as in observe mode.
+const MOD_CASE = "mc_01JBQ7XK2M9RPV4TNW8HD3CFGZ";
+function withModeration(accounts: CloudAccount[]): CloudAccount[] {
+  const mod = param("mod");
+  const first = accounts[0];
+  if (!first || !["warn", "rows", "suspend", "appealed"].includes(mod ?? "")) return accounts;
+  const at = nowSecs() - 3 * 3_600;
+  const moderation = {
+    case: MOD_CASE,
+    step: mod === "rows" ? "restrict_rows" : mod === "suspend" ? "suspend" : "warn",
+    category: mod === "suspend" ? "scam" : "advertising",
+    at,
+    until: null,
+    appeal:
+      mod === "appealed"
+        ? { can: false, until: at + 7 * DAY, state: "open" }
+        : { can: true, until: at + 7 * DAY, state: "none" },
+  };
+  const next: CloudAccount = { ...first, moderation };
+  if (mod === "suspend") {
+    next.hold = {
+      kind: "suspended",
+      until: null,
+      reason: "abuse",
+      case: MOD_CASE,
+      category: "scam",
+      auto: true,
+    };
+    next.live = { state: "stopped", since: at, reason: null, attempt: null, retryAt: null };
+    // The service closes renewal while an account is suspended.
+    next.renewal = { ...first.renewal, open: false };
+  }
+  if (mod === "rows") {
+    next.config = {
+      ...first.config,
+      commands: first.config.commands.map((row) =>
+        row.id === "c2"
+          ? {
+              ...row,
+              text: "play.ornekmc.net adresine gelin",
+              paused: { case: MOD_CASE, category: "advertising" },
+            }
+          : row,
+      ),
+    };
+  }
+  return [next, ...accounts.slice(1)];
+}
+
 function initialAccounts(which: Scenario): CloudAccount[] {
   if (!["accounts", "expired", "paused"].includes(which)) return [];
+  return withModeration(baseAccounts(which));
+}
+
+function baseAccounts(which: Scenario): CloudAccount[] {
   return withPlus(plainAccounts(which), () =>
     account(PLUS_ID, PLUS_NAME, "play.projects.gg", 0, {
       ...plusAccountParts(),
@@ -691,6 +752,13 @@ export const mockCloudApi: CloudApi = {
     await delay(400);
     const current = find(id);
     if (edit.rev !== current.rev) return { kind: "conflict", account: current };
+    // README "Saving": `&mod=refuse` turns away the second command as a clear advertising hit.
+    if (param("mod") === "refuse" && edit.config) {
+      return {
+        kind: "invalid",
+        issues: [{ place: "commands", index: 1, field: "text", problem: "content:advertising" }],
+      };
+    }
     const serverChanged =
       edit.server !== null &&
       (edit.server.host !== current.server.host || edit.server.port !== current.server.port);
