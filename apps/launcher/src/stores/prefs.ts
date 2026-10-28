@@ -32,6 +32,12 @@ interface PrefsState {
   language: LanguageChoice;
   selectedInstanceId: string | null;
   autoJoin: boolean;
+  /**
+   * AUTOJOIN: where each instance goes on Projects after the lobby's login (instance id → Studio's
+   * sub-server id, "play.projects.gg → SkyBlock"); missing: the lobby. Kept per instance: the pick
+   * belongs to the address beside it.
+   */
+  autoJoinRoutes: Record<string, string>;
   onGameStart: GameStartBehavior;
   startOnBoot: boolean;
   closeBehavior: CloseBehavior;
@@ -77,13 +83,15 @@ interface PrefsState {
   set: <K extends keyof PrefValues>(key: K, value: PrefValues[K]) => void;
   selectInstance: (id: string) => void;
   setAutoJoin: (on: boolean) => void;
+  /** AUTOJOIN: the instance's sub-server (its id), or `null` for the lobby. */
+  setAutoJoinRoute: (instanceId: string, subServer: string | null) => void;
   /** The player's own switch (Settings, the palette, a toast's button): marks `perfTouched`. */
   setPerformanceMode: (on: boolean) => void;
 }
 
 export type PrefValues = Omit<
   PrefsState,
-  "set" | "selectInstance" | "setAutoJoin" | "setPerformanceMode"
+  "set" | "selectInstance" | "setAutoJoin" | "setAutoJoinRoute" | "setPerformanceMode"
 >;
 
 export const usePrefs = create<PrefsState>()(
@@ -98,6 +106,7 @@ export const usePrefs = create<PrefsState>()(
       language: "auto",
       selectedInstanceId: null,
       autoJoin: true,
+      autoJoinRoutes: {},
       onGameStart: "minimize",
       startOnBoot: false,
       closeBehavior: "quit",
@@ -124,6 +133,13 @@ export const usePrefs = create<PrefsState>()(
       set: (key, value) => set({ [key]: value } as Partial<PrefsState>),
       selectInstance: (selectedInstanceId) => set({ selectedInstanceId }),
       setAutoJoin: (autoJoin) => set({ autoJoin }),
+      setAutoJoinRoute: (instanceId, subServer) =>
+        set((state) => {
+          const { [instanceId]: _previous, ...rest } = state.autoJoinRoutes ?? {};
+          return {
+            autoJoinRoutes: subServer === null ? rest : { ...rest, [instanceId]: subServer },
+          };
+        }),
       setPerformanceMode: (performanceMode) => set({ performanceMode, perfTouched: true }),
     }),
     { name: "pl.prefs", version: 4, migrate: migratePrefs },

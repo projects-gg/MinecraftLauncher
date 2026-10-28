@@ -203,6 +203,12 @@ pub struct LaunchSettings {
     /// back to the selected one.
     #[serde(default)]
     pub account: Option<String>,
+    /// AUTOJOIN: the Projects sub-server picked beside "Doğrudan sunucuya bağlan" for this
+    /// instance (its id; none: the lobby). Its command comes from the signed config, and the game
+    /// gets it only when OYNA joins the instance's own server with our overlay mod in place
+    /// (`pl_overlay::route_pick`).
+    #[serde(default)]
+    pub route: Option<String>,
 }
 
 /// One line of the running game's log, emitted as the `game-log` event.
@@ -1205,6 +1211,34 @@ async fn prepare_and_spawn(
         auto_join,
         resolved.supports_quick_play(),
     );
+    // AUTOJOIN: the Projects sub-server picked beside "Doğrudan sunucuya bağlan", only for OYNA to
+    // the instance's own server with our overlay mod in place; the mod sends its command once,
+    // after the lobby says its login is done. The command comes from the signed config.
+    let joins_own_server = settings.quick_play.is_none()
+        && auto_join
+        && matches!(options.quick_play, Some(QuickPlay::Multiplayer { .. }));
+    if joins_own_server
+        && overlay_mod.ours
+        && settings.route.is_some()
+        && let Ok(snapshot) = state.content.load_cached().await
+        && let Some(sub) = pl_overlay::route_pick(pl_overlay::RouteLaunch {
+            config: &snapshot.config,
+            instance_server: instance
+                .auto_join
+                .as_ref()
+                .map(|server| server.host.as_str()),
+            joins_own_server,
+            our_mod: overlay_mod.ours,
+            pick: settings.route.as_deref(),
+        })
+        // "Yalnız testçiler": only while the beta program says this player is in it.
+        && (!sub.testers_only || crate::commands::subservers::is_tester(state).await)
+    {
+        tracing::info!("the overlay switches to the picked sub-server after the lobby's login");
+        options
+            .launcher_jvm_args
+            .push(pl_overlay::route_jvm_arg(&sub.name, &sub.command));
+    }
     // A world (OVL-FIX): our own overlay opens it once the title screen drew a frame; without it,
     // a mod that breaks quick play into worlds keeps the game on its title screen, said once.
     if let Some(QuickPlay::Singleplayer { world }) = options.quick_play.clone() {
