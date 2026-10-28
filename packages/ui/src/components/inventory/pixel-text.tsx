@@ -6,7 +6,7 @@
 // system's), as before.
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "../../lib/cn";
-import { canDraw, clipText, LINE_BOX, scrambleText, textAdvance, textPath } from "./pixel-font";
+import { canDraw, clipText, LINE_BOX, textAdvance, textPath } from "./pixel-font";
 import { shadowOf, type TextRun } from "./text";
 
 export interface PixelLineProps {
@@ -81,13 +81,12 @@ export interface PixelRunsProps {
  * as the game's font draws them: each part's drop shadow a quarter of its colour, all shadows
  * under all letters; bold drawn twice a pixel apart, a pixel more a letter; the strikethrough and
  * the underline a pixel high from a pixel before the part to its end (rows 3.5 and 8); obfuscated
- * letters one still frame of the game's scramble. A part with a character the bitmaps lack sets the
+ * letters as they are, still. A part with a character the bitmaps lack sets the
  * line in the font instead, as PixelLine does.
  */
 export function PixelRuns({ runs, className, style }: PixelRunsProps) {
-  const shown = runs.map((run) =>
-    run.obfuscated ? { ...run, text: scrambleText(run.text) } : run,
-  );
+  // Obfuscated (§k) letters stay as they are, still: a view never moves without end.
+  const shown = runs;
   const text = runs.map((run) => run.text).join("");
   if (!shown.every((run) => canDraw(run.text))) {
     return (

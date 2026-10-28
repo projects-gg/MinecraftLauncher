@@ -12,11 +12,7 @@ import {
 } from "@pl/ui/items";
 import { describe, expect, it } from "vitest";
 import { SAMPLE_HEADS } from "../../../../packages/ui/src/components/inventory/fixtures";
-import {
-  scrambleText,
-  textAdvance,
-  wrapRuns,
-} from "../../../../packages/ui/src/components/inventory/pixel-font";
+import { textAdvance, wrapRuns } from "../../../../packages/ui/src/components/inventory/pixel-font";
 import * as rules from "../../../../packages/ui/src/components/inventory/rules";
 import {
   readableColor,
@@ -266,11 +262,6 @@ describe("the server's looks", () => {
       [{ text: "satır", color: "#ff5555", bold: true }],
     ]);
     expect(textAdvance("ab", true)).toBe(textAdvance("ab") + 2);
-    // Obfuscated: a still frame, each letter one of the same width, spaces kept.
-    const scrambled = scrambleText("gizli ödül");
-    expect(scrambled).toBe(scrambleText("gizli ödül"));
-    expect(scrambled[5]).toBe(" ");
-    expect(textAdvance(scrambled)).toBe(textAdvance("gizli ödül"));
   });
 
   it("maps the machine's looks and skin into the view's item", () => {

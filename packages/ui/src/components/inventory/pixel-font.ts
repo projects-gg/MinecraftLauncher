@@ -98,40 +98,6 @@ export function wrapRuns<T extends StyledText>(runs: T[], width: number): T[][] 
   });
 }
 
-// The letters of each width, for the game's obfuscated text (`§k`).
-let byAdvance: Map<number, string[]> | undefined;
-
-/**
- * Obfuscated text as one still frame of the game's: each letter another of the same width (the
- * game changes them every frame; a view never moves without end), spaces kept. The same text
- * scrambles the same way every time.
- */
-export function scrambleText(text: string): string {
-  if (!byAdvance) {
-    byAdvance = new Map();
-    for (const [char, glyph] of Object.entries(PIXEL_GLYPHS)) {
-      const advance = glyph[0];
-      const code = char.codePointAt(0) ?? 0;
-      // Printable ASCII only: every one of them has pixels and draws in any font.
-      if (advance === undefined || code < 0x21 || code > 0x7e) continue;
-      const list = byAdvance.get(advance) ?? [];
-      list.push(char);
-      byAdvance.set(advance, list);
-    }
-  }
-  let out = "";
-  let i = 0;
-  for (const char of text) {
-    const same = char === " " ? undefined : byAdvance.get(glyphAdvance(char));
-    const pick = same?.length
-      ? same[((char.codePointAt(0) ?? 0) * 31 + i * 17) % same.length]
-      : undefined;
-    out += pick ?? char;
-    i++;
-  }
-  return out;
-}
-
 /** Whether every character of the text has pixels (otherwise the line falls back to the font). */
 export function canDraw(text: string): boolean {
   for (const char of text) if (!PIXEL_GLYPHS[char]) return false;

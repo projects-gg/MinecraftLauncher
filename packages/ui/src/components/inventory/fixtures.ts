@@ -242,8 +242,8 @@ export const SAMPLE_HEADS: WinFrame = {
         [7, "cn"],
         [5, "c"],
       ],
-      lore: ["Yakında"],
-      loreStyle: [[[7, "8m"]]],
+      lore: ["Stokta yok"],
+      loreStyle: [[[10, "8m"]]],
     }),
   ],
 };
