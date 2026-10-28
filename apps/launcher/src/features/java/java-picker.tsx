@@ -66,7 +66,8 @@ function Row({
       className={cn(
         "group relative flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-3 py-2 text-left outline-none ring-1 ring-white/[0.07] transition-[background-color,box-shadow] duration-150",
         "hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300",
-        "data-[state=checked]:bg-gold-500/[0.07] data-[state=checked]:ring-gold-400/40",
+        // The chosen row a quiet plate, the gold only on its dot (design.md §6: one gold).
+        "data-[state=checked]:bg-white/[0.06] data-[state=checked]:ring-white/25",
       )}
     >
       <span

@@ -192,8 +192,9 @@ const toggleTones = {
   warn: "bg-gold-500/22 text-gold-200",
   info: "bg-white/10 text-bone-100",
   neutral: "bg-white/7 text-ash-300",
-  // One choice of several (the console's kind filters): the app's gold for "chosen".
-  chosen: "bg-gold-500/18 text-gold-200",
+  // One choice of several (the console's kind filters): a chosen segment's quiet plate, the gold
+  // stays the main action's (design.md §6).
+  chosen: "bg-white/16 text-bone-50",
 } as const;
 
 /** Chamfered on/off chip (log level filters). The focus ring is a hollow chamfered layer: the
