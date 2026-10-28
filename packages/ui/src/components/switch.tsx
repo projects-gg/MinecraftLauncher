@@ -13,6 +13,7 @@ export function Switch({
   className,
   id: idProp,
   describedBy,
+  tone = "gold",
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
@@ -27,6 +28,11 @@ export function Switch({
   id?: string;
   /** The id of the row's help line, read with the switch's name. */
   describedBy?: string;
+  /**
+   * "bone": the track is bone when on, for a switch beside the screen's gold action (the command
+   * bar's, next to OYNA), so the one loud thing stays the one gold.
+   */
+  tone?: "gold" | "bone";
 }) {
   const generatedId = useId();
   const id = idProp ?? generatedId;
@@ -44,7 +50,9 @@ export function Switch({
           // Under the pointer the track lifts a little, so a switch reads as something to press;
           // in a `switch-row` it also lifts while the pointer is on its words (its label).
           "data-[state=unchecked]:enabled:hovered:bg-[color-mix(in_oklab,var(--color-obsidian-700),white_7%)] data-[state=unchecked]:enabled:hovered:ring-white/20",
-          "data-[state=checked]:bg-gold-500 data-[state=checked]:ring-gold-400/60 data-[state=checked]:enabled:hovered:bg-gold-400",
+          tone === "bone"
+            ? "data-[state=checked]:bg-bone-100 data-[state=checked]:ring-white/30 data-[state=checked]:enabled:hovered:bg-bone-50"
+            : "data-[state=checked]:bg-gold-500 data-[state=checked]:ring-gold-400/60 data-[state=checked]:enabled:hovered:bg-gold-400",
           "disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
@@ -52,7 +60,10 @@ export function Switch({
         <RadixSwitch.Thumb
           className={cn(
             "block size-[14px] origin-left translate-x-[3px] rounded-full bg-bone-100 shadow-[0_1px_3px_rgb(10_9_12/0.6)] transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
-            "group-active:scale-x-[1.18] data-[state=checked]:origin-right data-[state=checked]:translate-x-[17px] data-[state=checked]:bg-gold-ink",
+            "group-active:scale-x-[1.18] data-[state=checked]:origin-right data-[state=checked]:translate-x-[17px]",
+            tone === "bone"
+              ? "data-[state=checked]:bg-obsidian-900"
+              : "data-[state=checked]:bg-gold-ink",
           )}
         />
       </RadixSwitch.Root>

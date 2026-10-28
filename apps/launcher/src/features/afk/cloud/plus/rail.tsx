@@ -1,7 +1,7 @@
 // The AFK+ panel's left column, the site's rail in the launcher's words: the assistant's state in
-// one sentence with its one control (Durdur / Başlat), the sections with what waits in them (gold
-// figures, no badges), and the AI allowance: two bars, when each renews, about how many replies
-// are left. The bars move only when a number changes.
+// one sentence with its one control (Durdur / Başlat), the sections with what waits in them (bone
+// figures, no badges: the gold is the panel's save button's), and the AI allowance: two bars, when
+// each renews, about how many replies are left. The bars move only when a number changes.
 import { ArrowSquareOut, Play, Stop } from "@phosphor-icons/react";
 import { Button, cn, enter, leave, toast, usePressGuard } from "@pl/ui";
 import type { TFunction } from "i18next";
@@ -189,7 +189,7 @@ function Nav({
                 ) : null}
                 <span className="truncate">{t(`afkPlus.panel.sections.${value}`)}</span>
                 {count > 0 ? (
-                  <span className="font-display text-[12.5px] font-semibold text-gold-200 tabular-nums">
+                  <span className="font-display text-[12.5px] font-semibold text-bone-100 tabular-nums">
                     {count}
                   </span>
                 ) : null}

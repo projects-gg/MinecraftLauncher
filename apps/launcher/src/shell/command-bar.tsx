@@ -18,7 +18,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountFace, type FaceAccount } from "@/features/accounts/account-face";
 import { useAccounts } from "@/features/accounts/use-accounts";
@@ -564,20 +564,61 @@ function StatusArea({
             </div>
             <div className="flex shrink-0 items-center">
               {selected?.autoJoin ? (
-                <Switch
+                <AutoJoinSwitch
                   checked={autoJoin}
                   onCheckedChange={setAutoJoin}
-                  label={t("play.autoJoin")}
-                  description={selected.autoJoin}
-                  // A narrow bar (1024 px): its words take two lines and the address goes (it is in
-                  // the instance's settings), so "who is in game" keeps a whole name (sixth look).
-                  className="shrink-0 @max-[560px]/bar:max-w-[172px] @max-[560px]/bar:[&_label>span+span]:hidden"
+                  address={selected.autoJoin}
                 />
               ) : null}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * "Doğrudan sunucuya bağlan" beside OYNA: a bone switch, so OYNA stays the bar's one gold, and its
+ * words on one line (design.md §3; QA-TASTE). A narrow bar (1024 px) says it shorter and drops the
+ * address (it is in the instance's settings), so "who is in game" keeps a whole name.
+ */
+function AutoJoinSwitch({
+  checked,
+  onCheckedChange,
+  address,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  address: string;
+}) {
+  const { t } = useTranslation();
+  const id = useId();
+  return (
+    <div className="flex shrink-0 items-center gap-3">
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        label={t("play.autoJoin")}
+        hideLabel
+        tone="bone"
+        describedBy={`${id}-address`}
+      />
+      <label htmlFor={id} className="cursor-pointer whitespace-nowrap select-none">
+        <span className="block text-[13px] font-medium text-bone-100 @max-[560px]/bar:hidden">
+          {t("play.autoJoin")}
+        </span>
+        <span className="hidden text-[13px] font-medium text-bone-100 @max-[560px]/bar:block">
+          {t("qaFix.bar.autoJoinShort")}
+        </span>
+        <span
+          id={`${id}-address`}
+          className="block text-[12px] text-ash-400 @max-[560px]/bar:hidden"
+        >
+          {address}
+        </span>
+      </label>
     </div>
   );
 }

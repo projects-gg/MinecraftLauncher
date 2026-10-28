@@ -291,7 +291,8 @@ export function CreateInstanceDialog({
                     key={key}
                     className={cn(
                       "cursor-pointer rounded-md p-1 transition-[background-color,box-shadow] hover:bg-white/8 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-gold-300",
-                      icon === key && "bg-white/8 ring-2 ring-gold-400",
+                      // The chosen one as a segment's quiet plate: gold stays the main button's.
+                      icon === key && "bg-white/12 ring-2 ring-bone-100/70",
                     )}
                   >
                     <input

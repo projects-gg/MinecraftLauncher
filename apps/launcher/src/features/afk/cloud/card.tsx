@@ -279,7 +279,7 @@ function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => vo
         {brief}
       </span>
       {approvals > 0 ? (
-        <span className="shrink-0 font-display text-[12.5px] font-semibold text-gold-200 tabular-nums">
+        <span className="shrink-0 font-display text-[12.5px] font-semibold text-bone-50 tabular-nums">
           {t("afkPlus.card.approvals", { count: approvals })}
         </span>
       ) : null}

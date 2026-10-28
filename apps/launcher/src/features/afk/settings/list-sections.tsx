@@ -388,8 +388,6 @@ function TaskCard({
           repeat on its own switch, both on the card's right edge (three like switches overlapped). */}
       <SettingRow title={t("afkPanel.task.onJoin")}>
         <Segmented<"every" | "first" | "never">
-          // A quiet plate: gold stays the save button's (the sixth look).
-          className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
           value={join}
           onValueChange={(v) => set({ onLogin: v === "every", onFirstLogin: v === "first" })}
           label={t("afkPanel.task.onJoin")}

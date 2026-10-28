@@ -276,8 +276,6 @@ export function CopyDialog({
               </p>
               {chosen.length > 1 ? (
                 <Segmented
-                  // A quiet plate: gold stays "Kopyala"'s.
-                  className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
                   value={mode}
                   onValueChange={(next) => setMode(next as SecretMode)}
                   label={t("cloudAfkFeat.copy.secrets")}
