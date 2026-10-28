@@ -536,7 +536,7 @@ export function CloudConsole({
             placeholder={
               canType
                 ? t("cloudAfk.console.input")
-                : stale && account.desired === "run"
+                : stale
                   ? t("cloudStale.console.offline")
                   : t("cloudAfk.console.offline")
             }
@@ -550,7 +550,9 @@ export function CloudConsole({
               setSendError(null);
             }}
             onKeyDown={onKeyDown}
-            className="h-[34px] disabled:opacity-60"
+            // Shut, its words say why: a still field rather than a faded one, so they stay
+            // readable (a placeholder's ash-500 under 60 % read at about 2:1).
+            className="h-[34px] disabled:border-white/6 disabled:bg-white/[0.02] disabled:opacity-100 disabled:placeholder:text-ash-400"
           />
           {canType ? (
             <IconButton
@@ -569,7 +571,8 @@ export function CloudConsole({
             >
               {t("afkClear.fixPassword")}
             </Button>
-          ) : account.desired !== "run" || account.hold?.kind === "cause" ? (
+          ) : !stale && (account.desired !== "run" || account.hold?.kind === "cause") ? (
+            // Its machine out of reach, a start waits as on the card (CLOUD-STALE).
             <Button variant="primary" onClick={() => onStart(account)}>
               {t("cloudAfk.actions.start")}
             </Button>

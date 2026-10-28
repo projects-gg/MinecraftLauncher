@@ -42,6 +42,7 @@ import {
   type MenuItem,
   PixelBrackets,
   SwapLabel,
+  Tooltip,
   useMotionPrefs,
   usePressGuard,
 } from "@pl/ui";
@@ -159,34 +160,50 @@ function useTwinMove(account: CloudAccount, here: AfkAccount | null, place: Twin
  * The line of an account this computer has too: its move to the other place in one plain phrase,
  * the place's mark before it ("Bu bilgisayarda çalıştır" stops the cloud one first; "Bulutta
  * çalıştır" the one here). A quiet text button, not gold: the card's gold is its main button.
+ * `waits`: the cloud's machine is out of reach, so neither place can take over (CLOUD-STALE).
  */
-function PlaceRow({ move }: { move: NonNullable<ReturnType<typeof useTwinMove>> }) {
+function PlaceRow({
+  move,
+  waits,
+}: {
+  move: NonNullable<ReturnType<typeof useTwinMove>>;
+  waits: boolean;
+}) {
+  const { t } = useTranslation();
   const Mark = move.toHere ? Desktop : Cloud;
   // A button's shape: as words with a place mark under the state lines it read as one more of
   // them, where the account runs now (AFK-CLEAR look 2).
   return (
     <div className="mt-2 flex pl-[23px]">
-      <Button
-        size="sm"
-        variant="secondary"
-        icon={<Mark size={14} weight="bold" aria-hidden className="text-ash-300" />}
-        disabled={move.busy}
-        onClick={() => void move.run()}
-      >
-        {move.label}
-      </Button>
+      {/* A disabled button takes no pointer: the reason hangs on its wrapper (afk-page.tsx). */}
+      <Tooltip content={t("cloudStale.waits")} disabled={!waits}>
+        <span className="inline-flex">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Mark size={14} weight="bold" aria-hidden className="text-ash-300" />}
+            disabled={move.busy || waits}
+            onClick={() => void move.run()}
+          >
+            {move.label}
+          </Button>
+        </span>
+      </Tooltip>
     </div>
   );
 }
 
 function PrimaryButton({
   account,
+  stale,
   onStart,
   onStop,
   onFixPassword,
   className,
 }: {
   account: CloudAccount;
+  /** Its machine is out of reach (CLOUD-STALE). */
+  stale: boolean;
   onStart: () => void;
   onStop: () => void;
   onFixPassword: () => void;
@@ -243,21 +260,30 @@ function PrimaryButton({
         .open("renew", account.id)
         .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
   };
+  // Its machine out of reach: a start or a stop could not take effect there (its client keeps
+  // running offline), so it waits until the machine is back (CLOUD-STALE).
+  const waits = stale && (action === "start" || action === "stop");
   return (
-    <Button
-      size="sm"
-      variant={action === "stop" || fixFirst ? "secondary" : "primary"}
-      icon={icons[action]}
-      aria-disabled={guard.armed ? undefined : true}
-      onClick={press}
-      {...guard.handlers}
-      className={className}
-    >
-      <SwapLabel
-        labels={ORDER.map((a) => labels[a as Exclude<CloudPrimary, "none">])}
-        active={ORDER.indexOf(action)}
-      />
-    </Button>
+    // A disabled button takes no pointer: the reason hangs on its wrapper (afk-page.tsx).
+    <Tooltip content={t("cloudStale.waits")} disabled={!waits}>
+      <span className={cn("inline-flex", className)}>
+        <Button
+          size="sm"
+          variant={action === "stop" || fixFirst ? "secondary" : "primary"}
+          icon={icons[action]}
+          disabled={waits}
+          aria-disabled={guard.armed ? undefined : true}
+          onClick={press}
+          {...guard.handlers}
+          className="w-full"
+        >
+          <SwapLabel
+            labels={ORDER.map((a) => labels[a as Exclude<CloudPrimary, "none">])}
+            active={ORDER.indexOf(action)}
+          />
+        </Button>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -438,13 +464,20 @@ export function CloudCard({
     ...(local
       ? hereItems
       : [
+          // Its machine out of reach, what needs the machine waits, as on the card (CLOUD-STALE).
           action === "start"
-            ? { label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }
+            ? {
+                label: t("cloudAfk.actions.start"),
+                icon: <Play size={16} />,
+                onSelect: onStart,
+                disabled: stale,
+              }
             : action === "stop"
               ? {
                   label: t("cloudAfk.actions.stop"),
                   icon: <StopCircle size={16} />,
                   onSelect: onStop,
+                  disabled: stale,
                 }
               : action === "fixPassword"
                 ? {
@@ -463,6 +496,7 @@ export function CloudCard({
                   label: t("cloudAfk.actions.reconnect"),
                   icon: <ArrowsClockwise size={16} />,
                   onSelect: onRestart,
+                  disabled: stale,
                 },
               ]
             : []),
@@ -473,6 +507,7 @@ export function CloudCard({
             label: move.label,
             icon: move.toHere ? <Desktop size={16} /> : <Cloud size={16} />,
             onSelect: () => void move.run(),
+            disabled: stale,
           },
         ]
       : []),
@@ -674,7 +709,7 @@ export function CloudCard({
           {local ? <ClientRow account={local} /> : null}
           <TimeRow account={account} skewMs={skewMs} here={local !== null} />
           <ModerationLine account={account} />
-          {move ? <PlaceRow move={move} /> : null}
+          {move ? <PlaceRow move={move} waits={stale} /> : null}
           {onPlus ? <PlusLine account={account} onOpen={onPlus} /> : null}
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
@@ -684,6 +719,7 @@ export function CloudCard({
             ) : (
               <PrimaryButton
                 account={account}
+                stale={stale}
                 onStart={onStart}
                 onStop={onStop}
                 onFixPassword={onSettings}

@@ -346,10 +346,11 @@ export function CloudSection({
             <span>{maintenance}</span>
           </motion.p>
         ) : unreachable ? (
-          <motion.p
+          <motion.div
             key="unreachable"
             role="status"
-            // The same quiet panel; a state, not an error, so its mark stays ash.
+            // The same quiet panel; a state, not an error, so its mark stays ash. Nothing reads on
+            // a timer: the one way to ask again is here, where the problem is named.
             className="mb-3 flex items-start gap-2 rounded-[var(--radius-panel)] bg-white/[0.035] px-3.5 py-2.5 text-[12.5px] text-bone-100 ring-1 ring-white/7"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: enter(0.2) }}
@@ -361,8 +362,16 @@ export function CloudSection({
               className="mt-px shrink-0 text-ash-300"
               aria-hidden
             />
-            <span>{t("cloudStale.line")}</span>
-          </motion.p>
+            <span className="min-w-0 flex-1">{t("cloudStale.line")}</span>
+            <button
+              type="button"
+              disabled={isFetching}
+              onClick={() => void refetch()}
+              className="shrink-0 cursor-pointer rounded-sm font-medium text-bone-100 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-default disabled:opacity-45"
+            >
+              {t("common.retry")}
+            </button>
+          </motion.div>
         ) : null}
       </AnimatePresence>
 

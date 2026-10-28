@@ -168,42 +168,42 @@ describe("an account's reach", () => {
     expect(reachOf(account(), withAway(known, "kz2", AT + 1))).toEqual({ stale: false });
   });
 
-  it("never covers the service's own words: a hold, an expired account", () => {
+  it("never covers the service's own words: a hold, an expired account, one the player stopped", () => {
     const away = withAway(known, "kz1", AT + 1);
     const held = account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null } });
     expect(reachOf(held, away)).toEqual({ stale: false });
     expect(reachOf(account({ expired: true }), away)).toEqual({ stale: false });
+    const stopped = { ...RUNNING, state: "stopped" };
+    expect(reachOf(account({ desired: "stop", live: stopped }), away)).toEqual({ stale: false });
+    // Stopped while the machine was away: its client may still be in game.
+    expect(reachOf(account({ desired: "stop" }), away).stale).toBe(true);
   });
 });
 
 describe("the last known line", () => {
-  it("names the state at its clock time, with the ending the time takes", () => {
-    expect(lastKnownText({ live: RUNNING, at: AT }, t, AT)).toBe("Son bilinen: 14:05'te oyunda");
+  it("says the state in the past at its clock time, with the ending the time takes", () => {
+    expect(lastKnownText({ live: RUNNING, at: AT }, t, AT)).toBe("En son 14:05'te oyundaydı");
     const three = new Date(2026, 9, 28, 15, 0).getTime();
     const queued = { ...RUNNING, state: "queued" };
-    expect(lastKnownText({ live: queued, at: three }, t, three)).toBe(
-      "Son bilinen: 15:00'te sırada",
-    );
+    expect(lastKnownText({ live: queued, at: three }, t, three)).toBe("En son 15:00'te sıradaydı");
   });
 
   it("reads a wait between attempts as connecting", () => {
     const waiting = { ...RUNNING, state: "waiting", attempt: 2, retryAt: NOW + 14 };
-    expect(lastKnownText({ live: waiting, at: AT }, t, AT)).toBe(
-      "Son bilinen: 14:05'te bağlanıyor",
-    );
+    expect(lastKnownText({ live: waiting, at: AT }, t, AT)).toBe("En son 14:05'te bağlanıyordu");
   });
 
   it("says the date of another day", () => {
     const tomorrow = AT + 86_400_000;
     expect(lastKnownText({ live: RUNNING, at: AT }, t, tomorrow)).toBe(
-      "Son bilinen: 28 Ekim 14:05'te oyunda",
+      "En son 28 Ekim 14:05'te oyundaydı",
     );
   });
 
-  it("says the state cannot be had when nothing is known", () => {
-    expect(lastKnownText(null, t, AT)).toBe("Durumu şu an alınamıyor");
+  it("says the state is not known when nothing is", () => {
+    expect(lastKnownText(null, t, AT)).toBe("Durumu bilinmiyor");
     const odd = { ...RUNNING, state: "unknown" };
-    expect(lastKnownText({ live: odd, at: AT }, t, AT)).toBe("Durumu şu an alınamıyor");
+    expect(lastKnownText({ live: odd, at: AT }, t, AT)).toBe("Durumu bilinmiyor");
   });
 
   it("is still and dim on the state line, the hold's words winning", () => {
@@ -211,7 +211,7 @@ describe("the last known line", () => {
     const status = cloudStatus(account(), AT, t, "tr", stale);
     expect(status).toMatchObject({ signal: "idle", tone: "stale", nextChangeMs: null });
     // Its day is today's or not by the real clock: the time and the ending stay.
-    expect(status.text).toMatch(/^Son bilinen: .*14:05'te oyunda$/);
+    expect(status.text).toMatch(/^En son .*14:05'te oyundaydı$/);
     const held = account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null } });
     expect(cloudStatus(held, AT, t, "tr", stale).text).toBe("Durdu: Giriş şifresi yanlış");
   });

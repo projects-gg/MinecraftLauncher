@@ -100,10 +100,12 @@ export function withBack(state: ReachState, host: string): ReachState {
 
 /**
  * What may be said of the account's live state now. A hold or an expired account says the
- * service's own words, which never need the machine.
+ * service's own words, which never need the machine, and so does one the player stopped that was
+ * stopped (nothing runs it, whatever the machine does).
  */
 export function reachOf(account: CloudAccount, state: ReachState): AccountReach {
   if (account.hold || account.expired) return LIVE_REACH;
+  if (account.desired !== "run" && account.live.state === "stopped") return LIVE_REACH;
   const away = account.host !== null && state.away[account.host] !== undefined;
   if (isKnown(account.live) && !away) return LIVE_REACH;
   return { stale: true, known: state.known[account.id] ?? null };
@@ -119,12 +121,12 @@ const LAST_KIND: Record<string, "running" | "connecting" | "queued" | "stopped">
 };
 
 /**
- * A last known state in words, with its clock time ("Son bilinen: 14:05'te oyunda"; another day's
- * with its date, "27 Ekim 14:05'te"); with nothing known, the words of a state that cannot be had.
+ * A last known state in words, in the past with its clock time ("En son 14:05'te oyundaydı";
+ * another day's with its date, "27 Ekim 14:05'te"); with nothing known, "Durumu bilinmiyor".
  */
 export function lastKnownText(known: KnownLive | null, t: TFunction, nowMs = Date.now()): string {
   const kind = known ? LAST_KIND[known.live.state] : undefined;
-  if (!known || !kind) return t("cloudAfk.state.unknown");
+  if (!known || !kind) return t("cloudStale.unknown");
   const at = new Date(known.at);
   const clock = dateTimeFormat({ hour: "2-digit", minute: "2-digit" }).format(at);
   const today = at.toDateString() === new Date(nowMs).toDateString();
