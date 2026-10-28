@@ -7,7 +7,6 @@ export const enPlayAgain = {
   sameServer: "If both games join the same server, one gets kicked.",
   memory: "Your computer is low on free memory, so the games may stutter.",
   confirm: "Open anyway",
-  confirmPlay: "Play anyway",
   runningHover: "Open another game",
   runningAria: "Playing, open another game",
   othersOne: "{{name}} is playing",

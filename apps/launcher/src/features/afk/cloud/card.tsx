@@ -59,6 +59,7 @@ import { StateLine } from "../state-line";
 import { type CloudAccount, cloudApi } from "./api";
 import { AI_TONE, useAiSentence } from "./plus/rail";
 import { plusAi } from "./plus/types";
+import { firstClause } from "./plus/words";
 import { CloudStateLine } from "./state-line";
 import {
   type CloudPrimary,
@@ -243,14 +244,15 @@ function PrimaryButton({
 
 /**
  * An AFK+ account's line on its card: the assistant's state in one sentence and what waits for the
- * player (approvals in gold); the whole line opens the AFK+ panel.
+ * player (the approvals in bone, their weight sets them apart: gold is never a sentence); the whole
+ * line opens the AFK+ panel.
  */
 function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => void }) {
   const { t } = useTranslation();
   const sentence = useAiSentence(account, true);
   // The row has room for the state only: its first clause ("Kontörün bitti"); the rest ("13:07'de
   // yenilenir") is in the panel's rail and the row's tooltip, never cut mid-word.
-  const brief = sentence.text.split("; ")[0] ?? sentence.text;
+  const brief = firstClause(sentence.text);
   const ai = plusAi(account);
   // A machine that cannot be asked has no current count (the panel shows none either).
   const approvals = ai && ai.state !== "unknown" ? ai.pendingApprovals : 0;

@@ -105,7 +105,7 @@ export const trHelp = {
     modsWarning: "{{count}} mod uyarısı var.",
     modsBlocking: "{{count}} mod sorunu oyunun açılmasını engelliyor.",
     crashNone: "Son 7 günde çökme olmadı.",
-    crashResolved: "Son çökmeden sonra oyun sorunsuz açıldı.",
+    crashResolved: "Son çökmeden sonra oyun hatasız açıldı.",
     /** "Dün: Oyunun belleği yetmedi." (the crash dialog's title for its kind). */
     crashRecent: "{{when}}: {{title}}.",
     /** "Dün: Sodium oyunu çökertmiş olabilir." */

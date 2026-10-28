@@ -12,9 +12,8 @@ export const trPlayAgain = {
   sameServer: "İki oyun aynı sunucuya girerse biri atılır.",
   /** Before any extra game, when the computer's free memory would not hold it (its own line). */
   memory: "Bilgisayarında boş bellek az, oyunlar takılabilir.",
-  /** The answer after "Bir oyun daha aç" (the same verb), and after OYNA ("Oyna" stays "Oyna": §8). */
+  /** The answer to the title's question, after "Bir oyun daha aç" and after OYNA alike. */
   confirm: "Yine de aç",
-  confirmPlay: "Yine de oyna",
   /** OYNA while it says "Oyunda": under the pointer it says what a press does (a verb: third look). */
   runningHover: "Bir oyun daha aç",
   /** OYNA's name for screen readers while it says "Oyunda": what a press does. */

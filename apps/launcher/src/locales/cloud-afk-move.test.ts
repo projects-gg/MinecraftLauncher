@@ -44,9 +44,9 @@ describe("movement texts", () => {
 
   it("use the contract's words", () => {
     expect(trCloudAfkMove.setting.line).toBe(
-      "Açıkken hesap yürüyebilir; düşebilir ya da ölebilir.",
+      "Açıkken hesap yürüyebilir. Düşebilir ya da ölebilir.",
     );
-    expect(enCloudAfkMove.setting.line).toBe("When on, the account can walk; it may fall or die.");
+    expect(enCloudAfkMove.setting.line).toBe("When on, the account can walk. It may fall or die.");
     const { forward, back, left, right, jump, sneak } = trCloudAfkMove.pad;
     expect([forward, back, left, right, jump, sneak]).toEqual([
       "İleri",
@@ -67,7 +67,7 @@ describe("movement texts", () => {
     expect(trCloudAfkMove.noSlot).toBe("Şu an hareket için yer yok.");
     expect(trCloudAfkMove.oneAccount).toBe("Hareket aynı anda yalnız bir hesabında açık olabilir.");
     expect(trCloudAfkMove.timeout).toBe("2 dakikada varamadı, durdu.");
-    expect(enCloudAfkMove.reset).toBe("The account was teleported or respawned; it stopped.");
+    expect(enCloudAfkMove.reset).toBe("The account was teleported or respawned, so it stopped.");
     expect(enCloudAfkMove.dims.end).toBe("The End");
   });
 });

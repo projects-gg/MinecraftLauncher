@@ -1,4 +1,4 @@
-// BETA-GATE: the beta update channel is for the Ar-Ge team while Studio's switch is on; the friends
+// BETA-GATE: the beta update channel is for Ar-Ge members while Studio's switch is on; the friends
 // service decides (pl_social::beta: a role on the Projects Discord, asked of ProBot). Picking
 // "Beta" asks first (`join`); on the beta channel every update look asks again (`keepBeta`), and
 // an answer that says no moves the launcher back to Kararlı with one quiet toast. It never installs

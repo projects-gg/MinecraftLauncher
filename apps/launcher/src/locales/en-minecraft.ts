@@ -2,5 +2,6 @@
 export const enMinecraft = {
   label: "Minecraft",
   readOn: "Read on minecraft.net",
-  notAffiliated: "Not affiliated with Mojang or Minecraft.",
+  notAffiliated:
+    "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.",
 };

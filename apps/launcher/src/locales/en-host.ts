@@ -100,8 +100,8 @@ export const enHost = {
     in: "In the world",
     retry: "Try again",
     rejoin: "Rejoin",
-    missing_one: "Couldn't find {{count}} mod; you may have trouble getting in.",
-    missing_other: "Couldn't find {{count}} mods; you may have trouble getting in.",
+    missing_one: "Couldn't find {{count}} mod. You may have trouble getting in.",
+    missing_other: "Couldn't find {{count}} mods. You may have trouble getting in.",
     copyAction: "Install and join",
     failed: {
       full: "The world is full.",

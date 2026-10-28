@@ -38,7 +38,7 @@ export const enAfkClear = {
     removeHere: "Remove from this PC",
     removeTitle: "Remove {{name}} from this PC?",
     removeBody:
-      "Its settings and saved login commands on this PC are deleted; the 24/7 Cloud account stays as it is. This can't be undone.",
+      "Its settings and saved login commands on this PC are deleted. The 24/7 Cloud account stays as it is. This can't be undone.",
   },
   copy: {
     refused: "The server turned down {{name}}'s password. Fix it first, then copy.",

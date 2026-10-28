@@ -52,7 +52,7 @@ export const trAfkPanel = {
     onJoin: "Ne zaman",
     every: "Her girişte",
     first: "Yalnız ilk girişte",
-    never: "Girişte değil",
+    never: "Yalnız aralıkla",
     neverRuns: "Bu görev hiç çalışmaz: girişte ya da aralıkla çalışmasını seç.",
   },
   /** Under a cloud account's login line after the machine stopped it for a wrong password. */

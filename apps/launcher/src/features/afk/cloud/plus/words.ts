@@ -312,3 +312,12 @@ export function withCase(text: string, kind: TrCase, lang: Lang = currentLang())
 export function amountWithCase(value: number, kind: TrCase, lang: Lang = currentLang()): string {
   return withCase(formatAmount(value, lang), kind, lang);
 }
+
+/**
+ * A state sentence's first clause, for a row that has room for the state only: "Kontörün bitti,
+ * hesabın AFK'da kalıyor" → "Kontörün bitti", "Weekly limit reached. It resets at 04:00" →
+ * "Weekly limit reached" (clauses are parted by a comma or a full stop, never a semicolon).
+ */
+export function firstClause(text: string): string {
+  return text.split(/[,.] /)[0] ?? text;
+}

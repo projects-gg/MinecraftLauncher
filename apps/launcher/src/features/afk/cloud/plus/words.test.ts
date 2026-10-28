@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { enAfkPlus } from "@/locales/en-afkplus";
+import { trAfkPlus } from "@/locales/tr-afkplus";
 import { atPhrase, dayGroup, durationParts, minutesLeft, rangeText, untilPhrase } from "./time";
 import {
   dealText,
   enWords,
+  firstClause,
   formatAmount,
   goodsText,
   parseAmount,
@@ -11,6 +14,27 @@ import {
   trWith,
   trWords,
 } from "./words";
+
+describe("AFK+ state sentences on the card", () => {
+  it("keep their first clause", () => {
+    expect(firstClause("Kontörün bitti, hesabın AFK'da kalıyor")).toBe("Kontörün bitti");
+    expect(firstClause("Weekly limit reached. It resets at 04:00")).toBe("Weekly limit reached");
+    expect(firstClause("Asistan çalışıyor")).toBe("Asistan çalışıyor");
+    // A number's own dot or comma is not a clause's end.
+    expect(firstClause("Elytra 37.500'e alındı")).toBe("Elytra 37.500'e alındı");
+  });
+
+  it("read as a state in both languages", () => {
+    for (const ai of [trAfkPlus.ai, enAfkPlus.ai]) {
+      for (const [key, text] of Object.entries(ai)) {
+        if (typeof text !== "string") continue;
+        const brief = firstClause(text.replace("{{when}}", "18:20'de"));
+        expect(brief.length, key).toBeGreaterThan(3);
+        expect(brief, key).not.toMatch(/[,.;:]$/);
+      }
+    }
+  });
+});
 
 describe("AFK+ amounts", () => {
   it("are grouped by the language", () => {

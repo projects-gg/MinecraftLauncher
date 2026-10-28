@@ -127,19 +127,19 @@ describe("one more game (PLAY-AGAIN)", () => {
       "Bilgisayarında boş bellek az, oyunlar takılabilir.",
     );
     expect(turkish(words.confirm)).toBe("Yine de aç");
-    // Another account's game only: the memory is the whole reason, the same title; the answer
-    // keeps OYNA's verb ("Oyna" stays "Oyna").
+    // Another account's game only: the memory is the whole reason, the same title and the same
+    // answer to it (one question, one answer).
     const beside = oneMoreWords("memory", true, "KorAtesi_");
     expect(turkish(beside.title)).toBe("Bir oyun daha açılsın mı?");
     expect(beside.body.map(turkish)).toEqual([
       "Bilgisayarında boş bellek az, oyunlar takılabilir.",
     ]);
     expect(beside.note).toBeNull();
-    expect(turkish(beside.confirm)).toBe("Yine de oyna");
+    expect(turkish(beside.confirm)).toBe("Yine de aç");
     expect(beside.body.map(english)).toEqual([
       "Your computer is low on free memory, so the games may stutter.",
     ]);
-    expect(english(beside.confirm)).toBe("Play anyway");
+    expect(english(beside.confirm)).toBe("Open anyway");
   });
 
   it("never names a technical figure or an id", () => {

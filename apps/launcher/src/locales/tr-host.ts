@@ -102,7 +102,7 @@ export const trHost = {
     in: "Dünyadasın",
     retry: "Tekrar dene",
     rejoin: "Yeniden katıl",
-    missing: "{{count}} mod bulunamadı; girerken sorun çıkabilir.",
+    missing: "{{count}} mod bulunamadı. Girerken sorun çıkabilir.",
     copyAction: "Kur ve katıl",
     failed: {
       full: "Dünya dolu.",
@@ -136,7 +136,7 @@ export const trHost = {
   },
   connect: {
     moveTitle: "Dünyaya geçilsin mi?",
-    moveBody: "Oyunda arkadaşının dünyasına geçeceksin; olmazsa oyun yeniden açılır.",
+    moveBody: "Oyunda arkadaşının dünyasına geçeceksin. Olmazsa oyun yeniden açılır.",
     restartBody: "Oyun kapanıp arkadaşının dünyasında yeniden açılır.",
     reopenBody: "Oyun baştan açılıp arkadaşının dünyasına bağlanacak.",
     movingBody: "Arkadaşının dünyasına geçiliyor.",

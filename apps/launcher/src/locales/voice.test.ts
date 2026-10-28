@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { en } from "./en";
 import { tr } from "./tr";
 
 /**
@@ -28,5 +29,18 @@ describe("Turkish strings", () => {
       .filter(([, text]) => FORMAL.test(text.toLocaleLowerCase("tr")))
       .map(([key, text]) => `${key}: ${text}`);
     expect(formal).toEqual([]);
+  });
+});
+
+/**
+ * One idea per sentence (QA-COPY O2): a player's line never joins two with a semicolon, in either
+ * language; nor with an em dash (docs/design.md §7).
+ */
+describe("Player-facing sentences", () => {
+  it("never join two with a semicolon or an em dash", () => {
+    const joined = [...strings(tr), ...strings(en)]
+      .filter(([, text]) => /;|—/.test(text))
+      .map(([key, text]) => `${key}: ${text}`);
+    expect(joined).toEqual([]);
   });
 });

@@ -21,7 +21,7 @@ export const trTeam6 = {
   lockedWhy: "Etiket {{date}} tarihine kadar takılamaz.",
   lockedShort: "kilitli",
   lockedUntil: "{{date}} tarihine kadar kilitli",
-  hiddenToast: "Lider ekibi gizledi; etiketin çıkarıldı.",
+  hiddenToast: "Lider ekibi gizledi, etiketin çıkarıldı.",
   joinedAction: "Etiketi tak",
   card: {
     member: "Sen de bu ekiptesin",
@@ -36,7 +36,7 @@ export const trTeam6 = {
     },
   },
   requests: {
-    via: "{{name}} aracılığıyla",
+    via: "{{name}} üzerinden",
   },
   visibility: {
     label: "Görünürlük",

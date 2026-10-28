@@ -5,6 +5,8 @@ export const trMinecraft = {
   label: "Minecraft",
   // The reader's button and source link: the official article opens in the browser.
   readOn: "minecraft.net'te oku",
-  // Settings → Hakkında, one quiet line under the credits (the owner's wording, 18 Oct).
-  notAffiliated: "Mojang veya Minecraft ile bağlantılı değildir.",
+  // Settings → Hakkında, one quiet line under the credits: the Minecraft usage guidelines' words, the
+  // same on every surface (lead, 28 Oct; docs/product.md → Minecraft haberleri).
+  notAffiliated:
+    "Resmî bir Minecraft ürünü değildir. Mojang veya Microsoft tarafından onaylanmamıştır ve onlarla bağlantılı değildir.",
 };

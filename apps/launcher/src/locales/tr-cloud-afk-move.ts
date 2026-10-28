@@ -5,7 +5,7 @@ export const trCloudAfkMove = {
   tab: "Hareket",
   setting: {
     title: "Hareket",
-    line: "Açıkken hesap yürüyebilir; düşebilir ya da ölebilir.",
+    line: "Açıkken hesap yürüyebilir. Düşebilir ya da ölebilir.",
   },
   position: "Konum",
   facing: "Yön: {{dir}}",
@@ -80,7 +80,7 @@ export const trCloudAfkMove = {
   reset: "Hesap ışınlandı ya da yeniden doğdu, durdu.",
   serviceOff: "Hareket şu an kapalı.",
   tradeStarted: "Takas başladı, durdu.",
-  machineAway: "Makinemize şu an ulaşılamıyor.",
+  machineAway: "7/24 Bulut'a şu an ulaşılamıyor.",
   unreachable: "Hesaba şu an ulaşılamıyor.",
   reconnect: "Şimdi yeniden bağlan",
 };

@@ -31,7 +31,7 @@ export const enAfkPanel = {
     onJoin: "When",
     every: "Every join",
     first: "First join only",
-    never: "Not on join",
+    never: "Only at intervals",
     neverRuns: "This task never runs: pick a join or a repeat.",
   },
   wrongPassword: "The server didn't accept this password. Type the right one.",

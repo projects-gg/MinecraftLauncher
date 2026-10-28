@@ -144,7 +144,7 @@ export const INVENTORY_TEXTS: Record<InventoryLang, InventoryTexts> = {
     menuOpened: "Menü açıldı: {title}",
     menuClosed: "Menü kapandı",
 
-    slowDown: "Biraz yavaşla; son tıklama sayılmadı.",
+    slowDown: "Biraz yavaşla. Son tıklama sayılmadı.",
     refused: "Sunucu bu hamleye izin vermedi.",
     tradeLocked: "Takas sürerken envanter kilitli.",
     viewOnly: "Bu envanterde değişiklik yapamazsın.",
@@ -209,7 +209,7 @@ export const INVENTORY_TEXTS: Record<InventoryLang, InventoryTexts> = {
     menuOpened: "Menu opened: {title}",
     menuClosed: "Menu closed",
 
-    slowDown: "Slow down a little; that click didn't count.",
+    slowDown: "Slow down a little. That click didn't count.",
     refused: "The server didn't allow that move.",
     tradeLocked: "The inventory is locked during a trade.",
     viewOnly: "You can't make changes to this inventory.",
