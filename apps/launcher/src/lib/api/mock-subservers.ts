@@ -9,7 +9,7 @@ const TODAY: SubServerView[] = [
   { id: "skyblock", name: "SkyBlock", testersOnly: false },
   { id: "smp", name: "SMP", testersOnly: false },
   { id: "survival", name: "Survival", testersOnly: false },
-  { id: "hg", name: "HG", testersOnly: false },
+  { id: "hg", name: "Hunger Games", testersOnly: false },
   { id: "testserver", name: "TestServer", testersOnly: true },
   { id: "pvp", name: "PvP", testersOnly: false },
 ];

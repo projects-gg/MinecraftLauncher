@@ -27,14 +27,15 @@ export function RoutePicker({
   const { t } = useTranslation();
   const setRoute = usePrefs((s) => s.setAutoJoinRoute);
   const items: MenuItem[] = rows.map((row) => ({
-    label: row.label,
+    // The lobby row says so too: the narrow bar calls that pick "Lobi".
+    label: row.id === null ? `${row.label} (${t("autojoin.lobby")})` : row.label,
     checked: row.id === current.id,
     radio: true,
     onSelect: () => setRoute(instance.id, row.id),
   }));
   return (
     <Menu
-      title={t("autojoin.after")}
+      title={t("autojoin.title")}
       side="top"
       align="end"
       // Above the bar, where the instance picker's menu opens (its bottom on the bar's top edge),
@@ -55,7 +56,9 @@ export function RoutePicker({
           <span className="hidden truncate @max-[560px]/bar:inline">
             {current.short ?? t("autojoin.lobby")}
           </span>
-          <CaretUpDown size={12} aria-hidden className="shrink-0" />
+          {/* No picking mark while the switch is off (the pick rides only on a direct join); its
+              room stays, so the words do not move. */}
+          <CaretUpDown size={12} aria-hidden className={on ? "shrink-0" : "invisible shrink-0"} />
         </button>
       }
     />
