@@ -6,6 +6,7 @@ import { trAfkMod } from "./tr-afk-mod";
 import { trAfkPanel } from "./tr-afk-panel";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
+import { trAutojoin } from "./tr-autojoin";
 import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
 import { trChatProd } from "./tr-chat-prod";
@@ -70,6 +71,7 @@ export const tr = {
   libraryDrop: trLibraryDrop,
   updates: trUpdates,
   betaGate: trBetaGate,
+  autojoin: trAutojoin,
   shortcuts: trShortcuts,
   prepare: trPrepare,
   social: trSocial,
