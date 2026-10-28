@@ -308,6 +308,8 @@ export const enCloudAfk = {
       ownerServer: "Server messages don't come from a player, so this rule can't use it.",
       name: "A player name has 3-16 letters, numbers or underscores.",
       nameDuplicate: "Another of your cloud accounts has this name on this server.",
+      nameProtected:
+        "This name is protected for staff on the server. 24/7 Cloud can't join with it.",
       host: "An address has only letters, numbers, dots, dashes and underscores.",
       hostDot: "Write the full address, like play.projects.gg",
       hostPrivate: "This address can't be reached.",
