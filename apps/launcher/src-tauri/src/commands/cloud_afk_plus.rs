@@ -130,7 +130,8 @@ pub async fn cloud_afk_plus_control(
         .await?)
 }
 
-/// "Kontrol et": the player's words become an order's card (nothing is stored).
+/// "Kontrol et": the player's words become an order's card (nothing is stored). `in_game`: the
+/// player said the words' money is the game's ("Bu oyun parası", after the money question).
 #[tauri::command]
 #[specta::specta]
 pub async fn cloud_afk_plus_check(
@@ -138,11 +139,12 @@ pub async fn cloud_afk_plus_check(
     state: State<'_, AppState>,
     id: String,
     text: String,
+    in_game: bool,
 ) -> CmdResult<PlusCheckOutcome> {
     let token = token(&state)?;
     let lang = Lang::current().pick("tr", "en");
     Ok(service(&app, &state)
-        .plus_check(&token, &id, &text, lang)
+        .plus_check(&token, &id, &text, lang, in_game)
         .await?)
 }
 

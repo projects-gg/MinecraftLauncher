@@ -1718,6 +1718,17 @@ fn to_body<T: Serialize>(value: &T) -> Result<serde_json::Value> {
     serde_json::to_value(value).map_err(|e| CloudError::Protocol(e.to_string()))
 }
 
+/// An order check's body: `inGame` only when the player said the money is the game's (28 Oct
+/// 2026), so an older service, which turns an unknown key away, still checks the rest.
+fn check_body(text: &str, lang: &str, in_game: bool) -> serde_json::Value {
+    let lang = if lang == "en" { "en" } else { "tr" };
+    let mut body = serde_json::json!({ "text": text, "lang": lang });
+    if in_game {
+        body["inGame"] = serde_json::Value::Bool(true);
+    }
+    body
+}
+
 impl CloudClient {
     /// `GET /accounts/:id/plus`.
     pub async fn plus_settings(&self, token: &Bearer, id: &str) -> Result<PlusSettings> {
@@ -1751,24 +1762,25 @@ impl CloudClient {
         .json()
     }
 
-    /// "Kontrol et": `POST /accounts/:id/plus/orders/check {text, lang}`. The answer's JSON as it
-    /// came (`{draft, questions, notes, left}`): the panel answers the questions on it locally, so
-    /// it must reach the page exactly as the service wrote it. Counted per minute and per day, so
-    /// never repeated.
+    /// "Kontrol et": `POST /accounts/:id/plus/orders/check {text, lang, inGame?}`. The answer's
+    /// JSON as it came (`{draft, questions, notes, left, check?}`): the panel answers the questions
+    /// on it locally, so it must reach the page exactly as the service wrote it. Counted per minute
+    /// and per day, so never repeated. `in_game`: the player said the words' money is the game's
+    /// ("Bu oyun parası", after `422 order_rejected {reason: "question", rule: "rmt"}`).
     pub async fn check_order(
         &self,
         token: &Bearer,
         id: &str,
         text: &str,
         lang: &str,
+        in_game: bool,
     ) -> Result<String> {
-        let lang = if lang == "en" { "en" } else { "tr" };
         let reply = self
             .send(
                 Method::POST,
                 &account_path(id, "/plus/orders/check")?,
                 Some(token),
-                Some(serde_json::json!({ "text": text, "lang": lang })),
+                Some(check_body(text, lang, in_game)),
                 &[],
                 Repeat::Never,
             )
@@ -2498,6 +2510,19 @@ mod tests {
         assert!(!settings.server.money.fixed);
         assert!(!settings.rules.features.currency);
         assert!(settings.rules.features.orders && settings.rules.features.audit);
+    }
+
+    #[test]
+    fn an_order_check_says_in_game_only_when_the_player_did() {
+        assert_eq!(
+            check_body("elytra alırım 100 dolar", "tr", false),
+            json!({"text": "elytra alırım 100 dolar", "lang": "tr"})
+        );
+        assert_eq!(
+            check_body("elytra alırım 100 dolar", "en", true),
+            json!({"text": "elytra alırım 100 dolar", "lang": "en", "inGame": true})
+        );
+        assert_eq!(check_body("x", "de", false)["lang"], json!("tr"));
     }
 
     #[test]

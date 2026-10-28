@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkOrderText,
   GENERIC_MAX_DEAL,
+  isMoneyQuestion,
   type RuleContext,
   readAmount,
   ruleHint,
@@ -62,6 +63,20 @@ describe("AFK+ typed orders: the free rule check (afkplus-intake-v1.json)", () =
     }
     expect(check.result).toBe(c.result);
     expect(check.notes).toEqual(c.notes);
+  });
+
+  it("asks about money that may be the game's, and refuses a rail without asking", () => {
+    const dollars = "elytra alırım 100 dolar";
+    expect(checkOrderText(dollars).result).toBe("question:rmt");
+    // Asked on "Kontrol et", never as a hint while typing.
+    expect(ruleHint(checkOrderText(dollars))).toBeNull();
+    expect(checkOrderText(dollars, { inGame: true }).result).toBe("ok");
+    const rail = checkOrderText("papara ile öderim elytra", { inGame: true });
+    expect(ruleHint(rail)).toEqual({ reason: "loosen", rule: "rmt" });
+    // The service's question offers "Bu oyun parası"; a rail's refusal never does.
+    expect(isMoneyQuestion("question", "rmt")).toBe(true);
+    expect(isMoneyQuestion("loosen", "rmt")).toBe(false);
+    expect(isMoneyQuestion("question", null)).toBe(false);
   });
 
   it("names the reason and the rule for the hint", () => {

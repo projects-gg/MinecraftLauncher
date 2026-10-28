@@ -34,6 +34,7 @@ import {
   plusScenario,
 } from "./mock-data";
 import { type CheckAnswer, fill, type OrderDraft } from "./order-draft";
+import { checkOrderText } from "./order-rules";
 import type {
   CloudNotifyPrefs,
   PlusApproval,
@@ -90,7 +91,7 @@ function log(k: string, parts: Partial<PlusAuditEntry> = {}) {
 }
 
 /** "Kontrol et": the card's draft, the way the agent reads the words (a preview's few). */
-function check(text: string): PlusCheckOutcome {
+function check(text: string, inGame = false): PlusCheckOutcome {
   const lower = text.toLocaleLowerCase("tr");
   if (/bakım/.test(lower)) return { kind: "unavailable", reason: "paused" };
   if (/bağlı değil/.test(lower)) return { kind: "offline" };
@@ -99,6 +100,12 @@ function check(text: string): PlusCheckOutcome {
   }
   if (/önce (sen|ben)|önden/.test(lower))
     return { kind: "rejected", reason: "loosen", rule: "prepay" };
+  // The rules' money (28 Oct 2026): a rail refuses; money that may be the game's is asked first
+  // ("Bu oyun parası"), unless the player said it is.
+  const label = settings().server.money.label;
+  const ruled = checkOrderText(text, { currency: label?.tr ?? null, inGame }).result;
+  if (ruled === "reject:loosen:rmt") return { kind: "rejected", reason: "loosen", rule: "rmt" };
+  if (ruled === "question:rmt") return { kind: "rejected", reason: "question", rule: "rmt" };
   if (checksLeft <= 0) return { kind: "limited", reason: "daily", retry_after: null };
   checksLeft -= 1;
   // "64 tane" is a quantity, never a price.
@@ -265,11 +272,11 @@ export const mockPlusApi: PlusApi = {
     emitAi();
     return { ai, aiRev };
   },
-  async check(_id, text) {
+  async check(_id, text, inGame) {
     await delay(900);
     if (offline) return { kind: "offline" };
     if (plusScenario === "maintenance") return { kind: "unavailable", reason: "paused" };
-    return check(text);
+    return check(text, inGame === true);
   },
   async createOrder(_id, order, customItems, chip) {
     await delay(420);

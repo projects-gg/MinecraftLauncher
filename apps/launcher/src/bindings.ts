@@ -523,8 +523,11 @@ export const commands = {
 	cloudAfkPlusRestore: (id: string, rev: number, current: number) => typedError<PlusSaveOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_restore", { id, rev, current })),
 	/**  The AI's switch, a player blocked, unblocked or forgotten, the spent total reset. */
 	cloudAfkPlusControl: (id: string, action: PlusAction, name: string | null) => typedError<PlusControlAnswer, CmdError>(__TAURI_INVOKE("cloud_afk_plus_control", { id, action, name })),
-	/**  "Kontrol et": the player's words become an order's card (nothing is stored). */
-	cloudAfkPlusCheck: (id: string, text: string) => typedError<PlusCheckOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_check", { id, text })),
+	/**
+	 *  "Kontrol et": the player's words become an order's card (nothing is stored). `in_game`: the
+	 *  player said the words' money is the game's ("Bu oyun parası", after the money question).
+	 */
+	cloudAfkPlusCheck: (id: string, text: string, inGame: boolean) => typedError<PlusCheckOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_check", { id, text, inGame })),
 	/**
 	 *  "Kaydet" of an order's card or form (or "Geri al" of a deleted one): the order, the new custom
 	 *  items it names and a chip's settings change, in one write.
@@ -6805,9 +6808,10 @@ export type PlusCheckOutcome =
 { kind: "draft"; answer: string } | 
 /**
  *  The rules or the agent said no: `length`, `link`, `command`, `personal`, `unsafe`,
- *  `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`.
+ *  `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`; or asked first:
+ *  `question` with `rule: "rmt"` (money that may be the game's: checked again with `in_game`).
  */
-{ kind: "rejected"; reason: string; rule: string | null } | 
+{ kind: "rejected"; reason: string; rule: string | null } |
 /**  `rate` (a fourth check within a minute) or `daily` (the AFK+ day's checks used). */
 { kind: "limited"; reason: string; retry_after: number | null } | 
 /**  The machine's AI cannot read it now: `agent`, `paused`, `off`, `budget`, `timeout`. */

@@ -431,6 +431,10 @@ export const trAfkPlus = {
     pick: "Envanterden seç",
     left: "Bugün {{count}} kez daha kontrol edebilirsin.",
     failed: "Yazdığın kontrol edilemedi.",
+    // Money that may be the game's ("100 dolar", "nakit"): asked, not refused (28 Oct). The button
+    // sends the same words as the game's money; a payment app or "gerçek para" stays refused.
+    money: "Bu, gerçek para gibi görünüyor.",
+    inGame: "Bu oyun parası",
     // Under the field while AFK+ is under maintenance (the notice above says why).
     maintenance: "Bakım bitince sipariş ekleyebilirsin.",
     aiPaused: "Yapay zekâ bakımda. Formla ekleyebilirsin.",

@@ -389,6 +389,8 @@ export const enAfkPlus = {
     left_one: "{{count}} check left today.",
     left_other: "{{count}} checks left today.",
     failed: "Couldn't check that.",
+    money: "This looks like real money.",
+    inGame: "This is in-game money",
     maintenance: "You can add orders once maintenance is over.",
     aiPaused: "The AI is under maintenance. You can use the form.",
     aiAway: "Can't reach the AI right now. You can use the form.",

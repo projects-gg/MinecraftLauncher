@@ -53,10 +53,15 @@ export interface RuleContext {
   perDay?: number;
   /**
    * The server's money name (the profile's `money.label`, else the player's `trade.currency`): an
-   * amount written with it is no real money, nor, when it is a real-money word ("TL"), the rmt
-   * phrases made of it ("tl ile").
+   * amount written with it is no real money, nor, when it is a real-money word ("TL"), the money
+   * words made of it ("tl ile").
    */
   currency?: string | null;
+  /**
+   * The player said the text's money is the game's ("Bu oyun parası", 28 Oct 2026): its money
+   * words pass; the rails never do.
+   */
+  inGame?: boolean;
 }
 
 export interface RuleCheck {
@@ -499,6 +504,31 @@ const RMT: readonly string[] = [
   "gift card",
   "ininal",
 ];
+/**
+ * The `rmt` rule's two kinds (28 Oct 2026, the owner: "Bu konuda esnek olsun"). Rails are real
+ * money whatever a server calls its money (payment apps, gift cards, "real money"): always refused,
+ * no button. Money words may be the server's own money ("TL", "dolar", "nakit": SkyBlock's balance
+ * line is "Nakit paranız"): asked about (`question:rmt`) until the player says it is the game's
+ * ("Bu oyun parası": `inGame`), never refused. An amount written with a real-money word or sign is
+ * a money word too; the server's own name never is.
+ */
+export const RMT_RAILS: readonly string[] = [
+  ...RMT,
+  "gercek parali",
+  "irl money",
+  "for real money",
+];
+export const RMT_UNSURE: readonly string[] = [
+  "tl ile",
+  "tl ye",
+  "tlye",
+  "lira ile",
+  "liraya",
+  "dolarla",
+  "euro ile",
+  "nakit",
+  "for cash",
+];
 
 /**
  * Attempts to loosen a hard rule (`loosen:<rule>`), checked in this order. Phrases are folded words
@@ -594,25 +624,9 @@ export const LOOSEN: readonly (readonly [LoosenRule, readonly string[]])[] = [
     ],
   ],
   // `rmt` before `off_platform`: payment apps (papara, ininal, a steam card) are real money first.
-  // Also an amount written with a real-money word or sign (afkplus-money.mjs `rmt`).
-  [
-    "rmt",
-    [
-      ...RMT,
-      "tl ile",
-      "tl ye",
-      "tlye",
-      "lira ile",
-      "liraya",
-      "dolarla",
-      "euro ile",
-      "gercek parali",
-      "irl money",
-      "for real money",
-      "for cash",
-      "nakit",
-    ],
-  ],
+  // Only the rails refuse; the money words (`RMT_UNSURE`, an amount with a real-money word or
+  // sign: afkplus-money.mjs `rmt`) are a question after every refusal.
+  ["rmt", RMT_RAILS],
   // `off_platform`: also every name of PLATFORM_WORDS (afkplus-text.mjs) as a whole word.
   [
     "off_platform",
@@ -756,9 +770,39 @@ function platformNamed(cleaned: string): boolean {
   return words(cleaned).some(named);
 }
 
+/** The server's own name as the money words read it, when it is a real-money word ("tl"). */
+function ownWordOf(own: string | null): string | null {
+  const form = own === null ? null : moneyForm(own);
+  return form !== null && CURRENCY_WORDS.includes(form) ? form : null;
+}
+
+/**
+ * Money words that may be the server's own: an `RMT_UNSURE` phrase or an amount with a real-money
+ * word or sign (`tokens`, read with the server's name `own`); the server's own name never is, nor,
+ * when it is a real-money word ("TL"), the phrases made of it ("tl ile").
+ */
+function moneyUnsure(list: string[], tokens: MoneyToken[], own: string | null): boolean {
+  const ownWord = ownWordOf(own);
+  const phrases =
+    ownWord === null
+      ? RMT_UNSURE
+      : RMT_UNSURE.filter((phrase) => !(phrase.split(" ")[0] ?? "").startsWith(ownWord));
+  return anyPhrase(list, phrases) || tokens.some((token) => token.rmt);
+}
+
+/**
+ * The service's question about money that may be the game's (`question` with `rule: "rmt"`): the
+ * field asks it with one button ("Bu oyun parası") that sends the words again with `inGame`. A
+ * rail's refusal (`loosen` with `rmt`) never asks.
+ */
+export function isMoneyQuestion(reason: string, rule: string | null | undefined): boolean {
+  return reason === "question" && rule === "rmt";
+}
+
 /**
  * The free rule check: `{result, notes}`. The first rule that holds answers, in this order:
- * length, link, command, personal, unsafe, loosen, too_big, orders_full, rate, daily.
+ * length, link, command, personal, unsafe, loosen, too_big, orders_full, rate, daily, then the
+ * questions: `question:rmt` (money that may be the game's, unless `inGame`), then `question:limit`.
  */
 export function checkOrderText(text: string, ctx: RuleContext = {}): RuleCheck {
   const cleaned = cleanOrderText(text);
@@ -783,19 +827,12 @@ export function checkOrderText(text: string, ctx: RuleContext = {}): RuleCheck {
   }
   const own = ctx.currency ?? null;
   const { tokens } = tokenize(cleaned, own);
-  // A name that is a real-money word ("TL"): the rmt phrases made of it ("tl ile") are no attempt.
-  const ownForm = own === null ? null : moneyForm(own);
-  const ownWord = ownForm !== null && CURRENCY_WORDS.includes(ownForm) ? ownForm : null;
-  for (const [rule, all] of LOOSEN) {
-    const phrases =
-      rule === "rmt" && ownWord !== null
-        ? all.filter((phrase) => !(phrase.split(" ")[0] ?? "").startsWith(ownWord))
-        : all;
+  for (const [rule, phrases] of LOOSEN) {
     let hit = anyPhrase(list, phrases);
     if (rule === "off_platform") hit = hit || platformNamed(cleaned);
-    if (rule === "rmt") hit = hit || tokens.some((token) => token.rmt);
     if (hit) return { result: `reject:loosen:${rule}`, notes };
   }
+  const unsure = moneyUnsure(list, tokens, own);
   const maxDeal = ctx.maxDeal ?? GENERIC_MAX_DEAL;
   if (tokens.some((token) => token.problem === undefined && (token.value ?? 0) > maxDeal)) {
     return { result: "reject:too_big", notes };
@@ -804,6 +841,8 @@ export function checkOrderText(text: string, ctx: RuleContext = {}): RuleCheck {
   if ((ctx.minute ?? 0) >= 3) return { result: "reject:rate", notes };
   if ((ctx.today ?? 0) >= (ctx.perDay ?? 20)) return { result: "reject:daily", notes };
   if (anyPhrase(list, APPROVAL_PREF)) notes.push("approval_pref");
+  // Money that may be the game's: asked after every refusal and before the limit's question.
+  if (unsure && ctx.inGame !== true) return { result: "question:rmt", notes };
   if (anyPhrase(list, NO_LIMIT)) return { result: "question:limit", notes };
   return { result: "ok", notes };
 }

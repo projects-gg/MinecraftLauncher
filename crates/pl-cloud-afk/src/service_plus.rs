@@ -147,7 +147,8 @@ pub enum PlusCheckOutcome {
     /// panel answers its questions on exactly what the service wrote.
     Draft { answer: String },
     /// The rules or the agent said no: `length`, `link`, `command`, `personal`, `unsafe`,
-    /// `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`.
+    /// `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`; or asked first:
+    /// `question` with `rule: "rmt"` (money that may be the game's: checked again with `in_game`).
     Rejected {
         reason: String,
         rule: Option<String>,
@@ -600,13 +601,14 @@ impl CloudService {
 
     /// "Kontrol et": the player's words become an order's card (nothing is stored). The free
     /// rules run at the service (the panel already hinted them); a text outside 3-200 characters
-    /// never leaves.
+    /// never leaves. `in_game`: the player said the words' money is the game's ("Bu oyun parası").
     pub async fn plus_check(
         &self,
         token: &Bearer,
         id: &str,
         text: &str,
         lang: &str,
+        in_game: bool,
     ) -> Result<PlusCheckOutcome> {
         let cleaned = clean_text(text).replace('\n', " ");
         let length = cleaned.chars().count();
@@ -619,7 +621,7 @@ impl CloudService {
         check_outcome(
             self.inner
                 .client
-                .check_order(token, id, &cleaned, lang)
+                .check_order(token, id, &cleaned, lang, in_game)
                 .await,
         )
     }
@@ -1353,6 +1355,18 @@ mod tests {
                 rule: Some("prepay".into())
             }
         );
+        // Money that may be the game's is asked (28 Oct 2026): the panel offers "Bu oyun parası".
+        assert_eq!(
+            check_outcome(refusal(
+                422,
+                json!({"error": {"code": "order_rejected", "reason": "question", "rule": "rmt"}})
+            ))
+            .unwrap(),
+            PlusCheckOutcome::Rejected {
+                reason: "question".into(),
+                rule: Some("rmt".into())
+            }
+        );
         assert_eq!(
             check_outcome(refusal(
                 429,
@@ -1459,7 +1473,10 @@ mod tests {
         ));
         for text in ["  a ", &"x".repeat(MAX_ORDER_TEXT + 1)] {
             assert_eq!(
-                service.plus_check(&token, "a_1", text, "tr").await.unwrap(),
+                service
+                    .plus_check(&token, "a_1", text, "tr", false)
+                    .await
+                    .unwrap(),
                 PlusCheckOutcome::Rejected {
                     reason: "length".into(),
                     rule: None
