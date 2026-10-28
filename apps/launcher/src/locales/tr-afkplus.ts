@@ -244,7 +244,7 @@ export const trAfkPlus = {
       offer: "{{w}} ile pazarlıkta {{p}} teklif edildi",
       // The comma keeps the name and the price apart ("Kaan_07, 40.000 istedi").
       counter: "{{w}}, {{p}} istedi",
-      agree: "{{w}} ile anlaşıldı: {{deal}}",
+      agree: "Asistan {{w}} ile anlaştı: {{deal}}",
       ask_owner: "Onayın istendi",
       ask_ownerOf: "{{i}} için onayın istendi",
       owner_ok: "Onayladın",
@@ -320,7 +320,7 @@ export const trAfkPlus = {
     reject: "Reddet",
     lower: "Fiyatı düşür",
     // Haggling again needs the assistant's AI: while it is stopped or paused, under the buttons.
-    lowerLater: "Asistan çalışınca fiyatı düşürebilirsin.",
+    lowerLater: "Asistan yeniden çalışınca fiyatı düşürebilirsin.",
     lowerLabel: "En fazla",
     // {{price}} comes with its ending ("37.500'den az").
     lowerPlaceholder: "{{price}} az",
@@ -678,8 +678,8 @@ export const trAfkPlus = {
     pay: "Ödeme",
     pays: { money: "Para", items: "Eşya", both: "İkisi de" },
     who: "Kimlerle",
-    whoAll: "Herkes",
-    whoFriends: "Yalnız arkadaşlarım",
+    whoAll: "Herkesle",
+    whoFriends: "Yalnız arkadaşlarımla",
     friendsPlaceholder: "Oyuncu adı",
     friendsAdd: "Ad ekle",
     friendsRemove: "{{name}} adını çıkar",

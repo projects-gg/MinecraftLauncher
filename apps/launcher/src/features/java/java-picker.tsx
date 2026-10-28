@@ -66,15 +66,15 @@ function Row({
       className={cn(
         "group relative flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-3 py-2 text-left outline-none ring-1 ring-white/[0.07] transition-[background-color,box-shadow] duration-150",
         "hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300",
-        // The chosen row a quiet plate, the gold only on its dot (design.md §6: one gold).
+        // The chosen row on the quiet plate, its dot bone (design.md §6: a chosen option is never gold).
         "data-[state=checked]:bg-white/[0.06] data-[state=checked]:ring-white/25",
       )}
     >
       <span
         aria-hidden
-        className="flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-gold-400"
+        className="flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-bone-100"
       >
-        <RadioGroup.Indicator className="size-2 rounded-full bg-gold-400" />
+        <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline gap-2">

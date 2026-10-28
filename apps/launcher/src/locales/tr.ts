@@ -912,7 +912,7 @@ export const tr = {
       empty: "Henüz görev yok.",
       name: "Ad",
       namePlaceholder: "Görev {{n}}",
-      interval: "Aralıkla tekrarla",
+      interval: "Aralıkla da tekrarla",
       help: "Aralıkla tekrarlanan görevler, bu iki süre arasında rastgele bir anda yeniden çalışır.",
     },
     antiAfk: {
@@ -1132,7 +1132,7 @@ export const tr = {
     removed: "Java {{major}} kaldırıldı, {{size}} boşaldı.",
     removeFailed: "Java kaldırılamadı.",
     removeBlocked: "Oyun açıkken kaldırılamaz.",
-    useAuto: "Otomatik'e geç",
+    useAuto: "Otomatiğe geç",
     switched: "{{count}} kurulum Otomatik Java'ya geçti.",
     rescan: "Yeniden tara",
     openFolder: "Klasörü aç",

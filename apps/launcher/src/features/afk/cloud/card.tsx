@@ -24,6 +24,7 @@ import {
   Play,
   SneakerMove,
   Stop,
+  StopCircle,
   Terminal,
   Trash,
   X,
@@ -296,7 +297,7 @@ function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => vo
         {brief}
       </span>
       {approvals > 0 ? (
-        <span className="shrink-0 font-display text-[12.5px] font-semibold text-bone-50 tabular-nums">
+        <span className="shrink-0 text-[12.5px] font-semibold text-bone-50 tabular-nums">
           {t("afkPlus.card.approvals", { count: approvals })}
         </span>
       ) : null}
@@ -330,7 +331,7 @@ function useHereItems(here: AfkAccount | null, onFixPassword: () => void): MenuI
   const stop = () => runAfk(api.afkStop(here.id), t("afk.stopFailed"));
   const items: Record<ReturnType<typeof primaryAction>, MenuItem> = {
     connect: { label: t("afk.connect"), icon: <Play size={16} />, onSelect: () => connect(here) },
-    stop: { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop },
+    stop: { label: t("afk.stop"), icon: <StopCircle size={16} />, onSelect: stop },
     cancel: { label: t("afkConnect.cancel"), icon: <X size={16} />, onSelect: stop },
     retry: {
       label: t("common.retry"),
@@ -437,7 +438,11 @@ export function CloudCard({
           action === "start"
             ? { label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }
             : action === "stop"
-              ? { label: t("cloudAfk.actions.stop"), icon: <Stop size={16} />, onSelect: onStop }
+              ? {
+                  label: t("cloudAfk.actions.stop"),
+                  icon: <StopCircle size={16} />,
+                  onSelect: onStop,
+                }
               : action === "fixPassword"
                 ? {
                     label: t("afkClear.fixPassword"),

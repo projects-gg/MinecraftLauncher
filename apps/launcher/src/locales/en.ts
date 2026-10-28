@@ -1153,7 +1153,7 @@ export const en: DeepPartial<Strings> = {
       empty: "No tasks yet.",
       name: "Name",
       namePlaceholder: "Task {{n}}",
-      interval: "Repeat at an interval",
+      interval: "Also repeat at an interval",
       help: "Repeating tasks run again at a random moment between these two times.",
     },
     antiAfk: {

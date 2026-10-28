@@ -923,9 +923,9 @@ function FineTuneGroup({
             >
               <span
                 aria-hidden
-                className="mt-[3px] flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-gold-400"
+                className="mt-[3px] flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-bone-100"
               >
-                <RadioGroup.Indicator className="size-2 rounded-full bg-gold-400" />
+                <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
               </span>
               <span className="min-w-0">
                 <span className="block text-[13.5px] font-medium text-bone-50">

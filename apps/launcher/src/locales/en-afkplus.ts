@@ -283,7 +283,7 @@ export const enAfkPlus = {
     approve: "Approve",
     reject: "Decline",
     lower: "Lower the price",
-    lowerLater: "You can lower the price once the assistant is running.",
+    lowerLater: "You can lower the price once the assistant works again.",
     lowerLabel: "At most",
     lowerPlaceholder: "Below {{price}}",
     lowerSend: "Try for this price",

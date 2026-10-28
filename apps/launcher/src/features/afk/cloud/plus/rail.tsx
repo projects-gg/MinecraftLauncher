@@ -34,11 +34,11 @@ export function visibleSections(features: PlusFeatureFlags): PlusSection[] {
   );
 }
 
-/** The colour of the assistant's state sentence (gold only where something waits on the player). */
+/** The colour of the assistant's state sentence: never gold, a sentence is not an action (flare for an error). */
 export const AI_TONE = {
   ok: "text-bone-50",
   muted: "text-ash-300",
-  warn: "text-gold-200",
+  warn: "text-bone-100",
   error: "text-flare-300",
 } as const;
 const TONE = AI_TONE;
@@ -189,7 +189,7 @@ function Nav({
                 ) : null}
                 <span className="truncate">{t(`afkPlus.panel.sections.${value}`)}</span>
                 {count > 0 ? (
-                  <span className="font-display text-[12.5px] font-semibold text-bone-100 tabular-nums">
+                  <span className="text-[12.5px] font-semibold text-bone-100 tabular-nums">
                     {count}
                   </span>
                 ) : null}

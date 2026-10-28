@@ -171,9 +171,9 @@ export function ReportDialog() {
               >
                 <span
                   aria-hidden
-                  className="flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-gold-400"
+                  className="flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-bone-100"
                 >
-                  <RadioGroup.Indicator className="size-2 rounded-full bg-gold-400" />
+                  <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
                 </span>
                 {t(reasonKey(kind, option, fromPlan, fromReaction))}
               </RadioGroup.Item>

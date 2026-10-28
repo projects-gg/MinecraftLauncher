@@ -27,7 +27,7 @@ import {
   Robot,
   Scroll,
   SquaresFour,
-  Stop,
+  StopCircle,
   Sun,
   TShirt,
   UserCircle,
@@ -675,7 +675,7 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 entry(
                   "action:afk-stop",
                   t("palette.afkStopAll"),
-                  <Stop size={18} />,
+                  <StopCircle size={18} />,
                   () => run(() => runAfk(api.afkStopAll(), t("afk.stopFailed"))),
                   { words: PALETTE_WORDS.afkStopAll },
                 ),
