@@ -12,7 +12,7 @@ export const trAfkPlus = {
   intro: {
     // The price beside it buys a whole account: the 24/7 machine comes with the assistant. The
     // product's name never breaks (a no-break space after "7/24").
-    subtitle: "Sen yokken pazarlık eden asistan, 7/24 Bulut dahil.",
+    subtitle: "Sen yokken pazarlık eden asistan, 7/24 Bulut dâhil.",
     pricePerMonth: "Aylık {{price}}",
     start: "afk.projects.gg'de başla",
     soldOut: "Şu an boş AFK+ yeri yok",
@@ -33,13 +33,14 @@ export const trAfkPlus = {
     // Where AFK+ works, said where the player decides (Studio's "Her sunucuda").
     projectsOnly: "AFK+ şimdilik yalnız Projects'te çalışır.",
     anyServer:
-      "AFK+, hesabının girebildiği her sunucuda çalışır; Projects dışındaki sunucularda takası sen yaparsın.",
+      "AFK+, hesabının girebildiği her sunucuda çalışır. Projects dışındaki sunucularda takası sen yaparsın.",
   },
   card: {
     open: "AFK+",
     openLabel: "{{name}} için AFK+ panelini aç",
-    // What waits for the player's answer: a deal's OK, a trade to mark, an item to confirm.
-    approvals: "{{count}} karar bekliyor",
+    // What waits for the player's answer: a deal's OK, a trade to mark, an item to confirm. Whose
+    // it is, as the panel's "Seni bekleyenler" says.
+    approvals: "{{count}} karar seni bekliyor",
     upgrade: "AFK+'ya yükselt",
     // The order card (afkplus-free.md §1.6): the order as read, in plain lines.
     noItem: "Eşya seçilmedi",
@@ -86,9 +87,9 @@ export const trAfkPlus = {
     // One line under the card, not a question: it does not stop the save.
     notes: {
       approval_pref: "Sormadan tamamlaması için ince ayardan yetkiyi değiştir.",
-      named_player: "Siparişler herkese açıktır; bir oyuncuya bağlanmaz.",
-      notify_only: "Harcama sınırı koymadığın için almaz; bulunca haber verir.",
-      item_pay_off: "Eşyayla takas ayarlarında kapalı; takas parayla yapılır.",
+      named_player: "Siparişler herkese açıktır. Bir oyuncuya bağlanmaz.",
+      notify_only: "Harcama sınırı koymadığın için almaz, bulunca haber verir.",
+      item_pay_off: "Eşyayla takas ayarlarında kapalı. Takas parayla yapılır.",
     },
   },
   // The assistant's state in one short sentence (never a code).
@@ -100,42 +101,42 @@ export const trAfkPlus = {
     restricted: "AFK+'dan uzaklaştırıldın",
     restrictedUntil: "{{when}} kadar AFK+'dan uzaklaştırıldın",
     staff: "Asistanı yetkililer durdurdu",
-    serviceOff: "AFK+ şu an kapalı; hesabın AFK'da kalıyor",
-    servicePaused: "AFK+ bakımda; hesabın AFK'da kalıyor",
-    server: "Bu sunucuda AFK+ kapalı; hesabın normal AFK olarak çalışıyor",
+    serviceOff: "AFK+ şu an kapalı, hesabın AFK'da kalıyor",
+    servicePaused: "AFK+ bakımda, hesabın AFK'da kalıyor",
+    server: "Bu sunucuda AFK+ kapalı, hesabın AFK'da kalıyor",
     player: "Asistanı sen durdurdun",
     breakOn: "Asistan molada",
     breakUntil: "Asistan {{when}} kadar molada",
     schedule: "Çalışma saatleri dışında",
-    scheduleUntil: "Çalışma saatleri dışında; {{when}} başlar",
-    gate: "Asistan güvenlik için durdu; yeniden başlatabilirsin",
-    muted: "Sunucu hesabı susturdu; asistanı yeniden başlatabilirsin",
-    host: "Yapay zekâ bakımda; hesabın AFK'da kalıyor",
-    budget: "Yapay zekâ bugünlük durdu; hesabın AFK'da kalıyor",
-    outage: "Yapay zekâya şu an ulaşılamıyor; hesabın AFK'da kalıyor",
-    quota: "Kontörün bitti; hesabın AFK'da kalıyor",
-    quotaUntil: "Kontörün bitti; {{when}} yeniden cevap verir",
+    scheduleUntil: "Çalışma saatleri dışında, {{when}} başlar",
+    gate: "Asistan güvenlik için durdu, yeniden başlatabilirsin",
+    muted: "Sunucu hesabı susturdu, asistanı yeniden başlatabilirsin",
+    host: "Yapay zekâ bakımda, hesabın AFK'da kalıyor",
+    budget: "Yapay zekâ bugünlük durdu, hesabın AFK'da kalıyor",
+    outage: "Yapay zekâya şu an ulaşılamıyor, hesabın AFK'da kalıyor",
+    quota: "Kontörün bitti, hesabın AFK'da kalıyor",
+    quotaUntil: "Kontörün bitti, {{when}} yeniden cevap verir",
     // Which window is full, when the allowance stopped at one of them.
     quotaW5h: "5 saatlik sınır doldu",
-    quotaW5hUntil: "5 saatlik sınır doldu; {{when}} yenilenir",
+    quotaW5hUntil: "5 saatlik sınır doldu, {{when}} yenilenir",
     quotaWeek: "Haftalık sınır doldu",
-    quotaWeekUntil: "Haftalık sınır doldu; {{when}} yenilenir",
+    quotaWeekUntil: "Haftalık sınır doldu, {{when}} yenilenir",
     // Under the state while the allowance is used up (cloud-afk README "AFK+ quotas").
     quotaNote:
       "Şimdilik yalnız hazır mesajlarla cevap veriyor. Hesabın AFK'da kalıyor, bekleyen alımları onaylayabilirsin.",
     // One verb for it: it stops, you stop it.
     paused: "Asistan durdu",
-    tradeLobby: "Hesap lobide; oyun moduna dönünce ticarete başlar",
-    tradeProfile: "Bu oyun modunda ticaret şu an kapalı",
+    tradeLobby: "Hesap lobide, oyun moduna dönünce takasa başlar",
+    tradeProfile: "Bu oyun modunda takas şu an kapalı",
     tradeOwner: "Bu sunucuda asistan anlaşır, takası sen yaparsın",
-    notifyOnly: "Harcama sınırı koymadığın için asistan almıyor; bulunca haber veriyor",
+    notifyOnly: "Harcama sınırı koymadığın için asistan almıyor, bulunca haber veriyor",
     // On the account's card, after the "AFK+" label: the states that name AFK+, without the name.
     line: {
       restricted: "Uzaklaştırıldın",
       restrictedUntil: "{{when}} kadar uzaklaştırıldın",
-      serviceOff: "Şu an kapalı; hesabın AFK'da kalıyor",
-      servicePaused: "Bakımda; hesabın AFK'da kalıyor",
-      server: "Bu sunucuda kapalı; hesabın normal AFK olarak çalışıyor",
+      serviceOff: "Şu an kapalı, hesabın AFK'da kalıyor",
+      servicePaused: "Bakımda, hesabın AFK'da kalıyor",
+      server: "Bu sunucuda kapalı, hesabın AFK'da kalıyor",
     },
   },
   control: {
@@ -160,12 +161,12 @@ export const trAfkPlus = {
     loadFailed: "AFK+ ayarları yüklenemedi.",
     site: "afk.projects.gg'de aç",
     // The machine cannot be reached (README: the log and the messages are read live from it, answers
-    // to approvals are kept and reach it on its return): said once, above the section, in the site's
-    // words ("sunucu" would read as the Minecraft server).
+    // to approvals are kept and reach it on its return): said once, above the section, with the
+    // product's name ("sunucu" would read as the Minecraft server, "makine" is far from a player).
     away: {
-      title: "Makinemize şu an ulaşılamıyor",
+      title: "7/24 Bulut'a şu an ulaşılamıyor",
       body: "Hesabın hâlâ oyunda olabilir.",
-      approvals: "Onaylara verdiğin cevaplar kaydedilir; bağlantı süre dolmadan dönerse uygulanır.",
+      approvals: "Onaylara verdiğin cevaplar kaydedilir. Bağlantı süre dolmadan dönerse uygulanır.",
     },
     // AFK+ under maintenance (`plusMode: paused`): said once, above the section.
     service: {
@@ -175,8 +176,8 @@ export const trAfkPlus = {
   },
   // How AFK+ works on the account's server, said once where it matters.
   server: {
-    owner: "Bu sunucuda asistan konuşur ve anlaşır; takası sen yaparsın.",
-    off: "Bu sunucuda AFK+ kapalı; hesabın normal AFK olarak çalışıyor.",
+    owner: "Bu sunucuda asistan konuşur ve anlaşır. Takası sen yaparsın.",
+    off: "Bu sunucuda AFK+ kapalı. Hesabın AFK'da kalıyor.",
   },
   // The AI usage allowance is "kontör" to the player (owner, 25 Oct: not "kredi", which is the
   // mc.projects.gg site balance); code and API names (`credits`, `allowance`) stay.
@@ -201,7 +202,7 @@ export const trAfkPlus = {
     bought: "Yaklaşık {{n}} tanesi aldığın kontörden",
     // "Aldığın kontör" first: "Şu an aldığın" read as "the kontör you are buying now".
     boughtInUse: "Aldığın kontör şu an kullanılıyor.",
-    buy: "Kontör al",
+    buy: "Ek kontör al",
     asOf: "Son bilgi {{time}}",
     // README "Saving": past the player's share, small talk and public chat scans stop; deals go on.
     saver:
@@ -229,7 +230,7 @@ export const trAfkPlus = {
     empty: "Henüz kayıt yok. Asistan bir mesaj aldığında burada görürsün.",
     noneHere: "Bu türde kayıt yok.",
     off: "Kayıtlar şu an kapalı.",
-    offline: "Daha önce gördüklerin aşağıda; yenileri bağlantı dönünce görünür.",
+    offline: "Daha önce gördüklerin aşağıda. Yenileri bağlantı dönünce görünür.",
     offlineEmpty: "Kayıtlar bağlantı dönünce görünür.",
     kept: "Kayıt 7 gün tutulur.",
     hidden: "Uygunsuz mesaj gizlendi.",
@@ -243,7 +244,7 @@ export const trAfkPlus = {
       offer: "{{w}} ile pazarlıkta {{p}} teklif edildi",
       // The comma keeps the name and the price apart ("Kaan_07, 40.000 istedi").
       counter: "{{w}}, {{p}} istedi",
-      agree: "{{w}} ile anlaşıldı: {{deal}}",
+      agree: "Asistan {{w}} ile anlaştı: {{deal}}",
       ask_owner: "Onayın istendi",
       ask_ownerOf: "{{i}} için onayın istendi",
       owner_ok: "Onayladın",
@@ -306,7 +307,7 @@ export const trAfkPlus = {
     why: {
       above: "Onay sınırının üstünde",
       new_counterpart: "Bu oyuncuyla ilk anlaşma",
-      authority: "Anlaşınca sana sormasını seçtin",
+      authority: "Anlaşmaları kendin onaylamayı seçtin",
       price_unusual: "Fiyat alışılmadık",
       budget: "Toplam harcama sınırı doldu",
       daily: "Günlük harcama sınırı doldu",
@@ -319,14 +320,14 @@ export const trAfkPlus = {
     reject: "Reddet",
     lower: "Fiyatı düşür",
     // Haggling again needs the assistant's AI: while it is stopped or paused, under the buttons.
-    lowerLater: "Asistan çalışınca fiyatı düşürebilirsin.",
+    lowerLater: "Asistan yeniden çalışınca fiyatı düşürebilirsin.",
     lowerLabel: "En fazla",
     // {{price}} comes with its ending ("37.500'den az").
     lowerPlaceholder: "{{price}} az",
     lowerSend: "Bu fiyata indirmeyi dene",
     // What lowering does, under the field (its outcome is not obvious). "ile" takes no ending: a
     // player's name cannot be inflected safely ("Kaan_07").
-    lowerHelp: "Asistan {{name}} ile bu fiyat için yeniden pazarlık eder; olmazsa anlaşma bozulur.",
+    lowerHelp: "Asistan {{name}} ile bu fiyat için yeniden pazarlık eder. Olmazsa anlaşma bozulur.",
     lowerTooHigh: "{{price}} düşük bir tutar yaz.",
     cancel: "Vazgeç",
     states: {
@@ -359,7 +360,7 @@ export const trAfkPlus = {
       "{{name}} buluttan çıkar ve oyun bu adla açılır. Takastan sonra bulutta yeniden başlatabilirsin.",
     joinGo: "Oyuna gir",
     joinCancel: "Vazgeç",
-    addAccount: "Launcher'da {{name}} hesabı yok; önce ekle.",
+    addAccount: "Launcher'da {{name}} hesabı yok. Önce ekle.",
     gameOpen: "Oyun zaten açık. Önce onu kapat.",
   },
   // A custom item seen for the first time (afkplus-free.md §1.5).
@@ -386,7 +387,7 @@ export const trAfkPlus = {
     cantReply: "Yalnız son 24 saatte sana yazanlara cevap verebilirsin.",
     hidden: "Uygunsuz mesaj gizlendi.",
     show: "Göster",
-    blocked: "Bu oyuncuyu engelledin; asistan ona cevap vermez.",
+    blocked: "Bu oyuncuyu engelledin. Asistan ona cevap vermez.",
     // A blocked player's conversation in the list, in place of its last line.
     blockedTag: "Engellendi",
     block: "Engelle",
@@ -398,7 +399,7 @@ export const trAfkPlus = {
     back: "Mesajlar",
     offline: "Mesajlar bağlantı dönünce görünür.",
     offlineBody: "Mesajlar bağlantı dönünce görünür. Ayarlarını yine de değiştirebilirsin.",
-    sendAway: "Makinemize şu an ulaşılamıyor; mesaj gönderilmedi.",
+    sendAway: "7/24 Bulut'a şu an ulaşılamıyor. Mesaj gönderilmedi.",
     unread: "{{count}} okunmamış",
     more: "Konuşma işlemleri",
     rejected: {
@@ -409,11 +410,11 @@ export const trAfkPlus = {
       tckn: "Kimlik numarası paylaşılamaz.",
       card: "Kart numarası paylaşılamaz.",
       words: "Bu mesaj gönderilemez.",
-      marker: "[AFK+] ile başlayamaz; o etiket asistana ait.",
+      marker: "[AFK+] ile başlayamaz. O etiket asistanın.",
       length: "En çok 200 karakter olabilir.",
       form: "Bu mesaj gönderilemez.",
     },
-    limited: "Çok hızlı yazdın. Biraz sonra yeniden dene.",
+    limited: "Çok hızlı yazdın. Biraz sonra tekrar dene.",
     sendFailed: "Mesaj gönderilemedi.",
   },
   // "Siparişler": the field, its checks and the orders' list (afkplus-free.md §7.1, §7.6).
@@ -430,12 +431,12 @@ export const trAfkPlus = {
     maintenance: "Bakım bitince sipariş ekleyebilirsin.",
     aiPaused: "Yapay zekâ bakımda. Formla ekleyebilirsin.",
     aiAway: "Yapay zekâya şu an ulaşılamıyor. Formla ekleyebilirsin.",
-    offline: "Makinemize şu an ulaşılamıyor. Formla ekleyebilirsin.",
+    offline: "7/24 Bulut'a şu an ulaşılamıyor. Formla ekleyebilirsin.",
     // The same while the notice above already says the machine is away.
     formOnly: "Şu an yalnız formla ekleyebilirsin.",
     off: "Yazıyla sipariş şu an kapalı. Formla ekleyebilirsin.",
     daily: "Bugün daha fazla kontrol edilemez. Formla ekleyebilirsin.",
-    rate: "Biraz bekleyip yeniden dene.",
+    rate: "Biraz bekleyip tekrar dene.",
     reject: {
       length: "Ne istediğini kısaca yaz.",
       link: "Bağlantı eklenemez.",
@@ -451,7 +452,7 @@ export const trAfkPlus = {
     },
     rules: {
       prepay: "asistan önden ödeme yapmaz, önden eşya vermez",
-      pay_cmd: "asistan para göndermez; ödeme yalnız takasta olur",
+      pay_cmd: "asistan para göndermez, ödeme yalnız takasta olur",
       disclose: "asistan bütçeni ve sınırlarını kimseye söylemez",
       hide_ai: "asistan yapay zekâ olduğunu saklamaz",
       off_platform: "asistan kimseyi başka uygulamaya çağırmaz",
@@ -492,7 +493,7 @@ export const trAfkPlus = {
     far: "En fazla {{limit}} doğru mu? Hedefin {{target}}.",
     yesRight: "Evet, doğru",
     fix: "Düzelt",
-    overCap: "Bu fiyat tek alım sınırını ({{cap}}) aşıyor.",
+    overCap: "Bu fiyat tek anlaşma sınırını ({{cap}}) aşıyor.",
     raise: "Sınırı {{amount}} yap",
     useCap: "Fiyatı {{cap}} yap",
   },
@@ -529,7 +530,7 @@ export const trAfkPlus = {
     gone: "Bu sipariş artık yok.",
     failed: "Sipariş kaydedilemedi.",
     writesDaily: "Bugün daha fazla sipariş değişikliği yapılamaz.",
-    writesLimited: "Biraz bekleyip yeniden dene.",
+    writesLimited: "Biraz bekleyip tekrar dene.",
     resumeFailed: "Sipariş sürdürülemedi.",
     extendFailed: "Süre uzatılamadı.",
     undoFailed: "Sipariş geri alınamadı.",
@@ -619,14 +620,14 @@ export const trAfkPlus = {
   // "Envanterden seç" (afkplus-free.md §7.2).
   pick: {
     title: "Envanterden seç",
-    exact: "Asistan bu eşyayı birebir tanır; adı aynı olan başka eşyayı kabul etmez.",
+    exact: "Asistan bu eşyayı birebir tanır. Adı aynı olan başka eşyayı kabul etmez.",
     confirm: "Bunu seç",
     cancel: "Vazgeç",
     chosen: "Seçilen: {{item}}",
     loading: "Envanter yükleniyor",
     empty: "Envanter boş.",
-    offline: "Makinemize şu an ulaşılamıyor.",
-    limited: "Biraz bekleyip yeniden dene.",
+    offline: "7/24 Bulut'a şu an ulaşılamıyor.",
+    limited: "Biraz bekleyip tekrar dene.",
     error: "Eşya seçilemedi.",
     failed: {
       empty: "Bu yuva artık boş.",
@@ -677,8 +678,8 @@ export const trAfkPlus = {
     pay: "Ödeme",
     pays: { money: "Para", items: "Eşya", both: "İkisi de" },
     who: "Kimlerle",
-    whoAll: "Herkes",
-    whoFriends: "Yalnız arkadaşlarım",
+    whoAll: "Herkesle",
+    whoFriends: "Yalnız arkadaşlarımla",
     friendsPlaceholder: "Oyuncu adı",
     friendsAdd: "Ad ekle",
     friendsRemove: "{{name}} adını çıkar",
@@ -686,11 +687,11 @@ export const trAfkPlus = {
     friendsErrors: {
       format: "3-16 karakter: harf, rakam ya da alt çizgi.",
       duplicate: "Bu ad zaten listede.",
-      blocked: "Bu oyuncuyu engelledin; önce engeli kaldır.",
+      blocked: "Bu oyuncuyu engelledin. Önce engeli kaldır.",
       full: "En çok {{count}} ad eklenebilir.",
-      refused: "İşaretli adlar kaydedilemiyor; onları çıkar.",
+      refused: "İşaretli adlar kaydedilemiyor. Onları çıkar.",
     },
-    persona: "Üslup",
+    persona: "Konuşma tarzı",
     presets: { friendly: "Samimi", brief: "Kısa ve net", polite: "Kibar", playful: "Esprili" },
     sample: "Örnek cevap",
     samples: {
@@ -701,7 +702,7 @@ export const trAfkPlus = {
     },
     // "Oyuncu gibi konuşsun" (27 Oct 2026): the wording only; the samples as it then writes them.
     playerTalk: "Oyuncu gibi konuşsun",
-    playerTalkHelp: "Sohbette resmi dil yerine oyuncu gibi konuşur.",
+    playerTalkHelp: "Sohbette resmî dil yerine oyuncu gibi konuşur.",
     samplesPlayer: {
       friendly: "slm knk, 32k olur mu",
       brief: "32k?",
@@ -736,7 +737,7 @@ export const trAfkPlus = {
     statusNone: "Yalnız AFK olduğumu",
     statusOwn: "Kendim yazacağım",
     statusPlaceholder: "Akşam 8'de dönerim",
-    judgePending: "Kontrol ediliyor; onaylanınca kullanılır.",
+    judgePending: "Kontrol ediliyor. Onaylanınca kullanılır.",
     judgeRejected: {
       inappropriate: "Bu metin uygunsuz bulundu.",
       impersonation: "Bu metin yetkili ya da başka biri gibi duruyor.",
@@ -746,17 +747,17 @@ export const trAfkPlus = {
     },
     text: {
       length: "En çok {{max}} karakter olabilir.",
-      marker: "[AFK+] yazılamaz; o etiket asistana ait.",
+      marker: "[AFK+] yazılamaz. O etiket asistanın.",
       link: "Bağlantı yazılamaz.",
       phone: "Telefon numarası yazılamaz.",
       email: "E-posta yazılamaz.",
-      form: "Tek satır yaz; komut ya da renk kodu yazılamaz.",
+      form: "Tek satır yaz. Komut ya da renk kodu yazılamaz.",
       other: "Bu metin kullanılamaz.",
     },
     scope: "Hangi mesajlara cevap versin",
     scopes: {
       all: "Her özel mesaja",
-      trade: "Ticaret konuşmalarına",
+      trade: "Takas konuşmalarına",
       off: "Yalnız hazır cevaplar",
     },
     // Small talk said as its opposite, on by default (27 Oct 2026).
@@ -788,7 +789,7 @@ export const trAfkPlus = {
     windowErrorTime: "Saati SS:DD biçiminde yaz.",
     windowsFull: "En çok 7 aralık eklenebilir.",
     breakTitle: "Mola",
-    breakHelp: "Hesabın AFK'da kalır; asistan seçtiğin güne kadar cevap vermez.",
+    breakHelp: "Hesabın AFK'da kalır. Asistan seçtiğin güne kadar cevap vermez.",
     breakTake: "Mola ver",
     breakFor: "Süre",
     breakDays: "{{count}} gün",
@@ -841,7 +842,7 @@ export const trAfkPlus = {
     returnRow: "Takastan sonra",
     returnStay: "Spawn'da kalsın",
     returnHelp:
-      "Takas spawn'da yapılır; sonra orada kalır ya da seçtiğin komutla AFK yerine döner.",
+      "Takas spawn'da yapılır. Sonra hesap orada kalır ya da seçtiğin komutla AFK yerine döner.",
     summaryAt: "Günlük özet saati",
     saver: "Kontörün azalınca sohbeti kıssın",
     savers: { "80": "%80 kullanılınca", "50": "%50 kullanılınca", off: "Kapalı" },
@@ -861,7 +862,7 @@ export const trAfkPlus = {
     barLabel: "Kaydedilmemiş AFK+ ayarları",
     fixFirst: "Önce işaretli alanları düzelt.",
     failed: "Ayarlar kaydedilemedi.",
-    changedElsewhere: "Ayarların başka bir yerde değişti. Yeniden dene.",
+    changedElsewhere: "Ayarların başka bir yerde değişti. Tekrar dene.",
     fineRefused: "Bu bölümdeki bir ayar kabul edilmedi.",
     notifyAll: "Bütün bulut hesapların için.",
   },
@@ -875,9 +876,9 @@ export const trAfkPlus = {
     restoreBody:
       "Ayarların bu hâle döner, sonraki değişiklikler geçmişte kalır. Siparişlerin olduğu gibi kalır.",
     restored: "Ayarlar eski hâline döndü",
-    conflict: "Ayarlar bu arada değişti; geçmiş yenilendi.",
+    conflict: "Ayarlar bu arada değişti. Geçmiş yenilendi.",
     failedRestore: "Ayarlar eski hâline döndürülemedi.",
-    invalidRestore: "Bu hâl bugünkü sınırlara uymuyor; geri dönülemez.",
+    invalidRestore: "Bu hâl bugünkü sınırlara uymuyor. Ona geri dönülemez.",
     by: {
       site: "Siteden",
       launcher: "Launcher'dan",
@@ -946,7 +947,7 @@ export const trAfkPlus = {
     empty: "Son 30 günde takas yok.",
     receipt: "Makbuz",
     // Under a receipt paid in money: a "makbuz" with a bare figure could read as real money.
-    receiptMoney: "Tutar oyundaki parayla; gerçek para el değiştirmez.",
+    receiptMoney: "Tutar oyundaki parayla. Gerçek para el değiştirmez.",
     download: "Tabloyu indir",
     downloaded: "Tablo İndirilenler klasörüne kaydedildi",
     downloadFailed: "Tablo kaydedilemedi.",
@@ -966,7 +967,7 @@ export const trAfkPlus = {
       completed: "Tamamlandı",
       review: "İncelemede",
     },
-    reviewNote: "Yetkililer bu takasa bakıyor; sonuçlanınca sayılır.",
+    reviewNote: "Yetkililer bu takasa bakıyor. Sonuçlanınca sayılır.",
     reviewShort: "incelemede",
     // After the item's name in a line ("64 Elmas satıldı").
     sides: { buy: "alındı", sell: "satıldı" },
@@ -1002,7 +1003,7 @@ export const trAfkPlus = {
       recaps: "Özetler",
     },
     quiet: "Sessiz saatler",
-    quietBody: "Bu saatlerde telefona bildirim gitmez; bitince olanların özeti gelir.",
+    quietBody: "Bu saatlerde telefona bildirim gitmez. Bitince olanların özeti gelir.",
     loadFailed: "Bildirim ayarları yüklenemedi.",
     failed: "Bildirim ayarı kaydedilemedi.",
   },
@@ -1026,11 +1027,11 @@ export const trAfkPlus = {
     renewalSoon: "Süre yakında bitiyor.",
     expired: "Hesabın süresi bitti.",
     quotaFull: "Kontörün bitti.",
-    quotaFullUntil: "Kontörün bitti; {{when}} yenilenir.",
+    quotaFullUntil: "Kontörün bitti, {{when}} yenilenir.",
     quota80: "Kontörün çoğu kullanıldı.",
     giftEnding: "Hediye kontörün yakında bitiyor.",
     boughtInUse: "Kontörün bitti, aldığın kontör kullanılıyor.",
-    incident: "Uygunsuz mesajlar geldi; o oyuncuya artık cevap verilmiyor.",
+    incident: "Uygunsuz mesajlar geldi. O oyuncuya artık cevap verilmiyor.",
     summary: "Bugün {{pms}}, {{deals}}.",
     summaryPms: "{{count}} mesaj",
     summaryDeals: "{{count}} anlaşma",
@@ -1062,7 +1063,7 @@ export const trAfkPlus = {
     },
     assistant: {
       title: "Nasıl konuşsun?",
-      lede: "Özel mesajlara bu üslupla cevap verir; yapay zekâ olduğunu saklamaz.",
+      lede: "Özel mesajlara bu tarzda cevap verir. Yapay zekâ olduğunu saklamaz.",
     },
     limits: {
       title: "Ne kadar harcayabilsin?",

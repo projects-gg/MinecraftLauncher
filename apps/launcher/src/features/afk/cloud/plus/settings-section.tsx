@@ -919,13 +919,13 @@ function FineTuneGroup({
             <RadioGroup.Item
               key={value}
               value={value}
-              className="group flex w-full cursor-pointer items-start gap-3 rounded-[var(--radius-panel)] px-3 py-2.5 text-left outline-none ring-1 ring-white/[0.07] transition-[background-color,box-shadow] duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=checked]:bg-gold-500/[0.07] data-[state=checked]:ring-gold-400/40"
+              className="group flex w-full cursor-pointer items-start gap-3 rounded-[var(--radius-panel)] px-3 py-2.5 text-left outline-none ring-1 ring-white/[0.07] transition-[background-color,box-shadow] duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=checked]:bg-white/[0.06] data-[state=checked]:ring-white/25"
             >
               <span
                 aria-hidden
-                className="mt-[3px] flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-gold-400"
+                className="mt-[3px] flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-bone-100"
               >
-                <RadioGroup.Indicator className="size-2 rounded-full bg-gold-400" />
+                <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
               </span>
               <span className="min-w-0">
                 <span className="block text-[13.5px] font-medium text-bone-50">
@@ -1556,9 +1556,7 @@ export function SettingsSection({
 
   return (
     <>
-      {/* Every choice here has the quiet plate, as in the account's settings panel: gold stays the
-          save button's (AFK-CLEAR; the custom properties reach each `Segmented` inside). */}
-      <div className="flex flex-col gap-8 [--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]">
+      <div className="flex flex-col gap-8">
         <FineTuneGroup
           {...props}
           serverIssues={serverIssues}

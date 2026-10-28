@@ -384,14 +384,21 @@ function TaskCard({
           onClick={onRemove}
         />
       </div>
-      {/* When it runs: one choice for joining (every one or only the first, never both), and a
-          repeat on its own switch, both on the card's right edge (three like switches overlapped). */}
+      {/* When it runs: on every join, on the first one, or only at an interval (one choice, on the
+          card's right edge: three like switches overlapped). A join may repeat at an interval too,
+          on its own switch; "Yalnız aralıkla" is the repeat itself, so it turns it on and the switch
+          goes (two controls for one thing read as a contradiction: QA-FIX-L's look). A task saved
+          with neither keeps the switch, beside the line that says it never runs. */}
       <SettingRow title={t("afkPanel.task.onJoin")}>
         <Segmented<"every" | "first" | "never">
-          // A quiet plate: gold stays the save button's (the sixth look).
-          className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
           value={join}
-          onValueChange={(v) => set({ onLogin: v === "every", onFirstLogin: v === "first" })}
+          onValueChange={(v) =>
+            set(
+              v === "never"
+                ? { onLogin: false, onFirstLogin: false, intervalEnabled: true }
+                : { onLogin: v === "every", onFirstLogin: v === "first" },
+            )
+          }
           label={t("afkPanel.task.onJoin")}
           options={[
             { value: "every", label: t("afkPanel.task.every") },
@@ -400,11 +407,13 @@ function TaskCard({
           ]}
         />
       </SettingRow>
-      <ToggleRow
-        title={t("afkSettings.scheduler.interval")}
-        checked={task.intervalEnabled}
-        onCheckedChange={(v) => set({ intervalEnabled: v })}
-      />
+      {join !== "never" || !task.intervalEnabled ? (
+        <ToggleRow
+          title={t("afkSettings.scheduler.interval")}
+          checked={task.intervalEnabled}
+          onCheckedChange={(v) => set({ intervalEnabled: v })}
+        />
+      ) : null}
       <Fold open={task.intervalEnabled}>
         <RangeRow title={t("afkPanel.interval")} errors={[minError, maxError]}>
           <NumberField

@@ -52,7 +52,7 @@ describe("mod health texts", () => {
     ).toBe("Xaero's Minimap, Minecraft 1.21.1 ile uyumlu değil.");
     expect(
       issueText(t, issue({ kind: "wrongLoader", mods: ["Create"], madeFor: "Forge" }), "1.21.1"),
-    ).toBe("Create, Forge için yapılmış; bu kurulumda çalışmaz.");
+    ).toBe("Create, Forge için yapılmış. Bu kurulumda çalışmaz.");
     expect(issueText(t, issue({ kind: "javaVersion", mods: ["Modern"], java: 25 }), "1.21.1")).toBe(
       "Modern, Java 25 istiyor.",
     );

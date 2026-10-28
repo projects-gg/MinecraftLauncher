@@ -525,7 +525,7 @@ pub async fn social_team_edit(
         Err(error @ SocialError::RateLimited { .. }) if text => Err(crate::error::CmdError::new(
             "SOSYAL-EKIP-METIN",
             pick(
-                "Ekibin adı, etiketi ve sloganı günde en çok 10 kez değişebilir. Yarın yeniden dene.",
+                "Ekibin adı, etiketi ve sloganı günde en çok 10 kez değişebilir. Yarın tekrar dene.",
                 "A crew's name, tag and motto can change 10 times a day. Try again tomorrow.",
             ),
             error.to_string(),
@@ -705,7 +705,7 @@ fn daily(result: Result<JoinResult, SocialError>) -> CmdResult<JoinResult> {
             Err(crate::error::CmdError::new(
                 "SOSYAL-EKIP-GUNLUK",
                 pick(
-                    "Bugünlük sınıra ulaştın. Yarın yeniden dene.",
+                    "Bugünlük sınıra ulaştın. Yarın tekrar dene.",
                     "You've reached today's limit. Try again tomorrow.",
                 ),
                 error.to_string(),
@@ -813,7 +813,7 @@ pub async fn social_team_link(
         Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
             "SOSYAL-EKIP-BAGLANTI",
             pick(
-                "Kodu ve bağlantıyı bugün çok yeniledin. Yarın yeniden dene.",
+                "Kodu ve bağlantıyı bugün çok yeniledin. Yarın tekrar dene.",
                 "You've renewed the code and the link a lot today. Try again tomorrow.",
             ),
             error.to_string(),
@@ -835,7 +835,7 @@ pub async fn social_team_join_mode(
         Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
             "SOSYAL-EKIP-DEGISIKLIK",
             pick(
-                "Ekibi bugün çok değiştirdin. Yarın yeniden dene.",
+                "Ekibi bugün çok değiştirdin. Yarın tekrar dene.",
                 "You've changed the crew a lot today. Try again tomorrow.",
             ),
             error.to_string(),
@@ -859,7 +859,7 @@ pub async fn social_plan_make(
         Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
             "SOSYAL-PLAN-SINIR",
             pick(
-                "Bugün en çok 5 plan yapabilirsin. Yarın yeniden dene.",
+                "Bugün en çok 5 plan yapabilirsin. Yarın tekrar dene.",
                 "You can make up to 5 plans a day. Try again tomorrow.",
             ),
             error.to_string(),
@@ -881,7 +881,7 @@ pub async fn social_plan_answer(
         Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
             "SOSYAL-PLAN-YANIT",
             pick(
-                "Yanıtını bugün çok değiştirdin. Yarın yeniden dene.",
+                "Yanıtını bugün çok değiştirdin. Yarın tekrar dene.",
                 "You've changed your answer a lot today. Try again tomorrow.",
             ),
             error.to_string(),
@@ -911,7 +911,7 @@ pub async fn social_plan_note(
         Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
             "SOSYAL-PLAN-NOT-SINIR",
             pick(
-                "Planları bugün çok değiştirdin. Yarın yeniden dene.",
+                "Planları bugün çok değiştirdin. Yarın tekrar dene.",
                 "You've changed plans a lot today. Try again tomorrow.",
             ),
             error.to_string(),
@@ -1098,7 +1098,7 @@ fn chat_extra_error(error: SocialError) -> crate::error::CmdError {
             ..
         } => Some((
             "SOSYAL-TEPKI-SINIR",
-            "Bugün çok tepki verdin. Yarın yeniden dene.",
+            "Bugün çok tepki verdin. Yarın tekrar dene.",
             "You've reacted a lot today. Try again tomorrow.",
         )),
         SocialError::RateLimited {
@@ -1106,7 +1106,7 @@ fn chat_extra_error(error: SocialError) -> crate::error::CmdError {
             ..
         } => Some((
             "SOSYAL-CIKARTMA-SINIR",
-            "Bugün çok çıkartma gönderdin. Yarın yeniden dene.",
+            "Bugün çok çıkartma gönderdin. Yarın tekrar dene.",
             "You've sent a lot of stickers today. Try again tomorrow.",
         )),
         _ => None,
@@ -1282,8 +1282,8 @@ fn wear_error(error: SocialError) -> crate::error::CmdError {
         } => Some((
             "SOSYAL-TAKIM-ETIKET-AD",
             lang.pick(
-                "Bu etiket takılamaz; lider ekibin adını ya da etiketini değiştirmeli.",
-                "This tag can't be worn; the leader needs to change the crew's name or tag.",
+                "Bu etiket takılamaz. Lider ekibin adını ya da etiketini değiştirmeli.",
+                "This tag can't be worn. The leader needs to change the crew's name or tag.",
             )
             .to_owned(),
         )),
@@ -1326,7 +1326,7 @@ fn crew_settings(result: Result<(), SocialError>) -> CmdResult<()> {
         Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
             "SOSYAL-TAKIM-AYAR",
             pick(
-                "Ekibin ayarları bugün çok değişti. Yarın yeniden dene.",
+                "Ekibin ayarları bugün çok değişti. Yarın tekrar dene.",
                 "The crew's settings changed a lot today. Try again tomorrow.",
             ),
             error.to_string(),
@@ -1427,7 +1427,7 @@ pub async fn social_report(
         Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
             "SOSYAL-RAPOR-SINIR",
             pick(
-                "Bugün çok rapor gönderdin. Yarın yeniden dene.",
+                "Bugün çok rapor gönderdin. Yarın tekrar dene.",
                 "You've sent a lot of reports today. Try again tomorrow.",
             ),
             error.to_string(),

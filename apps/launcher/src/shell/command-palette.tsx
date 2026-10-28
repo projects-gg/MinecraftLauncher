@@ -16,7 +16,6 @@ import {
   Images,
   Keyboard,
   Lifebuoy,
-  Lightning,
   LinkSimple,
   MagnifyingGlass,
   Memory,
@@ -28,7 +27,7 @@ import {
   Robot,
   Scroll,
   SquaresFour,
-  Stop,
+  StopCircle,
   Sun,
   TShirt,
   UserCircle,
@@ -48,6 +47,9 @@ import { sortAccounts } from "@/features/accounts/account-order";
 import { type CenterFocus, useAccountsUi } from "@/features/accounts/store";
 import { ACCOUNTS_KEY, switchAccount } from "@/features/accounts/use-accounts";
 import { useOwnLaunchInstance, useOwnLaunchKind } from "@/features/accounts/use-own-launch";
+import type { CloudPageData } from "@/features/afk/cloud/api";
+import { foldedIds } from "@/features/afk/cloud/twins";
+import { CLOUD_KEY, useConnectAll } from "@/features/afk/cloud/use-cloud";
 import { runAfk } from "@/features/afk/errors";
 import { showError } from "@/features/content/jobs";
 import { useHostUi } from "@/features/host/store";
@@ -190,7 +192,13 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
     enabled: open,
     staleTime: 0,
   });
-  const afk = afkPaletteActions(afkSessions);
+  // "Bu bilgisayardaki" as the AFK page's "Buradakileri bağla": an account also in 7/24 Bulut is
+  // its cloud card there, so connecting leaves it out (the page's cache, as useConnectAll reads it).
+  const afk = afkPaletteActions(
+    afkSessions,
+    foldedIds(queryClient.getQueryData<CloudPageData>(CLOUD_KEY)),
+  );
+  const connectAll = useConnectAll();
   const openCenter = useAccountsUi((s) => s.openCenter);
   const friendsOn = useSocialUi((s) => s.view.enabled);
   const friendsSignedIn = useSocialUi((s) => s.view.auth === "signedIn");
@@ -651,10 +659,11 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 entry(
                   "action:afk-all",
                   t("palette.afkConnectAll"),
-                  <Lightning size={18} />,
+                  // The page's "Buradakileri bağla" mark and its way (twins left out).
+                  <Play size={18} />,
                   () =>
                     run(() => {
-                      runAfk(api.afkConnectAll(), t("afk.connectFailed"));
+                      connectAll();
                       toast(t("palette.afkConnecting"));
                     }),
                   { words: PALETTE_WORDS.afkConnectAll },
@@ -666,7 +675,7 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 entry(
                   "action:afk-stop",
                   t("palette.afkStopAll"),
-                  <Stop size={18} />,
+                  <StopCircle size={18} />,
                   () => run(() => runAfk(api.afkStopAll(), t("afk.stopFailed"))),
                   { words: PALETTE_WORDS.afkStopAll },
                 ),

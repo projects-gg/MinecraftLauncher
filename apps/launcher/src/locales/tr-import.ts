@@ -57,7 +57,7 @@ export const trImport = {
     title: "Aktarılıyor",
     preparing: "Hazırlanıyor",
     label: "Aktarım ilerlemesi",
-    cancel: "İptal",
+    cancel: "İptal et",
     stopping: "İptal ediliyor",
   },
   done: {

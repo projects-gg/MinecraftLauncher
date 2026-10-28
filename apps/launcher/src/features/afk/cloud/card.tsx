@@ -24,6 +24,7 @@ import {
   Play,
   SneakerMove,
   Stop,
+  StopCircle,
   Terminal,
   Trash,
   X,
@@ -61,6 +62,7 @@ import { appealFirst, isModerationStop } from "./moderation";
 import { ModerationLine, openAppeal } from "./moderation-bits";
 import { AI_TONE, useAiSentence } from "./plus/rail";
 import { plusAi } from "./plus/types";
+import { firstClause } from "./plus/words";
 import { CloudStateLine } from "./state-line";
 import {
   type CloudPrimary,
@@ -260,14 +262,15 @@ function PrimaryButton({
 
 /**
  * An AFK+ account's line on its card: the assistant's state in one sentence and what waits for the
- * player (approvals in gold); the whole line opens the AFK+ panel.
+ * player (the approvals in bone, their weight sets them apart: gold is never a sentence); the whole
+ * line opens the AFK+ panel.
  */
 function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => void }) {
   const { t } = useTranslation();
   const sentence = useAiSentence(account, true);
   // The row has room for the state only: its first clause ("Kontörün bitti"); the rest ("13:07'de
   // yenilenir") is in the panel's rail and the row's tooltip, never cut mid-word.
-  const brief = sentence.text.split("; ")[0] ?? sentence.text;
+  const brief = firstClause(sentence.text);
   const ai = plusAi(account);
   // A machine that cannot be asked has no current count (the panel shows none either).
   const approvals = ai && ai.state !== "unknown" ? ai.pendingApprovals : 0;
@@ -294,7 +297,7 @@ function PlusLine({ account, onOpen }: { account: CloudAccount; onOpen: () => vo
         {brief}
       </span>
       {approvals > 0 ? (
-        <span className="shrink-0 font-display text-[12.5px] font-semibold text-gold-200 tabular-nums">
+        <span className="shrink-0 text-[12.5px] font-semibold text-bone-50 tabular-nums">
           {t("afkPlus.card.approvals", { count: approvals })}
         </span>
       ) : null}
@@ -328,7 +331,7 @@ function useHereItems(here: AfkAccount | null, onFixPassword: () => void): MenuI
   const stop = () => runAfk(api.afkStop(here.id), t("afk.stopFailed"));
   const items: Record<ReturnType<typeof primaryAction>, MenuItem> = {
     connect: { label: t("afk.connect"), icon: <Play size={16} />, onSelect: () => connect(here) },
-    stop: { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop },
+    stop: { label: t("afk.stop"), icon: <StopCircle size={16} />, onSelect: stop },
     cancel: { label: t("afkConnect.cancel"), icon: <X size={16} />, onSelect: stop },
     retry: {
       label: t("common.retry"),
@@ -435,7 +438,11 @@ export function CloudCard({
           action === "start"
             ? { label: t("cloudAfk.actions.start"), icon: <Play size={16} />, onSelect: onStart }
             : action === "stop"
-              ? { label: t("cloudAfk.actions.stop"), icon: <Stop size={16} />, onSelect: onStop }
+              ? {
+                  label: t("cloudAfk.actions.stop"),
+                  icon: <StopCircle size={16} />,
+                  onSelect: onStop,
+                }
               : action === "fixPassword"
                 ? {
                     label: t("afkClear.fixPassword"),

@@ -342,7 +342,7 @@ pub async fn game_log_share(
             "KAYIT-BOS",
             pick(
                 "Bu kayıt boş, paylaşılacak bir şey yok.",
-                "This log is empty; there's nothing to share.",
+                "This log is empty, so there's nothing to share.",
             ),
             file_name,
         ));

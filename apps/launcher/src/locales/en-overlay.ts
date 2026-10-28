@@ -2,11 +2,11 @@
 // needs more room: the switch to a player's own install names it bare ("Switch to Survival").
 export const enOverlay = {
   setting: "In-game overlay",
-  settingHelp: "Messages, friends and crew calls open in game; the default key is {{key}}.",
+  settingHelp: "Messages, friends and crew calls open in game. The default key is {{key}}.",
   emojiSetting: "Emoji picker in chat",
-  emojiHelp: "Emojis go into chat with one click; the default key is {{key}}.",
+  emojiHelp: "Emojis go into chat with one click. The default key is {{key}}.",
   closeHelp: "Won't work: the launcher closes when the game starts.",
-  toMinimize: "Minimize instead",
+  toMinimize: "Minimise instead",
   packMissing: "None of your installs can run it.",
   needs: "Won't work in the {{name}} install: it needs Fabric {{range}}.",
   toOfficial: "Switch to the official pack",

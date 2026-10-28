@@ -395,8 +395,6 @@ export function ConnectionPart({ draft, setDraft, view, issues }: PartProps) {
       </SettingRow>
       <SettingRow title={t("cloudAfk.settings.lang")}>
         <Segmented
-          // A quiet plate, as in the desktop panel: gold stays the save button's.
-          className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
           value={draft.lang === "en" ? "en" : "tr"}
           onValueChange={(lang) => setDraft((d) => ({ ...d, lang }))}
           label={t("cloudAfk.settings.lang")}

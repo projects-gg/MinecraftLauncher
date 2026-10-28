@@ -167,13 +167,13 @@ export function ReportDialog() {
               <RadioGroup.Item
                 key={option}
                 value={option}
-                className="group flex h-9 w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-3 text-left text-[13.5px] text-bone-100 outline-none ring-1 ring-white/[0.07] transition-[background-color,box-shadow,color] duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=checked]:bg-gold-500/[0.07] data-[state=checked]:text-bone-50 data-[state=checked]:ring-gold-400/40"
+                className="group flex h-9 w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-3 text-left text-[13.5px] text-bone-100 outline-none ring-1 ring-white/[0.07] transition-[background-color,box-shadow,color] duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=checked]:bg-white/[0.06] data-[state=checked]:text-bone-50 data-[state=checked]:ring-white/25"
               >
                 <span
                   aria-hidden
-                  className="flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-gold-400"
+                  className="flex size-4 shrink-0 items-center justify-center rounded-full border border-white/25 transition-colors duration-150 group-data-[state=checked]:border-bone-100"
                 >
-                  <RadioGroup.Indicator className="size-2 rounded-full bg-gold-400" />
+                  <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
                 </span>
                 {t(reasonKey(kind, option, fromPlan, fromReaction))}
               </RadioGroup.Item>

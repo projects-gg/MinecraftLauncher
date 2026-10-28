@@ -66,7 +66,7 @@ pub struct CrashView {
     /// Memory crashes: the maximum memory to retry with.
     pub memory: Option<MemoryAdviceView>,
     /// The JVM did not start because of the instance's own JVM arguments, and it has some:
-    /// "Argümanları sıfırla ve yeniden dene" (`instance_set_jvm_args`).
+    /// "Argümanları sıfırla ve tekrar dene" (`instance_set_jvm_args`).
     pub reset_jvm_args: bool,
 }
 
@@ -78,7 +78,7 @@ pub struct TurnOffView {
     pub name: String,
 }
 
-/// "Belleği artır/düşür ve yeniden dene".
+/// "Belleği artır/düşür ve tekrar dene".
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryAdviceView {

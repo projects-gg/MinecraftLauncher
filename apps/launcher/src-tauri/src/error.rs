@@ -33,8 +33,8 @@ impl CmdError {
         Self::new(
             "GENEL",
             pick(
-                "Beklenmeyen bir sorun oluştu. Tekrar dene; sürerse ayrıntıları destek ekibine gönder.",
-                "Something unexpected went wrong. Try again; if it keeps happening, send the details to support.",
+                "Beklenmeyen bir sorun oluştu. Tekrar dene. Sürerse ayrıntıları destek ekibine gönder.",
+                "Something unexpected went wrong. Try again. If it keeps happening, send the details to support.",
             ),
             details.to_string(),
         )
@@ -289,7 +289,7 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
         E::SignupsClosed { .. } => (
             "SOSYAL-YENI-HESAP",
             lang.pick(
-                "Şu an yeni hesap açılamıyor. Yarın yeniden dene.",
+                "Şu an yeni hesap açılamıyor. Yarın tekrar dene.",
                 "No new accounts can be made right now. Try again tomorrow.",
             )
             .to_owned(),
@@ -777,7 +777,7 @@ impl From<pl_social::SocialError> for CmdError {
                 C::CrewsChanged => (
                     "SOSYAL-EKIP-SIRA",
                     pick(
-                        "Ekiplerin bu arada değişti. Sırayı yeniden dene.",
+                        "Ekiplerin bu arada değişti. Sırayı tekrar dene.",
                         "Your crews changed meanwhile. Try the order again.",
                     ),
                 ),

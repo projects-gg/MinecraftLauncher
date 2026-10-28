@@ -223,13 +223,13 @@ pub async fn legacy_import(
             {
                 Ok(pl_auth::LegacyImport::Imported { .. }) => report.premium_imported = true,
                 Ok(_) => report.notes.push(
-                    pick("Premium oturum okunamadı; Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin.", "Couldn't read the premium session; you can sign in again in Settings > Accounts.")
+                    pick("Premium oturum okunamadı. Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin.", "Couldn't read the premium session. You can sign in again in Settings > Accounts.")
                         .into(),
                 ),
                 Err(error) => {
                     tracing::warn!(%error, "legacy premium import failed");
                     report.notes.push(
-                        pick("Premium oturum aktarılamadı; Microsoft ile yeniden giriş yap.", "Couldn't bring over the premium session; sign in with Microsoft again.").into(),
+                        pick("Premium oturum aktarılamadı. Microsoft ile yeniden giriş yap.", "Couldn't bring over the premium session. Sign in with Microsoft again.").into(),
                     );
                 }
             },
@@ -282,10 +282,10 @@ pub async fn legacy_import(
                     tracing::warn!(%error, "legacy AFK account settings not imported");
                     report.notes.push(pick(
                         format!(
-                            "{nickname} AFK hesabının ayarları aktarılamadı; AFK sayfasından kontrol et."
+                            "{nickname} AFK hesabının ayarları aktarılamadı. AFK sayfasından kontrol et."
                         ),
                         format!(
-                            "The settings of the AFK account {nickname} couldn't be brought over; check them on the AFK page."
+                            "The settings of the AFK account {nickname} couldn't be brought over. Check them on the AFK page."
                         ),
                     ));
                 }
@@ -295,10 +295,10 @@ pub async fn legacy_import(
                     tracing::warn!(%error, "legacy AFK login commands not imported");
                     report.notes.push(pick(
                         format!(
-                            "{nickname} AFK hesabının giriş komutları aktarılamadı; AFK ayarlarından yeniden gir."
+                            "{nickname} AFK hesabının giriş komutları aktarılamadı. AFK ayarlarından yeniden gir."
                         ),
                         format!(
-                            "The login commands of the AFK account {nickname} couldn't be brought over; enter them again in its AFK settings."
+                            "The login commands of the AFK account {nickname} couldn't be brought over. Enter them again in its AFK settings."
                         ),
                     ));
                 }

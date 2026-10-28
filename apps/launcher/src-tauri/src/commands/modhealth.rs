@@ -1773,7 +1773,7 @@ pub async fn mods_reinstall(
     let outcome = run_reinstall(&reinstall).await.map_err(|error| {
         CmdError::new(
             "YENIDEN-YUKLE",
-            pick("Modlar taşınamadı. Mod klasörünü açık tutan bir program (dosya gezgini ya da antivirüs gibi) olabilir; kapatıp tekrar dene.", "Couldn't move the mods. A program may have the mods folder open (like your file manager or antivirus); close it and try again."),
+            pick("Modlar taşınamadı. Mod klasörünü açık tutan bir program (dosya gezgini ya da antivirüs gibi) olabilir. Onu kapatıp tekrar dene.", "Couldn't move the mods. A program may have the mods folder open (like your file manager or antivirus). Close it and try again."),
             error.to_string(),
         )
     })?;

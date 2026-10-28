@@ -13,6 +13,14 @@
   --font-sans: "Figtree Variable", "PL Emoji", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* One gold (QA-FIX-L; docs/design.md §6): a segmented control's chosen option sits on a quiet
+   plate in the text colour everywhere in the launcher, as in Studio and on the site (the AFK panels
+   had it first). The gold stays the main action's, the progress's and the active nav's. */
+:root {
+  --segmented-plate: rgb(255 255 255 / 0.16);
+  --segmented-ink: var(--color-bone-50);
+}
+
 /* Page changes (router.tsx, view transition type "page"). Only the page area takes part: the
    rail, title bar, command bar and the art stay live and change in place. The leaving page
    fades out fast; the new one rises 6 px into place a beat later (docs/design.md §5). */

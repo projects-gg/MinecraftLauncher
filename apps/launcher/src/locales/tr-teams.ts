@@ -19,7 +19,7 @@ export const trTeams = {
   decline: "Reddet",
   joined: "{{name}} ekibine katıldın",
   privacy:
-    "Ekibindekiler adını, fotoğrafını ve ne oynadığını görür; başka sunucuların adresini görmez.",
+    "Ekibindekiler adını, fotoğrafını ve ne oynadığını görür. Başka sunucuların adresini görmez.",
   create: {
     title: "Ekip kur",
     name: "Ekip adı",

@@ -1153,7 +1153,7 @@ export const mockSocial: SocialApi = {
       throw new MockSocialError(
         "SOSYAL-SINIR",
         pick(
-          "Bugün çok rapor gönderdin. Yarın yeniden dene.",
+          "Bugün çok rapor gönderdin. Yarın tekrar dene.",
           "You've sent a lot of reports today. Try again tomorrow.",
         ),
       );

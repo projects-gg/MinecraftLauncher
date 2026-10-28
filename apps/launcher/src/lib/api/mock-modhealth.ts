@@ -460,7 +460,7 @@ export function mockCrash(instanceId: string, scenario: string) {
         ...base,
         kind,
         title: "Ekran kartı hazırlanamadı",
-        hint: "Ekran kartı sürücünü güncelleyip yeniden dene.",
+        hint: "Ekran kartı sürücünü güncelleyip tekrar dene.",
       };
     case "java":
       return {

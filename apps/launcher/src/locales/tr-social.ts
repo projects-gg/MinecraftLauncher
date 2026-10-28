@@ -10,16 +10,16 @@ export const trSocial = {
   },
   consent: {
     title: "Arkadaşlarınla birlikte oyna",
-    body: "Discord hesabınla giriş yaparsın. Arkadaşların adını, profil fotoğrafını ve ne oynadığını görür; e-postan ve şifren bize gelmez.",
+    body: "Discord hesabınla giriş yaparsın. Arkadaşların adını, profil fotoğrafını ve ne oynadığını görür. E-postan ve şifren bize gelmez.",
     privacy: "Gizlilik",
     signIn: "Discord ile giriş yap",
     waiting: "Tarayıcıda Discord'u onayla",
     waitingNote: "Onaylayınca burada devam edersin.",
     reopen: "Tarayıcıyı yeniden aç",
     cancel: "Vazgeç",
-    expired: "Giriş tamamlanamadı. Yeniden dene.",
+    expired: "Giriş tamamlanamadı. Tekrar dene.",
     unavailable: "Şu an giriş yapılamıyor. Biraz sonra tekrar dene.",
-    failed: "Giriş tamamlanamadı. Yeniden dene.",
+    failed: "Giriş tamamlanamadı. Tekrar dene.",
   },
   status: {
     online: "Çevrimiçi",
@@ -94,7 +94,7 @@ export const trSocial = {
     cancel: "Vazgeç",
     dismiss: "Kapat",
     friendsSince: "{{date}} tarihinden beri arkadaşsınız",
-    failed: "Bu işlem yapılamadı. Yeniden dene.",
+    failed: "Bu işlem yapılamadı. Tekrar dene.",
   },
   add: {
     title: "Arkadaş ekle",

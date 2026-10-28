@@ -132,8 +132,8 @@ impl From<pl_afk::AfkError> for CmdError {
             AfkError::Secret(_) => (
                 "AFK-ANAHTAR",
                 pick(
-                    "Giriş komutlarına bilgisayarın güvenli anahtar deposundan ulaşılamadı. Tekrar dene; sürerse bilgisayarı yeniden başlat.",
-                    "Couldn't reach the login commands in your computer's secure storage. Try again; if it keeps happening, restart your computer.",
+                    "Giriş komutlarına bilgisayarın güvenli anahtar deposundan ulaşılamadı. Tekrar dene. Sürerse bilgisayarı yeniden başlat.",
+                    "Couldn't reach the login commands in your computer's secure storage. Try again. If it keeps happening, restart your computer.",
                 ),
             ),
             AfkError::LoginCommandsChanged => (

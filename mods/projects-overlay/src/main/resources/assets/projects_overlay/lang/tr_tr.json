@@ -341,7 +341,7 @@
   "projects_overlay.toast.hint.manage": "%s ile yönet",
   "projects_overlay.friend.where.world": "Dünyasında",
   "projects_overlay.world.join.title": "Dünyaya geçilsin mi?",
-  "projects_overlay.world.join.body": "Oyunda arkadaşının dünyasına geçeceksin; olmazsa oyun yeniden açılır.",
+  "projects_overlay.world.join.body": "Oyunda arkadaşının dünyasına geçeceksin. Olmazsa oyun yeniden açılır.",
   "projects_overlay.world.join.preparing": "Arkadaşının dünyası hazırlanıyor…",
   "projects_overlay.connect.travel.world": "Arkadaşının dünyasına bağlanılıyor…",
   "projects_overlay.connect.already.world": "Zaten bu dünyadasın.",

@@ -673,8 +673,10 @@
   .prose-news li {
     margin: 0.3em 0;
   }
+  /* A decorative mark, as the patch notes' ash squares (docs/design.md: gold stays with OYNA and
+     the actions). */
   .prose-news li::marker {
-    color: var(--color-gold-500);
+    color: var(--color-ash-500);
   }
   .prose-news strong {
     color: var(--color-bone-50);

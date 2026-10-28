@@ -105,10 +105,10 @@ export const enCloudAfkFeat = {
       copy_other: "Copied the settings to {{count}} accounts.",
     },
     partial: {
-      start: "Started {{done}}; {{failed}} couldn't start: {{reason}}.",
-      stop: "Stopped {{done}}; {{failed}} couldn't stop: {{reason}}.",
-      restart: "Reconnecting {{done}}; {{failed}} couldn't reconnect: {{reason}}.",
-      copy: "Copied the settings to {{done}}; {{failed}} couldn't take them: {{reason}}.",
+      start: "Started {{done}}. {{failed}} couldn't start: {{reason}}.",
+      stop: "Stopped {{done}}. {{failed}} couldn't stop: {{reason}}.",
+      restart: "Reconnecting {{done}}. {{failed}} couldn't reconnect: {{reason}}.",
+      copy: "Copied the settings to {{done}}. {{failed}} couldn't take them: {{reason}}.",
     },
     none: {
       start: "The accounts couldn't start: {{reason}}.",

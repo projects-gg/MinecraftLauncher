@@ -9,7 +9,7 @@ export const trAfkConnect = {
   /** Turkish puts the sign before the figure. */
   percent: "%{{value}}",
   /** Replaces "Bağla" while the client is fetched: stops the download for this account. */
-  cancel: "İptal",
+  cancel: "İptal et",
   /**
    * Why the client could not be had: what happened (the state line) and what to do (the line
    * under it).

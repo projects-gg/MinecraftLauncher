@@ -88,13 +88,10 @@ export function oneMoreWords(
 ): { title: Line; body: Line[]; note: Line | null; confirm: Line } {
   const title: Line = [`${AGAIN}.title`];
   const memory: Line = [`${AGAIN}.memory`];
-  // The answer keeps the press's verb: "Bir oyun daha aç" → "Yine de aç", OYNA → "Yine de oyna"
-  // (design.md §8: one name per action; fourth look).
-  if (kind !== "again") {
-    const confirm: Line = [`${AGAIN}.confirmPlay`];
-    return { title, body: memoryShort ? [memory] : [], note: null, confirm };
-  }
+  // The answer takes the question's verb ("Bir oyun daha açılsın mı?" → "Yine de aç"), after OYNA
+  // too: one question, one answer (design.md §7; QA-TASTE).
   const confirm: Line = [`${AGAIN}.confirm`];
+  if (kind !== "again") return { title, body: memoryShort ? [memory] : [], note: null, confirm };
   const same: Line[] = [
     name ? [`${AGAIN}.sameName`, { name }] : [`${AGAIN}.sameNameUnknown`],
     [`${AGAIN}.sameServer`],

@@ -102,7 +102,7 @@ export const trCrewWave2 = {
     week: "Bu hafta birlikte {{time}}",
     month: "Bu ay birlikte {{time}}",
     setting: "Birlikte oynanan süre",
-    settingNote: "Yalnız bu bilgisayarda tutulur; kapatınca silinir.",
+    settingNote: "Yalnız bu bilgisayarda tutulur. Kapatınca silinir.",
     clear: "Süreleri sil",
     clearAsk: "Bu bilgisayarda tutulan süreler silinir.",
     cleared: "Birlikte oynanan süreler silindi",

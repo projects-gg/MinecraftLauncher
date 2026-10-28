@@ -541,9 +541,9 @@ interface SegmentedOption<T extends string> {
 const optionCut = { "--cut": `${PLATE_CUT}px` } as CSSProperties;
 
 /**
- * The plate's fill and the labels' ink over it: gold in the launcher. An app restyles them with
- * `--segmented-plate` and `--segmented-ink` (Studio's chosen option is a quiet plate: its one gold
- * is the top bar's Yayınla, docs/design.md §9).
+ * The plate's fill and the labels' ink over it: gold unless the app restyles them with
+ * `--segmented-plate` and `--segmented-ink`. Both apps do: a chosen option is a quiet plate, the
+ * gold is the main action's (the launcher's `styles.css`, Studio's; docs/design.md §6, §9).
  */
 const PLATE_FILL = "bg-[color:var(--segmented-plate,var(--color-gold-500))]";
 const PLATE_INK = "text-[color:var(--segmented-ink,var(--color-gold-ink))]";

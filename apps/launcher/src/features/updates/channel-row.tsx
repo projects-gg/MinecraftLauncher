@@ -1,7 +1,7 @@
 // Settings → Güncellemeler "Güncelleme kanalı" (BETA-GATE): Kararlı and Beta, both always there.
 // Beta asks first (beta-gate.ts): the plate goes to Beta while the answer is out and stays when it
 // lets the launcher in; otherwise it glides back to Kararlı and one line under the title says why,
-// with what to do (apply to the team, sign in, try again). The lines take turns in one grid cell,
+// with what to do (apply to Ar-Ge, sign in, try again). The lines take turns in one grid cell,
 // as the overlay's do, so changing between them never moves the rows below.
 import { ArrowSquareOut, Warning } from "@phosphor-icons/react";
 import { cn, Segmented } from "@pl/ui";
@@ -36,7 +36,7 @@ function useLasted(on: boolean, ms: number): boolean {
 
 /**
  * A line's action: gold words right after its sentence, as the overlay's lines carry theirs.
- * `joined`: the words finish the sentence ("… Ekipteysen Discord ile giriş yap"), so a word space
+ * `joined`: the words finish the sentence ("… Ar-Ge'deysen Discord ile giriş yap"), so a word space
  * leads them; `external`: they open the browser, so they carry the launcher's external-link mark.
  */
 function LineAction({
@@ -174,7 +174,7 @@ export function UpdateChannelRow() {
                   )}
                 >
                   {/* Only a check that failed takes the launcher's warning mark: "Beta is for
-                        the team" is an invitation, not an error. */}
+                        R&D members" is an invitation, not an error. */}
                   {kind === "unknown" ? (
                     <Warning
                       size={13}

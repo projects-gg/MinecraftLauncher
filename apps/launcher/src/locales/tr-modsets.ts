@@ -77,8 +77,8 @@ export const trModSets = {
     removed: "{{name}} seti kaldırıldı.",
     undo: "Geri al",
     applied: "{{name}} setindeki değişiklikler uygulandı.",
-    issues: "Bazı dosyalar değiştirilemedi; sonra yeniden denenecek.",
-    unavailable: "Setlerin son hâli yüklenemedi; kurulumdaki hâli gösteriliyor.",
+    issues: "Bazı dosyalar değiştirilemedi. Sonra yeniden denenecek.",
+    unavailable: "Setlerin son hâli yüklenemedi. Kurulumdaki hâli gösteriliyor.",
   },
   add: {
     title: "Set ekle",

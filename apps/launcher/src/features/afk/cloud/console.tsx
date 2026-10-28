@@ -98,10 +98,12 @@ function Banner({
   return (
     <AnimatePresence initial={false}>
       {text ? (
+        // A quiet line in the text colour, the action beside it in gold: no coloured box
+        // (projects-taste; AFK-CLEAR's card notes).
         <motion.p
           key={text}
           role="status"
-          className="flex items-center gap-2 border-b border-white/8 bg-gold-500/[0.06] px-5 py-2 text-[12.5px] text-gold-200"
+          className="flex items-center gap-2 border-b border-white/8 bg-white/[0.035] px-5 py-2 text-[12.5px] text-bone-100"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: enter(0.2) }}
           exit={{ opacity: 0, transition: leave(0.14) }}

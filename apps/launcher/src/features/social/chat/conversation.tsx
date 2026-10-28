@@ -329,13 +329,14 @@ const MessageItem = memo(function MessageItem({
     >
       {dayText ? <DayLine text={dayText} /> : null}
       {divider ? (
+        // Bone words between quiet lines: gold is never a sentence (QA-TASTE).
         <p
           data-divider
-          className="mx-2 my-2 flex items-center gap-2.5 text-[11.5px] font-semibold text-gold-300"
+          className="mx-2 my-2 flex items-center gap-2.5 text-[11.5px] font-semibold text-bone-100"
         >
-          <span aria-hidden className="h-px flex-1 bg-gold-400/35" />
+          <span aria-hidden className="h-px flex-1 bg-ash-500/45" />
           {divider}
-          <span aria-hidden className="h-px flex-1 bg-gold-400/35" />
+          <span aria-hidden className="h-px flex-1 bg-ash-500/45" />
         </p>
       ) : null}
       <MessageRow

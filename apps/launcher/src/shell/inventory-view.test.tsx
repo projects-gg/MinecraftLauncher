@@ -421,10 +421,10 @@ describe("answers", () => {
     const { sent } = mount();
     fireEvent.pointerDown(cell("inv:13"), { ...mouse, button: 0 });
     await sent[0]?.answer({ error: { code: "rate_limited", retryAfter: 2 } });
-    expect(status()).toBe("Biraz yavaşla; son tıklama sayılmadı.");
+    expect(status()).toBe("Biraz yavaşla. Son tıklama sayılmadı.");
     fireEvent.pointerDown(cell("inv:14"), { ...mouse, button: 0 });
     expect(sent).toHaveLength(1);
-    expect(status()).toBe("Biraz yavaşla; son tıklama sayılmadı.");
+    expect(status()).toBe("Biraz yavaşla. Son tıklama sayılmadı.");
     act(() => vi.advanceTimersByTime(10_000));
     expect(sent).toHaveLength(1);
     fireEvent.pointerDown(cell("inv:14"), { ...mouse, button: 0 });

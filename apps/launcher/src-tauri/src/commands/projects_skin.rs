@@ -193,7 +193,7 @@ pub async fn projects_skin_cancel(state: State<'_, AppState>, job_id: String) ->
             CmdError::new(
                 "PSKIN-IPTAL",
                 pick(
-                    "Şu an iptal edilemedi. Biraz sonra yeniden dene.",
+                    "Şu an iptal edilemedi. Biraz sonra tekrar dene.",
                     "Couldn't cancel right now. Try again in a moment.",
                 ),
                 format!("cancel refused: HTTP {} {}", failure.status, failure.code),

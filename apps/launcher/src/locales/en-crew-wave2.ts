@@ -103,7 +103,7 @@ export const enCrewWave2: typeof trCrewWave2 = {
     week: "{{time}} together this week",
     month: "{{time}} together this month",
     setting: "Time played together",
-    settingNote: "Kept on this computer only; turning it off deletes it.",
+    settingNote: "Kept on this computer only. Turning it off deletes it.",
     clear: "Delete times",
     clearAsk: "The times kept on this computer are deleted.",
     cleared: "Time played together deleted",

@@ -430,7 +430,7 @@ export function WhatsNew() {
       closeLabel={t("common.close")}
       footer={
         <Button variant="primary" onClick={() => setNotes(null)}>
-          {t("update.great")}
+          {t("common.close")}
         </Button>
       }
     >
@@ -459,7 +459,7 @@ export function PackNotesDialog() {
       closeLabel={t("common.close")}
       footer={
         <Button variant="primary" onClick={() => show(null)}>
-          {t("update.great")}
+          {t("common.close")}
         </Button>
       }
     >

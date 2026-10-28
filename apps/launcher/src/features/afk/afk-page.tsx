@@ -9,7 +9,6 @@ import {
   GearSix,
   Key,
   Play,
-  Stop,
   StopCircle,
   Terminal,
   Trash,
@@ -99,7 +98,7 @@ function AfkCard({
   // The main button's action leads the menu too.
   const main: Record<ReturnType<typeof primaryAction>, MenuItem> = {
     connect: { label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect },
-    stop: { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop },
+    stop: { label: t("afk.stop"), icon: <StopCircle size={16} />, onSelect: stop },
     cancel: { label: t("afkConnect.cancel"), icon: <X size={16} />, onSelect: stop },
     retry: { label: t("common.retry"), icon: <ArrowsClockwise size={16} />, onSelect: connect },
     fixPassword: {

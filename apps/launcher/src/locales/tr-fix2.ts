@@ -63,7 +63,7 @@ export const trFix2 = {
     cancel: "Vazgeç",
     address: "Sunucu adresi",
     moveTitle: "Sunucuya geçilsin mi?",
-    moveBody: "Oyunda {{server}} sunucusuna geçeceksin; olmazsa oyun yeniden açılır.",
+    moveBody: "Oyunda {{server}} sunucusuna geçeceksin. Olmazsa oyun yeniden açılır.",
     restartTitle: "Oyun yeniden açılsın mı?",
     restartBody: "Oyun kapanıp {{server}} sunucusunda yeniden açılır.",
     reopenBody: "Oyun baştan açılıp {{server}} sunucusuna bağlanacak.",

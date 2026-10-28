@@ -303,6 +303,20 @@ describe("afkPaletteActions", () => {
     ).toEqual({ connectAll: false, stopAll: true });
   });
 
+  it("connects what the page's 'Buradakileri bağla' would: no twin, none the server turned away", () => {
+    // A stopped account that is a 7/24 Bulut card on the page (its twin) is not this list's.
+    expect(afkPaletteActions([afkAccount("a", { kind: "stopped" })], new Set(["a"]))).toEqual({
+      connectAll: false,
+      stopAll: false,
+    });
+    // A refused password waits for a fix; trying it again can lock the account on the server.
+    expect(
+      afkPaletteActions([
+        afkAccount("a", { kind: "error", reason: "Yanlış şifre", cause: "wrongPassword" }),
+      ]),
+    ).toEqual({ connectAll: false, stopAll: false });
+  });
+
   it("waits while the last one is stopping", () => {
     expect(afkPaletteActions([afkAccount("a", { kind: "stopping" })])).toEqual({
       connectAll: false,
