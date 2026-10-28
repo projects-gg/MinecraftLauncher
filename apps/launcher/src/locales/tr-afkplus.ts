@@ -493,7 +493,7 @@ export const trAfkPlus = {
     far: "En fazla {{limit}} doğru mu? Hedefin {{target}}.",
     yesRight: "Evet, doğru",
     fix: "Düzelt",
-    overCap: "Bu fiyat tek alım sınırını ({{cap}}) aşıyor.",
+    overCap: "Bu fiyat tek anlaşma sınırını ({{cap}}) aşıyor.",
     raise: "Sınırı {{amount}} yap",
     useCap: "Fiyatı {{cap}} yap",
   },

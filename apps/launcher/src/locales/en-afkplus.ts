@@ -449,7 +449,7 @@ export const enAfkPlus = {
     far: "Is {{limit}} right as your top price? Your target is {{target}}.",
     yesRight: "Yes, that's right",
     fix: "Fix it",
-    overCap: "This is over your single-buy limit ({{cap}}).",
+    overCap: "This is over your per-deal limit ({{cap}}).",
     raise: "Raise the limit to {{amount}}",
     useCap: "Use {{cap}}",
   },
