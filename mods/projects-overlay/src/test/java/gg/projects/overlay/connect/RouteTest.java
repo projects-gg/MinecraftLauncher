@@ -62,7 +62,7 @@ class RouteTest {
             pick(2, "SkyBlock", "/aurora"), pick(1, "", "/aurora"), pick(1, " SkyBlock", "/aurora"),
             pick(1, "SkyBlock", "aurora"), pick(1, "SkyBlock", "//aurora"), pick(1, "SkyBlock", "/ aurora"),
             pick(1, "SkyBlock", "/aurora "), pick(1, "SkyBlock", "/a  b"), pick(1, "SkyBlock", "/a\nb"),
-            pick(1, "SkyBlock", "/§aaurora"), pick(1, "SkyBlock", "/a b"), pick(1, "SkyBlock", "/a"),
+            pick(1, "SkyBlock", "/§aaurora"), pick(1, "SkyBlock", "/a" + (char) 0xA0 + "b"), pick(1, "SkyBlock", "/a" + (char) 0xE000),
             pick(1, "SkyBlock", "/" + "a".repeat(Route.MAX_COMMAND_CHARS)),
             pick(1, "x".repeat(Route.MAX_NAME_CHARS + 1), "/aurora")}) {
             assertNull(Route.of(bad), String.valueOf(bad));
