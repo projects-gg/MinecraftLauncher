@@ -291,10 +291,12 @@ describe("the keyboard", () => {
     ]);
     // The window's close button stays in place, unavailable, while the slot's menu is open.
     const close = screen.getByRole("button", {
-      name: "Menüyü kapat",
+      name: "Menüyü oyunda kapat",
       hidden: true,
     }) as HTMLButtonElement;
     expect(close.disabled).toBe(true);
+    // Words alone: a cross beside a dialog's own read as closing the dialog.
+    expect(close.querySelector("svg")).toBeNull();
     fireEvent.click(within(menu).getByText("Sol tık"));
     expect(sent[0]?.op).toEqual(pickup("win", 13, SAMPLE_KITS.wseq));
   });
@@ -434,7 +436,7 @@ describe("answers", () => {
   it("keeps everything still in a trade, the close button too", () => {
     const { onOp } = mount({ window: SAMPLE_CHEST, locked: true });
     expect(status()).toBe("Takas sürerken envanter kilitli.");
-    const close = screen.getByRole("button", { name: "Menüyü kapat" }) as HTMLButtonElement;
+    const close = screen.getByRole("button", { name: "Menüyü oyunda kapat" }) as HTMLButtonElement;
     expect(close.disabled).toBe(true);
     expect(flashed()).toBe(false);
     fireEvent.pointerDown(cell("win:0"), { ...mouse, button: 0 });

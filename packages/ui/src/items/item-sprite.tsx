@@ -20,7 +20,8 @@ import {
 } from "react";
 import { cn } from "../lib/cn";
 import { FALLBACK_GLYPHS } from "./fallback-glyphs";
-import { hasGlint, layerColor, type ResolvedIcon, resolveIcon } from "./resolve";
+import { fullItemId, hasGlint, layerColor, type ResolvedIcon, resolveIcon } from "./resolve";
+import { SkinHeadCanvas, useSkinHead } from "./skin-head";
 import type { ItemArt, ItemRef } from "./types";
 
 const ItemArtContext = createContext<ItemArt | undefined>(undefined);
@@ -365,7 +366,22 @@ export function ItemSprite({ size = 32, label, className, art: own, ...item }: I
     if (largeUrl && !preloaded) loadLarge(largeUrl);
   }, [largeUrl, preloaded]);
   const largeReady = largeUrl !== undefined && (preloaded || largeState === "ready");
-  const drawn = drawLayers(resolved, item, art, size, largeReady);
+  // A player head with its own skin (INV-HEADS), once the skin is there: drawn as the atlas draws
+  // its 3D icons at this size, the plain head until then. Projects' own art for it comes first.
+  const skinned =
+    resolved.source !== "overlay" && fullItemId(item.id) === "minecraft:player_head"
+      ? item.skin
+      : undefined;
+  const head = useSkinHead(skinned, pickDrawing(size * ratio, 48) === "large" ? 48 : 32);
+  const plain = drawLayers(resolved, item, art, size, largeReady);
+  const drawn: Drawn | undefined = head
+    ? {
+        layers: [<SkinHeadCanvas key="skin" drawing={head} size={size} />],
+        glintMask: plain?.glintMask,
+        dark: false,
+        flat: false,
+      }
+    : plain;
   const a11y = label
     ? ({ role: "img", "aria-label": label } as const)
     : ({ "aria-hidden": true } as const);
@@ -423,7 +439,7 @@ export function ItemSprite({ size = 32, label, className, art: own, ...item }: I
     <span
       {...a11y}
       data-item={item.id}
-      data-source={resolved.source}
+      data-source={head ? "skin" : resolved.source}
       className={cn("shrink-0", className)}
       style={drawn.dark ? { ...box, filter: rim(size, drawn.flat) } : box}
     >

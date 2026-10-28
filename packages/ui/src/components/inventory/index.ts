@@ -2,9 +2,11 @@
 // not show an inventory should not carry it (its font and tables).
 export { type MoveMessage, messageFor } from "./controller";
 export {
+  SAMPLE_BOOK,
   SAMPLE_CHEST,
   SAMPLE_DISPENSER,
   SAMPLE_DOUBLE_CHEST,
+  SAMPLE_HEADS,
   SAMPLE_HOPPER,
   SAMPLE_INVENTORY,
   SAMPLE_KITS,
@@ -67,6 +69,7 @@ export type {
   InvOp,
   InvResult,
   SlotRef,
+  TextSpan,
   TitleGlyph,
   TitleRun,
   WinFrame,

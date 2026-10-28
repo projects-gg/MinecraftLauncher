@@ -203,6 +203,7 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
             quota={panel.quota}
             saverAt={features.saver ? (panel.settings.config.replies.saveAt ?? null) : null}
             settingsDirty={dirty}
+            ready={panel.settings.config.ready === true}
             onSetup={needsSetup ? () => setWizard(account.id) : undefined}
           />
           <div

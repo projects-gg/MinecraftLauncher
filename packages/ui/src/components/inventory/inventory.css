@@ -33,7 +33,8 @@
   --pl-item-standin: #a0a0a0;
   position: relative;
   min-width: 0;
-  /* A menu picture wider than the window reaches past it, as in the game, but never past us. */
+  /* The scale fits the whole art (the window and a server's picture past it); only at the
+     smallest scale can it be wider than we are, and then it never reaches past us. */
   overflow-x: clip;
 }
 
@@ -102,13 +103,39 @@
 .pl-inv[data-align="start"] .pl-inv-stage {
   justify-content: flex-start;
 }
+/* `fit="contain"`: the host gives the component its height (a panel, a dialog); the scale is the
+   largest whole number of device pixels that both its width and its height hold, the art and the
+   line under the window (`--pl-inv-under`, CSS pixels) counted, and the art sits in the middle. */
+.pl-inv[data-fit="contain"] {
+  container-type: size;
+  height: 100%;
+}
+.pl-inv[data-fit="contain"] .pl-inv-stage {
+  --pl-inv-n: clamp(
+    max(1px, round(down, calc(var(--pl-inv-min) * var(--pl-inv-dpr) * 1px), 1px)),
+    min(
+      round(down, calc(100cqi * var(--pl-inv-dpr) / var(--pl-inv-w)), 1px),
+      round(
+        down,
+        calc((100cqb - var(--pl-inv-under, 0px)) * var(--pl-inv-dpr) / var(--pl-inv-h)),
+        1px
+      )
+    ),
+    max(1px, round(down, calc(var(--pl-inv-max) * var(--pl-inv-dpr) * 1px), 1px))
+  );
+  height: 100%;
+  align-items: center;
+}
+.pl-inv[data-fit="contain"][data-align="start"] .pl-inv-stage {
+  align-items: flex-start;
+}
 @supports not (width: round(down, 10px, 1px)) {
   .pl-inv-stage {
     --pl-inv-px: 2px;
   }
 }
 
-/* The game's window and our line under it, as wide as the window. */
+/* The art (the game's window and a server's picture past it) and our line under the window. */
 .pl-inv-column {
   display: flex;
   flex: none;
@@ -127,6 +154,7 @@
 }
 
 .pl-inv-bar {
+  box-sizing: border-box;
   display: flex;
   min-width: 0;
   min-height: 32px;

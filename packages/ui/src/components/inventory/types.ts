@@ -20,6 +20,13 @@ export interface InvInsideStack {
   label: InvLabel;
 }
 
+/**
+ * One part of a text's look (the contract's `nameStyle`, `loreStyle`): its length in UTF-16 code
+ * units and its code, a colour (`0`–`f`, `#rrggbb`, or none for the field's own) and then the
+ * flags that are on among `k l m n o` (obfuscated, bold, strikethrough, underlined, italic).
+ */
+export type TextSpan = [number, string];
+
 export interface InvItem {
   /** inv: 5–8 armour (head, chest, legs, feet), 9–35 main, 36–44 hotbar, 45 off hand; win: 0 … size-1. */
   slot: number;
@@ -29,8 +36,14 @@ export interface InvItem {
   label: InvLabel;
   /** A custom name (anvil) or a server's item name: plain text, anyone's. */
   name?: string;
-  /** At most 4 lines of at most 80 characters: plain text, anyone's. */
+  /** The name's look in the game: spans over `name` (machine 0.3.2). */
+  nameStyle?: TextSpan[];
+  /** At most 32 lines of at most 80 characters: plain text, anyone's. */
   lore?: string[];
+  /** A look a `lore` line, or null (machine 0.3.2). */
+  loreStyle?: (TextSpan[] | null)[];
+  /** A player head's skin: its texture's hash on Mojang's texture server (machine 0.3.2). */
+  skin?: string;
   durability?: { left: number; max: number };
   ench?: InvEnchant[];
   enchanted?: boolean;

@@ -181,13 +181,22 @@ pub struct CloudInvItem {
     pub label: CloudLocalized,
     /// A custom name (anvil) or a server's item name.
     pub name: Option<String>,
-    /// At most 4 lines of at most 80 characters.
+    /// The name's look in the game (machine 0.3.2): spans over `name`, each its length in UTF-16
+    /// code units and its code (a colour `0`–`f` or `#rrggbb`, then the flags among `klmno`).
+    #[serde(rename = "nameStyle")]
+    pub name_style: Vec<(u32, String)>,
+    /// At most 32 lines of at most 80 characters.
     pub lore: Vec<String>,
+    /// A look a `lore` line, or none (machine 0.3.2).
+    #[serde(rename = "loreStyle")]
+    pub lore_style: Vec<Option<Vec<(u32, String)>>>,
     pub durability: Option<CloudInvDurability>,
     /// `custom_model_data` (its first float, rounded down).
     pub cmd: Option<i64>,
     /// The `item_model` component, when a server set one.
     pub model: Option<String>,
+    /// A player head's skin: its texture's hash on Mojang's texture server (machine 0.3.2).
+    pub skin: Option<String>,
     pub ench: Vec<CloudInvEnchant>,
     pub enchanted: bool,
     pub inside: Option<CloudInvInside>,
@@ -1249,6 +1258,24 @@ mod tests {
         );
         assert_eq!(item.ench[0].label.tr, "Keskinlik V");
         assert!(item.enchanted && item.lore.is_empty());
+        assert!(item.name_style.is_empty() && item.lore_style.is_empty() && item.skin.is_none());
+        // Machine 0.3.2: a head's skin and the looks of names and lore.
+        let head: CloudInvItem = serde_json::from_str(
+            r#"{"slot":3,"id":"minecraft:player_head","count":1,"skin":"8a6d5e1f0c3b4a29",
+                "name":"Kılıç","nameStyle":[[5,"6lo"]],
+                "lore":["Hasar +12",""],"loreStyle":[[[6,"7"],[3,"c"]],null]}"#,
+        )
+        .unwrap();
+        assert_eq!(head.skin.as_deref(), Some("8a6d5e1f0c3b4a29"));
+        assert_eq!(head.name_style, [(5, "6lo".to_owned())]);
+        assert_eq!(
+            head.lore_style,
+            [Some(vec![(6, "7".to_owned()), (3, "c".to_owned())]), None]
+        );
+        assert_eq!(
+            serde_json::to_value(&head).unwrap()["nameStyle"],
+            serde_json::json!([[5, "6lo"]])
+        );
         let open: CloudWinOpen =
             serde_json::from_str(r#"{"type":"generic_9x3","title":"Kitler","size":27}"#).unwrap();
         assert_eq!(open.kind, "generic_9x3");

@@ -51,6 +51,17 @@ export interface RuleContext {
   minute?: number;
   today?: number;
   perDay?: number;
+  /**
+   * The server's money name (the profile's `money.label`, else the player's `trade.currency`): an
+   * amount written with it is no real money, nor, when it is a real-money word ("TL"), the money
+   * words made of it ("tl ile").
+   */
+  currency?: string | null;
+  /**
+   * The player said the text's money is the game's ("Bu oyun parası", 28 Oct 2026): its money
+   * words pass; the rails never do.
+   */
+  inGame?: boolean;
 }
 
 export interface RuleCheck {
@@ -158,6 +169,24 @@ function currencyAt(form: string, at: number): number {
   return -1;
 }
 
+/**
+ * The server's own money name right at `at` (after at most one space), in the money form: its end,
+ * else -1. Like a currency word: an ending after an apostrophe, and on names of 4 letters or more
+ * letters glued on ("ripplea").
+ */
+function ownAt(form: string, at: number, own: string | null): number {
+  if (own === null || own === "") return -1;
+  let start = at;
+  if (form[start] === " ") start += 1;
+  if (!form.startsWith(own, start)) return -1;
+  let end = start + own.length;
+  if (own.length >= 4 && /\p{L}$/u.test(own)) {
+    while (end < form.length && /\p{L}/u.test(form[end] ?? "")) end += 1;
+  }
+  end += caseEnding(form, end);
+  return boundaryAt(form, end) ? end : -1;
+}
+
 type Digits = { value: number; shape: string } | { problem: string };
 
 /** The value of digits with separators and a multiplier, or why it cannot be told. */
@@ -220,9 +249,18 @@ export interface MoneyToken {
   problem?: string;
 }
 
-/** The number-like tokens of a text, left to right; digits glued to letters are no amount. */
-export function tokenize(text: string): { form: string; tokens: MoneyToken[]; stray: number } {
+/**
+ * The number-like tokens of a text, left to right; digits glued to letters are no amount. `own`:
+ * the server's money name (the profile's `money.label`, else the player's `trade.currency`): an
+ * amount written with it, the name after it or the sign before it, is the server's money, not real
+ * money, though the name is a real-money word or sign ("TL", "$"); every other one still is.
+ */
+export function tokenize(
+  text: string,
+  own: string | null = null,
+): { form: string; tokens: MoneyToken[]; stray: number } {
   const form = moneyForm(text);
+  const ownForm = own === null ? null : moneyForm(own);
   const tokens: MoneyToken[] = [];
   let stray = 0;
   let i = 0;
@@ -241,9 +279,12 @@ export function tokenize(text: string): { form: string; tokens: MoneyToken[]; st
       continue;
     }
     const loneSeparator = (before === "." || before === ",") && !isDigit(form[i - 2]);
-    let rmt =
-      (before !== undefined && CURRENCY_SIGNS.includes(before)) ||
-      (before === " " && CURRENCY_SIGNS.includes(form[i - 2] ?? ""));
+    const sign = CURRENCY_SIGNS.includes(before ?? "")
+      ? (before as string)
+      : before === " " && CURRENCY_SIGNS.includes(form[i - 2] ?? "")
+        ? (form[i - 2] as string)
+        : null;
+    let rmt = sign !== null && sign !== ownForm;
     let unit: Unit | null = null;
     const found = unitAt(form, end);
     if (found !== null) {
@@ -252,8 +293,11 @@ export function tokenize(text: string): { form: string; tokens: MoneyToken[]; st
     } else if (form[end] === "'") {
       end += caseEnding(form, end);
     }
-    const currencyEnd = currencyAt(form, end);
-    if (currencyEnd !== -1) {
+    const ownEnd = ownAt(form, end, ownForm);
+    const currencyEnd = ownEnd === -1 ? currencyAt(form, end) : -1;
+    if (ownEnd !== -1) {
+      end = ownEnd;
+    } else if (currencyEnd !== -1) {
       rmt = true;
       end = currencyEnd;
     }
@@ -283,10 +327,15 @@ export function tokenize(text: string): { form: string; tokens: MoneyToken[]; st
 
 /**
  * One amount the player types in a field ("40 bin", "40k", "40.000"): the number, or null when
- * it cannot be told for sure (the field then asks again). The same reading as the agent's.
+ * it cannot be told for sure (the field then asks again). The same reading as the agent's. `own`:
+ * as in `tokenize`.
  */
-export function readAmount(text: string, maxDeal = GENERIC_MAX_DEAL): number | null {
-  const { tokens } = tokenize(text);
+export function readAmount(
+  text: string,
+  maxDeal = GENERIC_MAX_DEAL,
+  own: string | null = null,
+): number | null {
+  const { tokens } = tokenize(text, own);
   const [token] = tokens;
   if (tokens.length !== 1 || token === undefined || token.problem !== undefined) return null;
   const value = token.value ?? 0;
@@ -455,6 +504,31 @@ const RMT: readonly string[] = [
   "gift card",
   "ininal",
 ];
+/**
+ * The `rmt` rule's two kinds (28 Oct 2026, the owner: "Bu konuda esnek olsun"). Rails are real
+ * money whatever a server calls its money (payment apps, gift cards, "real money"): always refused,
+ * no button. Money words may be the server's own money ("TL", "dolar", "nakit": SkyBlock's balance
+ * line is "Nakit paranız"): asked about (`question:rmt`) until the player says it is the game's
+ * ("Bu oyun parası": `inGame`), never refused. An amount written with a real-money word or sign is
+ * a money word too; the server's own name never is.
+ */
+export const RMT_RAILS: readonly string[] = [
+  ...RMT,
+  "gercek parali",
+  "irl money",
+  "for real money",
+];
+export const RMT_UNSURE: readonly string[] = [
+  "tl ile",
+  "tl ye",
+  "tlye",
+  "lira ile",
+  "liraya",
+  "dolarla",
+  "euro ile",
+  "nakit",
+  "for cash",
+];
 
 /**
  * Attempts to loosen a hard rule (`loosen:<rule>`), checked in this order. Phrases are folded words
@@ -550,25 +624,9 @@ export const LOOSEN: readonly (readonly [LoosenRule, readonly string[]])[] = [
     ],
   ],
   // `rmt` before `off_platform`: payment apps (papara, ininal, a steam card) are real money first.
-  // Also an amount written with a real-money word or sign (afkplus-money.mjs `rmt`).
-  [
-    "rmt",
-    [
-      ...RMT,
-      "tl ile",
-      "tl ye",
-      "tlye",
-      "lira ile",
-      "liraya",
-      "dolarla",
-      "euro ile",
-      "gercek parali",
-      "irl money",
-      "for real money",
-      "for cash",
-      "nakit",
-    ],
-  ],
+  // Only the rails refuse; the money words (`RMT_UNSURE`, an amount with a real-money word or
+  // sign: afkplus-money.mjs `rmt`) are a question after every refusal.
+  ["rmt", RMT_RAILS],
   // `off_platform`: also every name of PLATFORM_WORDS (afkplus-text.mjs) as a whole word.
   [
     "off_platform",
@@ -712,9 +770,39 @@ function platformNamed(cleaned: string): boolean {
   return words(cleaned).some(named);
 }
 
+/** The server's own name as the money words read it, when it is a real-money word ("tl"). */
+function ownWordOf(own: string | null): string | null {
+  const form = own === null ? null : moneyForm(own);
+  return form !== null && CURRENCY_WORDS.includes(form) ? form : null;
+}
+
+/**
+ * Money words that may be the server's own: an `RMT_UNSURE` phrase or an amount with a real-money
+ * word or sign (`tokens`, read with the server's name `own`); the server's own name never is, nor,
+ * when it is a real-money word ("TL"), the phrases made of it ("tl ile").
+ */
+function moneyUnsure(list: string[], tokens: MoneyToken[], own: string | null): boolean {
+  const ownWord = ownWordOf(own);
+  const phrases =
+    ownWord === null
+      ? RMT_UNSURE
+      : RMT_UNSURE.filter((phrase) => !(phrase.split(" ")[0] ?? "").startsWith(ownWord));
+  return anyPhrase(list, phrases) || tokens.some((token) => token.rmt);
+}
+
+/**
+ * The service's question about money that may be the game's (`question` with `rule: "rmt"`): the
+ * field asks it with one button ("Bu oyun parası") that sends the words again with `inGame`. A
+ * rail's refusal (`loosen` with `rmt`) never asks.
+ */
+export function isMoneyQuestion(reason: string, rule: string | null | undefined): boolean {
+  return reason === "question" && rule === "rmt";
+}
+
 /**
  * The free rule check: `{result, notes}`. The first rule that holds answers, in this order:
- * length, link, command, personal, unsafe, loosen, too_big, orders_full, rate, daily.
+ * length, link, command, personal, unsafe, loosen, too_big, orders_full, rate, daily, then the
+ * questions: `question:rmt` (money that may be the game's, unless `inGame`), then `question:limit`.
  */
 export function checkOrderText(text: string, ctx: RuleContext = {}): RuleCheck {
   const cleaned = cleanOrderText(text);
@@ -737,13 +825,14 @@ export function checkOrderText(text: string, ctx: RuleContext = {}): RuleCheck {
   ) {
     return { result: "reject:unsafe", notes };
   }
-  const { tokens } = tokenize(cleaned);
+  const own = ctx.currency ?? null;
+  const { tokens } = tokenize(cleaned, own);
   for (const [rule, phrases] of LOOSEN) {
     let hit = anyPhrase(list, phrases);
     if (rule === "off_platform") hit = hit || platformNamed(cleaned);
-    if (rule === "rmt") hit = hit || tokens.some((token) => token.rmt);
     if (hit) return { result: `reject:loosen:${rule}`, notes };
   }
+  const unsure = moneyUnsure(list, tokens, own);
   const maxDeal = ctx.maxDeal ?? GENERIC_MAX_DEAL;
   if (tokens.some((token) => token.problem === undefined && (token.value ?? 0) > maxDeal)) {
     return { result: "reject:too_big", notes };
@@ -752,6 +841,8 @@ export function checkOrderText(text: string, ctx: RuleContext = {}): RuleCheck {
   if ((ctx.minute ?? 0) >= 3) return { result: "reject:rate", notes };
   if ((ctx.today ?? 0) >= (ctx.perDay ?? 20)) return { result: "reject:daily", notes };
   if (anyPhrase(list, APPROVAL_PREF)) notes.push("approval_pref");
+  // Money that may be the game's: asked after every refusal and before the limit's question.
+  if (unsure && ctx.inGame !== true) return { result: "question:rmt", notes };
   if (anyPhrase(list, NO_LIMIT)) return { result: "question:limit", notes };
   return { result: "ok", notes };
 }

@@ -177,12 +177,100 @@ export const SAMPLE_KITS: WinFrame = {
     }),
     item(13, "diamond_chestplate", 1, l("Elmas Göğüslük", "Diamond Chestplate"), {
       name: "Savaşçı Kiti",
-      lore: ["Elmas zırh, kalkan", "Fiyat: 2.500 jeton"],
+      lore: ["Elmas zırh, kalkan", "Fiyat: 2.500 ripple"],
       enchanted: true,
     }),
     item(15, "golden_apple", 1, l("Altın Elma", "Golden Apple"), {
       name: "Yemek Kiti",
       lore: ["32 biftek, 8 altın elma"],
+    }),
+  ],
+};
+
+/**
+ * Two of Mojang's own default skins on its texture server, far from the plain head's look (orange
+ * hair; purple hair): heads that draw their skin.
+ */
+const ORANGE_SKIN = "46acd06e8483b176e8ea39fc12fe105eb3a2a4970f5100057e9d84d4b60bdfa7";
+const PURPLE_SKIN = "daf3d88ccb38f11f74814e92053d92f7728ddb1a7955652a60e30cb27ae6659f";
+const HEAD = l("Oyuncu Kafası", "Player Head");
+
+/**
+ * A server's head shop (INV-HEADS): heads that draw their own skins, a plain one, and names and
+ * lore in the server's colours and flags, with the blank spacer lines servers put between them.
+ */
+export const SAMPLE_HEADS: WinFrame = {
+  wseq: 1_000_009,
+  open: { type: "generic_9x3", title: "Kafa Mağazası", size: 27 },
+  items: [
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26].map(pane),
+    item(11, "player_head", 1, HEAD, {
+      skin: ORANGE_SKIN,
+      name: "Gezgin Kafası",
+      nameStyle: [[13, "6l"]],
+      lore: ["Fiyat: 250 ripple", "", "Tıkla ve satın al"],
+      loreStyle: [
+        [
+          [7, "7"],
+          [10, "e"],
+        ],
+        null,
+        [[17, "a"]],
+      ],
+    }),
+    item(13, "player_head", 1, HEAD, {
+      skin: PURPLE_SKIN,
+      name: "Büyücü Kafası",
+      nameStyle: [[13, "b"]],
+      lore: ["Nadir", "gizli ödül", "", "Fiyat: 900 ripple"],
+      loreStyle: [
+        [[5, "dl"]],
+        [
+          [5, "5k"],
+          [5, "7"],
+        ],
+        null,
+        [
+          [7, "7"],
+          [10, "e"],
+        ],
+      ],
+    }),
+    item(15, "player_head", 1, HEAD, {
+      name: "Gizemli Kafa",
+      nameStyle: [
+        [7, "cn"],
+        [5, "c"],
+      ],
+      lore: ["Stokta yok"],
+      loreStyle: [[[10, "8m"]]],
+    }),
+  ],
+};
+
+/**
+ * A server's book menu whose art is wider than the window (the owner's "KİTAP" menu, INV-HEADS): a
+ * move back past the window's left edge, then a picture 40 GUI pixels wider on each side.
+ */
+export const SAMPLE_BOOK: WinFrame = {
+  wseq: 1_000_010,
+  open: { type: "generic_9x3", title: "\uf80a\ue002", size: 27 },
+  items: [
+    item(10, "written_book", 1, l("Yazılı Kitap", "Written Book"), {
+      name: "Kurallar",
+      lore: ["Sunucunun kuralları"],
+    }),
+    item(12, "writable_book", 1, l("Kitap ve Tüy", "Book and Quill"), {
+      name: "Günlük",
+      lore: ["Kendi notların"],
+    }),
+    item(14, "enchanted_book", 1, l("Büyülü Kitap", "Enchanted Book"), {
+      name: "Büyüler",
+      lore: ["Hangi büyü nerede"],
+    }),
+    item(16, "book", 1, l("Kitap", "Book"), {
+      name: "Rehber",
+      lore: ["Yeni başlayanlar için"],
     }),
   ],
 };
@@ -248,15 +336,15 @@ export const SAMPLE_MARKET: WinFrame = {
   items: [
     item(10, "diamond", 1, l("Elmas", "Diamond"), {
       name: "Elmas sat",
-      lore: ["Tanesi 120 jeton"],
+      lore: ["Tanesi 120 ripple"],
     }),
     item(12, "emerald", 1, l("Zümrüt", "Emerald"), {
       name: "Zümrüt sat",
-      lore: ["Tanesi 80 jeton"],
+      lore: ["Tanesi 80 ripple"],
     }),
     item(14, "gold_ingot", 1, l("Altın Külçesi", "Gold Ingot"), {
       name: "Altın sat",
-      lore: ["Tanesi 40 jeton"],
+      lore: ["Tanesi 40 ripple"],
     }),
     item(16, "writable_book", 1, l("Kitap ve Tüy", "Book and Quill"), { name: "Satış geçmişi" }),
   ],
