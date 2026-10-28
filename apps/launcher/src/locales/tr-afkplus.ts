@@ -38,8 +38,9 @@ export const trAfkPlus = {
   card: {
     open: "AFK+",
     openLabel: "{{name}} için AFK+ panelini aç",
-    // What waits for the player's answer: a deal's OK, a trade to mark, an item to confirm.
-    approvals: "{{count}} karar bekliyor",
+    // What waits for the player's answer: a deal's OK, a trade to mark, an item to confirm. Whose
+    // it is, as the panel's "Seni bekleyenler" says.
+    approvals: "{{count}} karar seni bekliyor",
     upgrade: "AFK+'ya yükselt",
     // The order card (afkplus-free.md §1.6): the order as read, in plain lines.
     noItem: "Eşya seçilmedi",
@@ -306,7 +307,7 @@ export const trAfkPlus = {
     why: {
       above: "Onay sınırının üstünde",
       new_counterpart: "Bu oyuncuyla ilk anlaşma",
-      authority: "Anlaşınca sana sormasını seçtin",
+      authority: "Anlaşmaları kendin onaylamayı seçtin",
       price_unusual: "Fiyat alışılmadık",
       budget: "Toplam harcama sınırı doldu",
       daily: "Günlük harcama sınırı doldu",

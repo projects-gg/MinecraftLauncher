@@ -4,7 +4,7 @@
 // shown text, so they live here rather than in the locale files and work in either language.
 // Pure: palette-actions.test.ts checks the ranking.
 import { fold } from "@pl/ui/search";
-import { isAfkRunning } from "@/features/accounts/afk-match";
+import { isAfkIdle, isAfkRunning } from "@/features/accounts/afk-match";
 import type { AfkAccount } from "@/lib/api";
 import type { CheckResult } from "@/stores/update";
 
@@ -529,13 +529,22 @@ export function rankGroups<G extends { entries: readonly RankedEntry[] }>(
     .map((row) => row.group);
 }
 
-/** Which AFK actions make sense now (the AFK page's rule): none without AFK accounts. */
-export function afkPaletteActions(accounts: readonly AfkAccount[]): {
+/**
+ * Which AFK actions make sense now, by the AFK page's "Buradakileri bağla/durdur" (AFK-CLEAR): none
+ * without AFK accounts. Connecting takes the accounts the "Bu bilgisayarda" list shows (`folded`:
+ * those whose card is their 7/24 Bulut twin's) that are idle and not turned away by the server;
+ * stopping takes every client that runs here.
+ */
+export function afkPaletteActions(
+  accounts: readonly AfkAccount[],
+  folded: ReadonlySet<string> = new Set(),
+): {
   connectAll: boolean;
   stopAll: boolean;
 } {
+  const refused = (a: AfkAccount) => a.state.kind === "error" && Boolean(a.state.cause);
   return {
-    connectAll: accounts.some((a) => a.state.kind === "stopped" || a.state.kind === "error"),
+    connectAll: accounts.some((a) => !folded.has(a.id) && isAfkIdle(a.state) && !refused(a)),
     stopAll: accounts.some((a) => isAfkRunning(a.state)),
   };
 }

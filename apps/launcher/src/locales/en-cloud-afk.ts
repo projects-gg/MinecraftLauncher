@@ -173,7 +173,7 @@ export const enCloudAfk = {
     openConsole: "Open console",
   },
   console: {
-    title: "{{name}} console",
+    title: "{{name}}'s console",
     input: "Command or chat message",
     send: "Send",
     offline: "The account isn't in the game. Start it to type here.",
@@ -193,7 +193,7 @@ export const enCloudAfk = {
     sendFailed: "Couldn't send the message.",
   },
   settings: {
-    title: "{{name}} settings",
+    title: "{{name}}'s settings",
     loadFailed: "Couldn't load the settings.",
     name: "Player name",
     host: "Server address",
@@ -278,7 +278,7 @@ export const enCloudAfk = {
     save: "Save",
     saving: "Saving",
     cancel: "Discard",
-    saved: "{{name}} settings saved",
+    saved: "{{name}}'s settings saved",
     conflict: "The account changed somewhere else.",
     loadLatest: "Load the latest",
     issues: {

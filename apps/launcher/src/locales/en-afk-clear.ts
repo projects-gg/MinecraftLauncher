@@ -33,8 +33,8 @@ export const enAfkClear = {
     hereSettings: "Settings on this PC",
     cloudSettings: "Cloud settings",
     copyCloud: "Copy cloud settings",
-    hereTitle: "{{name}} settings on this PC",
-    cloudTitle: "{{name}} cloud settings",
+    hereTitle: "{{name}}'s settings on this PC",
+    cloudTitle: "{{name}}'s cloud settings",
     removeHere: "Remove from this PC",
     removeTitle: "Remove {{name}} from this PC?",
     removeBody:

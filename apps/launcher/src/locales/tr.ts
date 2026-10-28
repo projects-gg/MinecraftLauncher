@@ -764,7 +764,7 @@ export const tr = {
     stopAll: "Tümünü durdur",
     add: "Hesap ekle",
     nickname: "Oyuncu adı",
-    nicknameHelp: "3-16 karakter.",
+    nicknameHelp: "3 ile 16 karakter arası.",
     connect: "Bağla",
     stop: "Durdur",
     console: "Konsol",
@@ -813,7 +813,7 @@ export const tr = {
     send: "Gönder",
     showScript: "Giriş komutlarını göster",
     invalidName:
-      "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
+      "Oyuncu adı 3 ile 16 karakter arası olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
     duplicate: "Bu adla bir AFK hesabı zaten var.",
     settingsChanged: "Yeni ayarlar yeniden bağlanınca geçerli olur.",
     reconnect: "Yeniden bağlan",
@@ -911,7 +911,7 @@ export const tr = {
       name: "Ad",
       namePlaceholder: "Görev {{n}}",
       interval: "Aralıkla tekrarla",
-      help: "Aralıkla tekrarlanan görevler, en az ile en çok arasında rastgele bir sürede yeniden çalışır.",
+      help: "Aralıkla tekrarlanan görevler, bu iki süre arasında rastgele bir anda yeniden çalışır.",
     },
     antiAfk: {
       interval: "Hareket aralığı",
