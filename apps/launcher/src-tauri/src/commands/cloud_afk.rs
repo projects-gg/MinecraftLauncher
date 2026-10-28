@@ -456,6 +456,9 @@ pub enum CloudPage {
     /// The same tab with the extra credits' packs open ("Kontör al"; cloud-afk README "AFK+ extra
     /// credits"): buying happens on the site.
     PlusTopup,
+    /// The appeal of a moderation step on `account` (cloud-afk README "Appeals": the form is the
+    /// site's alone).
+    Appeal,
 }
 
 /// Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there.
@@ -480,9 +483,14 @@ pub fn cloud_afk_open(
         (CloudPage::Buy, _) => "satin-al".to_owned(),
         (CloudPage::Renew, Some(id)) => format!("satin-al?hesap={id}"),
         (CloudPage::Account, Some(id)) => format!("hesap/{id}"),
+        (CloudPage::Appeal, Some(id)) => format!("hesap/{id}/itiraz"),
         (CloudPage::Accounts, _)
         | (
-            CloudPage::Renew | CloudPage::Account | CloudPage::PlusAccount | CloudPage::PlusTopup,
+            CloudPage::Renew
+            | CloudPage::Account
+            | CloudPage::Appeal
+            | CloudPage::PlusAccount
+            | CloudPage::PlusTopup,
             None,
         ) => "hesaplar".to_owned(),
         (CloudPage::Plus, _) => "afk-plus".to_owned(),

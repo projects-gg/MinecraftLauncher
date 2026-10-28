@@ -57,6 +57,8 @@ import { SettingsButton } from "../settings/settings-button";
 import { useAfkReconnect } from "../settings/settings-sheet";
 import { StateLine } from "../state-line";
 import { type CloudAccount, cloudApi } from "./api";
+import { appealFirst, isModerationStop } from "./moderation";
+import { ModerationLine, openAppeal } from "./moderation-bits";
 import { AI_TONE, useAiSentence } from "./plus/rail";
 import { plusAi } from "./plus/types";
 import { CloudStateLine } from "./state-line";
@@ -192,7 +194,22 @@ function PrimaryButton({
   // The word that takes the place of the one just pressed never takes the rest of that double
   // click (@pl/ui press-guard), as on the desktop cards.
   const guard = usePressGuard(action);
-  if (action === "none") return null;
+  if (action === "none") {
+    // A moderation stop that may be appealed: the appeal is the one thing to do (README "Appeals"),
+    // calm, not gold.
+    if (!appealFirst(account)) return null;
+    return (
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={<ArrowSquareOut size={14} weight="bold" />}
+        onClick={() => openAppeal(account.id, t)}
+        className={className}
+      >
+        {t("afkMod.card.appeal")}
+      </Button>
+    );
+  }
   // Stopped until something is fixed (the state line's hint says what, "… düzelt, sonra başlat"):
   // "Başlat" steps back from gold, which called for a start that would stop again (SMALL11).
   // After a plain disconnect ("other") starting again is the fix, and it stays gold. A refused
@@ -589,7 +606,8 @@ export function CloudCard({
                 <h3 className="truncate font-display text-[15px] font-semibold text-bone-50">
                   {account.name}
                 </h3>
-                {account.hold?.kind === "suspended" ? (
+                {/* A moderation stop says its category on the state line, not who stopped it. */}
+                {account.hold?.kind === "suspended" && !isModerationStop(account) ? (
                   <Chip className="shrink-0">{t("cloudAfk.state.suspended")}</Chip>
                 ) : null}
               </div>
@@ -645,6 +663,7 @@ export function CloudCard({
           </div>
           {local ? <ClientRow account={local} /> : null}
           <TimeRow account={account} skewMs={skewMs} here={local !== null} />
+          <ModerationLine account={account} />
           {move ? <PlaceRow move={move} /> : null}
           {onPlus ? <PlusLine account={account} onOpen={onPlus} /> : null}
 

@@ -76,10 +76,11 @@ pub use migrate::{
 pub use model::{
     AccountList, AccountPatch, CLOUD_CAUSES, CloudAccount, CloudAccountCount, CloudAntiAfk,
     CloudCanBuy, CloudCommandView, CloudConfigView, CloudConsoleLine, CloudEvery, CloudHold,
-    CloudLimits, CloudLiveState, CloudLocalized, CloudLogPage, CloudPayloadView, CloudPlanPrice,
-    CloudRenewal, CloudRestriction, CloudRuleView, CloudSales, CloudServer, CloudServerChanges,
-    CloudStock, CloudVersionOption, CloudVersions, CommandInput, ConfigInput, Me, MeUser, Offer,
-    PayloadInput, RevealAnswer, RuleInput, ServiceMode, VaultKey,
+    CloudLimits, CloudLiveState, CloudLocalized, CloudLogPage, CloudModAppeal, CloudModPaused,
+    CloudModeration, CloudPayloadView, CloudPlanPrice, CloudRenewal, CloudRestriction,
+    CloudRuleView, CloudSales, CloudServer, CloudServerChanges, CloudStock, CloudVersionOption,
+    CloudVersions, CommandInput, ConfigInput, Me, MeUser, Offer, PayloadInput, RevealAnswer,
+    RuleInput, ServiceMode, VaultKey,
 };
 pub use movement::{
     CloudBlock, CloudMovementError, CloudMovementFeature, CloudMovementFollow,

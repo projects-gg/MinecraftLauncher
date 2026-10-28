@@ -70,6 +70,7 @@ function account(overrides: Partial<CloudAccount> = {}): CloudAccount {
     plusUntil: null,
     ai: null,
     features: null,
+    moderation: null,
     ...overrides,
   };
 }
@@ -122,6 +123,7 @@ describe("cloudStatus", () => {
         text: "/afk",
         preview: null,
         fp: null,
+        paused: null,
       })),
       rules: [
         {
@@ -133,6 +135,7 @@ describe("cloudStatus", () => {
           ownerOnly: false,
           cooldown: 60,
           reply: { secret: true, text: null, preview: "******", fp: "AAAAAAAAAAAAAAAA" },
+          paused: null,
         },
       ],
     };
@@ -183,6 +186,23 @@ describe("cloudStatus", () => {
     });
   });
 
+  it("names a moderation stop's category and keeps a staff stop's words", () => {
+    const hold = {
+      kind: "suspended",
+      until: null,
+      reason: "abuse",
+      case: "mc_01JBQ7XK2M9RPV4TNW8HD3CFGZ",
+      category: "scam",
+      auto: true,
+    } as const;
+    expect(cloudStatus(account({ hold }), NOW * 1000, t)).toMatchObject({
+      text: "Durduruldu: Dolandırıcılık",
+      tone: "error",
+    });
+    const staff = account({ hold: { ...hold, case: null, category: null, auto: false } });
+    expect(cloudStatus(staff, NOW * 1000, t).text).toBe(trCloudAfk.state.suspended);
+  });
+
   it("shows an ended account as expired whatever its live state says", () => {
     const status = cloudStatus(account({ expired: true }), NOW * 1000, t);
     expect(status).toMatchObject({ text: trCloudAfk.state.expired, tone: "warn" });
@@ -221,7 +241,18 @@ describe("cloudPrimary", () => {
     expect(cloudPrimary(account({ expired: true }))).toBe("renew");
     expect(cloudPrimary(account({ hold: { kind: "expired", at: NOW } }))).toBe("renew");
     expect(
-      cloudPrimary(account({ hold: { kind: "suspended", until: null, reason: "spam" } })),
+      cloudPrimary(
+        account({
+          hold: {
+            kind: "suspended",
+            until: null,
+            reason: "spam",
+            case: null,
+            category: null,
+            auto: false,
+          },
+        }),
+      ),
     ).toBe("none");
   });
 
