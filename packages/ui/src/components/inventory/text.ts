@@ -1,7 +1,8 @@
 // Text that reaches the view from anyone (item names, lore, window titles) and the game-styled
-// lines built from it. Plain text only: never markup, never styled as our own interface.
+// lines built from it. Plain text only: never markup, never styled as our own interface; a
+// server's colours and flags only as the game draws them (the frame's looks, INV-HEADS).
 import { fill, type InventoryLang, type InventoryTexts } from "./texts";
-import type { InvCursor, InvItem, TitleRun } from "./types";
+import type { InvCursor, InvItem, TextSpan, TitleRun } from "./types";
 
 /** Controls and direction marks (embeddings, overrides, isolates and the plain marks). */
 function isControl(codePoint: number): boolean {
@@ -189,11 +190,171 @@ export function shadowOf(hex: string): string {
 
 const CURSES = new Set(["binding_curse", "vanishing_curse"]);
 
+/** A part of a line in one look: the game's colour (made readable) and its flags. */
+export interface TextRun {
+  text: string;
+  color: string;
+  bold?: boolean;
+  italic?: boolean;
+  underlined?: boolean;
+  strikethrough?: boolean;
+  obfuscated?: boolean;
+}
+
 export interface TooltipLine {
   text: string;
   color: string;
   /** The game's italic, which only a container's "and N more..." takes. */
   italic?: boolean;
+  /** The line in the server's looks (the frame's `nameStyle`, `loreStyle`); `text` is all of it. */
+  runs?: TextRun[];
+}
+
+/** The game's 16 text colours, by their formatting code (`§0`–`§f`). */
+const LEGACY_COLORS = [
+  "#000000",
+  "#0000aa",
+  "#00aa00",
+  "#00aaaa",
+  "#aa0000",
+  "#aa00aa",
+  "#ffaa00",
+  "#aaaaaa",
+  "#555555",
+  "#5555ff",
+  "#55ff55",
+  "#55ffff",
+  "#ff5555",
+  "#ff55ff",
+  "#ffff55",
+  "#ffffff",
+] as const;
+
+/** The tooltip's darkest look: 94 % over a white page (the tooltip colour test's worst case). */
+const TOOLTIP_WORST = [0x1e, 0x0f, 0x1e] as const;
+
+function luminance(rgb: readonly number[]): number {
+  const [r = 0, g = 0, b = 0] = rgb.map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+const BACKGROUND = luminance(TOOLTIP_WORST);
+const readsAt = (rgb: readonly number[]) => (luminance(rgb) + 0.05) / (BACKGROUND + 0.05) >= 4.5;
+const readable = new Map<string, string>();
+
+/**
+ * A server's text colour as the tooltip draws it: as it is when it reads at 4.5:1 on the tooltip,
+ * else the least step towards white that does (its own hue, a little paler). The game's dark
+ * purple is lore's own (`TEXT_COLOR.lore`).
+ */
+export function readableColor(hex: string): string {
+  const key = hex.toLowerCase();
+  if (key === LEGACY_COLORS[5]) return TEXT_COLOR.lore;
+  const hit = readable.get(key);
+  if (hit) return hit;
+  const value = Number.parseInt(key.slice(1), 16);
+  const rgb = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const toward = (t: number) => rgb.map((c) => Math.round(c + (255 - c) * t));
+  let step = 0;
+  while (step < 255 && !readsAt(toward(step / 255))) step++;
+  const out = `#${toward(step / 255)
+    .map((c) => c.toString(16).padStart(2, "0"))
+    .join("")}`;
+  if (readable.size > 512) readable.clear();
+  readable.set(key, out);
+  return out;
+}
+
+const STYLE_CODE = /^(?:[0-9a-f]|#[0-9a-f]{6})?k?l?m?n?o?$/;
+
+function runLook(code: string, base: string): Omit<TextRun, "text"> {
+  let color: string | undefined;
+  let flags = code;
+  if (code.startsWith("#")) {
+    color = code.slice(0, 7);
+    flags = code.slice(7);
+  } else if (/^[0-9a-f]/.test(code)) {
+    color = LEGACY_COLORS[Number.parseInt(code.slice(0, 1), 16)];
+    flags = code.slice(1);
+  }
+  const look: Omit<TextRun, "text"> = { color: color ? readableColor(color) : base };
+  if (flags.includes("k")) look.obfuscated = true;
+  if (flags.includes("l")) look.bold = true;
+  if (flags.includes("m")) look.strikethrough = true;
+  if (flags.includes("n")) look.underlined = true;
+  if (flags.includes("o")) look.italic = true;
+  return look;
+}
+
+const sameLook = (a: Omit<TextRun, "text">, b: Omit<TextRun, "text">) =>
+  a.color === b.color &&
+  Boolean(a.bold) === Boolean(b.bold) &&
+  Boolean(a.italic) === Boolean(b.italic) &&
+  Boolean(a.underlined) === Boolean(b.underlined) &&
+  Boolean(a.strikethrough) === Boolean(b.strikethrough) &&
+  Boolean(a.obfuscated) === Boolean(b.obfuscated);
+
+/**
+ * A text's parts in their looks (a frame's spans over it), cleaned as `cleanText` cleans the text:
+ * the same characters left out, a run of space one space in the look it starts in, none at the
+ * ends. `base` is the colour of a part without one (the field's own). Null when the spans are not
+ * the contract's or do not cover the text exactly: the text then shows as it is.
+ */
+export function styledRuns(
+  text: string,
+  spans: readonly TextSpan[] | null | undefined,
+  base: string,
+): TextRun[] | null {
+  if (!Array.isArray(spans) || spans.length === 0) return null;
+  const chars: { char: string; look: Omit<TextRun, "text"> }[] = [];
+  let at = 0;
+  for (const span of spans) {
+    if (!Array.isArray(span) || span.length !== 2) return null;
+    const [length, code] = span;
+    if (!Number.isInteger(length) || length <= 0 || typeof code !== "string") return null;
+    if (!STYLE_CODE.test(code)) return null;
+    const part = text.slice(at, at + length);
+    // Never between the halves of a character.
+    const first = part.charCodeAt(0);
+    const last = part.charCodeAt(part.length - 1);
+    if (
+      part.length !== length ||
+      (first >= 0xdc00 && first <= 0xdfff) ||
+      (last >= 0xd800 && last <= 0xdbff)
+    ) {
+      return null;
+    }
+    const look = runLook(code, base);
+    for (const char of plainChars(part)) {
+      if (!isPrivateUse(char.codePointAt(0) ?? 0)) chars.push({ char, look });
+    }
+    at += length;
+  }
+  if (at !== text.length) return null;
+  const runs: TextRun[] = [];
+  let space: Omit<TextRun, "text"> | undefined;
+  for (const { char, look } of chars) {
+    if (/\s/.test(char)) {
+      if (runs.length > 0) space ??= look;
+      continue;
+    }
+    const pieces: [string, Omit<TextRun, "text">][] = space
+      ? [
+          [" ", space],
+          [char, look],
+        ]
+      : [[char, look]];
+    for (const [piece, pieceLook] of pieces) {
+      const tail = runs[runs.length - 1];
+      if (tail && sameLook(tail, pieceLook)) tail.text += piece;
+      else runs.push({ ...pieceLook, text: piece });
+    }
+    space = undefined;
+  }
+  return runs.map((run) => run.text).join("") === cleanText(text) && runs.length > 0 ? runs : null;
 }
 
 /**
@@ -205,9 +366,12 @@ export function tooltipLines(
   lang: InventoryLang,
   texts: InventoryTexts,
 ): TooltipLine[] {
-  const lines: TooltipLine[] = [
-    { text: itemName(item, lang), color: RARITY_COLOR[rarityOf(item)] },
-  ];
+  const nameColor = RARITY_COLOR[rarityOf(item)];
+  const name: TooltipLine = { text: itemName(item, lang), color: nameColor };
+  // The custom name in its look (the name shown is the custom one whenever it has text).
+  const nameRuns = item.name ? styledRuns(item.name, item.nameStyle, nameColor) : null;
+  if (nameRuns && nameRuns.map((run) => run.text).join("") === name.text) name.runs = nameRuns;
+  const lines: TooltipLine[] = [name];
   const inside = item.inside;
   if (inside && inside.top.length > 0) {
     const shown = inside.top.slice(0, 5);
@@ -233,10 +397,13 @@ export function tooltipLines(
       lines.push({ text, color: curse ? TEXT_COLOR.red : TEXT_COLOR.gray });
     }
   }
-  for (const line of item.lore ?? []) {
-    const text = cleanText(line);
-    if (text) lines.push({ text, color: TEXT_COLOR.lore });
-  }
+  // Every line, the blank ones too: a server's spacer is a line of its own in the game.
+  (item.lore ?? []).forEach((line, i) => {
+    const shown: TooltipLine = { text: cleanText(line), color: TEXT_COLOR.lore };
+    const runs = styledRuns(line, item.loreStyle?.[i], TEXT_COLOR.lore);
+    if (runs) shown.runs = runs;
+    lines.push(shown);
+  });
   const durability = item.durability;
   if (durability && durability.left < durability.max) {
     const text = fill(texts.durability, { left: durability.left, max: durability.max });

@@ -2901,13 +2901,22 @@ export type CloudInvItem = {
 	label?: CloudLocalized,
 	/**  A custom name (anvil) or a server's item name. */
 	name?: string | null,
-	/**  At most 4 lines of at most 80 characters. */
+	/**
+	 *  The name's look in the game (machine 0.3.2): spans over `name`, each its length in UTF-16
+	 *  code units and its code (a colour `0`–`f` or `#rrggbb`, then the flags among `klmno`).
+	 */
+	nameStyle?: ([number, string])[],
+	/**  At most 32 lines of at most 80 characters. */
 	lore?: string[],
+	/**  A look a `lore` line, or none (machine 0.3.2). */
+	loreStyle?: (([number, string])[] | null)[],
 	durability?: CloudInvDurability | null,
 	/**  `custom_model_data` (its first float, rounded down). */
 	cmd?: number | null,
 	/**  The `item_model` component, when a server set one. */
 	model?: string | null,
+	/**  A player head's skin: its texture's hash on Mojang's texture server (machine 0.3.2). */
+	skin?: string | null,
 	ench?: CloudInvEnchant[],
 	enchanted?: boolean,
 	inside?: CloudInvInside | null,

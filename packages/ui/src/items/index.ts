@@ -59,6 +59,15 @@ export {
   type ResolvedIcon,
   resolveIcon,
 } from "./resolve";
+export {
+  isSkinHash,
+  type Pixels as SkinPixels,
+  processSkin,
+  renderHead,
+  SKIN_TEXTURE_ORIGIN,
+  skinTextureUrl,
+} from "./skin";
+export { useSkinHead } from "./skin-head";
 export type {
   ItemArt,
   ItemArtAtlas,

@@ -3,9 +3,11 @@
 // it on a development page; the screenshots and the second look use it.
 import { useEffect, useMemo, useState } from "react";
 import {
+  SAMPLE_BOOK,
   SAMPLE_CHEST,
   SAMPLE_DISPENSER,
   SAMPLE_DOUBLE_CHEST,
+  SAMPLE_HEADS,
   SAMPLE_HOPPER,
   SAMPLE_INVENTORY,
   SAMPLE_KITS,
@@ -37,6 +39,8 @@ export const PREVIEW_STATES = {
   dispenser: { inventory: SAMPLE_INVENTORY, window: SAMPLE_DISPENSER },
   unknown: { inventory: SAMPLE_INVENTORY, window: SAMPLE_UNKNOWN },
   market: { inventory: SAMPLE_INVENTORY, window: SAMPLE_MARKET, kind: "menu" },
+  heads: { inventory: SAMPLE_INVENTORY, window: SAMPLE_HEADS, kind: "menu" },
+  book: { inventory: SAMPLE_INVENTORY, window: SAMPLE_BOOK, kind: "menu" },
   cursor: { inventory: withCursor(SAMPLE_INVENTORY, 13), window: null },
   locked: { inventory: SAMPLE_INVENTORY, window: SAMPLE_CHEST, locked: true },
 } satisfies Record<string, PreviewSetup>;
@@ -90,7 +94,52 @@ const MARKET_GLYPHS: ReadonlyMap<number, TitleGlyph> = new Map([
   [0xf808, { advance: -8 }],
   [0xe001, { advance: 177, image: { src: MARKET_ART, width: 176, height: 72, ascent: 13 } }],
 ]);
-const marketGlyph = (codePoint: number) => MARKET_GLYPHS.get(codePoint);
+// A book menu's art in the server's manner, wider than the window (INV-HEADS): an open book whose
+// cover reaches 40 GUI pixels past each side, the menu's name on a plate, sunken squares where the
+// buttons are (slots 10, 12, 14, 16, so the art's x is the window's x + 40).
+const BOOK_ART = (() => {
+  const rect = (fill: string, x: number, y: number, w: number, h: number) =>
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`;
+  const slots = [10, 12, 14, 16]
+    .map((i) => {
+      const x = 40 + 7 + (i % 9) * 18;
+      const y = 17 + Math.floor(i / 9) * 18;
+      return (
+        rect("#5a3418", x, y, 18, 18) +
+        rect("#fff4dc", x + 1, y + 1, 17, 17) +
+        rect("#e2c79a", x + 1, y + 1, 16, 16)
+      );
+    })
+    .join("");
+  const name = "KİTAP";
+  const ink = textAdvance(name) - 1;
+  const plateWidth = ink + 12;
+  const plateX = Math.floor((256 - plateWidth) / 2);
+  const plate =
+    rect("#2a1407", plateX, 2, plateWidth, 13) +
+    rect("#6b3a1a", plateX + 1, 3, plateWidth - 2, 11) +
+    `<path fill="#f6e3bf" transform="translate(${plateX + 6} 5)" d="${textPath(name)}"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 76" shape-rendering="crispEdges">${
+    rect("#2a1407", 0, 0, 256, 76) +
+    rect("#6b3a1a", 1, 1, 254, 74) +
+    rect("#8a4f26", 3, 3, 250, 70) +
+    rect("#e9d3a8", 8, 6, 118, 66) +
+    rect("#f3e3c0", 9, 7, 116, 64) +
+    rect("#e9d3a8", 130, 6, 118, 66) +
+    rect("#f3e3c0", 131, 7, 116, 64) +
+    rect("#4a2812", 126, 4, 4, 70)
+  }${slots}${plate}</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+})();
+
+// The book title's glyphs: a move back 48 from the title's x (8), so the art starts 40 left of
+// the window, then the picture, its top on the window's top.
+const BOOK_GLYPHS: ReadonlyMap<number, TitleGlyph> = new Map([
+  [0xf80a, { advance: -48 }],
+  [0xe002, { advance: 257, image: { src: BOOK_ART, width: 256, height: 76, ascent: 13 } }],
+]);
+const marketGlyph = (codePoint: number) =>
+  MARKET_GLYPHS.get(codePoint) ?? BOOK_GLYPHS.get(codePoint);
 
 export interface InventoryPreviewProps {
   state?: PreviewState;
@@ -100,6 +149,7 @@ export interface InventoryPreviewProps {
   latency?: number;
   maxScale?: number;
   align?: "center" | "start";
+  fit?: "width" | "contain";
   className?: string;
 }
 
@@ -110,6 +160,7 @@ export function InventoryPreview({
   latency = 180,
   maxScale,
   align,
+  fit,
   className,
 }: InventoryPreviewProps) {
   const setup: PreviewSetup = PREVIEW_STATES[state];
@@ -148,6 +199,7 @@ export function InventoryPreview({
       titleGlyph={marketGlyph}
       maxScale={maxScale}
       align={align}
+      fit={fit}
       className={className}
     />
   );
