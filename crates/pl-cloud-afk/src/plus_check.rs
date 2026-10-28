@@ -972,13 +972,17 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     let discovery_in = object(config.get("discovery"), "discovery")?;
     only(
         discovery_in,
-        &["scanChat", "proactivePm", "ads", "adTemplate"],
+        &["scanChat", "proactivePm", "ads", "adTemplate", "adEveryMin"],
         "discovery",
     )?;
     let scan_chat = boolean(discovery_in.get("scanChat"), "discovery.scanChat")?;
     let proactive_pm = boolean(discovery_in.get("proactivePm"), "discovery.proactivePm")?;
     let ads = boolean(discovery_in.get("ads"), "discovery.ads")?;
     let ad_template = string(discovery_in.get("adTemplate"), "discovery.adTemplate")?;
+    let ad_every_min = match discovery_in.get("adEveryMin") {
+        None => None,
+        value => Some(ad_minutes(value)?),
+    };
     let templates: &[String] = if mode == GENERIC {
         &[]
     } else {
@@ -1172,6 +1176,9 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     if ready {
         out["ready"] = Value::Bool(true);
     }
+    if let Some(minutes) = ad_every_min {
+        out["discovery"]["adEveryMin"] = Value::from(minutes);
+    }
     if out.to_string().len() > MAX_CONFIG_BYTES {
         return Err(PlusRefusal::TooLarge);
     }
@@ -1180,6 +1187,19 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
 
 fn kind_or_range(value: Option<&Value>) -> &'static str {
     if value.is_none() { "missing" } else { "range" }
+}
+
+/// "Sohbete ilan" (trade-any-4): the minutes between ads a player may choose.
+const AD_EVERY_MIN: [i64; 4] = [30, 45, 60, 120];
+
+/// `discovery.adEveryMin`, where the document has it: one of [`AD_EVERY_MIN`] (a server's floor
+/// only raises the minutes the service uses, it refuses none of them).
+fn ad_minutes(value: Option<&Value>) -> Checked<i64> {
+    let minutes = integer(value, "discovery.adEveryMin")?;
+    if !AD_EVERY_MIN.contains(&minutes) {
+        return Err(PlusRefusal::invalid("discovery.adEveryMin", "range"));
+    }
+    Ok(minutes)
 }
 
 fn parse_custom_items(value: &Value, now: i64) -> Checked<Vec<Value>> {
@@ -1724,6 +1744,45 @@ mod tests {
             assert_eq!(
                 check_config_value(&doc, &ctx),
                 Err(PlusRefusal::invalid("ready", "type"))
+            );
+        }
+    }
+
+    #[test]
+    fn the_ad_minutes_stay_as_the_player_chose() {
+        let doc = serde_json::to_value(crate::plus::PlusConfig {
+            mode: GENERIC.into(),
+            enabled: false,
+            ..crate::plus::PlusConfig::default()
+        })
+        .unwrap();
+        let ctx = PlusCheckContext {
+            now: 1_792_900_000,
+            ..PlusCheckContext::default()
+        };
+        let minutes = |doc: &Value| -> Checked<Option<Value>> {
+            let out = check_config_value(doc, &ctx)?;
+            Ok(out["discovery"].get("adEveryMin").cloned())
+        };
+        // None chosen (or an older service): none is made.
+        assert_eq!(minutes(&doc), Ok(None));
+        for chosen in AD_EVERY_MIN {
+            let mut sent = doc.clone();
+            sent["discovery"]["adEveryMin"] = Value::from(chosen);
+            assert_eq!(minutes(&sent), Ok(Some(Value::from(chosen))));
+        }
+        // Any other value is refused (a server's floor raises the minutes used, never refuses).
+        for (bad, reason) in [
+            (Value::from(90), "range"),
+            (Value::from(0), "range"),
+            (Value::from("60"), "type"),
+            (Value::Null, "type"),
+        ] {
+            let mut sent = doc.clone();
+            sent["discovery"]["adEveryMin"] = bad;
+            assert_eq!(
+                check_config_value(&sent, &ctx),
+                Err(PlusRefusal::invalid("discovery.adEveryMin", reason))
             );
         }
     }
