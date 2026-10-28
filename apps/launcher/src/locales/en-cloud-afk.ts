@@ -98,7 +98,7 @@ export const enCloudAfk = {
     settings: "Settings",
     more: "More actions",
     renew: "Extend time",
-    reactivate: "Reactivate",
+    reactivate: "Buy time",
     openSite: "Open on afk.projects.gg",
     started: "{{name}} started",
     stopped: "{{name}} stopped",
@@ -225,7 +225,8 @@ export const enCloudAfk = {
         daily: "Every day at set times",
       },
       delay: "Wait",
-      later: "s later",
+      // The site's words (SITE-W2B): "3 s later" read oddly.
+      later: "sec later",
       everyMin: "At least",
       everyMax: "At most",
       times: "Times",

@@ -1,6 +1,6 @@
 // A cloud account on the AFK page: face, name and server, the state line, the paid time with
 // "Süreyi uzat" once renewal opens, and one main button (Başlat, Durdur, "Şifreyi düzelt" after the
-// server turned its password down, or "Yeniden etkinleştir" on the site once the time is up), the
+// server turned its password down, or "Süre al" on the site once the time is up), the
 // console and the settings. With the cloud features: "Envanter" and "Hareket" in its menu (the
 // panel's tabs), "Ayarlarını kopyala", and a box while several accounts are chosen (the chosen card
 // carries the brand's pixel brackets).

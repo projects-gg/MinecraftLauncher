@@ -494,9 +494,10 @@ export const trAfkPlus = {
     far: "En fazla {{limit}} doğru mu? Hedefin {{target}}.",
     yesRight: "Evet, doğru",
     fix: "Düzelt",
-    overCap: "Bu fiyat tek anlaşma sınırını ({{cap}}) aşıyor.",
-    raise: "Sınırı {{amount}} yap",
-    useCap: "Fiyatı {{cap}} yap",
+    // Which price passes which limit, and what each answer changes (the site's, SITE-W2B).
+    overCap: "En fazla fiyat, tek anlaşma sınırını ({{cap}}) aşıyor.",
+    raise: "Tek anlaşma sınırını {{amount}} yap",
+    useCap: "En fazla fiyatı {{cap}} yap",
   },
   orders: {
     active: "Etkin",
