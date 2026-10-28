@@ -2,7 +2,7 @@
 // from the page URL), on top of `?cloud=accounts&feat=on`; without it the service is one from before
 // movement (nothing of it shows):
 // - `&move=on`: GeceBekcisi (play.projects.gg) is in game with movement on: "Hareket" shows beside
-//   the inventory; its main account is EjderAvcisi, its other account there Tuccar_Ali (stopped);
+//   the inventory; its main account is EjderAvcisi, its other account there TuccarBaykus (stopped);
 //   Madenci07 may move but has it off (the settings' switch);
 // - `&move=player|host`: GeceBekcisi has it off and no slot is free (the switch waits);
 // - `&move=restart|slots|version|trade|notrunning`: what the machine says for GeceBekcisi;
@@ -34,7 +34,7 @@ export const moveScenario = param("move");
 export const GECE = "a_8XH4N2RT6WQ9PB3D";
 const MADENCI = "a_7KQ2MZ3P9TW4XB1C";
 const MAIN = "EjderAvcisi";
-const OWN = ["Tuccar_Ali"];
+const OWN = ["TuccarBaykus"];
 
 /** GeceBekcisi is in game for the movement previews (it waits to reconnect otherwise). */
 export const geceRunning = moveScenario !== null && moveScenario !== "notrunning";
@@ -234,7 +234,7 @@ export function moveOperation(acct: string, op: MoveOp): CloudMovementError | nu
       const own = feature?.follow?.own ?? [];
       const isMain = main !== null && op.name.toLowerCase() === main.toLowerCase();
       if (!isMain && !own.includes(op.name)) return refuse("not_allowed");
-      // Tuccar_Ali is stopped in the previews: not in sight.
+      // TuccarBaykus is stopped in the previews: not in sight.
       if (!isMain || moveScenario === "away") return refuse("not_visible");
       stopTimer(machine);
       machine.move = {

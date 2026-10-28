@@ -338,7 +338,7 @@ export const commands = {
 	memory: MemoryAdviceView | null,
 	/**
 	 *  The JVM did not start because of the instance's own JVM arguments, and it has some:
-	 *  "Argümanları sıfırla ve yeniden dene" (`instance_set_jvm_args`).
+	 *  "Argümanları sıfırla ve tekrar dene" (`instance_set_jvm_args`).
 	 */
 	resetJvmArgs: boolean,
 } | null, CmdError>(__TAURI_INVOKE("troubleshoot_crash", { instanceId })),
@@ -429,8 +429,10 @@ export const commands = {
 	 */
 	cloudAfkMove: (desktopId: string, cloudId: string, rev: number, run: boolean) => typedError<CloudMoveResult_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_move", { desktopId, cloudId, rev, run })),
 	/**
-	 *  "Tümünü bağla" while some accounts run in the cloud: every other desktop account connects
-	 *  (staggered, as usual). Returns how many were left to the cloud.
+	 *  "Tümünü bağla" of the AFK page's "Bu bilgisayarda" list while the player has 7/24 Bulut
+	 *  accounts: every desktop account without a cloud twin connects (staggered, as usual). A twin's
+	 *  card is its cloud account's, which has its own buttons, so it is left out whether it runs there
+	 *  or not (AFK-CLEAR). Returns how many were left out.
 	 */
 	cloudAfkConnectHere: () => __TAURI_INVOKE<number>("cloud_afk_connect_here"),
 	/**  Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there. */
@@ -3828,7 +3830,7 @@ export type CrashView = {
 	memory: MemoryAdviceView | null,
 	/**
 	 *  The JVM did not start because of the instance's own JVM arguments, and it has some:
-	 *  "Argümanları sıfırla ve yeniden dene" (`instance_set_jvm_args`).
+	 *  "Argümanları sıfırla ve tekrar dene" (`instance_set_jvm_args`).
 	 */
 	resetJvmArgs: boolean,
 };
@@ -5532,7 +5534,7 @@ export type MeView = {
 	mark: ProfileMark | null,
 };
 
-/**  "Belleği artır/düşür ve yeniden dene". */
+/**  "Belleği artır/düşür ve tekrar dene". */
 export type MemoryAdviceView = {
 	currentMb: number,
 	suggestedMb: number,

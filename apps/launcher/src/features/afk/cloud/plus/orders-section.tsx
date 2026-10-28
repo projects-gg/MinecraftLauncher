@@ -1319,6 +1319,9 @@ function OrderRow({
   const lang = currentLang();
   const name = itemLabel(order.item, namer, lang);
   const finished = state.status === "done" || state.status === "expired";
+  // A paused or finished order rests: its picture dims and its words go a step quieter, each still
+  // AA on the panel (the whole row at 60 % put "Süresi doldu" near 3:1; afk.projects.gg, SITE-W2).
+  const resting = !order.on || finished;
   const counts = order.pay !== "money";
   const payName = counts ? itemLabel(order.pay, namer, lang) : null;
   const price = (value: number) =>
@@ -1414,17 +1417,37 @@ function OrderRow({
             })}
             className={cn(
               "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md py-1 text-left outline-none",
-              "transition-[opacity,transform,scale] duration-150 ease-out active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-gold-300",
-              (!order.on || finished) && "opacity-60",
+              "transition-[transform,scale] duration-150 ease-out active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-gold-300",
             )}
           >
-            <PlusItemIcon item={order.item} custom={namer.custom} size={32} />
+            <span className={cn("inline-flex shrink-0", resting && "opacity-60")}>
+              <PlusItemIcon item={order.item} custom={namer.custom} size={32} />
+            </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13.5px] font-medium text-bone-50">{name}</span>
-              <span className="block truncate text-[12px] text-ash-300 tabular-nums">{meta}</span>
+              <span
+                className={cn(
+                  "block truncate text-[13.5px] font-medium",
+                  resting ? "text-ash-300" : "text-bone-50",
+                )}
+              >
+                {name}
+              </span>
+              <span
+                className={cn(
+                  "block truncate text-[12px] tabular-nums",
+                  resting ? "text-ash-400" : "text-ash-300",
+                )}
+              >
+                {meta}
+              </span>
             </span>
             <span className="shrink-0 text-right">
-              <span className="block text-[13px] text-bone-100 tabular-nums">
+              <span
+                className={cn(
+                  "block text-[13px] tabular-nums",
+                  resting ? "text-ash-300" : "text-bone-100",
+                )}
+              >
                 {t(
                   order.side === "sell"
                     ? "afkPlus.orders.progressSold"
