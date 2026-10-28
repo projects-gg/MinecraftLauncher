@@ -29,6 +29,7 @@ import {
   toast,
   useInteractionMotion,
   useMotionPrefs,
+  useSystemReducedMotion,
 } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -63,7 +64,7 @@ import { AccountsSection } from "./accounts-section";
 import { DataSection } from "./data-section";
 import { GraphicsSection } from "./graphics-section";
 import { JavaSection } from "./java-section";
-import { Row, SwapLine } from "./row";
+import { Row, SettingArrival, SwapLine, useSettingLanding } from "./row";
 
 const sections = [
   { id: "general", icon: Gear },
@@ -280,6 +281,37 @@ function FriendsButtonRow() {
   );
 }
 
+/** The system's name where its settings are meant ("Windows ayarlarında açık."). */
+const SYSTEM_NAMES = { windows: "Windows", macos: "macOS", linux: "Linux" } as const;
+
+/**
+ * "Animasyonları azalt" (BETA-FB): fades only, as the system's own reduced motion gives (@pl/ui
+ * reduced-motion). Performance mode turns it on too, so the switch says so while it is on (as the
+ * embers' switch does); so does the system's setting, which the line under it names.
+ */
+function ReduceMotionRow() {
+  const { t } = useTranslation();
+  const p = usePrefs();
+  const system = useSystemReducedMotion();
+  const os = useMemo(() => detectOs(), []);
+  const kept = system || p.performanceMode;
+  return (
+    <Row
+      title={t("motion.title")}
+      help={system ? t("motion.systemOn", { system: SYSTEM_NAMES[os] }) : undefined}
+      setting="reduce-motion"
+    >
+      <Switch
+        checked={p.reduceMotion || kept}
+        onCheckedChange={(v) => p.set("reduceMotion", v)}
+        label={t("motion.title")}
+        hideLabel
+        disabled={kept}
+      />
+    </Row>
+  );
+}
+
 function Appearance() {
   const { t } = useTranslation();
   const p = usePrefs();
@@ -289,6 +321,7 @@ function Appearance() {
       <Row
         title={t("settings.appearance.performance")}
         help={t("settings.appearance.performanceHelp")}
+        setting="performance"
       >
         <Switch
           checked={p.performanceMode}
@@ -297,6 +330,7 @@ function Appearance() {
           hideLabel
         />
       </Row>
+      <ReduceMotionRow />
       <Row title={t("settings.appearance.particles")}>
         {/* Performance mode turns the embers off: the switch says so while it is on. */}
         <Switch
@@ -615,11 +649,15 @@ function GameDefaults() {
 export function SettingsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { section?: string };
+  const search = useSearch({ strict: false }) as { section?: string; focus?: string };
   const friendsOn = useSocialUi((s) => s.view.enabled);
   const shown = sections.filter((s) => s.id !== "friends" || friendsOn);
   const active = (shown.find((s) => s.id === search.section)?.id ?? "general") as SectionId;
   const glide = useMotionPrefs().layout;
+  // A row asked for by name (the command palette's settings rows): the page lands on it.
+  const arrival = useSettingLanding(search.focus, () => {
+    void navigate({ to: "/settings", search: { section: active }, replace: true });
+  });
 
   const body: Record<SectionId, ReactNode> = {
     general: <General />,
@@ -685,7 +723,7 @@ export function SettingsPage() {
           <h2 className="mb-1 font-display text-section font-semibold text-bone-50">
             {sectionTitle(t, active)}
           </h2>
-          {body[active]}
+          <SettingArrival.Provider value={arrival}>{body[active]}</SettingArrival.Provider>
         </div>
       </section>
     </div>
