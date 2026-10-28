@@ -270,7 +270,8 @@ function PrimaryButton({
       <span className={cn("inline-flex", className)}>
         <Button
           size="sm"
-          variant={action === "stop" || fixFirst ? "secondary" : "primary"}
+          // Waiting, it steps back from gold as the other waiting buttons do (no live-looking plate).
+          variant={action === "stop" || fixFirst || waits ? "secondary" : "primary"}
           icon={icons[action]}
           disabled={waits}
           aria-disabled={guard.armed ? undefined : true}

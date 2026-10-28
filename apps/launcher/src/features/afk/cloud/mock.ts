@@ -537,7 +537,9 @@ mockLive.onLink((online) => {
 function lines(id: string, count: number, endAt: number) {
   if (featScenario !== "off") {
     const cloud = find(id);
-    return kindLines(count, endAt, cloud.name, serverLabel(cloud.server));
+    // In game since then: its log does not show it joining minutes ago.
+    const since = cloud.live.state === "running" ? cloud.live.since : null;
+    return kindLines(count, endAt, cloud.name, serverLabel(cloud.server), since);
   }
   return Array.from({ length: count }, (_, i) => {
     const [k, text] = CONSOLE[i % CONSOLE.length] ?? ["n", ""];

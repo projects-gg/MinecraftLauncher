@@ -116,19 +116,26 @@ function kindLine(
   };
 }
 
+/** The fixture's lines from connecting to arriving in the game (the rest is the evening there). */
+const JOIN_LINES = 6;
+
+/**
+ * `count` lines 37 s apart up to `endAt`; `since`: when the account came into the game. One in game
+ * since before these lines does not join again in them (its uptime and its log agree), and no line
+ * repeats.
+ */
 export function kindLines(
   count: number,
   endAt: number,
   name: string,
   server: string,
+  since: number | null = null,
 ): CloudConsoleLine[] {
-  return Array.from({ length: count }, (_, i) =>
-    kindLine(
-      KIND_LINES[i % KIND_LINES.length] ?? ["n", "sys", ""],
-      endAt - (count - i) * 37,
-      name,
-      server,
-    ),
+  const source =
+    since !== null && since < endAt - count * 37 ? KIND_LINES.slice(JOIN_LINES) : KIND_LINES;
+  const shown = Math.min(count, source.length);
+  return Array.from({ length: shown }, (_, i) =>
+    kindLine(source[i] ?? ["n", "sys", ""], endAt - (shown - i) * 37, name, server),
   );
 }
 

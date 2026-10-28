@@ -459,15 +459,20 @@ export function CloudConsole({
         >
           {!earlierDone && lines.length > 0 ? (
             <div className="mb-2 flex justify-center font-sans">
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<ArrowUp size={13} />}
-                disabled={earlierBusy}
-                onClick={() => void loadEarlier()}
-              >
-                {t("cloudAfk.console.earlier")}
-              </Button>
+              {/* The older lines are the machine's: out of reach, they wait (CLOUD-STALE). */}
+              <Tooltip content={t("cloudStale.waits")} disabled={!unreachable}>
+                <span className="inline-flex">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<ArrowUp size={13} />}
+                    disabled={earlierBusy || unreachable}
+                    onClick={() => void loadEarlier()}
+                  >
+                    {t("cloudAfk.console.earlier")}
+                  </Button>
+                </span>
+              </Tooltip>
             </div>
           ) : null}
           {shown.length ? (
@@ -571,7 +576,7 @@ export function CloudConsole({
             <Tooltip content={t("cloudStale.waits")} disabled={!unreachable}>
               <span className="inline-flex">
                 <Button
-                  variant="primary"
+                  variant={unreachable ? "secondary" : "primary"}
                   icon={<Key size={15} weight="bold" />}
                   disabled={unreachable}
                   onClick={() => onOpenSettings(account.id)}
