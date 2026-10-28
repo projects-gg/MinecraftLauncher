@@ -884,6 +884,9 @@ pub struct PlusWritten {
     pub config: PlusConfig,
     pub ai_rev: u64,
     pub judge: PlusJudge,
+    /// The server view as `GET` resolves it for the stored settings (28 Oct 2026: its money name
+    /// follows `trade.currency`); None from an older service.
+    pub server: Option<PlusServer>,
 }
 
 /// An order route's answer: the order (none for a delete), the stored settings and their

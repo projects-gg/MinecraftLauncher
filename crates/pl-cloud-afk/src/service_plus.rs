@@ -64,14 +64,24 @@ impl PlusCache {
         self.settings.lock().get(id).cloned()
     }
 
-    /// A write's answer over what was read: the settings, their revision and the judge; the
-    /// server, Studio's rules and the orders' states stay.
-    fn written(&self, id: &str, config: PlusConfig, ai_rev: u64) -> PlusSettings {
+    /// A write's answer over what was read: the settings, their revision and the judge, and the
+    /// server view when the answer brings one (a save's: its money name as the service names it);
+    /// else the server read stays, as Studio's rules and the orders' states do.
+    fn written(
+        &self,
+        id: &str,
+        config: PlusConfig,
+        ai_rev: u64,
+        server: Option<crate::plus::PlusServer>,
+    ) -> PlusSettings {
         let mut guard = self.settings.lock();
         let entry = guard.entry(id.to_owned()).or_default();
         if entry.ai_rev <= ai_rev {
             entry.config = config;
             entry.ai_rev = ai_rev;
+            if let Some(server) = server {
+                entry.server = server;
+            }
         }
         entry.clone()
     }
@@ -571,7 +581,9 @@ impl CloudService {
     ) -> Result<PlusSaveOutcome> {
         match answer {
             Ok(written) => {
-                let mut settings = self.cache().written(id, written.config, written.ai_rev);
+                let mut settings = self
+                    .cache()
+                    .written(id, written.config, written.ai_rev, written.server);
                 settings.judge = written.judge;
                 self.cache().remember(id, &settings);
                 Ok(PlusSaveOutcome::Saved { settings })
@@ -712,7 +724,7 @@ impl CloudService {
     ) -> Result<PlusOrderOutcome> {
         match answer {
             Ok(written) => {
-                let settings = self.cache().written(id, written.config, written.ai_rev);
+                let settings = self.cache().written(id, written.config, written.ai_rev, None);
                 Ok(PlusOrderOutcome::Saved {
                     settings: Box::new(settings),
                     order: written.order.map(Box::new),
@@ -1461,5 +1473,44 @@ mod tests {
         assert_eq!(service.plus_minecraft("a_1").as_deref(), Some("26.3"));
         service.forget().await;
         assert_eq!(service.plus_minecraft("a_1"), None);
+    }
+
+    #[tokio::test]
+    async fn a_save_shows_the_server_view_it_answers_with() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = offline_service(dir.path());
+        let token = Bearer::new("t");
+        let read = settings();
+        service.inner.plus.remember("a_1", &read);
+        let label = |settings: &PlusSettings| settings.server.money.label.clone().map(|l| l.tr);
+        // An older service answers without it: the view read stays.
+        let answer = json!({"config": read.config, "aiRev": 4});
+        let written: PlusWritten = serde_json::from_value(answer).unwrap();
+        assert_eq!(written.server, None);
+        let outcome = service.settings_written(&token, "a_1", Ok(written)).await;
+        let Ok(PlusSaveOutcome::Saved { settings }) = outcome else {
+            panic!("not saved");
+        };
+        assert_eq!(settings.server, read.server);
+        // A save's answer names the money as the service resolved it ("Para birimi"): it shows at
+        // once, never worked out here.
+        let mut server = serde_json::to_value(&read.server).unwrap();
+        server["money"]["label"] = json!({"tr": "TL", "en": "TL"});
+        let answer = json!({"config": read.config, "aiRev": 5, "server": server});
+        let written: PlusWritten = serde_json::from_value(answer).unwrap();
+        let outcome = service.settings_written(&token, "a_1", Ok(written)).await;
+        let Ok(PlusSaveOutcome::Saved { settings }) = outcome else {
+            panic!("not saved");
+        };
+        assert_eq!(label(&settings).as_deref(), Some("TL"));
+        assert_eq!(settings.rules, read.rules, "Studio's rules stay as read");
+        // An order write's answer has none: the view known stays.
+        let answer = json!({"config": read.config, "aiRev": 6});
+        let written: PlusOrderWritten = serde_json::from_value(answer).unwrap();
+        let outcome = service.order_written("a_1", Ok(written));
+        let Ok(PlusOrderOutcome::Saved { settings, .. }) = outcome else {
+            panic!("not saved");
+        };
+        assert_eq!(label(&settings).as_deref(), Some("TL"));
     }
 }

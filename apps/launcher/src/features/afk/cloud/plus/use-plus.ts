@@ -226,7 +226,10 @@ export function storeApproval(queryClient: QueryClient, id: string, approval: Pl
   );
 }
 
-/** Puts written settings into the panel (an order write, a save): the server and rules stay. */
+/**
+ * Puts written settings into the panel (an order write, a save) as the backend merged them: a
+ * save's server view is the service's answer (its money name), else the one read; the rules stay.
+ */
 export function storeSettings(queryClient: QueryClient, id: string, settings: PlusSettings) {
   queryClient.setQueryData<PlusPanel>(plusKey(id), (panel) => {
     if (!panel) return panel;
