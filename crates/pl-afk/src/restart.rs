@@ -14,12 +14,13 @@
 
 use std::time::Duration;
 
+use pl_lang::Lang;
 use serde::{Deserialize, Serialize};
 
 use crate::bridge::DisconnectReason;
 use crate::form::{MAX_RELOG_DELAY_SECONDS, MIN_RELOG_DELAY_SECONDS, ordered};
-use crate::model::AutoRelogOptions;
-use crate::util::{contains_ignore_case, one_line, strip_color_codes};
+use crate::model::{AutoRelogOptions, default_kick_messages_in, is_default_kick_messages};
+use crate::util::{one_line, strip_color_codes};
 
 /// Longest server message kept in a failure reason (characters).
 const MAX_MESSAGE_CHARS: usize = 300;
@@ -478,13 +479,27 @@ pub enum ExitDecision {
     },
 }
 
-/// The message contains one of the account's kick messages ("reconnect on these").
+/// The message contains one of the account's kick messages ("reconnect on these"), ignoring case
+/// and the dots and tails of Turkish letters ([`plain_upper`]: "Sunucu yeniden başlatılıyor" also
+/// catches `SUNUCU YENİDEN BAŞLATILIYOR` and an ASCII `Sunucu yeniden baslatiliyor`). An untouched
+/// default list catches both languages' lines: a server may speak either.
 fn listed_kick_message(relog: &AutoRelogOptions, message: Option<&str>) -> bool {
-    let message = message.unwrap_or_default();
-    relog
-        .kick_messages
-        .iter()
-        .any(|k| !k.is_empty() && contains_ignore_case(message, k))
+    let text = plain_upper(message.unwrap_or_default());
+    let defaults;
+    let lines: &[String] = if is_default_kick_messages(&relog.kick_messages) {
+        defaults = [
+            default_kick_messages_in(Lang::Tr),
+            default_kick_messages_in(Lang::En),
+        ]
+        .concat();
+        &defaults
+    } else {
+        &relog.kick_messages
+    };
+    lines.iter().any(|line| {
+        let line = plain_upper(line.trim());
+        !line.is_empty() && text.contains(&line)
+    })
 }
 
 /// MCC's `AutoRelogRetryPolicy.ShouldReconnect` adapted to the launcher: with "ignore kick
@@ -1032,6 +1047,51 @@ mod tests {
                 message: Some("Unsupported protocol".into())
             })
         );
+    }
+
+    #[test]
+    fn kick_messages_match_turkish_letters_and_both_languages_by_default() {
+        let own = AutoRelogOptions {
+            ignore_kick_message: false,
+            kick_messages: vec!["yeniden başlatılıyor".into()],
+            ..AutoRelogOptions::default()
+        };
+        let kick = Some(&DisconnectReason::InGameKick);
+        for message in [
+            "Sunucu yeniden başlatılıyor",
+            "SUNUCU YENİDEN BAŞLATILIYOR",
+            "Sunucu yeniden baslatiliyor",
+        ] {
+            assert!(kick_filter_allows(&own, kick, Some(message)), "{message}");
+        }
+        assert!(!kick_filter_allows(
+            &own,
+            kick,
+            Some("Server is restarting")
+        ));
+        // An untouched list in either language catches the other's lines too.
+        for lang in [Lang::Tr, Lang::En] {
+            let defaults = AutoRelogOptions {
+                ignore_kick_message: false,
+                kick_messages: default_kick_messages_in(lang),
+                ..AutoRelogOptions::default()
+            };
+            for message in [
+                "Server is full!",
+                "Sunucu dolu!",
+                "SUNUCU YENİDEN BAŞLATILIYOR",
+            ] {
+                assert!(
+                    kick_filter_allows(&defaults, kick, Some(message)),
+                    "{lang:?} {message}"
+                );
+            }
+            assert!(!kick_filter_allows(
+                &defaults,
+                kick,
+                Some("Spam yüzünden atıldınız")
+            ));
+        }
     }
 
     #[test]

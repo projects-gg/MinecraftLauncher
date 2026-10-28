@@ -1,4 +1,5 @@
 import { enAfkAlerts } from "./en-afk-alerts";
+import { enAfkClear } from "./en-afk-clear";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkMod } from "./en-afk-mod";
 import { enAfkPanel } from "./en-afk-panel";
@@ -312,6 +313,7 @@ export const en: DeepPartial<Strings> = {
   cloudAfkMove: enCloudAfkMove,
   afkMod: enAfkMod,
   afkPanel: enAfkPanel,
+  afkClear: enAfkClear,
   projectsSkin: enProjectsSkin,
   host: enHost,
   afkPlus: enAfkPlus,
@@ -1014,7 +1016,7 @@ export const en: DeepPartial<Strings> = {
       starting: "Starting",
       connecting: "Connecting",
       connected: "In game, {{uptime}}",
-      reconnecting: "Reconnecting, {{secs}} s",
+      reconnecting: "Reconnecting in {{secs}} s",
       stopping: "Stopping",
       error: "Disconnected",
     },
@@ -1129,9 +1131,9 @@ export const en: DeepPartial<Strings> = {
       remove: "Remove command",
       empty: "No commands yet.",
       stored: "Saved",
-      storedHint: "Passwords are kept safely on this computer and never shown here.",
+      storedHint: "Saved passwords aren't shown here.",
       replace: "Change",
-      undoReplace: "Cancel",
+      undoReplace: "Keep the old one",
       newSecret: "New password",
       show: "Show password",
       hide: "Hide password",
@@ -1166,7 +1168,7 @@ export const en: DeepPartial<Strings> = {
     },
     relog: {
       delay: "Wait time",
-      unlimited: "Retry without limit",
+      unlimited: "Keep trying until it connects",
       retries: "Attempts",
       when: "When",
       whenAny: "Any disconnect",
@@ -1242,7 +1244,7 @@ export const en: DeepPartial<Strings> = {
       integer: "Enter a whole number.",
       range: "Enter a value between {{min}} and {{max}}.",
       loginEmpty: "Login commands are on but the list is empty.",
-      secretEmpty: "Type the new password or undo the change.",
+      secretEmpty: "Type the new password.",
       schedulerEmpty: "The scheduler is on but has no tasks.",
       taskAction: "Enter an action or remove the task.",
       respondEmpty: "Auto reply is on but has no complete rule.",

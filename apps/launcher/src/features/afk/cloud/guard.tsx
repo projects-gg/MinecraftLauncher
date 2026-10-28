@@ -1,7 +1,9 @@
 // The same account in two places: a desktop "Bağla" while it runs in the cloud, or a cloud "Başlat"
 // while it runs on this computer. Two clients with one name on one server keep kicking each other,
-// so the launcher asks first and stops the other one on the player's word.
-import { Button, Dialog } from "@pl/ui";
+// so the launcher asks first and stops the other one on the player's word. "Bu bilgisayarda
+// çalıştır" on the card of a 24/7 account running in the cloud asks the same way, in the move's own
+// words (what it leaves behind; AFK-CLEAR).
+import { Button, Dialog, toast } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,11 +25,14 @@ export function CloudGuardDialog() {
     if (!guard) return;
     setBusy(true);
     try {
-      if (guard.where === "cloud") {
+      if (guard.where === "cloud" || guard.where === "move") {
         // The cloud one stops first; then this computer connects, as "Bağla" asked.
         const stopped = await cloudApi.stop(guard.cloud.id);
         storeAccount(queryClient, stopped);
         await api.afkConnect(guard.desktop.id);
+        if (guard.where === "move") {
+          toast.success(t("cloudAfk.location.toHere", { name: guard.desktop.nickname }));
+        }
       } else {
         await api.afkStop(guard.desktop.id);
         await start(guard.cloud);
@@ -41,12 +46,19 @@ export function CloudGuardDialog() {
   };
 
   const where = guard?.where ?? "cloud";
+  const name = guard?.desktop.nickname ?? "";
   return (
     <Dialog
       open={Boolean(guard)}
       onOpenChange={(open) => !open && close()}
-      title={where === "cloud" ? t("cloudAfk.guard.cloudTitle") : t("cloudAfk.guard.hereTitle")}
-      description={t("cloudAfk.guard.body")}
+      title={
+        where === "move"
+          ? t("afkClear.twin.moveTitle", { name })
+          : where === "cloud"
+            ? t("cloudAfk.guard.cloudTitle")
+            : t("cloudAfk.guard.hereTitle")
+      }
+      description={where === "move" ? t("afkClear.twin.moveBody") : t("cloudAfk.guard.body")}
       closeLabel={t("common.close")}
       width={440}
       footer={
@@ -55,7 +67,11 @@ export function CloudGuardDialog() {
             {t("cloudAfk.guard.cancel")}
           </Button>
           <Button variant="primary" onClick={() => void proceed()} disabled={busy}>
-            {where === "cloud" ? t("cloudAfk.guard.stopCloud") : t("cloudAfk.guard.stopHere")}
+            {where === "move"
+              ? t("afkClear.twin.runHere")
+              : where === "cloud"
+                ? t("cloudAfk.guard.stopCloud")
+                : t("cloudAfk.guard.stopHere")}
           </Button>
         </>
       }

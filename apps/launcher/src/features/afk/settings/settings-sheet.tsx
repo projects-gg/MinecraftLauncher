@@ -19,7 +19,9 @@ import { copyErrorDetails } from "@/features/content/jobs";
 import { useDebounced } from "@/features/content/use-content";
 import { type AfkAccount, type AfkSettingsView, api } from "@/lib/api";
 import { PlusChangeDock } from "../cloud/plus/change-dock";
+import { useGuardedConnect } from "../cloud/use-cloud";
 import { afkFailed, isFriendly, runAfk } from "../errors";
+import { stoppedOnPassword } from "../primary-action";
 import { SectionTitle, useIssueText } from "./controls";
 import { draftKey, type HeldDraft, rebaseDraft, remindKept, useAfkDrafts } from "./drafts";
 import { CommandsSection, RepliesSection } from "./list-sections";
@@ -32,6 +34,7 @@ import {
   type GroupId,
   type Issue,
   isDirty,
+  passwordIssue,
   patternIssue,
   toDraft,
   unsavedGroups,
@@ -175,7 +178,8 @@ function usePatternIssues(draft: Draft): Issue[] {
   return issues;
 }
 
-type SaveMode = "save" | "reconnect";
+/** "reconnect": a running account takes the settings now; "connect": one stopped on its password. */
+type SaveMode = "save" | "reconnect" | "connect";
 
 function Editor({
   account,
@@ -198,9 +202,15 @@ function Editor({
     const held = useAfkDrafts.getState().held[slot] as HeldDraft<Draft> | undefined;
     return held ? rebaseDraft(held.draft, held.base, baseline) : baseline;
   });
-  const [section, setSection] = useState<GroupId>(
-    () => GROUPS.find((group) => unsavedGroups(draft, baseline).has(group)) ?? "connection",
-  );
+  // Stopped on a password the server refused: the panel opens where the login line is, marked
+  // (AFK-CLEAR, as the 7/24 Bulut panel); else where edits wait; else Bağlantı.
+  const onPassword = stoppedOnPassword(account.state);
+  const [section, setSection] = useState<GroupId>(() => {
+    const line = onPassword ? passwordIssue(draft, baseline, view.sensitiveCommands) : null;
+    if (line) return GROUP_OF[line.section];
+    if (onPassword) return "commands";
+    return GROUPS.find((group) => unsavedGroups(draft, baseline).has(group)) ?? "connection";
+  });
   const [submitted, setSubmitted] = useState(false);
   const [serverIssues, setServerIssues] = useState<Issue[]>([]);
   const [saveError, setSaveError] = useState<Failure | null>(null);
@@ -241,7 +251,11 @@ function Editor({
     return [...own, ...serverIssues.filter((i) => !fields.has(i.field))];
   }, [draft, submitted, serverIssues, patternIssues]);
 
-  const errorFor = (field: string) => issueText(issues.find((i) => i.field === field));
+  // Shown with the rest, never blocking (a save is how it gets fixed).
+  const password = onPassword ? passwordIssue(draft, baseline, view.sensitiveCommands) : null;
+  const shown = password ? [...issues, password] : issues;
+  const guardedConnect = useGuardedConnect();
+  const errorFor = (field: string) => issueText(shown.find((i) => i.field === field));
   const openFolder = () => runAfk(api.afkOpenFolder(account.id), t("afk.openFolderFailed"));
   const unsaved = unsavedGroups(draft, baseline);
 
@@ -264,7 +278,12 @@ function Editor({
       hold(slot, null);
       void queryClient.invalidateQueries({ queryKey: ["afk"] });
       const done = t("afkSettings.saved", { name: account.nickname });
-      if (result.reconnectNeeded && mode === "reconnect") {
+      if (mode === "connect") {
+        // The password typed again: this connect clears the stop (it asks first while the same
+        // account runs in 7/24 Bulut).
+        guardedConnect(account);
+        toast.success(done, { description: t("afkClear.savedConnecting") });
+      } else if (result.reconnectNeeded && mode === "reconnect") {
         runAfk(api.afkReconnect(account.id), t("afkSettings.reconnectFailed"));
         toast.success(done, { description: t("afkSettings.savedReconnecting") });
       } else if (result.reconnectNeeded) {
@@ -322,10 +341,12 @@ function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const blocking = submitted && issues.length > 0;
+  // A mark on screen holds the save (the refused password's never: saving is its fix).
+  const blocking = issues.length > 0;
   const pending = save.isPending ? save.variables : null;
-  // On a running account the main action applies the settings right away.
-  const mainMode: SaveMode = active ? "reconnect" : "save";
+  // On a running account the main action applies the settings right away; on one stopped on its
+  // password it connects again (saving alone left the stop in place).
+  const mainMode: SaveMode = active ? "reconnect" : onPassword ? "connect" : "save";
   const Body = BODIES[section];
 
   const bar = (
@@ -354,7 +375,7 @@ function Editor({
         {t("afkSettings.cancel")}
       </Button>
       {/* While the bar says to fix the marked fields first, saving waits (SHEET-UX). */}
-      {active ? (
+      {mainMode !== "save" ? (
         <Button
           variant="secondary"
           onClick={() => submit("save")}
@@ -370,9 +391,11 @@ function Editor({
       >
         {pending === mainMode
           ? t("afkSettings.saving")
-          : active
+          : mainMode === "reconnect"
             ? t("afkSettings.saveReconnect")
-            : t("afkSettings.save")}
+            : mainMode === "connect"
+              ? t("afkClear.saveConnect")
+              : t("afkSettings.save")}
       </Button>
     </PlusChangeDock>
   );
@@ -392,7 +415,7 @@ function Editor({
         label: t(`afkPanel.sections.${id}`),
         icon: ICONS[id],
         unsaved: unsaved.has(id),
-        problem: issues.some((i) => GROUP_OF[i.section] === id),
+        problem: shown.some((i) => GROUP_OF[i.section] === id),
       }))}
     >
       <StaleBanner account={account} />
@@ -411,9 +434,12 @@ function Editor({
 /** The settings panel of one desktop AFK account. */
 export function AfkSettingsSheet({
   account,
+  twin = false,
   onClose,
 }: {
   account: AfkAccount | undefined;
+  /** The same account is a 7/24 Bulut account too: the title says these are this computer's. */
+  twin?: boolean;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -441,7 +467,11 @@ export function AfkSettingsSheet({
       open={open}
       onClose={close}
       nickname={account?.nickname ?? ""}
-      title={t("afkSettings.title", { name: account?.nickname ?? "" })}
+      title={
+        twin
+          ? t("afkClear.twin.hereTitle", { name: account?.nickname ?? "" })
+          : t("afkSettings.title", { name: account?.nickname ?? "" })
+      }
       server={account?.server ?? ""}
     >
       {account && view ? (

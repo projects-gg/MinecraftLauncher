@@ -14,6 +14,7 @@ import {
   localized,
   offerLine,
   serverLabel,
+  stoppedOnPassword,
   timeLeft,
 } from "./status";
 
@@ -221,7 +222,7 @@ describe("cloudStatus", () => {
   it("counts down to the next try and then reads as connecting", () => {
     const waiting = account({ live: live("waiting", { retryAt: NOW + 11, attempt: 2 }) });
     const status = cloudStatus(waiting, NOW * 1000, t);
-    expect(status.text).toBe("Yeniden bağlanacak, 11 sn");
+    expect(status.text).toBe("11 sn sonra yeniden bağlanacak");
     expect(status.nextChangeMs).toBe(1000);
     const due = cloudStatus(waiting, (NOW + 10.5) * 1000, t);
     expect(due).toMatchObject({ signal: "pending", text: trCloudAfk.state.connecting });
@@ -259,11 +260,22 @@ describe("cloudPrimary", () => {
     expect(cloudPrimary(account())).toBe("stop");
     expect(cloudPrimary(account({ desired: "stop", live: live("stopped") }))).toBe("start");
     expect(
-      cloudPrimary(
-        account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null } }),
-      ),
+      cloudPrimary(account({ hold: { kind: "cause", cause: "banned", at: NOW, row: null } })),
     ).toBe("start");
     expect(cloudPrimary(account({ hold: { kind: "paused", mode: "paused" } }))).toBe("stop");
+  });
+
+  it("sends a stop on a refused password to the settings, not to a start", () => {
+    const refused = account({
+      desired: "stop",
+      live: live("stopped"),
+      hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null },
+    });
+    expect(cloudPrimary(refused)).toBe("fixPassword");
+    expect(stoppedOnPassword(refused)).toBe(true);
+    // The time ran out meanwhile: renewing comes first.
+    expect(cloudPrimary({ ...refused, expired: true })).toBe("renew");
+    expect(stoppedOnPassword(account())).toBe(false);
   });
 });
 

@@ -1,19 +1,11 @@
 // The desktop AFK settings panel's list sections (SHEET-UX): Komutlar (login commands with stored
 // passwords, scheduler tasks) and Otomatik yanıt (rules). Each feature is a block led by its switch.
-import {
-  ArrowDown,
-  ArrowUp,
-  Eye,
-  EyeSlash,
-  LockSimple,
-  PencilSimple,
-  Plus,
-  Trash,
-} from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { Button, cn, Field, IconButton, Input, Segmented } from "@pl/ui";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { insertToken } from "../cloud/placeholders";
+import { SecretField, SecretKept } from "../secret";
 import {
   Block,
   desktopTokens,
@@ -59,31 +51,34 @@ function TextLine({
   sensitive,
   onChange,
   label,
+  error,
 }: {
   row: Extract<LoginRow, { kind: "text" }>;
   sensitive: string[];
   onChange: (text: string) => void;
   label: string;
+  error: string | null;
 }) {
   const { t } = useTranslation();
-  const [focused, setFocused] = useState(false);
   const secret = isSecretLine(row.text, sensitive);
   return (
     <div className="min-w-0 flex-1">
-      <Input
+      {/* A password command turns secret as it is typed (the eye shows it on this computer). */}
+      <SecretField
         aria-label={label}
         value={row.text}
-        // A password typed here is only readable while the field is being edited.
-        type={secret && !focused ? "password" : "text"}
+        secret={secret}
+        invalid={Boolean(error)}
         placeholder={t("afkSettings.login.placeholder")}
-        spellCheck={false}
-        autoComplete="off"
-        className="h-9 font-mono text-[13px]"
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
       />
-      {secret ? <Hint className="mt-1.5">{t("afkSettings.login.secretNote")}</Hint> : null}
+      {error ? (
+        <div className="mt-1.5">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      ) : secret ? (
+        <Hint className="mt-1.5">{t("afkSettings.login.secretNote")}</Hint>
+      ) : null}
     </div>
   );
 }
@@ -93,38 +88,28 @@ function ReplaceLine({
   onChange,
   onUndo,
   error,
+  autoFocus,
 }: {
   row: Extract<LoginRow, { kind: "replace" }>;
   onChange: (args: string) => void;
   onUndo: () => void;
   error: string | null;
+  autoFocus: boolean;
 }) {
   const { t } = useTranslation();
-  const [reveal, setReveal] = useState(false);
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 font-mono text-[13px] text-bone-100">{row.command}</span>
-        <div className="relative min-w-0 flex-1">
-          <Input
-            aria-label={t("afkSettings.login.newSecret")}
-            value={row.args}
-            type={reveal ? "text" : "password"}
-            placeholder={t("afkSettings.login.newSecret")}
-            spellCheck={false}
-            autoComplete="new-password"
-            invalid={Boolean(error)}
-            className="h-9 pr-10 font-mono text-[13px]"
-            onChange={(e) => onChange(e.target.value)}
-          />
-          <IconButton
-            label={reveal ? t("afkSettings.login.hide") : t("afkSettings.login.show")}
-            icon={reveal ? <EyeSlash size={16} /> : <Eye size={16} />}
-            size="sm"
-            className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
-            onClick={() => setReveal((v) => !v)}
-          />
-        </div>
+        {/* The command stays in front of the field: only the password is typed again. */}
+        <SecretField
+          aria-label={t("afkClear.secret.newFor", { command: row.command })}
+          value={row.args}
+          command={row.command}
+          placeholder={t("afkSettings.login.newSecret")}
+          invalid={Boolean(error)}
+          autoFocus={autoFocus}
+          onChange={onChange}
+        />
         <Button size="sm" variant="ghost" onClick={onUndo}>
           {t("afkSettings.login.undoReplace")}
         </Button>
@@ -141,26 +126,31 @@ function ReplaceLine({
 function StoredLine({
   row,
   onReplace,
+  error,
 }: {
   row: Extract<LoginRow, { kind: "stored" }>;
   onReplace: () => void;
+  error: string | null;
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+    <div className="min-w-0 flex-1">
       {/* The padlock, the hidden password and "Değiştir" say it is kept: no gold "Kayıtlı" pill
           beside them (SHEET-UX). */}
-      <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-white/7 bg-obsidian-850/80 px-3">
-        <LockSimple size={15} weight="fill" className="shrink-0 text-ash-300" />
-        <span className="truncate font-mono text-[13px] text-bone-100">{row.command}</span>
-        <span aria-hidden className="font-mono text-[13px] tracking-widest text-ash-400">
-          ••••••
-        </span>
-        <span className="sr-only">{t("afkSettings.login.stored")}</span>
-      </div>
-      <Button size="sm" variant="secondary" icon={<PencilSimple size={14} />} onClick={onReplace}>
-        {t("afkSettings.login.replace")}
-      </Button>
+      <SecretKept
+        label={t("afkClear.secret.kept", { command: row.command })}
+        prefix={row.command}
+        invalid={Boolean(error)}
+      >
+        <Button size="sm" variant="ghost" icon={<PencilSimple size={14} />} onClick={onReplace}>
+          {t("afkSettings.login.replace")}
+        </Button>
+      </SecretKept>
+      {error ? (
+        <div className="mt-1.5">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -175,6 +165,8 @@ function LoginBlock({ draft, setDraft, errorFor, view }: SectionProps) {
   const setRow = (key: string, row: LoginRow) =>
     setRows((list) => list.map((r) => (r.key === key ? row : r)));
   const hasStored = rows.some((r) => r.kind !== "text");
+  // "Değiştir" puts the caret in the new field (a draft reopened with one waits for a click).
+  const [focusKey, setFocusKey] = useState<string | null>(null);
 
   return (
     <Block>
@@ -204,16 +196,22 @@ function LoginBlock({ draft, setDraft, errorFor, view }: SectionProps) {
                       row={row}
                       sensitive={view.sensitiveCommands}
                       label={t("afkSettings.login.lineLabel", { n: i + 1 })}
+                      error={errorFor(`login.${row.key}`)}
                       onChange={(text) => setRow(row.key, { ...row, text })}
                     />
                   ) : row.kind === "stored" ? (
                     <StoredLine
                       row={row}
-                      onReplace={() => setRow(row.key, { ...row, kind: "replace", args: "" })}
+                      error={errorFor(`login.${row.key}`)}
+                      onReplace={() => {
+                        setFocusKey(row.key);
+                        setRow(row.key, { ...row, kind: "replace", args: "" });
+                      }}
                     />
                   ) : (
                     <ReplaceLine
                       row={row}
+                      autoFocus={focusKey === row.key}
                       error={errorFor(`login.${row.key}`)}
                       onChange={(args) => setRow(row.key, { ...row, args })}
                       onUndo={() =>

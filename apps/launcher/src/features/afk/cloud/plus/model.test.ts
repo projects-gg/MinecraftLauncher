@@ -11,6 +11,7 @@ import {
   editDraft,
   giftReplies,
   limitProblems,
+  liveProblems,
   PREFIX_DEFAULT,
   personaTextProblem,
   prefixProblem,
@@ -178,6 +179,27 @@ describe("AFK+ limits and fields", () => {
     expect(personaTextProblem("Tom & Jerry", 60)).toBeNull();
     expect(personaTextProblem("0555 555 55 55", 80)).toBe("phone");
     expect(personaTextProblem("x".repeat(61), 60)).toBe("length");
+  });
+
+  it("say which marks hold the change bar's save while they are typed (AFK-CLEAR)", () => {
+    const shown = settingsPart(config());
+    expect(liveProblems(shown, 10_000_000)).toBe(false);
+    const long = { ...shown, persona: { ...shown.persona, intro: "x".repeat(500) } };
+    expect(liveProblems(long, 10_000_000)).toBe(true);
+    // A status text only counts while it is the player's own (no preset chosen).
+    const status = { ...shown, persona: { ...shown.persona, status: "x".repeat(500) } };
+    expect(liveProblems(status, 10_000_000)).toBe(true);
+    expect(
+      liveProblems({ ...status, persona: { ...status.persona, statusPreset: "busy" } }, 10_000_000),
+    ).toBe(false);
+    const above = {
+      ...shown,
+      limits: { ...shown.limits, perDealMax: 10_000, approvalAbove: 20_000 },
+    };
+    expect(liveProblems(above, 10_000_000)).toBe(true);
+    // Shown only after "Kaydet": not a reason to wait yet.
+    const link = { ...shown, persona: { ...shown.persona, intro: "discord.gg/abc" } };
+    expect(liveProblems(link, 10_000_000)).toBe(false);
   });
 });
 

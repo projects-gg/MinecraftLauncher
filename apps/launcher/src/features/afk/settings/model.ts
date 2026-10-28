@@ -172,9 +172,21 @@ export const newLoginRow = (): LoginRow => ({ key: key(), kind: "text", text: ""
 /** Line lists compare by their saved form (trimmed, blank lines dropped). */
 const lines = (items: string[]) => items.map((s) => s.trim()).filter(Boolean);
 
-/** Comparable form of a draft: what saving would actually change. */
+/**
+ * Comparable form of a draft: what saving would actually change. A stored secret opened with
+ * "Değiştir" and nothing typed yet is still the stored one: the press alone brought up the change
+ * bar, whose save would have asked for a password nobody had typed (AFK-CLEAR look 2).
+ */
 function comparable(draft: Draft): string {
-  const page = fromDraft(draft);
+  const page = fromDraft({
+    ...draft,
+    login: draft.login.map(
+      (row): LoginRow =>
+        row.kind === "replace" && !row.args.trim()
+          ? { key: row.key, kind: "stored", index: row.index, command: row.command }
+          : row,
+    ),
+  });
   return JSON.stringify({
     ...page,
     serverHost: page.serverHost.trim(),
@@ -213,7 +225,11 @@ export type IssueCode =
   | "ruleReply"
   | "patternInvalid"
   | "patternComplex"
-  | "patternLong";
+  | "patternLong"
+  /** A stop for a password the server refused, on the line that types it (never blocking). */
+  | "wrongPassword"
+  /** The same on a kept line: "Değiştir" first. */
+  | "wrongPasswordKept";
 
 export interface Issue {
   section: SectionId;
@@ -271,7 +287,13 @@ export function validate(draft: Draft): Issue[] {
   checkNumber(login.delaySeconds, LIMITS.loginDelay, "login", "login.delay", out);
   for (const row of draft.login) {
     if (row.kind === "replace" && !row.args.trim())
-      out.push({ section: "login", field: `login.${row.key}`, code: "secretEmpty" });
+      // Shown once a save is tried: "Değiştir" alone is not a mistake yet.
+      out.push({
+        section: "login",
+        field: `login.${row.key}`,
+        code: "secretEmpty",
+        structural: true,
+      });
   }
   const hasCommand = draft.login.some((row) => row.kind !== "text" || row.text.trim());
   if (login.enabled && !hasCommand)
@@ -392,4 +414,44 @@ export function isSecretLine(
   const [name = "", ...rest] = trimmed.split(/[ \t]+/);
   const upper = name.toUpperCase();
   return rest.join("").length > 0 && sensitive.some((s) => s.toUpperCase() === upper);
+}
+
+/**
+ * The line a stop for a password the server refused points at (the client names none): the first
+ * login command holding a password (kept or typed), else the first auto-reply that types one, while
+ * it still has its saved words. Shown with the rest, never blocking; a line being replaced is being
+ * fixed already (AFK-CLEAR).
+ */
+export function passwordIssue(
+  draft: Draft,
+  baseline: Draft,
+  sensitive: AfkSettingsView["sensitiveCommands"],
+): Issue | null {
+  if (draft.page.loginCommands.enabled) {
+    for (const row of draft.login) {
+      if (row.kind === "replace") return null;
+      if (row.kind === "stored") {
+        return { section: "login", field: `login.${row.key}`, code: "wrongPasswordKept" };
+      }
+      if (isSecretLine(row.text, sensitive)) {
+        const saved = baseline.login.find((r) => r.key === row.key);
+        return saved?.kind === "text" && saved.text === row.text
+          ? { section: "login", field: `login.${row.key}`, code: "wrongPassword" }
+          : null;
+      }
+    }
+  }
+  if (draft.page.autoRespond.enabled) {
+    for (const rule of draft.rules) {
+      const field = (["reply", "privateReply", "otherReply"] as const).find((f) =>
+        isSecretLine(rule[f], sensitive),
+      );
+      if (!field) continue;
+      const saved = baseline.rules.find((r) => r.key === rule.key);
+      return saved && saved[field] === rule[field]
+        ? { section: "respond", field: `rule.${rule.key}.reply`, code: "wrongPassword" }
+        : null;
+    }
+  }
+  return null;
 }

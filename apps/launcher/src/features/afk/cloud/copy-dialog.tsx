@@ -1,18 +1,22 @@
 // "Ayarları kopyala" (CAFK-FEAT §3.4): one account's anti-AFK, commands, replies and in-game name
 // onto the chosen ones; the server and version only when ticked; never its name, language or
 // inventory choice. Secret rows are sealed again for every target: from this computer's copy, or
-// from what the player types here (once for all, or per account). Each target restarts with the
-// new settings, as after any change.
-import { Button, Dialog, Field, Input, Segmented, Select } from "@pl/ui";
+// from what the player types here (per account unless "Hepsine aynısını yaz" is picked: accounts
+// rarely share a password, AFK-CLEAR look 2). Each target restarts with the new settings, as after
+// any change. A source whose password the server turned down gives nothing while this computer's
+// copy of that password would go along (it would lock every target out too).
+import { Button, Dialog, Field, Segmented, Select } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check } from "@/features/settings/cleanup/check";
 import { AfkHead } from "../afk-head";
+import { SecretField } from "../secret";
 import { type CloudAccount, type CloudCopySecret, type CloudCopySource, cloudApi } from "./api";
 import { commandOf, lineOf, rowName } from "./bulk";
 import { useBulkToast } from "./bulk-bar";
-import { serverLabel } from "./status";
+import { looksSensitive } from "./sensitive";
+import { serverLabel, stoppedOnPassword } from "./status";
 import { storeAccount } from "./use-cloud";
 
 type SecretMode = "same" | "each";
@@ -42,11 +46,9 @@ export function CopyDialog({
   const [withServer, setWithServer] = useState(false);
   const [plan, setPlan] = useState<CloudCopySource | null>(null);
   const [planFailed, setPlanFailed] = useState(false);
-  const [mode, setMode] = useState<SecretMode>("same");
+  const [mode, setMode] = useState<SecretMode>("each");
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  // "Kopyala" with a password still to type says so at the field (a dim button said nothing).
-  const [tried, setTried] = useState(false);
   const serverId = useId();
 
   // A fresh open starts from what the caller chose.
@@ -56,9 +58,8 @@ export function CopyDialog({
     setSourceId(initialSource);
     setTargets(new Set(initialTargets.filter((id) => id !== initialSource)));
     setWithServer(false);
-    setMode("same");
+    setMode("each");
     setTyped({});
-    setTried(false);
   }, [open]);
 
   // The source's secret rows this computer has no words for.
@@ -80,15 +81,25 @@ export function CopyDialog({
   const others = accounts.filter((account) => account.id !== sourceId);
   const chosen = others.filter((account) => targets.has(account.id));
   const toType = plan?.toType ?? [];
-  const each = mode === "each" && chosen.length > 1;
+  // One account: its own field, by name (a nameless one read as every account's password).
+  const each = mode === "each" || chosen.length === 1;
   const key = (row: string, target: string | null) => `${row}|${target ?? "*"}`;
   const missing = toType.some((row) =>
     each
       ? chosen.some((target) => !(typed[key(row.row, target.id)] ?? "").trim())
       : !(typed[key(row.row, null)] ?? "").trim(),
   );
-  const ready = Boolean(source && plan && chosen.length > 0 && !missing && !busy);
-  const blocked = !source || !plan || chosen.length === 0 || busy;
+  // Its refused login line would go along from this computer's copy (none of its secret rows is
+  // to be typed here, where new words would take its place).
+  const refused =
+    source !== undefined &&
+    plan !== null &&
+    stoppedOnPassword(source) &&
+    !toType.some((row) => looksSensitive(row.preview));
+  // "Kopyala" waits for every password, the footer saying why, as the panels' change bars wait for
+  // a marked field: enabled over empty fields it read as copying the accounts in without one
+  // (AFK-CLEAR look 3).
+  const blocked = !source || !plan || chosen.length === 0 || busy || refused || missing;
 
   const toggle = (id: string, on: boolean) =>
     setTargets((current) => {
@@ -99,12 +110,7 @@ export function CopyDialog({
     });
 
   const copy = async () => {
-    if (missing && !blocked) {
-      setTried(true);
-      document.querySelector<HTMLInputElement>("[data-copy-secret][data-empty]")?.focus();
-      return;
-    }
-    if (!source || !ready) return;
+    if (!source || blocked) return;
     setBusy(true);
     const secrets = toType.flatMap((row): CloudCopySecret[] =>
       each
@@ -149,47 +155,32 @@ export function CopyDialog({
   const secretField = (row: string, preview: string, target: CloudAccount | null) => {
     // The command stays in view before the field (`/login`), so only the password is typed.
     const command = commandOf(preview);
-    const empty = !(typed[key(row, target?.id ?? null)] ?? "").trim();
     return (
       <Field
         key={key(row, target?.id ?? null)}
-        error={tried && empty ? t("cloudAfkFeat.copy.secretMissing") : undefined}
+        htmlFor={`copy-secret-${key(row, target?.id ?? null)}`}
         label={
           target
             ? t("cloudAfkFeat.copy.secretFor", { name: target.name, row: rowName(preview) })
             : t("cloudAfkFeat.copy.secretField", { row: rowName(preview) })
         }
       >
-        <div className="relative">
-          {command ? (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-3 flex items-center font-mono text-[13px] text-ash-300"
-            >
-              {command}
-            </span>
-          ) : null}
-          <Input
-            data-copy-secret=""
-            data-empty={empty ? "" : undefined}
-            invalid={tried && empty}
-            type="password"
-            autoComplete="new-password"
-            spellCheck={false}
-            data-1p-ignore=""
-            data-lpignore="true"
-            maxLength={256 - (command ? command.length + 1 : 0)}
-            value={typed[key(row, target?.id ?? null)] ?? ""}
-            onChange={(event) =>
-              setTyped((current) => ({
-                ...current,
-                [key(row, target?.id ?? null)]: event.target.value,
-              }))
-            }
-            style={command ? { paddingLeft: `calc(0.75rem + ${command.length + 1}ch)` } : undefined}
-            className="font-mono text-[13px]"
-          />
-        </div>
+        {/* The AFK surfaces' one look for secret lines (secret.tsx): the command before the
+            field, only the password typed. */}
+        <SecretField
+          id={`copy-secret-${key(row, target?.id ?? null)}`}
+          placeholder={t("afkSettings.login.newSecret")}
+          command={command}
+          maxLength={256 - (command ? command.length + 1 : 0)}
+          value={typed[key(row, target?.id ?? null)] ?? ""}
+          onChange={(text) =>
+            setTyped((current) => ({
+              ...current,
+              [key(row, target?.id ?? null)]: text,
+            }))
+          }
+          className="h-[34px]"
+        />
       </Field>
     );
   };
@@ -204,6 +195,9 @@ export function CopyDialog({
       morph
       footer={
         <>
+          {missing && chosen.length > 0 && !refused ? (
+            <p className="mr-auto text-[12.5px] text-ash-300">{t("afkClear.copy.typeFirst")}</p>
+          ) : null}
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             {t("cloudAfkFeat.copy.cancel")}
           </Button>
@@ -234,6 +228,11 @@ export function CopyDialog({
             />
           </Field>
         ) : null}
+        {refused && source ? (
+          <p role="alert" className="text-[12.5px] text-flare-400">
+            {t("afkClear.copy.refused", { name: source.name })}
+          </p>
+        ) : null}
         <p className="text-[13px] text-ash-300">{t("cloudAfkFeat.copy.what")}</p>
         <fieldset className="flex flex-col gap-1">
           <legend className="mb-1.5 text-[13px] font-medium text-bone-100">
@@ -263,6 +262,8 @@ export function CopyDialog({
             );
           })}
         </fieldset>
+        {/* What happens to the ticked accounts, under them (it sat under the passwords). */}
+        <p className="-mt-2 px-2 text-[12.5px] text-ash-400">{t("cloudAfkFeat.copy.confirm")}</p>
         <label htmlFor={serverId} className="flex cursor-pointer items-center gap-3 px-2">
           <Check id={serverId} checked={withServer} onCheckedChange={setWithServer} />
           <span className="text-[13px] text-bone-100">{t("cloudAfkFeat.copy.withServer")}</span>
@@ -275,6 +276,8 @@ export function CopyDialog({
               </p>
               {chosen.length > 1 ? (
                 <Segmented
+                  // A quiet plate: gold stays "Kopyala"'s.
+                  className="[--segmented-ink:var(--color-bone-50)] [--segmented-plate:rgb(255_255_255/0.16)]"
                   value={mode}
                   onValueChange={(next) => setMode(next as SecretMode)}
                   label={t("cloudAfkFeat.copy.secrets")}
@@ -297,7 +300,6 @@ export function CopyDialog({
             {t("cloudAfkFeat.copy.loadFailed")}
           </p>
         ) : null}
-        <p className="text-[12.5px] text-ash-400">{t("cloudAfkFeat.copy.confirm")}</p>
       </div>
     </Dialog>
   );

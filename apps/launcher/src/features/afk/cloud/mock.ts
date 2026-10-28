@@ -4,7 +4,7 @@
 // - `signedout`: the service answers, the friends session is missing;
 // - `soldout`: no free slots; `closed`: sales off (Studio's switch), no account yet;
 // - `accounts`: three accounts (one in game, one reconnecting with its time running out, one
-//   stopped for a wrong password), `Madenci07` also on this computer (its "Bilgisayarda / Bulutta");
+//   stopped for a wrong password), `Madenci07` also on this computer (one card for both);
 // - `expired`: `accounts` plus one whose time is up;
 // - `paused`: maintenance (Studio's note, the accounts held);
 // - `failed`: signed in, the accounts could not be read.
@@ -492,17 +492,17 @@ const CONSOLE: Array<[string, string]> = [
   ["n", "[AuthMe] Başarıyla giriş yaptın."],
   ["s", "/warp maden"],
   ["n", "Maden bölgesine ışınlandın."],
-  ["n", "<Ayşe> selam millet"],
+  ["n", "<GeceKurdu_> selam millet"],
   ["n", "[Duyuru] Etkinlik 21:00'de başlıyor!"],
   ["e", "Sunucuyla bağlantı bir an yavaşladı."],
-  ["n", "<Mert> akşam pvp var mı"],
+  ["n", "<ElmasKazma> akşam pvp var mı"],
   ["n", "[Projects] AFK bölgesindesin, ödüllerin birikiyor."],
 ];
 
 const CHAT: string[] = [
-  "<Ayşe> biri pazara gelsin",
+  "<GeceKurdu_> biri pazara gelsin",
   "[Duyuru] Haftalık sıralama yenilendi.",
-  "<Kerem> hoş geldin Madenci07",
+  "<SessizOkcu> hoş geldin Madenci07",
   "[Projects] 15 dakika AFK ödülü: 120 altın.",
 ];
 
@@ -854,8 +854,14 @@ export const mockCloudApi: CloudApi = {
     return { outcome: { kind: "saved", account: next }, stoppedHere: true, started: run };
   },
   async connectHere() {
-    await api.afkConnectAll();
-    return 1;
+    // As `cloud_afk_connect_here`: every desktop account without a cloud twin (AFK-CLEAR).
+    const { twins } = await overview();
+    const left = new Set(twins.map((twin) => twin.desktopId));
+    for (const account of await api.afkAccounts()) {
+      if (left.has(account.id) || !["stopped", "error"].includes(account.state.kind)) continue;
+      await api.afkConnect(account.id);
+    }
+    return left.size;
   },
   async open(page, account) {
     console.info("[cloud-afk mock] open afk.projects.gg", page, account ?? "");

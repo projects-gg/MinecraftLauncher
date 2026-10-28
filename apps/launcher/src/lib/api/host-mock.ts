@@ -1,16 +1,16 @@
 // Browser preview of world sharing (HOST1, "Dünyanı arkadaşlarına aç"): the player's own world
 // opening, open and failing, a friend's world invite and every way its "Katıl" can go, kept in
-// memory. Nothing leaves the page; the friends are the friends mock's (Ayşe, Mert, Elif Su…).
+// memory. Nothing leaves the page; the friends are the friends mock's (GeceKurdu_, ElmasKazma, NetherKral…).
 //
 // Preview switches, read once from the page URL's query or the route's (`#/…?host=open`):
 // - `host=<scenario>`:
 //   (none) / `ready`: world sharing is on, no world is open, no invite waits;
 //   `off`: it is off (nothing shows anywhere);
-//   `open`: the player's "Yeni Dünya" (Projects) is open: Deniz in it, Mert on his way, Elif Su
+//   `open`: the player's "Yeni Dünya" (Projects) is open: PixelAvci in it, ElmasKazma on his way, NetherKral
 //   invited; `full`: open with every place taken (7 guests in it);
 //   `opening`: it is opening (`&step=backup|starting|publishing`, `&percent=<0-100>`);
 //   `failed`: it did not open (`&reason=unavailable|limit`);
-//   `invited`: Mert's world invite waits (the list, his row, Home); `quiet`: it came during
+//   `invited`: ElmasKazma's world invite waits (the list, his row, Home); `quiet`: it came during
 //   do-not-disturb (listed only); `invite`: it arrives live (`&inviteAt=<ms>`, 1500);
 //   `joining`: "Katıl" is under way on it (`&stage=preparing|ready|connecting|in|lost`);
 //   `ask`: it waits on a question (`&ask=copy|copyUnknown|install|name|nameTaken`);
@@ -57,27 +57,32 @@ const scenario = () => param("host") ?? "ready";
 
 /** The friends mock's people (same ids, names and pictures). */
 const PEOPLE: Record<string, Omit<WorldGuest, "state" | "gameName"> & { gameName: string }> = {
-  "301": { friend: "301", name: "Ayşe", avatar: "preset:fox", gameName: "AyseKaya" },
+  "301": { friend: "301", name: "GeceKurdu_", avatar: "preset:fox", gameName: "GeceKurdu_" },
   "302": {
     friend: "302",
-    name: "KorAteşi",
+    name: "KorAtesi",
     avatar: "discord",
     avatarUrl: "https://cdn.discordapp.com/embed/avatars/2.png",
     gameName: "KorAtesi",
   },
-  "303": { friend: "303", name: "Mert", avatar: "preset:knight", gameName: "MertYldz" },
-  "304": { friend: "304", name: "Deniz", avatar: "preset:wizard", gameName: "Denizz" },
-  "305": { friend: "305", name: "Elif Su", avatar: "preset:axolotl", gameName: "ElifSu" },
+  "303": { friend: "303", name: "ElmasKazma", avatar: "preset:knight", gameName: "ElmasKazma" },
+  "304": { friend: "304", name: "PixelAvci", avatar: "preset:wizard", gameName: "PixelAvci" },
+  "305": { friend: "305", name: "NetherKral", avatar: "preset:axolotl", gameName: "NetherKral" },
   "306": {
     friend: "306",
-    name: "Bora",
+    name: "KizilEjder",
     avatar: "discord",
     avatarUrl: "https://cdn.discordapp.com/embed/avatars/0.png",
-    gameName: "Bora_mc",
+    gameName: "KizilEjder",
   },
-  "307": { friend: "307", name: "Zeynep", avatar: "preset:wolf", gameName: "Zeyno" },
-  "308": { friend: "308", name: "Can Ejder", avatar: "preset:ember-dragon", gameName: "CanEjder" },
-  "309": { friend: "309", name: "Selin", avatar: "discord", gameName: "SelinAk" },
+  "307": { friend: "307", name: "ZumrutKilic", avatar: "preset:wolf", gameName: "ZumrutKilic" },
+  "308": {
+    friend: "308",
+    name: "EnderYolcu",
+    avatar: "preset:ember-dragon",
+    gameName: "EnderYolcu",
+  },
+  "309": { friend: "309", name: "Obsidyen77", avatar: "discord", gameName: "Obsidyen77" },
 };
 
 function guest(id: string, state: GuestState): WorldGuest {
@@ -89,14 +94,14 @@ function guest(id: string, state: GuestState): WorldGuest {
 const WORLD = { instanceId: "projects", folder: "Yeni Dünya", worldName: "Yeni Dünya" };
 const MAX = Math.min(7, Math.max(1, Number(param("max") ?? 7) || 7));
 
-/** Mert's world session (the invite the guest previews answer). */
+/** ElmasKazma's world session (the invite the guest previews answer). */
 const MERT_SESSION = "mert-session";
 
 function mertInvite(extra: Partial<WorldInvite> = {}): WorldInvite {
   return {
     session: MERT_SESSION,
     from: "303",
-    name: "Mert",
+    name: "ElmasKazma",
     avatar: "preset:knight",
     mc: param("join") === "install" || param("ask") === "install" ? "26.3" : "26.1.2",
     guests: 1,

@@ -210,15 +210,23 @@ export function isInGame(account: CloudAccount): boolean {
 }
 
 /** What the card's main button does. */
-export type CloudPrimary = "start" | "stop" | "renew" | "none";
+export type CloudPrimary = "start" | "stop" | "renew" | "fixPassword" | "none";
 
 export function cloudPrimary(account: CloudAccount): CloudPrimary {
-  const hold = account.hold?.kind;
-  if (account.expired || hold === "expired") return "renew";
-  if (hold === "suspended" || hold === "restricted") return "none";
+  const hold = account.hold;
+  if (account.expired || hold?.kind === "expired") return "renew";
+  if (hold?.kind === "suspended" || hold?.kind === "restricted") return "none";
+  // Stopped on a password the server turned down: the next step is the settings ("Şifreyi düzelt"),
+  // not a start that would stop again (AFK-CLEAR).
+  if (hold?.kind === "cause" && hold.cause === "wrongPassword") return "fixPassword";
   // A stop for good ends with the next start (the player fixed it; the service clears the hold).
-  const stoppedForGood = hold === "cause" || hold === "server_blocked";
+  const stoppedForGood = hold?.kind === "cause" || hold?.kind === "server_blocked";
   return account.desired === "run" && !stoppedForGood ? "stop" : "start";
+}
+
+/** Stopped on a password the server turned down (the settings say where it is). */
+export function stoppedOnPassword(account: CloudAccount): boolean {
+  return account.hold?.kind === "cause" && account.hold.cause === "wrongPassword";
 }
 
 /** The paid time left in words; for an expired account how long its settings are kept. */

@@ -6,7 +6,7 @@
 // With the cloud features (CAFK-FEAT) and only while the service offers them: the console's kinds
 // (colours, the chips, "Adın geçenler", search, "İndir") and the status strip; the Envanter tab
 // beside Konsol, on a solid panel (inside glass Chromium resamples the inventory's pixels).
-import { ArrowDown, ArrowUp, LockSimple, PaperPlaneRight, X } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, Key, PaperPlaneRight, X } from "@phosphor-icons/react";
 import {
   Button,
   cn,
@@ -14,7 +14,6 @@ import {
   enter,
   GatedMotion,
   IconButton,
-  Input,
   leave,
   scrimMotion,
   sheetMotion,
@@ -41,6 +40,7 @@ import { uiLocale } from "@/lib/format";
 import { useWindowAway } from "@/lib/window-away";
 import { AfkHead } from "../afk-head";
 import { isFriendly } from "../errors";
+import { SecretField } from "../secret";
 import { type CloudAccount, type CloudLiveEvent, cloudApi } from "./api";
 import {
   type KindFilter,
@@ -57,7 +57,7 @@ import { movementShown } from "./movement/use-cloud-movement";
 import { looksSensitive } from "./sensitive";
 import { issueKey, textProblem } from "./settings-model";
 import { CloudStateLine } from "./state-line";
-import { isInGame } from "./status";
+import { isInGame, stoppedOnPassword } from "./status";
 import { type PanelTab, storeAccount, useCloudUi } from "./use-cloud";
 
 type Line = KindLine;
@@ -469,7 +469,9 @@ export function CloudConsole({
           ) : (
             <p className="flex h-full items-center justify-center font-sans text-[13px] text-ash-400">
               {lines.length
-                ? t("cloudAfkFeat.console.noMatch")
+                ? query.trim()
+                  ? t("cloudAfkFeat.console.noSearchMatch")
+                  : t("cloudAfkFeat.console.noMatch")
                 : status === "connecting" && host
                   ? t("cloudAfk.console.connecting")
                   : t("cloudAfk.console.empty")}
@@ -514,38 +516,23 @@ export function CloudConsole({
         }}
       >
         <div className="flex gap-2">
-          <div className="relative min-w-0 flex-1">
-            {sensitive && running ? (
-              <LockSimple
-                size={15}
-                weight="fill"
-                aria-hidden
-                className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-gold-300"
-              />
-            ) : null}
-            <Input
-              aria-label={t("cloudAfk.console.input")}
-              placeholder={running ? t("cloudAfk.console.input") : t("cloudAfk.console.offline")}
-              value={text}
-              disabled={!running}
-              type={sensitive ? "password" : "text"}
-              maxLength={256}
-              onChange={(event) => {
-                setText(event.target.value);
-                setSendError(null);
-              }}
-              onKeyDown={onKeyDown}
-              spellCheck={false}
-              autoComplete="off"
-              data-1p-ignore=""
-              data-lpignore="true"
-              className={cn(
-                "disabled:opacity-60",
-                running && "font-mono text-[13px]",
-                sensitive && running && "pl-9",
-              )}
-            />
-          </div>
+          {/* A password command turns secret as it is typed (secret.tsx: the AFK surfaces' one
+              look for secret lines). */}
+          <SecretField
+            aria-label={t("cloudAfk.console.input")}
+            placeholder={running ? t("cloudAfk.console.input") : t("cloudAfk.console.offline")}
+            value={text}
+            secret={sensitive && running}
+            mono={running}
+            disabled={!running}
+            maxLength={256}
+            onChange={(next) => {
+              setText(next);
+              setSendError(null);
+            }}
+            onKeyDown={onKeyDown}
+            className="h-[34px] disabled:opacity-60"
+          />
           {running ? (
             <IconButton
               label={t("cloudAfk.console.send")}
@@ -554,6 +541,15 @@ export function CloudConsole({
               disabled={sending || !text.trim()}
               className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink"
             />
+          ) : stoppedOnPassword(account) ? (
+            // A start would stop again: the settings open on the login line (AFK-CLEAR).
+            <Button
+              variant="primary"
+              icon={<Key size={15} weight="bold" />}
+              onClick={() => onOpenSettings(account.id)}
+            >
+              {t("afkClear.fixPassword")}
+            </Button>
           ) : account.desired !== "run" || account.hold?.kind === "cause" ? (
             <Button variant="primary" onClick={() => onStart(account)}>
               {t("cloudAfk.actions.start")}
@@ -569,13 +565,14 @@ export function CloudConsole({
                 role={sendError ? "alert" : "status"}
                 className={cn(
                   "[grid-area:1/1] text-[12.5px] leading-[18px]",
-                  sendError ? "text-flare-400" : "text-gold-300",
+                  // A note, not an action: never gold.
+                  sendError ? "text-flare-400" : "text-ash-400",
                 )}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1, transition: enter(0.15) }}
                 exit={{ opacity: 0, transition: leave(0.1) }}
               >
-                {sendError ?? t("cloudAfk.console.sealed")}
+                {sendError ?? t("afkClear.secret.consoleNote")}
               </motion.p>
             ) : null}
           </AnimatePresence>

@@ -1,5 +1,6 @@
 // Turkish is the primary language. Keep strings plain, sentence case, no em dashes.
 import { trAfkAlerts } from "./tr-afk-alerts";
+import { trAfkClear } from "./tr-afk-clear";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkMod } from "./tr-afk-mod";
 import { trAfkPanel } from "./tr-afk-panel";
@@ -107,6 +108,7 @@ export const tr = {
   cloudAfkMove: trCloudAfkMove,
   afkMod: trAfkMod,
   afkPanel: trAfkPanel,
+  afkClear: trAfkClear,
   projectsSkin: trProjectsSkin,
   host: trHost,
   afkPlus: trAfkPlus,
@@ -776,7 +778,7 @@ export const tr = {
       starting: "Başlatılıyor",
       connecting: "Bağlanıyor",
       connected: "Oyunda, {{uptime}}",
-      reconnecting: "Yeniden bağlanıyor, {{secs}} sn",
+      reconnecting: "{{secs}} sn sonra yeniden bağlanacak",
       stopping: "Durduruluyor",
       error: "Bağlantı kesildi",
     },
@@ -888,9 +890,9 @@ export const tr = {
       remove: "Komutu sil",
       empty: "Henüz komut yok.",
       stored: "Kayıtlı",
-      storedHint: "Şifreler bu bilgisayarda güvenle saklanır, burada gösterilmez.",
+      storedHint: "Kayıtlı şifreler burada görünmez.",
       replace: "Değiştir",
-      undoReplace: "Vazgeç",
+      undoReplace: "Eskisi kalsın",
       newSecret: "Yeni şifre",
       show: "Şifreyi göster",
       hide: "Şifreyi gizle",
@@ -925,7 +927,7 @@ export const tr = {
     },
     relog: {
       delay: "Bekleme süresi",
-      unlimited: "Sınırsız dene",
+      unlimited: "Bağlanana kadar dene",
       retries: "Deneme sayısı",
       when: "Ne zaman",
       whenAny: "Her kopuşta",
@@ -1001,7 +1003,7 @@ export const tr = {
       integer: "Tam sayı gir.",
       range: "{{min}} ile {{max}} arasında bir değer gir.",
       loginEmpty: "Giriş komutları açık ama listede komut yok.",
-      secretEmpty: "Yeni şifreyi yaz ya da değişikliği geri al.",
+      secretEmpty: "Yeni şifreyi yaz.",
       schedulerEmpty: "Zamanlayıcı açık ama görev yok.",
       taskAction: "Eylem yaz ya da görevi sil.",
       respondEmpty: "Otomatik yanıt açık ama geçerli bir kural yok.",

@@ -2,7 +2,7 @@
 // the settings sheet talks to a stand-in for the backend (same redaction and validation rules as
 // crates/pl-afk, passwords kept in a pretend keychain).
 
-import i18n from "@/lib/i18n";
+import i18n, { currentLanguage } from "@/lib/i18n";
 import type {
   AfkSettings,
   AfkSettingsSaveResult,
@@ -34,6 +34,26 @@ function startEmpty(): boolean {
   }
 }
 
+/**
+ * Preview switch `?afk=password`: TarlaBot_1 starts stopped on a login password the server turned
+ * down (`refused`/`wrongPassword`), its `/login` line kept in the keychain (AFK-CLEAR's "Şifreyi
+ * düzelt").
+ */
+function startOnPassword(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get("afk") === "password";
+  } catch {
+    return false;
+  }
+}
+
+/** The refused password's words in the interface's language (the backend words them so). */
+const refusedPassword = (): AfkState => ({
+  kind: "error",
+  reason: pick("Giriş şifresi yanlış (Yanlış şifre!)", "Wrong login password (Wrong password!)"),
+  cause: "wrongPassword",
+});
+
 const accounts: AfkAccount[] = startEmpty()
   ? []
   : [
@@ -58,11 +78,13 @@ const accounts: AfkAccount[] = startEmpty()
         autoStart: true,
         mcVersion: "26.3",
         mcVersionRecommended: true,
-        state: {
-          kind: "reconnecting",
-          attempt: 2,
-          nextAttemptAt: new Date(Date.now() + 22_000).toISOString(),
-        },
+        state: startOnPassword()
+          ? refusedPassword()
+          : {
+              kind: "reconnecting",
+              attempt: 2,
+              nextAttemptAt: new Date(Date.now() + 22_000).toISOString(),
+            },
         settingsChanged: false,
         showDate: true,
       },
@@ -234,6 +256,29 @@ const SENSITIVE = [
   "/2fauth",
 ];
 
+/** `model::default_kick_messages_in`: the legacy English list and the Turkish one. */
+const KICK_EN = [
+  "Connection has been lost",
+  "Server is restarting",
+  "Server is full",
+  "Too Many people",
+];
+const KICK_TR = [
+  "Bağlantı koptu",
+  "Sunucu yeniden başlatılıyor",
+  "Sunucu dolu",
+  "Çok fazla oyuncu",
+];
+
+/** `model::kick_messages_in`: an untouched default list reads in the interface's language. */
+function kickMessagesNow(list: string[]): string[] {
+  const lines = list.map((line) => line.trim()).filter(Boolean);
+  const same = (defaults: string[]) =>
+    defaults.length === lines.length && defaults.every((line, i) => line === lines[i]);
+  if (!same(KICK_EN) && !same(KICK_TR)) return list;
+  return [...(currentLanguage() === "en" ? KICK_EN : KICK_TR)];
+}
+
 const defaultPage = (): SettingsPage => ({
   serverHost: "",
   serverPort: 0,
@@ -258,12 +303,7 @@ const defaultPage = (): SettingsPage => ({
     delayMax: 10,
     retries: -1,
     ignoreKickMessage: true,
-    kickMessages: [
-      "Connection has been lost",
-      "Server is restarting",
-      "Server is full",
-      "Too Many people",
-    ],
+    kickMessages: [...KICK_EN],
   },
   autoEat: { enabled: false, threshold: 6 },
   autoRespond: { enabled: false, soundEnabled: false, matchColors: false, rules: [] },
@@ -352,6 +392,12 @@ const stored = new Map<string, SettingsPage>([
     {
       ...defaultPage(),
       autoStart: true,
+      loginCommands: {
+        enabled: startOnPassword(),
+        onlyFirstLogin: false,
+        delaySeconds: 2,
+        commands: [],
+      },
       autoRelog: {
         ...defaultPage().autoRelog,
         retries: 25,
@@ -373,7 +419,10 @@ const stored = new Map<string, SettingsPage>([
   ],
 ]);
 
-const keychain = new Map<string, string[]>([["afk1", ["/login KasaSifre42", "/warp afk"]]]);
+const keychain = new Map<string, string[]>([
+  ["afk1", ["/login KasaSifre42", "/warp afk"]],
+  ...(startOnPassword() ? ([["afk2", ["/login TarlaEski1"]]] as Array<[string, string[]]>) : []),
+]);
 const globalSettings: AfkSettings = { showScriptCommands: false };
 
 function secretName(command: string): string | null {
@@ -569,7 +618,13 @@ async function connect(account: AfkAccount) {
 
 export const mockAfk = {
   async afkAccounts() {
-    return accounts.map((a) => ({ ...a, running: isRunning(a) }));
+    return accounts.map((a) => ({
+      ...a,
+      // Worded in the language of the moment, as the real list is read again on a switch.
+      state:
+        a.state.kind === "error" && a.state.cause === "wrongPassword" ? refusedPassword() : a.state,
+      running: isRunning(a),
+    }));
   },
   async afkAdd(nickname: string) {
     const account: AfkAccount = {
@@ -664,9 +719,14 @@ export const mockAfk = {
     const page = stored.get(id);
     if (!page) throw accountGone();
     const version = resolveVersion(storedVersions.get(id) ?? "");
+    const shown = redact(structuredClone(page), keychain.get(id) ?? []);
     return {
       settings: {
-        ...redact(structuredClone(page), keychain.get(id) ?? []),
+        ...shown,
+        autoRelog: {
+          ...shown.autoRelog,
+          kickMessages: kickMessagesNow(shown.autoRelog.kickMessages),
+        },
         minecraftVersion: version.value,
       },
       versions,
