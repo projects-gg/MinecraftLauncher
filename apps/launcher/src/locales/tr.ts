@@ -40,6 +40,7 @@ import { trPlayOpen } from "./tr-play-open";
 import { trPlayTogether } from "./tr-play-together";
 import { trPrepare } from "./tr-prepare";
 import { trProjectsSkin } from "./tr-projects-skin";
+import { trQaFix } from "./tr-qa-fix";
 import { trReminders } from "./tr-reminders";
 import { trReports } from "./tr-reports";
 import { trSafety } from "./tr-safety";
@@ -90,6 +91,7 @@ export const tr = {
   small7: trSmall7,
   small9: trSmall9,
   small10: trSmall10,
+  qaFix: trQaFix,
   crews: trCrews,
   chat: trChat,
   reports: trReports,
