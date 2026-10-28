@@ -37,7 +37,10 @@ export function RoutePicker({
       title={t("autojoin.after")}
       side="top"
       align="end"
-      sideOffset={10}
+      // Above the bar, where the instance picker's menu opens (its bottom on the bar's top edge),
+      // not over the switch's own words: the trigger sits 37 px under that edge (the label line
+      // and the bar's padding above it).
+      sideOffset={37}
       items={items}
       trigger={
         <button
