@@ -6,8 +6,10 @@ import type { TFunction } from "i18next";
 import { formatDuration, uiLocale } from "@/lib/format";
 import type { CloudAccount, CloudOverview } from "./api";
 import { categoryText, stopHint } from "./moderation";
+import { type AccountReach, LIVE_REACH, lastKnownText } from "./reach";
 
-export type CloudTone = "ok" | "muted" | "warn" | "error";
+/** `stale`: what was known last while the machine cannot be reached (dim, never ticking). */
+export type CloudTone = "ok" | "muted" | "warn" | "error" | "stale";
 
 export interface CloudStatus {
   signal: SignalState;
@@ -74,13 +76,15 @@ export function localized(
 
 /**
  * The account's state at `nowMs` (the service's clock: the UI's own plus the overview's skew).
- * `lang` picks Studio's words of a blocked server.
+ * `lang` picks Studio's words of a blocked server. `reach`: while its machine cannot be reached,
+ * the live part is the last state known, with its time and no counter (CLOUD-STALE).
  */
 export function cloudStatus(
   account: CloudAccount,
   nowMs: number,
   t: TFunction,
   lang: "tr" | "en" = "tr",
+  reach: AccountReach = LIVE_REACH,
 ): CloudStatus {
   const still = (
     signal: SignalState,
@@ -155,6 +159,7 @@ export function cloudStatus(
     }
   }
   if (account.expired) return still("idle", t("cloudAfk.state.expired"), "warn");
+  if (reach.stale) return still("idle", lastKnownText(reach.known, t), "stale");
   const live = account.live;
   switch (live.state) {
     case "running": {

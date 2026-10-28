@@ -197,10 +197,10 @@ const isActive = (order: PlusOrder) => {
 
 let chatter: number | undefined;
 const CHATTER: Array<[string, string, string]> = [
-  ["pm_in", "Baris_TR", "totem var mı satan"],
-  ["reply", "Baris_TR", "[AFK+] Ben alıyorum, satmıyorum. Elinde varsa 8.000 olur mu?"],
-  ["pm_in", "Ece_Gamer", "elmas tanesi kaç"],
-  ["reply", "Ece_Gamer", "[AFK+] Tanesi 120, 64'lük paket var."],
+  ["pm_in", "Pixel_TR", "totem var mı satan"],
+  ["reply", "Pixel_TR", "[AFK+] Ben alıyorum, satmıyorum. Elinde varsa 8.000 olur mu?"],
+  ["pm_in", "Kirpi_Gamer", "elmas tanesi kaç"],
+  ["reply", "Kirpi_Gamer", "[AFK+] Tanesi 120, 64'lük paket var."],
 ];
 
 export const mockPlusApi: PlusApi = {
@@ -440,7 +440,7 @@ export const mockPlusApi: PlusApi = {
     return {
       lines: own,
       handoffUntil: thread?.handoffUntil ?? null,
-      canReply: name !== "Zeynep_12" && thread?.state !== "blocked",
+      canReply: name !== "Buzul_12" && thread?.state !== "blocked",
       next: null,
     };
   },
@@ -505,6 +505,9 @@ export const mockPlusApi: PlusApi = {
   },
   async watch(id) {
     await delay(120);
+    // The machine's socket, as in the app: it says whether the machine is there.
+    mockLive.emit({ kind: "status", host: "kz1", status: "live" });
+    mockLive.emit({ kind: "hello", host: "kz1", online: mockLive.machineOnline() });
     if (id !== PLUS_ID || offline) return;
     setTimeout(() => mockLive.emit({ kind: "ai", acct: id, ai }), 240);
     let n = 0;

@@ -1,6 +1,7 @@
 // 7/24 Bulut's state on the AFK page: the overview (read when the page opens, after an action and
-// when the friends session changes; never on a timer), the cloud twins of desktop accounts, the
-// layers that are open, and the two-places guard.
+// when the friends session changes; never on a timer), what is known of its machines' reach
+// (reach.ts), the cloud twins of desktop accounts, the layers that are open, and the two-places
+// guard.
 import { toast } from "@pl/ui";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
@@ -10,6 +11,7 @@ import { afkFailed } from "@/features/afk/errors";
 import { useSocialUi } from "@/features/social/store";
 import { type AfkAccount, api } from "@/lib/api";
 import { type CloudAccount, type CloudPageData, cloudApi } from "./api";
+import { updateReach, useCloudReach, withAway, withBack, withLive, withOverview } from "./reach";
 import { foldedIds } from "./twins";
 
 export const CLOUD_KEY = ["cloud-afk"] as const;
@@ -37,7 +39,13 @@ export function useCloudSync() {
 export function useCloudPage() {
   const query = useQuery({
     queryKey: CLOUD_KEY,
-    queryFn: () => cloudApi.overview(),
+    queryFn: async () => {
+      // What the read knows is known from its start (the service asks the machines meanwhile).
+      const at = Date.now();
+      const data = await cloudApi.overview();
+      updateReach((state) => withOverview(state, data, at));
+      return data;
+    },
     staleTime: 15_000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -72,6 +80,97 @@ export function storeAccount(queryClient: QueryClient, account: CloudAccount) {
         }
       : data,
   );
+  updateReach((state) => withLive(state, account.id, account.live, Date.now()));
+}
+
+/**
+ * How long a dropped socket may take to come back before its machine counts as out of reach: a
+ * reconnect after a changed account list takes a moment, and the backoff's first wait is 2 s.
+ */
+const DROP_GRACE_MS = 5_000;
+
+/**
+ * What the live sockets that already run say of the machines' reach, for the whole 7/24 Bulut
+ * section (it calls this once; CLOUD-STALE): a machine away or back, a socket down past a moment,
+ * a refusal that names the machine, a streamed live state. A machine seen again reads the
+ * overview once, so the cards turn live again by themselves; nothing reads on a timer.
+ */
+export function useCloudReachFeed() {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    /** Sockets that stream now with their machine there: a watched account is known to the end. */
+    const streaming = new Set<string>();
+    const drops = new Map<string, number>();
+    const accounts = () =>
+      queryClient.getQueryData<CloudPageData>(CLOUD_KEY)?.overview.accounts ?? [];
+    const watchedOn = (host: string) => {
+      if (!streaming.has(host)) return null;
+      const id = useCloudUi.getState().consoleId;
+      const account = accounts().find((a) => a.id === id && a.host === host);
+      return account ? { id: account.id, live: account.live } : null;
+    };
+    const away = (host: string, at = Date.now()) => {
+      const watched = watchedOn(host);
+      streaming.delete(host);
+      updateReach((state) => withAway(state, host, at, watched));
+    };
+    const back = (host: string) => {
+      streaming.add(host);
+      const wasAway = useCloudReach.getState().away[host] !== undefined;
+      updateReach((state) => withBack(state, host));
+      const unasked = accounts().some((a) => a.host === host && a.live.state === "unknown");
+      if (wasAway || unasked) void queryClient.invalidateQueries({ queryKey: CLOUD_KEY });
+    };
+    const settle = (host: string) => {
+      window.clearTimeout(drops.get(host));
+      drops.delete(host);
+    };
+    const stop = cloudApi.onLive((event) => {
+      switch (event.kind) {
+        case "hello":
+        case "machine":
+          settle(event.host);
+          if (event.online) back(event.host);
+          else away(event.host);
+          break;
+        case "status": {
+          const host = event.host;
+          if (event.status === "reconnecting") {
+            if (drops.has(host)) break;
+            const at = Date.now();
+            drops.set(
+              host,
+              window.setTimeout(() => {
+                drops.delete(host);
+                away(host, at);
+              }, DROP_GRACE_MS),
+            );
+          } else if (event.status !== "connecting" && event.status !== "live") {
+            // Replaced, ended or refused: the socket is closed for good, the machine untold.
+            settle(host);
+            streaming.delete(host);
+          }
+          break;
+        }
+        case "problem":
+          if (event.code === "host_offline") {
+            const id = event.acct ?? useCloudUi.getState().consoleId;
+            const host = accounts().find((a) => a.id === id)?.host;
+            if (host) away(host);
+          }
+          break;
+        case "state":
+          updateReach((state) => withLive(state, event.acct, event.live, Date.now()));
+          break;
+        default:
+          break;
+      }
+    });
+    return () => {
+      stop();
+      for (const timer of drops.values()) window.clearTimeout(timer);
+    };
+  }, [queryClient]);
 }
 
 /** The cloud twin wants to run there now (stopping it first makes sense). */

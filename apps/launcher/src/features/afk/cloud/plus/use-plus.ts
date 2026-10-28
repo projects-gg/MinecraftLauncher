@@ -298,6 +298,9 @@ export function mergeAudit(
   return [...bySeq.values()].sort((a, b) => b.s - a.s);
 }
 
+/** A read's page of the audit log (pl-cloud-afk asks the machine for 50 at a time). */
+const FIRST_PAGE = 50;
+
 /**
  * The audit log: what this computer kept shows at once, then the machine's newer entries past the
  * last one kept, then the live stream; "Daha eski" reads older pages on demand.
@@ -330,13 +333,16 @@ export function usePlusAudit(id: string, enabled: boolean) {
       }
       // Past the newest entry kept: with more between than one page, the kept ones are older than
       // a gap, so the log goes on from the page (they stay on disk); without, they follow the page
-      // and the machine may still have older ones ("Daha eski" asks).
+      // and the machine may still have older ones ("Daha eski" asks), but only when this computer
+      // kept a whole first page or more. Fewer means its first read reached the oldest entry and
+      // the machine only adds newer ones since: no "Daha eski" then, as on a first visit (it showed
+      // on every revisit; afk.projects.gg's rule, SITE-W2).
       if (outcome.more) {
         return { items: mergeAudit(live, outcome.items), more: true, away: false, off: false };
       }
       return {
         items: mergeAudit(mergeAudit(live, kept), outcome.items),
-        more: true,
+        more: kept.length >= FIRST_PAGE,
         away: false,
         off: false,
       };

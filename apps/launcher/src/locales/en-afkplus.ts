@@ -12,7 +12,7 @@ export const enAfkPlus = {
     closed: "AFK+ isn't on sale right now",
     chatLabel: "A sample haggle",
     chat: {
-      them: "Kaan_07",
+      them: "Neon_Drift",
       c1: "got elytra, 45k",
       c2: "Hi, would 34,000 work?",
       c3: "40?",
@@ -683,7 +683,7 @@ export const enAfkPlus = {
     },
     intro: "Introduction",
     introHelp: "How it introduces itself in its first message.",
-    introPlaceholder: "Ahmet's AFK+ assistant",
+    introPlaceholder: "KaraKartal's AFK+ assistant",
     status: "Away message",
     statusText: "Your own message",
     statusPresets: {

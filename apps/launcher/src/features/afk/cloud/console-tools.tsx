@@ -58,7 +58,9 @@ export function ConsoleTools({
   };
 
   return (
-    <div className="flex h-11 shrink-0 items-center gap-2 px-5">
+    // Where the panel is wide enough the chips wrap (a container query, as afk.projects.gg's
+    // console does): scrolled sideways, the last one ("Adın geçenler") was cut at the 560 px edge.
+    <div className="@container flex min-h-11 shrink-0 items-center gap-2 px-5 py-1.5">
       {searching ? (
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <SearchInput
@@ -79,7 +81,7 @@ export function ConsoleTools({
       ) : (
         <fieldset
           aria-label={t("cloudAfkFeat.console.filters.label")}
-          className="-my-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 [scrollbar-width:none]"
+          className="-my-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 [scrollbar-width:none] @lg:flex-wrap @lg:overflow-x-visible"
         >
           {KIND_FILTERS.map((value) => (
             <ToggleChip

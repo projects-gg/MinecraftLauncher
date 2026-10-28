@@ -11,8 +11,9 @@
 // `&reveal=offline|retype|limited` makes "Göster" fail that way. AFK+ adds `&plus=<scenario>`
 // (plus/mock-data.ts); without it AFK+ is off, as the service is until its release. The cloud
 // features add `&feat=on|view` and their own switches (mock-feat.ts); without them the service is
-// one from before the features. `&link=down`: the machine is not connected. Movement adds
-// `&move=<scenario>` (mock-move.ts).
+// one from before the features. `&link=down`: the machine is not connected (a read cannot ask it, a
+// console streams nothing); `window.__plMockCloudLink(online)` changes it while the page is open
+// (mock-live.ts). Movement adds `&move=<scenario>` (mock-move.ts).
 import { api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
@@ -59,6 +60,7 @@ import {
   plusScenario,
   withPlus,
 } from "./plus/mock-data";
+import { serverLabel } from "./status";
 
 type Scenario =
   | "off"
@@ -340,7 +342,7 @@ function plainAccounts(which: Scenario): CloudAccount[] {
         : {}),
       rev: 9,
     }),
-    account("a_3MCV7Y1KD5HS8FQ2", "Tuccar_Ali", "play.projects.gg", 0, {
+    account("a_3MCV7Y1KD5HS8FQ2", "TuccarBaykus", "play.projects.gg", 0, {
       expiresAt: now + 27 * DAY,
       // `?hold=invalid`: the machine stopped it on a row that starts with a backslash;
       // `?hold=blocked`: its server is one the cloud cannot join ("Girilemeyen sunucular").
@@ -436,10 +438,20 @@ function refused(message: string): Error {
   return Object.assign(new Error(message), { code: "BULUT", details: "mock" });
 }
 
+/** An account as a read shows it while its machine cannot be asked (README "Accounts"). */
+function unasked(cloud: CloudAccount): CloudAccount {
+  return {
+    ...cloud,
+    live: { state: "unknown", since: null, reason: null, attempt: null, retryAt: null },
+    ai: cloud.ai ? { ...cloud.ai, state: "unknown" } : cloud.ai,
+  };
+}
+
 async function overview(): Promise<CloudPageData> {
   await delay(140);
   const now = nowSecs();
   const hidden = which === "off";
+  const shown = mockLive.machineOnline() ? accounts : accounts.map(unasked);
   const desktop = await api.afkAccounts();
   const twins = accounts.flatMap((cloud) => {
     const match = desktop.find(
@@ -471,7 +483,7 @@ async function overview(): Promise<CloudPageData> {
       limits: LIMITS,
       session:
         which === "signedout" || hidden ? "signedOut" : which === "failed" ? "failed" : "signedIn",
-      accounts: which === "failed" || which === "signedout" || hidden ? [] : accounts,
+      accounts: which === "failed" || which === "signedout" || hidden ? [] : shown,
       count: which === "signedout" || hidden ? null : { count: accounts.length, cap: 10 },
       canBuy:
         which === "signedout" || hidden
@@ -508,8 +520,27 @@ const CHAT: string[] = [
 
 const watching = new Map<string, number>();
 
+// The machine went away or came back while a console is on screen: its socket says so, and back,
+// the watched accounts' state and strip come again (mock-live.ts).
+mockLive.onLink((online) => {
+  if (watching.size === 0) return;
+  emit({ kind: "machine", host: "kz1", online });
+  if (!online) return;
+  for (const id of watching.keys()) {
+    const cloud = find(id);
+    emit({ kind: "state", acct: id, live: cloud.live });
+    const bars = cloud.live.state === "running" ? barsEvent(id) : null;
+    if (bars) emit(bars);
+  }
+});
+
 function lines(id: string, count: number, endAt: number) {
-  if (featScenario !== "off") return kindLines(count, endAt, find(id).name);
+  if (featScenario !== "off") {
+    const cloud = find(id);
+    // In game since then: its log does not show it joining minutes ago.
+    const since = cloud.live.state === "running" ? cloud.live.since : null;
+    return kindLines(count, endAt, cloud.name, serverLabel(cloud.server), since);
+  }
   return Array.from({ length: count }, (_, i) => {
     const [k, text] = CONSOLE[i % CONSOLE.length] ?? ["n", ""];
     return { at: endAt - (count - i) * 37, text, k, c: null, who: null, goto: null };
@@ -702,8 +733,11 @@ export const mockCloudApi: CloudApi = {
     emit({ kind: "status", host: "kz1", status: "connecting" });
     setTimeout(() => {
       emit({ kind: "status", host: "kz1", status: "live" });
-      // `&link=down`: the account's machine is away (the panel says so above its tabs).
-      emit({ kind: "hello", host: "kz1", online: param("link") !== "down" });
+      // `&link=down`: the account's machine is away (the panel says so above its tabs), so nothing
+      // of the account streams.
+      const online = mockLive.machineOnline();
+      emit({ kind: "hello", host: "kz1", online });
+      if (!online) return;
       const cloud = find(id);
       emit({ kind: "state", acct: id, live: cloud.live });
       emit({
@@ -721,7 +755,7 @@ export const mockCloudApi: CloudApi = {
     watching.set(
       id,
       window.setInterval(() => {
-        if (find(id).live.state !== "running") return;
+        if (find(id).live.state !== "running" || !mockLive.machineOnline()) return;
         const at = nowSecs();
         emit({
           kind: "lines",
@@ -729,7 +763,7 @@ export const mockCloudApi: CloudApi = {
           lines: [
             featScenario === "off"
               ? { at, text: CHAT[n++ % CHAT.length] ?? "", k: "n", c: null, who: null, goto: null }
-              : liveKindLine(n++, at, find(id).name),
+              : liveKindLine(n++, at, find(id).name, serverLabel(find(id).server)),
           ],
           skipped: 0,
           snapshot: false,
