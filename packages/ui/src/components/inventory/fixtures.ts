@@ -187,6 +187,91 @@ export const SAMPLE_KITS: WinFrame = {
   ],
 };
 
+/** Mojang's own default skins on its texture server (Alex, Steve): heads that draw their skin. */
+const ALEX_SKIN = "1a4af718455d4aab528e7a61f86fa25e6a369d1768dcb13f7df319a713eb810b";
+const STEVE_SKIN = "31f477eb1a7beee631c2ca64d06f8f68fa93a3386d04452ab27f43acdf1b60cb";
+const HEAD = l("Oyuncu Kafası", "Player Head");
+
+/**
+ * A server's head shop (INV-HEADS): heads that draw their own skins, a plain one, and names and
+ * lore in the server's colours and flags, with the blank spacer lines servers put between them.
+ */
+export const SAMPLE_HEADS: WinFrame = {
+  wseq: 1_000_009,
+  open: { type: "generic_9x3", title: "Kafa Mağazası", size: 27 },
+  items: [
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26].map(pane),
+    item(11, "player_head", 1, HEAD, {
+      skin: ALEX_SKIN,
+      name: "Alex Kafası",
+      nameStyle: [[11, "6l"]],
+      lore: ["Fiyat: 250 jeton", "", "Tıkla ve satın al"],
+      loreStyle: [
+        [
+          [7, "7"],
+          [9, "e"],
+        ],
+        null,
+        [[17, "a"]],
+      ],
+    }),
+    item(13, "player_head", 1, HEAD, {
+      skin: STEVE_SKIN,
+      name: "Steve Kafası",
+      nameStyle: [[12, "b"]],
+      lore: ["Nadir", "gizli ödül", "", "Fiyat: 900 jeton"],
+      loreStyle: [
+        [[5, "dl"]],
+        [
+          [5, "5k"],
+          [5, "7"],
+        ],
+        null,
+        [
+          [7, "7"],
+          [9, "e"],
+        ],
+      ],
+    }),
+    item(15, "player_head", 1, HEAD, {
+      name: "Gizemli Kafa",
+      nameStyle: [
+        [7, "cn"],
+        [5, "c"],
+      ],
+      lore: ["Yakında"],
+      loreStyle: [[[7, "8m"]]],
+    }),
+  ],
+};
+
+/**
+ * A server's book menu whose art is wider than the window (the owner's "KİTAP" menu, INV-HEADS): a
+ * move back past the window's left edge, then a picture 40 GUI pixels wider on each side.
+ */
+export const SAMPLE_BOOK: WinFrame = {
+  wseq: 1_000_010,
+  open: { type: "generic_9x3", title: "\uf80a\ue002", size: 27 },
+  items: [
+    item(10, "written_book", 1, l("Yazılı Kitap", "Written Book"), {
+      name: "Kurallar",
+      lore: ["Sunucunun kuralları"],
+    }),
+    item(12, "writable_book", 1, l("Kitap ve Tüy", "Book and Quill"), {
+      name: "Günlük",
+      lore: ["Kendi notların"],
+    }),
+    item(14, "enchanted_book", 1, l("Büyülü Kitap", "Enchanted Book"), {
+      name: "Büyüler",
+      lore: ["Hangi büyü nerede"],
+    }),
+    item(16, "book", 1, l("Kitap", "Book"), {
+      name: "Rehber",
+      lore: ["Yeni başlayanlar için"],
+    }),
+  ],
+};
+
 export const SAMPLE_DOUBLE_CHEST: WinFrame = {
   wseq: 1_000_003,
   open: { type: "generic_9x6", title: "Geniş Sandık", size: 54 },

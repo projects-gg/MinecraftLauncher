@@ -172,7 +172,11 @@ export function sameItem(a: Stack, b: Stack): boolean {
     (a.durability?.max ?? -1) === (b.durability?.max ?? -1) &&
     (a.cmd ?? -1) === (b.cmd ?? -1) &&
     (a.model ?? "") === (b.model ?? "") &&
-    Boolean(a.enchanted) === Boolean(b.enchanted)
+    Boolean(a.enchanted) === Boolean(b.enchanted) &&
+    // A head's profile and the text's look are components too.
+    (a.skin ?? "") === (b.skin ?? "") &&
+    JSON.stringify(a.nameStyle ?? null) === JSON.stringify(b.nameStyle ?? null) &&
+    JSON.stringify(a.loreStyle ?? null) === JSON.stringify(b.loreStyle ?? null)
   );
 }
 
