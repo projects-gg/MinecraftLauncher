@@ -864,6 +864,8 @@ export const trAfkPlus = {
     adWarned: "Sunucu spam uyarısı verdi. Aralık bugünlük iki katı: {{n}} dk.",
     adStopped: "Bugünlük ilan durdu.",
     adNoOrders: "Etkin sipariş yokken ilan verilmez.",
+    // The item names not known yet: the machine has not been in game (`namesPending`).
+    adNamesPending: "ProBot AI oyuna girince hazır olur.",
     // "Para birimi" (TRADE-ANY): the money's name after amounts, the player's or the profile's own.
     currency: "Para birimi",
     currencyHelp: "Sunucundaki paranın adı.",

@@ -14,7 +14,12 @@ function plan(parts: Partial<PlusAdPreview> = {}): PlusAdPreview {
   return {
     floorMin: 30,
     everyMin: 60,
-    lines: ["Elytra alınır, PM at", "3 Ölümsüzlük Totemi alınır, PM at", "64 Elmas satılır"],
+    lines: [
+      "Alıyorum: 4 Elytra, PM at",
+      "Alıyorum: 3 Ölümsüzlük Totemi, PM at",
+      "Satıyorum: 64 Elmas",
+    ],
+    namesPending: false,
     nextAt: null,
     warning: null,
     stoppedToday: false,
@@ -77,19 +82,19 @@ describe("Sohbete ilan", () => {
 
   it("draws the next ad as a chat line and goes through the next few", () => {
     const { container } = show(plan());
-    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Elytra alınır, PM at");
+    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Alıyorum: 4 Elytra, PM at");
     const next = () => fireEvent.click(screen.getByRole("button", { name: "Başka örnek" }));
     next();
-    expect(said(container)).toBe("Örnek ilan: Neon_Drift: 3 Ölümsüzlük Totemi alınır, PM at");
+    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Alıyorum: 3 Ölümsüzlük Totemi, PM at");
     next();
-    expect(said(container)).toBe("Örnek ilan: Neon_Drift: 64 Elmas satılır");
+    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Satıyorum: 64 Elmas");
     next();
-    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Elytra alınır, PM at");
+    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Alıyorum: 4 Elytra, PM at");
   });
 
   it("has no other example to show with one line", () => {
-    const { container } = show(plan({ lines: ["64 Elmas satılır"] }));
-    expect(said(container)).toBe("Örnek ilan: Neon_Drift: 64 Elmas satılır");
+    const { container } = show(plan({ lines: ["Satıyorum: 64 Elmas"] }));
+    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Satıyorum: 64 Elmas");
     expect(screen.queryByRole("button", { name: "Başka örnek" })).toBeNull();
   });
 
@@ -98,7 +103,7 @@ describe("Sohbete ilan", () => {
     const { container, rerender } = show(plan({ everyMin: 120, warning }), 60);
     const warned = "Sunucu spam uyarısı verdi. Aralık bugünlük iki katı: 120 dk.";
     expect(screen.getByText(warned)).toBeTruthy();
-    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Elytra alınır, PM at");
+    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Alıyorum: 4 Elytra, PM at");
     // A second warning stopped today's ads: that alone, no ad and no button; the minutes stay.
     const stopped = plan({ everyMin: 120, warning, stoppedToday: true });
     rerender(<ChatAds plan={stopped} minutes={60} name="Neon_Drift" onMinutes={ignore} />);
@@ -114,5 +119,12 @@ describe("Sohbete ilan", () => {
     expect(screen.getByText("Etkin sipariş yokken ilan verilmez.")).toBeTruthy();
     expect(said(container)).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("says it is ready once in game while the item names are not known", () => {
+    const { container } = show(plan({ lines: [], namesPending: true }));
+    expect(screen.getByText("ProBot AI oyuna girince hazır olur.")).toBeTruthy();
+    expect(screen.queryByText("Etkin sipariş yokken ilan verilmez.")).toBeNull();
+    expect(said(container)).toBeNull();
   });
 });

@@ -1193,13 +1193,17 @@ fn kind_or_range(value: Option<&Value>) -> &'static str {
 const AD_EVERY_MIN: [i64; 4] = [30, 45, 60, 120];
 
 /// `discovery.adEveryMin`, where the document has it: one of [`AD_EVERY_MIN`] (a server's floor
-/// only raises the minutes the service uses, it refuses none of them).
+/// only raises the minutes the service uses, it refuses none of them). Any other number, a
+/// fraction too, is out of range; anything else is the wrong type.
 fn ad_minutes(value: Option<&Value>) -> Checked<i64> {
-    let minutes = integer(value, "discovery.adEveryMin")?;
-    if !AD_EVERY_MIN.contains(&minutes) {
-        return Err(PlusRefusal::invalid("discovery.adEveryMin", "range"));
+    let field = "discovery.adEveryMin";
+    let Some(number @ Value::Number(_)) = value else {
+        return Err(PlusRefusal::invalid(field, kind_of(value)));
+    };
+    match whole(number) {
+        Some(minutes) if AD_EVERY_MIN.contains(&minutes) => Ok(minutes),
+        _ => Err(PlusRefusal::invalid(field, "range")),
     }
-    Ok(minutes)
 }
 
 fn parse_custom_items(value: &Value, now: i64) -> Checked<Vec<Value>> {
@@ -1775,6 +1779,7 @@ mod tests {
         for (bad, reason) in [
             (Value::from(90), "range"),
             (Value::from(0), "range"),
+            (Value::from(45.5), "range"),
             (Value::from("60"), "type"),
             (Value::Null, "type"),
         ] {

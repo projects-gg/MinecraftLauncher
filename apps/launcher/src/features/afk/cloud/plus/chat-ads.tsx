@@ -3,8 +3,9 @@
 // spama da takılabilir"): under the switch, how often ProBot AI posts (30 or 45 minutes, an hour,
 // two; the ones under the server's floor wait, said once) and its next ad as the game's chat shows
 // it, the bot's name before the text, "Başka örnek" going through the next few. The service plans
-// them (`adPreview`, the texts only): a spam warning, today's stop and no active order are its
-// word. An older service plans nothing: none of this shows and the switch stays as it was.
+// them (`adPreview`, the texts only, no price): a spam warning, today's stop, item names not known
+// yet and no active order are its word. An older service plans nothing: none of this shows and the
+// switch stays as it was.
 import { cn } from "@pl/ui";
 import { RadioGroup } from "radix-ui";
 import { useId, useState } from "react";
@@ -48,6 +49,8 @@ export function ChatAds({
   const floored = AD_EVERY_MIN.some((choice) => choice < floor);
   const count = plan.lines.length;
   const line = plan.lines[sample % Math.max(count, 1)] ?? null;
+  // No line: the item names not known yet (the machine not in game), or no active order.
+  const quiet = plan.namesPending ? "adNamesPending" : "adNoOrders";
   return (
     <div className="flex flex-col gap-1.5 py-2.5">
       <span id={`${id}-label`} className="text-[13px] font-medium text-bone-100">
@@ -89,7 +92,7 @@ export function ChatAds({
             </Hint>
           ) : null}
           {line === null ? (
-            <p className="pt-1.5 text-[12.5px] text-ash-400">{t("afkPlus.settings.adNoOrders")}</p>
+            <p className="pt-1.5 text-[12.5px] text-ash-400">{t(`afkPlus.settings.${quiet}`)}</p>
           ) : (
             <div className="flex flex-col items-start gap-1 pt-1.5">
               {/* A line of the game's chat, as the intro draws it. */}

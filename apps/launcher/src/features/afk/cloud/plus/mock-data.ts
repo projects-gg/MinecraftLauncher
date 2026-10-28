@@ -20,7 +20,8 @@
 //   "Para birimi" shows it as words with a lock. On SMP (no name of its own) the player names it.
 // - `&ads=<state>` ("Sohbete ilan", switched on): `on` the service's plan from the active orders,
 //   `floor` the server asks at least an hour, `warned` a spam warning today, `stopped` today's ads
-//   stopped, `empty` no active order, `old` an older service (no plan: the switch as before).
+//   stopped, `empty` no active order, `pending` the item names not known yet (never in game), `old`
+//   an older service (no plan: the switch as before).
 //   Without it the switch is off and the plan still comes, as from the newest service.
 // With `?cloud=intro` (no cloud account) `&plus=on` shows the AFK+ card beside 7/24 Bulut's.
 // The item data here is a small stand-in written for previews (the real file comes from our CDN).
@@ -101,7 +102,7 @@ export const auditScenario = param("audit");
 export const typedOrders = param("typed") !== "off";
 /** `&mode=survival`: Projects Survival, whose profile names the money. */
 const survivalMode = param("mode") === "survival" && plusScenario !== "owner";
-/** `&ads=on|floor|warned|stopped|empty|old`: "Sohbete ilan" switched on, and its plan's state. */
+/** `&ads=on|floor|warned|stopped|empty|pending|old`: "Sohbete ilan" on, and its plan's state. */
 const adsScenario = param("ads");
 /**
  * `&topup=on`: AFK+ extra credits on sale (the rail's "Kontör al"); `&topup=bought`: also the
@@ -672,7 +673,7 @@ export function mockSettings(config: PlusConfig, aiRev: number): PlusSettings {
 
 /**
  * "Sohbete ilan" as the service plans it for the stored settings (`&ads=`): the next ads from the
- * active orders, in the server's money and never with a budget, a limit or a top price.
+ * active orders, never with a price, a budget or a limit; none while the item names are not known.
  */
 function mockAdPreview(config: PlusConfig): PlusAdPreview | null {
   if (adsScenario === "old") return null;
@@ -681,19 +682,21 @@ function mockAdPreview(config: PlusConfig): PlusAdPreview | null {
   const minutes = Math.max(config.discovery.adEveryMin ?? AD_EVERY_DEFAULT, floorMin);
   const warned = adsScenario === "warned" || adsScenario === "stopped";
   const everyMin = warned ? minutes * 2 : minutes;
-  const active = adsScenario !== "empty" && config.orders.some((o) => o.on && o.until > now);
-  const money = mockServer(config.trade.currency).money.label?.tr;
+  const namesPending = adsScenario === "pending";
+  const orders = config.orders.some((o) => o.on && o.until > now);
+  const active = orders && adsScenario !== "empty" && !namesPending;
   const lines = active
     ? [
-        "Elytra alınır, PM at",
-        "3 Ölümsüzlük Totemi alınır, PM at",
-        `64 Elmas satılır, tanesi ${money ? `120 ${money}` : "120"}`,
+        "Alıyorum: 1 Elytra, PM at",
+        "Alıyorum: 3 Ölümsüzlük Totemi, PM at",
+        "Satıyorum: 64 Elmas, PM at",
       ]
     : [];
   return {
     floorMin,
     everyMin,
     lines,
+    namesPending,
     nextAt: active && adsScenario !== "stopped" ? now + 25 * MIN : null,
     warning: warned ? { at: now - 2 * HOUR, everyMin } : null,
     stoppedToday: adsScenario === "stopped",

@@ -736,9 +736,11 @@ impl CloudService {
     ) -> Result<PlusOrderOutcome> {
         match answer {
             Ok(written) => {
+                // The ads' plan follows the active orders: a newer service sends it again.
+                let plan = written.ad_preview;
                 let settings = self
                     .cache()
-                    .written(id, written.config, written.ai_rev, None, None);
+                    .written(id, written.config, written.ai_rev, None, plan);
                 Ok(PlusOrderOutcome::Saved {
                     settings: Box::new(settings),
                     order: written.order.map(Box::new),
@@ -1583,7 +1585,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_save_shows_the_ads_plan_it_answers_with() {
+    async fn every_write_shows_the_ads_plan_it_answers_with() {
         let dir = tempfile::tempdir().unwrap();
         let service = offline_service(dir.path());
         let token = Bearer::new("t");
@@ -1616,7 +1618,7 @@ mod tests {
         let plan = settings.ad_preview.expect("the answer's plan");
         assert_eq!(plan.every_min, 240);
         assert_eq!(plan.warning.map(|warning| warning.every_min), Some(240));
-        // An order write's answer has none: the plan known stays.
+        // An older service's order answer has none: the plan known stays.
         let answer = json!({"config": read.config, "aiRev": 6});
         let written: PlusOrderWritten = serde_json::from_value(answer).unwrap();
         let outcome = service.order_written("a_1", Ok(written));
@@ -1625,5 +1627,19 @@ mod tests {
         };
         let plan = settings.ad_preview.as_ref().expect("the plan known");
         assert_eq!(plan.every_min, 240);
+        // A newer one plans again after an order change: its last active order paused, no line.
+        let plan = json!({"floorMin": 30, "everyMin": 60, "lines": [], "nextAt": null,
+            "warning": null, "stoppedToday": false});
+        let answer = json!({"config": read.config, "aiRev": 7, "adPreview": plan});
+        let written: PlusOrderWritten = serde_json::from_value(answer).unwrap();
+        let outcome = service.order_written("a_1", Ok(written));
+        let Ok(PlusOrderOutcome::Saved { settings, .. }) = outcome else {
+            panic!("not saved");
+        };
+        let plan = settings.ad_preview.as_ref().expect("the answer's plan");
+        assert_eq!((plan.every_min, plan.lines.len()), (60, 0));
+        // And the checks before the next write have it too (the settings kept here).
+        let known = service.inner.plus.settings("a_1").unwrap();
+        assert_eq!(known.ad_preview, settings.ad_preview);
     }
 }

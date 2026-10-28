@@ -6588,10 +6588,15 @@ export type PlusAdPreview = {
 	 */
 	everyMin?: number,
 	/**
-	 *  The next ads' texts in their order (at most 3, without the sender's name before them);
-	 *  empty while no order is active.
+	 *  The next ads' texts in their order (at most 3, without the sender's name before them, and
+	 *  no price); empty while no order is active or the names are pending.
 	 */
 	lines?: string[],
+	/**
+	 *  The item names are not known yet (the machine has not been in game): `lines` stays empty
+	 *  until they are.
+	 */
+	namesPending?: boolean,
 	/**  When the next one goes (Unix seconds), when known. */
 	nextAt?: number | null,
 	/**  The server's spam warning today, if one came. */

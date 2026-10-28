@@ -801,6 +801,7 @@ export const enAfkPlus = {
     adWarned: "The server warned about spam. Today's interval is doubled: {{n}} min.",
     adStopped: "Ads stopped for today.",
     adNoOrders: "No ads while you have no active orders.",
+    adNamesPending: "Ready once ProBot AI is in game.",
     currency: "Currency",
     currencyHelp: "Your server's money name.",
     currencyFixed: "The server sets this name.",

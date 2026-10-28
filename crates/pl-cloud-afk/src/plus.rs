@@ -749,9 +749,12 @@ pub struct PlusAdPreview {
     /// The minutes between ads now: the player's choice, at least the floor, twice that after a
     /// spam warning today.
     pub every_min: u32,
-    /// The next ads' texts in their order (at most 3, without the sender's name before them);
-    /// empty while no order is active.
+    /// The next ads' texts in their order (at most 3, without the sender's name before them, and
+    /// no price); empty while no order is active or the names are pending.
     pub lines: Vec<String>,
+    /// The item names are not known yet (the machine has not been in game): `lines` stays empty
+    /// until they are.
+    pub names_pending: bool,
     /// When the next one goes (Unix seconds), when known.
     pub next_at: Option<i64>,
     /// The server's spam warning today, if one came.
@@ -946,6 +949,9 @@ pub struct PlusOrderWritten {
     pub config: PlusConfig,
     pub ai_rev: u64,
     pub deferred: bool,
+    /// "Sohbete ilan" as planned after the write (its lines follow the active orders); None from
+    /// an older service.
+    pub ad_preview: Option<PlusAdPreview>,
 }
 
 /// A new order as `POST …/plus/orders` takes it: without `id` and `at` (the Worker makes them),
@@ -2605,17 +2611,22 @@ mod tests {
         let settings: PlusSettings = serde_json::from_value(json!({
             "config": document(), "aiRev": 4,
             "adPreview": {"floorMin": 60, "everyMin": 120,
-              "lines": ["64 Elmas alınır, 100 ripple"], "nextAt": 1792950600,
+              "lines": ["Alıyorum: 64 Elmas, PM at"], "nextAt": 1792950600,
               "warning": {"at": 1792950000, "everyMin": 120}, "stoppedToday": false}
         }))
         .unwrap();
         let plan = settings.ad_preview.unwrap();
         assert_eq!((plan.floor_min, plan.every_min), (60, 120));
-        assert_eq!(plan.lines, ["64 Elmas alınır, 100 ripple"]);
+        assert_eq!(plan.lines, ["Alıyorum: 64 Elmas, PM at"]);
+        assert!(!plan.names_pending);
         assert_eq!(plan.next_at, Some(1792950600));
         let warning = plan.warning.unwrap();
         assert_eq!((warning.at, warning.every_min), (1792950000, 120));
         assert!(!plan.stopped_today);
+        // The item names not known yet (the machine not in game): no line, and it says why.
+        let pending = json!({"floorMin": 30, "everyMin": 60, "lines": [], "namesPending": true});
+        let pending: PlusAdPreview = serde_json::from_value(pending).unwrap();
+        assert!(pending.names_pending && pending.lines.is_empty());
         // An older service plans none: the switch alone shows as before.
         let settings: PlusSettings =
             serde_json::from_value(json!({"config": document(), "aiRev": 1})).unwrap();
