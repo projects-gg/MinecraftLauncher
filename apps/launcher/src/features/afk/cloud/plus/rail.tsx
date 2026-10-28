@@ -92,7 +92,8 @@ function StateBlock({
   const { t } = useTranslation();
   const sentence = useAiSentence(account);
   const own = aiState(plusAi(account));
-  // Waiting for its first start: one plain line and "Başlat"; after it, the state as ever.
+  // Waiting for its first start: one plain line and "ProBot AI'ı başlat" (a bare "Başlat" read as
+  // the account's, beside its "Durdur"); after it, the state as ever.
   const state = startState(own, ready);
   const waits = state.key === "ready";
   const text = waits ? t("afkPlus.ai.ready") : sentence.text;
@@ -103,7 +104,6 @@ function StateBlock({
   const note = waits ? null : stateNote;
   const control = usePlusControl(account.id);
   const action = state.canStop ? "stop" : state.canStart ? "start" : null;
-  const label = action === "stop" ? "stop" : waits ? "startFirst" : "start";
   const guard = usePressGuard(action ?? "none");
   const queryClient = useQueryClient();
   const goToLimit = usePlusUi((s) => s.goToLimit);
@@ -177,7 +177,7 @@ function StateBlock({
           {...guard.handlers}
           className="self-start"
         >
-          {t(`afkPlus.control.${label}`)}
+          {t(action === "stop" ? "afkPlus.control.stop" : "afkPlus.control.start")}
         </Button>
       ) : null}
     </div>

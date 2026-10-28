@@ -65,14 +65,16 @@ impl PlusCache {
     }
 
     /// A write's answer over what was read: the settings, their revision and the judge, and the
-    /// server view when the answer brings one (a save's: its money name as the service names it);
-    /// else the server read stays, as Studio's rules and the orders' states do.
+    /// server view and the chat ads' plan when the answer brings them (a save's: its money name as
+    /// the service names it, its ads as planned for what it stored); else what was read stays, as
+    /// Studio's rules and the orders' states do.
     fn written(
         &self,
         id: &str,
         config: PlusConfig,
         ai_rev: u64,
         server: Option<crate::plus::PlusServer>,
+        ad_preview: Option<crate::plus::PlusAdPreview>,
     ) -> PlusSettings {
         let mut guard = self.settings.lock();
         let entry = guard.entry(id.to_owned()).or_default();
@@ -81,6 +83,9 @@ impl PlusCache {
             entry.ai_rev = ai_rev;
             if let Some(server) = server {
                 entry.server = server;
+            }
+            if ad_preview.is_some() {
+                entry.ad_preview = ad_preview;
             }
         }
         entry.clone()
@@ -582,11 +587,16 @@ impl CloudService {
     ) -> Result<PlusSaveOutcome> {
         match answer {
             Ok(written) => {
-                let mut settings =
-                    self.cache()
-                        .written(id, written.config, written.ai_rev, written.server);
+                let cache = self.cache();
+                let mut settings = cache.written(
+                    id,
+                    written.config,
+                    written.ai_rev,
+                    written.server,
+                    written.ad_preview,
+                );
                 settings.judge = written.judge;
-                self.cache().remember(id, &settings);
+                cache.remember(id, &settings);
                 Ok(PlusSaveOutcome::Saved { settings })
             }
             Err(error) => match refusal_issues(&error) {
@@ -726,9 +736,11 @@ impl CloudService {
     ) -> Result<PlusOrderOutcome> {
         match answer {
             Ok(written) => {
+                // The ads' plan follows the active orders: a newer service sends it again.
+                let plan = written.ad_preview;
                 let settings = self
                     .cache()
-                    .written(id, written.config, written.ai_rev, None);
+                    .written(id, written.config, written.ai_rev, None, plan);
                 Ok(PlusOrderOutcome::Saved {
                     settings: Box::new(settings),
                     order: written.order.map(Box::new),
@@ -1233,6 +1245,28 @@ mod tests {
     }
 
     #[test]
+    fn a_save_sends_the_ad_minutes_only_as_they_came() {
+        let settings = settings();
+        let sent = |config: &PlusConfig| {
+            let checked = checked_settings(config, &settings, NOW).unwrap();
+            let written = serde_json::to_value(checked).unwrap();
+            written["discovery"].get("adEveryMin").cloned()
+        };
+        // None stored and none chosen (or an older service): none is sent.
+        assert_eq!(sent(&settings.config), None);
+        // The player's choice, or the one read, goes as it is.
+        let mut config = settings.config.clone();
+        config.discovery.ad_every_min = Some(45);
+        assert_eq!(sent(&config), Some(json!(45)));
+        // Another number is refused here first, as the service would.
+        config.discovery.ad_every_min = Some(50);
+        assert_eq!(
+            checked_settings(&config, &settings, NOW),
+            Err(vec![PlusIssue::new("discovery.adEveryMin", "range")])
+        );
+    }
+
+    #[test]
     fn a_save_keeps_the_ready_mark_while_the_assistant_waits() {
         let mut settings = settings();
         settings.config.enabled = false;
@@ -1548,5 +1582,64 @@ mod tests {
             panic!("not saved");
         };
         assert_eq!(label(&settings).as_deref(), Some("TL"));
+    }
+
+    #[tokio::test]
+    async fn every_write_shows_the_ads_plan_it_answers_with() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = offline_service(dir.path());
+        let token = Bearer::new("t");
+        let mut read = settings();
+        read.ad_preview = Some(crate::plus::PlusAdPreview {
+            floor_min: 30,
+            every_min: 60,
+            lines: vec!["Elytra alınır, PM at".into()],
+            ..crate::plus::PlusAdPreview::default()
+        });
+        service.inner.plus.remember("a_1", &read);
+        // An older service answers without it: the plan read stays.
+        let answer = json!({"config": read.config, "aiRev": 4});
+        let written: PlusWritten = serde_json::from_value(answer).unwrap();
+        assert_eq!(written.ad_preview, None);
+        let outcome = service.settings_written(&token, "a_1", Ok(written)).await;
+        let Ok(PlusSaveOutcome::Saved { settings }) = outcome else {
+            panic!("not saved");
+        };
+        assert_eq!(settings.ad_preview, read.ad_preview);
+        // A save's answer plans the ads for what it stored: its minutes, and today's warning.
+        let plan = json!({"floorMin": 30, "everyMin": 240, "lines": ["Elytra alınır, PM at"],
+            "nextAt": null, "warning": {"at": NOW, "everyMin": 240}, "stoppedToday": false});
+        let answer = json!({"config": read.config, "aiRev": 5, "adPreview": plan});
+        let written: PlusWritten = serde_json::from_value(answer).unwrap();
+        let outcome = service.settings_written(&token, "a_1", Ok(written)).await;
+        let Ok(PlusSaveOutcome::Saved { settings }) = outcome else {
+            panic!("not saved");
+        };
+        let plan = settings.ad_preview.expect("the answer's plan");
+        assert_eq!(plan.every_min, 240);
+        assert_eq!(plan.warning.map(|warning| warning.every_min), Some(240));
+        // An older service's order answer has none: the plan known stays.
+        let answer = json!({"config": read.config, "aiRev": 6});
+        let written: PlusOrderWritten = serde_json::from_value(answer).unwrap();
+        let outcome = service.order_written("a_1", Ok(written));
+        let Ok(PlusOrderOutcome::Saved { settings, .. }) = outcome else {
+            panic!("not saved");
+        };
+        let plan = settings.ad_preview.as_ref().expect("the plan known");
+        assert_eq!(plan.every_min, 240);
+        // A newer one plans again after an order change: its last active order paused, no line.
+        let plan = json!({"floorMin": 30, "everyMin": 60, "lines": [], "nextAt": null,
+            "warning": null, "stoppedToday": false});
+        let answer = json!({"config": read.config, "aiRev": 7, "adPreview": plan});
+        let written: PlusOrderWritten = serde_json::from_value(answer).unwrap();
+        let outcome = service.order_written("a_1", Ok(written));
+        let Ok(PlusOrderOutcome::Saved { settings, .. }) = outcome else {
+            panic!("not saved");
+        };
+        let plan = settings.ad_preview.as_ref().expect("the answer's plan");
+        assert_eq!((plan.every_min, plan.lines.len()), (60, 0));
+        // And the checks before the next write have it too (the settings kept here).
+        let known = service.inner.plus.settings("a_1").unwrap();
+        assert_eq!(known.ad_preview, settings.ad_preview);
     }
 }

@@ -145,8 +145,6 @@ export const trAfkPlus = {
   control: {
     stop: "ProBot AI'ı durdur",
     start: "ProBot AI'ı başlat",
-    // Under "ProBot AI hazır. Başlatınca çalışır.": the first start.
-    startFirst: "Başlat",
     stopLabel: "ProBot AI'ı durdur",
     startLabel: "ProBot AI'ı başlat",
     stopped: "ProBot AI durduruldu",
@@ -833,6 +831,9 @@ export const trAfkPlus = {
     timeoutShort: "Onay süresi",
     timeoutValue: "dakika sonra hayır sayılır",
     noLimitShort: "Sınır yok",
+    // Under the per-deal and the total limit while empty: without both nothing is bought (the hard
+    // rule), so never "Sınır yok" there (the site's words, SITE-W2).
+    emptyBuysNothing: "Boş bırakırsan ProBot AI alım yapmaz.",
     needed: "Alım için tek anlaşmada en fazla tutar ve toplam harcama sınırı gerekir.",
     // The one quiet line of the limits (afkplus-free.md §3.5): never said to the other player.
     secret: "ProBot AI bütçeni ve sınırlarını kimseye söylemez.",
@@ -851,9 +852,25 @@ export const trAfkPlus = {
     ads: "Sohbete ilan versin",
     adsHelp: "Hazır metinle, 30 dakikada bir.",
     adTemplate: "İlan metni",
+    // "Sohbete ilan" as the service plans it (TRADE-ANY trade-any-4, chat-ads.tsx): what it posts,
+    // how often (the server's floor closes the shorter ones), the next ad, a spam warning, today's
+    // stop. An older service plans none: "adsHelp" stays.
+    adsHelpPlan: "Etkin siparişlerini arada sohbete yazar.",
+    adEvery: "Ne sıklıkla yazsın?",
+    adEveryChoices: { m30: "30 dk", m45: "45 dk", m60: "1 saat", m120: "2 saat" },
+    adFloor: "Bu sunucuda en az {{n}} dk.",
+    adSample: "Örnek ilan",
+    adNext: "Başka örnek",
+    adWarned: "Sunucu spam uyarısı verdi. Aralık bugünlük iki katı: {{n}} dk.",
+    adStopped: "Bugünlük ilan durdu.",
+    adNoOrders: "Etkin sipariş yokken ilan verilmez.",
+    // The item names not known yet: the machine has not been in game (`namesPending`).
+    adNamesPending: "ProBot AI oyuna girince hazır olur.",
     // "Para birimi" (TRADE-ANY): the money's name after amounts, the player's or the profile's own.
     currency: "Para birimi",
     currencyHelp: "Sunucundaki paranın adı.",
+    // A profile's own name (ripple) as words with a lock, never a field.
+    currencyFixed: "Bu adı sunucu belirliyor.",
     currencyRefused: "Bu ad kullanılamaz.",
     returnRow: "Takastan sonra",
     returnStay: "Spawn'da kalsın",
@@ -922,6 +939,8 @@ export const trAfkPlus = {
     fineTune: "İnce ayar değişti",
     limit: "{{field}}: {{from}} yerine {{to}}",
     noLimit: "sınırsız",
+    // The per-deal or the total limit emptied: nothing is bought then, never "sınırsız".
+    noBuying: "alım yok",
     persona: "ProBot AI ayarları değişti",
     replies: "Cevap ayarları değişti",
     schedule: "Çalışma saatleri değişti",

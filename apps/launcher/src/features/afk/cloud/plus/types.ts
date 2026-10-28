@@ -8,7 +8,8 @@
 // assignable to the bindings' types. A look's and an audit entry's fields stay optional: the backend
 // leaves out what they lack. `trade.currency` ("Para birimi") is typed present but may be missing
 // too (no name stored, or a service that knows none): it goes back as it came, so code reads it
-// with `?? null` and only the field writes it (model.ts `withCurrency`).
+// with `?? null` and only the field writes it (model.ts `withCurrency`). `discovery.adEveryMin`
+// ("Sohbete ilan") is the same: missing until the player picks the minutes, read with `??`.
 import type * as B from "@/bindings";
 import type { CloudAccount, CloudOverview } from "../api";
 
@@ -30,6 +31,7 @@ export type CloudNotifyPrefs = Wire<B.CloudNotifyPrefs>;
 export type CloudQuietHours = Wire<B.CloudQuietHours>;
 export type MePlus = Wire<B.MePlus>;
 export type PlusAction = B.PlusAction;
+export type PlusAdPreview = Wire<B.PlusAdPreview>;
 export type PlusAdTemplate = Wire<B.PlusAdTemplate>;
 export type PlusAi = Wire<B.PlusAi>;
 export type PlusAllowance = Wire<B.PlusAllowance>;
@@ -44,7 +46,7 @@ export type PlusCheckOutcome = B.PlusCheckOutcome;
 export type PlusConfig = Wire<B.PlusConfig_Serialize>;
 export type PlusControlAnswer = Wire<B.PlusControlAnswer>;
 export type PlusCustomItem = Wire<B.PlusCustomItem_Serialize>;
-export type PlusDiscovery = Wire<B.PlusDiscovery>;
+export type PlusDiscovery = Wire<B.PlusDiscovery_Serialize>;
 export type PlusExport = Wire<B.PlusExport>;
 export type PlusFeatures = Wire<B.PlusFeatures>;
 export type PlusGift = Wire<B.PlusGift>;

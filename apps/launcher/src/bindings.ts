@@ -6574,10 +6574,47 @@ export type PlanView = {
  */
 export type PlusAction = "pause" | "resume" | "block" | "unblock" | "forget" | "reset_spent";
 
+/**
+ *  "Sohbete ilan" as the service plans it for the stored settings (`GET`'s, a save's and a
+ *  restore's answer carry it): the server's floor, the minutes between ads now, the next ads'
+ *  texts and today's spam warning or stop.
+ */
+export type PlusAdPreview = {
+	/**  The fewest minutes between ads here: 30, or more where the profile or Studio asks. */
+	floorMin?: number,
+	/**
+	 *  The minutes between ads now: the player's choice, at least the floor, twice that after a
+	 *  spam warning today.
+	 */
+	everyMin?: number,
+	/**
+	 *  The next ads' texts in their order (at most 3, without the sender's name before them, and
+	 *  no price); empty while no order is active or the names are pending.
+	 */
+	lines?: string[],
+	/**
+	 *  The item names are not known yet (the machine has not been in game): `lines` stays empty
+	 *  until they are.
+	 */
+	namesPending?: boolean,
+	/**  When the next one goes (Unix seconds), when known. */
+	nextAt?: number | null,
+	/**  The server's spam warning today, if one came. */
+	warning?: PlusAdWarning | null,
+	/**  A second warning stopped the ads until the day ends. */
+	stoppedToday?: boolean,
+};
+
 export type PlusAdTemplate = {
 	id?: string,
 	tr?: string,
 	en?: string,
+};
+
+/**  A spam warning: when it came (Unix seconds) and the minutes between ads since. */
+export type PlusAdWarning = {
+	at?: number,
+	everyMin?: number,
 };
 
 /**
@@ -6868,7 +6905,7 @@ export type PlusConfig_Deserialize = {
 	orders?: PlusOrder[],
 	customItems?: PlusCustomItem_Deserialize[],
 	limits?: PlusLimits,
-	discovery?: PlusDiscovery,
+	discovery?: PlusDiscovery_Deserialize,
 	trade?: PlusTradeSettings_Deserialize,
 	/**  "HH:MM" Turkey time: the daily summary. */
 	summaryAt?: string,
@@ -6917,7 +6954,7 @@ export type PlusConfig_Serialize = {
 	orders: PlusOrder[],
 	customItems: PlusCustomItem_Serialize[],
 	limits: PlusLimits,
-	discovery: PlusDiscovery,
+	discovery: PlusDiscovery_Serialize,
 	trade: PlusTradeSettings_Serialize,
 	/**  "HH:MM" Turkey time: the daily summary. */
 	summaryAt: string,
@@ -6974,11 +7011,32 @@ export type PlusCustomItem_Serialize = {
 	at: number,
 };
 
-export type PlusDiscovery = {
+export type PlusDiscovery = PlusDiscovery_Serialize | PlusDiscovery_Deserialize;
+
+export type PlusDiscovery_Deserialize = {
 	scanChat?: boolean,
 	proactivePm?: boolean,
 	ads?: boolean,
 	adTemplate?: string,
+	/**
+	 *  "Sohbete ilan" (trade-any-4): the minutes between ads the player chose, 30, 45, 60 or 120
+	 *  (the service's 60 while none is stored; a server may ask for more, `floorMin`). None: not
+	 *  in the document, and sent back so (never made here; an older service knows no such key).
+	 */
+	adEveryMin?: number | null,
+};
+
+export type PlusDiscovery_Serialize = {
+	scanChat: boolean,
+	proactivePm: boolean,
+	ads: boolean,
+	adTemplate: string,
+	/**
+	 *  "Sohbete ilan" (trade-any-4): the minutes between ads the player chose, 30, 45, 60 or 120
+	 *  (the service's 60 while none is stored; a server may ask for more, `floorMin`). None: not
+	 *  in the document, and sent back so (never made here; an older service knows no such key).
+	 */
+	adEveryMin?: number | null,
 };
 
 /**  A table written to the player's Downloads folder. */
@@ -7794,6 +7852,8 @@ export type PlusSettings_Deserialize = {
 	spent?: PlusSpent | null,
 	/**  The orders' states come from the machine's last snapshot of then. */
 	asOf?: number | null,
+	/**  "Sohbete ilan" as the service plans it; None from an older service. */
+	adPreview?: PlusAdPreview | null,
 };
 
 /**
@@ -7813,6 +7873,8 @@ export type PlusSettings_Serialize = {
 	spent: PlusSpent | null,
 	/**  The orders' states come from the machine's last snapshot of then. */
 	asOf: number | null,
+	/**  "Sohbete ilan" as the service plans it; None from an older service. */
+	adPreview: PlusAdPreview | null,
 };
 
 /**

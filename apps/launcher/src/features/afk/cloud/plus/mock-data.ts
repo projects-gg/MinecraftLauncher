@@ -17,15 +17,22 @@
 // - `&audit=off|empty`: Studio switched the log off, or nothing was logged yet.
 // - `&typed=off`: Studio switched typed orders off (the form and the inventory only).
 // - `&mode=survival`: the account plays Projects Survival, whose profile names the money (ripple):
-//   "Para birimi" shows it read-only. On SMP (no name of its own) the player names it.
+//   "Para birimi" shows it as words with a lock. On SMP (no name of its own) the player names it.
+// - `&ads=<state>` ("Sohbete ilan", switched on): `on` the service's plan from the active orders,
+//   `floor` the server asks at least an hour, `warned` a spam warning today, `stopped` today's ads
+//   stopped, `empty` no active order, `pending` the item names not known yet (never in game), `old`
+//   an older service (no plan: the switch as before).
+//   Without it the switch is off and the plan still comes, as from the newest service.
 // With `?cloud=intro` (no cloud account) `&plus=on` shows the AFK+ card beside 7/24 Bulut's.
 // The item data here is a small stand-in written for previews (the real file comes from our CDN).
 import { type InvFrame, type InvItem, SAMPLE_INVENTORY } from "@pl/ui/inventory";
 import type { AfkNotice } from "@/lib/api/social-types";
 import type { CloudAccount } from "../api";
+import { AD_EVERY_DEFAULT } from "./model";
 import type {
   CloudNotifyPrefs,
   MePlus,
+  PlusAdPreview,
   PlusAi,
   PlusApproval,
   PlusAuditEntry,
@@ -95,6 +102,8 @@ export const auditScenario = param("audit");
 export const typedOrders = param("typed") !== "off";
 /** `&mode=survival`: Projects Survival, whose profile names the money. */
 const survivalMode = param("mode") === "survival" && plusScenario !== "owner";
+/** `&ads=on|floor|warned|stopped|empty|pending|old`: "Sohbete ilan" on, and its plan's state. */
+const adsScenario = param("ads");
 /**
  * `&topup=on`: AFK+ extra credits on sale (the rail's "Kontör al"); `&topup=bought`: also the
  * windows used up and a bought pack paying (cloud-afk README "AFK+ extra credits").
@@ -600,7 +609,14 @@ export function mockConfig(): PlusConfig {
       newCounterpartApprovalAbove: setup ? null : 10_000,
       approvalTimeoutMin: 10,
     },
-    discovery: { scanChat: true, proactivePm: true, ads: false, adTemplate: "buy-basic" },
+    discovery: {
+      scanChat: true,
+      proactivePm: true,
+      ads: adsScenario !== null,
+      adTemplate: "buy-basic",
+      // Not picked yet (the service's hour); `floor`: an hour, the least the server takes.
+      adEveryMin: adsScenario === "floor" ? 60 : null,
+    },
     // No name of the player's yet: amounts on SMP are bare until "Para birimi" names the money.
     trade: { returnRow: null, currency: null },
     summaryAt: "21:00",
@@ -651,6 +667,39 @@ export function mockSettings(config: PlusConfig, aiRev: number): PlusSettings {
     // The completed buys since the last reset (`mockReceipts`: 36.000 + 16.400).
     spent: plusScenario === "offline" ? null : { total: 52_400, today: 16_400 },
     asOf: plusScenario === "offline" ? now - 37 * MIN : null,
+    adPreview: mockAdPreview(config),
+  };
+}
+
+/**
+ * "Sohbete ilan" as the service plans it for the stored settings (`&ads=`): the next ads from the
+ * active orders, never with a price, a budget or a limit; none while the item names are not known.
+ */
+function mockAdPreview(config: PlusConfig): PlusAdPreview | null {
+  if (adsScenario === "old") return null;
+  const now = nowSecs();
+  const floorMin = adsScenario === "floor" ? 60 : 30;
+  const minutes = Math.max(config.discovery.adEveryMin ?? AD_EVERY_DEFAULT, floorMin);
+  const warned = adsScenario === "warned" || adsScenario === "stopped";
+  const everyMin = warned ? minutes * 2 : minutes;
+  const namesPending = adsScenario === "pending";
+  const orders = config.orders.some((o) => o.on && o.until > now);
+  const active = orders && adsScenario !== "empty" && !namesPending;
+  const lines = active
+    ? [
+        "Alıyorum: 1 Elytra, PM at",
+        "Alıyorum: 3 Ölümsüzlük Totemi, PM at",
+        "Satıyorum: 64 Elmas, PM at",
+      ]
+    : [];
+  return {
+    floorMin,
+    everyMin,
+    lines,
+    namesPending,
+    nextAt: active && adsScenario !== "stopped" ? now + 25 * MIN : null,
+    warning: warned ? { at: now - 2 * HOUR, everyMin } : null,
+    stoppedToday: adsScenario === "stopped",
   };
 }
 

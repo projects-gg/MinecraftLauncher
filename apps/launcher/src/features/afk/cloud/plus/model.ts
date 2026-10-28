@@ -66,6 +66,33 @@ export function canSpend(limits: PlusLimits): boolean {
   return limits.totalBudget !== null && limits.perDealMax !== null;
 }
 
+export type EmptyLimit = "buysNothing" | "noLimit" | "noAsk";
+
+/**
+ * What leaving a limit empty does (README `SpendLimits`): without the per-deal or the total limit
+ * nothing is bought (the hard rule, `canSpend`), without the daily one there is no daily cap,
+ * without an approval limit no amount is asked about first. Null where it cannot be empty.
+ */
+export function emptyLimit(key: keyof PlusLimits): EmptyLimit | null {
+  switch (key) {
+    case "perDealMax":
+    case "totalBudget":
+      return "buysNothing";
+    case "dailySpendMax":
+      return "noLimit";
+    case "approvalAbove":
+    case "newCounterpartApprovalAbove":
+      return "noAsk";
+    default:
+      return null;
+  }
+}
+
+/** "Sohbete ilan": the minutes between ads a player may pick (`discovery.adEveryMin`). */
+export const AD_EVERY_MIN = [30, 45, 60, 120] as const;
+/** The service's minutes while the player has picked none. */
+export const AD_EVERY_DEFAULT = 60;
+
 // --- The "Ayarlar" draft ---------------------------------------------------------------------------
 
 /** What "Ayarlar" edits as one draft; orders, the switch, a break and blocked names save at once. */

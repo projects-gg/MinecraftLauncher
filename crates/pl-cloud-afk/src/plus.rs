@@ -650,6 +650,11 @@ pub struct PlusDiscovery {
     pub proactive_pm: bool,
     pub ads: bool,
     pub ad_template: String,
+    /// "Sohbete ilan" (trade-any-4): the minutes between ads the player chose, 30, 45, 60 or 120
+    /// (the service's 60 while none is stored; a server may ask for more, `floorMin`). None: not
+    /// in the document, and sent back so (never made here; an older service knows no such key).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ad_every_min: Option<u32>,
 }
 
 impl Default for PlusDiscovery {
@@ -659,6 +664,7 @@ impl Default for PlusDiscovery {
             proactive_pm: true,
             ads: false,
             ad_template: "buy-basic".into(),
+            ad_every_min: None,
         }
     }
 }
@@ -728,6 +734,41 @@ pub struct PlusSettings {
     pub spent: Option<PlusSpent>,
     /// The orders' states come from the machine's last snapshot of then.
     pub as_of: Option<i64>,
+    /// "Sohbete ilan" as the service plans it; None from an older service.
+    pub ad_preview: Option<PlusAdPreview>,
+}
+
+/// "Sohbete ilan" as the service plans it for the stored settings (`GET`'s, a save's and a
+/// restore's answer carry it): the server's floor, the minutes between ads now, the next ads'
+/// texts and today's spam warning or stop.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusAdPreview {
+    /// The fewest minutes between ads here: 30, or more where the profile or Studio asks.
+    pub floor_min: u32,
+    /// The minutes between ads now: the player's choice, at least the floor, twice that after a
+    /// spam warning today.
+    pub every_min: u32,
+    /// The next ads' texts in their order (at most 3, without the sender's name before them, and
+    /// no price); empty while no order is active or the names are pending.
+    pub lines: Vec<String>,
+    /// The item names are not known yet (the machine has not been in game): `lines` stays empty
+    /// until they are.
+    pub names_pending: bool,
+    /// When the next one goes (Unix seconds), when known.
+    pub next_at: Option<i64>,
+    /// The server's spam warning today, if one came.
+    pub warning: Option<PlusAdWarning>,
+    /// A second warning stopped the ads until the day ends.
+    pub stopped_today: bool,
+}
+
+/// A spam warning: when it came (Unix seconds) and the minutes between ads since.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusAdWarning {
+    pub at: i64,
+    pub every_min: u32,
 }
 
 /// How AFK+ works on the account's server (`PlusServer`).
@@ -895,6 +936,8 @@ pub struct PlusWritten {
     /// The server view as `GET` resolves it for the stored settings (28 Oct 2026: its money name
     /// follows `trade.currency`); None from an older service.
     pub server: Option<PlusServer>,
+    /// "Sohbete ilan" as planned for the stored settings; None from an older service.
+    pub ad_preview: Option<PlusAdPreview>,
 }
 
 /// An order route's answer: the order (none for a delete), the stored settings and their
@@ -906,6 +949,9 @@ pub struct PlusOrderWritten {
     pub config: PlusConfig,
     pub ai_rev: u64,
     pub deferred: bool,
+    /// "Sohbete ilan" as planned after the write (its lines follow the active orders); None from
+    /// an older service.
+    pub ad_preview: Option<PlusAdPreview>,
 }
 
 /// A new order as `POST …/plus/orders` takes it: without `id` and `at` (the Worker makes them),
@@ -2543,6 +2589,48 @@ mod tests {
         let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
         assert_eq!(config.ready, Some(true));
         assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+    }
+
+    #[test]
+    fn the_ad_minutes_go_back_as_they_came() {
+        // None chosen (or an older service): none is written.
+        let config: PlusConfig = serde_json::from_value(document()).unwrap();
+        assert_eq!(config.discovery.ad_every_min, None);
+        let written = serde_json::to_value(&config).unwrap();
+        assert_eq!(written["discovery"].get("adEveryMin"), None);
+        // A choice goes back as it was read.
+        let mut doc = document();
+        doc["discovery"]["adEveryMin"] = json!(45);
+        let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
+        assert_eq!(config.discovery.ad_every_min, Some(45));
+        assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+    }
+
+    #[test]
+    fn reads_the_ads_plan() {
+        let settings: PlusSettings = serde_json::from_value(json!({
+            "config": document(), "aiRev": 4,
+            "adPreview": {"floorMin": 60, "everyMin": 120,
+              "lines": ["Alıyorum: 64 Elmas, PM at"], "nextAt": 1792950600,
+              "warning": {"at": 1792950000, "everyMin": 120}, "stoppedToday": false}
+        }))
+        .unwrap();
+        let plan = settings.ad_preview.unwrap();
+        assert_eq!((plan.floor_min, plan.every_min), (60, 120));
+        assert_eq!(plan.lines, ["Alıyorum: 64 Elmas, PM at"]);
+        assert!(!plan.names_pending);
+        assert_eq!(plan.next_at, Some(1792950600));
+        let warning = plan.warning.unwrap();
+        assert_eq!((warning.at, warning.every_min), (1792950000, 120));
+        assert!(!plan.stopped_today);
+        // The item names not known yet (the machine not in game): no line, and it says why.
+        let pending = json!({"floorMin": 30, "everyMin": 60, "lines": [], "namesPending": true});
+        let pending: PlusAdPreview = serde_json::from_value(pending).unwrap();
+        assert!(pending.names_pending && pending.lines.is_empty());
+        // An older service plans none: the switch alone shows as before.
+        let settings: PlusSettings =
+            serde_json::from_value(json!({"config": document(), "aiRev": 1})).unwrap();
+        assert_eq!(settings.ad_preview, None);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// "Para birimi": nothing while Studio's switch is off, the profile's own name read-only, else the
-// player's own field, with one line under it (the hint, or that the name cannot be used).
+// "Para birimi": nothing while Studio's switch is off, the profile's own name as words with a lock,
+// else the player's own field, with one line under it (the hint, or that the name cannot be used).
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import "@/lib/i18n";
@@ -25,15 +25,15 @@ describe("the money's name field (Para birimi)", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("shows the profile's own name read-only, with the hint", () => {
+  it("shows the profile's own name as words with a lock, never as a field", () => {
     const fixed = { kind: "fixed", label: "ripple" } as const;
     const { container } = render(
       <CurrencyField state={fixed} value="TL" refused={false} onChange={ignore} />,
     );
-    const field = fieldOf(container);
-    expect(field.value).toBe("ripple");
-    expect(field.readOnly).toBe(true);
-    expect(screen.getByText("Sunucundaki paranın adı.")).toBeTruthy();
+    expect(container.querySelector("input")).toBeNull();
+    expect(screen.getByText("ripple")).toBeTruthy();
+    expect(container.querySelector("svg")).not.toBeNull();
+    expect(screen.getByText("Bu adı sunucu belirliyor.")).toBeTruthy();
   });
 
   it("takes the player's own name and says when it cannot be used", () => {

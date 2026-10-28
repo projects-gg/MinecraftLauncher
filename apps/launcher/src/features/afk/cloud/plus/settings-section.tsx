@@ -29,6 +29,7 @@ import { Hint, inputClass, ToggleRow } from "../../settings/controls";
 import type { CloudAccount } from "../api";
 import { type CloudNotifyPrefs, type PlusPanel, plusApi } from "./api";
 import { DOCK_HEIGHT, PlusChangeDock } from "./change-dock";
+import { ChatAds } from "./chat-ads";
 import { CurrencyField } from "./currency-field";
 import { AmountField, GroupTitle, IntField, QuietLink, TimeField } from "./fields";
 import { HistoryDialog } from "./history-dialog";
@@ -39,7 +40,9 @@ import {
   canSpend,
   currencyEditProblem,
   currencyFieldState,
+  type EmptyLimit,
   editDraft,
+  emptyLimit,
   isTime,
   limitProblems,
   liveProblems,
@@ -991,6 +994,13 @@ function FineTuneGroup({
 
 // --- Harcama -----------------------------------------------------------------------------------------
 
+/** What an empty limit's box says (`emptyLimit`); buying nothing is said under it instead. */
+const EMPTY_SHORT: Record<EmptyLimit, string | null> = {
+  buysNothing: null,
+  noLimit: "afkPlus.settings.noLimitShort",
+  noAsk: "afkPlus.settings.noAskShort",
+};
+
 function LimitsGroup({
   shown,
   set,
@@ -1029,23 +1039,24 @@ function LimitsGroup({
     }
     return t(`afkPlus.settings.limitErrors.${problem}`, { max: formatAmount(maxDeal) });
   };
-  const amount = (
-    key: keyof PlusLimits,
-    label: string,
-    optional: boolean,
-    more: { empty?: string; extra?: ReactNode } = {},
-  ) => (
-    <AmountField
-      label={label}
-      value={limits[key] as number | null}
-      optional={optional}
-      placeholder={optional ? (more.empty ?? t("afkPlus.settings.noLimitShort")) : undefined}
-      error={error(key)}
-      extra={more.extra}
-      anchor={`afk-plus-limits-${key}`}
-      onChange={(value) => setLimit(key, value)}
-    />
-  );
+  const amount = (key: keyof PlusLimits, label: string, more: { extra?: ReactNode } = {}) => {
+    // Left empty: no daily cap or no question, said in the box; no buying at all, under it.
+    const empty = emptyLimit(key);
+    const short = empty ? EMPTY_SHORT[empty] : null;
+    return (
+      <AmountField
+        label={label}
+        value={limits[key] as number | null}
+        optional={empty !== null}
+        placeholder={short ? t(short) : undefined}
+        help={empty === "buysNothing" ? t("afkPlus.settings.emptyBuysNothing") : undefined}
+        error={error(key)}
+        extra={more.extra}
+        anchor={`afk-plus-limits-${key}`}
+        onChange={(value) => setLimit(key, value)}
+      />
+    );
+  };
   const note = (text: string) => <p className="-mt-1 text-[12px] text-ash-400">{text}</p>;
   const reset = async () => {
     setConfirmReset(false);
@@ -1069,8 +1080,8 @@ function LimitsGroup({
           counter sits under the limit it counts against (the site's): the total counts since the
           last reset and a reset empties it only, so it never reads as today's figure gone down. */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-4 pt-1.5">
-        {amount("perDealMax", t("afkPlus.settings.perDealMax"), true)}
-        {amount("totalBudget", t("afkPlus.settings.totalBudget"), true, {
+        {amount("perDealMax", t("afkPlus.settings.perDealMax"))}
+        {amount("totalBudget", t("afkPlus.settings.totalBudget"), {
           extra:
             spent && spent.total > 0 ? (
               <p className="-mt-1 flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-bone-100">
@@ -1088,7 +1099,7 @@ function LimitsGroup({
               </p>
             ) : null,
         })}
-        {amount("dailySpendMax", t("afkPlus.settings.dailySpendMax"), true, {
+        {amount("dailySpendMax", t("afkPlus.settings.dailySpendMax"), {
           extra:
             spent && spent.today > 0 ? (
               <p className="-mt-1 text-[12.5px] text-bone-100 tabular-nums">
@@ -1096,13 +1107,11 @@ function LimitsGroup({
               </p>
             ) : null,
         })}
-        {amount("balanceFloor", t("afkPlus.settings.balanceFloor"), false)}
-        {amount("approvalAbove", t("afkPlus.settings.approvalAbove"), true, {
-          empty: t("afkPlus.settings.noAskShort"),
+        {amount("balanceFloor", t("afkPlus.settings.balanceFloor"))}
+        {amount("approvalAbove", t("afkPlus.settings.approvalAbove"), {
           extra: note(t("afkPlus.settings.approvalHelp")),
         })}
-        {amount("newCounterpartApprovalAbove", t("afkPlus.settings.newCounterpart"), true, {
-          empty: t("afkPlus.settings.noAskShort"),
+        {amount("newCounterpartApprovalAbove", t("afkPlus.settings.newCounterpart"), {
           extra: note(t("afkPlus.settings.newCounterpartHelp")),
         })}
       </div>
@@ -1145,11 +1154,23 @@ function LimitsGroup({
 
 // --- Bulma ve Takas ----------------------------------------------------------------------------------
 
-function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; panel: PlusPanel }) {
+function FindGroup({
+  shown,
+  set,
+  panel,
+  account,
+}: {
+  shown: SettingsPart;
+  set: Change;
+  panel: PlusPanel;
+  account: CloudAccount;
+}) {
   const { t } = useTranslation();
   const d = shown.discovery;
   const lang = currentLang();
   const templates = panel.settings.server.ads;
+  // "Sohbete ilan" as the service plans it (TRADE-ANY trade-any-4); none from an older service.
+  const plan = panel.settings.adPreview ?? null;
   const setD = (parts: Partial<SettingsPart["discovery"]>) =>
     set((s) => ({ ...s, discovery: { ...s.discovery, ...parts } }));
   return (
@@ -1167,7 +1188,7 @@ function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; pa
       />
       <ToggleRow
         title={t("afkPlus.settings.ads")}
-        help={t("afkPlus.settings.adsHelp")}
+        help={t(plan ? "afkPlus.settings.adsHelpPlan" : "afkPlus.settings.adsHelp")}
         checked={d.ads}
         disabled={!templates.length}
         onCheckedChange={(ads) =>
@@ -1191,6 +1212,14 @@ function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; pa
             className="max-w-[360px]"
           />
         </Labeled>
+      ) : null}
+      {d.ads && templates.length ? (
+        <ChatAds
+          plan={plan}
+          minutes={d.adEveryMin}
+          name={account.name}
+          onMinutes={(adEveryMin) => setD({ adEveryMin })}
+        />
       ) : null}
     </Group>
   );
@@ -1217,7 +1246,7 @@ function TradeGroup({
   const value = rows.some((row) => row.id === shown.trade.returnRow)
     ? (shown.trade.returnRow ?? "stay")
     : "stay";
-  // "Para birimi" while Studio's switch is on: the player's own name, or the profile's read-only.
+  // "Para birimi" while Studio's switch is on: the player's own name, or the profile's as words.
   const saved = panel.settings.config.trade;
   const currency = currencyFieldState(panel.settings.server, panel.settings.rules, currentLang());
   const currencyRefused =
@@ -1609,7 +1638,7 @@ export function SettingsSection({
         <AssistantGroup {...props} saver={features.saver} serverIssues={serverIssues} />
         {features.schedule ? <HoursGroup {...props} account={account} /> : null}
         <LimitsGroup {...props} account={account} serverIssues={serverIssues} />
-        <FindGroup {...props} />
+        <FindGroup {...props} account={account} />
         <TradeGroup {...props} account={account} serverIssues={serverIssues} />
         <BlockedGroup account={account} panel={panel} />
         <NotifyGroup />
