@@ -702,13 +702,15 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     let now = ctx.now;
     let stored = ctx.stored.as_ref();
     let enabled = boolean(config.get("enabled"), "enabled")?;
-    // The service's `ready` (28 Oct 2026: the assistant waits for its first start) may come back
-    // as it was read; a write that turns the assistant on ends it.
-    let came_ready = match config.get("ready") {
-        None | Some(Value::Null) => false,
-        other => boolean(other, "ready")?,
-    };
-    let ready = came_ready && !enabled;
+    // The service's `ready` (28 Oct 2026: a first grant's assistant waits for the player's start):
+    // a write may send it back as it got it (true) or leave it out, and what it sends changes
+    // nothing. It stays while the stored document has it and the assistant stays off, and goes
+    // with the start (`enabled: true`); a client never makes it.
+    if !matches!(config.get("ready"), None | Some(Value::Bool(true))) {
+        return Err(PlusRefusal::invalid("ready", "type"));
+    }
+    let stored_ready = stored.and_then(|doc| doc.get("ready")) == Some(&Value::Bool(true));
+    let ready = stored_ready && !enabled;
     let mode = string(config.get("mode"), "mode")?;
     if mode != GENERIC && !ctx.modes.contains_key(mode) && ctx.stored_mode.as_deref() != Some(mode)
     {
@@ -761,13 +763,14 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     }
     let small_talk = boolean(persona_in.get("smallTalk"), "persona.smallTalk")?;
     // "Oyuncu gibi konuşsun" and the tag (27 Oct 2026): a write without them keeps the stored ones,
-    // so a client that does not know them yet changes nothing.
+    // so a client that does not know them yet changes nothing; without a stored one, the default
+    // ("Oyuncu gibi konuşsun" on since 28 Oct 2026).
     let stored_persona = stored.and_then(|doc| doc.get("persona"));
     let player_talk = match persona_in.get("playerTalk") {
         None => stored_persona
             .and_then(|persona| persona.get("playerTalk"))
             .and_then(Value::as_bool)
-            .unwrap_or(false),
+            .unwrap_or(true),
         other => boolean(other, "persona.playerTalk")?,
     };
     let tag_refusal = |problem: &'static str| PlusRefusal::Invalid {
@@ -1684,27 +1687,34 @@ mod tests {
             ..crate::plus::PlusConfig::default()
         })
         .unwrap();
-        let ctx = PlusCheckContext {
-            now: 1_792_900_000,
-            ..PlusCheckContext::default()
-        };
-        let marked = |doc: &Value| {
-            let out = check_config_value(doc, &ctx).unwrap();
-            out.get("ready").cloned()
-        };
-        // Off and never started here: the mark is never made.
-        assert_eq!(marked(&off), None);
-        // The service's mark comes back as it was read while the assistant waits.
         let mut waiting = off.clone();
         waiting["ready"] = Value::Bool(true);
-        assert_eq!(marked(&waiting), Some(Value::Bool(true)));
+        // The stored document is the service's word: what a write sends changes nothing.
+        let marked = |doc: &Value, stored: &Value| {
+            let ctx = PlusCheckContext {
+                now: 1_792_900_000,
+                stored: Some(stored.clone()),
+                ..PlusCheckContext::default()
+            };
+            check_config_value(doc, &ctx).unwrap().get("ready").cloned()
+        };
+        let yes = Some(Value::Bool(true));
+        // It stays while the stored document has it and the assistant stays off, sent or not.
+        assert_eq!(marked(&waiting, &waiting), yes);
+        assert_eq!(marked(&off, &waiting), yes);
+        // A client never makes it.
+        assert_eq!(marked(&waiting, &off), None);
         // Turned on ("Başlat", or a save with the switch on): it ends.
         let mut on = waiting.clone();
         on["enabled"] = Value::Bool(true);
-        assert_eq!(marked(&on), None);
-        // Only a yes or no.
-        waiting["ready"] = Value::from("yes");
-        assert_eq!(check_config_value(&waiting, &ctx), Err(PlusRefusal::invalid("ready", "type")));
+        assert_eq!(marked(&on, &waiting), None);
+        // Only true, or nothing.
+        let ctx = PlusCheckContext::default();
+        for bad in [Value::Bool(false), Value::Null, Value::from("yes")] {
+            let mut doc = off.clone();
+            doc["ready"] = bad;
+            assert_eq!(check_config_value(&doc, &ctx), Err(PlusRefusal::invalid("ready", "type")));
+        }
     }
 
     #[test]

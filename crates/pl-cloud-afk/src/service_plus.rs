@@ -793,7 +793,11 @@ impl CloudService {
             let config = &mut settings.config;
             match action {
                 PlusAction::Pause => config.enabled = false,
-                PlusAction::Resume => config.enabled = true,
+                // "Başlat" also ends the wait for the first start (the service drops `ready`).
+                PlusAction::Resume => {
+                    config.enabled = true;
+                    config.ready = None;
+                }
                 PlusAction::Block | PlusAction::Unblock => {
                     if let Some(name) = name {
                         config.blocked.retain(|n| !n.eq_ignore_ascii_case(name));
