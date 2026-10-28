@@ -28,7 +28,7 @@ export const trSafety = {
     forever: "Hesabın kalıcı olarak kısıtlandı.",
     rules: "Topluluk kuralları",
   },
-  signupsClosed: "Şu an yeni hesap açılamıyor. Yarın yeniden dene.",
+  signupsClosed: "Şu an yeni hesap açılamıyor. Yarın tekrar dene.",
   notice: {
     warningTitle: "Uyarı aldın",
     warning: "Topluluk kurallarına aykırı davranış nedeniyle uyarı aldın.",

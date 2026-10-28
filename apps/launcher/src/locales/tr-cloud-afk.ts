@@ -162,7 +162,7 @@ export const trCloudAfk = {
     moving: "Taşınıyor",
     serverProblem: "Bulut hesapları bu sunucu adresine bağlanamaz.",
     conflict: "Bu bulut hesabı başka bir yerde değişti. Yeniden seç.",
-    invalid: "Bazı ayarlar bulutta kullanılamadı. afk.projects.gg'de düzeltip yeniden dene.",
+    invalid: "Bazı ayarlar bulutta kullanılamadı. afk.projects.gg'de düzeltip tekrar dene.",
     doneTitle: "{{name}} bulutta",
     doneRunning: "Bulutta başladı.",
     doneStopped: "Bulut hesabı hazır. Başlatınca çalışır.",

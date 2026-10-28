@@ -9,6 +9,9 @@ import { tr } from "./tr";
  */
 const FORMAL = /lütfen|deneyin|[ae]bilirsiniz/;
 
+/** One wording for trying again, in buttons and sentences alike (QA-COPY O5): "tekrar dene". */
+const RETRY = /(?<![\p{L}])yeniden dene(?![\p{L}])/u;
+
 /** Every string of the Turkish texts (feature modules included) with its key. */
 function* strings(value: unknown, key = ""): Generator<[string, string]> {
   if (typeof value === "string") {
@@ -29,6 +32,13 @@ describe("Turkish strings", () => {
       .filter(([, text]) => FORMAL.test(text.toLocaleLowerCase("tr")))
       .map(([key, text]) => `${key}: ${text}`);
     expect(formal).toEqual([]);
+  });
+
+  it('say "tekrar dene" to try again', () => {
+    const other = [...strings(tr)]
+      .filter(([, text]) => RETRY.test(text.toLocaleLowerCase("tr")))
+      .map(([key, text]) => `${key}: ${text}`);
+    expect(other).toEqual([]);
   });
 });
 
