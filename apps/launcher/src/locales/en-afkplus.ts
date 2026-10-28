@@ -679,7 +679,7 @@ export const enAfkPlus = {
     },
     intro: "Introduction",
     introHelp: "How it introduces itself in its first message.",
-    introPlaceholder: "Ahmet's AFK+ assistant",
+    introPlaceholder: "KaraKartal's AFK+ assistant",
     status: "Away message",
     statusText: "Your own message",
     statusPresets: {

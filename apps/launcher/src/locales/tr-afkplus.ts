@@ -723,7 +723,7 @@ export const trAfkPlus = {
     },
     intro: "Tanıtım",
     introHelp: "İlk mesajında kendini böyle tanıtır.",
-    introPlaceholder: "Ahmet'in AFK+ asistanı",
+    introPlaceholder: "KaraKartal'ın AFK+ asistanı",
     // Under "Diğer mesajlara uzakta olduğunu söylesin": the end of the away line ("Şu an AFK'yım: …").
     status: "Uzaktayken ne desin",
     statusText: "Kendi mesajın",
