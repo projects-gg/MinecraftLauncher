@@ -5,6 +5,7 @@ import type { SignalState } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { formatDuration, uiLocale } from "@/lib/format";
 import type { CloudAccount, CloudOverview } from "./api";
+import { categoryText, stopHint } from "./moderation";
 
 export type CloudTone = "ok" | "muted" | "warn" | "error";
 
@@ -97,6 +98,16 @@ export function cloudStatus(
   if (hold) {
     switch (hold.kind) {
       case "suspended":
+        // A moderation stop says its category (README "Moderation player API"), never who; its
+        // hint says when it opens and where the appeal stands (the card's button offers it).
+        if (hold.case) {
+          return still(
+            "idle",
+            t("afkMod.stateLine", { kind: categoryText(hold.category, t) }),
+            "error",
+            stopHint(account, t, lang),
+          );
+        }
         return still("idle", t("cloudAfk.state.suspended"), "error");
       case "restricted":
         return still("idle", t("cloudAfk.state.restricted"), "error");

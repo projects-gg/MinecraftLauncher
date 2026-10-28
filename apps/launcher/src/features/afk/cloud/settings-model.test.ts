@@ -61,6 +61,7 @@ function view(): CloudEditData {
     plusUntil: null,
     ai: null,
     features: null,
+    moderation: null,
   };
   return {
     account,

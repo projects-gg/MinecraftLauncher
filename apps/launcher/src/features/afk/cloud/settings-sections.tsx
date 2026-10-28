@@ -31,6 +31,8 @@ import {
   WideRow,
 } from "../settings/controls";
 import type { CloudEditData } from "./api";
+import { pausedRows, refusedCategory, refusedText } from "./moderation";
+import { PausedLine } from "./moderation-bits";
 import { slotKey } from "./movement/model";
 import { hasPlaceholder, insertToken } from "./placeholders";
 import { ReplyTools } from "./reply-tools";
@@ -64,7 +66,7 @@ export interface PartProps {
 
 /** The words of an issue, with Studio's numbers where it names them. */
 export function useIssueText(view: CloudEditData, draft?: Draft) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (issue: Issue | undefined): string | null => {
     if (!issue) return null;
     // A stop for a wrong password, marked on the login line (SHEET-UX). A line kept in the cloud
@@ -82,6 +84,9 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
         words?.kind === "sealed" ? "afkPanel.wrongPasswordSealed" : "afkPanel.wrongPassword",
       );
     }
+    // README "Saving": a content refusal names its category ("content:advertising").
+    const refused = refusedCategory(issue.problem);
+    if (refused !== null) return refusedText(refused, t, i18n.language);
     if (issue.problem.startsWith("placeholder_")) {
       const rule =
         issue.place === "rules" && issue.index !== null
@@ -493,6 +498,8 @@ function CommandRow({
   const { t } = useTranslation();
   const issueText = useIssueText(part.view, part.draft);
   const at = (field: string) => issueText(issueAt(part.issues, "commands", index, field));
+  // A moderation case paused it (the view's `paused`): "Durduruldu" until it is edited and saved.
+  const paused = pausedRows(part.view.account).get(command.id) ?? null;
   const minInterval = part.view.limits.minIntervalSec ?? 60;
   const triggers: SelectOption<Trigger>[] = TRIGGERS.map((value) => ({
     value,
@@ -626,6 +633,7 @@ function CommandRow({
           error={at("text")}
           autoFocus={focus}
         />
+        {paused ? <PausedLine category={paused} account={part.view.account} /> : null}
       </div>
     </li>
   );
@@ -705,6 +713,7 @@ function RuleRow({
   const { t } = useTranslation();
   const issueText = useIssueText(part.view, part.draft);
   const at = (field: string) => issueText(issueAt(part.issues, "rules", index, field));
+  const paused = pausedRows(part.view.account).get(rule.id) ?? null;
   const ids = useId();
   const replyRef = useRef<HTMLInputElement>(null);
   const reply = rule.reply;
@@ -841,6 +850,7 @@ function RuleRow({
                 {t("cloudAfkFeat.settings.silenced")}
               </p>
             ) : null}
+            {paused ? <PausedLine category={paused} account={part.view.account} /> : null}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/6 pt-3 pb-3">

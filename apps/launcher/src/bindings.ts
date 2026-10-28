@@ -2416,6 +2416,11 @@ export type CloudAccount_Deserialize = {
 	 *  them: then none shows.
 	 */
 	features?: CloudAccountFeatures | null,
+	/**
+	 *  A moderation step in force (phase B); None in observe mode, when nothing applies, and from
+	 *  older services.
+	 */
+	moderation?: CloudModeration | null,
 };
 
 /**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
@@ -2457,6 +2462,11 @@ export type CloudAccount_Serialize = {
 	 *  them: then none shows.
 	 */
 	features: CloudAccountFeatures | null,
+	/**
+	 *  A moderation step in force (phase B); None in observe mode, when nothing applies, and from
+	 *  older services.
+	 */
+	moderation: CloudModeration | null,
 };
 
 /**  Why an address cannot be used. */
@@ -2541,6 +2551,8 @@ export type CloudCommandView = {
 	text: string | null,
 	preview: string | null,
 	fp: string | null,
+	/**  Paused by a moderation case (`restrict_rows`): it does not run until edited and saved. */
+	paused: CloudModPaused | null,
 };
 
 /**  `Account.config`: the account's commands and auto-replies, secrets as their preview only. */
@@ -2762,11 +2774,17 @@ export type CloudHold = CloudHold_Serialize | CloudHold_Deserialize;
  *  launcher does not know yet is `Other` (shown like a plain stop).
  */
 export type CloudHold_Deserialize = 
-/**  Staff stopped it; `reason` is a reason key. */
+/**
+ *  Staff stopped it; `reason` is a reason key. A moderation suspension names its case and
+ *  category (only that case lifts it; `auto`: the system took the step).
+ */
 ({ suspended: {
 	kind: "suspended",
 	until: number | null,
 	reason: string,
+	case: string | null,
+	category: string | null,
+	auto?: boolean,
 } }) & { cause?: never; expired?: never; no_host?: never; other?: never; paused?: never; restricted?: never; server_blocked?: never } | 
 /**  The player is banned from Cloud AFK. */
 ({ restricted: {
@@ -2808,20 +2826,23 @@ export type CloudHold_Deserialize =
  *  launcher does not know yet is `Other` (shown like a plain stop).
  */
 export type CloudHold_Serialize = 
-/**  Staff stopped it; `reason` is a reason key. */
-({ kind: "suspended"; until: number | null; reason: string }) & { at?: never; cause?: never; mode?: never; row?: never; since?: never } | 
+/**
+ *  Staff stopped it; `reason` is a reason key. A moderation suspension names its case and
+ *  category (only that case lifts it; `auto`: the system took the step).
+ */
+({ kind: "suspended"; until: number | null; reason: string; case: string | null; category: string | null; auto: boolean }) & { at?: never; cause?: never; mode?: never; row?: never; since?: never } | 
 /**  The player is banned from Cloud AFK. */
-({ kind: "restricted"; until: number | null }) & { at?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never } | ({ kind: "expired"; at: number }) & { cause?: never; mode?: never; reason?: never; row?: never; since?: never; until?: never } | 
+({ kind: "restricted"; until: number | null }) & { at?: never; auto?: never; case?: never; category?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never } | ({ kind: "expired"; at: number }) & { auto?: never; case?: never; category?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never; until?: never } | 
 /**  The service is not on (`paused` or `off`). */
-({ kind: "paused"; mode: string }) & { at?: never; cause?: never; reason?: never; row?: never; since?: never; until?: never } | 
+({ kind: "paused"; mode: string }) & { at?: never; auto?: never; case?: never; category?: never; cause?: never; reason?: never; row?: never; since?: never; until?: never } | 
 /**  No machine yet, or its machine is disabled. */
-({ kind: "no_host"; since: number }) & { at?: never; cause?: never; mode?: never; reason?: never; row?: never; until?: never } | ({ kind: "server_blocked"; reason: CloudLocalized | null }) & { at?: never; cause?: never; mode?: never; row?: never; since?: never; until?: never } | 
+({ kind: "no_host"; since: number }) & { at?: never; auto?: never; case?: never; category?: never; cause?: never; mode?: never; reason?: never; row?: never; until?: never } | ({ kind: "server_blocked"; reason: CloudLocalized | null }) & { at?: never; auto?: never; case?: never; category?: never; cause?: never; mode?: never; row?: never; since?: never; until?: never } | 
 /**
  *  The client stopped for good: `cause` is a stop cause of the contract (pl-afk's names plus
  *  the cloud's own, [`CLOUD_CAUSES`]), kept as text so a newer one still reads. `row`: with
  *  `secretUnreadable` and `invalidCommand`, the row to write again, when the machine named it.
  */
-({ kind: "cause"; cause: string; at: number; row: string | null }) & { mode?: never; reason?: never; since?: never; until?: never } | ({ kind: "other" }) & { at?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never; until?: never };
+({ kind: "cause"; cause: string; at: number; row: string | null }) & { auto?: never; case?: never; category?: never; mode?: never; reason?: never; since?: never; until?: never } | ({ kind: "other" }) & { at?: never; auto?: never; case?: never; category?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never; until?: never };
 
 export type CloudInvDurability = {
 	left?: number,
@@ -3163,6 +3184,35 @@ export type CloudLogRange =
 /**  "Son 3 gün" (the log keeps three days). */
 "days3";
 
+/**  Whether, and until when, the player may appeal the step in force. */
+export type CloudModAppeal = {
+	can: boolean,
+	until: number | null,
+	/**  `none`, `open`, `upheld`, `overturned`. */
+	state: string,
+};
+
+/**  A row a moderation case paused (the config view's `paused`). */
+export type CloudModPaused = {
+	case: string,
+	category: string,
+};
+
+/**
+ *  The moderation step in force on an account (README "Moderation player API",
+ *  `AccountModeration`): one sentence on its card and "İtiraz et" while `appeal.can`.
+ */
+export type CloudModeration = {
+	case: string,
+	/**  `warn`, `restrict_rows`, `pause_ai`, `suspend` (kept as text). */
+	step: string,
+	category: string,
+	at: number,
+	/**  A suspension's end; None: none set (yet). */
+	until: number | null,
+	appeal: CloudModAppeal,
+};
+
 /**  The desktop account in the cloud's form. */
 export type CloudMovePlan = {
 	name: string,
@@ -3363,7 +3413,12 @@ export type CloudPage =
  *  The same tab with the extra credits' packs open ("Kontör al"; cloud-afk README "AFK+ extra
  *  credits"): buying happens on the site.
  */
-"plusTopup";
+"plusTopup" | 
+/**
+ *  The appeal of a moderation step on `account` (cloud-afk README "Appeals": the form is the
+ *  site's alone).
+ */
+"appeal";
 
 export type CloudPageView = CloudPageView_Serialize | CloudPageView_Deserialize;
 
@@ -3466,6 +3521,8 @@ export type CloudRuleView = {
 	ownerOnly: boolean,
 	cooldown: number,
 	reply: CloudPayloadView,
+	/**  Paused by a moderation case (`restrict_rows`). */
+	paused: CloudModPaused | null,
 };
 
 /**  How a save ended. Problems are worded by the UI where they are. */
