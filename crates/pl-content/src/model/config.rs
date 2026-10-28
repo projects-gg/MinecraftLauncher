@@ -477,7 +477,7 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 }
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
-/// `skins` and `worlds`, which stay off until Studio turns them on.
+/// `skins`, `worlds` and `fastPacks`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -509,6 +509,11 @@ pub struct Features {
     /// service's world sessions and the overlay mod that hosts are live; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub worlds: bool,
+    /// "Hızlı doku paketi yükleme" (FASTPACK): launchers show the setting (on by default) and
+    /// install the official pack's fast-pack items while it is on (`crate::items::FAST_PACK_ITEM`).
+    /// Off by default until the measurement passes and the owner turns it on; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub fast_packs: bool,
 }
 
 impl Default for Features {
@@ -523,6 +528,7 @@ impl Default for Features {
             chat: false,
             skins: false,
             worlds: false,
+            fast_packs: false,
         }
     }
 }
@@ -670,6 +676,16 @@ mod tests {
         assert!(skins.features.skins && !skins.features.chat);
         assert_eq!(
             serde_json::to_value(&skins).unwrap()["features"]["skins"],
+            serde_json::Value::Bool(true)
+        );
+        // "Hızlı doku paketi yükleme" the same way (FASTPACK), outside the friends feature.
+        assert!(!skins.features.fast_packs);
+        assert!(written["features"].get("fastPacks").is_none());
+        let fast: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"fastPacks": true}}"#).unwrap();
+        assert!(fast.features.fast_packs && !fast.features.friends && fast.features.afk);
+        assert_eq!(
+            serde_json::to_value(&fast).unwrap()["features"]["fastPacks"],
             serde_json::Value::Bool(true)
         );
     }

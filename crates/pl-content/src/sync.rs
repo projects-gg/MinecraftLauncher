@@ -2940,6 +2940,76 @@ mod tests {
         assert!(!status(&picked, OVERLAY_ITEM).effectively_enabled);
     }
 
+    #[tokio::test]
+    async fn fast_pack_items_follow_their_switch_and_step_aside_for_the_players_mods() {
+        use crate::items::{FAST_PACK_ITEM, FastPackTaken};
+
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        // Studio lists it default-off, for the clients without the setting.
+        let m = item_manifest("mods/sodium.jar", &[(FAST_PACK_ITEM, false)]);
+        let on = SyncPolicy {
+            items: LauncherItems {
+                fast_packs: true,
+                ..LauncherItems::default()
+            },
+            ..SyncPolicy::default()
+        };
+        let taken = SyncPolicy {
+            items: LauncherItems {
+                fast_packs: true,
+                fast_packs_taken: FastPackTaken {
+                    loader: true,
+                    cache: false,
+                },
+                ..LauncherItems::default()
+            },
+            ..SyncPolicy::default()
+        };
+        let jar = format!("mods/{FAST_PACK_ITEM}.jar");
+        // Without the setting (or the content flag) it is never downloaded.
+        let first = plan_sync(&m, game, None, None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert!(!first.downloads.iter().any(|d| d.path == jar));
+        let state = installed(
+            game,
+            &first,
+            &[
+                ("mods/fabric-api.jar", b"fabric"),
+                ("mods/sodium.jar", b"sodium"),
+                ("config/sodium.json", b"{}"),
+            ],
+        );
+
+        // On: installed by the next sync, never new, never a choice.
+        let plan = plan_sync(&m, game, Some(&state), None, &on).await.unwrap();
+        assert_eq!(
+            paths(&plan.downloads),
+            [(jar.as_str(), DownloadAction::Add)]
+        );
+        let fast = status(&plan, FAST_PACK_ITEM);
+        assert!(fast.effectively_enabled && !fast.is_new && !fast.selected);
+        assert!(!plan.next_state.items.contains_key(FAST_PACK_ITEM));
+        let state = installed(game, &plan, &[(jar.as_str(), FAST_PACK_ITEM.as_bytes())]);
+        assert_eq!(state.installed_item(FAST_PACK_ITEM), Some(jar.as_str()));
+
+        // The player brought a mod for the same work: the pack's copy goes, nothing is adopted.
+        let aside = plan_sync(&m, game, Some(&state), None, &taken)
+            .await
+            .unwrap();
+        assert_eq!(deleted(&aside), [jar.as_str()]);
+        assert!(aside.adopted.is_empty());
+        assert!(aside.next_state.installed_item(FAST_PACK_ITEM).is_none());
+
+        // Switched off (or the flag turned off): the same.
+        let off = plan_sync(&m, game, Some(&state), None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert_eq!(deleted(&off), [jar.as_str()]);
+        assert!(off.adopted.is_empty());
+    }
+
     /// The pack for one Minecraft version: sodium and its library, plus the overlay's jar built for
     /// that version when there is one (Studio lists each version's own file under the same id).
     fn version_manifest(minecraft: &str, overlay_jar: Option<&str>) -> PackManifest {
@@ -3080,6 +3150,7 @@ mod tests {
             items: LauncherItems {
                 overlay: true,
                 overlay_bundled: true,
+                ..LauncherItems::default()
             },
             ..SyncPolicy::default()
         };
@@ -3110,6 +3181,7 @@ mod tests {
             items: LauncherItems {
                 overlay: false,
                 overlay_bundled: true,
+                ..LauncherItems::default()
             },
             ..SyncPolicy::default()
         };

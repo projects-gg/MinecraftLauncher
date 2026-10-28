@@ -28,6 +28,7 @@ import { helpsWithLaunchError } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { useOfficialOffer } from "@/features/library/official";
+import { useFastPackSync } from "@/features/fastpack/use-fast-pack-sync";
 import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
 import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
 import { api, type InstanceSummary } from "@/lib/api";
@@ -662,6 +663,8 @@ export function CommandBar() {
   // The instance OYNA plays is the one the launcher prepares in the background; its hint gives
   // way to the launch's own progress.
   usePrepareSync(selected, !instancesLoading);
+  // "Hızlı doku paketi yükleme" reaches the pack syncs that run while the page rests.
+  useFastPackSync();
   const prepareHint = usePrepare((s) => s.hint);
   const hint = !busy && prepareHint?.instanceId === selected?.id ? prepareHint : null;
 

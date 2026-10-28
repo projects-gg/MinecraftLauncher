@@ -170,12 +170,14 @@ fn debug_jars_dir() -> Option<PathBuf> {
     }
 }
 
-/// The launcher settings that own pack items, for every pack sync: with jars of its own the
-/// launcher never installs the pack's overlay item and keeps the pack's Fabric API for its jar.
+/// The overlay's part of the launcher settings that own pack items (every pack sync takes them
+/// through `crate::fastpack::pack_items`): with jars of its own the launcher never installs the
+/// pack's overlay item and keeps the pack's Fabric API for its jar.
 pub fn pack_items() -> LauncherItems {
     LauncherItems {
         overlay: ENABLED.load(Ordering::Relaxed),
         overlay_bundled: bundle().is_some(),
+        ..LauncherItems::default()
     }
 }
 

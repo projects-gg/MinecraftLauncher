@@ -56,8 +56,10 @@ pub use feed::{
 pub use glob::glob_match;
 pub use images::{LAUNCHER_IMAGE_HOSTS, is_launcher_image_url};
 pub use items::{
-    AdoptedChange, FABRIC_API_PROJECT, ItemResolution, ItemStatus, LauncherItems, ManualChange,
-    OVERLAY_ITEM, PackSelection, is_fabric_api, resolve_items, resolve_items_with,
+    AdoptedChange, FABRIC_API_PROJECT, FAST_PACK_CACHE_ITEM, FAST_PACK_CACHE_RIVALS,
+    FAST_PACK_ITEM, FAST_PACK_RIVALS, FastPackTaken, ItemResolution, ItemStatus, LauncherItems,
+    ManualChange, OVERLAY_ITEM, PackSelection, fast_pack_taken, is_fabric_api, resolve_items,
+    resolve_items_with,
 };
 pub use model::*;
 pub use modsets::{

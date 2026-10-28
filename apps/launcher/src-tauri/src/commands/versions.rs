@@ -1060,7 +1060,8 @@ async fn sync_set(
     cancel: &CancellationToken,
 ) -> CmdResult<()> {
     let previous = PackState::load(game_dir).await.map_err(pack_error)?;
-    let plan = plan_sync(manifest, game_dir, previous.as_ref(), None, &quick())
+    let policy = quick(game_dir, previous.as_ref()).await;
+    let plan = plan_sync(manifest, game_dir, previous.as_ref(), None, &policy)
         .await
         .map_err(pack_error)?;
     if !plan.is_noop() {
