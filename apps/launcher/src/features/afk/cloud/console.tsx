@@ -5,7 +5,10 @@
 //
 // With the cloud features (CAFK-FEAT) and only while the service offers them: the console's kinds
 // (colours, the chips, "Adın geçenler", search, "İndir") and the status strip; the Envanter tab
-// beside Konsol, on a solid panel (inside glass Chromium resamples the inventory's pixels).
+// beside Konsol, on a solid panel (inside glass Chromium resamples the inventory's pixels). With
+// console looks (CONSOLE-COLOR, Studio's switch) lines show in the game's colours: a part's hover
+// as the game's tooltip, a part's command or link waiting in the command line's place for the
+// player's word, a suggestion filling the command line, a copy copying.
 import { ArrowDown, ArrowUp, Key, PaperPlaneRight, X } from "@phosphor-icons/react";
 import {
   Button,
@@ -21,9 +24,17 @@ import {
   TabPanel,
   Tabs,
   Tooltip,
+  toast,
   useInteractionMotion,
   useMotionPrefs,
 } from "@pl/ui";
+import {
+  CONSOLE_TEXTS,
+  ConsoleActionCard,
+  type ConsoleClick,
+  ConsoleDirection,
+  ConsoleText,
+} from "@pl/ui/console";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
@@ -36,8 +47,9 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { CloudBars } from "@/bindings";
+import type { CloudBars, CloudInvItem } from "@/bindings";
 import { uiLocale } from "@/lib/format";
+import { openWebLink } from "@/lib/links";
 import { useWindowAway } from "@/lib/window-away";
 import { AfkHead } from "../afk-head";
 import { isFriendly } from "../errors";
@@ -53,6 +65,7 @@ import {
 import { ConsoleStrip } from "./console-strip";
 import { ConsoleTools } from "./console-tools";
 import { InventoryPanel, useInventoryArt } from "./inventory/inventory-panel";
+import { toInvItem } from "./inventory/model";
 import { MovementPanel } from "./movement/movement-panel";
 import { movementShown } from "./movement/use-cloud-movement";
 import { useAccountReach, useMachineAway } from "./reach";
@@ -71,6 +84,25 @@ const KEEP = 1000;
 const STICK_PX = 32;
 /** Lines typed per account this session, newest last: ↑ and ↓ walk through them. */
 const histories = new Map<string, string[]>();
+
+/** A hover's item as the inventory shows it (the socket's item, checked by pl_cloud_afk). */
+const hoverItem = (raw: unknown) => toInvItem(raw as CloudInvItem);
+
+/** A line's time as the console shows it. */
+function clockOf(at: number): string {
+  return new Date(at * 1000).toLocaleTimeString(uiLocale(), {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+/** A clicked command or link waiting for the player's word, with whose line it came from. */
+interface Pending {
+  click: ConsoleClick;
+  who: string | null;
+  clock: string;
+}
 
 function Banner({
   status,
@@ -126,29 +158,57 @@ function Banner({
   );
 }
 
-/** One console line: its time, its words in its kind's colour, a private line's name standing out. */
+/**
+ * One console line: its time, its words in its kind's colour, a private line's name standing out;
+ * with console looks its words in the game's colours (a part without one in the kind's colour).
+ */
 function LineText({
   line,
   clock,
   onInventory,
+  looks,
+  lang,
+  onPart,
 }: {
   line: Line;
   clock: string;
   onInventory?: () => void;
+  looks: boolean;
+  lang: "tr" | "en";
+  /** A part's click; absent while nothing can be sent. */
+  onPart?: (line: Line, click: ConsoleClick) => void;
 }) {
   const { t } = useTranslation();
-  const parts = splitAtName(line);
+  // Your own reply names the player it went to: never their name standing out as its author.
+  const dir = line.c === "pm" ? line.dir : null;
+  const parts = dir === "out" ? null : splitAtName(line);
+  const onClick = useCallback((click: ConsoleClick) => onPart?.(line, click), [line, onPart]);
+  const plain = parts ? (
+    <>
+      {parts[0]}
+      <span className="text-gold-300">{parts[1]}</span>
+      {parts[2]}
+    </>
+  ) : (
+    line.text
+  );
   return (
     <p className={cn("break-words", kindTone(line))}>
       <span className="mr-2 text-ash-400 tabular-nums select-none">{clock}</span>
-      {parts ? (
-        <>
-          {parts[0]}
-          <span className="text-gold-300">{parts[1]}</span>
-          {parts[2]}
-        </>
+      <ConsoleDirection dir={dir} lang={lang} />
+      {looks && line.st ? (
+        <ConsoleText
+          text={line.text}
+          st={line.st}
+          ev={line.ev}
+          lang={lang}
+          onClick={onPart ? onClick : undefined}
+          itemOf={hoverItem}
+        >
+          {plain}
+        </ConsoleText>
       ) : (
-        line.text
+        plain
       )}
       {line.goto === "inventory" && onInventory ? (
         <button
@@ -179,7 +239,8 @@ export function CloudConsole({
   onOpenSettings: (id: string) => void;
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language === "en" ? "en" : "tr";
   const animate = useInteractionMotion();
   const { reduce } = useMotionPrefs();
   const away = useWindowAway();
@@ -190,6 +251,7 @@ export function CloudConsole({
   const id = account?.id;
   const host = account?.host ?? null;
   const kinds = Boolean(account?.features?.consoleKinds);
+  const looks = kinds && Boolean(account?.features?.consoleLooks);
   const [inventoryGone, setInventoryGone] = useState(false);
   const [movementGone, setMovementGone] = useState(false);
   const inventory =
@@ -213,6 +275,8 @@ export function CloudConsole({
   const [filter, setFilter] = useState<KindFilter>("all");
   const [query, setQuery] = useState("");
   const [bars, setBars] = useState<CloudBars | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const draft = useRef("");
   const listRef = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true);
@@ -237,6 +301,7 @@ export function CloudConsole({
     setFilter("all");
     setQuery("");
     setBars(null);
+    setPending(null);
     setInventoryGone(false);
     setMovementGone(false);
     atEnd.current = true;
@@ -374,8 +439,8 @@ export function CloudConsole({
   const canType = running && !stale;
   const sensitive = looksSensitive(text);
 
-  const send = async () => {
-    const line = text.trim();
+  /** A typed line, or a clicked command the player said yes to: the same checks, the same way. */
+  const deliver = async (line: string, typed: boolean) => {
     if (!line || !account || !canType || sending) return;
     // The settings' rule and words (pl_cloud_afk::check_text): said here, nothing is sent.
     const problem = textProblem(line);
@@ -386,22 +451,65 @@ export function CloudConsole({
     }
     setSending(true);
     setSendError(null);
-    const list = histories.get(account.id) ?? [];
-    if (list.at(-1) !== line) list.push(line);
-    if (list.length > 50) list.splice(0, list.length - 50);
-    histories.set(account.id, list);
-    setRecall(null);
-    setText("");
+    if (typed) {
+      const list = histories.get(account.id) ?? [];
+      if (list.at(-1) !== line) list.push(line);
+      if (list.length > 50) list.splice(0, list.length - 50);
+      histories.set(account.id, list);
+      setRecall(null);
+      setText("");
+    }
     atEnd.current = true;
     try {
       await cloudApi.send(account.id, line);
     } catch (error) {
       setSendError(isFriendly(error) ? error.message : t("cloudAfk.console.sendFailed"));
       // Nothing typed is lost: the line comes back unless a new one was started.
-      setText((current) => current || line);
+      if (typed) setText((current) => current || line);
     } finally {
       setSending(false);
     }
+  };
+  const send = () => deliver(text.trim(), true);
+
+  // A part's click: a command or a link waits for the player's word, a suggestion fills the
+  // command line (nothing is sent), a copy copies. The AFK+ agent never sees these.
+  const onPart = useCallback(
+    (line: Line, click: ConsoleClick) => {
+      switch (click.a) {
+        case "run_command":
+        case "open_url":
+          setPending({
+            click,
+            who: line.c === "chat" || line.c === "pm" ? (line.who ?? null) : null,
+            clock: clockOf(line.at),
+          });
+          return;
+        case "suggest_command":
+          setText(click.v);
+          setSendError(null);
+          setRecall(null);
+          requestAnimationFrame(() => inputRef.current?.focus());
+          return;
+        case "copy_to_clipboard":
+          navigator.clipboard.writeText(click.v).then(
+            () => toast(CONSOLE_TEXTS[lang].copied),
+            () => undefined,
+          );
+      }
+    },
+    [lang],
+  );
+  const closePending = () => {
+    setPending(null);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+  const confirmPending = () => {
+    if (!pending) return;
+    const { click } = pending;
+    closePending();
+    if (click.a === "run_command") void deliver(click.v, false);
+    else if (click.a === "open_url") openWebLink(click.v);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -425,13 +533,6 @@ export function CloudConsole({
       }
     }
   };
-
-  const clock = (at: number) =>
-    new Date(at * 1000).toLocaleTimeString(uiLocale(), {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
 
   const consoleBody = account ? (
     <>
@@ -481,8 +582,11 @@ export function CloudConsole({
                 // biome-ignore lint/suspicious/noArrayIndexKey: lines arrive in order and are never edited
                 key={`${line.at}-${index}`}
                 line={line}
-                clock={clock(line.at)}
+                clock={clockOf(line.at)}
                 onInventory={inventory ? () => setTab("inventory") : undefined}
+                looks={looks}
+                lang={lang}
+                onPart={canType ? onPart : undefined}
               />
             ))
           ) : (
@@ -529,8 +633,21 @@ export function CloudConsole({
           ) : null}
         </AnimatePresence>
       </div>
+      {pending ? (
+        <div className="border-t border-white/8 p-4">
+          <ConsoleActionCard
+            click={pending.click}
+            lang={lang}
+            who={pending.who}
+            clock={pending.clock}
+            busy={sending}
+            onConfirm={confirmPending}
+            onCancel={closePending}
+          />
+        </div>
+      ) : null}
       <form
-        className="flex flex-col gap-2 border-t border-white/8 p-4"
+        className={cn("flex flex-col gap-2 border-t border-white/8 p-4", pending && "hidden")}
         onSubmit={(event) => {
           event.preventDefault();
           void send();
@@ -540,6 +657,7 @@ export function CloudConsole({
           {/* A password command turns secret as it is typed (secret.tsx: the AFK surfaces' one
               look for secret lines). */}
           <SecretField
+            ref={inputRef}
             aria-label={t("cloudAfk.console.input")}
             placeholder={
               canType
