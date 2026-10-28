@@ -6,8 +6,12 @@ import {
   boughtInUse,
   boughtLeft,
   boughtReplies,
+  CURRENCY_MAX,
   canSpend,
   configChanges,
+  currencyEditProblem,
+  currencyFieldState,
+  currencyProblem,
   editDraft,
   giftReplies,
   limitProblems,
@@ -16,9 +20,12 @@ import {
   personaTextProblem,
   prefixProblem,
   readTime,
+  type SettingsPart,
   settingsPart,
   tradeNoteKey,
   windowProblems,
+  withCurrency,
+  withSettings,
 } from "./model";
 import type { PlusAi, PlusConfig, PlusOrder, PlusQuota } from "./types";
 
@@ -54,7 +61,7 @@ function config(parts: Partial<PlusConfig> = {}): PlusConfig {
       approvalTimeoutMin: 10,
     },
     discovery: { scanChat: true, proactivePm: true, ads: false, adTemplate: "buy-basic" },
-    trade: { returnRow: null },
+    trade: { returnRow: null, currency: null },
     summaryAt: "21:00",
     blocked: [],
     schedule: { on: false, windows: [] },
@@ -235,6 +242,82 @@ describe("the Ayarlar draft", () => {
       config({ who: { mode: "friends", friends: ["Ece_", "Mert", "Baris_TR", "kaan_07"] } }),
     );
     expect(applyDraft(latest, draft).who.friends).toEqual(["Ece_", "Baris_TR", "kaan_07"]);
+  });
+});
+
+describe("the money's name (Para birimi)", () => {
+  it("is checked as the service checks it", () => {
+    for (const name of ["TL", "coin", "ripple", "Altın Para", "₺", "$", "Gold.Coin", "Şeker_Ç"]) {
+      expect(currencyProblem(name), name).toBeNull();
+    }
+    // Spaces are cleaned away, and an empty field is no name.
+    expect(currencyProblem("  Altın   Para ")).toBeNull();
+    expect(currencyProblem("   ")).toBeNull();
+    // A digit is a number to the reply rule; a name needs a letter or a sign.
+    for (const name of ["TL2", "100 coin", "-", "...", "TL!", "Аltın", "&aCoin"]) {
+      expect(currencyProblem(name), name).toBe("form");
+    }
+    expect(currencyProblem("x".repeat(CURRENCY_MAX))).toBeNull();
+    expect(currencyProblem("x".repeat(CURRENCY_MAX + 1))).toBe("length");
+  });
+
+  it("shows only while Studio's switch is on, a profile's own name read-only", () => {
+    const money = (label: string | null, fixed: boolean) => ({
+      money: {
+        label: label === null ? null : { tr: label, en: label },
+        fixed,
+        maxDeal: 10_000_000,
+        currency: "smp",
+      },
+    });
+    const features = { orders: true, audit: true, customItems: true, itemPay: false };
+    const on = { features: { ...features, currency: true } };
+    const off = { features: { ...features, currency: false } };
+    expect(currencyFieldState(money(null, false), off, "tr")).toEqual({ kind: "hidden" });
+    // An older service sends neither the switch nor `fixed`: no field either.
+    const older = JSON.parse('{"features": {"orders": true}}');
+    expect(currencyFieldState(money("ripple", false), older, "tr")).toEqual({ kind: "hidden" });
+    // Projects SMP names no money: the player's own field, named or not.
+    expect(currencyFieldState(money(null, false), on, "tr")).toEqual({ kind: "own" });
+    expect(currencyFieldState(money("TL", false), on, "tr")).toEqual({ kind: "own" });
+    // Survival's profile names it (ripple): read-only.
+    expect(currencyFieldState(money("ripple", true), on, "en")).toEqual({
+      kind: "fixed",
+      label: "ripple",
+    });
+  });
+
+  it("goes back as it came: left out, cleared or typed", () => {
+    // A document without a name, as the service sends it (none stored, or a service without it).
+    const absent: PlusConfig["trade"] = JSON.parse('{"returnRow": null}');
+    const saved = settingsPart(config({ trade: absent }));
+    const typing = (base: SettingsPart, text: string) => (shown: SettingsPart) => ({
+      ...shown,
+      trade: withCurrency(shown.trade, base.trade, text),
+    });
+    // Typed and emptied again: no edit is left, so no save writes the key.
+    const typed = editDraft(saved, null, typing(saved, "TL"));
+    expect(typed?.value.trade.currency).toBe("TL");
+    expect(editDraft(saved, typed, typing(saved, "  "))).toBeNull();
+    // Another edit sends the trade settings without it: the stored name stays.
+    const other = editDraft(saved, null, (shown) => ({ ...shown, summaryAt: "22:00" }));
+    const sent = withSettings(config({ trade: absent }), applyDraft(saved, other));
+    expect(JSON.parse(JSON.stringify(sent)).trade).toEqual({ returnRow: null });
+    // A stored name emptied goes as null (the save clears it); a typed one goes as typed.
+    const named = settingsPart(config({ trade: { returnRow: null, currency: "TL" } }));
+    const cleared = editDraft(named, null, typing(named, ""));
+    expect(cleared?.value.trade).toEqual({ returnRow: null, currency: null });
+    const renamed = editDraft(named, null, typing(named, "Altın Para"));
+    expect(renamed?.value.trade.currency).toBe("Altın Para");
+    // An untouched name takes the newest (the phone renamed it meanwhile).
+    const latest = settingsPart(config({ trade: { returnRow: null, currency: "coin" } }));
+    const lang = editDraft(named, null, (shown) => ({ ...shown, lang: "en" }));
+    expect(applyDraft(latest, lang).trade.currency).toBe("coin");
+    // Only a name the player typed is the panel's to refuse.
+    expect(currencyEditProblem(typing(named, "TL2")(named).trade, named.trade)).toBe("form");
+    const odd = { returnRow: null, currency: "TL2" };
+    expect(currencyEditProblem(odd, odd)).toBeNull();
+    expect(currencyEditProblem(absent, absent)).toBeNull();
   });
 });
 

@@ -6857,7 +6857,7 @@ export type PlusConfig_Deserialize = {
 	customItems?: PlusCustomItem_Deserialize[],
 	limits?: PlusLimits,
 	discovery?: PlusDiscovery,
-	trade?: PlusTradeSettings,
+	trade?: PlusTradeSettings_Deserialize,
 	/**  "HH:MM" Turkey time: the daily summary. */
 	summaryAt?: string,
 	/**  In-game names the bot never answers (at most 100). */
@@ -6900,7 +6900,7 @@ export type PlusConfig_Serialize = {
 	customItems: PlusCustomItem_Serialize[],
 	limits: PlusLimits,
 	discovery: PlusDiscovery,
-	trade: PlusTradeSettings,
+	trade: PlusTradeSettings_Serialize,
 	/**  "HH:MM" Turkey time: the daily summary. */
 	summaryAt: string,
 	/**  In-game names the bot never answers (at most 100). */
@@ -7661,12 +7661,20 @@ export type PlusRules = {
 	features?: PlusRulesFeatures,
 };
 
-/**  `rules.features`: the order switches (a missing one reads as on, the service refuses in words). */
+/**
+ *  `rules.features`: the order switches (a missing one reads as on, the service refuses in words)
+ *  and "Para birimi".
+ */
 export type PlusRulesFeatures = {
 	orders?: boolean,
 	audit?: boolean,
 	customItems?: boolean,
 	itemPay?: boolean,
+	/**
+	 *  "Para birimi" (`trade.currency`), off by default: a missing one (an older service) reads
+	 *  as off, so the field stays hidden.
+	 */
+	currency?: boolean,
 };
 
 /**  How a settings save (or "Bu hale dön") ended. Problems are worded where they are. */
@@ -7723,11 +7731,17 @@ export type PlusServer = {
 };
 
 /**
- *  The game mode's money: `label` the name to write after amounts ("Coin"); None: bare amounts and
- *  once "Oyundaki parayla".
+ *  The game mode's money: `label` the name to write after amounts ("Coin"), the profile's or else
+ *  the player's own (`trade.currency`, the same in both languages); None: bare amounts and once
+ *  "Oyundaki parayla".
  */
 export type PlusServerMoney = {
 	label?: CloudLocalized | null,
+	/**
+	 *  The name is the profile's (Projects Survival and SkyBlock: ripple): "Para birimi" shows it
+	 *  read-only. False from an older service.
+	 */
+	fixed?: boolean,
 	maxDeal?: number,
 	/**  The money's key (receipts carry it). */
 	currency?: string,
@@ -7808,9 +7822,28 @@ export type PlusTotals = {
 	earned?: number,
 };
 
-export type PlusTradeSettings = {
+export type PlusTradeSettings = PlusTradeSettings_Serialize | PlusTradeSettings_Deserialize;
+
+export type PlusTradeSettings_Deserialize = {
 	/**  A plain command row of the account's config to run after a trade, or None (stay at spawn). */
 	returnRow?: string | null,
+	/**
+	 *  "Para birimi" (28 Oct 2026): the money's name the player gave, `Some(None)` cleared (written
+	 *  as null), None not in the document (a write leaves the stored one, and an older service
+	 *  knows no such key). It goes back as it came.
+	 */
+	currency?: string | null,
+};
+
+export type PlusTradeSettings_Serialize = {
+	/**  A plain command row of the account's config to run after a trade, or None (stay at spawn). */
+	returnRow: string | null,
+	/**
+	 *  "Para birimi" (28 Oct 2026): the money's name the player gave, `Some(None)` cleared (written
+	 *  as null), None not in the document (a write leaves the stored one, and an older service
+	 *  knows no such key). It goes back as it came.
+	 */
+	currency?: string | null,
 };
 
 /**

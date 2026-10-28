@@ -217,8 +217,17 @@ export const mockPlusApi: PlusApi = {
   async save(_id, rev, next) {
     await delay(380);
     if (rev !== aiRev) return { kind: "conflict", settings: settings() };
+    // The money's name as the service keeps it: a write without it keeps the stored one, an
+    // emptied one is none.
+    const sent = "currency" in next.trade ? next.trade.currency : config.trade.currency;
+    const currency = sent?.trim().replace(/\s+/gu, " ") || null;
     // Orders and custom items have their own routes: the settings' save keeps the stored ones.
-    config = { ...next, orders: config.orders, customItems: config.customItems };
+    config = {
+      ...next,
+      trade: { ...next.trade, currency },
+      orders: config.orders,
+      customItems: config.customItems,
+    };
     aiRev += 1;
     emitAi();
     return { kind: "saved", settings: settings() };

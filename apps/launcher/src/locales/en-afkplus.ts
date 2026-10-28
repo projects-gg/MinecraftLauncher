@@ -788,6 +788,9 @@ export const enAfkPlus = {
     ads: "Post ads in chat",
     adsHelp: "Posts a ready-made ad every 30 minutes.",
     adTemplate: "Ad text",
+    currency: "Currency",
+    currencyHelp: "Your server's money name.",
+    currencyRefused: "This name can't be used.",
     returnRow: "After a trade",
     returnStay: "Stay at spawn",
     returnHelp:

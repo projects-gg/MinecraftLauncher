@@ -1,7 +1,8 @@
 // "Ayarlar": what the assistant may do ("İnce ayar": its authority, buying and selling, how deals are
 // paid, whom it deals with; afkplus-free.md §3), how it talks, when it works, what it may spend, how
-// it finds things, what it does after a trade, who it ignores, and the notices. The form is one draft (design.md G6-P): edits
-// wait across sections and the panel closing, the docked change bar saves or drops them, Ctrl+S saves.
+// it finds things, the server's money, what it does after a trade, who it ignores, and the notices.
+// The form is one draft (design.md G6-P): edits wait across sections and the panel closing, the
+// docked change bar saves or drops them, Ctrl+S saves.
 // Saving puts only the player's own edits on top of the latest settings, so a rule added meanwhile
 // or a change made on the site stays. A break, a blocked player, "Harcananı sıfırla" and the
 // notices take effect at once. Amounts read the players' shorthands and say the number in words.
@@ -29,6 +30,7 @@ import { Hint, inputClass, ToggleRow } from "../../settings/controls";
 import type { CloudAccount } from "../api";
 import { type CloudNotifyPrefs, type PlusPanel, plusApi } from "./api";
 import { DOCK_HEIGHT, PlusChangeDock } from "./change-dock";
+import { CurrencyField } from "./currency-field";
 import { AmountField, GroupTitle, IntField, QuietLink, TimeField } from "./fields";
 import { HistoryDialog } from "./history-dialog";
 import {
@@ -36,12 +38,15 @@ import {
   applyDraft,
   blockedNameProblem,
   canSpend,
+  currencyEditProblem,
+  currencyFieldState,
   editDraft,
   isTime,
   limitProblems,
   liveProblems,
   type PersonaTextProblem,
   PLUS_LIMITS,
+  type PlusConfig,
   type PlusLimits,
   type PlusWindow,
   PREFIX_DEFAULT,
@@ -54,6 +59,7 @@ import {
   sortedDays,
   WEEKDAYS,
   windowProblems,
+  withCurrency,
   withSettings,
 } from "./model";
 import { untilPhrase } from "./time";
@@ -1192,13 +1198,17 @@ function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; pa
 function TradeGroup({
   shown,
   set,
+  panel,
   account,
   submitted,
+  serverIssues,
 }: {
   shown: SettingsPart;
   set: Change;
+  panel: PlusPanel;
   account: CloudAccount;
   submitted: boolean;
+  serverIssues: ReadonlySet<string>;
 }) {
   const { t } = useTranslation();
   // A plain command row of the account to run after a trade (never a secret one).
@@ -1206,15 +1216,28 @@ function TradeGroup({
   const value = rows.some((row) => row.id === shown.trade.returnRow)
     ? (shown.trade.returnRow ?? "stay")
     : "stay";
+  // "Para birimi" while Studio's switch is on: the player's own name, or the profile's read-only.
+  const saved = panel.settings.config.trade;
+  const currency = currencyFieldState(panel.settings.server, panel.settings.rules, currentLang());
+  const currencyRefused =
+    currency.kind === "own" &&
+    (currencyEditProblem(shown.trade, saved) !== null || serverIssues.has("trade.currency"));
   return (
     <Group id="trade" title={t("afkPlus.settings.groups.trade")}>
+      <CurrencyField
+        state={currency}
+        value={shown.trade.currency ?? ""}
+        refused={currencyRefused}
+        onChange={(text) => set((s) => ({ ...s, trade: withCurrency(s.trade, saved, text) }))}
+      />
       <Labeled label={t("afkPlus.settings.returnRow")} help={t("afkPlus.settings.returnHelp")}>
         <Select
           label={t("afkPlus.settings.returnRow")}
           value={value}
-          onValueChange={(next) =>
-            set((s) => ({ ...s, trade: { returnRow: next === "stay" ? null : next } }))
-          }
+          onValueChange={(next) => {
+            const returnRow = next === "stay" ? null : next;
+            set((s) => ({ ...s, trade: { ...s.trade, returnRow } }));
+          }}
           options={[
             { value: "stay", label: t("afkPlus.settings.returnStay") },
             ...rows.map((row) => ({ value: row.id, label: row.text ?? row.id })),
@@ -1438,16 +1461,17 @@ function NotifyGroup() {
 // --- The section ---------------------------------------------------------------------------------------
 
 /** Every problem the launcher can see before sending, so "Kaydet" never sends what will be refused. */
-function hasProblems(shown: SettingsPart, maxDeal: number, blocked: readonly string[]): boolean {
+function hasProblems(shown: SettingsPart, maxDeal: number, saved: PlusConfig): boolean {
   const limits = limitProblems(shown.limits, maxDeal);
   return (
     Object.keys(limits).length > 0 ||
     personaTextProblem(shown.persona.intro, PLUS_LIMITS.introMax) !== null ||
-    prefixProblem(shown.persona.prefix.text, [...shown.who.friends, ...blocked]) !== null ||
+    prefixProblem(shown.persona.prefix.text, [...shown.who.friends, ...saved.blocked]) !== null ||
     (shown.persona.statusPreset === null &&
       personaTextProblem(shown.persona.status, PLUS_LIMITS.statusMax) !== null) ||
     (shown.schedule.on && shown.schedule.windows.some((w) => windowProblems(w).length > 0)) ||
-    !isTime(shown.summaryAt)
+    !isTime(shown.summaryAt) ||
+    currencyEditProblem(shown.trade, saved.trade) !== null
   );
 }
 
@@ -1487,7 +1511,7 @@ export function SettingsSection({
   const submit = async () => {
     if (!draft || saving) return;
     setSubmitted(true);
-    if (hasProblems(shown, maxDeal, panel.settings.config.blocked)) return;
+    if (hasProblems(shown, maxDeal, saved)) return;
     setSaving(true);
     try {
       const sent = draft;
@@ -1535,9 +1559,9 @@ export function SettingsSection({
   }, [focusGroup, setFocusGroup]);
 
   // A problem the form shows blocks the save at once (the AFK sheets' rule, SHEET-UX decision 27):
-  // after "Kaydet", while an edited tag reads wrong (its line shows as it is typed), while a field
-  // is marked as it is typed (a text too long, an approval above the per-deal limit), and while the
-  // service's marks stand (any edit takes them away).
+  // after "Kaydet", while an edited tag or money name reads wrong (its line shows as it is typed),
+  // while a field is marked as it is typed (a text too long, an approval above the per-deal limit),
+  // and while the service's marks stand (any edit takes them away).
   const savedTag = panel.settings.config.persona.prefix;
   const tagProblem = prefixProblem(shown.persona.prefix.text, [
     ...shown.who.friends,
@@ -1548,8 +1572,9 @@ export function SettingsSection({
     tagProblem !== "empty" &&
     (shown.persona.prefix.text !== savedTag.text || shown.persona.prefix.on !== savedTag.on);
   const blocking =
-    (submitted && hasProblems(shown, maxDeal, panel.settings.config.blocked)) ||
+    (submitted && hasProblems(shown, maxDeal, saved)) ||
     tagShown ||
+    currencyEditProblem(shown.trade, saved.trade) !== null ||
     liveProblems(shown, maxDeal) ||
     serverIssues.size > 0;
   const props = { shown, set, panel, submitted };
@@ -1577,7 +1602,7 @@ export function SettingsSection({
         {features.schedule ? <HoursGroup {...props} account={account} /> : null}
         <LimitsGroup {...props} account={account} serverIssues={serverIssues} />
         <FindGroup {...props} />
-        <TradeGroup {...props} account={account} />
+        <TradeGroup {...props} account={account} serverIssues={serverIssues} />
         <BlockedGroup account={account} panel={panel} />
         <NotifyGroup />
       </div>

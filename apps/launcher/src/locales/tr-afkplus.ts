@@ -839,6 +839,10 @@ export const trAfkPlus = {
     ads: "Sohbete ilan versin",
     adsHelp: "Hazır metinle, 30 dakikada bir.",
     adTemplate: "İlan metni",
+    // "Para birimi" (TRADE-ANY): the money's name after amounts, the player's or the profile's own.
+    currency: "Para birimi",
+    currencyHelp: "Sunucundaki paranın adı.",
+    currencyRefused: "Bu ad kullanılamaz.",
     returnRow: "Takastan sonra",
     returnStay: "Spawn'da kalsın",
     returnHelp:

@@ -3,7 +3,18 @@
 // words; the Worker and the agent have the last word), the "Ayarlar" draft, the AI state's sentence,
 // and what changed between two saved versions (QoL Q7). The same rules as afk.projects.gg's, so the
 // three surfaces agree. Orders have their own module (order-draft.ts, orders.ts).
-import type { PlusAi, PlusConfig, PlusLimits, PlusOrder, PlusQuota, PlusWindow } from "./types";
+import type {
+  PlusAi,
+  PlusConfig,
+  PlusLimits,
+  PlusOrder,
+  PlusQuota,
+  PlusRules,
+  PlusServer,
+  PlusTradeSettings,
+  PlusWindow,
+} from "./types";
+import type { Lang } from "./words";
 
 export type { PlusAi, PlusConfig, PlusLimits, PlusWindow };
 
@@ -436,6 +447,85 @@ export const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 /** A window's days in order, without repeats. */
 export function sortedDays(days: readonly number[]): number[] {
   return [...new Set(days)].filter((d) => d >= 1 && d <= 7).sort((a, b) => a - b);
+}
+
+// --- "Para birimi" (TRADE-ANY, 28 Oct 2026) --------------------------------------------------------
+
+/** The longest money name (`trade.currency`, code points). */
+export const CURRENCY_MAX = 16;
+/**
+ * A money name's characters (the service's rule): Latin letters (Turkish ones too), spaces,
+ * `. _ -` and the signs `$ € ₺ £`. No digit: the reply rule reads every digit as a number.
+ */
+const CURRENCY_CHARS = /^[\p{Script=Latin} ._\-$€₺£]+$/u;
+/** At least one letter or sign. */
+const CURRENCY_SHOWN = /[\p{Script=Latin}$€₺£]/u;
+
+export type CurrencyProblem = "form" | "length";
+
+/**
+ * The panel's quick look at a money name as the player types it (the service's `checkCurrency`,
+ * as `plus_check.rs` has it): other characters (a digit too) or over 16 of them. Empty is no name.
+ * The service has the last word (listed words, links, contact data, apps).
+ */
+export function currencyProblem(text: string): CurrencyProblem | null {
+  // Spaces as the chat cleaning leaves them: trimmed, runs as one.
+  const value = text.trim().replace(/\s+/gu, " ");
+  if (!value) return null;
+  if (!CURRENCY_CHARS.test(value) || !CURRENCY_SHOWN.test(value)) return "form";
+  if ([...value].length > CURRENCY_MAX) return "length";
+  return null;
+}
+
+/**
+ * A money name the player typed that the service would refuse. One they did not touch is the
+ * service's to judge: it came from there (the site, the phone) and a save sends it back as it is.
+ */
+export function currencyEditProblem(
+  shown: PlusTradeSettings,
+  saved: PlusTradeSettings,
+): CurrencyProblem | null {
+  const name = shown.currency ?? null;
+  if (name === null || name === (saved.currency ?? null)) return null;
+  return currencyProblem(name);
+}
+
+/**
+ * The trade settings after the player typed in "Para birimi": the text as typed, or null once it
+ * is emptied, which clears the stored name. With nothing stored an emptied field goes back to how
+ * it was read, so an untouched name never reaches a save (an older service knows no such key).
+ */
+export function withCurrency(
+  trade: PlusTradeSettings,
+  saved: PlusTradeSettings,
+  text: string,
+): PlusTradeSettings {
+  if (text.trim()) return { ...trade, currency: text };
+  return { ...trade, currency: saved.currency ? null : saved.currency };
+}
+
+/** How "Para birimi" shows: not at all, the profile's own name read-only, or the player's field. */
+export type CurrencyFieldState =
+  | { kind: "hidden" }
+  | { kind: "fixed"; label: string }
+  | { kind: "own" };
+
+/**
+ * "Para birimi" shows only while Studio's switch is on (an older service sends no switch: hidden).
+ * A profile that names its money (Projects Survival and SkyBlock: ripple) shows that name read-only:
+ * the player's own cannot change it.
+ */
+export function currencyFieldState(
+  server: Pick<PlusServer, "money">,
+  rules: Pick<PlusRules, "features">,
+  lang: Lang,
+): CurrencyFieldState {
+  if (!rules.features.currency) return { kind: "hidden" };
+  const label = server.money.label;
+  if (server.money.fixed && label) {
+    return { kind: "fixed", label: lang === "en" ? label.en : label.tr };
+  }
+  return { kind: "own" };
 }
 
 // --- What changed (QoL Q7) --------------------------------------------------------------------------

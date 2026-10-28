@@ -393,7 +393,8 @@ export function PlusSetupWizard({
         ...latest,
         enabled: true,
         persona: { ...latest.persona, preset: picked.preset, intro: picked.intro.trim() },
-        trade: { returnRow: picked.returnRow },
+        // The money's name stays as it is ("Para birimi" is in the settings only).
+        trade: { ...latest.trade, returnRow: picked.returnRow },
         limits: {
           ...latest.limits,
           perDealMax: picked.notNow ? null : picked.perDealMax,
