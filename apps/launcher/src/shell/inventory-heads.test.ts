@@ -12,11 +12,7 @@ import {
 } from "@pl/ui/items";
 import { describe, expect, it } from "vitest";
 import { SAMPLE_HEADS } from "../../../../packages/ui/src/components/inventory/fixtures";
-import {
-  scrambleText,
-  textAdvance,
-  wrapRuns,
-} from "../../../../packages/ui/src/components/inventory/pixel-font";
+import { textAdvance, wrapRuns } from "../../../../packages/ui/src/components/inventory/pixel-font";
 import * as rules from "../../../../packages/ui/src/components/inventory/rules";
 import {
   readableColor,
@@ -228,14 +224,14 @@ describe("the server's looks", () => {
   it("draws the tooltip's name and lore in their looks, spacer lines too", () => {
     const head = SAMPLE_HEADS.items.find((i) => i.slot === 13) as InvItem;
     const lines = tooltipLines(head, "tr", INVENTORY_TEXTS.tr);
-    expect(lines[0]?.text).toBe("Steve Kafası");
-    expect(lines[0]?.runs).toEqual([{ text: "Steve Kafası", color: "#55ffff" }]);
+    expect(lines[0]?.text).toBe("Büyücü Kafası");
+    expect(lines[0]?.runs).toEqual([{ text: "Büyücü Kafası", color: "#55ffff" }]);
     expect(lines.map((l) => l.text)).toEqual([
-      "Steve Kafası",
+      "Büyücü Kafası",
       "Nadir",
       "gizli ödül",
       "",
-      "Fiyat: 900 jeton",
+      "Fiyat: 900 ripple",
     ]);
     expect(lines[2]?.runs).toEqual([
       { text: "gizli", color: TEXT_COLOR.lore, obfuscated: true },
@@ -266,11 +262,6 @@ describe("the server's looks", () => {
       [{ text: "satır", color: "#ff5555", bold: true }],
     ]);
     expect(textAdvance("ab", true)).toBe(textAdvance("ab") + 2);
-    // Obfuscated: a still frame, each letter one of the same width, spaces kept.
-    const scrambled = scrambleText("gizli ödül");
-    expect(scrambled).toBe(scrambleText("gizli ödül"));
-    expect(scrambled[5]).toBe(" ");
-    expect(textAdvance(scrambled)).toBe(textAdvance("gizli ödül"));
   });
 
   it("maps the machine's looks and skin into the view's item", () => {

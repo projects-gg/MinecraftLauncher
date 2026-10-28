@@ -177,7 +177,7 @@ export const SAMPLE_KITS: WinFrame = {
     }),
     item(13, "diamond_chestplate", 1, l("Elmas Göğüslük", "Diamond Chestplate"), {
       name: "Savaşçı Kiti",
-      lore: ["Elmas zırh, kalkan", "Fiyat: 2.500 jeton"],
+      lore: ["Elmas zırh, kalkan", "Fiyat: 2.500 ripple"],
       enchanted: true,
     }),
     item(15, "golden_apple", 1, l("Altın Elma", "Golden Apple"), {
@@ -187,9 +187,12 @@ export const SAMPLE_KITS: WinFrame = {
   ],
 };
 
-/** Mojang's own default skins on its texture server (Alex, Steve): heads that draw their skin. */
-const ALEX_SKIN = "1a4af718455d4aab528e7a61f86fa25e6a369d1768dcb13f7df319a713eb810b";
-const STEVE_SKIN = "31f477eb1a7beee631c2ca64d06f8f68fa93a3386d04452ab27f43acdf1b60cb";
+/**
+ * Two of Mojang's own default skins on its texture server, far from the plain head's look (orange
+ * hair; purple hair): heads that draw their skin.
+ */
+const ORANGE_SKIN = "46acd06e8483b176e8ea39fc12fe105eb3a2a4970f5100057e9d84d4b60bdfa7";
+const PURPLE_SKIN = "daf3d88ccb38f11f74814e92053d92f7728ddb1a7955652a60e30cb27ae6659f";
 const HEAD = l("Oyuncu Kafası", "Player Head");
 
 /**
@@ -202,24 +205,24 @@ export const SAMPLE_HEADS: WinFrame = {
   items: [
     ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26].map(pane),
     item(11, "player_head", 1, HEAD, {
-      skin: ALEX_SKIN,
-      name: "Alex Kafası",
-      nameStyle: [[11, "6l"]],
-      lore: ["Fiyat: 250 jeton", "", "Tıkla ve satın al"],
+      skin: ORANGE_SKIN,
+      name: "Gezgin Kafası",
+      nameStyle: [[13, "6l"]],
+      lore: ["Fiyat: 250 ripple", "", "Tıkla ve satın al"],
       loreStyle: [
         [
           [7, "7"],
-          [9, "e"],
+          [10, "e"],
         ],
         null,
         [[17, "a"]],
       ],
     }),
     item(13, "player_head", 1, HEAD, {
-      skin: STEVE_SKIN,
-      name: "Steve Kafası",
-      nameStyle: [[12, "b"]],
-      lore: ["Nadir", "gizli ödül", "", "Fiyat: 900 jeton"],
+      skin: PURPLE_SKIN,
+      name: "Büyücü Kafası",
+      nameStyle: [[13, "b"]],
+      lore: ["Nadir", "gizli ödül", "", "Fiyat: 900 ripple"],
       loreStyle: [
         [[5, "dl"]],
         [
@@ -229,7 +232,7 @@ export const SAMPLE_HEADS: WinFrame = {
         null,
         [
           [7, "7"],
-          [9, "e"],
+          [10, "e"],
         ],
       ],
     }),
@@ -239,8 +242,8 @@ export const SAMPLE_HEADS: WinFrame = {
         [7, "cn"],
         [5, "c"],
       ],
-      lore: ["Yakında"],
-      loreStyle: [[[7, "8m"]]],
+      lore: ["Stokta yok"],
+      loreStyle: [[[10, "8m"]]],
     }),
   ],
 };
@@ -333,15 +336,15 @@ export const SAMPLE_MARKET: WinFrame = {
   items: [
     item(10, "diamond", 1, l("Elmas", "Diamond"), {
       name: "Elmas sat",
-      lore: ["Tanesi 120 jeton"],
+      lore: ["Tanesi 120 ripple"],
     }),
     item(12, "emerald", 1, l("Zümrüt", "Emerald"), {
       name: "Zümrüt sat",
-      lore: ["Tanesi 80 jeton"],
+      lore: ["Tanesi 80 ripple"],
     }),
     item(14, "gold_ingot", 1, l("Altın Külçesi", "Gold Ingot"), {
       name: "Altın sat",
-      lore: ["Tanesi 40 jeton"],
+      lore: ["Tanesi 40 ripple"],
     }),
     item(16, "writable_book", 1, l("Kitap ve Tüy", "Book and Quill"), { name: "Satış geçmişi" }),
   ],

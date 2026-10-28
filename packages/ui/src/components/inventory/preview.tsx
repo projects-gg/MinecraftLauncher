@@ -119,15 +119,15 @@ const BOOK_ART = (() => {
     rect("#2a1407", plateX, 2, plateWidth, 13) +
     rect("#6b3a1a", plateX + 1, 3, plateWidth - 2, 11) +
     `<path fill="#f6e3bf" transform="translate(${plateX + 6} 5)" d="${textPath(name)}"/>`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 76" shape-rendering="crispEdges">${
-    rect("#2a1407", 0, 0, 256, 76) +
-    rect("#6b3a1a", 1, 1, 254, 74) +
-    rect("#8a4f26", 3, 3, 250, 70) +
-    rect("#e9d3a8", 8, 6, 118, 66) +
-    rect("#f3e3c0", 9, 7, 116, 64) +
-    rect("#e9d3a8", 130, 6, 118, 66) +
-    rect("#f3e3c0", 131, 7, 116, 64) +
-    rect("#4a2812", 126, 4, 4, 70)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 72" shape-rendering="crispEdges">${
+    rect("#2a1407", 0, 0, 256, 72) +
+    rect("#6b3a1a", 1, 1, 254, 70) +
+    rect("#8a4f26", 3, 3, 250, 66) +
+    rect("#e9d3a8", 8, 6, 118, 62) +
+    rect("#f3e3c0", 9, 7, 116, 60) +
+    rect("#e9d3a8", 130, 6, 118, 62) +
+    rect("#f3e3c0", 131, 7, 116, 60) +
+    rect("#4a2812", 126, 4, 4, 66)
   }${slots}${plate}</svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 })();
@@ -136,7 +136,7 @@ const BOOK_ART = (() => {
 // the window, then the picture, its top on the window's top.
 const BOOK_GLYPHS: ReadonlyMap<number, TitleGlyph> = new Map([
   [0xf80a, { advance: -48 }],
-  [0xe002, { advance: 257, image: { src: BOOK_ART, width: 256, height: 76, ascent: 13 } }],
+  [0xe002, { advance: 257, image: { src: BOOK_ART, width: 256, height: 72, ascent: 13 } }],
 ]);
 const marketGlyph = (codePoint: number) =>
   MARKET_GLYPHS.get(codePoint) ?? BOOK_GLYPHS.get(codePoint);
