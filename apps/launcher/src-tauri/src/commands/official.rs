@@ -84,8 +84,8 @@ pub(crate) fn pack_error(error: pl_content::Error) -> CmdError {
         CmdError::new(
             "PAKET",
             pick(
-                "Projects paketi hazırlanamadı. Tekrar dene; sürerse ayrıntıları destek ekibine gönder.",
-                "Couldn't get the Projects pack ready. Try again; if it keeps happening, send the details to support.",
+                "Projects paketi hazırlanamadı. Tekrar dene. Sürerse ayrıntıları destek ekibine gönder.",
+                "Couldn't get the Projects pack ready. Try again. If it keeps happening, send the details to support.",
             ),
             error.to_string(),
         )

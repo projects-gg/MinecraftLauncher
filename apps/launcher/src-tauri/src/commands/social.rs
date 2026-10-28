@@ -1282,8 +1282,8 @@ fn wear_error(error: SocialError) -> crate::error::CmdError {
         } => Some((
             "SOSYAL-TAKIM-ETIKET-AD",
             lang.pick(
-                "Bu etiket takılamaz; lider ekibin adını ya da etiketini değiştirmeli.",
-                "This tag can't be worn; the leader needs to change the crew's name or tag.",
+                "Bu etiket takılamaz. Lider ekibin adını ya da etiketini değiştirmeli.",
+                "This tag can't be worn. The leader needs to change the crew's name or tag.",
             )
             .to_owned(),
         )),

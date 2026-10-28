@@ -69,8 +69,8 @@ fn switch_error(error: pl_content::Error) -> CmdError {
     CmdError::new(
         "SURUM-DEGISIMI",
         pick(
-            "Sürüm değiştirilemedi. Mod klasörünü açık tutan bir program (dosya gezgini ya da antivirüs gibi) olabilir; kapatıp tekrar dene.",
-            "Couldn't switch the version. A program may have the mods folder open (like your file manager or antivirus); close it and try again.",
+            "Sürüm değiştirilemedi. Mod klasörünü açık tutan bir program (dosya gezgini ya da antivirüs gibi) olabilir. Onu kapatıp tekrar dene.",
+            "Couldn't switch the version. A program may have the mods folder open (like your file manager or antivirus). Close it and try again.",
         ),
         error.to_string(),
     )
@@ -1015,8 +1015,8 @@ pub async fn instance_restore_trashed_set(
         return Err(CmdError::new(
             "SET-DOLU",
             pick(
-                "Bu sürümün artık yeni bir seti var; eski set çöp kutusunda kaldı.",
-                "This version has a new set now; the old one stays in the trash.",
+                "Bu sürümün artık yeni bir seti var. Eski set çöp kutusunda kaldı.",
+                "This version has a new set now. The old one stays in the trash.",
             ),
             format!("{} has a set", entry.name),
         ));

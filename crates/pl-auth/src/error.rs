@@ -404,7 +404,7 @@ impl AuthError {
             }
             Self::Loopback { .. } => {
                 lang.pick("Giriş yanıtı tarayıcıdan alınamadı. Güvenlik yazılımın launcher'ı engelliyor \
-                 olabilir; izin verip tekrar dene.", "The sign-in answer didn't come back from the browser. Your security software may be blocking the launcher; allow it and try again.")
+                 olabilir. İzin verip tekrar dene.", "The sign-in answer didn't come back from the browser. Your security software may be blocking the launcher. Allow it and try again.")
             }
             Self::StateMismatch { .. } => {
                 lang.pick("Giriş yanıtı doğrulanamadı, güvenliğin için giriş durduruldu. Tekrar dene.", "The sign-in answer couldn't be verified, so sign-in stopped to keep you safe. Try again.")
@@ -432,8 +432,8 @@ impl AuthError {
                         lang.pick("Giriş onayı geçersiz ya da süresi dolmuş. Yeniden giriş yap.", "The sign-in confirmation is invalid or expired. Sign in again.")
                     }
                 } else if matches!(error, "unauthorized_client" | "invalid_client") {
-                    lang.pick("Microsoft ile giriş şu an kullanılamıyor. Launcher'ı güncelle; sorun sürerse \
-                     destek ekibimize yaz.", "Signing in with Microsoft isn't working right now. Update the launcher; if it keeps happening, write to our support team.")
+                    lang.pick("Microsoft ile giriş şu an kullanılamıyor. Launcher'ı güncelle. Sorun sürerse \
+                     destek ekibimize yaz.", "Signing in with Microsoft isn't working right now. Update the launcher. If it keeps happening, write to our support team.")
                 } else if is_transient_status(*status) {
                     lang.pick("Microsoft giriş hizmetine şu an ulaşılamıyor. Biraz sonra tekrar dene.", "Microsoft's sign-in service can't be reached right now. Try again in a bit.")
                 } else {
@@ -529,7 +529,7 @@ impl AuthError {
             }
             Self::InvalidOfflineName { problem } => problem.user_message(lang),
             Self::AccountNotFound { .. } => {
-                lang.pick("Hesap bulunamadı. Hesap listesi değişmiş olabilir, tekrar dene.", "Account not found. The account list may have changed; try again.")
+                lang.pick("Hesap bulunamadı. Hesap listesi değişmiş olabilir, tekrar dene.", "Account not found. The account list may have changed. Try again.")
             }
             Self::NotMicrosoftAccount { .. } => {
                 lang.pick("Bu işlem yalnızca Microsoft hesaplarında kullanılabilir.", "This only works with Microsoft accounts.")

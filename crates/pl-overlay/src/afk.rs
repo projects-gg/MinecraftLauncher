@@ -99,7 +99,7 @@ pub(crate) fn afk_toast(notice: &AfkNotice, english: bool) -> Option<ToastView> 
         "approval" => match notice.get("approvalKind") {
             Some("handoff") => pick(
                 "Anlaşma tamam, takası sen yapacaksın.",
-                "Deal agreed; you'll make the trade.",
+                "Deal agreed. You'll make the trade.",
             ),
             Some("confirm_item") => {
                 let what = item(notice, english)?;
@@ -164,8 +164,8 @@ pub(crate) fn afk_toast(notice: &AfkNotice, english: bool) -> Option<ToastView> 
             _ => return None,
         },
         "incident" => pick(
-            "Uygunsuz mesajlar geldi; o oyuncuya artık cevap verilmiyor.",
-            "Inappropriate messages came; that player gets no replies now.",
+            "Uygunsuz mesajlar geldi. O oyuncuya artık cevap verilmiyor.",
+            "Inappropriate messages came in. That player gets no replies now.",
         ),
         "message" => match notice
             .get("count")
@@ -285,7 +285,7 @@ mod tests {
         );
         assert_eq!(
             afk_toast(&handoff, true).unwrap().body,
-            "Deal agreed; you'll make the trade."
+            "Deal agreed. You'll make the trade."
         );
         let mut seen = notice(
             "approval",

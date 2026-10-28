@@ -461,7 +461,7 @@ fn ensure_can_move(app: &AppHandle, state: &AppState) -> CmdResult<()> {
             "TASI-SABIT",
             pick(
                 "Bu kurulumda veri klasörünün yeri sabit, buradan taşınamaz.",
-                "This install keeps the data folder in a fixed place; it can't be moved from here.",
+                "This install keeps the data folder in a fixed place, so it can't be moved from here.",
             ),
             "PROJECTS_LAUNCHER_DATA_DIR is set",
         ));
@@ -579,7 +579,7 @@ fn move_error(error: pl_data::Error) -> CmdError {
             "TASI-DOGRULAMA",
             pick(
                 "Kopyalanan dosyalar doğrulanamadı. Verilerin eski yerinde duruyor, tekrar dene.",
-                "The copied files couldn't be checked. Your data is still in its old place; try again.",
+                "The copied files couldn't be checked. Your data is still in its old place. Try again.",
             ),
         ),
         E::Link { folder: true, .. } => (
@@ -607,7 +607,7 @@ fn move_error(error: pl_data::Error) -> CmdError {
             "TASI-ERISIM",
             pick(
                 "Bazı dosyalar kopyalanamadı, başka bir program kullanıyor olabilir. Diğer programları kapatıp tekrar dene. Verilerin eski yerinde duruyor.",
-                "Some files couldn't be copied; another program may be using them. Close other programs and try again. Your data is still in its old place.",
+                "Some files couldn't be copied. Another program may be using them. Close other programs and try again. Your data is still in its old place.",
             ),
         ),
         _ => (

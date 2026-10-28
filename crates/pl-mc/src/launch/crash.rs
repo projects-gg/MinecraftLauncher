@@ -1080,7 +1080,7 @@ fn describe(
             (
                 s("Java sürümü bu oyun için eski"),
                 format!(
-                    "{need}Kurulum ayarlarında Java seçimini Otomatik yap; uygun Java senin \
+                    "{need}Kurulum ayarlarında Java seçimini Otomatik yap. Uygun Java senin \
                      için indirilir."
                 ),
                 vec![SuggestedAction::UseAutomaticJava {
@@ -1098,7 +1098,7 @@ fn describe(
             (
                 s("Java sürümü bu oyun için çok yeni"),
                 format!(
-                    "{need}Kurulum ayarlarında Java seçimini Otomatik yap; uygun Java senin \
+                    "{need}Kurulum ayarlarında Java seçimini Otomatik yap. Uygun Java senin \
                      için indirilir."
                 ),
                 vec![SuggestedAction::UseAutomaticJava {
@@ -1122,7 +1122,7 @@ fn describe(
             let hint = if mods.is_empty() {
                 s(
                     "Kurulu modlardan bazıları bu Minecraft sürümüyle ya da birbirleriyle uyumlu \
-                   değil. Modlarını güncelle ya da sorunlu olanları kaldır; oyun modsuz \
+                   değil. Modlarını güncelle ya da sorunlu olanları kaldır. Oyun modsuz \
                    açılıyorsa sorun modlardadır.",
                 )
             } else {
@@ -1190,7 +1190,7 @@ fn describe(
             let hint = match mods.len() {
                 0 => s(
                     "Kurulu modlardan biri bu sürümle uyuşmuyor ya da hatalı çalışıyor. \
-                        Modlarını güncelle; oyun modsuz (vanilla) açılıyorsa sorun mod \
+                        Modlarını güncelle. Oyun modsuz (vanilla) açılıyorsa sorun mod \
                         tarafındadır.",
                 ),
                 1 => format!(
@@ -1225,7 +1225,7 @@ fn describe(
             s("Oyun dosyalarına erişilemedi"),
             s(
                 "Oyun bazı dosyalara erişemediği için kapandı. Güvenlik yazılımın launcher'ı ya da \
-               Java'yı engelliyor olabilir; launcher'ı güvenlik yazılımının istisnalarına ekleyip \
+               Java'yı engelliyor olabilir. Launcher'ı güvenlik yazılımının istisnalarına ekleyip \
                tekrar dene.",
             ),
             vec![SuggestedAction::AddAntivirusException],
@@ -1234,7 +1234,7 @@ fn describe(
             s("Oyun hiç açılmadan kapandı"),
             s(
                 "Güvenlik yazılımın Java'yı engelliyor olabilir. Launcher'ı istisnalara ekleyip \
-               tekrar dene; sorun sürerse kurulumu onar.",
+               tekrar dene. Sorun sürerse kurulumu onar.",
             ),
             vec![
                 SuggestedAction::AddAntivirusException,
@@ -1244,8 +1244,8 @@ fn describe(
         CrashKind::Unknown => (
             s("Oyun beklenmedik şekilde kapandı"),
             s(
-                "Oyun bir hata yüzünden kapandı. Ayrıntılar çökme raporunda ve oyun kaydında; \
-               sorun sürerse kaydı destek ekibiyle paylaşabilirsin.",
+                "Oyun bir hata yüzünden kapandı. Ayrıntılar çökme raporunda ve oyun kaydında. \
+               Sorun sürerse kaydı destek ekibiyle paylaşabilirsin.",
             ),
             Vec::new(),
         ),

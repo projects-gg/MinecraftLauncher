@@ -249,7 +249,7 @@ pub async fn instance_delete(
             pl_mc::Error::NotFound(_) => CmdError::from(error),
             other => CmdError::new(
                 "KURULUM-SIL",
-                pick("Kurulum çöp kutusuna taşınamadı. Klasörünü açık tutan bir program olabilir; kapatıp tekrar dene.", "Couldn't move the instance to the trash. A program may have its folder open; close it and try again."),
+                pick("Kurulum çöp kutusuna taşınamadı. Klasörünü açık tutan bir program olabilir. Onu kapatıp tekrar dene.", "Couldn't move the instance to the trash. A program may have its folder open. Close it and try again."),
                 other.to_string(),
             ),
         })?;
@@ -1086,7 +1086,7 @@ pub async fn instance_servers_edit(
             "SUNUCU-DEGISTI",
             pick(
                 "Sunucu listesi oyunda değişmiş. Liste yenilendi, tekrar dene.",
-                "The server list changed in the game. The list is refreshed; try again.",
+                "The server list changed in the game. The list is refreshed. Try again.",
             ),
             e.to_string(),
         ),

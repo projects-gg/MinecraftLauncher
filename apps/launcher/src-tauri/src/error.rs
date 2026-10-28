@@ -33,8 +33,8 @@ impl CmdError {
         Self::new(
             "GENEL",
             pick(
-                "Beklenmeyen bir sorun oluştu. Tekrar dene; sürerse ayrıntıları destek ekibine gönder.",
-                "Something unexpected went wrong. Try again; if it keeps happening, send the details to support.",
+                "Beklenmeyen bir sorun oluştu. Tekrar dene. Sürerse ayrıntıları destek ekibine gönder.",
+                "Something unexpected went wrong. Try again. If it keeps happening, send the details to support.",
             ),
             details.to_string(),
         )
