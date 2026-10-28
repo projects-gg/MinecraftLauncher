@@ -60,6 +60,7 @@ import {
   plusScenario,
   withPlus,
 } from "./plus/mock-data";
+import { serverLabel } from "./status";
 
 type Scenario =
   | "off"
@@ -341,7 +342,7 @@ function plainAccounts(which: Scenario): CloudAccount[] {
         : {}),
       rev: 9,
     }),
-    account("a_3MCV7Y1KD5HS8FQ2", "Tuccar_Ali", "play.projects.gg", 0, {
+    account("a_3MCV7Y1KD5HS8FQ2", "TuccarBaykus", "play.projects.gg", 0, {
       expiresAt: now + 27 * DAY,
       // `?hold=invalid`: the machine stopped it on a row that starts with a backslash;
       // `?hold=blocked`: its server is one the cloud cannot join ("Girilemeyen sunucular").
@@ -534,7 +535,10 @@ mockLive.onLink((online) => {
 });
 
 function lines(id: string, count: number, endAt: number) {
-  if (featScenario !== "off") return kindLines(count, endAt, find(id).name);
+  if (featScenario !== "off") {
+    const cloud = find(id);
+    return kindLines(count, endAt, cloud.name, serverLabel(cloud.server));
+  }
   return Array.from({ length: count }, (_, i) => {
     const [k, text] = CONSOLE[i % CONSOLE.length] ?? ["n", ""];
     return { at: endAt - (count - i) * 37, text, k, c: null, who: null, goto: null };
@@ -757,7 +761,7 @@ export const mockCloudApi: CloudApi = {
           lines: [
             featScenario === "off"
               ? { at, text: CHAT[n++ % CHAT.length] ?? "", k: "n", c: null, who: null, goto: null }
-              : liveKindLine(n++, at, find(id).name),
+              : liveKindLine(n++, at, find(id).name, serverLabel(find(id).server)),
           ],
           skipped: 0,
           snapshot: false,

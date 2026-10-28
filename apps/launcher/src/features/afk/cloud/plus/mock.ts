@@ -189,10 +189,10 @@ const isActive = (order: PlusOrder) => {
 
 let chatter: number | undefined;
 const CHATTER: Array<[string, string, string]> = [
-  ["pm_in", "Baris_TR", "totem var mı satan"],
-  ["reply", "Baris_TR", "[AFK+] Ben alıyorum, satmıyorum. Elinde varsa 8.000 olur mu?"],
-  ["pm_in", "Ece_Gamer", "elmas tanesi kaç"],
-  ["reply", "Ece_Gamer", "[AFK+] Tanesi 120, 64'lük paket var."],
+  ["pm_in", "Pixel_TR", "totem var mı satan"],
+  ["reply", "Pixel_TR", "[AFK+] Ben alıyorum, satmıyorum. Elinde varsa 8.000 olur mu?"],
+  ["pm_in", "Kirpi_Gamer", "elmas tanesi kaç"],
+  ["reply", "Kirpi_Gamer", "[AFK+] Tanesi 120, 64'lük paket var."],
 ];
 
 export const mockPlusApi: PlusApi = {
@@ -419,7 +419,7 @@ export const mockPlusApi: PlusApi = {
     return {
       lines: own,
       handoffUntil: thread?.handoffUntil ?? null,
-      canReply: name !== "Zeynep_12" && thread?.state !== "blocked",
+      canReply: name !== "Buzul_12" && thread?.state !== "blocked",
       next: null,
     };
   },

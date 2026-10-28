@@ -21,7 +21,8 @@ export const trAfkPlus = {
     // A real haggle as the player reads it in the game's chat ([AFK+] marks the bot's lines). Its
     // last step reads as any other offer: "son teklif" would give the limit away (§3.5).
     chat: {
-      them: "Kaan_07",
+      // A gamer tag, as the site's demo seller (no real first name in sample data).
+      them: "Neon_Drift",
       c1: "elytra var, 45k",
       c2: "Merhaba, 34.000 olur mu?",
       c3: "40 olmaz mı",
