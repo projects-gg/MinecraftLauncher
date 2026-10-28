@@ -38,11 +38,13 @@ function show(
 
 /** Each chip's words, whether it is the pick and whether it can be picked. */
 function chips() {
-  return screen.getAllByRole("radio").map((chip) => [
-    chip.textContent,
-    chip.getAttribute("aria-checked") === "true",
-    !(chip as HTMLButtonElement).disabled,
-  ]);
+  return screen
+    .getAllByRole("radio")
+    .map((chip) => [
+      chip.textContent,
+      chip.getAttribute("aria-checked") === "true",
+      !(chip as HTMLButtonElement).disabled,
+    ]);
 }
 
 /** The chat line as a screen reader reads it; null while none shows. */
