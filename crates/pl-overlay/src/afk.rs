@@ -177,7 +177,7 @@ pub(crate) fn afk_toast(notice: &AfkNotice, english: bool) -> Option<ToastView> 
             ),
             _ => pick("Yeni mesaj.", "New message."),
         },
-        "paused" => pick("Asistan durdu.", "The assistant paused."),
+        "paused" => pick("ProBot AI durdu.", "ProBot AI paused."),
         // The night's digest, summaries and closed approvals are the launcher's.
         _ => return None,
     };
@@ -190,7 +190,10 @@ pub(crate) fn afk_toast(notice: &AfkNotice, english: bool) -> Option<ToastView> 
         .filter(|name| !name.is_empty());
     let title = match (name, plain) {
         (Some(name), true) => name.to_owned(),
-        (Some(name), false) => pick(&format!("{name} asistanı"), &format!("{name}'s assistant")),
+        (Some(name), false) => pick(
+            &format!("{name} için ProBot AI"),
+            &format!("{name}'s ProBot AI"),
+        ),
         (None, true) => pick("7/24 Bulut", "24/7 Cloud"),
         (None, false) => "AFK+".to_owned(),
     };
@@ -256,11 +259,11 @@ mod tests {
         approval.tag = Some("approval:01JBXK3D2E".into());
         let card = afk_toast(&approval, false).unwrap();
         assert_eq!(card.kind, ToastKind::Info);
-        assert_eq!(card.title, "Ahmet_AFK asistanı");
+        assert_eq!(card.title, "Ahmet_AFK için ProBot AI");
         assert_eq!(card.body, "Onay bekliyor: 1 Elytra = 37.500");
         assert_eq!(card.key, "afk:approval:01JBXK3D2E");
         let card = afk_toast(&approval, true).unwrap();
-        assert_eq!(card.title, "Ahmet_AFK's assistant");
+        assert_eq!(card.title, "Ahmet_AFK's ProBot AI");
         assert_eq!(card.body, "Waiting for approval: Elytra = 37,500");
         // A plain account's event keeps the bare name.
         let renewal = notice("renewal", &[("name", "Ahmet_AFK"), ("days", "3")]);

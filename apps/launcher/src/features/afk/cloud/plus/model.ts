@@ -3,7 +3,19 @@
 // words; the Worker and the agent have the last word), the "Ayarlar" draft, the AI state's sentence,
 // and what changed between two saved versions (QoL Q7). The same rules as afk.projects.gg's, so the
 // three surfaces agree. Orders have their own module (order-draft.ts, orders.ts).
-import type { PlusAi, PlusConfig, PlusLimits, PlusOrder, PlusQuota, PlusWindow } from "./types";
+import type {
+  PlusAction,
+  PlusAi,
+  PlusConfig,
+  PlusLimits,
+  PlusOrder,
+  PlusQuota,
+  PlusRules,
+  PlusServer,
+  PlusTradeSettings,
+  PlusWindow,
+} from "./types";
+import type { Lang } from "./words";
 
 export type { PlusAi, PlusConfig, PlusLimits, PlusWindow };
 
@@ -27,7 +39,7 @@ export type Style = "patient" | "balanced" | "quick";
 export type Scope = "all" | "trade" | "off";
 export type Preset = "friendly" | "brief" | "polite" | "playful";
 export type StatusPreset = "back_soon" | "back_evening" | "back_tomorrow" | "weekend" | "busy";
-/** "Asistan ne yapsın?": answer only, haggle and ask (the default), haggle and finish. */
+/** "ProBot AI ne yapsın?": answer only, haggle and ask (the default), haggle and finish. */
 export type Authority = "reply" | "ask" | "deal";
 
 export const STYLES: Style[] = ["patient", "balanced", "quick"];
@@ -40,6 +52,14 @@ export const STATUS_PRESETS: StatusPreset[] = [
   "weekend",
   "busy",
 ];
+
+/**
+ * The style replies take: the stored one, else "Kibar" where the settings name none the launcher
+ * knows (the default since 28 Oct 2026, with "Oyuncu gibi konuşsun" on).
+ */
+export function presetOf(preset: string): Preset {
+  return PRESETS.find((known) => known === preset) ?? "polite";
+}
 
 /** Whether the bot may spend at all (without it buy orders for money only tell what they find). */
 export function canSpend(limits: PlusLimits): boolean {
@@ -438,6 +458,126 @@ export function sortedDays(days: readonly number[]): number[] {
   return [...new Set(days)].filter((d) => d >= 1 && d <= 7).sort((a, b) => a - b);
 }
 
+// --- "Para birimi" (TRADE-ANY, 28 Oct 2026) --------------------------------------------------------
+
+/** The longest money name (`trade.currency`, code points). */
+export const CURRENCY_MAX = 16;
+/**
+ * A money name's characters (the service's rule): Latin letters (Turkish ones too), spaces,
+ * `. _ -` and the signs `$ € ₺ £`. No digit: the reply rule reads every digit as a number.
+ */
+const CURRENCY_CHARS = /^[\p{Script=Latin} ._\-$€₺£]+$/u;
+/** At least one letter or sign. */
+const CURRENCY_SHOWN = /[\p{Script=Latin}$€₺£]/u;
+
+export type CurrencyProblem = "form" | "length";
+
+/**
+ * The panel's quick look at a money name as the player types it (the service's `checkCurrency`,
+ * as `plus_check.rs` has it): other characters (a digit too) or over 16 of them. Empty is no name.
+ * The service has the last word (listed words, links, contact data, apps).
+ */
+export function currencyProblem(text: string): CurrencyProblem | null {
+  // Spaces as the chat cleaning leaves them: trimmed, runs as one.
+  const value = text.trim().replace(/\s+/gu, " ");
+  if (!value) return null;
+  if (!CURRENCY_CHARS.test(value) || !CURRENCY_SHOWN.test(value)) return "form";
+  if ([...value].length > CURRENCY_MAX) return "length";
+  return null;
+}
+
+/**
+ * A money name the player typed that the service would refuse. One they did not touch is the
+ * service's to judge: it came from there (the site, the phone) and a save sends it back as it is.
+ */
+export function currencyEditProblem(
+  shown: PlusTradeSettings,
+  saved: PlusTradeSettings,
+): CurrencyProblem | null {
+  const name = shown.currency ?? null;
+  if (name === null || name === (saved.currency ?? null)) return null;
+  return currencyProblem(name);
+}
+
+/**
+ * The trade settings after the player typed in "Para birimi": the text as typed, or null once it
+ * is emptied, which clears the stored name. With nothing stored an emptied field goes back to how
+ * it was read, so an untouched name never reaches a save (an older service knows no such key).
+ */
+export function withCurrency(
+  trade: PlusTradeSettings,
+  saved: PlusTradeSettings,
+  text: string,
+): PlusTradeSettings {
+  if (text.trim()) return { ...trade, currency: text };
+  return { ...trade, currency: saved.currency ? null : saved.currency };
+}
+
+/** How "Para birimi" shows: not at all, the profile's own name read-only, or the player's field. */
+export type CurrencyFieldState =
+  | { kind: "hidden" }
+  | { kind: "fixed"; label: string }
+  | { kind: "own" };
+
+/**
+ * "Para birimi" shows only while Studio's switch is on (an older service sends no switch: hidden).
+ * A profile that names its money (Projects Survival and SkyBlock: ripple) shows that name read-only:
+ * the player's own cannot change it.
+ */
+export function currencyFieldState(
+  server: Pick<PlusServer, "money">,
+  rules: Pick<PlusRules, "features">,
+  lang: Lang,
+): CurrencyFieldState {
+  if (!rules.features.currency) return { kind: "hidden" };
+  const label = server.money.label;
+  if (server.money.fixed && label) {
+    return { kind: "fixed", label: lang === "en" ? label.en : label.tr };
+  }
+  return { kind: "own" };
+}
+
+// --- "Sınırlara git" (owner, 28 Oct 2026) -----------------------------------------------------------
+
+/** A limit "Sınırlara git" brings into view in "Harcama", its field focused. */
+export type LimitField =
+  | "perDealMax"
+  | "totalBudget"
+  | "dailySpendMax"
+  | "approvalAbove"
+  | "newCounterpartApprovalAbove";
+
+/** An approval's reason that is a limit's, and that limit. */
+export interface LimitReason {
+  reason: string;
+  field: LimitField;
+}
+
+const REASON_LIMITS = new Map<string, LimitField>([
+  ["above", "approvalAbove"],
+  ["new_counterpart", "newCounterpartApprovalAbove"],
+  ["daily", "dailySpendMax"],
+  ["budget", "totalBudget"],
+]);
+
+/**
+ * The first of an approval's reasons that is a limit's ("Onay sınırının üstünde"): its line
+ * carries "Sınırlara git". None for the others: a price, or the authority the player chose, is no
+ * limit to go to.
+ */
+export function limitReason(why: readonly string[]): LimitReason | null {
+  for (const reason of why) {
+    const field = REASON_LIMITS.get(reason);
+    if (field) return { reason, field };
+  }
+  return null;
+}
+
+/** Buying waits for both spending limits ("bulunca haber veriyor"): the first one missing. */
+export function spendingField(limits: Pick<PlusLimits, "perDealMax" | "totalBudget">): LimitField {
+  return limits.perDealMax === null ? "perDealMax" : "totalBudget";
+}
+
 // --- What changed (QoL Q7) --------------------------------------------------------------------------
 
 export type ConfigChange =
@@ -634,6 +774,9 @@ export function aiState(ai: PlusAi | null | undefined): AiState {
       return line("server", "warn");
     case "player":
       return line("player", "muted", { canStart: true });
+    // Waiting for its first start (28 Oct 2026: AFK+ never starts by itself): ready, "Başlat".
+    case "ready":
+      return line("ready", "ok", { canStart: true });
     // The pauses that end by themselves can still be stopped for good: the stop is the player's own
     // switch (`config.enabled`), stored and sent on when the machine hears it (README "Control").
     case "break":
@@ -680,4 +823,36 @@ export function tradeNoteKey(ai: PlusAi | null | undefined): string | null {
   if (!ai.trade.on) return ai.trade.off === "profile" ? "tradeProfile" : "tradeLobby";
   if (ai.trade.buy === "notify") return "notifyOnly";
   return null;
+}
+
+/**
+ * The state the rail shows while the assistant waits for its first start (the service's `ready`,
+ * 28 Oct 2026: AFK+ never starts by itself): one plain line and "Başlat". Otherwise the AI's own
+ * state, as it is.
+ */
+export function startState(state: AiState, ready: boolean): AiState {
+  if (!ready) return state;
+  return { key: "ready", tone: "ok", until: null, canStart: true, canStop: false };
+}
+
+/**
+ * The settings after a control the service took, as it stores them: "Durdur" and "Başlat" turn the
+ * switch, and "Başlat" ends the wait for the first start; blocking a player takes them off the
+ * friends list too (a save would be refused).
+ */
+export function configAfterControl(
+  config: PlusConfig,
+  action: PlusAction,
+  name?: string,
+): PlusConfig {
+  const next = { ...config };
+  if (action === "pause" || action === "resume") next.enabled = action === "resume";
+  if (action === "resume") next.ready = null;
+  if ((action === "block" || action === "unblock") && name) {
+    const other = (n: string) => n.toLowerCase() !== name.toLowerCase();
+    const rest = next.blocked.filter(other);
+    next.blocked = action === "block" ? [...rest, name] : rest;
+    if (action === "block") next.who = { ...next.who, friends: next.who.friends.filter(other) };
+  }
+  return next;
 }

@@ -6,7 +6,9 @@
 // specta writes two types; the UI takes the `_Serialize` one (what it receives) and sends the
 // `_Deserialize` one. Values sent back (a config to save, an order, notification switches) are
 // assignable to the bindings' types. A look's and an audit entry's fields stay optional: the backend
-// leaves out what they lack.
+// leaves out what they lack. `trade.currency` ("Para birimi") is typed present but may be missing
+// too (no name stored, or a service that knows none): it goes back as it came, so code reads it
+// with `?? null` and only the field writes it (model.ts `withCurrency`).
 import type * as B from "@/bindings";
 import type { CloudAccount, CloudOverview } from "../api";
 
@@ -92,7 +94,7 @@ export type PlusSettings = Wire<B.PlusSettings_Serialize>;
 export type PlusSpent = Wire<B.PlusSpent>;
 export type PlusThreadPage = Wire<B.PlusThreadPage>;
 export type PlusTotals = Wire<B.PlusTotals>;
-export type PlusTradeSettings = Wire<B.PlusTradeSettings>;
+export type PlusTradeSettings = Wire<B.PlusTradeSettings_Serialize>;
 export type PlusTradeState = Wire<B.PlusTradeState>;
 export type PlusWeeklyAccount = Wire<B.PlusWeeklyAccount>;
 export type PlusWeeklyReport = Wire<B.PlusWeeklyReport>;

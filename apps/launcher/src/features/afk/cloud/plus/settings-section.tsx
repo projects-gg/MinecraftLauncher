@@ -1,7 +1,8 @@
 // "Ayarlar": what the assistant may do ("İnce ayar": its authority, buying and selling, how deals are
 // paid, whom it deals with; afkplus-free.md §3), how it talks, when it works, what it may spend, how
-// it finds things, what it does after a trade, who it ignores, and the notices. The form is one draft (design.md G6-P): edits
-// wait across sections and the panel closing, the docked change bar saves or drops them, Ctrl+S saves.
+// it finds things, the server's money, what it does after a trade, who it ignores, and the notices.
+// The form is one draft (design.md G6-P): edits wait across sections and the panel closing, the
+// docked change bar saves or drops them, Ctrl+S saves.
 // Saving puts only the player's own edits on top of the latest settings, so a rule added meanwhile
 // or a change made on the site stays. A break, a blocked player, "Harcananı sıfırla" and the
 // notices take effect at once. Amounts read the players' shorthands and say the number in words.
@@ -15,7 +16,6 @@ import {
   leave,
   Segmented,
   Select,
-  scrollBehavior,
   toast,
   useMotionPrefs,
 } from "@pl/ui";
@@ -29,6 +29,7 @@ import { Hint, inputClass, ToggleRow } from "../../settings/controls";
 import type { CloudAccount } from "../api";
 import { type CloudNotifyPrefs, type PlusPanel, plusApi } from "./api";
 import { DOCK_HEIGHT, PlusChangeDock } from "./change-dock";
+import { CurrencyField } from "./currency-field";
 import { AmountField, GroupTitle, IntField, QuietLink, TimeField } from "./fields";
 import { HistoryDialog } from "./history-dialog";
 import {
@@ -36,12 +37,15 @@ import {
   applyDraft,
   blockedNameProblem,
   canSpend,
+  currencyEditProblem,
+  currencyFieldState,
   editDraft,
   isTime,
   limitProblems,
   liveProblems,
   type PersonaTextProblem,
   PLUS_LIMITS,
+  type PlusConfig,
   type PlusLimits,
   type PlusWindow,
   PREFIX_DEFAULT,
@@ -49,11 +53,13 @@ import {
   PRESETS,
   personaTextProblem,
   prefixProblem,
+  presetOf,
   type SettingsPart,
   STATUS_PRESETS,
   sortedDays,
   WEEKDAYS,
   windowProblems,
+  withCurrency,
   withSettings,
 } from "./model";
 import { untilPhrase } from "./time";
@@ -194,7 +200,7 @@ function PersonaText({
   );
 }
 
-// --- Asistan ----------------------------------------------------------------------------------------
+// --- ProBot AI --------------------------------------------------------------------------------------
 
 /** The tag before the assistant's lines (27 Oct 2026): the player's own, under its switch. */
 function TagField({
@@ -256,7 +262,7 @@ function AssistantGroup({
 }) {
   const { t } = useTranslation();
   const persona = shown.persona;
-  const preset = (PRESETS as string[]).includes(persona.preset) ? persona.preset : "friendly";
+  const preset = presetOf(persona.preset);
   const status = persona.statusPreset ?? (persona.status ? "own" : "none");
   const judge = panel.settings.judge;
   const savedPersona = panel.settings.config.persona;
@@ -1036,6 +1042,7 @@ function LimitsGroup({
       placeholder={optional ? (more.empty ?? t("afkPlus.settings.noLimitShort")) : undefined}
       error={error(key)}
       extra={more.extra}
+      anchor={`afk-plus-limits-${key}`}
       onChange={(value) => setLimit(key, value)}
     />
   );
@@ -1192,13 +1199,17 @@ function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; pa
 function TradeGroup({
   shown,
   set,
+  panel,
   account,
   submitted,
+  serverIssues,
 }: {
   shown: SettingsPart;
   set: Change;
+  panel: PlusPanel;
   account: CloudAccount;
   submitted: boolean;
+  serverIssues: ReadonlySet<string>;
 }) {
   const { t } = useTranslation();
   // A plain command row of the account to run after a trade (never a secret one).
@@ -1206,15 +1217,28 @@ function TradeGroup({
   const value = rows.some((row) => row.id === shown.trade.returnRow)
     ? (shown.trade.returnRow ?? "stay")
     : "stay";
+  // "Para birimi" while Studio's switch is on: the player's own name, or the profile's read-only.
+  const saved = panel.settings.config.trade;
+  const currency = currencyFieldState(panel.settings.server, panel.settings.rules, currentLang());
+  const currencyRefused =
+    currency.kind === "own" &&
+    (currencyEditProblem(shown.trade, saved) !== null || serverIssues.has("trade.currency"));
   return (
     <Group id="trade" title={t("afkPlus.settings.groups.trade")}>
+      <CurrencyField
+        state={currency}
+        value={shown.trade.currency ?? ""}
+        refused={currencyRefused}
+        onChange={(text) => set((s) => ({ ...s, trade: withCurrency(s.trade, saved, text) }))}
+      />
       <Labeled label={t("afkPlus.settings.returnRow")} help={t("afkPlus.settings.returnHelp")}>
         <Select
           label={t("afkPlus.settings.returnRow")}
           value={value}
-          onValueChange={(next) =>
-            set((s) => ({ ...s, trade: { returnRow: next === "stay" ? null : next } }))
-          }
+          onValueChange={(next) => {
+            const returnRow = next === "stay" ? null : next;
+            set((s) => ({ ...s, trade: { ...s.trade, returnRow } }));
+          }}
           options={[
             { value: "stay", label: t("afkPlus.settings.returnStay") },
             ...rows.map((row) => ({ value: row.id, label: row.text ?? row.id })),
@@ -1438,16 +1462,17 @@ function NotifyGroup() {
 // --- The section ---------------------------------------------------------------------------------------
 
 /** Every problem the launcher can see before sending, so "Kaydet" never sends what will be refused. */
-function hasProblems(shown: SettingsPart, maxDeal: number, blocked: readonly string[]): boolean {
+function hasProblems(shown: SettingsPart, maxDeal: number, saved: PlusConfig): boolean {
   const limits = limitProblems(shown.limits, maxDeal);
   return (
     Object.keys(limits).length > 0 ||
     personaTextProblem(shown.persona.intro, PLUS_LIMITS.introMax) !== null ||
-    prefixProblem(shown.persona.prefix.text, [...shown.who.friends, ...blocked]) !== null ||
+    prefixProblem(shown.persona.prefix.text, [...shown.who.friends, ...saved.blocked]) !== null ||
     (shown.persona.statusPreset === null &&
       personaTextProblem(shown.persona.status, PLUS_LIMITS.statusMax) !== null) ||
     (shown.schedule.on && shown.schedule.windows.some((w) => windowProblems(w).length > 0)) ||
-    !isTime(shown.summaryAt)
+    !isTime(shown.summaryAt) ||
+    currencyEditProblem(shown.trade, saved.trade) !== null
   );
 }
 
@@ -1467,7 +1492,9 @@ export function SettingsSection({
   const draft = usePlusUi((s) => s.drafts[account.id] ?? null);
   const setDraft = usePlusUi((s) => s.setDraft);
   const focusGroup = usePlusUi((s) => s.focusGroup);
+  const focusField = usePlusUi((s) => s.focusField);
   const setFocusGroup = usePlusUi((s) => s.setFocusGroup);
+  const { layout } = useMotionPrefs();
   const [submitted, setSubmitted] = useState(false);
   const [serverIssues, setServerIssues] = useState<ReadonlySet<string>>(new Set());
   const [failure, setFailure] = useState<{ message: string } | null>(null);
@@ -1487,7 +1514,7 @@ export function SettingsSection({
   const submit = async () => {
     if (!draft || saving) return;
     setSubmitted(true);
-    if (hasProblems(shown, maxDeal, panel.settings.config.blocked)) return;
+    if (hasProblems(shown, maxDeal, saved)) return;
     setSaving(true);
     try {
       const sent = draft;
@@ -1526,18 +1553,23 @@ export function SettingsSection({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // "Sınırları ayarla" (Listeler) brings its group into view once.
+  // A group asked for elsewhere ("Sınırlara git") comes into view once, its field focused when one
+  // is named; at once under reduced motion and in Performance mode.
   useEffect(() => {
     if (!focusGroup) return;
-    const node = document.getElementById(`afk-plus-${focusGroup}`);
-    node?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
+    const anchor = focusField ? `afk-plus-${focusGroup}-${focusField}` : null;
+    const field = anchor ? document.getElementById(anchor) : null;
+    const node = field ?? document.getElementById(`afk-plus-${focusGroup}`);
+    const behavior = layout ? "smooth" : "auto";
+    node?.scrollIntoView({ block: field ? "center" : "start", behavior });
+    field?.querySelector("input")?.focus({ preventScroll: true });
     setFocusGroup(null);
-  }, [focusGroup, setFocusGroup]);
+  }, [focusGroup, focusField, layout, setFocusGroup]);
 
   // A problem the form shows blocks the save at once (the AFK sheets' rule, SHEET-UX decision 27):
-  // after "Kaydet", while an edited tag reads wrong (its line shows as it is typed), while a field
-  // is marked as it is typed (a text too long, an approval above the per-deal limit), and while the
-  // service's marks stand (any edit takes them away).
+  // after "Kaydet", while an edited tag or money name reads wrong (its line shows as it is typed),
+  // while a field is marked as it is typed (a text too long, an approval above the per-deal limit),
+  // and while the service's marks stand (any edit takes them away).
   const savedTag = panel.settings.config.persona.prefix;
   const tagProblem = prefixProblem(shown.persona.prefix.text, [
     ...shown.who.friends,
@@ -1548,8 +1580,9 @@ export function SettingsSection({
     tagProblem !== "empty" &&
     (shown.persona.prefix.text !== savedTag.text || shown.persona.prefix.on !== savedTag.on);
   const blocking =
-    (submitted && hasProblems(shown, maxDeal, panel.settings.config.blocked)) ||
+    (submitted && hasProblems(shown, maxDeal, saved)) ||
     tagShown ||
+    currencyEditProblem(shown.trade, saved.trade) !== null ||
     liveProblems(shown, maxDeal) ||
     serverIssues.size > 0;
   const props = { shown, set, panel, submitted };
@@ -1577,7 +1610,7 @@ export function SettingsSection({
         {features.schedule ? <HoursGroup {...props} account={account} /> : null}
         <LimitsGroup {...props} account={account} serverIssues={serverIssues} />
         <FindGroup {...props} />
-        <TradeGroup {...props} account={account} />
+        <TradeGroup {...props} account={account} serverIssues={serverIssues} />
         <BlockedGroup account={account} panel={panel} />
         <NotifyGroup />
       </div>

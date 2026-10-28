@@ -34,6 +34,7 @@ import {
   plusScenario,
 } from "./mock-data";
 import { type CheckAnswer, fill, type OrderDraft } from "./order-draft";
+import { checkOrderText } from "./order-rules";
 import type {
   CloudNotifyPrefs,
   PlusApproval,
@@ -76,7 +77,8 @@ function emitAi() {
     ...ai,
     pendingApprovals: approvals.filter((a) => a.state === "pending").length,
     state: config.enabled ? ai.state : "off",
-    reason: config.enabled ? ai.reason : "player",
+    // Off and never started: the service says it waits for the first "Başlat".
+    reason: config.enabled ? ai.reason : config.ready ? "ready" : "player",
   };
   mockLive.emit({ kind: "ai", acct: PLUS_ID, ai });
 }
@@ -89,7 +91,7 @@ function log(k: string, parts: Partial<PlusAuditEntry> = {}) {
 }
 
 /** "Kontrol et": the card's draft, the way the agent reads the words (a preview's few). */
-function check(text: string): PlusCheckOutcome {
+function check(text: string, inGame = false): PlusCheckOutcome {
   const lower = text.toLocaleLowerCase("tr");
   if (/bakım/.test(lower)) return { kind: "unavailable", reason: "paused" };
   if (/bağlı değil/.test(lower)) return { kind: "offline" };
@@ -98,6 +100,12 @@ function check(text: string): PlusCheckOutcome {
   }
   if (/önce (sen|ben)|önden/.test(lower))
     return { kind: "rejected", reason: "loosen", rule: "prepay" };
+  // The rules' money (28 Oct 2026): a rail refuses; money that may be the game's is asked first
+  // ("Bu oyun parası"), unless the player said it is.
+  const label = settings().server.money.label;
+  const ruled = checkOrderText(text, { currency: label?.tr ?? null, inGame }).result;
+  if (ruled === "reject:loosen:rmt") return { kind: "rejected", reason: "loosen", rule: "rmt" };
+  if (ruled === "question:rmt") return { kind: "rejected", reason: "question", rule: "rmt" };
   if (checksLeft <= 0) return { kind: "limited", reason: "daily", retry_after: null };
   checksLeft -= 1;
   // "64 tane" is a quantity, never a price.
@@ -217,8 +225,19 @@ export const mockPlusApi: PlusApi = {
   async save(_id, rev, next) {
     await delay(380);
     if (rev !== aiRev) return { kind: "conflict", settings: settings() };
-    // Orders and custom items have their own routes: the settings' save keeps the stored ones.
-    config = { ...next, orders: config.orders, customItems: config.customItems };
+    // The money's name as the service keeps it: a write without it keeps the stored one, an
+    // emptied one is none.
+    const sent = "currency" in next.trade ? next.trade.currency : config.trade.currency;
+    const currency = sent?.trim().replace(/\s+/gu, " ") || null;
+    // Orders and custom items have their own routes: the settings' save keeps the stored ones. The
+    // first-start mark is the service's: a save that turns the assistant on ends it.
+    config = {
+      ...next,
+      ready: next.enabled ? null : config.ready,
+      trade: { ...next.trade, currency },
+      orders: config.orders,
+      customItems: config.customItems,
+    };
     aiRev += 1;
     emitAi();
     return { kind: "saved", settings: settings() };
@@ -234,7 +253,9 @@ export const mockPlusApi: PlusApi = {
   async control(_id, action, name) {
     await delay(260);
     if (action === "pause" || action === "resume") {
-      config = { ...config, enabled: action === "resume" };
+      // "Başlat" also ends the wait for the first start (the service's `ready`).
+      const ready = action === "resume" ? null : config.ready;
+      config = { ...config, enabled: action === "resume", ready };
       ai = {
         ...ai,
         state: action === "resume" ? "on" : "off",
@@ -251,11 +272,11 @@ export const mockPlusApi: PlusApi = {
     emitAi();
     return { ai, aiRev };
   },
-  async check(_id, text) {
+  async check(_id, text, inGame) {
     await delay(900);
     if (offline) return { kind: "offline" };
     if (plusScenario === "maintenance") return { kind: "unavailable", reason: "paused" };
-    return check(text);
+    return check(text, inGame === true);
   },
   async createOrder(_id, order, customItems, chip) {
     await delay(420);

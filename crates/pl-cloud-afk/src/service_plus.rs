@@ -64,14 +64,24 @@ impl PlusCache {
         self.settings.lock().get(id).cloned()
     }
 
-    /// A write's answer over what was read: the settings, their revision and the judge; the
-    /// server, Studio's rules and the orders' states stay.
-    fn written(&self, id: &str, config: PlusConfig, ai_rev: u64) -> PlusSettings {
+    /// A write's answer over what was read: the settings, their revision and the judge, and the
+    /// server view when the answer brings one (a save's: its money name as the service names it);
+    /// else the server read stays, as Studio's rules and the orders' states do.
+    fn written(
+        &self,
+        id: &str,
+        config: PlusConfig,
+        ai_rev: u64,
+        server: Option<crate::plus::PlusServer>,
+    ) -> PlusSettings {
         let mut guard = self.settings.lock();
         let entry = guard.entry(id.to_owned()).or_default();
         if entry.ai_rev <= ai_rev {
             entry.config = config;
             entry.ai_rev = ai_rev;
+            if let Some(server) = server {
+                entry.server = server;
+            }
         }
         entry.clone()
     }
@@ -137,7 +147,8 @@ pub enum PlusCheckOutcome {
     /// panel answers its questions on exactly what the service wrote.
     Draft { answer: String },
     /// The rules or the agent said no: `length`, `link`, `command`, `personal`, `unsafe`,
-    /// `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`.
+    /// `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`; or asked first:
+    /// `question` with `rule: "rmt"` (money that may be the game's: checked again with `in_game`).
     Rejected {
         reason: String,
         rule: Option<String>,
@@ -222,6 +233,7 @@ pub fn check_context(settings: &PlusSettings, now: i64) -> PlusCheckContext {
         features: PlusCheckFeatures {
             item_pay: Some(rules.features.item_pay),
             custom_items: Some(rules.features.custom_items),
+            currency: Some(rules.features.currency),
         },
         limits: PlusCheckLimits {
             order_max: rules.order_max,
@@ -249,7 +261,9 @@ pub fn check_context(settings: &PlusSettings, now: i64) -> PlusCheckContext {
 }
 
 /// The settings a `PUT` sends (everything but the orders and custom items), checked and as the
-/// service would store them; or what it would refuse.
+/// service would store them; or what it would refuse. The money's name goes as the player's
+/// settings have it: cleaned, null once cleared (the stored document leaves it out), and not at
+/// all where they leave it out (the service keeps the stored one; an older one knows no such key).
 pub fn checked_settings(
     config: &PlusConfig,
     settings: &PlusSettings,
@@ -263,7 +277,14 @@ pub fn checked_settings(
     }
     let stored = check_config_value(&input, &check_context(settings, checks_now(settings, now)))
         .map_err(|refusal| vec![refusal.issue()])?;
-    serde_json::from_value(stored).map_err(|_| vec![PlusIssue::new("config", "type")])
+    let mut sent: PlusConfig =
+        serde_json::from_value(stored).map_err(|_| vec![PlusIssue::new("config", "type")])?;
+    match config.trade.currency {
+        None => sent.trade.currency = None,
+        Some(None) => sent.trade.currency = Some(None),
+        Some(Some(_)) => {}
+    }
+    Ok(sent)
 }
 
 /// A refusal on the count of active orders (`limit_orders`, scope `active`).
@@ -561,7 +582,9 @@ impl CloudService {
     ) -> Result<PlusSaveOutcome> {
         match answer {
             Ok(written) => {
-                let mut settings = self.cache().written(id, written.config, written.ai_rev);
+                let mut settings =
+                    self.cache()
+                        .written(id, written.config, written.ai_rev, written.server);
                 settings.judge = written.judge;
                 self.cache().remember(id, &settings);
                 Ok(PlusSaveOutcome::Saved { settings })
@@ -578,13 +601,14 @@ impl CloudService {
 
     /// "Kontrol et": the player's words become an order's card (nothing is stored). The free
     /// rules run at the service (the panel already hinted them); a text outside 3-200 characters
-    /// never leaves.
+    /// never leaves. `in_game`: the player said the words' money is the game's ("Bu oyun parası").
     pub async fn plus_check(
         &self,
         token: &Bearer,
         id: &str,
         text: &str,
         lang: &str,
+        in_game: bool,
     ) -> Result<PlusCheckOutcome> {
         let cleaned = clean_text(text).replace('\n', " ");
         let length = cleaned.chars().count();
@@ -597,7 +621,7 @@ impl CloudService {
         check_outcome(
             self.inner
                 .client
-                .check_order(token, id, &cleaned, lang)
+                .check_order(token, id, &cleaned, lang, in_game)
                 .await,
         )
     }
@@ -702,7 +726,9 @@ impl CloudService {
     ) -> Result<PlusOrderOutcome> {
         match answer {
             Ok(written) => {
-                let settings = self.cache().written(id, written.config, written.ai_rev);
+                let settings = self
+                    .cache()
+                    .written(id, written.config, written.ai_rev, None);
                 Ok(PlusOrderOutcome::Saved {
                     settings: Box::new(settings),
                     order: written.order.map(Box::new),
@@ -771,7 +797,11 @@ impl CloudService {
             let config = &mut settings.config;
             match action {
                 PlusAction::Pause => config.enabled = false,
-                PlusAction::Resume => config.enabled = true,
+                // "Başlat" also ends the wait for the first start (the service drops `ready`).
+                PlusAction::Resume => {
+                    config.enabled = true;
+                    config.ready = None;
+                }
                 PlusAction::Block | PlusAction::Unblock => {
                     if let Some(name) = name {
                         config.blocked.retain(|n| !n.eq_ignore_ascii_case(name));
@@ -1100,6 +1130,7 @@ mod tests {
                 trade: "bot".into(),
                 money: crate::plus::PlusServerMoney {
                     label: None,
+                    fixed: false,
                     max_deal: 10_000_000,
                     currency: "smp".into(),
                 },
@@ -1161,6 +1192,57 @@ mod tests {
             checked_settings(&config, &settings, NOW),
             Err(vec![PlusIssue::new("who.friends[0]", "blocked")])
         );
+    }
+
+    #[test]
+    fn the_money_name_goes_as_the_player_left_it() {
+        let mut settings = settings();
+        settings.rules.features.currency = true;
+        settings.config.trade.currency = Some(Some("TL".into()));
+        let sent = |config: &PlusConfig| {
+            let checked = checked_settings(config, &settings, NOW).unwrap();
+            checked.trade.currency
+        };
+        // Left out (a screen that does not show it): left out of the write, the stored one stays.
+        let mut config = settings.config.clone();
+        config.trade.currency = None;
+        assert_eq!(sent(&config), None);
+        config.trade.currency = Some(Some("  Altın  Para ".into()));
+        assert_eq!(sent(&config), Some(Some("Altın Para".into())));
+        config.trade.currency = Some(None);
+        assert_eq!(sent(&config), Some(None), "a cleared name goes as null");
+        config.trade.currency = Some(Some("TL2".into()));
+        assert_eq!(
+            checked_settings(&config, &settings, NOW),
+            Err(vec![PlusIssue::text("trade.currency", "form")])
+        );
+        // Studio's switch off (an older service reads so too): the stored name may go back, a new
+        // one is refused.
+        let mut off = settings.clone();
+        off.rules.features.currency = false;
+        assert_eq!(
+            checked_settings(&off.config, &off, NOW).map(|checked| checked.trade.currency),
+            Ok(Some(Some("TL".into())))
+        );
+        let mut config = off.config.clone();
+        config.trade.currency = Some(Some("coin".into()));
+        assert_eq!(
+            checked_settings(&config, &off, NOW),
+            Err(vec![PlusIssue::new("trade.currency", "feature")])
+        );
+    }
+
+    #[test]
+    fn a_save_keeps_the_ready_mark_while_the_assistant_waits() {
+        let mut settings = settings();
+        settings.config.enabled = false;
+        settings.config.ready = Some(true);
+        let sent = checked_settings(&settings.config, &settings, NOW).unwrap();
+        assert_eq!(sent.ready, Some(true));
+        // A save that turns the assistant on starts it: the mark ends.
+        let mut on = settings.config.clone();
+        on.enabled = true;
+        assert_eq!(checked_settings(&on, &settings, NOW).unwrap().ready, None);
     }
 
     #[test]
@@ -1275,6 +1357,18 @@ mod tests {
                 rule: Some("prepay".into())
             }
         );
+        // Money that may be the game's is asked (28 Oct 2026): the panel offers "Bu oyun parası".
+        assert_eq!(
+            check_outcome(refusal(
+                422,
+                json!({"error": {"code": "order_rejected", "reason": "question", "rule": "rmt"}})
+            ))
+            .unwrap(),
+            PlusCheckOutcome::Rejected {
+                reason: "question".into(),
+                rule: Some("rmt".into())
+            }
+        );
         assert_eq!(
             check_outcome(refusal(
                 429,
@@ -1381,7 +1475,10 @@ mod tests {
         ));
         for text in ["  a ", &"x".repeat(MAX_ORDER_TEXT + 1)] {
             assert_eq!(
-                service.plus_check(&token, "a_1", text, "tr").await.unwrap(),
+                service
+                    .plus_check(&token, "a_1", text, "tr", false)
+                    .await
+                    .unwrap(),
                 PlusCheckOutcome::Rejected {
                     reason: "length".into(),
                     rule: None
@@ -1412,5 +1509,44 @@ mod tests {
         assert_eq!(service.plus_minecraft("a_1").as_deref(), Some("26.3"));
         service.forget().await;
         assert_eq!(service.plus_minecraft("a_1"), None);
+    }
+
+    #[tokio::test]
+    async fn a_save_shows_the_server_view_it_answers_with() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = offline_service(dir.path());
+        let token = Bearer::new("t");
+        let read = settings();
+        service.inner.plus.remember("a_1", &read);
+        let label = |settings: &PlusSettings| settings.server.money.label.clone().map(|l| l.tr);
+        // An older service answers without it: the view read stays.
+        let answer = json!({"config": read.config, "aiRev": 4});
+        let written: PlusWritten = serde_json::from_value(answer).unwrap();
+        assert_eq!(written.server, None);
+        let outcome = service.settings_written(&token, "a_1", Ok(written)).await;
+        let Ok(PlusSaveOutcome::Saved { settings }) = outcome else {
+            panic!("not saved");
+        };
+        assert_eq!(settings.server, read.server);
+        // A save's answer names the money as the service resolved it ("Para birimi"): it shows at
+        // once, never worked out here.
+        let mut server = serde_json::to_value(&read.server).unwrap();
+        server["money"]["label"] = json!({"tr": "TL", "en": "TL"});
+        let answer = json!({"config": read.config, "aiRev": 5, "server": server});
+        let written: PlusWritten = serde_json::from_value(answer).unwrap();
+        let outcome = service.settings_written(&token, "a_1", Ok(written)).await;
+        let Ok(PlusSaveOutcome::Saved { settings }) = outcome else {
+            panic!("not saved");
+        };
+        assert_eq!(label(&settings).as_deref(), Some("TL"));
+        assert_eq!(settings.rules, read.rules, "Studio's rules stay as read");
+        // An order write's answer has none: the view known stays.
+        let answer = json!({"config": read.config, "aiRev": 6});
+        let written: PlusOrderWritten = serde_json::from_value(answer).unwrap();
+        let outcome = service.order_written("a_1", Ok(written));
+        let Ok(PlusOrderOutcome::Saved { settings, .. }) = outcome else {
+            panic!("not saved");
+        };
+        assert_eq!(label(&settings).as_deref(), Some("TL"));
     }
 }

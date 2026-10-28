@@ -23,7 +23,7 @@ import { itemLabel, type Namer } from "./items";
 import { moneyText } from "./orders";
 import { clockText, dateTimeText, dayText, rangeText } from "./time";
 import { usePlusFeatures } from "./use-plus";
-import { amountWords, currentLang, formatAmount, goodsText, type Lang, qtyItem } from "./words";
+import { cardWords, currentLang, formatAmount, goodsText, type Lang, qtyItem } from "./words";
 
 type Filter = "all" | "buy" | "sell";
 
@@ -141,6 +141,8 @@ function ReceiptDetails({
   const { t } = useTranslation();
   const lang = currentLang();
   const at = Math.floor(receipt.at / 1000);
+  // The amount in words from 10.000, as on the cards (a bare "bin" under "1.000" read as a million).
+  const priceWords = receipt.pay === "money" ? cardWords(receipt.price, lang) : null;
   const rows: Array<[string, string, string?]> = [
     [t("afkPlus.report.time"), dateTimeText(at, lang)],
     [t("afkPlus.report.trader"), receipt.counterpart],
@@ -152,7 +154,7 @@ function ReceiptDetails({
     [
       t("afkPlus.report.amount"),
       priceText(receipt.price, receipt.pay, receipt.currency, namer, server, lang),
-      receipt.pay === "money" ? amountWords(receipt.price, lang) : undefined,
+      priceWords ?? undefined,
     ],
     [
       t("afkPlus.report.status"),
