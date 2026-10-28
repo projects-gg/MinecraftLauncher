@@ -19,6 +19,11 @@ export interface ItemRef {
    * golden apples, bottles o' enchanting, nether stars, end crystals and written books glint.
    */
   enchanted?: boolean;
+  /**
+   * A player head's skin: its texture's hash on Mojang's texture server (INV-HEADS). The head is
+   * drawn with it once it has loaded, else as the plain head.
+   */
+  skin?: string;
 }
 
 /** A tinted layer: the client multiplies it by a colour the server can send. */

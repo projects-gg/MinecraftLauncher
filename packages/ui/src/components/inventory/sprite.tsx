@@ -17,6 +17,8 @@ export interface InventorySpriteProps {
   /** Projects' own items (IA-ART): custom_model_data and item_model. */
   cmd?: number;
   model?: string;
+  /** A player head's skin (INV-HEADS): its texture's hash on Mojang's texture server. */
+  skin?: string;
   label?: string;
   className?: string;
 }
