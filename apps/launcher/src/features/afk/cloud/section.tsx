@@ -6,7 +6,7 @@
 // for one action at a time (CAFK-FEAT §3.4). An account this computer has too lists where it runs
 // (AFK-CLEAR): while its copy here is busy its card stands under "Bu bilgisayarda", with the same
 // actions (`useCloudCardActions`), and this list's count says so.
-import { ArrowSquareOut, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
+import { ArrowSquareOut, ArrowsClockwise, CloudSlash, WarningCircle } from "@phosphor-icons/react";
 import { Button, cn, enter, IconButton, leave, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -26,12 +26,14 @@ import { PlusIntroCard, PlusIntroDialog } from "./plus/intro";
 import { PlusPanel } from "./plus/plus-panel";
 import { plusMe, plusOffer } from "./plus/types";
 import { isPlusAccount, plusShown, usePlusUi } from "./plus/use-plus";
+import { reachOf, useCloudReach } from "./reach";
 import { CloudSettingsSheet } from "./settings";
 import { localized } from "./status";
 import { hereCopy, twinsHere } from "./twins";
 import {
   useCloudAction,
   useCloudPage,
+  useCloudReachFeed,
   useCloudSync,
   useCloudUi,
   useGuardedStart,
@@ -132,7 +134,9 @@ export function CloudSection({
 }) {
   const { t, i18n } = useTranslation();
   useCloudSync();
+  useCloudReachFeed();
   const { data, skewMs, refetch, isFetching } = useCloudPage();
+  const reach = useCloudReach();
   const ui = useCloudUi();
   const restart = useCloudAction("restart");
   const guardedStart = useGuardedStart();
@@ -211,7 +215,12 @@ export function CloudSection({
   // Every cloud account counts; those running on this computer have their card in its list.
   const all = signedIn ? overview.accounts : [];
   const accounts = all.filter((account) => !away.has(account.id));
-  const online = accounts.filter((a) => a.live.state === "running" && !a.hold).length;
+  // A machine out of reach: the cards say what was known last, so the count claims no one in game
+  // and one line says why (CLOUD-STALE).
+  const unreachable = accounts.some((account) => reachOf(account, reach).stale);
+  const online = unreachable
+    ? 0
+    : accounts.filter((a) => a.live.state === "running" && !a.hold).length;
   const count =
     away.size > 0
       ? online > 0
@@ -335,6 +344,24 @@ export function CloudSection({
               aria-hidden
             />
             <span>{maintenance}</span>
+          </motion.p>
+        ) : unreachable ? (
+          <motion.p
+            key="unreachable"
+            role="status"
+            // The same quiet panel; a state, not an error, so its mark stays ash.
+            className="mb-3 flex items-start gap-2 rounded-[var(--radius-panel)] bg-white/[0.035] px-3.5 py-2.5 text-[12.5px] text-bone-100 ring-1 ring-white/7"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: enter(0.2) }}
+            exit={{ opacity: 0, transition: leave(0.14) }}
+          >
+            <CloudSlash
+              size={15}
+              weight="bold"
+              className="mt-px shrink-0 text-ash-300"
+              aria-hidden
+            />
+            <span>{t("cloudStale.line")}</span>
           </motion.p>
         ) : null}
       </AnimatePresence>

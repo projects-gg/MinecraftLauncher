@@ -484,6 +484,9 @@ export const mockPlusApi: PlusApi = {
   },
   async watch(id) {
     await delay(120);
+    // The machine's socket, as in the app: it says whether the machine is there.
+    mockLive.emit({ kind: "status", host: "kz1", status: "live" });
+    mockLive.emit({ kind: "hello", host: "kz1", online: mockLive.machineOnline() });
     if (id !== PLUS_ID || offline) return;
     setTimeout(() => mockLive.emit({ kind: "ai", acct: id, ai }), 240);
     let n = 0;

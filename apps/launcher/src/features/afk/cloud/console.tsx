@@ -54,6 +54,7 @@ import { ConsoleTools } from "./console-tools";
 import { InventoryPanel, useInventoryArt } from "./inventory/inventory-panel";
 import { MovementPanel } from "./movement/movement-panel";
 import { movementShown } from "./movement/use-cloud-movement";
+import { useAccountReach } from "./reach";
 import { looksSensitive } from "./sensitive";
 import { issueKey, textProblem } from "./settings-model";
 import { CloudStateLine } from "./state-line";
@@ -256,7 +257,11 @@ export function CloudConsole({
           }
           break;
         case "machine":
-          if (event.host === current.host) setHostOnline(event.online);
+          if (event.host === current.host) {
+            setHostOnline(event.online);
+            // What the server kept on screen is not known any more: a return brings it anew.
+            if (!event.online) setBars(null);
+          }
           break;
         case "state":
           if (event.acct === current.id)
@@ -360,11 +365,15 @@ export function CloudConsole({
   };
 
   const running = account ? isInGame(account) : false;
+  // Its machine out of reach (CLOUD-STALE): the title says what was known last, the strip goes, and
+  // the line waits for the connection, since nothing typed could reach the game.
+  const stale = useAccountReach(account).stale;
+  const canType = running && !stale;
   const sensitive = looksSensitive(text);
 
   const send = async () => {
     const line = text.trim();
-    if (!line || !account || !running || sending) return;
+    if (!line || !account || !canType || sending) return;
     // The settings' rule and words (pl_cloud_afk::check_text): said here, nothing is sent.
     const problem = textProblem(line);
     if (problem) {
@@ -432,7 +441,7 @@ export function CloudConsole({
             query={query}
             onQuery={setQuery}
           />
-          <ConsoleStrip bars={running ? bars : null} skewMs={skewMs} />
+          <ConsoleStrip bars={canType ? bars : null} skewMs={skewMs} />
         </>
       ) : null}
       <div className="relative min-h-0 flex-1">
@@ -474,9 +483,11 @@ export function CloudConsole({
                 ? query.trim()
                   ? t("cloudAfkFeat.console.noSearchMatch")
                   : t("cloudAfkFeat.console.noMatch")
-                : status === "connecting" && host
-                  ? t("cloudAfk.console.connecting")
-                  : t("cloudAfk.console.empty")}
+                : stale
+                  ? t("cloudStale.console.noLines")
+                  : status === "connecting" && host
+                    ? t("cloudAfk.console.connecting")
+                    : t("cloudAfk.console.empty")}
             </p>
           )}
           {skipped ? (
@@ -522,11 +533,17 @@ export function CloudConsole({
               look for secret lines). */}
           <SecretField
             aria-label={t("cloudAfk.console.input")}
-            placeholder={running ? t("cloudAfk.console.input") : t("cloudAfk.console.offline")}
+            placeholder={
+              canType
+                ? t("cloudAfk.console.input")
+                : stale && account.desired === "run"
+                  ? t("cloudStale.console.offline")
+                  : t("cloudAfk.console.offline")
+            }
             value={text}
-            secret={sensitive && running}
-            mono={running}
-            disabled={!running}
+            secret={sensitive && canType}
+            mono={canType}
+            disabled={!canType}
             maxLength={256}
             onChange={(next) => {
               setText(next);
@@ -535,7 +552,7 @@ export function CloudConsole({
             onKeyDown={onKeyDown}
             className="h-[34px] disabled:opacity-60"
           />
-          {running ? (
+          {canType ? (
             <IconButton
               label={t("cloudAfk.console.send")}
               icon={<PaperPlaneRight size={18} weight="fill" />}
@@ -561,7 +578,7 @@ export function CloudConsole({
         {/* One reserved line: the note or the error fades in place, nothing moves. */}
         <div className="grid min-h-[18px]">
           <AnimatePresence initial={false}>
-            {sendError || (sensitive && running) ? (
+            {sendError || (sensitive && canType) ? (
               <motion.p
                 key={sendError ? "error" : "sealed"}
                 role={sendError ? "alert" : "status"}

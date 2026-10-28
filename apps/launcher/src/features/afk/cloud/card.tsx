@@ -63,6 +63,7 @@ import { ModerationLine, openAppeal } from "./moderation-bits";
 import { AI_TONE, useAiSentence } from "./plus/rail";
 import { plusAi } from "./plus/types";
 import { firstClause } from "./plus/words";
+import { useAccountReach } from "./reach";
 import { CloudStateLine } from "./state-line";
 import {
   type CloudPrimary,
@@ -416,7 +417,9 @@ export function CloudCard({
   const place: TwinPlace = here ? twinPlace(account, here) : "cloud";
   // The card speaks for the copy on this computer (its state, button, console and settings).
   const local = place === "here" ? here : null;
-  const inGame = local ? local.state.kind === "connected" : isInGame(account);
+  // Its machine out of reach, the card makes no live claim: the line says what was known last.
+  const stale = useAccountReach(account).stale;
+  const inGame = local ? local.state.kind === "connected" : isInGame(account) && !stale;
   const action = cloudPrimary(account);
   const hereConsole = onHereConsole ?? onConsole;
   const hereSettings = onHereSettings ?? onSettings;

@@ -1,9 +1,11 @@
 // A cloud account's state in one line, as on the desktop cards: the server bars and the words. Only
-// the uptime and the reconnect countdown tick, and only while somebody can see them.
+// the uptime and the reconnect countdown tick, and only while somebody can see them. While its
+// machine cannot be reached the line is what was known last, dim and still (CLOUD-STALE).
 import { cn, SignalBars, usePerf } from "@pl/ui";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CloudAccount } from "./api";
+import { useAccountReach } from "./reach";
 import { cloudStatus } from "./status";
 
 export function CloudStateLine({
@@ -20,9 +22,10 @@ export function CloudStateLine({
 }) {
   const { t, i18n } = useTranslation();
   const { unseen } = usePerf();
+  const reach = useAccountReach(account);
   const [ticks, tick] = useState(0);
   const lang = i18n.language === "en" ? "en" : "tr";
-  const status = cloudStatus(account, Date.now() + skewMs, t, lang);
+  const status = cloudStatus(account, Date.now() + skewMs, t, lang, reach);
   const text = status.text;
   const wait = unseen ? null : status.nextChangeMs;
   useEffect(() => {
@@ -36,7 +39,7 @@ export function CloudStateLine({
       <p
         className="flex min-w-0 items-center gap-2 text-[12.5px]"
         // A long stop reason is cut in the line; the whole of it stays one hover away.
-        title={status.tone === "error" ? text : undefined}
+        title={status.tone === "error" || status.tone === "stale" ? text : undefined}
       >
         <SignalBars state={status.signal} />
         <span
@@ -46,6 +49,7 @@ export function CloudStateLine({
             status.tone === "muted" && "text-ash-300",
             status.tone === "warn" && "text-gold-300",
             status.tone === "error" && "text-flare-400",
+            status.tone === "stale" && "text-ash-400",
           )}
         >
           {text}
