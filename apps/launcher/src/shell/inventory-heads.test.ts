@@ -228,14 +228,14 @@ describe("the server's looks", () => {
   it("draws the tooltip's name and lore in their looks, spacer lines too", () => {
     const head = SAMPLE_HEADS.items.find((i) => i.slot === 13) as InvItem;
     const lines = tooltipLines(head, "tr", INVENTORY_TEXTS.tr);
-    expect(lines[0]?.text).toBe("Steve Kafası");
-    expect(lines[0]?.runs).toEqual([{ text: "Steve Kafası", color: "#55ffff" }]);
+    expect(lines[0]?.text).toBe("Büyücü Kafası");
+    expect(lines[0]?.runs).toEqual([{ text: "Büyücü Kafası", color: "#55ffff" }]);
     expect(lines.map((l) => l.text)).toEqual([
-      "Steve Kafası",
+      "Büyücü Kafası",
       "Nadir",
       "gizli ödül",
       "",
-      "Fiyat: 900 jeton",
+      "Fiyat: 900 ripple",
     ]);
     expect(lines[2]?.runs).toEqual([
       { text: "gizli", color: TEXT_COLOR.lore, obfuscated: true },

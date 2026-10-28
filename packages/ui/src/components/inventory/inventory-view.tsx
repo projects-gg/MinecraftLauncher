@@ -105,9 +105,10 @@ export interface InventoryViewProps {
   align?: "center" | "start";
   /**
    * `width` (default): the largest whole-pixel scale the component's width holds. `contain`: the
-   * largest one its width and its height both hold, the line under the window counted; the
-   * component fills its parent's height (a host with a fixed height: a panel, a dialog) and sits
-   * in the middle of it (`align="start"`: at its top).
+   * largest one its width and its height both hold, the line under the window counted. The host
+   * gives it both (a panel, a dialog: it fills its parent's height and has no size of its own, so
+   * a shrink-to-fit parent gives it none), and the art sits in the middle (`align="start"`: at
+   * its top).
    */
   fit?: "width" | "contain";
   /**
