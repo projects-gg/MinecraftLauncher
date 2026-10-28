@@ -34,10 +34,12 @@ import { markAnswered } from "./approval-clock";
 import { AmountField } from "./fields";
 import { ItemTile, PlusItemIcon } from "./item-icon";
 import { itemLabel, type Namer } from "./items";
+import { LimitLine } from "./limits-link";
+import { limitReason } from "./model";
 import { moneyText } from "./orders";
 import { minutesLeft } from "./time";
-import { storeApproval } from "./use-plus";
-import { amountWithCase, amountWords, currentLang, dealText, qtyItem } from "./words";
+import { storeApproval, usePlusUi } from "./use-plus";
+import { amountWithCase, cardWords, currentLang, dealText, qtyItem } from "./words";
 
 /** Minutes left, read again at each whole minute (never every second). */
 function useMinutesLeft(expiresAt: number): number {
@@ -218,6 +220,7 @@ export function ApprovalCard({
   const [ceiling, setCeiling] = useState<number | null>(null);
   const [ceilingError, setCeilingError] = useState<string | null>(null);
   const guard = usePressGuard(lowering ? "lower" : "ask");
+  const goToLimit = usePlusUi((s) => s.goToLimit);
   // The card glides when the rows around it change, never in Performance mode.
   const { layout } = useMotionPrefs();
   const { deal } = approval;
@@ -233,6 +236,7 @@ export function ApprovalCard({
     ? money(deal.price)
     : qtyItem(deal.price, itemLabel(deal.pay, namer, lang), lang);
   const dealWords = dealText(deal.qty, item, price, lang);
+  const priceWords = pending && kind === "deal" && forMoney ? cardWords(deal.price, lang) : null;
   // The other player as a label: the name takes no ending ("Satıcı: Kaan_07").
   const party = t(buy ? "afkPlus.approval.partyBuy" : "afkPlus.approval.partySell", {
     name: approval.counterpart,
@@ -269,6 +273,10 @@ export function ApprovalCard({
     ),
   ];
   const lowerable = kind === "deal" && buy && forMoney;
+  // The first reason that is a limit's ("Onay sınırının üstünde") carries "Sınırlara git", while it
+  // waits and once closed: the limit is one click away.
+  const limit = kind === "deal" ? limitReason(approval.why) : null;
+  const limitLine = limit ? t(`afkPlus.approval.why.${limit.reason}`) : null;
 
   const answer = async (approve: boolean, maxPrice: number | null) => {
     setBusy(approve ? (maxPrice ? "lower" : "approve") : "reject");
@@ -368,20 +376,19 @@ export function ApprovalCard({
               </span>
             ) : null}
           </div>
-          {/* The amount in words only while it waits for an answer about it. */}
-          {pending && kind === "deal" && forMoney && deal.price >= 1000 ? (
-            <p className="text-[12px] text-ash-400">{amountWords(deal.price, lang)}</p>
-          ) : null}
+          {/* The amount in words only while it waits for an answer about it (from 10.000). */}
+          {priceWords ? <p className="text-[12px] text-ash-400">{priceWords}</p> : null}
           {lines.map((line) => (
-            <p
+            <LimitLine
               key={line}
+              onGo={limit && line === limitLine ? () => goToLimit(limit.field) : null}
               className={cn(
                 "mt-0.5 text-[12.5px] tabular-nums [overflow-wrap:anywhere]",
                 pending ? "text-ash-300" : "text-ash-400",
               )}
             >
               {line}
-            </p>
+            </LimitLine>
           ))}
           {kind === "confirm_item" && approval.seen ? (
             <div className="mt-2 flex items-start gap-3">

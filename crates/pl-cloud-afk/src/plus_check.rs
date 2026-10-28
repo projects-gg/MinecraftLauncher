@@ -37,9 +37,10 @@ const STATUS_PRESETS: [&str; 5] = [
     "weekend",
     "busy",
 ];
-const ROOT_KEYS: [&str; 19] = [
+const ROOT_KEYS: [&str; 20] = [
     "v",
     "enabled",
+    "ready",
     "mode",
     "lang",
     "persona",
@@ -109,6 +110,8 @@ pub struct PlusModeFacts {
 pub struct PlusCheckFeatures {
     pub item_pay: Option<bool>,
     pub custom_items: Option<bool>,
+    /// "Para birimi": while off, a new money name is refused (the stored one may come back).
+    pub currency: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -580,6 +583,34 @@ pub fn check_prefix(raw: &str, names: &[String]) -> Result<String, &'static str>
     Ok(cleaned)
 }
 
+/// The longest money name (`trade.currency`, code points).
+pub const CURRENCY_MAX: usize = 16;
+
+/// The money name the player gives ("Para birimi", the reference's `checkCurrency`): the cleaned
+/// text, or why not, in its order: `length` (empty), `form` (one line, only Latin letters, spaces,
+/// `. _ -` and `$ € ₺ £`, with a letter or a sign; no digit, since the reply rule reads every digit
+/// as a number) and `length` (over 16). Listed words, links, contact data and apps are the
+/// service's.
+pub fn check_currency(raw: &str) -> Result<String, &'static str> {
+    static CHARS: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"^[\p{Script=Latin} ._\-$€₺£]+$").expect("a valid pattern")
+    });
+    static SHOWN: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"[\p{Script=Latin}$€₺£]").expect("a valid pattern")
+    });
+    let cleaned = clean_text(raw);
+    if cleaned.is_empty() {
+        return Err("length");
+    }
+    if form_problem(&cleaned) || !CHARS.is_match(&cleaned) || !SHOWN.is_match(&cleaned) {
+        return Err("form");
+    }
+    if cp(&cleaned) > CURRENCY_MAX {
+        return Err("length");
+    }
+    Ok(cleaned)
+}
+
 /// The persona text rule's part the launcher knows (README "Persona texts"; a custom item's name
 /// too): the cleaned text, or why not (`form`, `length`, `marker`, in the reference's order).
 /// Links, contact data and listed words are the service's.
@@ -671,6 +702,15 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     let now = ctx.now;
     let stored = ctx.stored.as_ref();
     let enabled = boolean(config.get("enabled"), "enabled")?;
+    // The service's `ready` (28 Oct 2026: a first grant's assistant waits for the player's start):
+    // a write may send it back as it got it (true) or leave it out, and what it sends changes
+    // nothing. It stays while the stored document has it and the assistant stays off, and goes
+    // with the start (`enabled: true`); a client never makes it.
+    if !matches!(config.get("ready"), None | Some(Value::Bool(true))) {
+        return Err(PlusRefusal::invalid("ready", "type"));
+    }
+    let stored_ready = stored.and_then(|doc| doc.get("ready")) == Some(&Value::Bool(true));
+    let ready = stored_ready && !enabled;
     let mode = string(config.get("mode"), "mode")?;
     if mode != GENERIC && !ctx.modes.contains_key(mode) && ctx.stored_mode.as_deref() != Some(mode)
     {
@@ -723,13 +763,14 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     }
     let small_talk = boolean(persona_in.get("smallTalk"), "persona.smallTalk")?;
     // "Oyuncu gibi konuşsun" and the tag (27 Oct 2026): a write without them keeps the stored ones,
-    // so a client that does not know them yet changes nothing.
+    // so a client that does not know them yet changes nothing; without a stored one, the default
+    // ("Oyuncu gibi konuşsun" on since 28 Oct 2026).
     let stored_persona = stored.and_then(|doc| doc.get("persona"));
     let player_talk = match persona_in.get("playerTalk") {
         None => stored_persona
             .and_then(|persona| persona.get("playerTalk"))
             .and_then(Value::as_bool)
-            .unwrap_or(false),
+            .unwrap_or(true),
         other => boolean(other, "persona.playerTalk")?,
     };
     let tag_refusal = |problem: &'static str| PlusRefusal::Invalid {
@@ -931,13 +972,17 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     let discovery_in = object(config.get("discovery"), "discovery")?;
     only(
         discovery_in,
-        &["scanChat", "proactivePm", "ads", "adTemplate"],
+        &["scanChat", "proactivePm", "ads", "adTemplate", "adEveryMin"],
         "discovery",
     )?;
     let scan_chat = boolean(discovery_in.get("scanChat"), "discovery.scanChat")?;
     let proactive_pm = boolean(discovery_in.get("proactivePm"), "discovery.proactivePm")?;
     let ads = boolean(discovery_in.get("ads"), "discovery.ads")?;
     let ad_template = string(discovery_in.get("adTemplate"), "discovery.adTemplate")?;
+    let ad_every_min = match discovery_in.get("adEveryMin") {
+        None => None,
+        value => Some(ad_minutes(value)?),
+    };
     let templates: &[String] = if mode == GENERIC {
         &[]
     } else {
@@ -950,7 +995,7 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     }
 
     let trade_in = object(config.get("trade"), "trade")?;
-    only(trade_in, &["returnRow"], "trade")?;
+    only(trade_in, &["returnRow", "currency"], "trade")?;
     let return_row = match trade_in.get("returnRow") {
         Some(Value::Null) => Value::Null,
         other => {
@@ -963,6 +1008,33 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
             Value::String(id.to_owned())
         }
     };
+    // The money's name (28 Oct 2026): a write without it keeps the stored one (a client that does
+    // not know it changes nothing), null clears it. While Studio's switch is off a new name is
+    // refused; the stored one may come back unchanged, so a client that sends it back is not stuck.
+    let stored_currency = stored
+        .and_then(|doc| doc.get("trade"))
+        .and_then(|trade| trade.get("currency"))
+        .and_then(Value::as_str);
+    let currency = match trade_in.get("currency") {
+        None => stored_currency.map(str::to_owned),
+        Some(Value::Null) => None,
+        other => {
+            let raw = string(other, "trade.currency")?;
+            let name = check_currency(raw).map_err(|problem| PlusRefusal::Invalid {
+                field: "trade.currency".into(),
+                reason: "text".into(),
+                problem: Some(problem.into()),
+            })?;
+            if ctx.features.currency == Some(false) && stored_currency != Some(name.as_str()) {
+                return Err(PlusRefusal::invalid("trade.currency", "feature"));
+            }
+            Some(name)
+        }
+    };
+    let mut trade = serde_json::json!({"returnRow": return_row});
+    if let Some(name) = currency {
+        trade["currency"] = Value::String(name);
+    }
 
     let summary_at = string(config.get("summaryAt"), "summaryAt")?;
     if !is_time(summary_at) {
@@ -1074,7 +1146,7 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
         });
     }
 
-    let out = serde_json::json!({
+    let mut out = serde_json::json!({
         "v": 2,
         "enabled": enabled,
         "mode": mode,
@@ -1095,12 +1167,18 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
             "approvalTimeoutMin": timeout},
         "discovery": {"scanChat": scan_chat, "proactivePm": proactive_pm, "ads": ads,
             "adTemplate": ad_template},
-        "trade": {"returnRow": return_row},
+        "trade": trade,
         "summaryAt": summary_at,
         "blocked": blocked,
         "schedule": schedule,
         "pauseUntil": pause_until,
     });
+    if ready {
+        out["ready"] = Value::Bool(true);
+    }
+    if let Some(minutes) = ad_every_min {
+        out["discovery"]["adEveryMin"] = Value::from(minutes);
+    }
     if out.to_string().len() > MAX_CONFIG_BYTES {
         return Err(PlusRefusal::TooLarge);
     }
@@ -1109,6 +1187,23 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
 
 fn kind_or_range(value: Option<&Value>) -> &'static str {
     if value.is_none() { "missing" } else { "range" }
+}
+
+/// "Sohbete ilan" (trade-any-4): the minutes between ads a player may choose.
+const AD_EVERY_MIN: [i64; 4] = [30, 45, 60, 120];
+
+/// `discovery.adEveryMin`, where the document has it: one of [`AD_EVERY_MIN`] (a server's floor
+/// only raises the minutes the service uses, it refuses none of them). Any other number, a
+/// fraction too, is out of range; anything else is the wrong type.
+fn ad_minutes(value: Option<&Value>) -> Checked<i64> {
+    let field = "discovery.adEveryMin";
+    let Some(number @ Value::Number(_)) = value else {
+        return Err(PlusRefusal::invalid(field, kind_of(value)));
+    };
+    match whole(number) {
+        Some(minutes) if AD_EVERY_MIN.contains(&minutes) => Ok(minutes),
+        _ => Err(PlusRefusal::invalid(field, "range")),
+    }
 }
 
 fn parse_custom_items(value: &Value, now: i64) -> Checked<Vec<Value>> {
@@ -1454,9 +1549,12 @@ mod tests {
     }
 
     /// Cases that hang on the parts of the rule that are the service's: the text rule's links,
-    /// contact data and listed words (the order form says them in TypeScript).
-    const SERVICE_ONLY: [&str; 3] = [
+    /// contact data, other apps and listed words (a custom name's the order form says in
+    /// TypeScript too).
+    const SERVICE_ONLY: [&str; 5] = [
         "a custom name with a link",
+        "a money name naming another app",
+        "a money name that is a domain",
         "a tag naming another app",
         "a tag with a link",
     ];
@@ -1530,6 +1628,168 @@ mod tests {
         assert_eq!(check_persona("Tom & Jerry", 60), Ok("Tom & Jerry".into()));
         assert_eq!(check_persona(&"y".repeat(61), 60), Err("length"));
         assert_eq!(check_persona(" Yakut ", 32), Ok("Yakut".into()));
+    }
+
+    #[test]
+    fn money_names_are_checked_as_the_service_checks_them() {
+        for good in [
+            "TL",
+            "coin",
+            "ripple",
+            "Altın Para",
+            "₺",
+            "$",
+            "Gold.Coin",
+            "Elmas-Puan",
+            "Şeker_Ç",
+        ] {
+            assert_eq!(check_currency(good), Ok(good.to_owned()), "{good}");
+        }
+        assert_eq!(check_currency("  Altın   Para "), Ok("Altın Para".into()));
+        assert_eq!(check_currency("   "), Err("length"));
+        // A digit is a number to the reply rule; a name needs a letter or a sign.
+        for bad in [
+            "TL2", "100 coin", "-", "...", "TL!", "Аltın", "&aCoin", "Coin\nTL",
+        ] {
+            assert_eq!(check_currency(bad), Err("form"), "{bad}");
+        }
+        assert_eq!(check_currency(&"x".repeat(16)), Ok("x".repeat(16)));
+        assert_eq!(check_currency(&"x".repeat(17)), Err("length"));
+    }
+
+    #[test]
+    fn the_money_name_is_kept_cleared_or_checked() {
+        let base = serde_json::to_value(crate::plus::PlusConfig {
+            mode: GENERIC.into(),
+            ..crate::plus::PlusConfig::default()
+        })
+        .unwrap();
+        let with = |currency: Value| {
+            let mut doc = base.clone();
+            doc["trade"]["currency"] = currency;
+            doc
+        };
+        // The stored document names the money "TL"; `on` is Studio's switch.
+        let check = |currency: Option<Value>, on: bool| {
+            let ctx = PlusCheckContext {
+                now: 1_792_900_000,
+                stored: Some(with(Value::from("TL"))),
+                features: PlusCheckFeatures {
+                    currency: Some(on),
+                    ..PlusCheckFeatures::default()
+                },
+                ..PlusCheckContext::default()
+            };
+            check_config_value(&currency.map_or_else(|| base.clone(), with), &ctx)
+        };
+        let kept = |out: Checked<Value>| out.unwrap()["trade"].get("currency").cloned();
+        let refused = |reason: &str, problem: Option<&str>| -> Checked<Value> {
+            Err(PlusRefusal::Invalid {
+                field: "trade.currency".into(),
+                reason: reason.into(),
+                problem: problem.map(str::to_owned),
+            })
+        };
+        let tl = Some(Value::from("TL"));
+        // A write without it keeps the stored one; null clears it (the document leaves it out).
+        assert_eq!(kept(check(None, true)), tl);
+        assert_eq!(kept(check(Some(Value::Null), true)), None);
+        let spaced = Some(Value::from(" Altın  Para "));
+        assert_eq!(kept(check(spaced, true)), Some(Value::from("Altın Para")));
+        assert_eq!(
+            check(Some(Value::from("TL2")), true),
+            refused("text", Some("form"))
+        );
+        assert_eq!(check(Some(Value::from(5)), true), refused("type", None));
+        // Studio's switch off: a new name is refused; the stored one comes back, and clearing it
+        // works.
+        assert_eq!(
+            check(Some(Value::from("coin")), false),
+            refused("feature", None)
+        );
+        assert_eq!(kept(check(tl.clone(), false)), tl);
+        assert_eq!(kept(check(Some(Value::Null), false)), None);
+    }
+
+    #[test]
+    fn the_ready_mark_stays_while_the_assistant_waits() {
+        let off = serde_json::to_value(crate::plus::PlusConfig {
+            mode: GENERIC.into(),
+            enabled: false,
+            ..crate::plus::PlusConfig::default()
+        })
+        .unwrap();
+        let mut waiting = off.clone();
+        waiting["ready"] = Value::Bool(true);
+        // The stored document is the service's word: what a write sends changes nothing.
+        let marked = |doc: &Value, stored: &Value| {
+            let ctx = PlusCheckContext {
+                now: 1_792_900_000,
+                stored: Some(stored.clone()),
+                ..PlusCheckContext::default()
+            };
+            check_config_value(doc, &ctx).unwrap().get("ready").cloned()
+        };
+        let yes = Some(Value::Bool(true));
+        // It stays while the stored document has it and the assistant stays off, sent or not.
+        assert_eq!(marked(&waiting, &waiting), yes);
+        assert_eq!(marked(&off, &waiting), yes);
+        // A client never makes it.
+        assert_eq!(marked(&waiting, &off), None);
+        // Turned on ("Başlat", or a save with the switch on): it ends.
+        let mut on = waiting.clone();
+        on["enabled"] = Value::Bool(true);
+        assert_eq!(marked(&on, &waiting), None);
+        // Only true, or nothing.
+        let ctx = PlusCheckContext::default();
+        for bad in [Value::Bool(false), Value::Null, Value::from("yes")] {
+            let mut doc = off.clone();
+            doc["ready"] = bad;
+            assert_eq!(
+                check_config_value(&doc, &ctx),
+                Err(PlusRefusal::invalid("ready", "type"))
+            );
+        }
+    }
+
+    #[test]
+    fn the_ad_minutes_stay_as_the_player_chose() {
+        let doc = serde_json::to_value(crate::plus::PlusConfig {
+            mode: GENERIC.into(),
+            enabled: false,
+            ..crate::plus::PlusConfig::default()
+        })
+        .unwrap();
+        let ctx = PlusCheckContext {
+            now: 1_792_900_000,
+            ..PlusCheckContext::default()
+        };
+        let minutes = |doc: &Value| -> Checked<Option<Value>> {
+            let out = check_config_value(doc, &ctx)?;
+            Ok(out["discovery"].get("adEveryMin").cloned())
+        };
+        // None chosen (or an older service): none is made.
+        assert_eq!(minutes(&doc), Ok(None));
+        for chosen in AD_EVERY_MIN {
+            let mut sent = doc.clone();
+            sent["discovery"]["adEveryMin"] = Value::from(chosen);
+            assert_eq!(minutes(&sent), Ok(Some(Value::from(chosen))));
+        }
+        // Any other value is refused (a server's floor raises the minutes used, never refuses).
+        for (bad, reason) in [
+            (Value::from(90), "range"),
+            (Value::from(0), "range"),
+            (Value::from(45.5), "range"),
+            (Value::from("60"), "type"),
+            (Value::Null, "type"),
+        ] {
+            let mut sent = doc.clone();
+            sent["discovery"]["adEveryMin"] = bad;
+            assert_eq!(
+                check_config_value(&sent, &ctx),
+                Err(PlusRefusal::invalid("discovery.adEveryMin", reason))
+            );
+        }
     }
 
     #[test]

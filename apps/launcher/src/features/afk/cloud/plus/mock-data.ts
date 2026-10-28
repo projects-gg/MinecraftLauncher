@@ -5,6 +5,7 @@
 //   - `on`: AFK+ is open; "Firtina_AFK" is an AFK+ account in game with orders, approvals waiting, a
 //     handoff and a first sight;
 //   - `setup`: the same account before its first settings (the setup wizard, no orders);
+//   - `ready`: set up, waiting for its first "Başlat" (AFK+ never starts by itself);
 //   - `paused`: its AI allowance is used up until later today;
 //   - `offline`: its machine is not connected (the quota, the log and the messages wait);
 //   - `maintenance`: AFK+ is under maintenance (the field is closed, the list reads);
@@ -15,14 +16,23 @@
 // - `&itemdata=fail`: the item list cannot load (the form says so and offers to try again).
 // - `&audit=off|empty`: Studio switched the log off, or nothing was logged yet.
 // - `&typed=off`: Studio switched typed orders off (the form and the inventory only).
+// - `&mode=survival`: the account plays Projects Survival, whose profile names the money (ripple):
+//   "Para birimi" shows it as words with a lock. On SMP (no name of its own) the player names it.
+// - `&ads=<state>` ("Sohbete ilan", switched on): `on` the service's plan from the active orders,
+//   `floor` the server asks at least an hour, `warned` a spam warning today, `stopped` today's ads
+//   stopped, `empty` no active order, `pending` the item names not known yet (never in game), `old`
+//   an older service (no plan: the switch as before).
+//   Without it the switch is off and the plan still comes, as from the newest service.
 // With `?cloud=intro` (no cloud account) `&plus=on` shows the AFK+ card beside 7/24 Bulut's.
 // The item data here is a small stand-in written for previews (the real file comes from our CDN).
 import { type InvFrame, type InvItem, SAMPLE_INVENTORY } from "@pl/ui/inventory";
 import type { AfkNotice } from "@/lib/api/social-types";
 import type { CloudAccount } from "../api";
+import { AD_EVERY_DEFAULT } from "./model";
 import type {
   CloudNotifyPrefs,
   MePlus,
+  PlusAdPreview,
   PlusAi,
   PlusApproval,
   PlusAuditEntry,
@@ -46,6 +56,7 @@ export type PlusScenario =
   | "off"
   | "on"
   | "setup"
+  | "ready"
   | "paused"
   | "offline"
   | "maintenance"
@@ -57,6 +68,7 @@ const SCENARIOS: PlusScenario[] = [
   "off",
   "on",
   "setup",
+  "ready",
   "paused",
   "offline",
   "maintenance",
@@ -88,6 +100,10 @@ export const itemDataFails = param("itemdata") === "fail";
 export const auditScenario = param("audit");
 /** `&typed=off`: typed orders are switched off. */
 export const typedOrders = param("typed") !== "off";
+/** `&mode=survival`: Projects Survival, whose profile names the money. */
+const survivalMode = param("mode") === "survival" && plusScenario !== "owner";
+/** `&ads=on|floor|warned|stopped|empty|pending|old`: "Sohbete ilan" on, and its plan's state. */
+const adsScenario = param("ads");
 /**
  * `&topup=on`: AFK+ extra credits on sale (the rail's "Kontör al"); `&topup=bought`: also the
  * windows used up and a bought pack paying (cloud-afk README "AFK+ extra credits").
@@ -176,9 +192,12 @@ export function mockAi(): PlusAi {
   const now = nowSecs();
   const paused = plusScenario === "paused";
   const maintenance = plusScenario === "maintenance";
+  // A new account waits for its first "Başlat" (the service's `ready`): its switch is off.
+  const waiting = plusScenario === "setup" || plusScenario === "ready";
+  const away = plusScenario === "offline";
   return {
-    state: paused || maintenance ? "paused" : plusScenario === "offline" ? "unknown" : "on",
-    reason: paused ? "quota" : maintenance ? "service" : null,
+    state: waiting ? "off" : paused || maintenance ? "paused" : away ? "unknown" : "on",
+    reason: waiting ? "ready" : paused ? "quota" : maintenance ? "service" : null,
     staffReason: null,
     until: paused ? W5H_RESET_AT : null,
     trade: {
@@ -521,14 +540,27 @@ export function mockOrderViews(): Record<string, PlusOrderView> {
   };
 }
 
-export function mockServer(): PlusServer {
+/**
+ * The account's server as the service says it. Projects SMP's profile names no money, so the name
+ * after amounts is the player's own ("Para birimi", the same in both languages) or none; Survival's
+ * profile names it (ripple), and the player's cannot change it.
+ */
+export function mockServer(currency: string | null = null): PlusServer {
   const owner = plusScenario === "owner";
+  const own = currency?.trim() || null;
+  const profile = survivalMode ? { tr: "ripple", en: "ripple" } : null;
+  const name = survivalMode ? { tr: "Survival", en: "Survival" } : { tr: "SMP", en: "SMP" };
   return {
     kind: owner ? "generic" : "verified",
-    mode: owner ? "generic" : "projects-smp",
-    name: owner ? null : { tr: "SMP", en: "SMP" },
+    mode: owner ? "generic" : survivalMode ? "projects-survival" : "projects-smp",
+    name: owner ? null : name,
     trade: owner ? "owner" : "bot",
-    money: { label: null, maxDeal: owner ? 100_000_000 : 10_000_000, currency: owner ? "" : "smp" },
+    money: {
+      label: profile ?? (own ? { tr: own, en: own } : null),
+      fixed: profile !== null,
+      maxDeal: owner ? 100_000_000 : survivalMode ? 1_000_000 : 10_000_000,
+      currency: owner ? "" : survivalMode ? "survival" : "smp",
+    },
     mc: "26.3",
     ads: owner
       ? []
@@ -542,19 +574,23 @@ export function mockServer(): PlusServer {
 
 export function mockConfig(): PlusConfig {
   const setup = plusScenario === "setup";
+  // Waiting for its first "Başlat": the service's mark, the switch off (AFK+ never starts itself).
+  const waiting = setup || plusScenario === "ready";
   return {
     v: 2,
-    enabled: !setup,
-    mode: plusScenario === "owner" ? "generic" : "projects-smp",
+    enabled: !waiting,
+    ready: waiting ? true : null,
+    mode: mockServer().mode,
     lang: "auto",
     persona: {
-      preset: "friendly",
+      // The defaults where the settings have none (28 Oct 2026): "Kibar", "Oyuncu gibi konuşsun".
+      preset: "polite",
       // Not written yet: the field shows its example in the interface's language.
       intro: "",
       status: "",
       statusPreset: setup ? null : "back_evening",
       smallTalk: false,
-      playerTalk: false,
+      playerTalk: true,
       prefix: { on: false, text: "[AFK+]" },
     },
     replies: { scope: "trade", away: true, saveAt: 80 },
@@ -573,8 +609,16 @@ export function mockConfig(): PlusConfig {
       newCounterpartApprovalAbove: setup ? null : 10_000,
       approvalTimeoutMin: 10,
     },
-    discovery: { scanChat: true, proactivePm: true, ads: false, adTemplate: "buy-basic" },
-    trade: { returnRow: null },
+    discovery: {
+      scanChat: true,
+      proactivePm: true,
+      ads: adsScenario !== null,
+      adTemplate: "buy-basic",
+      // Not picked yet (the service's hour); `floor`: an hour, the least the server takes.
+      adEveryMin: adsScenario === "floor" ? 60 : null,
+    },
+    // No name of the player's yet: amounts on SMP are bare until "Para birimi" names the money.
+    trade: { returnRow: null, currency: null },
     summaryAt: "21:00",
     blocked: setup ? [] : ["Dolandirici_X", "Hizli_Satis"],
     schedule: {
@@ -597,7 +641,7 @@ export function mockSettings(config: PlusConfig, aiRev: number): PlusSettings {
       intro: { state: "ok", reason: null, at: now - DAY },
       status: { state: "ok", reason: null, at: now - DAY },
     },
-    server: mockServer(),
+    server: mockServer(config.trade.currency),
     rules: {
       orderMax: plusScenario === "full" ? 10 : 10,
       orderStore: 20,
@@ -616,12 +660,46 @@ export function mockSettings(config: PlusConfig, aiRev: number): PlusSettings {
         audit: auditScenario !== "off",
         customItems: true,
         itemPay: true,
+        currency: true,
       },
     },
     orders: mockOrderViews(),
     // The completed buys since the last reset (`mockReceipts`: 36.000 + 16.400).
     spent: plusScenario === "offline" ? null : { total: 52_400, today: 16_400 },
     asOf: plusScenario === "offline" ? now - 37 * MIN : null,
+    adPreview: mockAdPreview(config),
+  };
+}
+
+/**
+ * "Sohbete ilan" as the service plans it for the stored settings (`&ads=`): the next ads from the
+ * active orders, never with a price, a budget or a limit; none while the item names are not known.
+ */
+function mockAdPreview(config: PlusConfig): PlusAdPreview | null {
+  if (adsScenario === "old") return null;
+  const now = nowSecs();
+  const floorMin = adsScenario === "floor" ? 60 : 30;
+  const minutes = Math.max(config.discovery.adEveryMin ?? AD_EVERY_DEFAULT, floorMin);
+  const warned = adsScenario === "warned" || adsScenario === "stopped";
+  const everyMin = warned ? minutes * 2 : minutes;
+  const namesPending = adsScenario === "pending";
+  const orders = config.orders.some((o) => o.on && o.until > now);
+  const active = orders && adsScenario !== "empty" && !namesPending;
+  const lines = active
+    ? [
+        "Alıyorum: 1 Elytra, PM at",
+        "Alıyorum: 3 Ölümsüzlük Totemi, PM at",
+        "Satıyorum: 64 Elmas, PM at",
+      ]
+    : [];
+  return {
+    floorMin,
+    everyMin,
+    lines,
+    namesPending,
+    nextAt: active && adsScenario !== "stopped" ? now + 25 * MIN : null,
+    warning: warned ? { at: now - 2 * HOUR, everyMin } : null,
+    stoppedToday: adsScenario === "stopped",
   };
 }
 

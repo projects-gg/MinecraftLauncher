@@ -21,6 +21,7 @@ export const ItemArt = memo(function ItemArt({ item }: { item: Stack }) {
           enchanted={item.enchanted}
           cmd={item.cmd}
           model={item.model}
+          skin={item.skin}
         />
       </span>
       {worn ? (

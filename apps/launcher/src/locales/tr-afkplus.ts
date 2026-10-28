@@ -8,11 +8,11 @@ export const trAfkPlus = {
   name: "AFK+",
   // Under what the assistant made or did: the order card, an approval, the feed, the week (27 Oct
   // 2026, the owner: the assistant can make mistakes).
-  aiNote: "Asistan yapay zekâdır, hata yapabilir.",
+  aiNote: "ProBot AI yapay zekâdır, hata yapabilir.",
   intro: {
     // The price beside it buys a whole account: the 24/7 machine comes with the assistant. The
     // product's name never breaks (a no-break space after "7/24").
-    subtitle: "Sen yokken pazarlık eden asistan, 7/24 Bulut dâhil.",
+    subtitle: "Sen yokken pazarlık eden ProBot AI, 7/24 Bulut dâhil.",
     pricePerMonth: "Aylık {{price}}",
     start: "afk.projects.gg'de başla",
     soldOut: "Şu an boş AFK+ yeri yok",
@@ -60,7 +60,7 @@ export const trAfkPlus = {
     forMoneyBare: "Oyundaki parayla",
     style: "Pazarlık: {{style}}",
     valid: "{{count}} gün geçerli",
-    bot: "Takası asistan yapar.",
+    bot: "Takası ProBot AI yapar.",
     owner: "Takası sen yaparsın.",
     ownerHere: "Bu sunucuda takası sen yaparsın.",
     durability: "En az %{{pct}} dayanıklı",
@@ -95,23 +95,25 @@ export const trAfkPlus = {
   },
   // The assistant's state in one short sentence (never a code).
   ai: {
-    on: "Asistan çalışıyor",
+    on: "ProBot AI çalışıyor",
     // A new AFK+ account answers with the defaults (README: `enabled: true`) until it is set up.
-    setup: "Asistan varsayılan ayarlarla çalışıyor",
-    unknown: "Asistanın durumu şu\u00a0an alınamıyor",
+    setup: "ProBot AI varsayılan ayarlarla çalışıyor",
+    // AFK+ never starts by itself (the owner, 28 Oct): until the player's first "Başlat".
+    ready: "ProBot AI hazır. Başlatınca çalışır.",
+    unknown: "ProBot AI'ın durumu şu\u00a0an alınamıyor",
     restricted: "AFK+'dan uzaklaştırıldın",
     restrictedUntil: "{{when}} kadar AFK+'dan uzaklaştırıldın",
-    staff: "Asistanı yetkililer durdurdu",
+    staff: "ProBot AI'ı yetkililer durdurdu",
     serviceOff: "AFK+ şu an kapalı, hesabın AFK'da kalıyor",
     servicePaused: "AFK+ bakımda, hesabın AFK'da kalıyor",
     server: "Bu sunucuda AFK+ kapalı, hesabın AFK'da kalıyor",
-    player: "Asistanı sen durdurdun",
-    breakOn: "Asistan molada",
-    breakUntil: "Asistan {{when}} kadar molada",
+    player: "ProBot AI'ı sen durdurdun",
+    breakOn: "ProBot AI molada",
+    breakUntil: "ProBot AI {{when}} kadar molada",
     schedule: "Çalışma saatleri dışında",
     scheduleUntil: "Çalışma saatleri dışında, {{when}} başlar",
-    gate: "Asistan güvenlik için durdu, yeniden başlatabilirsin",
-    muted: "Sunucu hesabı susturdu, asistanı yeniden başlatabilirsin",
+    gate: "ProBot AI güvenlik için durdu, yeniden başlatabilirsin",
+    muted: "Sunucu hesabı susturdu, ProBot AI'ı yeniden başlatabilirsin",
     host: "Yapay zekâ bakımda, hesabın AFK'da kalıyor",
     budget: "Yapay zekâ bugünlük durdu, hesabın AFK'da kalıyor",
     outage: "Yapay zekâya şu an ulaşılamıyor, hesabın AFK'da kalıyor",
@@ -126,11 +128,11 @@ export const trAfkPlus = {
     quotaNote:
       "Şimdilik yalnız hazır mesajlarla cevap veriyor. Hesabın AFK'da kalıyor, bekleyen alımları onaylayabilirsin.",
     // One verb for it: it stops, you stop it.
-    paused: "Asistan durdu",
+    paused: "ProBot AI durdu",
     tradeLobby: "Hesap lobide, oyun moduna dönünce takasa başlar",
     tradeProfile: "Bu oyun modunda takas şu an kapalı",
-    tradeOwner: "Bu sunucuda asistan anlaşır, takası sen yaparsın",
-    notifyOnly: "Harcama sınırı koymadığın için asistan almıyor, bulunca haber veriyor",
+    tradeOwner: "Bu sunucuda ProBot AI anlaşır, takası sen yaparsın",
+    notifyOnly: "Harcama sınırı koymadığın için ProBot AI almıyor, bulunca haber veriyor",
     // On the account's card, after the "AFK+" label: the states that name AFK+, without the name.
     line: {
       restricted: "Uzaklaştırıldın",
@@ -141,16 +143,16 @@ export const trAfkPlus = {
     },
   },
   control: {
-    stop: "Asistanı durdur",
-    start: "Asistanı başlat",
-    stopLabel: "Asistanı durdur",
-    startLabel: "Asistanı başlat",
-    stopped: "Asistan durduruldu",
-    started: "Asistan başlatıldı",
-    failed: "Asistan şu an değiştirilemedi.",
+    stop: "ProBot AI'ı durdur",
+    start: "ProBot AI'ı başlat",
+    stopLabel: "ProBot AI'ı durdur",
+    startLabel: "ProBot AI'ı başlat",
+    stopped: "ProBot AI durduruldu",
+    started: "ProBot AI başlatıldı",
+    failed: "ProBot AI şu an değiştirilemedi.",
   },
   panel: {
-    title: "{{name}} asistanı",
+    title: "{{name}} için ProBot AI",
     sections: {
       feed: "Akış",
       messages: "Mesajlar",
@@ -177,7 +179,7 @@ export const trAfkPlus = {
   },
   // How AFK+ works on the account's server, said once where it matters.
   server: {
-    owner: "Bu sunucuda asistan konuşur ve anlaşır. Takası sen yaparsın.",
+    owner: "Bu sunucuda ProBot AI konuşur ve anlaşır. Takası sen yaparsın.",
     off: "Bu sunucuda AFK+ kapalı. Hesabın AFK'da kalıyor.",
   },
   // The AI usage allowance is "kontör" to the player (owner, 25 Oct: not "kredi", which is the
@@ -207,7 +209,7 @@ export const trAfkPlus = {
     asOf: "Son bilgi {{time}}",
     // README "Saving": past the player's share, small talk and public chat scans stop; deals go on.
     saver:
-      "Kontörün azaldığı için asistan yalnız pazarlık mesajlarına cevap verir, genel sohbette satılık eşya aramaz.",
+      "Kontörün azaldığı için ProBot AI yalnız pazarlık mesajlarına cevap verir, genel sohbette satılık eşya aramaz.",
   },
   // "Akış": the audit log (afkplus-free.md §5.4).
   audit: {
@@ -228,7 +230,7 @@ export const trAfkPlus = {
     older: "Daha eski",
     retry: "Tekrar dene",
     reconnecting: "Canlı bağlantı koptu, yeniden bağlanılıyor.",
-    empty: "Henüz kayıt yok. Asistan bir mesaj aldığında burada görürsün.",
+    empty: "Henüz kayıt yok. ProBot AI bir mesaj aldığında burada görürsün.",
     noneHere: "Bu türde kayıt yok.",
     off: "Kayıtlar şu an kapalı.",
     offline: "Daha önce gördüklerin aşağıda. Yenileri bağlantı dönünce görünür.",
@@ -239,13 +241,13 @@ export const trAfkPlus = {
     someone: "Bir oyuncu",
     lines: {
       pm_in: "{{w}} yazdı:",
-      reply: "Asistan cevap verdi:",
+      reply: "ProBot AI cevap verdi:",
       owner_msg: "Sen yazdın:",
       // A player's name never takes a suffix (its sound is unknown): subject, "ile" or before a colon.
       offer: "{{w}} ile pazarlıkta {{p}} teklif edildi",
       // The comma keeps the name and the price apart ("Kaan_07, 40.000 istedi").
       counter: "{{w}}, {{p}} istedi",
-      agree: "Asistan {{w}} ile anlaştı: {{deal}}",
+      agree: "ProBot AI {{w}} ile anlaştı: {{deal}}",
       ask_owner: "Onayın istendi",
       ask_ownerOf: "{{i}} için onayın istendi",
       owner_ok: "Onayladın",
@@ -267,9 +269,9 @@ export const trAfkPlus = {
       confirm_itemOf: "{{i}} için onayın istendi",
       order_done: "Sipariş tamamlandı",
       order_expired: "Siparişin süresi doldu",
-      paused: "Asistan durdu: {{r}}",
-      pausedBare: "Asistan durdu",
-      resumed: "Asistan yeniden çalışıyor",
+      paused: "ProBot AI durdu: {{r}}",
+      pausedBare: "ProBot AI durdu",
+      resumed: "ProBot AI yeniden çalışıyor",
       quota: "Kontörün bitti",
       gate: "Güvenlik kuralı bir işlemi durdurdu",
       gateWhy: "Güvenlik kuralı bir işlemi durdurdu: {{r}}",
@@ -321,14 +323,15 @@ export const trAfkPlus = {
     reject: "Reddet",
     lower: "Fiyatı düşür",
     // Haggling again needs the assistant's AI: while it is stopped or paused, under the buttons.
-    lowerLater: "Asistan yeniden çalışınca fiyatı düşürebilirsin.",
+    lowerLater: "ProBot AI yeniden çalışınca fiyatı düşürebilirsin.",
     lowerLabel: "En fazla",
     // {{price}} comes with its ending ("37.500'den az").
     lowerPlaceholder: "{{price}} az",
     lowerSend: "Bu fiyata indirmeyi dene",
     // What lowering does, under the field (its outcome is not obvious). "ile" takes no ending: a
     // player's name cannot be inflected safely ("Kaan_07").
-    lowerHelp: "Asistan {{name}} ile bu fiyat için yeniden pazarlık eder. Olmazsa anlaşma bozulur.",
+    lowerHelp:
+      "ProBot AI {{name}} ile bu fiyat için yeniden pazarlık eder. Olmazsa anlaşma bozulur.",
     lowerTooHigh: "{{price}} düşük bir tutar yaz.",
     cancel: "Vazgeç",
     states: {
@@ -336,7 +339,7 @@ export const trAfkPlus = {
       rejected: "Reddedildi",
       expired: "Süresi doldu",
       closed: "Kapandı",
-      closedStopped: "Asistan durduğu için kapandı",
+      closedStopped: "ProBot AI durduğu için kapandı",
       closedGone: "Teklif kalmadığı için kapandı",
       closedService: "AFK+ bakıma girdiği için kapandı",
     },
@@ -378,17 +381,17 @@ export const trAfkPlus = {
     title: "Mesajlar",
     empty: "Henüz mesaj yok.",
     you: "Sen",
-    assistant: "Asistan",
+    assistant: "ProBot AI",
     reply: "Cevap yaz",
     send: "Gönder",
-    firstNote: "Sen yazınca asistan bu konuşmada 30 dakika susar.",
-    handoff: "Asistan {{when}} kadar bu konuşmada sessiz.",
+    firstNote: "Sen yazınca ProBot AI bu konuşmada 30 dakika susar.",
+    handoff: "ProBot AI {{when}} kadar bu konuşmada sessiz.",
     handBack: "Şimdi devret",
-    handedBack: "Konuşma asistana devredildi",
+    handedBack: "Konuşmayı ProBot AI devraldı",
     cantReply: "Yalnız son 24 saatte sana yazanlara cevap verebilirsin.",
     hidden: "Uygunsuz mesaj gizlendi.",
     show: "Göster",
-    blocked: "Bu oyuncuyu engelledin. Asistan ona cevap vermez.",
+    blocked: "Bu oyuncuyu engelledin. ProBot AI ona cevap vermez.",
     // A blocked player's conversation in the list, in place of its last line.
     blockedTag: "Engellendi",
     block: "Engelle",
@@ -411,7 +414,7 @@ export const trAfkPlus = {
       tckn: "Kimlik numarası paylaşılamaz.",
       card: "Kart numarası paylaşılamaz.",
       words: "Bu mesaj gönderilemez.",
-      marker: "[AFK+] ile başlayamaz. O etiket asistanın.",
+      marker: "[AFK+] ile başlayamaz. O etiketi yalnız ProBot AI kullanır.",
       length: "En çok 200 karakter olabilir.",
       form: "Bu mesaj gönderilemez.",
     },
@@ -428,6 +431,10 @@ export const trAfkPlus = {
     pick: "Envanterden seç",
     left: "Bugün {{count}} kez daha kontrol edebilirsin.",
     failed: "Yazdığın kontrol edilemedi.",
+    // Money that may be the game's ("100 dolar", "nakit"): asked, not refused (28 Oct). The button
+    // sends the same words as the game's money; a payment app or "gerçek para" stays refused.
+    money: "Bu, gerçek para gibi görünüyor.",
+    inGame: "Bu oyun parası",
     // Under the field while AFK+ is under maintenance (the notice above says why).
     maintenance: "Bakım bitince sipariş ekleyebilirsin.",
     aiPaused: "Yapay zekâ bakımda. Formla ekleyebilirsin.",
@@ -452,12 +459,12 @@ export const trAfkPlus = {
       many_items: "Her eşyayı ayrı yaz.",
     },
     rules: {
-      prepay: "asistan önden ödeme yapmaz, önden eşya vermez",
-      pay_cmd: "asistan para göndermez, ödeme yalnız takasta olur",
-      disclose: "asistan bütçeni ve sınırlarını kimseye söylemez",
-      hide_ai: "asistan yapay zekâ olduğunu saklamaz",
-      off_platform: "asistan kimseyi başka uygulamaya çağırmaz",
-      third_party: "asistan yalnız ona yazana cevap verir",
+      prepay: "ProBot AI önden ödeme yapmaz, önden eşya vermez",
+      pay_cmd: "ProBot AI para göndermez, ödeme yalnız takasta olur",
+      disclose: "ProBot AI bütçeni ve sınırlarını kimseye söylemez",
+      hide_ai: "ProBot AI yapay zekâ olduğunu saklamaz",
+      off_platform: "ProBot AI kimseyi başka uygulamaya çağırmaz",
+      third_party: "ProBot AI yalnız ona yazana cevap verir",
       rmt: "gerçek parayla ticaret yapılmaz",
     },
   },
@@ -468,7 +475,7 @@ export const trAfkPlus = {
     buying: "Alıyorum",
     selling: "Satıyorum",
     // The chips answer it: show one, wait for the first one, or fix the name.
-    custom: '"{{name}}" oyunda yok. Asistan onu nasıl tanısın?',
+    custom: '"{{name}}" oyunda yok. ProBot AI onu nasıl tanısın?',
     customChips: {
       pick: "Envanterden seç",
       first_seen: "İlk görünce bana sor",
@@ -569,8 +576,8 @@ export const trAfkPlus = {
     dataFailed: "Eşya listesi şu an yüklenemedi.",
     retry: "Tekrar dene",
     customName: "Eşyanın adı",
-    customKnown: "Asistan bu eşyayı bu adla anar.",
-    customFirstSight: "Asistan bu eşyayı ilk gördüğünde sana sorar.",
+    customKnown: "ProBot AI bu eşyayı bu adla anar.",
+    customFirstSight: "ProBot AI bu eşyayı ilk gördüğünde sana sorar.",
     qty: "Adet",
     stacks: "{{count}} yığın",
     inReturn: "Karşılığında",
@@ -592,7 +599,7 @@ export const trAfkPlus = {
     validKeep: "Aynı kalsın",
     days: "{{count}} gün",
     who: "Takası kim yapsın?",
-    whoBot: "Asistan",
+    whoBot: "ProBot AI",
     whoMe: "Ben",
     conditions: "{{item}} için şartlar",
     durability: "En az dayanıklılık",
@@ -621,7 +628,7 @@ export const trAfkPlus = {
   // "Envanterden seç" (afkplus-free.md §7.2).
   pick: {
     title: "Envanterden seç",
-    exact: "Asistan bu eşyayı birebir tanır. Adı aynı olan başka eşyayı kabul etmez.",
+    exact: "ProBot AI bu eşyayı birebir tanır. Adı aynı olan başka eşyayı kabul etmez.",
     confirm: "Bunu seç",
     cancel: "Vazgeç",
     chosen: "Seçilen: {{item}}",
@@ -654,7 +661,7 @@ export const trAfkPlus = {
   settings: {
     groups: {
       fine: "İnce ayar",
-      assistant: "Asistan",
+      assistant: "ProBot AI",
       hours: "Çalışma saatleri",
       limits: "Harcama",
       discovery: "Eşya arama",
@@ -663,7 +670,7 @@ export const trAfkPlus = {
       notify: "Bildirimler",
     },
     // "İnce ayar" (afkplus-free.md §3.1): what the assistant may do, with one line under each choice.
-    authorityLabel: "Asistan ne yapsın?",
+    authorityLabel: "ProBot AI ne yapsın?",
     authority: {
       reply: "Yalnız cevap ver",
       ask: "Pazarlık et, bana sor",
@@ -684,7 +691,7 @@ export const trAfkPlus = {
     friendsPlaceholder: "Oyuncu adı",
     friendsAdd: "Ad ekle",
     friendsRemove: "{{name}} adını çıkar",
-    friendsEmpty: "Listede kimse yokken asistan kimseyle takas konuşmaz.",
+    friendsEmpty: "Listede kimse yokken ProBot AI kimseyle takas konuşmaz.",
     friendsErrors: {
       format: "3-16 karakter: harf, rakam ya da alt çizgi.",
       duplicate: "Bu ad zaten listede.",
@@ -724,7 +731,7 @@ export const trAfkPlus = {
     },
     intro: "Tanıtım",
     introHelp: "İlk mesajında kendini böyle tanıtır.",
-    introPlaceholder: "KaraKartal'ın AFK+ asistanı",
+    introPlaceholder: "KaraKartal'ın ProBot AI'ı",
     // Under "Diğer mesajlara uzakta olduğunu söylesin": the end of the away line ("Şu an AFK'yım: …").
     status: "Uzaktayken ne desin",
     statusText: "Kendi mesajın",
@@ -748,7 +755,7 @@ export const trAfkPlus = {
     },
     text: {
       length: "En çok {{max}} karakter olabilir.",
-      marker: "[AFK+] yazılamaz. O etiket asistanın.",
+      marker: "[AFK+] yazılamaz. O etiketi yalnız ProBot AI kullanır.",
       link: "Bağlantı yazılamaz.",
       phone: "Telefon numarası yazılamaz.",
       email: "E-posta yazılamaz.",
@@ -790,12 +797,12 @@ export const trAfkPlus = {
     windowErrorTime: "Saati SS:DD biçiminde yaz.",
     windowsFull: "En çok 7 aralık eklenebilir.",
     breakTitle: "Mola",
-    breakHelp: "Hesabın AFK'da kalır. Asistan seçtiğin güne kadar cevap vermez.",
+    breakHelp: "Hesabın AFK'da kalır. ProBot AI seçtiğin güne kadar cevap vermez.",
     breakTake: "Mola ver",
     breakFor: "Süre",
     breakDays: "{{count}} gün",
     breakPreview: "{{when}} kadar",
-    breakOn: "Asistan {{when}} kadar molada.",
+    breakOn: "ProBot AI {{when}} kadar molada.",
     breakEnd: "Molayı bitir",
     breakSet: "Mola başladı",
     breakEnded: "Mola bitti",
@@ -811,7 +818,7 @@ export const trAfkPlus = {
     spentToday: "Bugün {{amount}} harcandı",
     resetSpent: "Harcananı sıfırla",
     resetSpentTitle: "Harcanan sıfırlansın mı?",
-    resetSpentBody: "Asistan toplam harcama sınırının tamamını yeniden harcayabilir.",
+    resetSpentBody: "ProBot AI toplam harcama sınırının tamamını yeniden harcayabilir.",
     resetSpentDone: "Harcanan sıfırlandı",
     balanceFloor: "En az kalacak bakiye",
     approvalAbove: "Onay sınırı",
@@ -824,11 +831,16 @@ export const trAfkPlus = {
     timeoutShort: "Onay süresi",
     timeoutValue: "dakika sonra hayır sayılır",
     noLimitShort: "Sınır yok",
+    // Under the per-deal and the total limit while empty: without both nothing is bought (the hard
+    // rule), so never "Sınır yok" there (the site's words, SITE-W2).
+    emptyBuysNothing: "Boş bırakırsan ProBot AI alım yapmaz.",
     needed: "Alım için tek anlaşmada en fazla tutar ve toplam harcama sınırı gerekir.",
     // The one quiet line of the limits (afkplus-free.md §3.5): never said to the other player.
-    secret: "Asistan bütçeni ve sınırlarını kimseye söylemez.",
+    secret: "ProBot AI bütçeni ve sınırlarını kimseye söylemez.",
     // Beside "Harcama": the amounts are the game's money, never lira.
     limitsMoney: "Tutarlar oyundaki parayla.",
+    // Beside a line that asks, or waits, because of a limit: to that limit here (owner, 28 Oct).
+    goToLimits: "Sınırlara git",
     limitErrors: {
       approvalAbove: "Onay sınırı, tek anlaşmadaki en fazla tutardan büyük olamaz.",
       maxDeal: "En çok {{max}} olabilir.",
@@ -840,6 +852,26 @@ export const trAfkPlus = {
     ads: "Sohbete ilan versin",
     adsHelp: "Hazır metinle, 30 dakikada bir.",
     adTemplate: "İlan metni",
+    // "Sohbete ilan" as the service plans it (TRADE-ANY trade-any-4, chat-ads.tsx): what it posts,
+    // how often (the server's floor closes the shorter ones), the next ad, a spam warning, today's
+    // stop. An older service plans none: "adsHelp" stays.
+    adsHelpPlan: "Etkin siparişlerini arada sohbete yazar.",
+    adEvery: "Ne sıklıkla yazsın?",
+    adEveryChoices: { m30: "30 dk", m45: "45 dk", m60: "1 saat", m120: "2 saat" },
+    adFloor: "Bu sunucuda en az {{n}} dk.",
+    adSample: "Örnek ilan",
+    adNext: "Başka örnek",
+    adWarned: "Sunucu spam uyarısı verdi. Aralık bugünlük iki katı: {{n}} dk.",
+    adStopped: "Bugünlük ilan durdu.",
+    adNoOrders: "Etkin sipariş yokken ilan verilmez.",
+    // The item names not known yet: the machine has not been in game (`namesPending`).
+    adNamesPending: "ProBot AI oyuna girince hazır olur.",
+    // "Para birimi" (TRADE-ANY): the money's name after amounts, the player's or the profile's own.
+    currency: "Para birimi",
+    currencyHelp: "Sunucundaki paranın adı.",
+    // A profile's own name (ripple) as words with a lock, never a field.
+    currencyFixed: "Bu adı sunucu belirliyor.",
+    currencyRefused: "Bu ad kullanılamaz.",
     returnRow: "Takastan sonra",
     returnStay: "Spawn'da kalsın",
     returnHelp:
@@ -903,11 +935,13 @@ export const trAfkPlus = {
       limit: "sınır",
       qty: "adet",
     },
-    authority: "Asistanın yetkisi: {{to}}",
+    authority: "ProBot AI'ın yetkisi: {{to}}",
     fineTune: "İnce ayar değişti",
     limit: "{{field}}: {{from}} yerine {{to}}",
     noLimit: "sınırsız",
-    persona: "Asistan ayarları değişti",
+    // The per-deal or the total limit emptied: nothing is bought then, never "sınırsız".
+    noBuying: "alım yok",
+    persona: "ProBot AI ayarları değişti",
     replies: "Cevap ayarları değişti",
     schedule: "Çalışma saatleri değişti",
     discovery: "Eşya arama ayarları değişti",
@@ -919,7 +953,7 @@ export const trAfkPlus = {
   report: {
     weekTitle: "Geçen hafta",
     // Last week's figures in three groups: what was bought, what was sold, what the assistant did.
-    weekGroups: { buy: "Alımlar", sell: "Satışlar", assistant: "Asistan" },
+    weekGroups: { buy: "Alımlar", sell: "Satışlar", assistant: "ProBot AI" },
     weekEmpty: "Geçen hafta bu hesapta takas ya da cevap olmadı.",
     rows: {
       pms: "Cevaplanan mesaj",
@@ -993,7 +1027,7 @@ export const trAfkPlus = {
       gift_ending: "Hediye kontör bitiyor",
       summary: "Günlük özet",
       weekly: "Haftalık rapor",
-      paused: "Asistan duraklatıldı",
+      paused: "ProBot AI duraklatıldı",
       incident: "Uygunsuz mesaj engellendi",
     },
     groups: {
@@ -1013,7 +1047,7 @@ export const trAfkPlus = {
   notices: {
     title: "AFK+",
     // The assistant's own notices, titled as its panel is.
-    titleOf: "{{name}} asistanı",
+    titleOf: "{{name}} için ProBot AI",
     approval: "Onay bekliyor: {{deal}}",
     // An order's handoff and first sight: never the counterpart's name.
     handoff: "Anlaşma tamam, takası sen yapacaksın.",
@@ -1036,7 +1070,7 @@ export const trAfkPlus = {
     summary: "Bugün {{pms}}, {{deals}}.",
     summaryPms: "{{count}} mesaj",
     summaryDeals: "{{count}} anlaşma",
-    paused: "Asistan durdu.",
+    paused: "ProBot AI durdu.",
     message: "Yeni mesaj.",
     messages: "{{count}} yeni mesaj.",
     weekly: "Geçen hafta {{count}} takas yaptı.",
@@ -1053,12 +1087,12 @@ export const trAfkPlus = {
     finishing: "Başlatılıyor",
     // Not "Sonra": beside "Devam" it read as "next".
     later: "Daha sonra",
-    done: "Asistan çalışmaya başladı",
+    done: "ProBot AI çalışmaya başladı",
     invalid: "Bazı seçimler kaydedilemedi. Ayarlar'dan düzeltebilirsin.",
     failed: "AFK+ şu an kurulamadı.",
     mode: {
       title: "Çalışacağı yer",
-      lede: "Asistan hesabın bulunduğu sunucuda konuşur ve anlaşır.",
+      lede: "ProBot AI hesabın bulunduğu sunucuda konuşur ve anlaşır.",
       mode: "Oyun modu",
       generic: "Her sunucuya uyan genel ayar",
     },
@@ -1073,7 +1107,7 @@ export const trAfkPlus = {
       notNowHelp: "Aradığını bulunca yalnız haber verir.",
       required: 'İki tutarı da yaz ya da "Şimdilik alım yapmasın" seçeneğini aç.',
       requiredOne: 'Bir tutar yaz ya da "Şimdilik alım yapmasın" seçeneğini aç.',
-      secret: "Asistan bütçeni ve sınırlarını kimseye söylemez.",
+      secret: "ProBot AI bütçeni ve sınırlarını kimseye söylemez.",
     },
     list: {
       title: "İlk siparişin",

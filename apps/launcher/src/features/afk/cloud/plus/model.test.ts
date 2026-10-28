@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { enAfkPlus } from "@/locales/en-afkplus";
+import { trAfkPlus } from "@/locales/tr-afkplus";
 import {
   aiState,
   applyDraft,
@@ -6,19 +8,34 @@ import {
   boughtInUse,
   boughtLeft,
   boughtReplies,
+  CURRENCY_MAX,
   canSpend,
+  configAfterControl,
   configChanges,
+  currencyEditProblem,
+  currencyFieldState,
+  currencyProblem,
   editDraft,
+  emptyLimit,
   giftReplies,
+  type LimitField,
   limitProblems,
+  limitReason,
   liveProblems,
   PREFIX_DEFAULT,
   personaTextProblem,
   prefixProblem,
+  presetOf,
   readTime,
+  type SettingsDraft,
+  type SettingsPart,
   settingsPart,
+  spendingField,
+  startState,
   tradeNoteKey,
   windowProblems,
+  withCurrency,
+  withSettings,
 } from "./model";
 import type { PlusAi, PlusConfig, PlusOrder, PlusQuota } from "./types";
 
@@ -26,6 +43,7 @@ function config(parts: Partial<PlusConfig> = {}): PlusConfig {
   return {
     v: 2,
     enabled: true,
+    ready: null,
     mode: "projects-smp",
     lang: "auto",
     persona: {
@@ -53,8 +71,14 @@ function config(parts: Partial<PlusConfig> = {}): PlusConfig {
       newCounterpartApprovalAbove: null,
       approvalTimeoutMin: 10,
     },
-    discovery: { scanChat: true, proactivePm: true, ads: false, adTemplate: "buy-basic" },
-    trade: { returnRow: null },
+    discovery: {
+      scanChat: true,
+      proactivePm: true,
+      ads: false,
+      adTemplate: "buy-basic",
+      adEveryMin: null,
+    },
+    trade: { returnRow: null, currency: null },
     summaryAt: "21:00",
     blocked: [],
     schedule: { on: false, windows: [] },
@@ -129,6 +153,18 @@ describe("the tag before the assistant's lines (afkplus-config-v2.json's tag cas
 });
 
 describe("AFK+ limits and fields", () => {
+  it("say what an empty limit does: no buying without the per-deal or the total one", () => {
+    expect(emptyLimit("perDealMax")).toBe("buysNothing");
+    expect(emptyLimit("totalBudget")).toBe("buysNothing");
+    expect(emptyLimit("dailySpendMax")).toBe("noLimit");
+    expect(emptyLimit("approvalAbove")).toBe("noAsk");
+    expect(emptyLimit("newCounterpartApprovalAbove")).toBe("noAsk");
+    expect(emptyLimit("balanceFloor")).toBeNull();
+    // The site's words under the two (SITE-W2), never "Sınır yok" there.
+    expect(trAfkPlus.settings.emptyBuysNothing).toBe("Boş bırakırsan ProBot AI alım yapmaz.");
+    expect(enAfkPlus.settings.emptyBuysNothing).toBe("Leave it empty and ProBot AI buys nothing.");
+  });
+
   it("need both limits to buy", () => {
     expect(canSpend(config().limits)).toBe(false);
     expect(canSpend({ ...config().limits, perDealMax: 50_000, totalBudget: 300_000 })).toBe(true);
@@ -235,6 +271,186 @@ describe("the Ayarlar draft", () => {
       config({ who: { mode: "friends", friends: ["Ece_", "Mert", "Baris_TR", "kaan_07"] } }),
     );
     expect(applyDraft(latest, draft).who.friends).toEqual(["Ece_", "Baris_TR", "kaan_07"]);
+  });
+
+  it("sends the ads' minutes as they came, or as the player picked them", () => {
+    // A document without them, as the service sends it (none picked, or a service without them).
+    const absent: PlusConfig["discovery"] = JSON.parse(
+      '{"scanChat": true, "proactivePm": true, "ads": true, "adTemplate": "buy-basic"}',
+    );
+    const saved = settingsPart(config({ discovery: absent }));
+    const sent = (latest: SettingsPart, draft: SettingsDraft | null) =>
+      JSON.parse(JSON.stringify(withSettings(config(), applyDraft(latest, draft)))).discovery;
+    // Another edit sends them as they came: none is made here.
+    const other = editDraft(saved, null, (shown) => ({ ...shown, summaryAt: "22:00" }));
+    expect(sent(saved, other)).toEqual(absent);
+    // The player's pick goes on top of the latest.
+    const pick = editDraft(saved, null, (shown) => ({
+      ...shown,
+      discovery: { ...shown.discovery, adEveryMin: 45 },
+    }));
+    expect(sent(saved, pick).adEveryMin).toBe(45);
+    // Minutes read stay through another edit.
+    const read = settingsPart(config({ discovery: { ...absent, adEveryMin: 120 } }));
+    const lang = editDraft(read, null, (shown) => ({ ...shown, lang: "en" }));
+    expect(sent(read, lang).adEveryMin).toBe(120);
+  });
+});
+
+describe("the money's name (Para birimi)", () => {
+  it("is checked as the service checks it", () => {
+    for (const name of ["TL", "coin", "ripple", "Altın Para", "₺", "$", "Gold.Coin", "Şeker_Ç"]) {
+      expect(currencyProblem(name), name).toBeNull();
+    }
+    // Spaces are cleaned away, and an empty field is no name.
+    expect(currencyProblem("  Altın   Para ")).toBeNull();
+    expect(currencyProblem("   ")).toBeNull();
+    // A digit is a number to the reply rule; a name needs a letter or a sign.
+    for (const name of ["TL2", "100 coin", "-", "...", "TL!", "Аltın", "&aCoin"]) {
+      expect(currencyProblem(name), name).toBe("form");
+    }
+    expect(currencyProblem("x".repeat(CURRENCY_MAX))).toBeNull();
+    expect(currencyProblem("x".repeat(CURRENCY_MAX + 1))).toBe("length");
+  });
+
+  it("shows only while Studio's switch is on, a profile's own name read-only", () => {
+    const money = (label: string | null, fixed: boolean) => ({
+      money: {
+        label: label === null ? null : { tr: label, en: label },
+        fixed,
+        maxDeal: 10_000_000,
+        currency: "smp",
+      },
+    });
+    const features = { orders: true, audit: true, customItems: true, itemPay: false };
+    const on = { features: { ...features, currency: true } };
+    const off = { features: { ...features, currency: false } };
+    expect(currencyFieldState(money(null, false), off, "tr")).toEqual({ kind: "hidden" });
+    // An older service sends neither the switch nor `fixed`: no field either.
+    const older = JSON.parse('{"features": {"orders": true}}');
+    expect(currencyFieldState(money("ripple", false), older, "tr")).toEqual({ kind: "hidden" });
+    // Projects SMP names no money: the player's own field, named or not.
+    expect(currencyFieldState(money(null, false), on, "tr")).toEqual({ kind: "own" });
+    expect(currencyFieldState(money("TL", false), on, "tr")).toEqual({ kind: "own" });
+    // Survival's profile names it (ripple): read-only.
+    expect(currencyFieldState(money("ripple", true), on, "en")).toEqual({
+      kind: "fixed",
+      label: "ripple",
+    });
+  });
+
+  it("goes back as it came: left out, cleared or typed", () => {
+    // A document without a name, as the service sends it (none stored, or a service without it).
+    const absent: PlusConfig["trade"] = JSON.parse('{"returnRow": null}');
+    const saved = settingsPart(config({ trade: absent }));
+    const typing = (base: SettingsPart, text: string) => (shown: SettingsPart) => ({
+      ...shown,
+      trade: withCurrency(shown.trade, base.trade, text),
+    });
+    // Typed and emptied again: no edit is left, so no save writes the key.
+    const typed = editDraft(saved, null, typing(saved, "TL"));
+    expect(typed?.value.trade.currency).toBe("TL");
+    expect(editDraft(saved, typed, typing(saved, "  "))).toBeNull();
+    // Another edit sends the trade settings without it: the stored name stays.
+    const other = editDraft(saved, null, (shown) => ({ ...shown, summaryAt: "22:00" }));
+    const sent = withSettings(config({ trade: absent }), applyDraft(saved, other));
+    expect(JSON.parse(JSON.stringify(sent)).trade).toEqual({ returnRow: null });
+    // A stored name emptied goes as null (the save clears it); a typed one goes as typed.
+    const named = settingsPart(config({ trade: { returnRow: null, currency: "TL" } }));
+    const cleared = editDraft(named, null, typing(named, ""));
+    expect(cleared?.value.trade).toEqual({ returnRow: null, currency: null });
+    const renamed = editDraft(named, null, typing(named, "Altın Para"));
+    expect(renamed?.value.trade.currency).toBe("Altın Para");
+    // An untouched name takes the newest (the phone renamed it meanwhile).
+    const latest = settingsPart(config({ trade: { returnRow: null, currency: "coin" } }));
+    const lang = editDraft(named, null, (shown) => ({ ...shown, lang: "en" }));
+    expect(applyDraft(latest, lang).trade.currency).toBe("coin");
+    // Only a name the player typed is the panel's to refuse.
+    expect(currencyEditProblem(typing(named, "TL2")(named).trade, named.trade)).toBe("form");
+    const odd = { returnRow: null, currency: "TL2" };
+    expect(currencyEditProblem(odd, odd)).toBeNull();
+    expect(currencyEditProblem(absent, absent)).toBeNull();
+  });
+});
+
+describe("Sınırlara git: the limit a line is about", () => {
+  it("goes from an approval's reason to its limit, and from no other", () => {
+    const cases: Array<[string, LimitField | undefined]> = [
+      ["above", "approvalAbove"],
+      ["new_counterpart", "newCounterpartApprovalAbove"],
+      ["daily", "dailySpendMax"],
+      ["budget", "totalBudget"],
+      // The authority the player chose, or a price, is no limit to go to.
+      ["authority", undefined],
+      ["price_unusual", undefined],
+      ["other", undefined],
+      ["constructor", undefined],
+    ];
+    for (const [reason, field] of cases) expect(limitReason([reason])?.field, reason).toBe(field);
+    // The first reason that is a limit's carries it.
+    const first = limitReason(["price_unusual", "daily", "above"]);
+    expect(first).toEqual({ reason: "daily", field: "dailySpendMax" });
+    expect(limitReason([])).toBeNull();
+  });
+
+  it("goes from buying that waits for the spending limits to the first one missing", () => {
+    expect(spendingField({ perDealMax: null, totalBudget: null })).toBe("perDealMax");
+    expect(spendingField({ perDealMax: 50_000, totalBudget: null })).toBe("totalBudget");
+  });
+});
+
+describe("the first start (AFK+ never starts by itself)", () => {
+  it("says ProBot AI is ready and offers to start it while it waits", () => {
+    const off = aiState(ai({ state: "off", reason: "player" }));
+    expect(startState(off, true)).toEqual({
+      key: "ready",
+      tone: "ok",
+      until: null,
+      canStart: true,
+      canStop: false,
+    });
+    expect(trAfkPlus.ai.ready).toBe("ProBot AI hazır. Başlatınca çalışır.");
+    // Never a bare "Başlat": beside the account's "Durdur" it read as the account's (SITE-W2).
+    expect(trAfkPlus.control.start).toBe("ProBot AI'ı başlat");
+    expect(enAfkPlus.control.start).toBe("Start ProBot AI");
+  });
+
+  it("reads the service's ready the same way, and other reasons as before", () => {
+    const ready = aiState(ai({ state: "off", reason: "ready" }));
+    expect(ready).toMatchObject({ key: "ready", tone: "ok", canStart: true, canStop: false });
+    expect(startState(ready, false)).toBe(ready);
+    // A started account switched off keeps its own line; a reason the launcher does not know
+    // reads as it always did.
+    expect(aiState(ai({ state: "off", reason: "player" }))).toMatchObject({ key: "player" });
+    expect(aiState(ai({ state: "off", reason: "somethingNew" }))).toMatchObject({ key: "paused" });
+  });
+
+  it("leaves every other state as it is, a pause too", () => {
+    const paused = aiState(ai({ state: "paused", reason: "break", until: 1 }));
+    expect(startState(paused, false)).toBe(paused);
+    const on = aiState(ai({}));
+    expect(startState(on, false)).toBe(on);
+  });
+
+  it("ends with Başlat, while Durdur leaves the mark as it is", () => {
+    const waiting = config({ enabled: false, ready: true });
+    const started = configAfterControl(waiting, "resume");
+    expect([started.enabled, started.ready]).toEqual([true, null]);
+    const stopped = configAfterControl(waiting, "pause");
+    expect([stopped.enabled, stopped.ready]).toEqual([false, true]);
+    // Blocking still takes the player off the friends list.
+    const friends = config({ who: { mode: "friends", friends: ["Pixel_Fox9"] } });
+    const blocked = configAfterControl(friends, "block", "pixel_fox9");
+    expect([blocked.blocked, blocked.who.friends]).toEqual([["pixel_fox9"], []]);
+  });
+});
+
+describe("the assistant's defaults", () => {
+  it('take "Kibar" where the settings name no style, and keep a stored one', () => {
+    expect(presetOf("brief")).toBe("brief");
+    expect(presetOf("friendly")).toBe("friendly");
+    expect(presetOf("")).toBe("polite");
+    expect(presetOf("somethingNew")).toBe("polite");
   });
 });
 

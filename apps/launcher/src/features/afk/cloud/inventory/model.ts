@@ -16,7 +16,11 @@ export function toInvItem(item: CloudInvItem): InvItem {
     label: label(item.label),
   };
   if (item.name) out.name = item.name;
+  // Machine 0.3.2: the looks of the name and lore, a head's skin (@pl/ui checks them again).
+  if (item.name && item.nameStyle?.length) out.nameStyle = item.nameStyle;
   if (item.lore?.length) out.lore = item.lore;
+  if (item.lore?.length && item.loreStyle?.some(Boolean)) out.loreStyle = item.loreStyle;
+  if (item.skin) out.skin = item.skin;
   if (item.durability) {
     out.durability = { left: item.durability.left ?? 0, max: item.durability.max ?? 0 };
   }
