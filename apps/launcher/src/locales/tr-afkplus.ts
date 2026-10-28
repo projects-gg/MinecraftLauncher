@@ -42,6 +42,9 @@ export const trAfkPlus = {
     // What waits for the player's answer: a deal's OK, a trade to mark, an item to confirm. Whose
     // it is, as the panel's "Seni bekleyenler" says.
     approvals: "{{count}} karar seni bekliyor",
+    // The card's stop under "ProBot AI çalışıyor": the whole account leaves the game, not only the
+    // AI (the site's words; TASTE-SWEEP, BETA-FB).
+    stopAccount: "Hesabı durdur",
     upgrade: "AFK+'ya yükselt",
     // The order card (afkplus-free.md §1.6): the order as read, in plain lines.
     noItem: "Eşya seçilmedi",

@@ -31,6 +31,7 @@ export const enAfkPlus = {
     // As the site says it (SITE-W2B): what waits, not a bare number.
     approvals_one: "{{count}} decision waiting for you",
     approvals_other: "{{count}} decisions waiting for you",
+    stopAccount: "Stop account",
     upgrade: "Upgrade to AFK+",
     noItem: "No item picked",
     unset: "Not set",

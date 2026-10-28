@@ -87,8 +87,8 @@ export const enCloudAfk = {
     hoursLeft_other: "{{count}} hours left",
     minutesLeft_one: "{{count}} minute left",
     minutesLeft_other: "{{count}} minutes left",
-    graceLeft_one: "Its settings are kept {{count}} more day",
-    graceLeft_other: "Its settings are kept {{count}} more days",
+    graceLeft_one: "Settings are kept for {{count}} more day",
+    graceLeft_other: "Settings are kept for {{count}} more days",
   },
   actions: {
     start: "Start",

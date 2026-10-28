@@ -29,6 +29,7 @@ import {
   toast,
   useInteractionMotion,
   useMotionPrefs,
+  useReduceMotion,
   useSystemReducedMotion,
 } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -286,8 +287,9 @@ const SYSTEM_NAMES = { windows: "Windows", macos: "macOS", linux: "Linux" } as c
 
 /**
  * "Animasyonları azalt" (BETA-FB): fades only, as the system's own reduced motion gives (@pl/ui
- * reduced-motion). Performance mode turns it on too, so the switch says so while it is on (as the
- * embers' switch does); so does the system's setting, which the line under it names.
+ * reduced-motion). Performance mode and the system's setting hold it on, and the line under it
+ * says which (a switch held on without a reason read as broken; TASTE-SWEEP); otherwise the line
+ * says what it does, apart from Performance mode above it. One cell, so nothing below moves.
  */
 function ReduceMotionRow() {
   const { t } = useTranslation();
@@ -298,7 +300,16 @@ function ReduceMotionRow() {
   return (
     <Row
       title={t("motion.title")}
-      help={system ? t("motion.systemOn", { system: SYSTEM_NAMES[os] }) : undefined}
+      help={
+        <SwapLine
+          lines={[
+            t("motion.help"),
+            t("motion.perfOn"),
+            t("motion.systemOn", { system: SYSTEM_NAMES[os] }),
+          ]}
+          active={system ? 2 : p.performanceMode ? 1 : 0}
+        />
+      }
       setting="reduce-motion"
     >
       <Switch
@@ -307,6 +318,34 @@ function ReduceMotionRow() {
         label={t("motion.title")}
         hideLabel
         disabled={kept}
+      />
+    </Row>
+  );
+}
+
+/**
+ * The embers on Home are ambient motion: Performance mode and reduced motion (the system's, or
+ * "Animasyonları azalt") stop them, so the switch shows them off and fixed then, with the reason
+ * under it (it showed them on in gold while Home had none; TASTE-SWEEP).
+ */
+function ParticlesRow() {
+  const { t } = useTranslation();
+  const p = usePrefs();
+  const reduced = useReduceMotion();
+  const held = p.performanceMode || reduced;
+  return (
+    <Row
+      title={t("settings.appearance.particles")}
+      help={
+        p.performanceMode ? t("motion.embersPerf") : reduced ? t("motion.embersReduced") : undefined
+      }
+    >
+      <Switch
+        checked={p.particles && !held}
+        onCheckedChange={(v) => p.set("particles", v)}
+        label={t("settings.appearance.particles")}
+        hideLabel
+        disabled={held}
       />
     </Row>
   );
@@ -331,16 +370,7 @@ function Appearance() {
         />
       </Row>
       <ReduceMotionRow />
-      <Row title={t("settings.appearance.particles")}>
-        {/* Performance mode turns the embers off: the switch says so while it is on. */}
-        <Switch
-          checked={p.particles && !p.performanceMode}
-          onCheckedChange={(v) => p.set("particles", v)}
-          label={t("settings.appearance.particles")}
-          hideLabel
-          disabled={p.performanceMode}
-        />
-      </Row>
+      <ParticlesRow />
       <Row title={t("settings.appearance.sounds")}>
         <Switch
           checked={p.sounds}

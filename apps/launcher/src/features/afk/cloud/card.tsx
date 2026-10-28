@@ -196,6 +196,7 @@ function PlaceRow({
 function PrimaryButton({
   account,
   away,
+  plus = false,
   onStart,
   onStop,
   onFixPassword,
@@ -204,6 +205,12 @@ function PrimaryButton({
   account: CloudAccount;
   /** Its machine is out of reach (CLOUD-STALE). */
   away: boolean;
+  /**
+   * An AFK+ account: "Durdur" sat right under "ProBot AI çalışıyor" and read as stopping the AI,
+   * where it takes the whole account out of the game, so it says "Hesabı durdur" (TASTE-SWEEP,
+   * the site's words).
+   */
+  plus?: boolean;
   onStart: () => void;
   onStop: () => void;
   onFixPassword: () => void;
@@ -240,7 +247,7 @@ function PrimaryButton({
     ((hold?.kind === "cause" && hold.cause !== "other") || hold?.kind === "server_blocked");
   const labels: Record<Exclude<CloudPrimary, "none">, string> = {
     start: t("cloudAfk.actions.start"),
-    stop: t("cloudAfk.actions.stop"),
+    stop: plus ? t("afkPlus.card.stopAccount") : t("cloudAfk.actions.stop"),
     renew: t("cloudAfk.actions.reactivate"),
     fixPassword: t("afkClear.fixPassword"),
   };
@@ -732,6 +739,7 @@ export function CloudCard({
               <PrimaryButton
                 account={account}
                 away={away}
+                plus={Boolean(onPlus)}
                 onStart={onStart}
                 onStop={onStop}
                 onFixPassword={onSettings}
