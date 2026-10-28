@@ -25,6 +25,7 @@ import {
   prefixProblem,
   presetOf,
   readTime,
+  type SettingsDraft,
   type SettingsPart,
   settingsPart,
   spendingField,
@@ -68,7 +69,13 @@ function config(parts: Partial<PlusConfig> = {}): PlusConfig {
       newCounterpartApprovalAbove: null,
       approvalTimeoutMin: 10,
     },
-    discovery: { scanChat: true, proactivePm: true, ads: false, adTemplate: "buy-basic" },
+    discovery: {
+      scanChat: true,
+      proactivePm: true,
+      ads: false,
+      adTemplate: "buy-basic",
+      adEveryMin: null,
+    },
     trade: { returnRow: null, currency: null },
     summaryAt: "21:00",
     blocked: [],
@@ -250,6 +257,29 @@ describe("the Ayarlar draft", () => {
       config({ who: { mode: "friends", friends: ["Ece_", "Mert", "Baris_TR", "kaan_07"] } }),
     );
     expect(applyDraft(latest, draft).who.friends).toEqual(["Ece_", "Baris_TR", "kaan_07"]);
+  });
+
+  it("sends the ads' minutes as they came, or as the player picked them", () => {
+    // A document without them, as the service sends it (none picked, or a service without them).
+    const absent: PlusConfig["discovery"] = JSON.parse(
+      '{"scanChat": true, "proactivePm": true, "ads": true, "adTemplate": "buy-basic"}',
+    );
+    const saved = settingsPart(config({ discovery: absent }));
+    const sent = (latest: SettingsPart, draft: SettingsDraft | null) =>
+      JSON.parse(JSON.stringify(withSettings(config(), applyDraft(latest, draft)))).discovery;
+    // Another edit sends them as they came: none is made here.
+    const other = editDraft(saved, null, (shown) => ({ ...shown, summaryAt: "22:00" }));
+    expect(sent(saved, other)).toEqual(absent);
+    // The player's pick goes on top of the latest.
+    const pick = editDraft(saved, null, (shown) => ({
+      ...shown,
+      discovery: { ...shown.discovery, adEveryMin: 45 },
+    }));
+    expect(sent(saved, pick).adEveryMin).toBe(45);
+    // Minutes read stay through another edit.
+    const read = settingsPart(config({ discovery: { ...absent, adEveryMin: 120 } }));
+    const lang = editDraft(read, null, (shown) => ({ ...shown, lang: "en" }));
+    expect(sent(read, lang).adEveryMin).toBe(120);
   });
 });
 

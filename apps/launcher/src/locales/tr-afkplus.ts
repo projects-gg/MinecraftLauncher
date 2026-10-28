@@ -851,6 +851,18 @@ export const trAfkPlus = {
     ads: "Sohbete ilan versin",
     adsHelp: "Hazır metinle, 30 dakikada bir.",
     adTemplate: "İlan metni",
+    // "Sohbete ilan" as the service plans it (TRADE-ANY trade-any-4, chat-ads.tsx): what it posts,
+    // how often (the server's floor closes the shorter ones), the next ad, a spam warning, today's
+    // stop. An older service plans none: "adsHelp" stays.
+    adsHelpPlan: "Etkin siparişlerini arada sohbete yazar.",
+    adEvery: "Ne sıklıkla yazsın?",
+    adEveryChoices: { m30: "30 dk", m45: "45 dk", m60: "1 saat", m120: "2 saat" },
+    adFloor: "Bu sunucuda en az {{n}} dk.",
+    adSample: "Örnek ilan",
+    adNext: "Başka örnek",
+    adWarned: "Sunucu spam uyarısı verdi. Aralık bugünlük iki katı: {{n}} dk.",
+    adStopped: "Bugünlük ilan durdu.",
+    adNoOrders: "Etkin sipariş yokken ilan verilmez.",
     // "Para birimi" (TRADE-ANY): the money's name after amounts, the player's or the profile's own.
     currency: "Para birimi",
     currencyHelp: "Sunucundaki paranın adı.",

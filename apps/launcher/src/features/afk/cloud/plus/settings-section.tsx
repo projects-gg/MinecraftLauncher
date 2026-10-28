@@ -29,6 +29,7 @@ import { Hint, inputClass, ToggleRow } from "../../settings/controls";
 import type { CloudAccount } from "../api";
 import { type CloudNotifyPrefs, type PlusPanel, plusApi } from "./api";
 import { DOCK_HEIGHT, PlusChangeDock } from "./change-dock";
+import { ChatAds } from "./chat-ads";
 import { CurrencyField } from "./currency-field";
 import { AmountField, GroupTitle, IntField, QuietLink, TimeField } from "./fields";
 import { HistoryDialog } from "./history-dialog";
@@ -1145,11 +1146,23 @@ function LimitsGroup({
 
 // --- Bulma ve Takas ----------------------------------------------------------------------------------
 
-function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; panel: PlusPanel }) {
+function FindGroup({
+  shown,
+  set,
+  panel,
+  account,
+}: {
+  shown: SettingsPart;
+  set: Change;
+  panel: PlusPanel;
+  account: CloudAccount;
+}) {
   const { t } = useTranslation();
   const d = shown.discovery;
   const lang = currentLang();
   const templates = panel.settings.server.ads;
+  // "Sohbete ilan" as the service plans it (TRADE-ANY trade-any-4); none from an older service.
+  const plan = panel.settings.adPreview ?? null;
   const setD = (parts: Partial<SettingsPart["discovery"]>) =>
     set((s) => ({ ...s, discovery: { ...s.discovery, ...parts } }));
   return (
@@ -1167,7 +1180,7 @@ function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; pa
       />
       <ToggleRow
         title={t("afkPlus.settings.ads")}
-        help={t("afkPlus.settings.adsHelp")}
+        help={t(plan ? "afkPlus.settings.adsHelpPlan" : "afkPlus.settings.adsHelp")}
         checked={d.ads}
         disabled={!templates.length}
         onCheckedChange={(ads) =>
@@ -1191,6 +1204,14 @@ function FindGroup({ shown, set, panel }: { shown: SettingsPart; set: Change; pa
             className="max-w-[360px]"
           />
         </Labeled>
+      ) : null}
+      {d.ads && templates.length ? (
+        <ChatAds
+          plan={plan}
+          minutes={d.adEveryMin}
+          name={account.name}
+          onMinutes={(adEveryMin) => setD({ adEveryMin })}
+        />
       ) : null}
     </Group>
   );
@@ -1609,7 +1630,7 @@ export function SettingsSection({
         <AssistantGroup {...props} saver={features.saver} serverIssues={serverIssues} />
         {features.schedule ? <HoursGroup {...props} account={account} /> : null}
         <LimitsGroup {...props} account={account} serverIssues={serverIssues} />
-        <FindGroup {...props} />
+        <FindGroup {...props} account={account} />
         <TradeGroup {...props} account={account} serverIssues={serverIssues} />
         <BlockedGroup account={account} panel={panel} />
         <NotifyGroup />

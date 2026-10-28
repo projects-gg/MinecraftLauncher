@@ -66,6 +66,11 @@ export function canSpend(limits: PlusLimits): boolean {
   return limits.totalBudget !== null && limits.perDealMax !== null;
 }
 
+/** "Sohbete ilan": the minutes between ads a player may pick (`discovery.adEveryMin`). */
+export const AD_EVERY_MIN = [30, 45, 60, 120] as const;
+/** The service's minutes while the player has picked none. */
+export const AD_EVERY_DEFAULT = 60;
+
 // --- The "Ayarlar" draft ---------------------------------------------------------------------------
 
 /** What "Ayarlar" edits as one draft; orders, the switch, a break and blocked names save at once. */
