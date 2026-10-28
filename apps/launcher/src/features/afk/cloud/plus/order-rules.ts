@@ -51,6 +51,12 @@ export interface RuleContext {
   minute?: number;
   today?: number;
   perDay?: number;
+  /**
+   * The server's money name (the profile's `money.label`, else the player's `trade.currency`): an
+   * amount written with it is no real money, nor, when it is a real-money word ("TL"), the rmt
+   * phrases made of it ("tl ile").
+   */
+  currency?: string | null;
 }
 
 export interface RuleCheck {
@@ -158,6 +164,24 @@ function currencyAt(form: string, at: number): number {
   return -1;
 }
 
+/**
+ * The server's own money name right at `at` (after at most one space), in the money form: its end,
+ * else -1. Like a currency word: an ending after an apostrophe, and on names of 4 letters or more
+ * letters glued on ("ripplea").
+ */
+function ownAt(form: string, at: number, own: string | null): number {
+  if (own === null || own === "") return -1;
+  let start = at;
+  if (form[start] === " ") start += 1;
+  if (!form.startsWith(own, start)) return -1;
+  let end = start + own.length;
+  if (own.length >= 4 && /\p{L}$/u.test(own)) {
+    while (end < form.length && /\p{L}/u.test(form[end] ?? "")) end += 1;
+  }
+  end += caseEnding(form, end);
+  return boundaryAt(form, end) ? end : -1;
+}
+
 type Digits = { value: number; shape: string } | { problem: string };
 
 /** The value of digits with separators and a multiplier, or why it cannot be told. */
@@ -220,9 +244,18 @@ export interface MoneyToken {
   problem?: string;
 }
 
-/** The number-like tokens of a text, left to right; digits glued to letters are no amount. */
-export function tokenize(text: string): { form: string; tokens: MoneyToken[]; stray: number } {
+/**
+ * The number-like tokens of a text, left to right; digits glued to letters are no amount. `own`:
+ * the server's money name (the profile's `money.label`, else the player's `trade.currency`): an
+ * amount written with it, the name after it or the sign before it, is the server's money, not real
+ * money, though the name is a real-money word or sign ("TL", "$"); every other one still is.
+ */
+export function tokenize(
+  text: string,
+  own: string | null = null,
+): { form: string; tokens: MoneyToken[]; stray: number } {
   const form = moneyForm(text);
+  const ownForm = own === null ? null : moneyForm(own);
   const tokens: MoneyToken[] = [];
   let stray = 0;
   let i = 0;
@@ -241,9 +274,12 @@ export function tokenize(text: string): { form: string; tokens: MoneyToken[]; st
       continue;
     }
     const loneSeparator = (before === "." || before === ",") && !isDigit(form[i - 2]);
-    let rmt =
-      (before !== undefined && CURRENCY_SIGNS.includes(before)) ||
-      (before === " " && CURRENCY_SIGNS.includes(form[i - 2] ?? ""));
+    const sign = CURRENCY_SIGNS.includes(before ?? "")
+      ? (before as string)
+      : before === " " && CURRENCY_SIGNS.includes(form[i - 2] ?? "")
+        ? (form[i - 2] as string)
+        : null;
+    let rmt = sign !== null && sign !== ownForm;
     let unit: Unit | null = null;
     const found = unitAt(form, end);
     if (found !== null) {
@@ -252,8 +288,11 @@ export function tokenize(text: string): { form: string; tokens: MoneyToken[]; st
     } else if (form[end] === "'") {
       end += caseEnding(form, end);
     }
-    const currencyEnd = currencyAt(form, end);
-    if (currencyEnd !== -1) {
+    const ownEnd = ownAt(form, end, ownForm);
+    const currencyEnd = ownEnd === -1 ? currencyAt(form, end) : -1;
+    if (ownEnd !== -1) {
+      end = ownEnd;
+    } else if (currencyEnd !== -1) {
       rmt = true;
       end = currencyEnd;
     }
@@ -283,10 +322,15 @@ export function tokenize(text: string): { form: string; tokens: MoneyToken[]; st
 
 /**
  * One amount the player types in a field ("40 bin", "40k", "40.000"): the number, or null when
- * it cannot be told for sure (the field then asks again). The same reading as the agent's.
+ * it cannot be told for sure (the field then asks again). The same reading as the agent's. `own`:
+ * as in `tokenize`.
  */
-export function readAmount(text: string, maxDeal = GENERIC_MAX_DEAL): number | null {
-  const { tokens } = tokenize(text);
+export function readAmount(
+  text: string,
+  maxDeal = GENERIC_MAX_DEAL,
+  own: string | null = null,
+): number | null {
+  const { tokens } = tokenize(text, own);
   const [token] = tokens;
   if (tokens.length !== 1 || token === undefined || token.problem !== undefined) return null;
   const value = token.value ?? 0;
@@ -737,8 +781,16 @@ export function checkOrderText(text: string, ctx: RuleContext = {}): RuleCheck {
   ) {
     return { result: "reject:unsafe", notes };
   }
-  const { tokens } = tokenize(cleaned);
-  for (const [rule, phrases] of LOOSEN) {
+  const own = ctx.currency ?? null;
+  const { tokens } = tokenize(cleaned, own);
+  // A name that is a real-money word ("TL"): the rmt phrases made of it ("tl ile") are no attempt.
+  const ownForm = own === null ? null : moneyForm(own);
+  const ownWord = ownForm !== null && CURRENCY_WORDS.includes(ownForm) ? ownForm : null;
+  for (const [rule, all] of LOOSEN) {
+    const phrases =
+      rule === "rmt" && ownWord !== null
+        ? all.filter((phrase) => !(phrase.split(" ")[0] ?? "").startsWith(ownWord))
+        : all;
     let hit = anyPhrase(list, phrases);
     if (rule === "off_platform") hit = hit || platformNamed(cleaned);
     if (rule === "rmt") hit = hit || tokens.some((token) => token.rmt);

@@ -20,7 +20,10 @@
         "Elytra",
         0,
         {
-          "a": ["elitra", "kanat"]
+          "a": [
+            "elitra",
+            "kanat"
+          ]
         }
       ],
       [
@@ -31,7 +34,9 @@
         "Diamond",
         -1,
         {
-          "a": ["dia"]
+          "a": [
+            "dia"
+          ]
         }
       ],
       [
@@ -42,7 +47,10 @@
         "Block of Diamond",
         -1,
         {
-          "a": ["elmas blok", "dia blok"]
+          "a": [
+            "elmas blok",
+            "dia blok"
+          ]
         }
       ],
       [
@@ -53,7 +61,9 @@
         "Diamond Sword",
         1,
         {
-          "a": ["dia kilic"]
+          "a": [
+            "dia kilic"
+          ]
         }
       ],
       [
@@ -64,7 +74,9 @@
         "Netherite Sword",
         1,
         {
-          "a": ["netherit kilic"]
+          "a": [
+            "netherit kilic"
+          ]
         }
       ],
       [
@@ -75,7 +87,9 @@
         "Netherite Ingot",
         -1,
         {
-          "a": ["netherit"]
+          "a": [
+            "netherit"
+          ]
         }
       ],
       [
@@ -86,7 +100,9 @@
         "Totem of Undying",
         -1,
         {
-          "a": ["totem"]
+          "a": [
+            "totem"
+          ]
         }
       ],
       [
@@ -97,7 +113,10 @@
         "Ender Pearl",
         -1,
         {
-          "a": ["pearl", "inci"]
+          "a": [
+            "pearl",
+            "inci"
+          ]
         }
       ],
       [
@@ -108,11 +127,27 @@
         "Enchanted Golden Apple",
         -1,
         {
-          "a": ["god elma"]
+          "a": [
+            "god elma"
+          ]
         }
       ],
-      ["minecraft:golden_apple", 64, 0, "Altın Elma", "Golden Apple", -1],
-      ["minecraft:paper", 64, 0, "Kâğıt", "Paper", -1],
+      [
+        "minecraft:golden_apple",
+        64,
+        0,
+        "Altın Elma",
+        "Golden Apple",
+        -1
+      ],
+      [
+        "minecraft:paper",
+        64,
+        0,
+        "Kâğıt",
+        "Paper",
+        -1
+      ],
       [
         "minecraft:diamond_pickaxe",
         1,
@@ -121,10 +156,19 @@
         "Diamond Pickaxe",
         2,
         {
-          "a": ["dia kazma"]
+          "a": [
+            "dia kazma"
+          ]
         }
       ],
-      ["minecraft:enchanted_book", 1, 0, "Büyülü Kitap", "Enchanted Book", 3]
+      [
+        "minecraft:enchanted_book",
+        1,
+        0,
+        "Büyülü Kitap",
+        "Enchanted Book",
+        3
+      ]
     ],
     "ench": [
       [
@@ -133,8 +177,13 @@
         "Keskinlik",
         "Sharpness",
         {
-          "a": ["sharp"],
-          "x": [1, 2]
+          "a": [
+            "sharp"
+          ],
+          "x": [
+            1,
+            2
+          ]
         }
       ],
       [
@@ -143,7 +192,10 @@
         "Kutsallık",
         "Smite",
         {
-          "x": [0, 2]
+          "x": [
+            0,
+            2
+          ]
         }
       ],
       [
@@ -152,17 +204,27 @@
         "Eklembacaklıların Belası",
         "Bane of Arthropods",
         {
-          "x": [0, 1]
+          "x": [
+            0,
+            1
+          ]
         }
       ],
-      ["minecraft:looting", 3, "Ganimet", "Looting"],
+      [
+        "minecraft:looting",
+        3,
+        "Ganimet",
+        "Looting"
+      ],
       [
         "minecraft:unbreaking",
         3,
         "Kırılmazlık",
         "Unbreaking",
         {
-          "a": ["unb"]
+          "a": [
+            "unb"
+          ]
         }
       ],
       [
@@ -171,7 +233,9 @@
         "Onarım",
         "Mending",
         {
-          "a": ["mend"]
+          "a": [
+            "mend"
+          ]
         }
       ],
       [
@@ -180,7 +244,9 @@
         "Verimlilik",
         "Efficiency",
         {
-          "a": ["eff"]
+          "a": [
+            "eff"
+          ]
         }
       ],
       [
@@ -189,7 +255,9 @@
         "Servet",
         "Fortune",
         {
-          "x": [8]
+          "x": [
+            8
+          ]
         }
       ],
       [
@@ -198,7 +266,9 @@
         "İpeksi Dokunuş",
         "Silk Touch",
         {
-          "x": [7]
+          "x": [
+            7
+          ]
         }
       ],
       [
@@ -221,14 +291,46 @@
       ]
     ],
     "groups": [
-      [4, 5, 9, 10],
-      [0, 1, 2, 3, 4, 5, 10],
-      [4, 5, 6, 7, 8, 10],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      [
+        4,
+        5,
+        9,
+        10
+      ],
+      [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        10
+      ],
+      [
+        4,
+        5,
+        6,
+        7,
+        8,
+        10
+      ],
+      [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ]
     ]
   },
   "counts": {
-    "rules": 163,
+    "rules": 169,
     "readers": 68,
     "drafts": 53,
     "answers": 21
@@ -1176,6 +1278,60 @@
       "notes": []
     },
     {
+      "name": "the server's TL",
+      "text": "50 TL'ye elytra alırım",
+      "ctx": {
+        "currency": "TL"
+      },
+      "result": "ok",
+      "notes": []
+    },
+    {
+      "name": "the server's TL with ile",
+      "text": "50 bin tl ile elytra alırım",
+      "ctx": {
+        "currency": "TL"
+      },
+      "result": "ok",
+      "notes": []
+    },
+    {
+      "name": "the server's dollar sign",
+      "text": "$10 elytra alırım",
+      "ctx": {
+        "currency": "$"
+      },
+      "result": "ok",
+      "notes": []
+    },
+    {
+      "name": "lira on a TL server",
+      "text": "50 liraya elytra alırım",
+      "ctx": {
+        "currency": "TL"
+      },
+      "result": "reject:loosen:rmt",
+      "notes": []
+    },
+    {
+      "name": "papara on a TL server",
+      "text": "papara ile 50 TL elytra",
+      "ctx": {
+        "currency": "TL"
+      },
+      "result": "reject:loosen:rmt",
+      "notes": []
+    },
+    {
+      "name": "TL on a coin server",
+      "text": "50 TL'ye elytra alırım",
+      "ctx": {
+        "currency": "coin"
+      },
+      "result": "reject:loosen:rmt",
+      "notes": []
+    },
+    {
       "name": "a gift card",
       "text": "gift card for an elytra",
       "ctx": {},
@@ -1386,28 +1542,36 @@
       "text": "bana sormadan elytra al 40k",
       "ctx": {},
       "result": "ok",
-      "notes": ["approval_pref"]
+      "notes": [
+        "approval_pref"
+      ]
     },
     {
       "name": "without approval",
       "text": "onaysız al elytra 40k",
       "ctx": {},
       "result": "ok",
-      "notes": ["approval_pref"]
+      "notes": [
+        "approval_pref"
+      ]
     },
     {
       "name": "English don't ask",
       "text": "buy elytra 40k, dont ask me",
       "ctx": {},
       "result": "ok",
-      "notes": ["approval_pref"]
+      "notes": [
+        "approval_pref"
+      ]
     },
     {
       "name": "a note and the limit question",
       "text": "bana sorma her fiyata al elytra",
       "ctx": {},
       "result": "question:limit",
-      "notes": ["approval_pref"]
+      "notes": [
+        "approval_pref"
+      ]
     },
     {
       "name": "no note on a refusal",
@@ -1866,7 +2030,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2176,7 +2349,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2271,7 +2453,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2310,7 +2501,11 @@
         {
           "kind": "limit",
           "side": "sell",
-          "amounts": [5800, 5100, 4500]
+          "amounts": [
+            5800,
+            5100,
+            4500
+          ]
         },
         {
           "kind": "per",
@@ -2358,7 +2553,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2402,7 +2606,11 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [17000, 19000, 23000]
+          "amounts": [
+            17000,
+            19000,
+            23000
+          ]
         }
       ],
       "notes": [],
@@ -2447,7 +2655,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2486,7 +2703,10 @@
         "amounts": "money",
         "open": {
           "item": {
-            "options": ["minecraft:diamond_sword", "minecraft:netherite_sword"]
+            "options": [
+              "minecraft:diamond_sword",
+              "minecraft:netherite_sword"
+            ]
           }
         },
         "ok": []
@@ -2495,7 +2715,10 @@
         {
           "kind": "which",
           "field": "item",
-          "options": ["minecraft:diamond_sword", "minecraft:netherite_sword"]
+          "options": [
+            "minecraft:diamond_sword",
+            "minecraft:netherite_sword"
+          ]
         }
       ],
       "notes": [],
@@ -2541,7 +2764,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2585,11 +2817,19 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [130, 150, 180]
+          "amounts": [
+            130,
+            150,
+            180
+          ]
         },
         {
           "kind": "qty",
-          "amounts": [1, 32, 64]
+          "amounts": [
+            1,
+            32,
+            64
+          ]
         }
       ],
       "notes": [],
@@ -2631,7 +2871,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2680,12 +2929,20 @@
           "kind": "custom",
           "field": "item",
           "mention": "Yakut",
-          "chips": ["pick", "first_seen", "fix"]
+          "chips": [
+            "pick",
+            "first_seen",
+            "fix"
+          ]
         },
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [550, 630, 750]
+          "amounts": [
+            550,
+            630,
+            750
+          ]
         }
       ],
       "notes": [],
@@ -2727,7 +2984,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2776,12 +3042,20 @@
           "kind": "custom",
           "field": "item",
           "mention": "Kırmızı Parlak Yakut Taşı Çok Nadir Olan",
-          "chips": ["pick", "first_seen", "fix"]
+          "chips": [
+            "pick",
+            "first_seen",
+            "fix"
+          ]
         },
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [550, 630, 750]
+          "amounts": [
+            550,
+            630,
+            750
+          ]
         }
       ],
       "notes": [],
@@ -2823,7 +3097,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2867,7 +3150,10 @@
           "kind": "custom",
           "field": "item",
           "mention": "Yakut",
-          "chips": ["pick", "fix"]
+          "chips": [
+            "pick",
+            "fix"
+          ]
         }
       ],
       "notes": [],
@@ -2909,7 +3195,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -2958,7 +3253,9 @@
           "kind": "custom",
           "field": "item",
           "mention": "Yakut",
-          "chips": ["fix"]
+          "chips": [
+            "fix"
+          ]
         }
       ],
       "notes": [],
@@ -3000,7 +3297,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3052,7 +3358,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3095,7 +3410,9 @@
           "dur": null
         },
         "days": null,
-        "flags": ["unsafe"]
+        "flags": [
+          "unsafe"
+        ]
       },
       "cands": {
         "items": {
@@ -3106,7 +3423,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3149,7 +3475,9 @@
           "dur": null
         },
         "days": null,
-        "flags": ["many_items"]
+        "flags": [
+          "many_items"
+        ]
       },
       "cands": {
         "items": {
@@ -3161,7 +3489,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3204,7 +3541,9 @@
           "dur": null
         },
         "days": null,
-        "flags": ["rmt"]
+        "flags": [
+          "rmt"
+        ]
       },
       "cands": {
         "items": {
@@ -3215,7 +3554,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3258,7 +3606,9 @@
           "dur": null
         },
         "days": null,
-        "flags": ["prepay"]
+        "flags": [
+          "prepay"
+        ]
       },
       "cands": {
         "items": {
@@ -3269,7 +3619,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3315,7 +3674,10 @@
           "dur": null
         },
         "days": null,
-        "flags": ["approval_pref", "named_player"]
+        "flags": [
+          "approval_pref",
+          "named_player"
+        ]
       },
       "cands": {
         "items": {
@@ -3326,7 +3688,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3367,7 +3738,10 @@
         "ok": []
       },
       "questions": [],
-      "notes": ["approval_pref", "named_player"],
+      "notes": [
+        "approval_pref",
+        "named_player"
+      ],
       "order": {
         "on": true,
         "side": "buy",
@@ -3428,7 +3802,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3516,7 +3899,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3604,7 +3996,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3739,7 +4140,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3856,7 +4266,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -3967,7 +4386,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -4073,7 +4501,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -4161,7 +4598,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -4252,7 +4698,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -4357,7 +4812,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -4462,7 +4926,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -4567,7 +5040,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -4670,7 +5152,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -4714,7 +5205,11 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [11, 13, 15]
+          "amounts": [
+            11,
+            13,
+            15
+          ]
         },
         {
           "kind": "pay_off",
@@ -4766,7 +5261,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "both",
         "features": {
@@ -4869,7 +5373,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "both",
         "features": {
@@ -4916,7 +5429,9 @@
           "amounts": []
         }
       ],
-      "notes": ["item_pay_off"],
+      "notes": [
+        "item_pay_off"
+      ],
       "order": null
     },
     {
@@ -4955,7 +5470,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5051,7 +5575,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5153,7 +5686,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5244,7 +5786,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5332,7 +5883,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5373,7 +5933,9 @@
         "ok": []
       },
       "questions": [],
-      "notes": ["notify_only"],
+      "notes": [
+        "notify_only"
+      ],
       "order": {
         "on": true,
         "side": "buy",
@@ -5434,7 +5996,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5537,7 +6108,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5643,7 +6223,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5752,7 +6341,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "both",
         "features": {
@@ -5851,7 +6449,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -5946,7 +6553,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -6042,7 +6658,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -6081,7 +6706,10 @@
         "amounts": "money",
         "open": {
           "item": {
-            "options": ["minecraft:diamond_sword", "minecraft:netherite_sword"]
+            "options": [
+              "minecraft:diamond_sword",
+              "minecraft:netherite_sword"
+            ]
           }
         },
         "ok": []
@@ -6090,12 +6718,19 @@
         {
           "kind": "which",
           "field": "item",
-          "options": ["minecraft:diamond_sword", "minecraft:netherite_sword"]
+          "options": [
+            "minecraft:diamond_sword",
+            "minecraft:netherite_sword"
+          ]
         },
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [22000, 25000, 30000]
+          "amounts": [
+            22000,
+            25000,
+            30000
+          ]
         }
       ],
       "notes": [],
@@ -6140,7 +6775,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -6179,7 +6823,10 @@
         "amounts": "money",
         "open": {
           "item": {
-            "options": ["minecraft:diamond_sword", "minecraft:netherite_sword"]
+            "options": [
+              "minecraft:diamond_sword",
+              "minecraft:netherite_sword"
+            ]
           }
         },
         "ok": []
@@ -6188,7 +6835,10 @@
         {
           "kind": "which",
           "field": "item",
-          "options": ["minecraft:diamond_sword", "minecraft:netherite_sword"]
+          "options": [
+            "minecraft:diamond_sword",
+            "minecraft:netherite_sword"
+          ]
         },
         {
           "kind": "limit",
@@ -6328,7 +6978,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -6373,7 +7032,11 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [33000, 38000, 45000]
+          "amounts": [
+            33000,
+            38000,
+            45000
+          ]
         }
       ],
       "notes": [],
@@ -6417,7 +7080,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -6519,7 +7191,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -6605,7 +7286,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "items",
         "features": {
@@ -6692,7 +7382,16 @@
         "now": 1792900000,
         "money": {
           "maxDeal": 10000000,
-          "round": [[10000, 500], [0, 50]]
+          "round": [
+            [
+              10000,
+              500
+            ],
+            [
+              0,
+              50
+            ]
+          ]
         },
         "pay": "money",
         "features": {
@@ -6747,7 +7446,11 @@
       "questions": [
         {
           "kind": "qty",
-          "amounts": [1, 32, 64]
+          "amounts": [
+            1,
+            32,
+            64
+          ]
         }
       ],
       "notes": [],
@@ -6761,7 +7464,10 @@
       "question": {
         "kind": "which",
         "field": "item",
-        "options": ["minecraft:diamond_sword", "minecraft:netherite_sword"]
+        "options": [
+          "minecraft:diamond_sword",
+          "minecraft:netherite_sword"
+        ]
       },
       "choice": {
         "option": "minecraft:diamond_sword"
@@ -6846,7 +7552,11 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [44000, 50000, 60000]
+          "amounts": [
+            44000,
+            50000,
+            60000
+          ]
         }
       ],
       "order": null
@@ -6880,7 +7590,11 @@
         {
           "kind": "limit",
           "side": "sell",
-          "amounts": [36000, 32000, 28000]
+          "amounts": [
+            36000,
+            32000,
+            28000
+          ]
         }
       ],
       "order": null
@@ -6892,7 +7606,11 @@
         "kind": "custom",
         "field": "item",
         "mention": "Yakut",
-        "chips": ["pick", "first_seen", "fix"]
+        "chips": [
+          "pick",
+          "first_seen",
+          "fix"
+        ]
       },
       "choice": "first_seen",
       "newKey": "cq5ab",
@@ -6933,11 +7651,19 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [550, 630, 750]
+          "amounts": [
+            550,
+            630,
+            750
+          ]
         },
         {
           "kind": "qty",
-          "amounts": [1, 32, 64]
+          "amounts": [
+            1,
+            32,
+            64
+          ]
         }
       ],
       "order": null
@@ -6949,7 +7675,11 @@
         "kind": "custom",
         "field": "item",
         "mention": "Kırmızı Parlak Yakut Taşı Çok Nadir Olan",
-        "chips": ["pick", "first_seen", "fix"]
+        "chips": [
+          "pick",
+          "first_seen",
+          "fix"
+        ]
       },
       "choice": "first_seen",
       "newKey": "cl0ng",
@@ -6990,11 +7720,19 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [550, 630, 750]
+          "amounts": [
+            550,
+            630,
+            750
+          ]
         },
         {
           "kind": "qty",
-          "amounts": [1, 32, 64]
+          "amounts": [
+            1,
+            32,
+            64
+          ]
         }
       ],
       "order": null
@@ -7006,7 +7744,11 @@
         "kind": "custom",
         "field": "item",
         "mention": "Yakut",
-        "chips": ["pick", "first_seen", "fix"]
+        "chips": [
+          "pick",
+          "first_seen",
+          "fix"
+        ]
       },
       "choice": "fix",
       "form": "item"
@@ -7018,7 +7760,11 @@
         "kind": "custom",
         "field": "item",
         "mention": "Yakut",
-        "chips": ["pick", "first_seen", "fix"]
+        "chips": [
+          "pick",
+          "first_seen",
+          "fix"
+        ]
       },
       "choice": "pick",
       "pick": "item"
@@ -7029,7 +7775,11 @@
       "question": {
         "kind": "limit",
         "side": "buy",
-        "amounts": [17000, 19000, 23000]
+        "amounts": [
+          17000,
+          19000,
+          23000
+        ]
       },
       "choice": {
         "amount": 19000
@@ -7086,7 +7836,11 @@
       "question": {
         "kind": "limit",
         "side": "buy",
-        "amounts": [17000, 19000, 23000]
+        "amounts": [
+          17000,
+          19000,
+          23000
+        ]
       },
       "choice": {
         "amount": 12000
@@ -7316,7 +8070,11 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [11, 13, 15]
+          "amounts": [
+            11,
+            13,
+            15
+          ]
         }
       ],
       "order": null
@@ -7401,7 +8159,11 @@
         {
           "kind": "limit",
           "side": "sell",
-          "amounts": [5800, 5100, 4500]
+          "amounts": [
+            5800,
+            5100,
+            4500
+          ]
         }
       ],
       "order": null
@@ -7411,7 +8173,11 @@
       "from": "an exact name wins over a longer one",
       "question": {
         "kind": "qty",
-        "amounts": [1, 32, 64]
+        "amounts": [
+          1,
+          32,
+          64
+        ]
       },
       "choice": {
         "amount": 64
@@ -7443,7 +8209,11 @@
         {
           "kind": "limit",
           "side": "buy",
-          "amounts": [130, 150, 180]
+          "amounts": [
+            130,
+            150,
+            180
+          ]
         }
       ],
       "order": null
@@ -7478,7 +8248,9 @@
         "src": "text",
         "amounts": "money",
         "open": {},
-        "ok": ["far"]
+        "ok": [
+          "far"
+        ]
       },
       "questions": [],
       "order": {

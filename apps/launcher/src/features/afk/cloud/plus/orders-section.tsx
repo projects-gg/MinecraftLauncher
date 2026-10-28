@@ -852,6 +852,10 @@ function OrderIntake({
   const id = useId();
   const writes = useOrderWrites(accountId);
   const maxDeal = server.money.maxDeal;
+  // The server's money name in the language "Kontrol et" asks in (the launcher's): an amount
+  // written with it is no real money ("50 bin TL" where the money is TL).
+  const label = server.money.label;
+  const currency = label === null ? null : lang === "en" ? label.en : label.tr;
   const [text, setText] = useState("");
   const [checking, setChecking] = useState(false);
   const [line, setLine] = useState<IntakeLine | null>(null);
@@ -869,14 +873,14 @@ function OrderIntake({
   const hint = useMemo(() => {
     const trimmed = text.trim();
     if (!trimmed) return null;
-    const check = checkOrderText(trimmed, { maxDeal, active, orderMax });
+    const check = checkOrderText(trimmed, { maxDeal, active, orderMax, currency });
     const rejected = ruleHint(check);
     // Too short is no news while the player is still typing; the button says it by waiting.
     if (!rejected || rejected.reason === "length") {
       return [...trimmed].length > 200 ? ({ kind: "rule", reason: "length" } as IntakeLine) : null;
     }
     return { kind: "rule", reason: rejected.reason, rule: rejected.rule } as IntakeLine;
-  }, [text, maxDeal, active, orderMax]);
+  }, [text, maxDeal, active, orderMax, currency]);
   const shownLine = line ?? hint;
   const enough = [...text.trim()].length >= 3;
   const outOfChecks = left !== null && left <= 0;

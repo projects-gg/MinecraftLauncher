@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { checkOrderText, readAmount, ruleHint } from "./order-rules";
+import {
+  checkOrderText,
+  GENERIC_MAX_DEAL,
+  type RuleContext,
+  readAmount,
+  ruleHint,
+  tokenize,
+} from "./order-rules";
 import intake from "./vectors/afkplus-intake-v1.json";
 
 // The free rule check runs as an instant hint here and exactly at the Worker; the contract's
@@ -8,10 +15,35 @@ import intake from "./vectors/afkplus-intake-v1.json";
 interface RuleCase {
   name: string;
   text: string;
-  ctx: Record<string, number>;
+  /** The vectors' context: counts, the profile's cap and the server's money name (`currency`). */
+  ctx: RuleContext;
   result: string;
   notes: string[];
 }
+
+/** A name, the text, the server's own money name, then what is read: value, shape, unit, rmt. */
+type OwnRow = [string, string, string | null, number, string, string | null, boolean];
+
+/**
+ * afkplus-money-v1.json's `own` group (projects-studio, 28 Oct 2026): an amount written with the
+ * server's own money name is the server's money; every other real-money word and sign still is.
+ */
+const OWN: OwnRow[] = [
+  ["the server's TL", "45 tl", "TL", 45, "plain", null, false],
+  ["the server's TL after k, upper case", "45k TL", "TL", 45_000, "unit", "k", false],
+  ["the server's TL with an ending", "45 bin tl'ye", "TL", 45_000, "unit", "bin", false],
+  ["the server's TL glued", "45tl", "tl", 45, "plain", null, false],
+  ["the server's sign before", "$45", "$", 45, "plain", null, false],
+  ["the server's sign before, spaced", "$ 45", "$", 45, "plain", null, false],
+  ["the server's sign after", "45₺", "₺", 45, "plain", null, false],
+  ["the server's lira with an ending", "100 liraya", "Lira", 100, "plain", null, false],
+  ["another real-money word still is", "45 lira", "TL", 45, "plain", null, true],
+  ["another sign still is", "€45", "$", 45, "plain", null, true],
+  ["a real-money sign before the server's name", "$45 coin", "coin", 45, "plain", null, true],
+  ["a name that is no real-money word", "45k coin", "coin", 45_000, "unit", "k", false],
+  ["a name of two words", "45 altın para", "Altın Para", 45, "plain", null, false],
+  ["no name: tl is real money", "45 tl", null, 45, "plain", null, true],
+];
 
 /**
  * Cases the friends service's word list decides: the launcher never carries the list (the
@@ -51,5 +83,14 @@ describe("AFK+ typed orders: the free rule check (afkplus-intake-v1.json)", () =
     expect(readAmount("0")).toBeNull();
     expect(readAmount("12 13")).toBeNull();
     expect(readAmount("200m", 10_000_000)).toBeNull();
+    // The server's own money name: its amount is the server's money.
+    expect(readAmount("40 tl", GENERIC_MAX_DEAL, "TL")).toBe(40);
+    expect(readAmount("40 lira", GENERIC_MAX_DEAL, "TL")).toBeNull();
+  });
+
+  it.each(OWN)("the server's own money: %s", (_name, text, own, value, shape, unit, rmt) => {
+    const { tokens } = tokenize(text, own);
+    const read = tokens.map((token) => [token.value, token.shape, token.unit, token.rmt]);
+    expect(read).toEqual([[value, shape, unit, rmt]]);
   });
 });
