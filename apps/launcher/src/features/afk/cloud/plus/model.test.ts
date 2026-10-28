@@ -369,6 +369,16 @@ describe("the first start (AFK+ never starts by itself)", () => {
     expect(trAfkPlus.control.startFirst).toBe("Başlat");
   });
 
+  it("reads the service's ready the same way, and other reasons as before", () => {
+    const ready = aiState(ai({ state: "off", reason: "ready" }));
+    expect(ready).toMatchObject({ key: "ready", tone: "ok", canStart: true, canStop: false });
+    expect(startState(ready, false)).toBe(ready);
+    // A started account switched off keeps its own line; a reason the launcher does not know
+    // reads as it always did.
+    expect(aiState(ai({ state: "off", reason: "player" }))).toMatchObject({ key: "player" });
+    expect(aiState(ai({ state: "off", reason: "somethingNew" }))).toMatchObject({ key: "paused" });
+  });
+
   it("leaves every other state as it is, a pause too", () => {
     const paused = aiState(ai({ state: "paused", reason: "break", until: 1 }));
     expect(startState(paused, false)).toBe(paused);

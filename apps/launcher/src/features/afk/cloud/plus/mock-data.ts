@@ -188,7 +188,7 @@ export function mockAi(): PlusAi {
   const away = plusScenario === "offline";
   return {
     state: waiting ? "off" : paused || maintenance ? "paused" : away ? "unknown" : "on",
-    reason: waiting ? "player" : paused ? "quota" : maintenance ? "service" : null,
+    reason: waiting ? "ready" : paused ? "quota" : maintenance ? "service" : null,
     staffReason: null,
     until: paused ? W5H_RESET_AT : null,
     trade: {

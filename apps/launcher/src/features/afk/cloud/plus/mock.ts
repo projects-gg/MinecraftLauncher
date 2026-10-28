@@ -76,7 +76,8 @@ function emitAi() {
     ...ai,
     pendingApprovals: approvals.filter((a) => a.state === "pending").length,
     state: config.enabled ? ai.state : "off",
-    reason: config.enabled ? ai.reason : "player",
+    // Off and never started: the service says it waits for the first "Başlat".
+    reason: config.enabled ? ai.reason : config.ready ? "ready" : "player",
   };
   mockLive.emit({ kind: "ai", acct: PLUS_ID, ai });
 }

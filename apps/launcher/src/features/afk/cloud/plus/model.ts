@@ -774,6 +774,9 @@ export function aiState(ai: PlusAi | null | undefined): AiState {
       return line("server", "warn");
     case "player":
       return line("player", "muted", { canStart: true });
+    // Waiting for its first start (28 Oct 2026: AFK+ never starts by itself): ready, "Başlat".
+    case "ready":
+      return line("ready", "ok", { canStart: true });
     // The pauses that end by themselves can still be stopped for good: the stop is the player's own
     // switch (`config.enabled`), stored and sent on when the machine hears it (README "Control").
     case "break":
