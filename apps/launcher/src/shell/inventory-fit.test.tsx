@@ -54,8 +54,10 @@ describe("a server's art past the window", () => {
         onOp={async () => ({ ok: true })}
       />,
     );
-    // The scale's width is the art's (256), not the window's (176).
+    // The scale's width is the art's (256), not the window's (176); the window's own width keeps
+    // the scale readable when the whole art would take it below 2 (TASTE-SWEEP).
     expect(html).toContain("--pl-inv-w:256");
+    expect(html).toContain("--pl-inv-ww:176");
     expect(html).toContain("--pl-inv-gw:256");
     // The window starts 40 GUI pixels in, the picture at the art's edge, the line under the window.
     expect(html).toContain("left:calc(40 * var(--pl-inv-px))");
