@@ -21,7 +21,7 @@ describe("AFK+ state sentences on the card", () => {
   it("keep their first clause", () => {
     expect(firstClause("Kontörün bitti, hesabın AFK'da kalıyor")).toBe("Kontörün bitti");
     expect(firstClause("Weekly limit reached. It resets at 04:00")).toBe("Weekly limit reached");
-    expect(firstClause("Asistan çalışıyor")).toBe("Asistan çalışıyor");
+    expect(firstClause("ProBot AI çalışıyor")).toBe("ProBot AI çalışıyor");
     // A number's own dot or comma is not a clause's end.
     expect(firstClause("Elytra 37.500'e alındı")).toBe("Elytra 37.500'e alındı");
   });

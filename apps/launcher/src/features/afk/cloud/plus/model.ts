@@ -39,7 +39,7 @@ export type Style = "patient" | "balanced" | "quick";
 export type Scope = "all" | "trade" | "off";
 export type Preset = "friendly" | "brief" | "polite" | "playful";
 export type StatusPreset = "back_soon" | "back_evening" | "back_tomorrow" | "weekend" | "busy";
-/** "Asistan ne yapsın?": answer only, haggle and ask (the default), haggle and finish. */
+/** "ProBot AI ne yapsın?": answer only, haggle and ask (the default), haggle and finish. */
 export type Authority = "reply" | "ask" | "deal";
 
 export const STYLES: Style[] = ["patient", "balanced", "quick"];

@@ -783,7 +783,7 @@ function intakeLineText(
   switch (line.kind) {
     case "rule":
       if (line.reason === "loosen") {
-        // The hard rule itself, as a sentence ("Asistan bütçeni ve sınırlarını kimseye söylemez.").
+        // The hard rule as a sentence ("ProBot AI bütçeni ve sınırlarını kimseye söylemez.").
         const rule = t(`afkPlus.intake.rules.${line.rule ?? "prepay"}`);
         const first = rule.charAt(0).toLocaleUpperCase(currentLang() === "tr" ? "tr" : "en");
         return t("afkPlus.intake.reject.loosen", { rule: first + rule.slice(1) });

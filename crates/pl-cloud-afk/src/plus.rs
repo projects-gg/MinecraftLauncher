@@ -322,7 +322,7 @@ pub struct PlusConfig {
     pub lang: String,
     pub persona: PlusPersona,
     pub replies: PlusReplies,
-    /// "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+    /// "ProBot AI ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
     /// waits for the owner's OK; the default), `deal` (closes within the limits).
     pub authority: String,
     /// "Alış", "Satış": an order of a side switched off waits.

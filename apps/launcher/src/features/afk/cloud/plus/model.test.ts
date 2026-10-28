@@ -365,7 +365,7 @@ describe("the first start (AFK+ never starts by itself)", () => {
       canStart: true,
       canStop: false,
     });
-    expect(trAfkPlus.ai.ready).toBe("Asistan hazır. Başlatınca çalışır.");
+    expect(trAfkPlus.ai.ready).toBe("ProBot AI hazır. Başlatınca çalışır.");
     expect(trAfkPlus.control.startFirst).toBe("Başlat");
   });
 

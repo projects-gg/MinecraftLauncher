@@ -200,7 +200,7 @@ function PersonaText({
   );
 }
 
-// --- Asistan ----------------------------------------------------------------------------------------
+// --- ProBot AI --------------------------------------------------------------------------------------
 
 /** The tag before the assistant's lines (27 Oct 2026): the player's own, under its switch. */
 function TagField({

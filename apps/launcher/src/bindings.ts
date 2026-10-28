@@ -6854,7 +6854,7 @@ export type PlusConfig_Deserialize = {
 	persona?: PlusPersona,
 	replies?: PlusReplies,
 	/**
-	 *  "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+	 *  "ProBot AI ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
 	 *  waits for the owner's OK; the default), `deal` (closes within the limits).
 	 */
 	authority?: string,
@@ -6903,7 +6903,7 @@ export type PlusConfig_Serialize = {
 	persona: PlusPersona,
 	replies: PlusReplies,
 	/**
-	 *  "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+	 *  "ProBot AI ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
 	 *  waits for the owner's OK; the default), `deal` (closes within the limits).
 	 */
 	authority: string,
