@@ -2905,11 +2905,11 @@ export type CloudInvItem = {
 	 *  The name's look in the game (machine 0.3.2): spans over `name`, each its length in UTF-16
 	 *  code units and its code (a colour `0`–`f` or `#rrggbb`, then the flags among `klmno`).
 	 */
-	nameStyle?: [number, string][],
+	nameStyle?: ([number, string])[],
 	/**  At most 32 lines of at most 80 characters. */
 	lore?: string[],
 	/**  A look a `lore` line, or none (machine 0.3.2). */
-	loreStyle?: ([number, string][] | null)[],
+	loreStyle?: (([number, string])[] | null)[],
 	durability?: CloudInvDurability | null,
 	/**  `custom_model_data` (its first float, rounded down). */
 	cmd?: number | null,
