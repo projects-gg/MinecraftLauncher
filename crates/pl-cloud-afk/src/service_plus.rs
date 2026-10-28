@@ -582,9 +582,9 @@ impl CloudService {
     ) -> Result<PlusSaveOutcome> {
         match answer {
             Ok(written) => {
-                let mut settings = self
-                    .cache()
-                    .written(id, written.config, written.ai_rev, written.server);
+                let mut settings =
+                    self.cache()
+                        .written(id, written.config, written.ai_rev, written.server);
                 settings.judge = written.judge;
                 self.cache().remember(id, &settings);
                 Ok(PlusSaveOutcome::Saved { settings })
@@ -726,7 +726,9 @@ impl CloudService {
     ) -> Result<PlusOrderOutcome> {
         match answer {
             Ok(written) => {
-                let settings = self.cache().written(id, written.config, written.ai_rev, None);
+                let settings = self
+                    .cache()
+                    .written(id, written.config, written.ai_rev, None);
                 Ok(PlusOrderOutcome::Saved {
                     settings: Box::new(settings),
                     order: written.order.map(Box::new),

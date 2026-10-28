@@ -1624,7 +1624,9 @@ mod tests {
         assert_eq!(check_currency("  Altın   Para "), Ok("Altın Para".into()));
         assert_eq!(check_currency("   "), Err("length"));
         // A digit is a number to the reply rule; a name needs a letter or a sign.
-        for bad in ["TL2", "100 coin", "-", "...", "TL!", "Аltın", "&aCoin", "Coin\nTL"] {
+        for bad in [
+            "TL2", "100 coin", "-", "...", "TL!", "Аltın", "&aCoin", "Coin\nTL",
+        ] {
             assert_eq!(check_currency(bad), Err("form"), "{bad}");
         }
         assert_eq!(check_currency(&"x".repeat(16)), Ok("x".repeat(16)));
@@ -1670,11 +1672,17 @@ mod tests {
         assert_eq!(kept(check(Some(Value::Null), true)), None);
         let spaced = Some(Value::from(" Altın  Para "));
         assert_eq!(kept(check(spaced, true)), Some(Value::from("Altın Para")));
-        assert_eq!(check(Some(Value::from("TL2")), true), refused("text", Some("form")));
+        assert_eq!(
+            check(Some(Value::from("TL2")), true),
+            refused("text", Some("form"))
+        );
         assert_eq!(check(Some(Value::from(5)), true), refused("type", None));
         // Studio's switch off: a new name is refused; the stored one comes back, and clearing it
         // works.
-        assert_eq!(check(Some(Value::from("coin")), false), refused("feature", None));
+        assert_eq!(
+            check(Some(Value::from("coin")), false),
+            refused("feature", None)
+        );
         assert_eq!(kept(check(tl.clone(), false)), tl);
         assert_eq!(kept(check(Some(Value::Null), false)), None);
     }
@@ -1713,7 +1721,10 @@ mod tests {
         for bad in [Value::Bool(false), Value::Null, Value::from("yes")] {
             let mut doc = off.clone();
             doc["ready"] = bad;
-            assert_eq!(check_config_value(&doc, &ctx), Err(PlusRefusal::invalid("ready", "type")));
+            assert_eq!(
+                check_config_value(&doc, &ctx),
+                Err(PlusRefusal::invalid("ready", "type"))
+            );
         }
     }
 

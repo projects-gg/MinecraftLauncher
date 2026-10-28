@@ -2530,7 +2530,12 @@ mod tests {
         // Started before (or an older service): no mark, and none is written.
         let config: PlusConfig = serde_json::from_value(document()).unwrap();
         assert_eq!(config.ready, None);
-        assert!(serde_json::to_value(&config).unwrap().get("ready").is_none());
+        assert!(
+            serde_json::to_value(&config)
+                .unwrap()
+                .get("ready")
+                .is_none()
+        );
         // Waiting for its first start: the service's mark goes back as it came.
         let mut doc = document();
         doc["enabled"] = json!(false);
@@ -2544,12 +2549,18 @@ mod tests {
     fn the_persona_defaults_fill_only_what_is_missing() {
         // "Kibar" and "Oyuncu gibi konuşsun" where the settings have none (28 Oct 2026).
         let persona: PlusPersona = serde_json::from_value(json!({"intro": ""})).unwrap();
-        assert_eq!((persona.preset.as_str(), persona.player_talk), ("polite", true));
+        assert_eq!(
+            (persona.preset.as_str(), persona.player_talk),
+            ("polite", true)
+        );
         assert_eq!(PlusConfig::default().persona, persona);
         // A stored choice stays.
         let persona: PlusPersona =
             serde_json::from_value(json!({"preset": "brief", "playerTalk": false})).unwrap();
-        assert_eq!((persona.preset.as_str(), persona.player_talk), ("brief", false));
+        assert_eq!(
+            (persona.preset.as_str(), persona.player_talk),
+            ("brief", false)
+        );
     }
 
     #[test]
