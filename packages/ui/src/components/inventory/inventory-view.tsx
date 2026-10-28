@@ -110,6 +110,12 @@ export interface InventoryViewProps {
    * in the middle of it (`align="start"`: at its top).
    */
   fit?: "width" | "contain";
+  /**
+   * The art's size, whenever it changes: its box in GUI pixels (the window and a server's picture
+   * past it) and the line under the window in CSS pixels. For a host that sizes itself to the art
+   * at its own scale (a dialog as wide as the window it shows); `fit="contain"` needs none of it.
+   */
+  onArt?: (art: { width: number; height: number; under: number }) => void;
   /** What a `static` picture is called for screen readers. */
   label?: string;
   className?: string;
@@ -177,6 +183,7 @@ export function InventoryView({
   allowDrop = true,
   align = "center",
   fit = "width",
+  onArt,
   label,
   className,
 }: InventoryViewProps) {
@@ -1008,6 +1015,15 @@ export function InventoryView({
   );
   const headRatio = dpr ?? 1;
   const headUnit = Math.max(1, Math.round(2 * headRatio)) / headRatio;
+  // The line under the window: its gap and its height (as tall as the hand slot), CSS pixels.
+  const under = live ? 8 + Math.max(32, 18 * headUnit) : 0;
+  const onArtRef = useRef(onArt);
+  useEffect(() => {
+    onArtRef.current = onArt;
+  }, [onArt]);
+  useEffect(() => {
+    onArtRef.current?.({ width: box.width, height: box.height, under });
+  }, [box.width, box.height, under]);
   const headPx = `${headUnit}px`;
   const menuLabel = menuItem
     ? itemName(menuItem, lang)
@@ -1020,7 +1036,7 @@ export function InventoryView({
     // For `fit="contain"`: the art's height, and the line under the window (its gap and its
     // height, as tall as the hand slot) in CSS pixels.
     "--pl-inv-h": box.height,
-    "--pl-inv-under": live ? `${8 + Math.max(32, 18 * headUnit)}px` : "0px",
+    "--pl-inv-under": `${under}px`,
     "--pl-inv-min": minScale,
     "--pl-inv-max": maxScale,
     ...(dpr ? { "--pl-inv-dpr": dpr } : {}),
