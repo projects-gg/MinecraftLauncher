@@ -83,7 +83,7 @@ import {
 } from "./orders";
 import { plusAi } from "./types";
 import { plusKey, storeSettings, usePlusFeatures } from "./use-plus";
-import { amountWords, currentLang, formatAmount, type Lang, qtyItem } from "./words";
+import { cardWords, currentLang, formatAmount, type Lang, qtyItem } from "./words";
 
 const SHOWN_QUESTIONS = 2;
 /** "Okunuyor" this long without an answer: the line says the assistant cannot be reached. */
@@ -521,8 +521,11 @@ function OrderCard({
       : counts
         ? formatAmount(value, lang)
         : moneyText(value, server, lang);
-  const words = (value: number | null) =>
-    value !== null && !counts && value >= 1000 ? amountWords(value, lang) : null;
+  // In words under the figure from 10.000 (`cardWords`): a count is no money.
+  const words = (value: number | null) => {
+    if (value === null || counts) return null;
+    return cardWords(value, lang);
+  };
   const perItem = draft.unit === "each" && (draft.qty ?? 0) > 1;
   const itemName = draft.item ? itemLabel(draft.item, namer, lang) : null;
   const owner = draft.trade === "owner" || serverTrade === "owner";

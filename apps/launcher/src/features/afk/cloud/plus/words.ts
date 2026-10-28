@@ -141,6 +141,18 @@ export function amountWords(value: number, lang: Lang = currentLang()): string {
 }
 
 /**
+ * The smallest amount a card says in words under its figure (the site's rule since SITE-W2, 28 Oct
+ * 2026): a bare "bin" under "1.000" read as "1.000 bin", a million; from 10.000 ("on bin") the
+ * words only help.
+ */
+export const WORDS_FROM = 10_000;
+
+/** An amount in words under a card's figure: from `WORDS_FROM`, else none. */
+export function cardWords(value: number, lang: Lang = currentLang()): string | null {
+  return value >= WORDS_FROM ? amountWords(value, lang) : null;
+}
+
+/**
  * So many of an item: "64 Elmas" (Turkish takes no plural after a number); the game's English
  * names are singular and their plurals cannot be guessed ("Totem of Undying"), so "64 × Diamond",
  * the count kept with its item by no-break spaces. A price counted in an item keeps its "1 ×".

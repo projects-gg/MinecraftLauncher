@@ -39,7 +39,7 @@ import { limitReason } from "./model";
 import { moneyText } from "./orders";
 import { minutesLeft } from "./time";
 import { storeApproval, usePlusUi } from "./use-plus";
-import { amountWithCase, amountWords, currentLang, dealText, qtyItem } from "./words";
+import { amountWithCase, cardWords, currentLang, dealText, qtyItem } from "./words";
 
 /** Minutes left, read again at each whole minute (never every second). */
 function useMinutesLeft(expiresAt: number): number {
@@ -236,6 +236,7 @@ export function ApprovalCard({
     ? money(deal.price)
     : qtyItem(deal.price, itemLabel(deal.pay, namer, lang), lang);
   const dealWords = dealText(deal.qty, item, price, lang);
+  const priceWords = pending && kind === "deal" && forMoney ? cardWords(deal.price, lang) : null;
   // The other player as a label: the name takes no ending ("Satıcı: Kaan_07").
   const party = t(buy ? "afkPlus.approval.partyBuy" : "afkPlus.approval.partySell", {
     name: approval.counterpart,
@@ -375,10 +376,8 @@ export function ApprovalCard({
               </span>
             ) : null}
           </div>
-          {/* The amount in words only while it waits for an answer about it. */}
-          {pending && kind === "deal" && forMoney && deal.price >= 1000 ? (
-            <p className="text-[12px] text-ash-400">{amountWords(deal.price, lang)}</p>
-          ) : null}
+          {/* The amount in words only while it waits for an answer about it (from 10.000). */}
+          {priceWords ? <p className="text-[12px] text-ash-400">{priceWords}</p> : null}
           {lines.map((line) => (
             <LimitLine
               key={line}
