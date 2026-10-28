@@ -316,7 +316,8 @@ mod tests {
     #[test]
     fn ids_and_names_follow_their_rules() {
         assert!(is_sub_server_id("skyblock") && is_sub_server_id("aurora-1"));
-        for bad in ["", "-a", "a-", "SkyBlock", "sky block", &"a".repeat(33)] {
+        let long = "a".repeat(33);
+        for bad in ["", "-a", "a-", "SkyBlock", "sky block", long.as_str()] {
             assert!(!is_sub_server_id(bad), "{bad:?}");
         }
         assert_eq!(
