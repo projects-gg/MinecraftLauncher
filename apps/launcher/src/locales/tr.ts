@@ -1,6 +1,7 @@
 // Turkish is the primary language. Keep strings plain, sentence case, no em dashes.
 import { trAfkAlerts } from "./tr-afk-alerts";
 import { trAfkConnect } from "./tr-afk-connect";
+import { trAfkMod } from "./tr-afk-mod";
 import { trAfkPanel } from "./tr-afk-panel";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
@@ -104,6 +105,7 @@ export const tr = {
   cloudAfk: trCloudAfk,
   cloudAfkFeat: trCloudAfkFeat,
   cloudAfkMove: trCloudAfkMove,
+  afkMod: trAfkMod,
   afkPanel: trAfkPanel,
   projectsSkin: trProjectsSkin,
   host: trHost,
