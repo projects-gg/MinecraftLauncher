@@ -65,3 +65,32 @@ export function layoutTitle(
   }
   return { pictures, texts, advance: pen - x };
 }
+
+/** The art's box in the window's GUI pixels: where the window and its title's pictures are. */
+export interface ArtBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The box the view scales to fit: the window, grown to hold every title picture that reaches past
+ * it on any side (a server's menu art wider or taller than the window), so none of it is cut.
+ */
+export function artBox(
+  screen: { width: number; height: number },
+  pictures: readonly TitlePicture[],
+): ArtBox {
+  let left = 0;
+  let top = 0;
+  let right = screen.width;
+  let bottom = screen.height;
+  for (const picture of pictures) {
+    left = Math.min(left, picture.x);
+    top = Math.min(top, picture.y);
+    right = Math.max(right, picture.x + picture.width);
+    bottom = Math.max(bottom, picture.y + picture.height);
+  }
+  return { left, top, width: right - left, height: bottom - top };
+}

@@ -13,7 +13,7 @@
 // (projects-studio services/cloud-afk/README.md, "Inventory"); moves go out through `onOp` and the
 // view waits for the frames that follow. Nothing here runs in a loop: the view moves only with the
 // player and with frames.
-import { ArrowUUpLeft, HandTap, Hourglass, Info, LockSimple, X } from "@phosphor-icons/react";
+import { ArrowUUpLeft, HandTap, Hourglass, Info, LockSimple } from "@phosphor-icons/react";
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -63,7 +63,7 @@ import { ItemArt, SlotCell } from "./slot-cell";
 import { InventoryScale } from "./sprite";
 import { cleanText, itemName, itemSpeech, TEXT_COLOR, titleRuns, tooltipLines } from "./text";
 import { fill, INVENTORY_TEXTS, type InventoryLang, type InventoryTexts } from "./texts";
-import { layoutTitle } from "./title";
+import { artBox, layoutTitle } from "./title";
 import { ItemTooltip, MenuHead } from "./tooltip";
 import type { InventoryMode, InvFrame, InvOp, InvResult, TitleGlyph, WinFrame } from "./types";
 
@@ -103,6 +103,20 @@ export interface InventoryViewProps {
   /** Q, Ctrl+Q and the drop rows (default on). */
   allowDrop?: boolean;
   align?: "center" | "start";
+  /**
+   * `width` (default): the largest whole-pixel scale the component's width holds. `contain`: the
+   * largest one its width and its height both hold, the line under the window counted. The host
+   * gives it both (a panel, a dialog: it fills its parent's height and has no size of its own, so
+   * a shrink-to-fit parent gives it none), and the art sits in the middle (`align="start"`: at
+   * its top).
+   */
+  fit?: "width" | "contain";
+  /**
+   * The art's size, whenever it changes: its box in GUI pixels (the window and a server's picture
+   * past it) and the line under the window in CSS pixels. For a host that sizes itself to the art
+   * at its own scale (a dialog as wide as the window it shows); `fit="contain"` needs none of it.
+   */
+  onArt?: (art: { width: number; height: number; under: number }) => void;
   /** What a `static` picture is called for screen readers. */
   label?: string;
   className?: string;
@@ -169,6 +183,8 @@ export function InventoryView({
   minScale = 1,
   allowDrop = true,
   align = "center",
+  fit = "width",
+  onArt,
   label,
   className,
 }: InventoryViewProps) {
@@ -204,18 +220,10 @@ export function InventoryView({
     return layoutTitle(runs, x, place.y, titleGlyph);
   }, [open, screen, texts.equipment, texts.menu, titleGlyph]);
 
-  // The art's box: the window, grown up and down to hold a menu picture that reaches past it (as
-  // in the game, a picture wider than the window reaches past its sides: the scale follows the
-  // window, and the component clips what goes beyond its own width).
-  const box = useMemo(() => {
-    let top = 0;
-    let bottom = screen.height;
-    for (const picture of titleLayout?.pictures ?? []) {
-      top = Math.min(top, picture.y);
-      bottom = Math.max(bottom, picture.y + picture.height);
-    }
-    return { left: 0, top, width: screen.width, height: bottom - top };
-  }, [screen, titleLayout]);
+  // The art's box: the window, grown on every side to hold a menu picture that reaches past it (a
+  // server's art wider than the window, the owner's "KİTAP" menu): the scale fits all of it, and
+  // the window sits where the art puts it.
+  const box = useMemo(() => artBox(screen, titleLayout?.pictures ?? []), [screen, titleLayout]);
 
   const truth = useMemo<InvState | null>(
     () => (inventory ? stateOf(inventory) : null),
@@ -1008,6 +1016,15 @@ export function InventoryView({
   );
   const headRatio = dpr ?? 1;
   const headUnit = Math.max(1, Math.round(2 * headRatio)) / headRatio;
+  // The line under the window: its gap and its height (as tall as the hand slot), CSS pixels.
+  const under = live ? 8 + Math.max(32, 18 * headUnit) : 0;
+  const onArtRef = useRef(onArt);
+  useEffect(() => {
+    onArtRef.current = onArt;
+  }, [onArt]);
+  useEffect(() => {
+    onArtRef.current?.({ width: box.width, height: box.height, under });
+  }, [box.width, box.height, under]);
   const headPx = `${headUnit}px`;
   const menuLabel = menuItem
     ? itemName(menuItem, lang)
@@ -1017,6 +1034,10 @@ export function InventoryView({
 
   const rootStyle = {
     "--pl-inv-w": box.width,
+    // For `fit="contain"`: the art's height, and the line under the window (its gap and its
+    // height, as tall as the hand slot) in CSS pixels.
+    "--pl-inv-h": box.height,
+    "--pl-inv-under": `${under}px`,
     "--pl-inv-min": minScale,
     "--pl-inv-max": maxScale,
     ...(dpr ? { "--pl-inv-dpr": dpr } : {}),
@@ -1110,6 +1131,7 @@ export function InventoryView({
         ref={rootRef}
         className={cn("pl-inv", className)}
         data-align={align}
+        data-fit={fit === "contain" ? "contain" : undefined}
         data-live={live ? "" : undefined}
         style={rootStyle}
         role="group"
@@ -1239,8 +1261,13 @@ export function InventoryView({
             {live ? (
               <div
                 className="pl-inv-bar"
-                // As tall as the hand slot, so carrying a stack never moves what is below.
-                style={{ minHeight: `max(32px, calc(18 * ${headPx}))` }}
+                // As tall as the hand slot, so carrying a stack never moves what is below; under
+                // the window itself when a server's art is wider.
+                style={{
+                  minHeight: `max(32px, calc(18 * ${headPx}))`,
+                  marginLeft: at(-box.left),
+                  width: at(screen.width),
+                }}
               >
                 <div className="flex min-w-0 items-center gap-2">
                   {touchCarry && cursor ? (
@@ -1316,10 +1343,10 @@ export function InventoryView({
                   <Button
                     variant="ghost"
                     size="sm"
-                    // The label's edge on the window's edge; the hover fill reaches past it.
+                    // The label's edge on the window's edge; the hover fill reaches past it. No
+                    // cross: beside a dialog's own one it read as closing the dialog (SITE-W2).
                     className="-mr-3 shrink-0"
                     disabled={locked || menuOpen}
-                    icon={<X size={14} weight="bold" aria-hidden />}
                     onClick={() => {
                       const state = planRef.current;
                       if (state.inv.cursor) {

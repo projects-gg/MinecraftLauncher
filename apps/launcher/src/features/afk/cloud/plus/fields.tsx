@@ -31,6 +31,7 @@ export function AmountField({
   describedBy,
   lineless = false,
   extra,
+  anchor,
 }: {
   label: string;
   value: AmountValue;
@@ -51,6 +52,8 @@ export function AmountField({
   lineless?: boolean;
   /** Its own line under the field's (what the limit counted, what the amount does). */
   extra?: ReactNode;
+  /** The block's id, so a link elsewhere brings the field into view ("Sınırlara git"). */
+  anchor?: string;
 }) {
   const id = useId();
   const { t } = useTranslation();
@@ -66,7 +69,7 @@ export function AmountField({
   const line = error ?? (bad ? t("afkPlus.form.errors.amount") : null);
   const flare = Boolean(line) || invalid;
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+    <div id={anchor} className={cn("flex min-w-0 flex-col gap-1.5", className)}>
       <label
         htmlFor={id}
         className={cn("text-[13px] font-medium text-bone-100", hideLabel && "sr-only")}
@@ -120,15 +123,20 @@ export function AmountField({
   );
 }
 
-/** A quiet text action ("Formla ekle", "Envanterden seç", "Harcananı sıfırla"). */
+/**
+ * A quiet text action ("Formla ekle", "Envanterden seç", "Harcananı sıfırla"). `bone` where gold
+ * would be a second loud thing beside the card's answer ("Sınırlara git" on an approval).
+ */
 export function QuietLink({
   children,
   onClick,
   disabled = false,
+  tone = "gold",
 }: {
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  tone?: "gold" | "bone";
 }) {
   return (
     <button
@@ -136,8 +144,9 @@ export function QuietLink({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "cursor-pointer rounded-sm text-[12.5px] font-medium text-gold-300 underline-offset-2 outline-none",
-        "transition-[color,opacity] duration-150 hover:text-gold-200 hover:underline focus-visible:ring-2 focus-visible:ring-gold-300",
+        "cursor-pointer rounded-sm text-[12.5px] font-medium underline-offset-2 outline-none",
+        tone === "gold" ? "text-gold-300 hover:text-gold-200" : "text-bone-100 hover:text-bone-50",
+        "transition-[color,opacity] duration-150 hover:underline focus-visible:ring-2 focus-visible:ring-gold-300",
         "disabled:cursor-not-allowed disabled:text-ash-500 disabled:no-underline",
       )}
     >

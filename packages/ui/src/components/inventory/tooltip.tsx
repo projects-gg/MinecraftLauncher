@@ -4,8 +4,8 @@
 // surface, never two boxes on top of each other on a phone). Lines are 10 GUI pixels apart, the
 // name 2 more, as in the game; a line wider than the screen allows wraps at its spaces.
 import { type CSSProperties, forwardRef } from "react";
-import { wrapText } from "./pixel-font";
-import { PixelLine } from "./pixel-text";
+import { wrapRuns, wrapText } from "./pixel-font";
+import { PixelLine, PixelRuns } from "./pixel-text";
 import { shadowOf, type TooltipLine } from "./text";
 
 /** How many GUI pixels of words fit: `room` CSS pixels at `px` CSS pixels each, less the frame. */
@@ -15,7 +15,10 @@ function wordsWidth(px: string, room: (viewport: number, unit: number) => number
   return Math.max(16, Math.floor(room(viewport, unit) / unit) - frame);
 }
 
-/** The lines, each with the game's drop shadow (a quarter of its colour). */
+/**
+ * The lines, each with the game's drop shadow (a quarter of its colour); a line in a server's
+ * looks part by part (PixelRuns), wrapped at the same spaces.
+ */
 export function TooltipLines({ lines, width }: { lines: TooltipLine[]; width: number }) {
   return (
     <div className="pl-inv-tip-lines">
@@ -26,16 +29,21 @@ export function TooltipLines({ lines, width }: { lines: TooltipLine[]; width: nu
           className="pl-inv-tip-line"
           data-text={line.text}
         >
-          {wrapText(line.text, width).map((part, j) => (
-            <PixelLine
-              // biome-ignore lint/suspicious/noArrayIndexKey: a wrapped line's parts are its order
-              key={j}
-              text={part}
-              color={line.color}
-              shadow={shadowOf(line.color)}
-              italic={line.italic}
-            />
-          ))}
+          {line.runs
+            ? wrapRuns(line.runs, width).map((part, j) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: a wrapped line's parts are its order
+                <PixelRuns key={j} runs={part} />
+              ))
+            : wrapText(line.text, width).map((part, j) => (
+                <PixelLine
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a wrapped line's parts are its order
+                  key={j}
+                  text={part}
+                  color={line.color}
+                  shadow={shadowOf(line.color)}
+                  italic={line.italic}
+                />
+              ))}
         </div>
       ))}
     </div>

@@ -311,13 +311,18 @@ pub struct PlusConfig {
     pub v: u32,
     /// The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only.
     pub enabled: bool,
+    /// The service's (28 Oct 2026): the assistant waits for its first start ("Başlat"), `enabled`
+    /// false meanwhile. Sent back as it came and never made here; a start, or a save that turns
+    /// the assistant on, ends it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ready: Option<bool>,
     /// A server profile open for the account's server (`projects-smp`), or `generic`.
     pub mode: String,
     /// `auto` (English to players who write English, else Turkish), `tr`, `en`.
     pub lang: String,
     pub persona: PlusPersona,
     pub replies: PlusReplies,
-    /// "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+    /// "ProBot AI ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
     /// waits for the owner's OK; the default), `deal` (closes within the limits).
     pub authority: String,
     /// "Alış", "Satış": an order of a side switched off waits.
@@ -348,6 +353,7 @@ impl Default for PlusConfig {
         Self {
             v: 2,
             enabled: true,
+            ready: None,
             mode: String::new(),
             lang: "auto".into(),
             persona: PlusPersona::default(),
@@ -386,7 +392,8 @@ impl PlusConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusPersona {
-    /// `friendly`, `brief`, `polite`, `playful`.
+    /// `friendly`, `brief`, `polite`, `playful`; `polite` ("Kibar") where the settings have none
+    /// (28 Oct 2026).
     pub preset: String,
     /// "" or 1-60 code points.
     pub intro: String,
@@ -396,7 +403,8 @@ pub struct PlusPersona {
     pub status_preset: Option<String>,
     /// Small talk; "Konu dışına çıkmasın" is its opposite (off by default since 27 Oct 2026).
     pub small_talk: bool,
-    /// "Oyuncu gibi konuşsun": chats like a player instead of in formal language.
+    /// "Oyuncu gibi konuşsun": chats like a player instead of in formal language; on where the
+    /// settings have none (28 Oct 2026).
     pub player_talk: bool,
     /// The tag before the assistant's lines: the player's choice, off by default.
     pub prefix: PlusPrefix,
@@ -405,12 +413,12 @@ pub struct PlusPersona {
 impl Default for PlusPersona {
     fn default() -> Self {
         Self {
-            preset: "friendly".into(),
+            preset: "polite".into(),
             intro: String::new(),
             status: String::new(),
             status_preset: None,
             small_talk: false,
-            player_talk: false,
+            player_talk: true,
             prefix: PlusPrefix::default(),
         }
     }
@@ -642,6 +650,11 @@ pub struct PlusDiscovery {
     pub proactive_pm: bool,
     pub ads: bool,
     pub ad_template: String,
+    /// "Sohbete ilan" (trade-any-4): the minutes between ads the player chose, 30, 45, 60 or 120
+    /// (the service's 60 while none is stored; a server may ask for more, `floorMin`). None: not
+    /// in the document, and sent back so (never made here; an older service knows no such key).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ad_every_min: Option<u32>,
 }
 
 impl Default for PlusDiscovery {
@@ -651,6 +664,7 @@ impl Default for PlusDiscovery {
             proactive_pm: true,
             ads: false,
             ad_template: "buy-basic".into(),
+            ad_every_min: None,
         }
     }
 }
@@ -660,6 +674,28 @@ impl Default for PlusDiscovery {
 pub struct PlusTradeSettings {
     /// A plain command row of the account's config to run after a trade, or None (stay at spawn).
     pub return_row: Option<String>,
+    /// "Para birimi" (28 Oct 2026): the money's name the player gave, `Some(None)` cleared (written
+    /// as null), None not in the document (a write leaves the stored one, and an older service
+    /// knows no such key). It goes back as it came.
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<String>)]
+    pub currency: Option<Option<String>>,
+}
+
+/// A text that may be missing (None, the field's default) or null (`Some(None)`). Any other value
+/// reads as missing, so one odd field never hides the settings.
+fn present<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<String>>, D::Error> {
+    Ok(match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Null => Some(None),
+        serde_json::Value::String(text) => Some(Some(text)),
+        _ => None,
+    })
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -698,6 +734,41 @@ pub struct PlusSettings {
     pub spent: Option<PlusSpent>,
     /// The orders' states come from the machine's last snapshot of then.
     pub as_of: Option<i64>,
+    /// "Sohbete ilan" as the service plans it; None from an older service.
+    pub ad_preview: Option<PlusAdPreview>,
+}
+
+/// "Sohbete ilan" as the service plans it for the stored settings (`GET`'s, a save's and a
+/// restore's answer carry it): the server's floor, the minutes between ads now, the next ads'
+/// texts and today's spam warning or stop.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusAdPreview {
+    /// The fewest minutes between ads here: 30, or more where the profile or Studio asks.
+    pub floor_min: u32,
+    /// The minutes between ads now: the player's choice, at least the floor, twice that after a
+    /// spam warning today.
+    pub every_min: u32,
+    /// The next ads' texts in their order (at most 3, without the sender's name before them, and
+    /// no price); empty while no order is active or the names are pending.
+    pub lines: Vec<String>,
+    /// The item names are not known yet (the machine has not been in game): `lines` stays empty
+    /// until they are.
+    pub names_pending: bool,
+    /// When the next one goes (Unix seconds), when known.
+    pub next_at: Option<i64>,
+    /// The server's spam warning today, if one came.
+    pub warning: Option<PlusAdWarning>,
+    /// A second warning stopped the ads until the day ends.
+    pub stopped_today: bool,
+}
+
+/// A spam warning: when it came (Unix seconds) and the minutes between ads since.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlusAdWarning {
+    pub at: i64,
+    pub every_min: u32,
 }
 
 /// How AFK+ works on the account's server (`PlusServer`).
@@ -722,12 +793,17 @@ pub struct PlusServer {
     pub on: bool,
 }
 
-/// The game mode's money: `label` the name to write after amounts ("Coin"); None: bare amounts and
-/// once "Oyundaki parayla".
+/// The game mode's money: `label` the name to write after amounts ("Coin"), the profile's or else
+/// the player's own (`trade.currency`, the same in both languages); None: bare amounts and once
+/// "Oyundaki parayla".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusServerMoney {
     pub label: Option<CloudLocalized>,
+    /// The name is the profile's (Projects Survival and SkyBlock: ripple): "Para birimi" shows it
+    /// read-only. False from an older service.
+    #[serde(default)]
+    pub fixed: bool,
     pub max_deal: u64,
     /// The money's key (receipts carry it).
     pub currency: String,
@@ -737,6 +813,7 @@ impl Default for PlusServerMoney {
     fn default() -> Self {
         Self {
             label: None,
+            fixed: false,
             max_deal: GENERIC_MAX_DEAL,
             currency: String::new(),
         }
@@ -793,7 +870,8 @@ impl Default for PlusRules {
     }
 }
 
-/// `rules.features`: the order switches (a missing one reads as on, the service refuses in words).
+/// `rules.features`: the order switches (a missing one reads as on, the service refuses in words)
+/// and "Para birimi".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusRulesFeatures {
@@ -801,6 +879,10 @@ pub struct PlusRulesFeatures {
     pub audit: bool,
     pub custom_items: bool,
     pub item_pay: bool,
+    /// "Para birimi" (`trade.currency`), off by default: a missing one (an older service) reads
+    /// as off, so the field stays hidden.
+    #[serde(default)]
+    pub currency: bool,
 }
 
 impl Default for PlusRulesFeatures {
@@ -810,6 +892,7 @@ impl Default for PlusRulesFeatures {
             audit: true,
             custom_items: true,
             item_pay: false,
+            currency: false,
         }
     }
 }
@@ -850,6 +933,11 @@ pub struct PlusWritten {
     pub config: PlusConfig,
     pub ai_rev: u64,
     pub judge: PlusJudge,
+    /// The server view as `GET` resolves it for the stored settings (28 Oct 2026: its money name
+    /// follows `trade.currency`); None from an older service.
+    pub server: Option<PlusServer>,
+    /// "Sohbete ilan" as planned for the stored settings; None from an older service.
+    pub ad_preview: Option<PlusAdPreview>,
 }
 
 /// An order route's answer: the order (none for a delete), the stored settings and their
@@ -861,6 +949,9 @@ pub struct PlusOrderWritten {
     pub config: PlusConfig,
     pub ai_rev: u64,
     pub deferred: bool,
+    /// "Sohbete ilan" as planned after the write (its lines follow the active orders); None from
+    /// an older service.
+    pub ad_preview: Option<PlusAdPreview>,
 }
 
 /// A new order as `POST …/plus/orders` takes it: without `id` and `at` (the Worker makes them),
@@ -1673,6 +1764,17 @@ fn to_body<T: Serialize>(value: &T) -> Result<serde_json::Value> {
     serde_json::to_value(value).map_err(|e| CloudError::Protocol(e.to_string()))
 }
 
+/// An order check's body: `inGame` only when the player said the money is the game's (28 Oct
+/// 2026), so an older service, which turns an unknown key away, still checks the rest.
+fn check_body(text: &str, lang: &str, in_game: bool) -> serde_json::Value {
+    let lang = if lang == "en" { "en" } else { "tr" };
+    let mut body = serde_json::json!({ "text": text, "lang": lang });
+    if in_game {
+        body["inGame"] = serde_json::Value::Bool(true);
+    }
+    body
+}
+
 impl CloudClient {
     /// `GET /accounts/:id/plus`.
     pub async fn plus_settings(&self, token: &Bearer, id: &str) -> Result<PlusSettings> {
@@ -1706,24 +1808,25 @@ impl CloudClient {
         .json()
     }
 
-    /// "Kontrol et": `POST /accounts/:id/plus/orders/check {text, lang}`. The answer's JSON as it
-    /// came (`{draft, questions, notes, left}`): the panel answers the questions on it locally, so
-    /// it must reach the page exactly as the service wrote it. Counted per minute and per day, so
-    /// never repeated.
+    /// "Kontrol et": `POST /accounts/:id/plus/orders/check {text, lang, inGame?}`. The answer's
+    /// JSON as it came (`{draft, questions, notes, left, check?}`): the panel answers the questions
+    /// on it locally, so it must reach the page exactly as the service wrote it. Counted per minute
+    /// and per day, so never repeated. `in_game`: the player said the words' money is the game's
+    /// ("Bu oyun parası", after `422 order_rejected {reason: "question", rule: "rmt"}`).
     pub async fn check_order(
         &self,
         token: &Bearer,
         id: &str,
         text: &str,
         lang: &str,
+        in_game: bool,
     ) -> Result<String> {
-        let lang = if lang == "en" { "en" } else { "tr" };
         let reply = self
             .send(
                 Method::POST,
                 &account_path(id, "/plus/orders/check")?,
                 Some(token),
-                Some(serde_json::json!({ "text": text, "lang": lang })),
+                Some(check_body(text, lang, in_game)),
                 &[],
                 Repeat::Never,
             )
@@ -2399,6 +2502,153 @@ mod tests {
             serde_json::from_value(json!({"config": document(), "aiRev": 1})).unwrap();
         assert_eq!(settings.rules, PlusRules::default());
         assert_eq!(settings.server.money.max_deal, GENERIC_MAX_DEAL);
+    }
+
+    #[test]
+    fn the_money_name_goes_back_as_it_came() {
+        // Not in the document (no name stored, or an older service): a write leaves it out.
+        let config: PlusConfig = serde_json::from_value(document()).unwrap();
+        assert_eq!(config.trade.currency, None);
+        let written = serde_json::to_value(&config).unwrap();
+        assert_eq!(written["trade"], json!({"returnRow": null}));
+        // A name, and a cleared one, are written as they came.
+        for (sent, read) in [
+            (json!("TL"), Some(Some("TL".to_owned()))),
+            (serde_json::Value::Null, Some(None)),
+        ] {
+            let mut doc = document();
+            doc["trade"]["currency"] = sent;
+            let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
+            assert_eq!(config.trade.currency, read);
+            assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+        }
+        // An odd value reads as missing: nothing is written back.
+        let mut doc = document();
+        doc["trade"]["currency"] = json!(5);
+        let config: PlusConfig = serde_json::from_value(doc).unwrap();
+        assert_eq!(config.trade.currency, None);
+    }
+
+    #[test]
+    fn reads_whose_money_name_shows() {
+        let settings: PlusSettings = serde_json::from_value(json!({
+            "config": document(), "aiRev": 4,
+            "server": {"kind": "verified", "mode": "projects-survival",
+              "name": {"tr": "Survival", "en": "Survival"}, "trade": "bot",
+              "money": {"label": {"tr": "ripple", "en": "ripple"}, "fixed": true,
+                "maxDeal": 1000000, "currency": "survival"},
+              "ads": [], "on": true},
+            "rules": {"features": {"orders": true, "audit": true, "customItems": true,
+              "itemPay": false, "currency": true}}
+        }))
+        .unwrap();
+        assert!(settings.server.money.fixed);
+        assert!(settings.rules.features.currency);
+        // An older service names neither: nothing is fixed and the field stays hidden, while the
+        // order switches it leaves out still read as on.
+        let settings: PlusSettings = serde_json::from_value(json!({
+            "config": document(), "aiRev": 4,
+            "server": {"money": {"label": {"tr": "ripple", "en": "ripple"}, "maxDeal": 1000000,
+              "currency": "survival"}},
+            "rules": {"features": {"itemPay": false}}
+        }))
+        .unwrap();
+        assert!(!settings.server.money.fixed);
+        assert!(!settings.rules.features.currency);
+        assert!(settings.rules.features.orders && settings.rules.features.audit);
+    }
+
+    #[test]
+    fn an_order_check_says_in_game_only_when_the_player_did() {
+        assert_eq!(
+            check_body("elytra alırım 100 dolar", "tr", false),
+            json!({"text": "elytra alırım 100 dolar", "lang": "tr"})
+        );
+        assert_eq!(
+            check_body("elytra alırım 100 dolar", "en", true),
+            json!({"text": "elytra alırım 100 dolar", "lang": "en", "inGame": true})
+        );
+        assert_eq!(check_body("x", "de", false)["lang"], json!("tr"));
+    }
+
+    #[test]
+    fn the_ready_mark_goes_back_as_it_came() {
+        // Started before (or an older service): no mark, and none is written.
+        let config: PlusConfig = serde_json::from_value(document()).unwrap();
+        assert_eq!(config.ready, None);
+        assert!(
+            serde_json::to_value(&config)
+                .unwrap()
+                .get("ready")
+                .is_none()
+        );
+        // Waiting for its first start: the service's mark goes back as it came.
+        let mut doc = document();
+        doc["enabled"] = json!(false);
+        doc["ready"] = json!(true);
+        let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
+        assert_eq!(config.ready, Some(true));
+        assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+    }
+
+    #[test]
+    fn the_ad_minutes_go_back_as_they_came() {
+        // None chosen (or an older service): none is written.
+        let config: PlusConfig = serde_json::from_value(document()).unwrap();
+        assert_eq!(config.discovery.ad_every_min, None);
+        let written = serde_json::to_value(&config).unwrap();
+        assert_eq!(written["discovery"].get("adEveryMin"), None);
+        // A choice goes back as it was read.
+        let mut doc = document();
+        doc["discovery"]["adEveryMin"] = json!(45);
+        let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
+        assert_eq!(config.discovery.ad_every_min, Some(45));
+        assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+    }
+
+    #[test]
+    fn reads_the_ads_plan() {
+        let settings: PlusSettings = serde_json::from_value(json!({
+            "config": document(), "aiRev": 4,
+            "adPreview": {"floorMin": 60, "everyMin": 120,
+              "lines": ["Alıyorum: 64 Elmas, PM at"], "nextAt": 1792950600,
+              "warning": {"at": 1792950000, "everyMin": 120}, "stoppedToday": false}
+        }))
+        .unwrap();
+        let plan = settings.ad_preview.unwrap();
+        assert_eq!((plan.floor_min, plan.every_min), (60, 120));
+        assert_eq!(plan.lines, ["Alıyorum: 64 Elmas, PM at"]);
+        assert!(!plan.names_pending);
+        assert_eq!(plan.next_at, Some(1792950600));
+        let warning = plan.warning.unwrap();
+        assert_eq!((warning.at, warning.every_min), (1792950000, 120));
+        assert!(!plan.stopped_today);
+        // The item names not known yet (the machine not in game): no line, and it says why.
+        let pending = json!({"floorMin": 30, "everyMin": 60, "lines": [], "namesPending": true});
+        let pending: PlusAdPreview = serde_json::from_value(pending).unwrap();
+        assert!(pending.names_pending && pending.lines.is_empty());
+        // An older service plans none: the switch alone shows as before.
+        let settings: PlusSettings =
+            serde_json::from_value(json!({"config": document(), "aiRev": 1})).unwrap();
+        assert_eq!(settings.ad_preview, None);
+    }
+
+    #[test]
+    fn the_persona_defaults_fill_only_what_is_missing() {
+        // "Kibar" and "Oyuncu gibi konuşsun" where the settings have none (28 Oct 2026).
+        let persona: PlusPersona = serde_json::from_value(json!({"intro": ""})).unwrap();
+        assert_eq!(
+            (persona.preset.as_str(), persona.player_talk),
+            ("polite", true)
+        );
+        assert_eq!(PlusConfig::default().persona, persona);
+        // A stored choice stays.
+        let persona: PlusPersona =
+            serde_json::from_value(json!({"preset": "brief", "playerTalk": false})).unwrap();
+        assert_eq!(
+            (persona.preset.as_str(), persona.player_talk),
+            ("brief", false)
+        );
     }
 
     #[test]

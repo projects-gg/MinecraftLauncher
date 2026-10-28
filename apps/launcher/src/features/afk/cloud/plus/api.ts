@@ -61,8 +61,11 @@ export interface PlusApi {
   /** "Bu hale dön": the revision `rev` becomes the next (`current`: the one on screen). */
   restore(id: string, rev: number, current: number): Promise<PlusSaveOutcome>;
   control(id: string, action: PlusAction, name?: string): Promise<PlusControlAnswer>;
-  /** "Kontrol et": the card, or why not. */
-  check(id: string, text: string): Promise<PlusCheckOutcome>;
+  /**
+   * "Kontrol et": the card, or why not. `inGame`: the player said the words' money is the game's
+   * ("Bu oyun parası", after the money question).
+   */
+  check(id: string, text: string, inGame?: boolean): Promise<PlusCheckOutcome>;
   createOrder(
     id: string,
     order: PlusNewOrder,
@@ -142,7 +145,7 @@ const tauriPlusApi: PlusApi = {
   save: (id, rev, config) => ok(commands.cloudAfkPlusSave(id, rev, config)),
   restore: (id, rev, current) => ok(commands.cloudAfkPlusRestore(id, rev, current)),
   control: (id, action, name) => ok(commands.cloudAfkPlusControl(id, action, name ?? null)),
-  check: (id, text) => raw(commands.cloudAfkPlusCheck(id, text)),
+  check: (id, text, inGame) => raw(commands.cloudAfkPlusCheck(id, text, inGame ?? false)),
   createOrder: (id, order, customItems, settings) =>
     ok(commands.cloudAfkPlusOrderCreate(id, order, customItems, settings)),
   patchOrder: (id, order, patch) => ok(commands.cloudAfkPlusOrderPatch(id, order, patch)),

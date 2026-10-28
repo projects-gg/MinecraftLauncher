@@ -54,7 +54,7 @@ function dealOf(notice: AfkNotice, lang: Lang): string | null {
 /**
  * Events of every 7/24 Bulut account, AFK+ or not: titled with the account's name (without one,
  * the cloud's name), never "AFK+" (AFK+ that is off shows nowhere). The assistant's own events say
- * whose assistant it is, as its panel does ("Ahmet_AFK asistanı").
+ * whose assistant it is, as its panel does ("Ahmet_AFK için ProBot AI").
  */
 const PLAIN_EVENTS = new Set(["stopped", "expired", "renewal", "night", "moderation"]);
 
