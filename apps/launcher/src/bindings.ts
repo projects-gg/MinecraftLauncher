@@ -6835,6 +6835,12 @@ export type PlusConfig_Deserialize = {
 	v?: number,
 	/**  The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only. */
 	enabled?: boolean,
+	/**
+	 *  The service's (28 Oct 2026): the assistant waits for its first start ("Başlat"), `enabled`
+	 *  false meanwhile. Sent back as it came and never made here; a start, or a save that turns
+	 *  the assistant on, ends it.
+	 */
+	ready?: boolean | null,
 	/**  A server profile open for the account's server (`projects-smp`), or `generic`. */
 	mode?: string,
 	/**  `auto` (English to players who write English, else Turkish), `tr`, `en`. */
@@ -6878,6 +6884,12 @@ export type PlusConfig_Serialize = {
 	v: number,
 	/**  The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only. */
 	enabled: boolean,
+	/**
+	 *  The service's (28 Oct 2026): the assistant waits for its first start ("Başlat"), `enabled`
+	 *  false meanwhile. Sent back as it came and never made here; a start, or a save that turns
+	 *  the assistant on, ends it.
+	 */
+	ready?: boolean | null,
 	/**  A server profile open for the account's server (`projects-smp`), or `generic`. */
 	mode: string,
 	/**  `auto` (English to players who write English, else Turkish), `tr`, `en`. */
@@ -7433,7 +7445,10 @@ export type PlusPanelView_Serialize = {
 };
 
 export type PlusPersona = {
-	/**  `friendly`, `brief`, `polite`, `playful`. */
+	/**
+	 *  `friendly`, `brief`, `polite`, `playful`; `polite` ("Kibar") where the settings have none
+	 *  (28 Oct 2026).
+	 */
 	preset?: string,
 	/**  "" or 1-60 code points. */
 	intro?: string,
@@ -7443,7 +7458,10 @@ export type PlusPersona = {
 	statusPreset?: string | null,
 	/**  Small talk; "Konu dışına çıkmasın" is its opposite (off by default since 27 Oct 2026). */
 	smallTalk?: boolean,
-	/**  "Oyuncu gibi konuşsun": chats like a player instead of in formal language. */
+	/**
+	 *  "Oyuncu gibi konuşsun": chats like a player instead of in formal language; on where the
+	 *  settings have none (28 Oct 2026).
+	 */
 	playerTalk?: boolean,
 	/**  The tag before the assistant's lines: the player's choice, off by default. */
 	prefix?: PlusPrefix,

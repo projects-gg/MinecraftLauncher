@@ -5,6 +5,7 @@
 //   - `on`: AFK+ is open; "Ahmet_AFK" is an AFK+ account in game with orders, approvals waiting, a
 //     handoff and a first sight;
 //   - `setup`: the same account before its first settings (the setup wizard, no orders);
+//   - `ready`: set up, waiting for its first "Başlat" (AFK+ never starts by itself);
 //   - `paused`: its AI allowance is used up until later today;
 //   - `offline`: its machine is not connected (the quota, the log and the messages wait);
 //   - `maintenance`: AFK+ is under maintenance (the field is closed, the list reads);
@@ -48,6 +49,7 @@ export type PlusScenario =
   | "off"
   | "on"
   | "setup"
+  | "ready"
   | "paused"
   | "offline"
   | "maintenance"
@@ -59,6 +61,7 @@ const SCENARIOS: PlusScenario[] = [
   "off",
   "on",
   "setup",
+  "ready",
   "paused",
   "offline",
   "maintenance",
@@ -180,9 +183,12 @@ export function mockAi(): PlusAi {
   const now = nowSecs();
   const paused = plusScenario === "paused";
   const maintenance = plusScenario === "maintenance";
+  // A new account waits for its first "Başlat" (the service's `ready`): its switch is off.
+  const waiting = plusScenario === "setup" || plusScenario === "ready";
+  const away = plusScenario === "offline";
   return {
-    state: paused || maintenance ? "paused" : plusScenario === "offline" ? "unknown" : "on",
-    reason: paused ? "quota" : maintenance ? "service" : null,
+    state: waiting ? "off" : paused || maintenance ? "paused" : away ? "unknown" : "on",
+    reason: waiting ? "player" : paused ? "quota" : maintenance ? "service" : null,
     staffReason: null,
     until: paused ? W5H_RESET_AT : null,
     trade: {
@@ -559,19 +565,23 @@ export function mockServer(currency: string | null = null): PlusServer {
 
 export function mockConfig(): PlusConfig {
   const setup = plusScenario === "setup";
+  // Waiting for its first "Başlat": the service's mark, the switch off (AFK+ never starts itself).
+  const waiting = setup || plusScenario === "ready";
   return {
     v: 2,
-    enabled: !setup,
+    enabled: !waiting,
+    ready: waiting ? true : null,
     mode: mockServer().mode,
     lang: "auto",
     persona: {
-      preset: "friendly",
+      // The defaults where the settings have none (28 Oct 2026): "Kibar", "Oyuncu gibi konuşsun".
+      preset: "polite",
       // Not written yet: the field shows its example in the interface's language.
       intro: "",
       status: "",
       statusPreset: setup ? null : "back_evening",
       smallTalk: false,
-      playerTalk: false,
+      playerTalk: true,
       prefix: { on: false, text: "[AFK+]" },
     },
     replies: { scope: "trade", away: true, saveAt: 80 },

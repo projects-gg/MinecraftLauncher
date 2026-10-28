@@ -221,9 +221,11 @@ export const mockPlusApi: PlusApi = {
     // emptied one is none.
     const sent = "currency" in next.trade ? next.trade.currency : config.trade.currency;
     const currency = sent?.trim().replace(/\s+/gu, " ") || null;
-    // Orders and custom items have their own routes: the settings' save keeps the stored ones.
+    // Orders and custom items have their own routes: the settings' save keeps the stored ones. The
+    // first-start mark is the service's: a save that turns the assistant on ends it.
     config = {
       ...next,
+      ready: next.enabled ? null : config.ready,
       trade: { ...next.trade, currency },
       orders: config.orders,
       customItems: config.customItems,
@@ -243,7 +245,9 @@ export const mockPlusApi: PlusApi = {
   async control(_id, action, name) {
     await delay(260);
     if (action === "pause" || action === "resume") {
-      config = { ...config, enabled: action === "resume" };
+      // "Başlat" also ends the wait for the first start (the service's `ready`).
+      const ready = action === "resume" ? null : config.ready;
+      config = { ...config, enabled: action === "resume", ready };
       ai = {
         ...ai,
         state: action === "resume" ? "on" : "off",

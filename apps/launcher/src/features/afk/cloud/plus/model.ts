@@ -4,6 +4,7 @@
 // and what changed between two saved versions (QoL Q7). The same rules as afk.projects.gg's, so the
 // three surfaces agree. Orders have their own module (order-draft.ts, orders.ts).
 import type {
+  PlusAction,
   PlusAi,
   PlusConfig,
   PlusLimits,
@@ -51,6 +52,14 @@ export const STATUS_PRESETS: StatusPreset[] = [
   "weekend",
   "busy",
 ];
+
+/**
+ * The style replies take: the stored one, else "Kibar" where the settings name none the launcher
+ * knows (the default since 28 Oct 2026, with "Oyuncu gibi konuşsun" on).
+ */
+export function presetOf(preset: string): Preset {
+  return PRESETS.find((known) => known === preset) ?? "polite";
+}
 
 /** Whether the bot may spend at all (without it buy orders for money only tell what they find). */
 export function canSpend(limits: PlusLimits): boolean {
@@ -811,4 +820,36 @@ export function tradeNoteKey(ai: PlusAi | null | undefined): string | null {
   if (!ai.trade.on) return ai.trade.off === "profile" ? "tradeProfile" : "tradeLobby";
   if (ai.trade.buy === "notify") return "notifyOnly";
   return null;
+}
+
+/**
+ * The state the rail shows while the assistant waits for its first start (the service's `ready`,
+ * 28 Oct 2026: AFK+ never starts by itself): one plain line and "Başlat". Otherwise the AI's own
+ * state, as it is.
+ */
+export function startState(state: AiState, ready: boolean): AiState {
+  if (!ready) return state;
+  return { key: "ready", tone: "ok", until: null, canStart: true, canStop: false };
+}
+
+/**
+ * The settings after a control the service took, as it stores them: "Durdur" and "Başlat" turn the
+ * switch, and "Başlat" ends the wait for the first start; blocking a player takes them off the
+ * friends list too (a save would be refused).
+ */
+export function configAfterControl(
+  config: PlusConfig,
+  action: PlusAction,
+  name?: string,
+): PlusConfig {
+  const next = { ...config };
+  if (action === "pause" || action === "resume") next.enabled = action === "resume";
+  if (action === "resume") next.ready = null;
+  if ((action === "block" || action === "unblock") && name) {
+    const other = (n: string) => n.toLowerCase() !== name.toLowerCase();
+    const rest = next.blocked.filter(other);
+    next.blocked = action === "block" ? [...rest, name] : rest;
+    if (action === "block") next.who = { ...next.who, friends: next.who.friends.filter(other) };
+  }
+  return next;
 }

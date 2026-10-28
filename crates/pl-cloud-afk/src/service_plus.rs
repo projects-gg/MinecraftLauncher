@@ -1225,6 +1225,19 @@ mod tests {
     }
 
     #[test]
+    fn a_save_keeps_the_ready_mark_while_the_assistant_waits() {
+        let mut settings = settings();
+        settings.config.enabled = false;
+        settings.config.ready = Some(true);
+        let sent = checked_settings(&settings.config, &settings, NOW).unwrap();
+        assert_eq!(sent.ready, Some(true));
+        // A save that turns the assistant on starts it: the mark ends.
+        let mut on = settings.config.clone();
+        on.enabled = true;
+        assert_eq!(checked_settings(&on, &settings, NOW).unwrap().ready, None);
+    }
+
+    #[test]
     fn orders_are_checked_on_the_forms_fields() {
         let settings = settings();
         let none = PlusOrderSettings::default();

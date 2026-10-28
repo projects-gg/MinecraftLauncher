@@ -37,9 +37,10 @@ const STATUS_PRESETS: [&str; 5] = [
     "weekend",
     "busy",
 ];
-const ROOT_KEYS: [&str; 19] = [
+const ROOT_KEYS: [&str; 20] = [
     "v",
     "enabled",
+    "ready",
     "mode",
     "lang",
     "persona",
@@ -701,6 +702,13 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     let now = ctx.now;
     let stored = ctx.stored.as_ref();
     let enabled = boolean(config.get("enabled"), "enabled")?;
+    // The service's `ready` (28 Oct 2026: the assistant waits for its first start) may come back
+    // as it was read; a write that turns the assistant on ends it.
+    let came_ready = match config.get("ready") {
+        None | Some(Value::Null) => false,
+        other => boolean(other, "ready")?,
+    };
+    let ready = came_ready && !enabled;
     let mode = string(config.get("mode"), "mode")?;
     if mode != GENERIC && !ctx.modes.contains_key(mode) && ctx.stored_mode.as_deref() != Some(mode)
     {
@@ -1131,7 +1139,7 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
         });
     }
 
-    let out = serde_json::json!({
+    let mut out = serde_json::json!({
         "v": 2,
         "enabled": enabled,
         "mode": mode,
@@ -1158,6 +1166,9 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
         "schedule": schedule,
         "pauseUntil": pause_until,
     });
+    if ready {
+        out["ready"] = Value::Bool(true);
+    }
     if out.to_string().len() > MAX_CONFIG_BYTES {
         return Err(PlusRefusal::TooLarge);
     }
@@ -1663,6 +1674,37 @@ mod tests {
         assert_eq!(check(Some(Value::from("coin")), false), refused("feature", None));
         assert_eq!(kept(check(tl.clone(), false)), tl);
         assert_eq!(kept(check(Some(Value::Null), false)), None);
+    }
+
+    #[test]
+    fn the_ready_mark_stays_while_the_assistant_waits() {
+        let off = serde_json::to_value(crate::plus::PlusConfig {
+            mode: GENERIC.into(),
+            enabled: false,
+            ..crate::plus::PlusConfig::default()
+        })
+        .unwrap();
+        let ctx = PlusCheckContext {
+            now: 1_792_900_000,
+            ..PlusCheckContext::default()
+        };
+        let marked = |doc: &Value| {
+            let out = check_config_value(doc, &ctx).unwrap();
+            out.get("ready").cloned()
+        };
+        // Off and never started here: the mark is never made.
+        assert_eq!(marked(&off), None);
+        // The service's mark comes back as it was read while the assistant waits.
+        let mut waiting = off.clone();
+        waiting["ready"] = Value::Bool(true);
+        assert_eq!(marked(&waiting), Some(Value::Bool(true)));
+        // Turned on ("Başlat", or a save with the switch on): it ends.
+        let mut on = waiting.clone();
+        on["enabled"] = Value::Bool(true);
+        assert_eq!(marked(&on), None);
+        // Only a yes or no.
+        waiting["ready"] = Value::from("yes");
+        assert_eq!(check_config_value(&waiting, &ctx), Err(PlusRefusal::invalid("ready", "type")));
     }
 
     #[test]

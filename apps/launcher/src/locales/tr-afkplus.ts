@@ -97,6 +97,8 @@ export const trAfkPlus = {
     on: "Asistan çalışıyor",
     // A new AFK+ account answers with the defaults (README: `enabled: true`) until it is set up.
     setup: "Asistan varsayılan ayarlarla çalışıyor",
+    // AFK+ never starts by itself (the owner, 28 Oct): until the player's first "Başlat".
+    ready: "Asistan hazır. Başlatınca çalışır.",
     unknown: "Asistanın durumu şu\u00a0an alınamıyor",
     restricted: "AFK+'dan uzaklaştırıldın",
     restrictedUntil: "{{when}} kadar AFK+'dan uzaklaştırıldın",
@@ -142,6 +144,8 @@ export const trAfkPlus = {
   control: {
     stop: "Asistanı durdur",
     start: "Asistanı başlat",
+    // Under "Asistan hazır. Başlatınca çalışır.": the first start.
+    startFirst: "Başlat",
     stopLabel: "Asistanı durdur",
     startLabel: "Asistanı başlat",
     stopped: "Asistan durduruldu",

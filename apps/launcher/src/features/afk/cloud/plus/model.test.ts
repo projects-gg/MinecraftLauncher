@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { trAfkPlus } from "@/locales/tr-afkplus";
 import {
   aiState,
   applyDraft,
@@ -8,6 +9,7 @@ import {
   boughtReplies,
   CURRENCY_MAX,
   canSpend,
+  configAfterControl,
   configChanges,
   currencyEditProblem,
   currencyFieldState,
@@ -21,10 +23,12 @@ import {
   PREFIX_DEFAULT,
   personaTextProblem,
   prefixProblem,
+  presetOf,
   readTime,
   type SettingsPart,
   settingsPart,
   spendingField,
+  startState,
   tradeNoteKey,
   windowProblems,
   withCurrency,
@@ -36,6 +40,7 @@ function config(parts: Partial<PlusConfig> = {}): PlusConfig {
   return {
     v: 2,
     enabled: true,
+    ready: null,
     mode: "projects-smp",
     lang: "auto",
     persona: {
@@ -347,6 +352,49 @@ describe("Sınırlara git: the limit a line is about", () => {
   it("goes from buying that waits for the spending limits to the first one missing", () => {
     expect(spendingField({ perDealMax: null, totalBudget: null })).toBe("perDealMax");
     expect(spendingField({ perDealMax: 50_000, totalBudget: null })).toBe("totalBudget");
+  });
+});
+
+describe("the first start (AFK+ never starts by itself)", () => {
+  it("says the assistant is ready and offers Başlat while it waits", () => {
+    const off = aiState(ai({ state: "off", reason: "player" }));
+    expect(startState(off, true)).toEqual({
+      key: "ready",
+      tone: "ok",
+      until: null,
+      canStart: true,
+      canStop: false,
+    });
+    expect(trAfkPlus.ai.ready).toBe("Asistan hazır. Başlatınca çalışır.");
+    expect(trAfkPlus.control.startFirst).toBe("Başlat");
+  });
+
+  it("leaves every other state as it is, a pause too", () => {
+    const paused = aiState(ai({ state: "paused", reason: "break", until: 1 }));
+    expect(startState(paused, false)).toBe(paused);
+    const on = aiState(ai({}));
+    expect(startState(on, false)).toBe(on);
+  });
+
+  it("ends with Başlat, while Durdur leaves the mark as it is", () => {
+    const waiting = config({ enabled: false, ready: true });
+    const started = configAfterControl(waiting, "resume");
+    expect([started.enabled, started.ready]).toEqual([true, null]);
+    const stopped = configAfterControl(waiting, "pause");
+    expect([stopped.enabled, stopped.ready]).toEqual([false, true]);
+    // Blocking still takes the player off the friends list.
+    const friends = config({ who: { mode: "friends", friends: ["Pixel_Fox9"] } });
+    const blocked = configAfterControl(friends, "block", "pixel_fox9");
+    expect([blocked.blocked, blocked.who.friends]).toEqual([["pixel_fox9"], []]);
+  });
+});
+
+describe("the assistant's defaults", () => {
+  it('take "Kibar" where the settings name no style, and keep a stored one', () => {
+    expect(presetOf("brief")).toBe("brief");
+    expect(presetOf("friendly")).toBe("friendly");
+    expect(presetOf("")).toBe("polite");
+    expect(presetOf("somethingNew")).toBe("polite");
   });
 });
 

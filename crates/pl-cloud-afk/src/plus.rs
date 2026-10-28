@@ -311,6 +311,11 @@ pub struct PlusConfig {
     pub v: u32,
     /// The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only.
     pub enabled: bool,
+    /// The service's (28 Oct 2026): the assistant waits for its first start ("Başlat"), `enabled`
+    /// false meanwhile. Sent back as it came and never made here; a start, or a save that turns
+    /// the assistant on, ends it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ready: Option<bool>,
     /// A server profile open for the account's server (`projects-smp`), or `generic`.
     pub mode: String,
     /// `auto` (English to players who write English, else Turkish), `tr`, `en`.
@@ -348,6 +353,7 @@ impl Default for PlusConfig {
         Self {
             v: 2,
             enabled: true,
+            ready: None,
             mode: String::new(),
             lang: "auto".into(),
             persona: PlusPersona::default(),
@@ -386,7 +392,8 @@ impl PlusConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusPersona {
-    /// `friendly`, `brief`, `polite`, `playful`.
+    /// `friendly`, `brief`, `polite`, `playful`; `polite` ("Kibar") where the settings have none
+    /// (28 Oct 2026).
     pub preset: String,
     /// "" or 1-60 code points.
     pub intro: String,
@@ -396,7 +403,8 @@ pub struct PlusPersona {
     pub status_preset: Option<String>,
     /// Small talk; "Konu dışına çıkmasın" is its opposite (off by default since 27 Oct 2026).
     pub small_talk: bool,
-    /// "Oyuncu gibi konuşsun": chats like a player instead of in formal language.
+    /// "Oyuncu gibi konuşsun": chats like a player instead of in formal language; on where the
+    /// settings have none (28 Oct 2026).
     pub player_talk: bool,
     /// The tag before the assistant's lines: the player's choice, off by default.
     pub prefix: PlusPrefix,
@@ -405,12 +413,12 @@ pub struct PlusPersona {
 impl Default for PlusPersona {
     fn default() -> Self {
         Self {
-            preset: "friendly".into(),
+            preset: "polite".into(),
             intro: String::new(),
             status: String::new(),
             status_preset: None,
             small_talk: false,
-            player_talk: false,
+            player_talk: true,
             prefix: PlusPrefix::default(),
         }
     }
@@ -2490,6 +2498,33 @@ mod tests {
         assert!(!settings.server.money.fixed);
         assert!(!settings.rules.features.currency);
         assert!(settings.rules.features.orders && settings.rules.features.audit);
+    }
+
+    #[test]
+    fn the_ready_mark_goes_back_as_it_came() {
+        // Started before (or an older service): no mark, and none is written.
+        let config: PlusConfig = serde_json::from_value(document()).unwrap();
+        assert_eq!(config.ready, None);
+        assert!(serde_json::to_value(&config).unwrap().get("ready").is_none());
+        // Waiting for its first start: the service's mark goes back as it came.
+        let mut doc = document();
+        doc["enabled"] = json!(false);
+        doc["ready"] = json!(true);
+        let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
+        assert_eq!(config.ready, Some(true));
+        assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+    }
+
+    #[test]
+    fn the_persona_defaults_fill_only_what_is_missing() {
+        // "Kibar" and "Oyuncu gibi konuşsun" where the settings have none (28 Oct 2026).
+        let persona: PlusPersona = serde_json::from_value(json!({"intro": ""})).unwrap();
+        assert_eq!((persona.preset.as_str(), persona.player_talk), ("polite", true));
+        assert_eq!(PlusConfig::default().persona, persona);
+        // A stored choice stays.
+        let persona: PlusPersona =
+            serde_json::from_value(json!({"preset": "brief", "playerTalk": false})).unwrap();
+        assert_eq!((persona.preset.as_str(), persona.player_talk), ("brief", false));
     }
 
     #[test]

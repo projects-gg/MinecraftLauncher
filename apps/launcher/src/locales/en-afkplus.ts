@@ -79,6 +79,7 @@ export const enAfkPlus = {
   ai: {
     on: "The assistant is running",
     setup: "The assistant runs on default settings",
+    ready: "The assistant is ready. It runs once you start it.",
     unknown: "The assistant's state can't be read right now",
     restricted: "You're banned from AFK+",
     restrictedUntil: "You're banned from AFK+ {{when}}",
@@ -121,6 +122,7 @@ export const enAfkPlus = {
   control: {
     stop: "Stop the assistant",
     start: "Start the assistant",
+    startFirst: "Start",
     stopLabel: "Stop the assistant",
     startLabel: "Start the assistant",
     stopped: "Assistant stopped",

@@ -20,6 +20,7 @@ import {
   boughtReplies,
   giftReplies,
   spendingField,
+  startState,
   tradeNoteKey,
 } from "./model";
 import { atPhrase, clockText, dayText, untilPhrase } from "./time";
@@ -78,15 +79,31 @@ export function useAiSentence(
   };
 }
 
-function StateBlock({ account, onSetup }: { account: CloudAccount; onSetup?: () => void }) {
+function StateBlock({
+  account,
+  ready = false,
+  onSetup,
+}: {
+  account: CloudAccount;
+  /** The service's `ready`: the assistant waits for its first start (it never starts by itself). */
+  ready?: boolean;
+  onSetup?: () => void;
+}) {
   const { t } = useTranslation();
   const sentence = useAiSentence(account);
-  const state = aiState(plusAi(account));
+  const own = aiState(plusAi(account));
+  // Waiting for its first start: one plain line and "Başlat"; after it, the state as ever.
+  const state = startState(own, ready);
+  const waits = state.key === "ready";
+  const text = waits ? t("afkPlus.ai.ready") : sentence.text;
+  const tone = waits ? state.tone : sentence.tone;
   // Out of credits only the AI stops: say what still works (cloud-afk README "AFK+ quotas").
-  const note =
+  const stateNote =
     tradeNoteKey(plusAi(account)) ?? (state.key.startsWith("quota") ? "quotaNote" : null);
+  const note = waits ? null : stateNote;
   const control = usePlusControl(account.id);
   const action = state.canStop ? "stop" : state.canStart ? "start" : null;
+  const label = action === "stop" ? "stop" : waits ? "startFirst" : "start";
   const guard = usePressGuard(action ?? "none");
   const queryClient = useQueryClient();
   const goToLimit = usePlusUi((s) => s.goToLimit);
@@ -96,10 +113,11 @@ function StateBlock({ account, onSetup }: { account: CloudAccount; onSetup?: () 
     goToLimit(panel ? spendingField(panel.settings.config.limits) : "perDealMax");
   };
   if (onSetup) {
-    // Never set up: the one thing to do is the setup (the switch would start it with no limits).
-    // While the machine can't be reached that is said instead of "running with the defaults" (the
-    // setup is saved by the Worker and reaches the machine later).
-    const away = state.key === "unknown";
+    // Never set up: the one thing to do is the setup (the switch would start it with no limits;
+    // the setup's last step is "Başlat"). While the machine can't be reached that is said instead
+    // of "running with the defaults" (the setup is saved by the Worker and reaches the machine
+    // later); a service that waits for the first start says it is ready, not running.
+    const away = own.key === "unknown";
     return (
       <div className="flex flex-col gap-2.5">
         <p
@@ -108,7 +126,7 @@ function StateBlock({ account, onSetup }: { account: CloudAccount; onSetup?: () 
             away ? TONE[sentence.tone] : "text-bone-50",
           )}
         >
-          {away ? sentence.text : t("afkPlus.ai.setup")}
+          {away ? sentence.text : waits ? text : t("afkPlus.ai.setup")}
         </p>
         <Button size="sm" variant="primary" onClick={onSetup} className="self-start">
           {t("afkPlus.setup.open")}
@@ -122,10 +140,10 @@ function StateBlock({ account, onSetup }: { account: CloudAccount; onSetup?: () 
         aria-live="polite"
         className={cn(
           "text-[13.5px] leading-snug font-medium text-pretty transition-colors duration-150",
-          TONE[sentence.tone],
+          TONE[tone],
         )}
       >
-        {sentence.text}
+        {text}
       </p>
       {note ? (
         <LimitLine
@@ -159,7 +177,7 @@ function StateBlock({ account, onSetup }: { account: CloudAccount; onSetup?: () 
           {...guard.handlers}
           className="self-start"
         >
-          {t(action === "stop" ? "afkPlus.control.stop" : "afkPlus.control.start")}
+          {t(`afkPlus.control.${label}`)}
         </Button>
       ) : null}
     </div>
@@ -404,6 +422,7 @@ export function PlusRail({
   quota,
   saverAt = null,
   settingsDirty = false,
+  ready = false,
   onSetup,
 }: {
   account: CloudAccount;
@@ -419,13 +438,15 @@ export function PlusRail({
   saverAt?: number | null;
   /** "Ayarlar" holds unsaved edits. */
   settingsDirty?: boolean;
+  /** The assistant waits for its first start (the service's `ready`). */
+  ready?: boolean;
   /** The account was never set up: the state block offers the setup instead of the switch. */
   onSetup?: () => void;
 }) {
   const { t } = useTranslation();
   return (
     <aside className="flex w-[232px] shrink-0 flex-col gap-5 overflow-y-auto border-r border-white/7 px-4 py-4 [scrollbar-width:thin]">
-      <StateBlock account={account} onSetup={onSetup} />
+      <StateBlock account={account} ready={ready} onSetup={onSetup} />
       <div className="border-t border-white/7 pt-4">
         <Nav
           section={section}

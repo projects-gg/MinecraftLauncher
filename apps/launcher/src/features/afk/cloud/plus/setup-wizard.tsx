@@ -23,7 +23,14 @@ import { afkFailed, isFriendly } from "../../errors";
 import type { CloudAccount } from "../api";
 import type { PlusConfig, PlusPanel } from "./api";
 import { AmountField } from "./fields";
-import { limitProblems, PLUS_LIMITS, type PlusLimits, PRESETS, personaTextProblem } from "./model";
+import {
+  limitProblems,
+  PLUS_LIMITS,
+  type PlusLimits,
+  PRESETS,
+  personaTextProblem,
+  presetOf,
+} from "./model";
 import { OrderStarter } from "./orders-section";
 import { usePlusSave } from "./use-plus";
 import { formatAmount } from "./words";
@@ -45,9 +52,7 @@ interface Choices {
 function choicesOf(config: PlusConfig): Choices {
   return {
     returnRow: config.trade.returnRow,
-    preset: (PRESETS as string[]).includes(config.persona.preset)
-      ? config.persona.preset
-      : "friendly",
+    preset: presetOf(config.persona.preset),
     intro: config.persona.intro,
     perDealMax: config.limits.perDealMax,
     totalBudget: config.limits.totalBudget,

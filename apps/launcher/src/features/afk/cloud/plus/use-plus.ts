@@ -23,7 +23,7 @@ import {
   type PlusSettings,
   plusApi,
 } from "./api";
-import type { LimitField, SettingsDraft } from "./model";
+import { configAfterControl, type LimitField, type SettingsDraft } from "./model";
 import { type PlusFeatures, plusMe, plusOffer } from "./types";
 
 export type PlusSection = "feed" | "messages" | "orders" | "settings" | "report";
@@ -483,16 +483,7 @@ export function usePlusControl(id: string) {
       storeAi(queryClient, id, answer.ai);
       queryClient.setQueryData<PlusPanel>(plusKey(id), (panel) => {
         if (!panel) return panel;
-        const config = { ...panel.settings.config };
-        if (action === "pause" || action === "resume") config.enabled = action === "resume";
-        if ((action === "block" || action === "unblock") && name) {
-          const other = (n: string) => n.toLowerCase() !== name.toLowerCase();
-          const rest = config.blocked.filter(other);
-          config.blocked = action === "block" ? [...rest, name] : rest;
-          // The service takes a blocked name off the friends list too (a save would be refused).
-          if (action === "block")
-            config.who = { ...config.who, friends: config.who.friends.filter(other) };
-        }
+        const config = configAfterControl(panel.settings.config, action, name);
         const spent =
           action === "reset_spent" && panel.settings.spent
             ? { ...panel.settings.spent, total: 0 }

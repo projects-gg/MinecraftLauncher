@@ -53,6 +53,7 @@ import {
   PRESETS,
   personaTextProblem,
   prefixProblem,
+  presetOf,
   type SettingsPart,
   STATUS_PRESETS,
   sortedDays,
@@ -261,7 +262,7 @@ function AssistantGroup({
 }) {
   const { t } = useTranslation();
   const persona = shown.persona;
-  const preset = (PRESETS as string[]).includes(persona.preset) ? persona.preset : "friendly";
+  const preset = presetOf(persona.preset);
   const status = persona.statusPreset ?? (persona.status ? "own" : "none");
   const judge = panel.settings.judge;
   const savedPersona = panel.settings.config.persona;
