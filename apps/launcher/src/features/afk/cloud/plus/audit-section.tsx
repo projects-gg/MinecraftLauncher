@@ -218,12 +218,14 @@ function AuditRow({
       layout={layout ? "position" : false}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1, transition: { duration: 0.24 } }}
-      className="grid grid-cols-[44px_18px_minmax(0,1fr)] items-baseline gap-x-2 py-1.5 text-[13px] leading-snug"
+      // The time, the mark and the words' first line share one 18 px line box: the mark sits centred
+      // on that line, level with the time (on baselines a 15 px mark rode high, the owner, 28 Oct).
+      className="grid grid-cols-[44px_18px_minmax(0,1fr)] items-start gap-x-2 py-1.5 text-[13px] leading-[18px]"
     >
       <time className="text-[12px] text-ash-400 tabular-nums">
         {clockText(Math.floor(entry.t / 1000), lang)}
       </time>
-      <span aria-hidden className={cn("translate-y-[2px]", mark?.tone)}>
+      <span aria-hidden className={cn("flex h-[18px] items-center", mark?.tone)}>
         {mark?.icon}
       </span>
       <p className="min-w-0 text-pretty">

@@ -2,9 +2,10 @@
 // page URL beside `?cloud=`:
 // - `&plus=<scenario>`:
 //   - (none) or `off`: the service's plusMode is off; nothing of AFK+ shows anywhere;
-//   - `on`: AFK+ is open; "Ahmet_AFK" is an AFK+ account in game with orders, approvals waiting, a
+//   - `on`: AFK+ is open; "Firtina_AFK" is an AFK+ account in game with orders, approvals waiting, a
 //     handoff and a first sight;
 //   - `setup`: the same account before its first settings (the setup wizard, no orders);
+//   - `ready`: set up, waiting for its first "Başlat" (AFK+ never starts by itself);
 //   - `paused`: its AI allowance is used up until later today;
 //   - `offline`: its machine is not connected (the quota, the log and the messages wait);
 //   - `maintenance`: AFK+ is under maintenance (the field is closed, the list reads);
@@ -15,14 +16,23 @@
 // - `&itemdata=fail`: the item list cannot load (the form says so and offers to try again).
 // - `&audit=off|empty`: Studio switched the log off, or nothing was logged yet.
 // - `&typed=off`: Studio switched typed orders off (the form and the inventory only).
+// - `&mode=survival`: the account plays Projects Survival, whose profile names the money (ripple):
+//   "Para birimi" shows it as words with a lock. On SMP (no name of its own) the player names it.
+// - `&ads=<state>` ("Sohbete ilan", switched on): `on` the service's plan from the active orders,
+//   `floor` the server asks at least an hour, `warned` a spam warning today, `stopped` today's ads
+//   stopped, `empty` no active order, `pending` the item names not known yet (never in game), `old`
+//   an older service (no plan: the switch as before).
+//   Without it the switch is off and the plan still comes, as from the newest service.
 // With `?cloud=intro` (no cloud account) `&plus=on` shows the AFK+ card beside 7/24 Bulut's.
 // The item data here is a small stand-in written for previews (the real file comes from our CDN).
 import { type InvFrame, type InvItem, SAMPLE_INVENTORY } from "@pl/ui/inventory";
 import type { AfkNotice } from "@/lib/api/social-types";
 import type { CloudAccount } from "../api";
+import { AD_EVERY_DEFAULT } from "./model";
 import type {
   CloudNotifyPrefs,
   MePlus,
+  PlusAdPreview,
   PlusAi,
   PlusApproval,
   PlusAuditEntry,
@@ -46,6 +56,7 @@ export type PlusScenario =
   | "off"
   | "on"
   | "setup"
+  | "ready"
   | "paused"
   | "offline"
   | "maintenance"
@@ -57,6 +68,7 @@ const SCENARIOS: PlusScenario[] = [
   "off",
   "on",
   "setup",
+  "ready",
   "paused",
   "offline",
   "maintenance",
@@ -88,6 +100,10 @@ export const itemDataFails = param("itemdata") === "fail";
 export const auditScenario = param("audit");
 /** `&typed=off`: typed orders are switched off. */
 export const typedOrders = param("typed") !== "off";
+/** `&mode=survival`: Projects Survival, whose profile names the money. */
+const survivalMode = param("mode") === "survival" && plusScenario !== "owner";
+/** `&ads=on|floor|warned|stopped|empty|pending|old`: "Sohbete ilan" on, and its plan's state. */
+const adsScenario = param("ads");
 /**
  * `&topup=on`: AFK+ extra credits on sale (the rail's "Kontör al"); `&topup=bought`: also the
  * windows used up and a bought pack paying (cloud-afk README "AFK+ extra credits").
@@ -103,7 +119,7 @@ const HOUR = 3_600;
 const DAY = 86_400;
 
 export const PLUS_ID = "a_5RT8KQ2MZ7WD4XB9";
-export const PLUS_NAME = "Ahmet_AFK";
+export const PLUS_NAME = "Firtina_AFK";
 
 export function mockOffer(): PlusOffer | null {
   if (plusScenario === "off") return null;
@@ -176,9 +192,12 @@ export function mockAi(): PlusAi {
   const now = nowSecs();
   const paused = plusScenario === "paused";
   const maintenance = plusScenario === "maintenance";
+  // A new account waits for its first "Başlat" (the service's `ready`): its switch is off.
+  const waiting = plusScenario === "setup" || plusScenario === "ready";
+  const away = plusScenario === "offline";
   return {
-    state: paused || maintenance ? "paused" : plusScenario === "offline" ? "unknown" : "on",
-    reason: paused ? "quota" : maintenance ? "service" : null,
+    state: waiting ? "off" : paused || maintenance ? "paused" : away ? "unknown" : "on",
+    reason: waiting ? "ready" : paused ? "quota" : maintenance ? "service" : null,
     staffReason: null,
     until: paused ? W5H_RESET_AT : null,
     trade: {
@@ -521,14 +540,27 @@ export function mockOrderViews(): Record<string, PlusOrderView> {
   };
 }
 
-export function mockServer(): PlusServer {
+/**
+ * The account's server as the service says it. Projects SMP's profile names no money, so the name
+ * after amounts is the player's own ("Para birimi", the same in both languages) or none; Survival's
+ * profile names it (ripple), and the player's cannot change it.
+ */
+export function mockServer(currency: string | null = null): PlusServer {
   const owner = plusScenario === "owner";
+  const own = currency?.trim() || null;
+  const profile = survivalMode ? { tr: "ripple", en: "ripple" } : null;
+  const name = survivalMode ? { tr: "Survival", en: "Survival" } : { tr: "SMP", en: "SMP" };
   return {
     kind: owner ? "generic" : "verified",
-    mode: owner ? "generic" : "projects-smp",
-    name: owner ? null : { tr: "SMP", en: "SMP" },
+    mode: owner ? "generic" : survivalMode ? "projects-survival" : "projects-smp",
+    name: owner ? null : name,
     trade: owner ? "owner" : "bot",
-    money: { label: null, maxDeal: owner ? 100_000_000 : 10_000_000, currency: owner ? "" : "smp" },
+    money: {
+      label: profile ?? (own ? { tr: own, en: own } : null),
+      fixed: profile !== null,
+      maxDeal: owner ? 100_000_000 : survivalMode ? 1_000_000 : 10_000_000,
+      currency: owner ? "" : survivalMode ? "survival" : "smp",
+    },
     mc: "26.3",
     ads: owner
       ? []
@@ -542,26 +574,30 @@ export function mockServer(): PlusServer {
 
 export function mockConfig(): PlusConfig {
   const setup = plusScenario === "setup";
+  // Waiting for its first "Başlat": the service's mark, the switch off (AFK+ never starts itself).
+  const waiting = setup || plusScenario === "ready";
   return {
     v: 2,
-    enabled: !setup,
-    mode: plusScenario === "owner" ? "generic" : "projects-smp",
+    enabled: !waiting,
+    ready: waiting ? true : null,
+    mode: mockServer().mode,
     lang: "auto",
     persona: {
-      preset: "friendly",
+      // The defaults where the settings have none (28 Oct 2026): "Kibar", "Oyuncu gibi konuşsun".
+      preset: "polite",
       // Not written yet: the field shows its example in the interface's language.
       intro: "",
       status: "",
       statusPreset: setup ? null : "back_evening",
       smallTalk: false,
-      playerTalk: false,
+      playerTalk: true,
       prefix: { on: false, text: "[AFK+]" },
     },
     replies: { scope: "trade", away: true, saveAt: 80 },
     authority: "ask",
     allow: { buy: true, sell: true },
     pay: setup ? "money" : "both",
-    who: { mode: "all", friends: setup ? [] : ["Kaan_07", "Ece_Gamer"] },
+    who: { mode: "all", friends: setup ? [] : ["Neon_Drift", "Kirpi_Gamer"] },
     orders: mockOrders(),
     customItems: mockCustomItems(),
     limits: {
@@ -573,8 +609,16 @@ export function mockConfig(): PlusConfig {
       newCounterpartApprovalAbove: setup ? null : 10_000,
       approvalTimeoutMin: 10,
     },
-    discovery: { scanChat: true, proactivePm: true, ads: false, adTemplate: "buy-basic" },
-    trade: { returnRow: null },
+    discovery: {
+      scanChat: true,
+      proactivePm: true,
+      ads: adsScenario !== null,
+      adTemplate: "buy-basic",
+      // Not picked yet (the service's hour); `floor`: an hour, the least the server takes.
+      adEveryMin: adsScenario === "floor" ? 60 : null,
+    },
+    // No name of the player's yet: amounts on SMP are bare until "Para birimi" names the money.
+    trade: { returnRow: null, currency: null },
     summaryAt: "21:00",
     blocked: setup ? [] : ["Dolandirici_X", "Hizli_Satis"],
     schedule: {
@@ -597,7 +641,7 @@ export function mockSettings(config: PlusConfig, aiRev: number): PlusSettings {
       intro: { state: "ok", reason: null, at: now - DAY },
       status: { state: "ok", reason: null, at: now - DAY },
     },
-    server: mockServer(),
+    server: mockServer(config.trade.currency),
     rules: {
       orderMax: plusScenario === "full" ? 10 : 10,
       orderStore: 20,
@@ -616,12 +660,46 @@ export function mockSettings(config: PlusConfig, aiRev: number): PlusSettings {
         audit: auditScenario !== "off",
         customItems: true,
         itemPay: true,
+        currency: true,
       },
     },
     orders: mockOrderViews(),
     // The completed buys since the last reset (`mockReceipts`: 36.000 + 16.400).
     spent: plusScenario === "offline" ? null : { total: 52_400, today: 16_400 },
     asOf: plusScenario === "offline" ? now - 37 * MIN : null,
+    adPreview: mockAdPreview(config),
+  };
+}
+
+/**
+ * "Sohbete ilan" as the service plans it for the stored settings (`&ads=`): the next ads from the
+ * active orders, never with a price, a budget or a limit; none while the item names are not known.
+ */
+function mockAdPreview(config: PlusConfig): PlusAdPreview | null {
+  if (adsScenario === "old") return null;
+  const now = nowSecs();
+  const floorMin = adsScenario === "floor" ? 60 : 30;
+  const minutes = Math.max(config.discovery.adEveryMin ?? AD_EVERY_DEFAULT, floorMin);
+  const warned = adsScenario === "warned" || adsScenario === "stopped";
+  const everyMin = warned ? minutes * 2 : minutes;
+  const namesPending = adsScenario === "pending";
+  const orders = config.orders.some((o) => o.on && o.until > now);
+  const active = orders && adsScenario !== "empty" && !namesPending;
+  const lines = active
+    ? [
+        "Alıyorum: 1 Elytra, PM at",
+        "Alıyorum: 3 Ölümsüzlük Totemi, PM at",
+        "Satıyorum: 64 Elmas, PM at",
+      ]
+    : [];
+  return {
+    floorMin,
+    everyMin,
+    lines,
+    namesPending,
+    nextAt: active && adsScenario !== "stopped" ? now + 25 * MIN : null,
+    warning: warned ? { at: now - 2 * HOUR, everyMin } : null,
+    stoppedToday: adsScenario === "stopped",
   };
 }
 
@@ -688,7 +766,7 @@ function approvalList(): PlusApproval[] {
         price: 9,
         pay: "minecraft:diamond",
       },
-      counterpart: "Deniz_TR",
+      counterpart: "Dalga_TR",
       why: ["authority"],
       createdAt: now - 2 * MIN,
       expiresAt: now + 8 * MIN,
@@ -699,7 +777,7 @@ function approvalList(): PlusApproval[] {
       kind: "handoff",
       order: "o4",
       deal: { side: "buy", item: "custom:c1", qty: 2, price: 1_800, pay: "money" },
-      counterpart: "Kaan_07",
+      counterpart: "Neon_Drift",
       why: [],
       createdAt: now - 40 * MIN,
       expiresAt: now + 23 * HOUR,
@@ -711,7 +789,7 @@ function approvalList(): PlusApproval[] {
       order: "o6",
       custom: { k: "c2", field: "item" },
       deal: { side: "buy", item: "custom:c2", qty: 1, price: 72_000, pay: "money" },
-      counterpart: "MertK",
+      counterpart: "MorKedi",
       why: [],
       seen: {
         id: "minecraft:netherite_sword",
@@ -730,7 +808,7 @@ function approvalList(): PlusApproval[] {
       order: "o1",
       // A buy for money above the approval limit, from a new player, in its last two minutes.
       deal: { side: "buy", item: "minecraft:elytra", qty: 1, price: 38_000, pay: "money" },
-      counterpart: "Kaan_07",
+      counterpart: "Neon_Drift",
       why: ["above", "new_counterpart"],
       createdAt: now - 8 * MIN,
       expiresAt: now + 2 * MIN,
@@ -743,7 +821,7 @@ function approvalList(): PlusApproval[] {
       kind: "deal",
       order: "o2",
       deal: { side: "buy", item: "minecraft:totem_of_undying", qty: 1, price: 9_800, pay: "money" },
-      counterpart: "Ece_K",
+      counterpart: "Kuzgun_K",
       why: ["above"],
       state: "approved",
       maxPrice: 9_200,
@@ -756,7 +834,7 @@ function approvalList(): PlusApproval[] {
       kind: "deal",
       order: "o3",
       deal: { side: "sell", item: "minecraft:diamond", qty: 16, price: 1_900, pay: "money" },
-      counterpart: "MertK",
+      counterpart: "MorKedi",
       why: ["authority"],
       state: plusScenario === "maintenance" ? "closed" : "expired",
       closed: plusScenario === "maintenance" ? "ai_stopped" : null,
@@ -794,19 +872,19 @@ export function mockAudit(): PlusAuditEntry[] {
     auditEntry(at(2 * 24 * 60 + 90), "paused", { r: "hours" }),
     auditEntry(at(2 * 24 * 60 + 30), "resumed"),
     // Yesterday.
-    auditEntry(at(26 * 60), "pm_in", { w: "Baris_TR", x: "totem var 8500", o: "o2" }),
-    auditEntry(at(26 * 60 - 1), "reply", { w: "Baris_TR", x: "[AFK+] 8.000 olur mu?", o: "o2" }),
+    auditEntry(at(26 * 60), "pm_in", { w: "Pixel_TR", x: "totem var 8500", o: "o2" }),
+    auditEntry(at(26 * 60 - 1), "reply", { w: "Pixel_TR", x: "[AFK+] 8.000 olur mu?", o: "o2" }),
     auditEntry(at(26 * 60 - 5), "agree", {
-      w: "Baris_TR",
+      w: "Pixel_TR",
       o: "o2",
       i: "minecraft:totem_of_undying",
       q: 1,
       p: 8_000,
       u: "money",
     }),
-    auditEntry(at(26 * 60 - 7), "trade_start", { w: "Baris_TR", o: "o2" }),
+    auditEntry(at(26 * 60 - 7), "trade_start", { w: "Pixel_TR", o: "o2" }),
     auditEntry(at(26 * 60 - 9), "trade_done", {
-      w: "Baris_TR",
+      w: "Pixel_TR",
       o: "o2",
       i: "minecraft:totem_of_undying",
       q: 1,
@@ -816,40 +894,40 @@ export function mockAudit(): PlusAuditEntry[] {
     auditEntry(at(25 * 60), "refuse", { w: "Hizli_Satis", r: "unsafe" }),
     auditEntry(at(25 * 60 - 1), "pm_in", { w: "Hizli_Satis", x: "…", h: true }),
     // Today.
-    auditEntry(at(60), "found", { w: "Zeynep_12", i: "minecraft:elytra", p: 45_000, u: "money" }),
+    auditEntry(at(60), "found", { w: "Buzul_12", i: "minecraft:elytra", p: 45_000, u: "money" }),
     auditEntry(at(45), "confirm_item", {
-      w: "MertK",
+      w: "MorKedi",
       o: "o6",
       i: "custom:c2",
       a: "01JBXK3D2E7Q2M9R3T5W8Y0ZC3",
     }),
     auditEntry(at(40), "handoff", {
-      w: "Kaan_07",
+      w: "Neon_Drift",
       o: "o4",
       i: "custom:c1",
       q: 2,
       p: 1_800,
       u: "money",
     }),
-    auditEntry(at(9), "pm_in", { w: "Kaan_07", x: "elytra var 45k", o: "o1" }),
-    auditEntry(at(8), "reply", { w: "Kaan_07", x: "[AFK+] Merhaba, 34.000 olur mu?", o: "o1" }),
+    auditEntry(at(9), "pm_in", { w: "Neon_Drift", x: "elytra var 45k", o: "o1" }),
+    auditEntry(at(8), "reply", { w: "Neon_Drift", x: "[AFK+] Merhaba, 34.000 olur mu?", o: "o1" }),
     auditEntry(at(6), "counter", {
-      w: "Kaan_07",
+      w: "Neon_Drift",
       o: "o1",
       i: "minecraft:elytra",
       p: 40_000,
       u: "money",
     }),
     auditEntry(at(5), "offer", {
-      w: "Kaan_07",
+      w: "Neon_Drift",
       o: "o1",
       i: "minecraft:elytra",
       p: 37_500,
       u: "money",
     }),
-    auditEntry(at(3), "owner_msg", { w: "MertK", x: "Akşam spawn'da olurum." }),
+    auditEntry(at(3), "owner_msg", { w: "MorKedi", x: "Akşam spawn'da olurum." }),
     auditEntry(at(2), "ask_owner", {
-      w: "Deniz_TR",
+      w: "Dalga_TR",
       o: "o5",
       i: "minecraft:netherite_ingot",
       q: 2,
@@ -869,7 +947,7 @@ export function mockThreads(): PlusInboxThread[] {
   const now = nowSecs();
   return [
     {
-      name: "Kaan_07",
+      name: "Neon_Drift",
       lastAt: now - 3 * MIN,
       last: { from: "them", text: "tamam anlaştık" },
       unread: 2,
@@ -877,7 +955,7 @@ export function mockThreads(): PlusInboxThread[] {
       handoffUntil: null,
     },
     {
-      name: "MertK",
+      name: "MorKedi",
       lastAt: now - 40 * MIN,
       last: { from: "you", text: "Akşam spawn'da olurum, orada konuşalım." },
       unread: 0,
@@ -885,7 +963,7 @@ export function mockThreads(): PlusInboxThread[] {
       handoffUntil: now + 12 * MIN,
     },
     {
-      name: "Zeynep_12",
+      name: "Buzul_12",
       lastAt: now - 3 * HOUR,
       last: { from: "bot", text: "[AFK+] Elytra hâlâ satılık mı? 33.000 düşünüyorum." },
       unread: 0,
@@ -906,7 +984,7 @@ export function mockThreads(): PlusInboxThread[] {
 export function mockLines(name: string): PlusInboxLine[] {
   const now = nowSecs();
   const at = (minutesAgo: number) => now - minutesAgo * MIN;
-  if (name === "Kaan_07") {
+  if (name === "Neon_Drift") {
     return [
       { at: at(8), from: "them", text: "elytra var 45k", hidden: null },
       { at: at(7), from: "bot", text: "[AFK+] Merhaba, 34.000 olur mu?", hidden: null },
@@ -915,7 +993,7 @@ export function mockLines(name: string): PlusInboxLine[] {
       { at: at(3), from: "them", text: "tamam anlaştık", hidden: null },
     ];
   }
-  if (name === "MertK") {
+  if (name === "MorKedi") {
     return [
       { at: at(55), from: "them", text: "elmas lazım 64 tane", hidden: null },
       { at: at(54), from: "bot", text: "[AFK+] Var, tanesi 120. Olur mu?", hidden: null },
@@ -993,20 +1071,20 @@ export function mockReceipts(): PlusReceipt[] {
     ...parts,
   });
   return [
-    receipt(0.07, "sell", "minecraft:diamond", 20, 2_400, "MertK", { order: "o3" }),
-    receipt(1.08, "buy", "minecraft:totem_of_undying", 1, 8_000, "Baris_TR", { order: "o2" }),
-    receipt(1.5, "buy", "custom:c1", 3, 2_700, "Kaan_07", { approval: "owner", review: true }),
-    receipt(2.3, "buy", "minecraft:diamond_pickaxe", 1, 16_400, "Zeynep_12", {
+    receipt(0.07, "sell", "minecraft:diamond", 20, 2_400, "MorKedi", { order: "o3" }),
+    receipt(1.08, "buy", "minecraft:totem_of_undying", 1, 8_000, "Pixel_TR", { order: "o2" }),
+    receipt(1.5, "buy", "custom:c1", 3, 2_700, "Neon_Drift", { approval: "owner", review: true }),
+    receipt(2.3, "buy", "minecraft:diamond_pickaxe", 1, 16_400, "Buzul_12", {
       approval: "approved",
       order: "o8",
     }),
-    receipt(4.5, "sell", "minecraft:diamond", 64, 7_680, "Ece_Gamer"),
-    receipt(6.2, "buy", "minecraft:netherite_ingot", 1, 5, "Deniz_TR", {
+    receipt(4.5, "sell", "minecraft:diamond", 64, 7_680, "Kirpi_Gamer"),
+    receipt(6.2, "buy", "minecraft:netherite_ingot", 1, 5, "Dalga_TR", {
       pay: "minecraft:diamond",
       currency: null,
       approval: "approved",
     }),
-    receipt(8.6, "buy", "minecraft:elytra", 1, 36_000, "Kaan_07"),
+    receipt(8.6, "buy", "minecraft:elytra", 1, 36_000, "Neon_Drift"),
   ];
 }
 

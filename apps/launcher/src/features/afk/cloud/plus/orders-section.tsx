@@ -69,7 +69,7 @@ import {
   receivedOf,
 } from "./order-draft";
 import { type FormField, type FormRequest, type FormSeed, OrderForm } from "./order-form";
-import { checkOrderText, ruleHint } from "./order-rules";
+import { checkOrderText, isMoneyQuestion, ruleHint } from "./order-rules";
 import {
   activeCount,
   bareMoney,
@@ -83,7 +83,7 @@ import {
 } from "./orders";
 import { plusAi } from "./types";
 import { plusKey, storeSettings, usePlusFeatures } from "./use-plus";
-import { amountWords, currentLang, formatAmount, type Lang, qtyItem } from "./words";
+import { cardWords, currentLang, formatAmount, type Lang, qtyItem } from "./words";
 
 const SHOWN_QUESTIONS = 2;
 /** "Okunuyor" this long without an answer: the line says the assistant cannot be reached. */
@@ -521,8 +521,11 @@ function OrderCard({
       : counts
         ? formatAmount(value, lang)
         : moneyText(value, server, lang);
-  const words = (value: number | null) =>
-    value !== null && !counts && value >= 1000 ? amountWords(value, lang) : null;
+  // In words under the figure from 10.000 (`cardWords`): a count is no money.
+  const words = (value: number | null) => {
+    if (value === null || counts) return null;
+    return cardWords(value, lang);
+  };
   const perItem = draft.unit === "each" && (draft.qty ?? 0) > 1;
   const itemName = draft.item ? itemLabel(draft.item, namer, lang) : null;
   const owner = draft.trade === "owner" || serverTrade === "owner";
@@ -764,6 +767,8 @@ export type IntakeChecks = "on" | "off" | "away";
 
 type IntakeLine =
   | { kind: "rule"; reason: string; rule?: string }
+  // Money that may be the game's: asked with one button, "Bu oyun parası" (28 Oct 2026).
+  | { kind: "money" }
   | { kind: "limited"; reason: "rate" | "daily" }
   | { kind: "unavailable"; reason: string }
   | { kind: "offline" }
@@ -778,7 +783,7 @@ function intakeLineText(
   switch (line.kind) {
     case "rule":
       if (line.reason === "loosen") {
-        // The hard rule itself, as a sentence ("Asistan bütçeni ve sınırlarını kimseye söylemez.").
+        // The hard rule as a sentence ("ProBot AI bütçeni ve sınırlarını kimseye söylemez.").
         const rule = t(`afkPlus.intake.rules.${line.rule ?? "prepay"}`);
         const first = rule.charAt(0).toLocaleUpperCase(currentLang() === "tr" ? "tr" : "en");
         return t("afkPlus.intake.reject.loosen", { rule: first + rule.slice(1) });
@@ -788,6 +793,8 @@ function intakeLineText(
       return t(`afkPlus.intake.reject.${line.reason}`, {
         defaultValue: t("afkPlus.intake.reject.unsafe"),
       });
+    case "money":
+      return t("afkPlus.intake.money");
     case "limited":
       return t(line.reason === "daily" ? "afkPlus.intake.daily" : "afkPlus.intake.rate");
     case "unavailable":
@@ -852,6 +859,10 @@ function OrderIntake({
   const id = useId();
   const writes = useOrderWrites(accountId);
   const maxDeal = server.money.maxDeal;
+  // The server's money name in the language "Kontrol et" asks in (the launcher's): an amount
+  // written with it is no real money ("50 bin TL" where the money is TL).
+  const label = server.money.label;
+  const currency = label === null ? null : lang === "en" ? label.en : label.tr;
   const [text, setText] = useState("");
   const [checking, setChecking] = useState(false);
   const [line, setLine] = useState<IntakeLine | null>(null);
@@ -865,18 +876,23 @@ function OrderIntake({
   // One save of the card at a time (a double click lands before the disabled button renders).
   const savingNow = useRef(false);
 
-  // The free rules as a hint while typing (the service checks again on "Kontrol et").
-  const hint = useMemo(() => {
+  // The free rules as a hint while typing (the service checks again on "Kontrol et"); money that
+  // may be the game's is asked on "Kontrol et", not while typing.
+  const { hint, moneyAsked } = useMemo(() => {
     const trimmed = text.trim();
-    if (!trimmed) return null;
-    const check = checkOrderText(trimmed, { maxDeal, active, orderMax });
+    if (!trimmed) return { hint: null, moneyAsked: false };
+    const check = checkOrderText(trimmed, { maxDeal, active, orderMax, currency });
     const rejected = ruleHint(check);
+    const asked = check.result === "question:rmt";
     // Too short is no news while the player is still typing; the button says it by waiting.
     if (!rejected || rejected.reason === "length") {
-      return [...trimmed].length > 200 ? ({ kind: "rule", reason: "length" } as IntakeLine) : null;
+      const long = [...trimmed].length > 200;
+      const tooLong: IntakeLine | null = long ? { kind: "rule", reason: "length" } : null;
+      return { hint: tooLong, moneyAsked: asked };
     }
-    return { kind: "rule", reason: rejected.reason, rule: rejected.rule } as IntakeLine;
-  }, [text, maxDeal, active, orderMax]);
+    const ruled = { kind: "rule", reason: rejected.reason, rule: rejected.rule } as IntakeLine;
+    return { hint: ruled, moneyAsked: asked };
+  }, [text, maxDeal, active, orderMax, currency]);
   const shownLine = line ?? hint;
   const enough = [...text.trim()].length >= 3;
   const outOfChecks = left !== null && left <= 0;
@@ -885,18 +901,24 @@ function OrderIntake({
   // Nothing typed here can be checked now: the field rests, the line says what works.
   const resting = blocked || checks === "away" || aiDown;
 
-  const check = async (event?: FormEvent) => {
+  // `inGame`: the player said the words' money is the game's ("Bu oyun parası"); the same words go
+  // again with it, and the rails still refuse.
+  const check = async (event?: FormEvent, inGame = false) => {
     event?.preventDefault();
     if (!enough || checking || !canCheck || outOfChecks || blocked) return;
     if (hint && hint.kind === "rule") {
       setLine(hint);
       return;
     }
+    if (moneyAsked && !inGame) {
+      setLine({ kind: "money" });
+      return;
+    }
     setChecking(true);
     setLine(null);
     const slow = window.setTimeout(() => setLine({ kind: "slow" }), SLOW_CHECK_MS);
     try {
-      const outcome = await plusApi.check(accountId, text);
+      const outcome = await plusApi.check(accountId, text, inGame);
       window.clearTimeout(slow);
       switch (outcome.kind) {
         case "draft": {
@@ -907,7 +929,11 @@ function OrderIntake({
           break;
         }
         case "rejected":
-          setLine({ kind: "rule", reason: outcome.reason, rule: outcome.rule ?? undefined });
+          setLine(
+            isMoneyQuestion(outcome.reason, outcome.rule)
+              ? { kind: "money" }
+              : { kind: "rule", reason: outcome.reason, rule: outcome.rule ?? undefined },
+          );
           break;
         case "limited":
           setLine({ kind: "limited", reason: outcome.reason === "daily" ? "daily" : "rate" });
@@ -1034,6 +1060,7 @@ function OrderIntake({
           ? t("afkPlus.intake.daily")
           : null;
   const ruleLine = !disabledLine && !full && shownLine?.kind === "rule";
+  const moneyLine = !disabledLine && !full && shownLine?.kind === "money";
   const lineText =
     disabledLine ??
     (full
@@ -1193,7 +1220,22 @@ function OrderIntake({
                         ruleLine ? "text-flare-400" : "text-gold-300",
                       )}
                     />
-                    <span>{lineText}</span>
+                    {moneyLine ? (
+                      // The question's one answer, quiet (the gold is "Kontrol et"'s): the same
+                      // words again as the game's money; the hard rules stay.
+                      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                        <span>{lineText}</span>
+                        <QuietLink
+                          tone="bone"
+                          disabled={checking}
+                          onClick={() => void check(undefined, true)}
+                        >
+                          {t("afkPlus.intake.inGame")}
+                        </QuietLink>
+                      </span>
+                    ) : (
+                      <span>{lineText}</span>
+                    )}
                   </>
                 ) : null}
               </p>
@@ -1319,6 +1361,9 @@ function OrderRow({
   const lang = currentLang();
   const name = itemLabel(order.item, namer, lang);
   const finished = state.status === "done" || state.status === "expired";
+  // A paused or finished order rests: its picture dims and its words go a step quieter, each still
+  // AA on the panel (the whole row at 60 % put "Süresi doldu" near 3:1; afk.projects.gg, SITE-W2).
+  const resting = !order.on || finished;
   const counts = order.pay !== "money";
   const payName = counts ? itemLabel(order.pay, namer, lang) : null;
   const price = (value: number) =>
@@ -1414,17 +1459,37 @@ function OrderRow({
             })}
             className={cn(
               "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md py-1 text-left outline-none",
-              "transition-[opacity,transform,scale] duration-150 ease-out active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-gold-300",
-              (!order.on || finished) && "opacity-60",
+              "transition-[transform,scale] duration-150 ease-out active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-gold-300",
             )}
           >
-            <PlusItemIcon item={order.item} custom={namer.custom} size={32} />
+            <span className={cn("inline-flex shrink-0", resting && "opacity-60")}>
+              <PlusItemIcon item={order.item} custom={namer.custom} size={32} />
+            </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13.5px] font-medium text-bone-50">{name}</span>
-              <span className="block truncate text-[12px] text-ash-300 tabular-nums">{meta}</span>
+              <span
+                className={cn(
+                  "block truncate text-[13.5px] font-medium",
+                  resting ? "text-ash-300" : "text-bone-50",
+                )}
+              >
+                {name}
+              </span>
+              <span
+                className={cn(
+                  "block truncate text-[12px] tabular-nums",
+                  resting ? "text-ash-400" : "text-ash-300",
+                )}
+              >
+                {meta}
+              </span>
             </span>
             <span className="shrink-0 text-right">
-              <span className="block text-[13px] text-bone-100 tabular-nums">
+              <span
+                className={cn(
+                  "block text-[13px] tabular-nums",
+                  resting ? "text-ash-300" : "text-bone-100",
+                )}
+              >
                 {t(
                   order.side === "sell"
                     ? "afkPlus.orders.progressSold"

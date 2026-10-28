@@ -3,6 +3,7 @@ import { enAfkPlus } from "@/locales/en-afkplus";
 import { trAfkPlus } from "@/locales/tr-afkplus";
 import { atPhrase, dayGroup, durationParts, minutesLeft, rangeText, untilPhrase } from "./time";
 import {
+  cardWords,
   dealText,
   enWords,
   firstClause,
@@ -13,13 +14,14 @@ import {
   trEnding,
   trWith,
   trWords,
+  WORDS_FROM,
 } from "./words";
 
 describe("AFK+ state sentences on the card", () => {
   it("keep their first clause", () => {
     expect(firstClause("Kontörün bitti, hesabın AFK'da kalıyor")).toBe("Kontörün bitti");
     expect(firstClause("Weekly limit reached. It resets at 04:00")).toBe("Weekly limit reached");
-    expect(firstClause("Asistan çalışıyor")).toBe("Asistan çalışıyor");
+    expect(firstClause("ProBot AI çalışıyor")).toBe("ProBot AI çalışıyor");
     // A number's own dot or comma is not a clause's end.
     expect(firstClause("Elytra 37.500'e alındı")).toBe("Elytra 37.500'e alındı");
   });
@@ -37,6 +39,15 @@ describe("AFK+ state sentences on the card", () => {
 });
 
 describe("AFK+ amounts", () => {
+  it("are said in words under a card's figure from 10.000 only", () => {
+    // A bare "bin" under "1.000" read as "1.000 bin", a million.
+    expect(cardWords(1_000, "tr")).toBeNull();
+    expect(cardWords(9_999, "en")).toBeNull();
+    expect(cardWords(10_000, "tr")).toBe("on bin");
+    expect(cardWords(10_000, "en")).toBe("ten thousand");
+    expect(WORDS_FROM).toBe(10_000);
+  });
+
   it("are grouped by the language", () => {
     expect(formatAmount(37_500, "tr")).toBe("37.500");
     expect(formatAmount(37_500, "en")).toBe("37,500");

@@ -338,7 +338,7 @@ export const commands = {
 	memory: MemoryAdviceView | null,
 	/**
 	 *  The JVM did not start because of the instance's own JVM arguments, and it has some:
-	 *  "Argümanları sıfırla ve yeniden dene" (`instance_set_jvm_args`).
+	 *  "Argümanları sıfırla ve tekrar dene" (`instance_set_jvm_args`).
 	 */
 	resetJvmArgs: boolean,
 } | null, CmdError>(__TAURI_INVOKE("troubleshoot_crash", { instanceId })),
@@ -429,8 +429,10 @@ export const commands = {
 	 */
 	cloudAfkMove: (desktopId: string, cloudId: string, rev: number, run: boolean) => typedError<CloudMoveResult_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_move", { desktopId, cloudId, rev, run })),
 	/**
-	 *  "Tümünü bağla" while some accounts run in the cloud: every other desktop account connects
-	 *  (staggered, as usual). Returns how many were left to the cloud.
+	 *  "Tümünü bağla" of the AFK page's "Bu bilgisayarda" list while the player has 7/24 Bulut
+	 *  accounts: every desktop account without a cloud twin connects (staggered, as usual). A twin's
+	 *  card is its cloud account's, which has its own buttons, so it is left out whether it runs there
+	 *  or not (AFK-CLEAR). Returns how many were left out.
 	 */
 	cloudAfkConnectHere: () => __TAURI_INVOKE<number>("cloud_afk_connect_here"),
 	/**  Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there. */
@@ -523,8 +525,11 @@ export const commands = {
 	cloudAfkPlusRestore: (id: string, rev: number, current: number) => typedError<PlusSaveOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_plus_restore", { id, rev, current })),
 	/**  The AI's switch, a player blocked, unblocked or forgotten, the spent total reset. */
 	cloudAfkPlusControl: (id: string, action: PlusAction, name: string | null) => typedError<PlusControlAnswer, CmdError>(__TAURI_INVOKE("cloud_afk_plus_control", { id, action, name })),
-	/**  "Kontrol et": the player's words become an order's card (nothing is stored). */
-	cloudAfkPlusCheck: (id: string, text: string) => typedError<PlusCheckOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_check", { id, text })),
+	/**
+	 *  "Kontrol et": the player's words become an order's card (nothing is stored). `in_game`: the
+	 *  player said the words' money is the game's ("Bu oyun parası", after the money question).
+	 */
+	cloudAfkPlusCheck: (id: string, text: string, inGame: boolean) => typedError<PlusCheckOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_check", { id, text, inGame })),
 	/**
 	 *  "Kaydet" of an order's card or form (or "Geri al" of a deleted one): the order, the new custom
 	 *  items it names and a chip's settings change, in one write.
@@ -3837,7 +3842,7 @@ export type CrashView = {
 	memory: MemoryAdviceView | null,
 	/**
 	 *  The JVM did not start because of the instance's own JVM arguments, and it has some:
-	 *  "Argümanları sıfırla ve yeniden dene" (`instance_set_jvm_args`).
+	 *  "Argümanları sıfırla ve tekrar dene" (`instance_set_jvm_args`).
 	 */
 	resetJvmArgs: boolean,
 };
@@ -5541,7 +5546,7 @@ export type MeView = {
 	mark: ProfileMark | null,
 };
 
-/**  "Belleği artır/düşür ve yeniden dene". */
+/**  "Belleği artır/düşür ve tekrar dene". */
 export type MemoryAdviceView = {
 	currentMb: number,
 	suggestedMb: number,
@@ -6578,10 +6583,47 @@ export type PlanView = {
  */
 export type PlusAction = "pause" | "resume" | "block" | "unblock" | "forget" | "reset_spent";
 
+/**
+ *  "Sohbete ilan" as the service plans it for the stored settings (`GET`'s, a save's and a
+ *  restore's answer carry it): the server's floor, the minutes between ads now, the next ads'
+ *  texts and today's spam warning or stop.
+ */
+export type PlusAdPreview = {
+	/**  The fewest minutes between ads here: 30, or more where the profile or Studio asks. */
+	floorMin?: number,
+	/**
+	 *  The minutes between ads now: the player's choice, at least the floor, twice that after a
+	 *  spam warning today.
+	 */
+	everyMin?: number,
+	/**
+	 *  The next ads' texts in their order (at most 3, without the sender's name before them, and
+	 *  no price); empty while no order is active or the names are pending.
+	 */
+	lines?: string[],
+	/**
+	 *  The item names are not known yet (the machine has not been in game): `lines` stays empty
+	 *  until they are.
+	 */
+	namesPending?: boolean,
+	/**  When the next one goes (Unix seconds), when known. */
+	nextAt?: number | null,
+	/**  The server's spam warning today, if one came. */
+	warning?: PlusAdWarning | null,
+	/**  A second warning stopped the ads until the day ends. */
+	stoppedToday?: boolean,
+};
+
 export type PlusAdTemplate = {
 	id?: string,
 	tr?: string,
 	en?: string,
+};
+
+/**  A spam warning: when it came (Unix seconds) and the minutes between ads since. */
+export type PlusAdWarning = {
+	at?: number,
+	everyMin?: number,
 };
 
 /**
@@ -6814,7 +6856,8 @@ export type PlusCheckOutcome =
 { kind: "draft"; answer: string } | 
 /**
  *  The rules or the agent said no: `length`, `link`, `command`, `personal`, `unsafe`,
- *  `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`.
+ *  `loosen` (with `rule`), `too_big`, `orders_full`, `no_item`, `many_items`; or asked first:
+ *  `question` with `rule: "rmt"` (money that may be the game's: checked again with `in_game`).
  */
 { kind: "rejected"; reason: string; rule: string | null } | 
 /**  `rate` (a fourth check within a minute) or `daily` (the AFK+ day's checks used). */
@@ -6844,6 +6887,12 @@ export type PlusConfig_Deserialize = {
 	v?: number,
 	/**  The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only. */
 	enabled?: boolean,
+	/**
+	 *  The service's (28 Oct 2026): the assistant waits for its first start ("Başlat"), `enabled`
+	 *  false meanwhile. Sent back as it came and never made here; a start, or a save that turns
+	 *  the assistant on, ends it.
+	 */
+	ready?: boolean | null,
 	/**  A server profile open for the account's server (`projects-smp`), or `generic`. */
 	mode?: string,
 	/**  `auto` (English to players who write English, else Turkish), `tr`, `en`. */
@@ -6851,7 +6900,7 @@ export type PlusConfig_Deserialize = {
 	persona?: PlusPersona,
 	replies?: PlusReplies,
 	/**
-	 *  "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+	 *  "ProBot AI ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
 	 *  waits for the owner's OK; the default), `deal` (closes within the limits).
 	 */
 	authority?: string,
@@ -6865,8 +6914,8 @@ export type PlusConfig_Deserialize = {
 	orders?: PlusOrder[],
 	customItems?: PlusCustomItem_Deserialize[],
 	limits?: PlusLimits,
-	discovery?: PlusDiscovery,
-	trade?: PlusTradeSettings,
+	discovery?: PlusDiscovery_Deserialize,
+	trade?: PlusTradeSettings_Deserialize,
 	/**  "HH:MM" Turkey time: the daily summary. */
 	summaryAt?: string,
 	/**  In-game names the bot never answers (at most 100). */
@@ -6887,6 +6936,12 @@ export type PlusConfig_Serialize = {
 	v: number,
 	/**  The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only. */
 	enabled: boolean,
+	/**
+	 *  The service's (28 Oct 2026): the assistant waits for its first start ("Başlat"), `enabled`
+	 *  false meanwhile. Sent back as it came and never made here; a start, or a save that turns
+	 *  the assistant on, ends it.
+	 */
+	ready?: boolean | null,
 	/**  A server profile open for the account's server (`projects-smp`), or `generic`. */
 	mode: string,
 	/**  `auto` (English to players who write English, else Turkish), `tr`, `en`. */
@@ -6894,7 +6949,7 @@ export type PlusConfig_Serialize = {
 	persona: PlusPersona,
 	replies: PlusReplies,
 	/**
-	 *  "Asistan ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
+	 *  "ProBot AI ne yapsın?": `reply` (only answers and passes offers on), `ask` (bargains, then
 	 *  waits for the owner's OK; the default), `deal` (closes within the limits).
 	 */
 	authority: string,
@@ -6908,8 +6963,8 @@ export type PlusConfig_Serialize = {
 	orders: PlusOrder[],
 	customItems: PlusCustomItem_Serialize[],
 	limits: PlusLimits,
-	discovery: PlusDiscovery,
-	trade: PlusTradeSettings,
+	discovery: PlusDiscovery_Serialize,
+	trade: PlusTradeSettings_Serialize,
 	/**  "HH:MM" Turkey time: the daily summary. */
 	summaryAt: string,
 	/**  In-game names the bot never answers (at most 100). */
@@ -6965,11 +7020,32 @@ export type PlusCustomItem_Serialize = {
 	at: number,
 };
 
-export type PlusDiscovery = {
+export type PlusDiscovery = PlusDiscovery_Serialize | PlusDiscovery_Deserialize;
+
+export type PlusDiscovery_Deserialize = {
 	scanChat?: boolean,
 	proactivePm?: boolean,
 	ads?: boolean,
 	adTemplate?: string,
+	/**
+	 *  "Sohbete ilan" (trade-any-4): the minutes between ads the player chose, 30, 45, 60 or 120
+	 *  (the service's 60 while none is stored; a server may ask for more, `floorMin`). None: not
+	 *  in the document, and sent back so (never made here; an older service knows no such key).
+	 */
+	adEveryMin?: number | null,
+};
+
+export type PlusDiscovery_Serialize = {
+	scanChat: boolean,
+	proactivePm: boolean,
+	ads: boolean,
+	adTemplate: string,
+	/**
+	 *  "Sohbete ilan" (trade-any-4): the minutes between ads the player chose, 30, 45, 60 or 120
+	 *  (the service's 60 while none is stored; a server may ask for more, `floorMin`). None: not
+	 *  in the document, and sent back so (never made here; an older service knows no such key).
+	 */
+	adEveryMin?: number | null,
 };
 
 /**  A table written to the player's Downloads folder. */
@@ -7442,7 +7518,10 @@ export type PlusPanelView_Serialize = {
 };
 
 export type PlusPersona = {
-	/**  `friendly`, `brief`, `polite`, `playful`. */
+	/**
+	 *  `friendly`, `brief`, `polite`, `playful`; `polite` ("Kibar") where the settings have none
+	 *  (28 Oct 2026).
+	 */
 	preset?: string,
 	/**  "" or 1-60 code points. */
 	intro?: string,
@@ -7452,7 +7531,10 @@ export type PlusPersona = {
 	statusPreset?: string | null,
 	/**  Small talk; "Konu dışına çıkmasın" is its opposite (off by default since 27 Oct 2026). */
 	smallTalk?: boolean,
-	/**  "Oyuncu gibi konuşsun": chats like a player instead of in formal language. */
+	/**
+	 *  "Oyuncu gibi konuşsun": chats like a player instead of in formal language; on where the
+	 *  settings have none (28 Oct 2026).
+	 */
 	playerTalk?: boolean,
 	/**  The tag before the assistant's lines: the player's choice, off by default. */
 	prefix?: PlusPrefix,
@@ -7670,12 +7752,20 @@ export type PlusRules = {
 	features?: PlusRulesFeatures,
 };
 
-/**  `rules.features`: the order switches (a missing one reads as on, the service refuses in words). */
+/**
+ *  `rules.features`: the order switches (a missing one reads as on, the service refuses in words)
+ *  and "Para birimi".
+ */
 export type PlusRulesFeatures = {
 	orders?: boolean,
 	audit?: boolean,
 	customItems?: boolean,
 	itemPay?: boolean,
+	/**
+	 *  "Para birimi" (`trade.currency`), off by default: a missing one (an older service) reads
+	 *  as off, so the field stays hidden.
+	 */
+	currency?: boolean,
 };
 
 /**  How a settings save (or "Bu hale dön") ended. Problems are worded where they are. */
@@ -7732,11 +7822,17 @@ export type PlusServer = {
 };
 
 /**
- *  The game mode's money: `label` the name to write after amounts ("Coin"); None: bare amounts and
- *  once "Oyundaki parayla".
+ *  The game mode's money: `label` the name to write after amounts ("Coin"), the profile's or else
+ *  the player's own (`trade.currency`, the same in both languages); None: bare amounts and once
+ *  "Oyundaki parayla".
  */
 export type PlusServerMoney = {
 	label?: CloudLocalized | null,
+	/**
+	 *  The name is the profile's (Projects Survival and SkyBlock: ripple): "Para birimi" shows it
+	 *  read-only. False from an older service.
+	 */
+	fixed?: boolean,
 	maxDeal?: number,
 	/**  The money's key (receipts carry it). */
 	currency?: string,
@@ -7765,6 +7861,8 @@ export type PlusSettings_Deserialize = {
 	spent?: PlusSpent | null,
 	/**  The orders' states come from the machine's last snapshot of then. */
 	asOf?: number | null,
+	/**  "Sohbete ilan" as the service plans it; None from an older service. */
+	adPreview?: PlusAdPreview | null,
 };
 
 /**
@@ -7784,6 +7882,8 @@ export type PlusSettings_Serialize = {
 	spent: PlusSpent | null,
 	/**  The orders' states come from the machine's last snapshot of then. */
 	asOf: number | null,
+	/**  "Sohbete ilan" as the service plans it; None from an older service. */
+	adPreview: PlusAdPreview | null,
 };
 
 /**
@@ -7817,9 +7917,28 @@ export type PlusTotals = {
 	earned?: number,
 };
 
-export type PlusTradeSettings = {
+export type PlusTradeSettings = PlusTradeSettings_Serialize | PlusTradeSettings_Deserialize;
+
+export type PlusTradeSettings_Deserialize = {
 	/**  A plain command row of the account's config to run after a trade, or None (stay at spawn). */
 	returnRow?: string | null,
+	/**
+	 *  "Para birimi" (28 Oct 2026): the money's name the player gave, `Some(None)` cleared (written
+	 *  as null), None not in the document (a write leaves the stored one, and an older service
+	 *  knows no such key). It goes back as it came.
+	 */
+	currency?: string | null,
+};
+
+export type PlusTradeSettings_Serialize = {
+	/**  A plain command row of the account's config to run after a trade, or None (stay at spawn). */
+	returnRow: string | null,
+	/**
+	 *  "Para birimi" (28 Oct 2026): the money's name the player gave, `Some(None)` cleared (written
+	 *  as null), None not in the document (a write leaves the stored one, and an older service
+	 *  knows no such key). It goes back as it came.
+	 */
+	currency?: string | null,
 };
 
 /**

@@ -23,7 +23,7 @@ import {
   type PlusSettings,
   plusApi,
 } from "./api";
-import type { SettingsDraft } from "./model";
+import { configAfterControl, type LimitField, type SettingsDraft } from "./model";
 import { type PlusFeatures, plusMe, plusOffer } from "./types";
 
 export type PlusSection = "feed" | "messages" | "orders" | "settings" | "report";
@@ -36,8 +36,9 @@ interface PlusUi {
   thread: string | null;
   /** The setup wizard is open for this account. */
   wizardFor: string | null;
-  /** A settings group to bring into view ("Sınırları ayarla"). */
+  /** A settings group to bring into view, and the field in it to focus ("Sınırlara git"). */
   focusGroup: string | null;
+  focusField: string | null;
   /**
    * Unsaved "Ayarlar" edits per account: they wait where they were made, across sections and
    * the panel closing (design.md G6-P), until saved or dropped with "Vazgeç".
@@ -51,6 +52,8 @@ interface PlusUi {
   setThread: (name: string | null) => void;
   setWizard: (id: string | null) => void;
   setFocusGroup: (group: string | null) => void;
+  /** "Sınırlara git": "Ayarlar" at that limit, its field in view and focused. */
+  goToLimit: (field: LimitField) => void;
   setDraft: (id: string, draft: SettingsDraft | null) => void;
   putOffSetup: (id: string) => void;
 }
@@ -61,14 +64,17 @@ export const usePlusUi = create<PlusUi>()((set) => ({
   thread: null,
   wizardFor: null,
   focusGroup: null,
+  focusField: null,
   drafts: {},
   setupLater: [],
   openPanel: (panelId, section = "feed") => set({ panelId, section, thread: null }),
-  closePanel: () => set({ panelId: null, thread: null, focusGroup: null }),
+  closePanel: () => set({ panelId: null, thread: null, focusGroup: null, focusField: null }),
   setSection: (section) => set({ section, thread: null }),
   setThread: (thread) => set({ thread }),
   setWizard: (wizardFor) => set({ wizardFor }),
-  setFocusGroup: (focusGroup) => set({ focusGroup }),
+  setFocusGroup: (focusGroup) => set({ focusGroup, focusField: null }),
+  goToLimit: (focusField) =>
+    set({ section: "settings", thread: null, focusGroup: "limits", focusField }),
   setDraft: (id, draft) =>
     set((state) => {
       const drafts = { ...state.drafts };
@@ -226,7 +232,10 @@ export function storeApproval(queryClient: QueryClient, id: string, approval: Pl
   );
 }
 
-/** Puts written settings into the panel (an order write, a save): the server and rules stay. */
+/**
+ * Puts written settings into the panel (an order write, a save) as the backend merged them: a
+ * save's server view is the service's answer (its money name), else the one read; the rules stay.
+ */
 export function storeSettings(queryClient: QueryClient, id: string, settings: PlusSettings) {
   queryClient.setQueryData<PlusPanel>(plusKey(id), (panel) => {
     if (!panel) return panel;
@@ -289,6 +298,9 @@ export function mergeAudit(
   return [...bySeq.values()].sort((a, b) => b.s - a.s);
 }
 
+/** A read's page of the audit log (pl-cloud-afk asks the machine for 50 at a time). */
+const FIRST_PAGE = 50;
+
 /**
  * The audit log: what this computer kept shows at once, then the machine's newer entries past the
  * last one kept, then the live stream; "Daha eski" reads older pages on demand.
@@ -321,13 +333,16 @@ export function usePlusAudit(id: string, enabled: boolean) {
       }
       // Past the newest entry kept: with more between than one page, the kept ones are older than
       // a gap, so the log goes on from the page (they stay on disk); without, they follow the page
-      // and the machine may still have older ones ("Daha eski" asks).
+      // and the machine may still have older ones ("Daha eski" asks), but only when this computer
+      // kept a whole first page or more. Fewer means its first read reached the oldest entry and
+      // the machine only adds newer ones since: no "Daha eski" then, as on a first visit (it showed
+      // on every revisit; afk.projects.gg's rule, SITE-W2).
       if (outcome.more) {
         return { items: mergeAudit(live, outcome.items), more: true, away: false, off: false };
       }
       return {
         items: mergeAudit(mergeAudit(live, kept), outcome.items),
-        more: true,
+        more: kept.length >= FIRST_PAGE,
         away: false,
         off: false,
       };
@@ -474,16 +489,7 @@ export function usePlusControl(id: string) {
       storeAi(queryClient, id, answer.ai);
       queryClient.setQueryData<PlusPanel>(plusKey(id), (panel) => {
         if (!panel) return panel;
-        const config = { ...panel.settings.config };
-        if (action === "pause" || action === "resume") config.enabled = action === "resume";
-        if ((action === "block" || action === "unblock") && name) {
-          const other = (n: string) => n.toLowerCase() !== name.toLowerCase();
-          const rest = config.blocked.filter(other);
-          config.blocked = action === "block" ? [...rest, name] : rest;
-          // The service takes a blocked name off the friends list too (a save would be refused).
-          if (action === "block")
-            config.who = { ...config.who, friends: config.who.friends.filter(other) };
-        }
+        const config = configAfterControl(panel.settings.config, action, name);
         const spent =
           action === "reset_spent" && panel.settings.spent
             ? { ...panel.settings.spent, total: 0 }
