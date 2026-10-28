@@ -222,6 +222,7 @@ pub fn check_context(settings: &PlusSettings, now: i64) -> PlusCheckContext {
         features: PlusCheckFeatures {
             item_pay: Some(rules.features.item_pay),
             custom_items: Some(rules.features.custom_items),
+            currency: Some(rules.features.currency),
         },
         limits: PlusCheckLimits {
             order_max: rules.order_max,
@@ -249,7 +250,9 @@ pub fn check_context(settings: &PlusSettings, now: i64) -> PlusCheckContext {
 }
 
 /// The settings a `PUT` sends (everything but the orders and custom items), checked and as the
-/// service would store them; or what it would refuse.
+/// service would store them; or what it would refuse. The money's name goes as the player's
+/// settings have it: cleaned, null once cleared (the stored document leaves it out), and not at
+/// all where they leave it out (the service keeps the stored one; an older one knows no such key).
 pub fn checked_settings(
     config: &PlusConfig,
     settings: &PlusSettings,
@@ -263,7 +266,14 @@ pub fn checked_settings(
     }
     let stored = check_config_value(&input, &check_context(settings, checks_now(settings, now)))
         .map_err(|refusal| vec![refusal.issue()])?;
-    serde_json::from_value(stored).map_err(|_| vec![PlusIssue::new("config", "type")])
+    let mut sent: PlusConfig =
+        serde_json::from_value(stored).map_err(|_| vec![PlusIssue::new("config", "type")])?;
+    match config.trade.currency {
+        None => sent.trade.currency = None,
+        Some(None) => sent.trade.currency = Some(None),
+        Some(Some(_)) => {}
+    }
+    Ok(sent)
 }
 
 /// A refusal on the count of active orders (`limit_orders`, scope `active`).
@@ -1100,6 +1110,7 @@ mod tests {
                 trade: "bot".into(),
                 money: crate::plus::PlusServerMoney {
                     label: None,
+                    fixed: false,
                     max_deal: 10_000_000,
                     currency: "smp".into(),
                 },
@@ -1160,6 +1171,44 @@ mod tests {
         assert_eq!(
             checked_settings(&config, &settings, NOW),
             Err(vec![PlusIssue::new("who.friends[0]", "blocked")])
+        );
+    }
+
+    #[test]
+    fn the_money_name_goes_as_the_player_left_it() {
+        let mut settings = settings();
+        settings.rules.features.currency = true;
+        settings.config.trade.currency = Some(Some("TL".into()));
+        let sent = |config: &PlusConfig| {
+            let checked = checked_settings(config, &settings, NOW).unwrap();
+            checked.trade.currency
+        };
+        // Left out (a screen that does not show it): left out of the write, the stored one stays.
+        let mut config = settings.config.clone();
+        config.trade.currency = None;
+        assert_eq!(sent(&config), None);
+        config.trade.currency = Some(Some("  Altın  Para ".into()));
+        assert_eq!(sent(&config), Some(Some("Altın Para".into())));
+        config.trade.currency = Some(None);
+        assert_eq!(sent(&config), Some(None), "a cleared name goes as null");
+        config.trade.currency = Some(Some("TL2".into()));
+        assert_eq!(
+            checked_settings(&config, &settings, NOW),
+            Err(vec![PlusIssue::text("trade.currency", "form")])
+        );
+        // Studio's switch off (an older service reads so too): the stored name may go back, a new
+        // one is refused.
+        let mut off = settings.clone();
+        off.rules.features.currency = false;
+        assert_eq!(
+            checked_settings(&off.config, &off, NOW).map(|checked| checked.trade.currency),
+            Ok(Some(Some("TL".into())))
+        );
+        let mut config = off.config.clone();
+        config.trade.currency = Some(Some("coin".into()));
+        assert_eq!(
+            checked_settings(&config, &off, NOW),
+            Err(vec![PlusIssue::new("trade.currency", "feature")])
         );
     }
 

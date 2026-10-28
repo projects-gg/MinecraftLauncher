@@ -108,9 +108,9 @@ pub use plus::{
 };
 pub use plus_audit::{AUDIT_KEEP_DAYS, AUDIT_MAX_BYTES};
 pub use plus_check::{
-    PREFIX_DEFAULT_TEXT, PREFIX_MAX, PlusCheckContext, PlusCheckFeatures, PlusCheckLimits,
-    PlusModeFacts, PlusProgress, PlusRefusal, check_config_value, check_persona, check_prefix,
-    clean_text, is_custom_key, is_order_id, is_vanilla_id,
+    CURRENCY_MAX, PREFIX_DEFAULT_TEXT, PREFIX_MAX, PlusCheckContext, PlusCheckFeatures,
+    PlusCheckLimits, PlusModeFacts, PlusProgress, PlusRefusal, check_config_value, check_currency,
+    check_persona, check_prefix, clean_text, is_custom_key, is_order_id, is_vanilla_id,
 };
 pub use plus_items::PlusItemData;
 pub use seal::{

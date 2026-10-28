@@ -660,6 +660,28 @@ impl Default for PlusDiscovery {
 pub struct PlusTradeSettings {
     /// A plain command row of the account's config to run after a trade, or None (stay at spawn).
     pub return_row: Option<String>,
+    /// "Para birimi" (28 Oct 2026): the money's name the player gave, `Some(None)` cleared (written
+    /// as null), None not in the document (a write leaves the stored one, and an older service
+    /// knows no such key). It goes back as it came.
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<String>)]
+    pub currency: Option<Option<String>>,
+}
+
+/// A text that may be missing (None, the field's default) or null (`Some(None)`). Any other value
+/// reads as missing, so one odd field never hides the settings.
+fn present<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<String>>, D::Error> {
+    Ok(match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Null => Some(None),
+        serde_json::Value::String(text) => Some(Some(text)),
+        _ => None,
+    })
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -722,12 +744,17 @@ pub struct PlusServer {
     pub on: bool,
 }
 
-/// The game mode's money: `label` the name to write after amounts ("Coin"); None: bare amounts and
-/// once "Oyundaki parayla".
+/// The game mode's money: `label` the name to write after amounts ("Coin"), the profile's or else
+/// the player's own (`trade.currency`, the same in both languages); None: bare amounts and once
+/// "Oyundaki parayla".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusServerMoney {
     pub label: Option<CloudLocalized>,
+    /// The name is the profile's (Projects Survival and SkyBlock: ripple): "Para birimi" shows it
+    /// read-only. False from an older service.
+    #[serde(default)]
+    pub fixed: bool,
     pub max_deal: u64,
     /// The money's key (receipts carry it).
     pub currency: String,
@@ -737,6 +764,7 @@ impl Default for PlusServerMoney {
     fn default() -> Self {
         Self {
             label: None,
+            fixed: false,
             max_deal: GENERIC_MAX_DEAL,
             currency: String::new(),
         }
@@ -793,7 +821,8 @@ impl Default for PlusRules {
     }
 }
 
-/// `rules.features`: the order switches (a missing one reads as on, the service refuses in words).
+/// `rules.features`: the order switches (a missing one reads as on, the service refuses in words)
+/// and "Para birimi".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlusRulesFeatures {
@@ -801,6 +830,10 @@ pub struct PlusRulesFeatures {
     pub audit: bool,
     pub custom_items: bool,
     pub item_pay: bool,
+    /// "Para birimi" (`trade.currency`), off by default: a missing one (an older service) reads
+    /// as off, so the field stays hidden.
+    #[serde(default)]
+    pub currency: bool,
 }
 
 impl Default for PlusRulesFeatures {
@@ -810,6 +843,7 @@ impl Default for PlusRulesFeatures {
             audit: true,
             custom_items: true,
             item_pay: false,
+            currency: false,
         }
     }
 }
@@ -2399,6 +2433,60 @@ mod tests {
             serde_json::from_value(json!({"config": document(), "aiRev": 1})).unwrap();
         assert_eq!(settings.rules, PlusRules::default());
         assert_eq!(settings.server.money.max_deal, GENERIC_MAX_DEAL);
+    }
+
+    #[test]
+    fn the_money_name_goes_back_as_it_came() {
+        // Not in the document (no name stored, or an older service): a write leaves it out.
+        let config: PlusConfig = serde_json::from_value(document()).unwrap();
+        assert_eq!(config.trade.currency, None);
+        let written = serde_json::to_value(&config).unwrap();
+        assert_eq!(written["trade"], json!({"returnRow": null}));
+        // A name, and a cleared one, are written as they came.
+        for (sent, read) in [
+            (json!("TL"), Some(Some("TL".to_owned()))),
+            (serde_json::Value::Null, Some(None)),
+        ] {
+            let mut doc = document();
+            doc["trade"]["currency"] = sent;
+            let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
+            assert_eq!(config.trade.currency, read);
+            assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+        }
+        // An odd value reads as missing: nothing is written back.
+        let mut doc = document();
+        doc["trade"]["currency"] = json!(5);
+        let config: PlusConfig = serde_json::from_value(doc).unwrap();
+        assert_eq!(config.trade.currency, None);
+    }
+
+    #[test]
+    fn reads_whose_money_name_shows() {
+        let settings: PlusSettings = serde_json::from_value(json!({
+            "config": document(), "aiRev": 4,
+            "server": {"kind": "verified", "mode": "projects-survival",
+              "name": {"tr": "Survival", "en": "Survival"}, "trade": "bot",
+              "money": {"label": {"tr": "ripple", "en": "ripple"}, "fixed": true,
+                "maxDeal": 1000000, "currency": "survival"},
+              "ads": [], "on": true},
+            "rules": {"features": {"orders": true, "audit": true, "customItems": true,
+              "itemPay": false, "currency": true}}
+        }))
+        .unwrap();
+        assert!(settings.server.money.fixed);
+        assert!(settings.rules.features.currency);
+        // An older service names neither: nothing is fixed and the field stays hidden, while the
+        // order switches it leaves out still read as on.
+        let settings: PlusSettings = serde_json::from_value(json!({
+            "config": document(), "aiRev": 4,
+            "server": {"money": {"label": {"tr": "ripple", "en": "ripple"}, "maxDeal": 1000000,
+              "currency": "survival"}},
+            "rules": {"features": {"itemPay": false}}
+        }))
+        .unwrap();
+        assert!(!settings.server.money.fixed);
+        assert!(!settings.rules.features.currency);
+        assert!(settings.rules.features.orders && settings.rules.features.audit);
     }
 
     #[test]
