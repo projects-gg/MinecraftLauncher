@@ -32,6 +32,7 @@ export function AmountField({
   lineless = false,
   extra,
   anchor,
+  unit,
 }: {
   label: string;
   value: AmountValue;
@@ -54,6 +55,8 @@ export function AmountField({
   extra?: ReactNode;
   /** The block's id, so a link elsewhere brings the field into view ("Sınırlara git"). */
   anchor?: string;
+  /** The money's name after the amount ("ripple"), quiet inside the field; none for bare amounts. */
+  unit?: string | null;
 }) {
   const id = useId();
   const { t } = useTranslation();
@@ -76,36 +79,48 @@ export function AmountField({
       >
         {label}
       </label>
-      <input
-        id={id}
-        inputMode="numeric"
-        autoComplete="off"
-        spellCheck={false}
-        // biome-ignore lint/a11y/noAutofocus: the field the player came to write in
-        autoFocus={autoFocus}
-        value={text}
-        placeholder={placeholder}
-        aria-invalid={flare ? true : undefined}
-        aria-describedby={
-          [lineless ? null : `${id}-line`, describedBy].filter(Boolean).join(" ") || undefined
-        }
-        onChange={(event) => {
-          const next = event.target.value;
-          setText(next);
-          setTyped(true);
-          if (next.trim() === "") onChange(optional ? null : undefined);
-          else onChange(parseAmount(next) ?? undefined);
-        }}
-        onBlur={() => {
-          setTyped(false);
-          if (parsed !== null) setText(formatAmount(parsed));
-        }}
-        className={cn(
-          inputClass,
-          "h-[34px] px-3 tabular-nums",
-          flare && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
-        )}
-      />
+      <div className="relative">
+        <input
+          id={id}
+          inputMode="numeric"
+          autoComplete="off"
+          spellCheck={false}
+          // biome-ignore lint/a11y/noAutofocus: the field the player came to write in
+          autoFocus={autoFocus}
+          value={text}
+          placeholder={placeholder}
+          aria-invalid={flare ? true : undefined}
+          aria-describedby={
+            [lineless ? null : `${id}-line`, describedBy].filter(Boolean).join(" ") || undefined
+          }
+          onChange={(event) => {
+            const next = event.target.value;
+            setText(next);
+            setTyped(true);
+            if (next.trim() === "") onChange(optional ? null : undefined);
+            else onChange(parseAmount(next) ?? undefined);
+          }}
+          onBlur={() => {
+            setTyped(false);
+            if (parsed !== null) setText(formatAmount(parsed));
+          }}
+          className={cn(
+            inputClass,
+            "h-[34px] px-3 tabular-nums",
+            unit && "pr-16",
+            flare && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
+          )}
+        />
+        {/* The server's money name, quiet inside the field (SETUP-UX-L, the site's MoneyInput). */}
+        {unit ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[12.5px] text-ash-400"
+          >
+            {unit}
+          </span>
+        ) : null}
+      </div>
       {lineless ? null : (
         <p
           id={`${id}-line`}
@@ -124,7 +139,7 @@ export function AmountField({
 }
 
 /**
- * A quiet text action ("Formla ekle", "Envanterden seç", "Harcananı sıfırla"). `bone` where gold
+ * A quiet text action ("Elle ekle", "Envanterden seç", "Harcananı sıfırla"). `bone` where gold
  * would be a second loud thing beside the card's answer ("Sınırlara git" on an approval).
  */
 export function QuietLink({

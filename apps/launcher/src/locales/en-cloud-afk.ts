@@ -92,7 +92,7 @@ export const enCloudAfk = {
   },
   actions: {
     start: "Start",
-    stop: "Stop",
+    stop: "Stop account",
     reconnect: "Reconnect",
     console: "Console",
     settings: "Settings",

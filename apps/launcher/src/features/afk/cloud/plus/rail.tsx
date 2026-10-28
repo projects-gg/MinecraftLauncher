@@ -107,6 +107,8 @@ function StateBlock({
   const guard = usePressGuard(action ?? "none");
   const queryClient = useQueryClient();
   const goToLimit = usePlusUi((s) => s.goToLimit);
+  // The setup's choices wait ("Daha sonra"): the button goes back to them (SETUP-UX-L).
+  const resumes = usePlusUi((s) => Boolean(s.setups[account.id]));
   // Buying waits for the spending limits: "Sınırlara git" to the first one missing, as last read.
   const goSpend = () => {
     const panel = queryClient.getQueryData<PlusPanel>(plusKey(account.id));
@@ -129,7 +131,7 @@ function StateBlock({
           {away ? sentence.text : waits ? text : t("afkPlus.ai.setup")}
         </p>
         <Button size="sm" variant="primary" onClick={onSetup} className="self-start">
-          {t("afkPlus.setup.open")}
+          {resumes ? t("setup.plus.resume") : t("afkPlus.setup.open")}
         </Button>
       </div>
     );

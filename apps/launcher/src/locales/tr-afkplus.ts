@@ -427,7 +427,7 @@ export const trAfkPlus = {
     placeholder: "Örnek: Elytra alırım, en fazla 40 bin",
     check: "Kontrol et",
     reading: "Okunuyor",
-    form: "Formla ekle",
+    form: "Elle ekle",
     pick: "Envanterden seç",
     left: "Bugün {{count}} kez daha kontrol edebilirsin.",
     failed: "Yazdığın kontrol edilemedi.",
@@ -437,13 +437,13 @@ export const trAfkPlus = {
     inGame: "Bu oyun parası",
     // Under the field while AFK+ is under maintenance (the notice above says why).
     maintenance: "Bakım bitince sipariş ekleyebilirsin.",
-    aiPaused: "Yapay zekâ bakımda. Formla ekleyebilirsin.",
-    aiAway: "Yapay zekâya şu an ulaşılamıyor. Formla ekleyebilirsin.",
-    offline: "7/24 Bulut'a şu an ulaşılamıyor. Formla ekleyebilirsin.",
+    aiPaused: "Yapay zekâ bakımda. Elle ekleyebilirsin.",
+    aiAway: "Yapay zekâya şu an ulaşılamıyor. Elle ekleyebilirsin.",
+    offline: "7/24 Bulut'a şu an ulaşılamıyor. Elle ekleyebilirsin.",
     // The same while the notice above already says the machine is away.
-    formOnly: "Şu an yalnız formla ekleyebilirsin.",
-    off: "Yazıyla sipariş şu an kapalı. Formla ekleyebilirsin.",
-    daily: "Bugün daha fazla kontrol edilemez. Formla ekleyebilirsin.",
+    formOnly: "Şu an yalnız elle ekleyebilirsin.",
+    off: "Yazıyla sipariş şu an kapalı. Elle ekleyebilirsin.",
+    daily: "Bugün daha fazla kontrol edilemez. Elle ekleyebilirsin.",
     rate: "Biraz bekleyip tekrar dene.",
     reject: {
       length: "Ne istediğini kısaca yaz.",
@@ -659,15 +659,9 @@ export const trAfkPlus = {
     unnamed: "Adsız eşya",
   },
   settings: {
+    // The settings are questions now (setup.plus, SETUP-UX-L); a list keeps its own name.
     groups: {
-      fine: "İnce ayar",
-      assistant: "ProBot AI",
-      hours: "Çalışma saatleri",
-      limits: "Harcama",
-      discovery: "Eşya arama",
-      trade: "Takas",
       blocked: "Engellenenler",
-      notify: "Bildirimler",
     },
     // "İnce ayar" (afkplus-free.md §3.1): what the assistant may do, with one line under each choice.
     authorityLabel: "ProBot AI ne yapsın?",
@@ -701,22 +695,9 @@ export const trAfkPlus = {
     },
     persona: "Konuşma tarzı",
     presets: { friendly: "Samimi", brief: "Kısa ve net", polite: "Kibar", playful: "Esprili" },
-    sample: "Örnek cevap",
-    samples: {
-      friendly: "Merhaba, 32.000 olur mu?",
-      brief: "32.000?",
-      polite: "Merhaba, 32.000 sizin için uygun olur mu?",
-      playful: "Selam, 32.000'e el sıkışalım mı?",
-    },
-    // "Oyuncu gibi konuşsun" (27 Oct 2026): the wording only; the samples as it then writes them.
+    // "Oyuncu gibi konuşsun" (27 Oct 2026): the wording only; the samples are setup.plus's.
     playerTalk: "Oyuncu gibi konuşsun",
     playerTalkHelp: "Sohbette resmî dil yerine oyuncu gibi konuşur.",
-    samplesPlayer: {
-      friendly: "slm knk, 32k olur mu",
-      brief: "32k?",
-      polite: "merhaba, 32k olur mu?",
-      playful: "32k'ya anlaşalım mı xd",
-    },
     // The tag before its lines: the player's choice, off by default; never staff or a player.
     prefix: "Mesajlarının başına etiket koysun",
     prefixLabel: "Etiket",
@@ -841,6 +822,8 @@ export const trAfkPlus = {
     limitsMoney: "Tutarlar oyundaki parayla.",
     // Beside a line that asks, or waits, because of a limit: to that limit here (owner, 28 Oct).
     goToLimits: "Sınırlara git",
+    // The same beside an approval limit's reason (the site's word).
+    goToApproval: "Onay sınırına git",
     limitErrors: {
       approvalAbove: "Onay sınırı, tek anlaşmadaki en fazla tutardan büyük olamaz.",
       maxDeal: "En çok {{max}} olabilir.",
@@ -1077,43 +1060,11 @@ export const trAfkPlus = {
     night: "Gece AFK hesaplarında olanlar var.",
     open: "Aç",
   },
+  // The first setup's own words are setup.plus (tr-setup.ts, SETUP-UX-L).
   setup: {
-    title: "AFK+'yı kur",
     open: "Kur",
-    step: "{{step}} / {{total}}",
-    next: "Devam",
-    back: "Geri",
-    finish: "Başlat",
-    finishing: "Başlatılıyor",
-    // Not "Sonra": beside "Devam" it read as "next".
-    later: "Daha sonra",
-    done: "ProBot AI çalışmaya başladı",
     invalid: "Bazı seçimler kaydedilemedi. Ayarlar'dan düzeltebilirsin.",
     failed: "AFK+ şu an kurulamadı.",
-    mode: {
-      title: "Çalışacağı yer",
-      lede: "ProBot AI hesabın bulunduğu sunucuda konuşur ve anlaşır.",
-      mode: "Oyun modu",
-      generic: "Her sunucuya uyan genel ayar",
-    },
-    assistant: {
-      title: "Nasıl konuşsun?",
-      lede: "Özel mesajlara bu tarzda cevap verir. Yapay zekâ olduğunu saklamaz.",
-    },
-    limits: {
-      title: "Ne kadar harcayabilsin?",
-      lede: "Yalnız oyundaki parayı harcar ve bu sınırları asla aşmaz. Büyük alımlarda önce sana sorar.",
-      notNow: "Şimdilik alım yapmasın",
-      notNowHelp: "Aradığını bulunca yalnız haber verir.",
-      required: 'İki tutarı da yaz ya da "Şimdilik alım yapmasın" seçeneğini aç.',
-      requiredOne: 'Bir tutar yaz ya da "Şimdilik alım yapmasın" seçeneğini aç.',
-      secret: "ProBot AI bütçeni ve sınırlarını kimseye söylemez.",
-    },
-    list: {
-      title: "İlk siparişin",
-      lede: "Ne almak ya da satmak istediğini yaz. Sonra da ekleyebilirsin.",
-      added: "Sipariş kaydedildi. İstersen bir tane daha yaz.",
-    },
   },
   time: {
     tomorrow: "yarın",

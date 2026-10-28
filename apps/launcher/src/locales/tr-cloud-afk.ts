@@ -91,7 +91,9 @@ export const trCloudAfk = {
   },
   actions: {
     start: "Başlat",
-    stop: "Durdur",
+    // The account's, never ProBot AI's ("ProBot AI'ı durdur"): beside "ProBot AI çalışıyor" a bare
+    // "Durdur" was pressed to stop the AI (the site's word, 28 Oct 2026).
+    stop: "Hesabı durdur",
     reconnect: "Yeniden bağlan",
     console: "Konsol",
     settings: "Ayarlar",
