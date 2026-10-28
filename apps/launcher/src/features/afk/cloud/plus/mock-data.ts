@@ -17,7 +17,7 @@
 // - `&audit=off|empty`: Studio switched the log off, or nothing was logged yet.
 // - `&typed=off`: Studio switched typed orders off (the form and the inventory only).
 // - `&mode=survival`: the account plays Projects Survival, whose profile names the money (ripple):
-//   "Para birimi" shows it read-only. On SMP (no name of its own) the player names it.
+//   "Para birimi" shows it as words with a lock. On SMP (no name of its own) the player names it.
 // - `&ads=<state>` ("Sohbete ilan", switched on): `on` the service's plan from the active orders,
 //   `floor` the server asks at least an hour, `warned` a spam warning today, `stopped` today's ads
 //   stopped, `empty` no active order, `old` an older service (no plan: the switch as before).

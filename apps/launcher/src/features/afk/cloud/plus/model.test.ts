@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { enAfkPlus } from "@/locales/en-afkplus";
 import { trAfkPlus } from "@/locales/tr-afkplus";
 import {
   aiState,
@@ -15,6 +16,7 @@ import {
   currencyFieldState,
   currencyProblem,
   editDraft,
+  emptyLimit,
   giftReplies,
   type LimitField,
   limitProblems,
@@ -151,6 +153,18 @@ describe("the tag before the assistant's lines (afkplus-config-v2.json's tag cas
 });
 
 describe("AFK+ limits and fields", () => {
+  it("say what an empty limit does: no buying without the per-deal or the total one", () => {
+    expect(emptyLimit("perDealMax")).toBe("buysNothing");
+    expect(emptyLimit("totalBudget")).toBe("buysNothing");
+    expect(emptyLimit("dailySpendMax")).toBe("noLimit");
+    expect(emptyLimit("approvalAbove")).toBe("noAsk");
+    expect(emptyLimit("newCounterpartApprovalAbove")).toBe("noAsk");
+    expect(emptyLimit("balanceFloor")).toBeNull();
+    // The site's words under the two (SITE-W2), never "Sınır yok" there.
+    expect(trAfkPlus.settings.emptyBuysNothing).toBe("Boş bırakırsan ProBot AI alım yapmaz.");
+    expect(enAfkPlus.settings.emptyBuysNothing).toBe("Leave it empty and ProBot AI buys nothing.");
+  });
+
   it("need both limits to buy", () => {
     expect(canSpend(config().limits)).toBe(false);
     expect(canSpend({ ...config().limits, perDealMax: 50_000, totalBudget: 300_000 })).toBe(true);
@@ -386,7 +400,7 @@ describe("Sınırlara git: the limit a line is about", () => {
 });
 
 describe("the first start (AFK+ never starts by itself)", () => {
-  it("says the assistant is ready and offers Başlat while it waits", () => {
+  it("says ProBot AI is ready and offers to start it while it waits", () => {
     const off = aiState(ai({ state: "off", reason: "player" }));
     expect(startState(off, true)).toEqual({
       key: "ready",
@@ -396,7 +410,9 @@ describe("the first start (AFK+ never starts by itself)", () => {
       canStop: false,
     });
     expect(trAfkPlus.ai.ready).toBe("ProBot AI hazır. Başlatınca çalışır.");
-    expect(trAfkPlus.control.startFirst).toBe("Başlat");
+    // Never a bare "Başlat": beside the account's "Durdur" it read as the account's (SITE-W2).
+    expect(trAfkPlus.control.start).toBe("ProBot AI'ı başlat");
+    expect(enAfkPlus.control.start).toBe("Start ProBot AI");
   });
 
   it("reads the service's ready the same way, and other reasons as before", () => {

@@ -10,7 +10,7 @@ import { afkFailed } from "../../errors";
 import type { CloudAccount } from "../api";
 import { type PlusHistoryEntry, type PlusPanel, plusApi } from "./api";
 import { itemLabel, type Namer, usePlusItemData } from "./items";
-import { type ConfigChange, configChanges, type PlusLimits } from "./model";
+import { type ConfigChange, configChanges, emptyLimit, type PlusLimits } from "./model";
 import { clockText, dayGroup, dayText } from "./time";
 import { plusKey } from "./use-plus";
 import { currentLang, formatAmount } from "./words";
@@ -67,9 +67,12 @@ function useChangeText(panel: PlusPanel) {
           }),
         });
       case "limit": {
+        // Emptied: no buying at all for the two limits buying needs (the hard rule), else no limit.
+        const buysNothing = emptyLimit(change.field) === "buysNothing";
+        const none = t(buysNothing ? "afkPlus.history.noBuying" : "afkPlus.history.noLimit");
         const value = (amount: number | null) =>
           amount === null
-            ? t("afkPlus.history.noLimit")
+            ? none
             : change.field === "approvalTimeoutMin"
               ? t("afkPlus.units.minutes", { count: amount })
               : formatAmount(amount);
