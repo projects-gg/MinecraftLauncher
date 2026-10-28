@@ -4,6 +4,7 @@
 // each renews, about how many replies are left. The bars move only when a number changes.
 import { ArrowSquareOut, Play, Stop } from "@phosphor-icons/react";
 import { Button, cn, enter, leave, toast, usePressGuard } from "@pl/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -11,16 +12,26 @@ import { formatCount, formatPercent } from "@/lib/format";
 import { afkFailed } from "../../errors";
 import type { CloudAccount } from "../api";
 import { cloudApi } from "../api";
-import type { PlusQuota } from "./api";
-import { aiState, boughtInUse, boughtReplies, giftReplies, tradeNoteKey } from "./model";
+import type { PlusPanel, PlusQuota } from "./api";
+import { LimitLine } from "./limits-link";
+import {
+  aiState,
+  boughtInUse,
+  boughtReplies,
+  giftReplies,
+  spendingField,
+  tradeNoteKey,
+} from "./model";
 import { atPhrase, clockText, dayText, untilPhrase } from "./time";
 import { plusAi } from "./types";
 import {
   type PlusFeatureFlags,
   type PlusSection,
+  plusKey,
   usePlusControl,
   usePlusFeatures,
   usePlusTopupOpen,
+  usePlusUi,
 } from "./use-plus";
 import { currentLang, trWith } from "./words";
 
@@ -77,6 +88,13 @@ function StateBlock({ account, onSetup }: { account: CloudAccount; onSetup?: () 
   const control = usePlusControl(account.id);
   const action = state.canStop ? "stop" : state.canStart ? "start" : null;
   const guard = usePressGuard(action ?? "none");
+  const queryClient = useQueryClient();
+  const goToLimit = usePlusUi((s) => s.goToLimit);
+  // Buying waits for the spending limits: "Sınırlara git" to the first one missing, as last read.
+  const goSpend = () => {
+    const panel = queryClient.getQueryData<PlusPanel>(plusKey(account.id));
+    goToLimit(panel ? spendingField(panel.settings.config.limits) : "perDealMax");
+  };
   if (onSetup) {
     // Never set up: the one thing to do is the setup (the switch would start it with no limits).
     // While the machine can't be reached that is said instead of "running with the defaults" (the
@@ -110,7 +128,12 @@ function StateBlock({ account, onSetup }: { account: CloudAccount; onSetup?: () 
         {sentence.text}
       </p>
       {note ? (
-        <p className="-mt-1 text-[12px] leading-snug text-ash-400">{t(`afkPlus.ai.${note}`)}</p>
+        <LimitLine
+          onGo={note === "notifyOnly" ? goSpend : null}
+          className="-mt-1 text-[12px] leading-snug text-ash-400"
+        >
+          {t(`afkPlus.ai.${note}`)}
+        </LimitLine>
       ) : null}
       {action ? (
         <Button

@@ -828,6 +828,8 @@ export const trAfkPlus = {
     secret: "Asistan bütçeni ve sınırlarını kimseye söylemez.",
     // Beside "Harcama": the amounts are the game's money, never lira.
     limitsMoney: "Tutarlar oyundaki parayla.",
+    // Beside a line that asks, or waits, because of a limit: to that limit here (owner, 28 Oct).
+    goToLimits: "Sınırlara git",
     limitErrors: {
       approvalAbove: "Onay sınırı, tek anlaşmadaki en fazla tutardan büyük olamaz.",
       maxDeal: "En çok {{max}} olabilir.",

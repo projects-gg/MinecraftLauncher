@@ -777,6 +777,7 @@ export const enAfkPlus = {
     needed: "Buying needs an amount per deal and a total spending limit.",
     secret: "The assistant never tells anyone your budget or limits.",
     limitsMoney: "Amounts use in-game money.",
+    goToLimits: "Go to limits",
     limitErrors: {
       approvalAbove: "The approval limit can't be above the per-deal maximum.",
       maxDeal: "Up to {{max}}.",

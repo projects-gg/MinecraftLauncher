@@ -23,7 +23,7 @@ import {
   type PlusSettings,
   plusApi,
 } from "./api";
-import type { SettingsDraft } from "./model";
+import type { LimitField, SettingsDraft } from "./model";
 import { type PlusFeatures, plusMe, plusOffer } from "./types";
 
 export type PlusSection = "feed" | "messages" | "orders" | "settings" | "report";
@@ -36,8 +36,9 @@ interface PlusUi {
   thread: string | null;
   /** The setup wizard is open for this account. */
   wizardFor: string | null;
-  /** A settings group to bring into view ("Sınırları ayarla"). */
+  /** A settings group to bring into view, and the field in it to focus ("Sınırlara git"). */
   focusGroup: string | null;
+  focusField: string | null;
   /**
    * Unsaved "Ayarlar" edits per account: they wait where they were made, across sections and
    * the panel closing (design.md G6-P), until saved or dropped with "Vazgeç".
@@ -51,6 +52,8 @@ interface PlusUi {
   setThread: (name: string | null) => void;
   setWizard: (id: string | null) => void;
   setFocusGroup: (group: string | null) => void;
+  /** "Sınırlara git": "Ayarlar" at that limit, its field in view and focused. */
+  goToLimit: (field: LimitField) => void;
   setDraft: (id: string, draft: SettingsDraft | null) => void;
   putOffSetup: (id: string) => void;
 }
@@ -61,14 +64,17 @@ export const usePlusUi = create<PlusUi>()((set) => ({
   thread: null,
   wizardFor: null,
   focusGroup: null,
+  focusField: null,
   drafts: {},
   setupLater: [],
   openPanel: (panelId, section = "feed") => set({ panelId, section, thread: null }),
-  closePanel: () => set({ panelId: null, thread: null, focusGroup: null }),
+  closePanel: () => set({ panelId: null, thread: null, focusGroup: null, focusField: null }),
   setSection: (section) => set({ section, thread: null }),
   setThread: (thread) => set({ thread }),
   setWizard: (wizardFor) => set({ wizardFor }),
-  setFocusGroup: (focusGroup) => set({ focusGroup }),
+  setFocusGroup: (focusGroup) => set({ focusGroup, focusField: null }),
+  goToLimit: (focusField) =>
+    set({ section: "settings", thread: null, focusGroup: "limits", focusField }),
   setDraft: (id, draft) =>
     set((state) => {
       const drafts = { ...state.drafts };

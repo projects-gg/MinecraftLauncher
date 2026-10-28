@@ -528,6 +528,47 @@ export function currencyFieldState(
   return { kind: "own" };
 }
 
+// --- "Sınırlara git" (owner, 28 Oct 2026) -----------------------------------------------------------
+
+/** A limit "Sınırlara git" brings into view in "Harcama", its field focused. */
+export type LimitField =
+  | "perDealMax"
+  | "totalBudget"
+  | "dailySpendMax"
+  | "approvalAbove"
+  | "newCounterpartApprovalAbove";
+
+/** An approval's reason that is a limit's, and that limit. */
+export interface LimitReason {
+  reason: string;
+  field: LimitField;
+}
+
+const REASON_LIMITS = new Map<string, LimitField>([
+  ["above", "approvalAbove"],
+  ["new_counterpart", "newCounterpartApprovalAbove"],
+  ["daily", "dailySpendMax"],
+  ["budget", "totalBudget"],
+]);
+
+/**
+ * The first of an approval's reasons that is a limit's ("Onay sınırının üstünde"): its line
+ * carries "Sınırlara git". None for the others: a price, or the authority the player chose, is no
+ * limit to go to.
+ */
+export function limitReason(why: readonly string[]): LimitReason | null {
+  for (const reason of why) {
+    const field = REASON_LIMITS.get(reason);
+    if (field) return { reason, field };
+  }
+  return null;
+}
+
+/** Buying waits for both spending limits ("bulunca haber veriyor"): the first one missing. */
+export function spendingField(limits: Pick<PlusLimits, "perDealMax" | "totalBudget">): LimitField {
+  return limits.perDealMax === null ? "perDealMax" : "totalBudget";
+}
+
 // --- What changed (QoL Q7) --------------------------------------------------------------------------
 
 export type ConfigChange =

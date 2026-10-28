@@ -16,7 +16,6 @@ import {
   leave,
   Segmented,
   Select,
-  scrollBehavior,
   toast,
   useMotionPrefs,
 } from "@pl/ui";
@@ -1042,6 +1041,7 @@ function LimitsGroup({
       placeholder={optional ? (more.empty ?? t("afkPlus.settings.noLimitShort")) : undefined}
       error={error(key)}
       extra={more.extra}
+      anchor={`afk-plus-limits-${key}`}
       onChange={(value) => setLimit(key, value)}
     />
   );
@@ -1491,7 +1491,9 @@ export function SettingsSection({
   const draft = usePlusUi((s) => s.drafts[account.id] ?? null);
   const setDraft = usePlusUi((s) => s.setDraft);
   const focusGroup = usePlusUi((s) => s.focusGroup);
+  const focusField = usePlusUi((s) => s.focusField);
   const setFocusGroup = usePlusUi((s) => s.setFocusGroup);
+  const { layout } = useMotionPrefs();
   const [submitted, setSubmitted] = useState(false);
   const [serverIssues, setServerIssues] = useState<ReadonlySet<string>>(new Set());
   const [failure, setFailure] = useState<{ message: string } | null>(null);
@@ -1550,13 +1552,18 @@ export function SettingsSection({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // "Sınırları ayarla" (Listeler) brings its group into view once.
+  // A group asked for elsewhere ("Sınırlara git") comes into view once, its field focused when one
+  // is named; at once under reduced motion and in Performance mode.
   useEffect(() => {
     if (!focusGroup) return;
-    const node = document.getElementById(`afk-plus-${focusGroup}`);
-    node?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
+    const anchor = focusField ? `afk-plus-${focusGroup}-${focusField}` : null;
+    const field = anchor ? document.getElementById(anchor) : null;
+    const node = field ?? document.getElementById(`afk-plus-${focusGroup}`);
+    const behavior = layout ? "smooth" : "auto";
+    node?.scrollIntoView({ block: field ? "center" : "start", behavior });
+    field?.querySelector("input")?.focus({ preventScroll: true });
     setFocusGroup(null);
-  }, [focusGroup, setFocusGroup]);
+  }, [focusGroup, focusField, layout, setFocusGroup]);
 
   // A problem the form shows blocks the save at once (the AFK sheets' rule, SHEET-UX decision 27):
   // after "Kaydet", while an edited tag or money name reads wrong (its line shows as it is typed),

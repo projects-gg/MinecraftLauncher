@@ -14,7 +14,9 @@ import {
   currencyProblem,
   editDraft,
   giftReplies,
+  type LimitField,
   limitProblems,
+  limitReason,
   liveProblems,
   PREFIX_DEFAULT,
   personaTextProblem,
@@ -22,6 +24,7 @@ import {
   readTime,
   type SettingsPart,
   settingsPart,
+  spendingField,
   tradeNoteKey,
   windowProblems,
   withCurrency,
@@ -318,6 +321,32 @@ describe("the money's name (Para birimi)", () => {
     const odd = { returnRow: null, currency: "TL2" };
     expect(currencyEditProblem(odd, odd)).toBeNull();
     expect(currencyEditProblem(absent, absent)).toBeNull();
+  });
+});
+
+describe("Sınırlara git: the limit a line is about", () => {
+  it("goes from an approval's reason to its limit, and from no other", () => {
+    const cases: Array<[string, LimitField | undefined]> = [
+      ["above", "approvalAbove"],
+      ["new_counterpart", "newCounterpartApprovalAbove"],
+      ["daily", "dailySpendMax"],
+      ["budget", "totalBudget"],
+      // The authority the player chose, or a price, is no limit to go to.
+      ["authority", undefined],
+      ["price_unusual", undefined],
+      ["other", undefined],
+      ["constructor", undefined],
+    ];
+    for (const [reason, field] of cases) expect(limitReason([reason])?.field, reason).toBe(field);
+    // The first reason that is a limit's carries it.
+    const first = limitReason(["price_unusual", "daily", "above"]);
+    expect(first).toEqual({ reason: "daily", field: "dailySpendMax" });
+    expect(limitReason([])).toBeNull();
+  });
+
+  it("goes from buying that waits for the spending limits to the first one missing", () => {
+    expect(spendingField({ perDealMax: null, totalBudget: null })).toBe("perDealMax");
+    expect(spendingField({ perDealMax: 50_000, totalBudget: null })).toBe("totalBudget");
   });
 });
 
