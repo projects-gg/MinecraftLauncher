@@ -16,6 +16,7 @@ import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
+import { enFastPack } from "./en-fastpack";
 import { enFix2 } from "./en-fix2";
 import { enFps } from "./en-fps";
 import { enFriendGroups } from "./en-friend-groups";
@@ -305,6 +306,7 @@ export const en: DeepPartial<Strings> = {
   help: enHelp,
   crewWave2: enCrewWave2,
   overlay: enOverlay,
+  fastPack: enFastPack,
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,

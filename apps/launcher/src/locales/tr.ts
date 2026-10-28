@@ -17,6 +17,7 @@ import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
+import { trFastPack } from "./tr-fastpack";
 import { trFix2 } from "./tr-fix2";
 import { trFps } from "./tr-fps";
 import { trFriendGroups } from "./tr-friend-groups";
@@ -100,6 +101,7 @@ export const tr = {
   help: trHelp,
   crewWave2: trCrewWave2,
   overlay: trOverlay,
+  fastPack: trFastPack,
   lib1: trLib1,
   fix2: trFix2,
   chat2: trChat2,
