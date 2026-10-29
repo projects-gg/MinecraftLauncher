@@ -21,6 +21,8 @@ pub enum PresenceStep {
 struct Game {
     id: u64,
     quick_play: Option<String>,
+    /// SOC9: the Minecraft version it plays, as friends see it.
+    version: Option<String>,
     shown: bool,
     /// Its log's last line that told where it is.
     last_signal: Option<String>,
@@ -46,9 +48,26 @@ impl GameLead {
         self.games.push(Game {
             id,
             quick_play,
+            version: None,
             shown: false,
             last_signal: None,
         });
+    }
+
+    /// SOC9: the Minecraft version game `id` plays (its instance's version).
+    pub fn set_version(&mut self, id: u64, version: Option<String>) {
+        if let Some(game) = self.games.iter_mut().find(|game| game.id == id) {
+            game.version = version;
+        }
+    }
+
+    /// The version of the game the status follows, if any.
+    pub fn lead_version(&self) -> Option<String> {
+        let lead = self.lead?;
+        self.games
+            .iter()
+            .find(|game| game.id == lead)
+            .and_then(|game| game.version.clone())
     }
 
     /// The game's window is on screen: it leads when no other game does.
@@ -133,6 +152,23 @@ mod tests {
         );
         assert_eq!(lead.exited(1), [PresenceStep::Stopped]);
         assert!(lead.exited(1).is_empty(), "told once");
+    }
+
+    #[test]
+    fn the_version_is_the_leading_games() {
+        let mut lead = GameLead::new();
+        lead.started(1, None);
+        lead.set_version(1, Some("1.21.4".into()));
+        lead.started(2, None);
+        lead.set_version(2, Some("26.2".into()));
+        assert_eq!(lead.lead_version(), None, "no game on screen yet");
+        lead.shown(2);
+        lead.shown(1);
+        assert_eq!(lead.lead_version().as_deref(), Some("26.2"));
+        lead.exited(2);
+        assert_eq!(lead.lead_version().as_deref(), Some("1.21.4"));
+        lead.exited(1);
+        assert_eq!(lead.lead_version(), None);
     }
 
     #[test]

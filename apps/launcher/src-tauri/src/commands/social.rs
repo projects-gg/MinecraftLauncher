@@ -157,14 +157,24 @@ pub struct GamePresence {
 }
 
 impl GamePresence {
-    pub fn new(social: &SocialService, game: u64, quick_play: Option<&QuickPlay>) -> Self {
+    /// `version`: the instance's Minecraft version (SOC9: friends see it next to where it plays).
+    pub fn new(
+        social: &SocialService,
+        game: u64,
+        quick_play: Option<&QuickPlay>,
+        version: Option<&str>,
+    ) -> Self {
         let quick_play = match quick_play {
             Some(QuickPlay::Multiplayer { host, port }) => {
                 pl_social::server_label(host, port.unwrap_or(25565))
             }
             _ => None,
         };
-        GAME_LEAD.lock().started(game, quick_play);
+        {
+            let mut lead = GAME_LEAD.lock();
+            lead.started(game, quick_play);
+            lead.set_version(game, version.map(str::to_owned));
+        }
         Self {
             social: social.clone(),
             game,
@@ -185,6 +195,8 @@ impl GamePresence {
             match step {
                 pl_social::PresenceStep::Started { quick_play } => {
                     self.social.game_started(quick_play.as_deref());
+                    let version = GAME_LEAD.lock().lead_version();
+                    self.social.set_game_version(version.as_deref());
                 }
                 pl_social::PresenceStep::Line(line) => self.social.game_line(&line),
                 pl_social::PresenceStep::Stopped => self.social.game_stopped(),

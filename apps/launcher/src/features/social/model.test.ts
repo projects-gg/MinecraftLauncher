@@ -140,6 +140,20 @@ describe("presenceLine", () => {
     expect(presenceLine(friend("1", "A"), t)).toBe("social.presence.offline");
   });
 
+  it("adds the version a friend plays to every place in game, as is (SOC9)", () => {
+    const playing = (game: Friend["game"]) => friend("1", "A", { state: "playing", game });
+    expect(presenceLine(playing({ where: "projects", ver: "1.21.4" }), t)).toBe(
+      "social.presence.projects · 1.21.4",
+    );
+    expect(
+      presenceLine(playing({ where: "other", host: "mc.example.net", ver: "26.2" }), t),
+    ).toBe("social.presence.otherHost:mc.example.net · 26.2");
+    expect(presenceLine(playing({ where: "singleplayer", ver: "25w14a" }), t)).toBe(
+      "social.presence.singleplayer · 25w14a",
+    );
+    expect(presenceLine(playing({ where: "other", ver: null }), t)).toBe("social.presence.other");
+  });
+
   it("knows projects.gg hosts", () => {
     expect(isProjectsHost("play.projects.gg")).toBe(true);
     expect(isProjectsHost("projects.gg:25570")).toBe(true);

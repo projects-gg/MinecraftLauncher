@@ -1585,6 +1585,7 @@ pub(crate) mod tests {
         Some(Game {
             location: GameLocation::Projects,
             host: None,
+            ver: None,
         })
     }
 
@@ -1677,6 +1678,7 @@ pub(crate) mod tests {
                     Some(Game {
                         location: GameLocation::Other,
                         host: Some("mc.example.net".into()),
+                        ver: None,
                     }),
                 ),
                 friend("f-mert", "Mert", PresenceState::Launcher, None),
@@ -3129,6 +3131,7 @@ pub(crate) mod tests {
         v.crews[0].members[1].game = Some(Game {
             location: GameLocation::Singleplayer,
             host: None,
+            ver: None,
         });
         assert!(Scene::from_view(&v, &prefs, NOW).lists.projects.is_empty());
         // A web profile that is not `https`: no row.

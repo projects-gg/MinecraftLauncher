@@ -247,21 +247,28 @@ export function playingPeople(
   return [...friends, ...crew];
 }
 
-/** One short line under a friend's name. */
+/** Where a friend plays, as the line under their name says it. */
+function placeLine(friend: Friend, t: TFunction): string {
+  switch (friend.game?.where) {
+    case "projects":
+      return t("social.presence.projects");
+    case "singleplayer":
+      return t("social.presence.singleplayer");
+    case "other":
+      return friend.game.host
+        ? t("social.presence.otherHost", { host: friend.game.host })
+        : t("social.presence.other");
+    default:
+      return t("social.presence.playing");
+  }
+}
+
+/** One short line under a friend's name; in game with the version they play (SOC9), as is. */
 export function presenceLine(friend: Friend, t: TFunction): string {
   if (friend.state === "playing") {
-    switch (friend.game?.where) {
-      case "projects":
-        return t("social.presence.projects");
-      case "singleplayer":
-        return t("social.presence.singleplayer");
-      case "other":
-        return friend.game.host
-          ? t("social.presence.otherHost", { host: friend.game.host })
-          : t("social.presence.other");
-      default:
-        return t("social.presence.playing");
-    }
+    const place = placeLine(friend, t);
+    const version = friend.game?.ver;
+    return version ? `${place} · ${version}` : place;
   }
   if (friend.state === "launcher") return t("social.presence.launcher");
   return friend.lastSeen
