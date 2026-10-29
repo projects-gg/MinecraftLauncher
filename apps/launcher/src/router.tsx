@@ -69,8 +69,14 @@ const afkRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
-  validateSearch: (search: Record<string, unknown>): { section?: string } => ({
+  // `focus`: a row to land on (`Row`'s `setting`, the command palette's settings rows), a plain
+  // name, as it goes into a selector.
+  validateSearch: (search: Record<string, unknown>): { section?: string; focus?: string } => ({
     section: typeof search.section === "string" ? search.section : undefined,
+    focus:
+      typeof search.focus === "string" && /^[a-z][a-z-]{0,39}$/.test(search.focus)
+        ? search.focus
+        : undefined,
   }),
   component: SettingsPage,
 });

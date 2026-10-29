@@ -8,6 +8,7 @@ import {
   CopySimple,
   Cube,
   FileZip,
+  FilmStrip,
   FolderOpen,
   Gauge,
   Gear,
@@ -63,7 +64,9 @@ import { liveMinecraft, minecraftText } from "@/lib/minecraft";
 import { detectOs } from "@/lib/platform";
 import {
   ESCAPE_KEYS,
+  matchShortcut,
   type PageShortcut,
+  playButtonReady,
   pressPlayButton,
   SHORTCUT_PAGES,
   type ShortcutId,
@@ -249,6 +252,10 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const openFriends = (page: "list" | "add") =>
     afterClose(() => useSocialUi.getState().openPanel({ page }));
   const openSettings = (section: string) => void navigate({ to: "/settings", search: { section } });
+  // A setting's own row (BETA-FB: Enter on "performans" flipped Performance mode where the player
+  // meant to find it): the page lands on the row, lights it and focuses its switch.
+  const openSetting = (section: string, focus: string) =>
+    void navigate({ to: "/settings", search: { section, focus } });
   // `focus`: the settings group to land on (its control takes the focus).
   const openInstance = (instanceId: string, tab?: InstanceTab, focus?: "graphics" | "memory") =>
     void navigate({
@@ -575,15 +582,20 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             () => run(() => openSettings("help")),
             { words: PALETTE_WORDS.help },
           ),
+          // A setting's row goes to the setting; switching it is an action of its own (below).
           entry(
             "setting:performance",
-            performanceMode ? t("palette.performanceOff") : t("palette.performanceOn"),
+            t("settings.appearance.performance"),
             <Gauge size={18} />,
-            () => run(() => setPerformanceMode(!performanceMode)),
-            {
-              words: PALETTE_WORDS.performance,
-              extra: [t("palette.performanceOn"), t("palette.performanceOff")],
-            },
+            () => run(() => openSetting("appearance", "performance")),
+            { words: PALETTE_WORDS.performance },
+          ),
+          entry(
+            "setting:reduce-motion",
+            t("motion.title"),
+            <FilmStrip size={18} />,
+            () => run(() => openSetting("appearance", "reduce-motion")),
+            { words: PALETTE_WORDS.reduceMotion },
           ),
           entry(
             "setting:java",
@@ -631,6 +643,15 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             <CopySimple size={18} />,
             () => run(copyAddress),
             { words: PALETTE_WORDS.copyAddress },
+          ),
+          // The switch itself, by its words ("Performans modunu aç"); "performans" alone finds the
+          // setting's row first.
+          entry(
+            "action:performance",
+            performanceMode ? t("palette.performanceOff") : t("palette.performanceOn"),
+            <Gauge size={18} />,
+            () => run(() => setPerformanceMode(!performanceMode)),
+            { extra: [t("palette.performanceOn"), t("palette.performanceOff")] },
           ),
           ...(worldsOn && worldOpen
             ? [
@@ -794,6 +815,14 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
       value={freshList ? "" : undefined}
       onValueChange={freshList ? () => setFreshList(false) : undefined}
       onKeyDown={(event) => {
+        // Ctrl+Enter is OYNA's, as the key caps on the command bar's instance say: never Enter on
+        // the row under the arrows, which cmdk made of it (BETA-FB). The handled key keeps cmdk's
+        // own Enter and the app's shortcut out; while OYNA would not start a game it does nothing.
+        if (matchShortcut(event.nativeEvent, detectOs()) === "play") {
+          event.preventDefault();
+          if (playButtonReady(document)) run(() => afterClose(() => pressPlayButton(document)));
+          return;
+        }
         // Backspace in the empty field leaves a list (Esc closes the palette, as everywhere).
         if (view !== "commands" && event.key === "Backspace" && search === "") {
           event.preventDefault();

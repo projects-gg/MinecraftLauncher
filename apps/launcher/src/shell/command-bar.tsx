@@ -12,11 +12,12 @@ import {
   Switch,
   Tooltip,
   toast,
+  useReduceMotion,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import type { TFunction } from "i18next";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -59,7 +60,7 @@ function PickerLine({
   hint: PrepareHint | null;
 }) {
   const { t } = useTranslation();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   return (
     <span className="grid text-[12px] *:[grid-area:1/1]">
       <AnimatePresence initial={false}>
@@ -301,7 +302,7 @@ function useFirstStartNote(phase: LaunchPhase): boolean {
  */
 function LaunchStatus({ phase }: { phase: LaunchPhase }) {
   const { t } = useTranslation();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   const note = useFirstStartNote(phase);
   const working = phase.kind === "working" ? phase : null;
   const label = working ? t(`play.stages.${working.stage}`) : t("playOpen.status");
@@ -474,7 +475,7 @@ function StatusArea({
   others: readonly string[];
 }) {
   const { t } = useTranslation();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   const autoJoin = usePrefs((s) => s.autoJoin);
   const setAutoJoin = usePrefs((s) => s.setAutoJoin);
   const othersText = othersWords(t, others);

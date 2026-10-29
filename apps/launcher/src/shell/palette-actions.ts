@@ -227,6 +227,24 @@ export const PALETTE_WORDS = {
       "smooth",
     ],
   },
+  // Settings → Görünüm "Animasyonları azalt" (BETA-FB), by the words a player looks for it with.
+  reduceMotion: {
+    keywords: [
+      "animasyon",
+      "animasyonlar",
+      "animasyonları azalt",
+      "hareket",
+      "hareketi azalt",
+      "geçiş",
+      "geçişler",
+      "kayma",
+      "baş dönmesi",
+      "animation",
+      "animations",
+      "reduce motion",
+      "motion",
+    ],
+  },
   java: {
     keywords: ["java", "jre", "jdk", "jvm", "javaw", "runtime"],
     related: ["açılmıyor", "başlamıyor"],

@@ -32,6 +32,7 @@ import { enLib1 } from "./en-lib1";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
 import { enModSets } from "./en-modsets";
+import { enMotion } from "./en-motion";
 import { enNewsColumn } from "./en-news-column";
 import { enOverlay } from "./en-overlay";
 import { enOverview } from "./en-overview";
@@ -328,6 +329,7 @@ export const en: DeepPartial<Strings> = {
   playAcct: enPlayAcct,
   playAgain: enPlayAgain,
   chatProd: enChatProd,
+  motion: enMotion,
   nav: {
     home: "Home",
     library: "Library",
@@ -1290,7 +1292,8 @@ export const en: DeepPartial<Strings> = {
     },
     appearance: {
       performance: "Performance mode",
-      performanceHelp: "Turns off video, ember and blur effects. Recommended for slower computers.",
+      performanceHelp:
+        "Turns off video, ember and blur effects, and reduces animations. Recommended for slower computers.",
       particles: "Ember effect on the home page",
       sounds: "Interface sounds",
       volume: "Volume",

@@ -6,7 +6,7 @@
 //   computer's copy (sealed here, in the keychain) or from the machine (sealed on the site or
 //   another computer: sent sealed to a one-time key, never kept);
 // - a secret being typed (new, or again after "Değiştir"): the padlocked, masked field with its eye.
-import { LockSimple, LockSimpleOpen, PencilSimple } from "@phosphor-icons/react";
+import { LockSimple, PencilSimple } from "@phosphor-icons/react";
 import { Button, cn, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
 import { type Ref, useEffect, useId, useRef, useState } from "react";
@@ -327,6 +327,9 @@ export function WordsField({
         ) : (
           // In words, as on the site: an unnamed padlock beside every line said nothing. Pressed
           // while the line is secret (a password command stays so); no gold, it is not the action.
+          // Plain, a button like any other with a closed lock: pressing locks the line (a faint
+          // one with an open lock read as disabled and as "unlock"); secret, the quiet plate with a
+          // filled lock (SITE-W2B's twin, BETA-FB). The words sit right after the lock.
           <button
             type="button"
             aria-pressed={secret}
@@ -342,15 +345,11 @@ export function WordsField({
             className={cn(
               "chamfer inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[12.5px] font-medium transition-[background-color,color,transform,scale] duration-150 [--cut:5px] outline-none focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] disabled:cursor-default disabled:active:scale-100",
               secret
-                ? "bg-white/12 text-bone-50"
-                : "bg-white/5 text-ash-300 hover:bg-white/9 hover:text-bone-100",
+                ? "bg-white/12 text-bone-50 enabled:hover:bg-white/16"
+                : "bg-white/8 text-bone-100 hover:bg-white/12",
             )}
           >
-            {secret ? (
-              <LockSimple size={14} weight="fill" aria-hidden />
-            ) : (
-              <LockSimpleOpen size={14} aria-hidden />
-            )}
+            <LockSimple size={14} weight={secret ? "fill" : "regular"} aria-hidden />
             {secret ? t("cloudAfk.settings.secret.mark") : t("afkPanel.makeSecret")}
           </button>
         )}

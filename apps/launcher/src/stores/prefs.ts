@@ -25,6 +25,12 @@ interface PrefsState {
   /** The player switched Performance mode themselves: the launcher never changes or offers it. */
   perfTouched: boolean;
   perfAdvice: PerfAdvice;
+  /**
+   * Settings → Görünüm "Animasyonları azalt" (BETA-FB): fades only, as under the system's reduced
+   * motion; Performance mode does the same (main.tsx, @pl/ui reduced-motion). Stays on this
+   * computer, as the system's own setting does.
+   */
+  reduceMotion: boolean;
   particles: boolean;
   sounds: boolean;
   soundVolume: number;
@@ -100,6 +106,7 @@ export const usePrefs = create<PrefsState>()(
       performanceMode: false,
       perfTouched: false,
       perfAdvice: "todo",
+      reduceMotion: false,
       particles: true,
       sounds: true,
       soundVolume: 35,

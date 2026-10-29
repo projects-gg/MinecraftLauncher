@@ -32,7 +32,20 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "motion/react": {
+                "importNames": ["useReducedMotion"],
+                "message": "It reads the system's setting alone: use useReduceMotion from @pl/ui, which also follows the app's own (Animasyonları azalt, Performance mode)."
+              }
+            }
+          }
+        }
+      }
     }
   },
   "assist": {

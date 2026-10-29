@@ -29,6 +29,8 @@ import {
   toast,
   useInteractionMotion,
   useMotionPrefs,
+  useReduceMotion,
+  useSystemReducedMotion,
 } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -63,7 +65,7 @@ import { AccountsSection } from "./accounts-section";
 import { DataSection } from "./data-section";
 import { GraphicsSection } from "./graphics-section";
 import { JavaSection } from "./java-section";
-import { Row, SwapLine } from "./row";
+import { Row, SettingArrival, SwapLine, useSettingLanding } from "./row";
 
 const sections = [
   { id: "general", icon: Gear },
@@ -280,6 +282,75 @@ function FriendsButtonRow() {
   );
 }
 
+/** The system's name where its settings are meant ("Windows ayarlarında açık."). */
+const SYSTEM_NAMES = { windows: "Windows", macos: "macOS", linux: "Linux" } as const;
+
+/**
+ * "Animasyonları azalt" (BETA-FB): fades only, as the system's own reduced motion gives (@pl/ui
+ * reduced-motion). Performance mode and the system's setting hold it on, and the line under it
+ * says which (a switch held on without a reason read as broken; TASTE-SWEEP); otherwise the line
+ * says what it does, apart from Performance mode above it. One cell, so nothing below moves.
+ */
+function ReduceMotionRow() {
+  const { t } = useTranslation();
+  const p = usePrefs();
+  const system = useSystemReducedMotion();
+  const os = useMemo(() => detectOs(), []);
+  const kept = system || p.performanceMode;
+  return (
+    <Row
+      title={t("motion.title")}
+      help={
+        <SwapLine
+          lines={[
+            t("motion.help"),
+            t("motion.perfOn"),
+            t("motion.systemOn", { system: SYSTEM_NAMES[os] }),
+          ]}
+          active={system ? 2 : p.performanceMode ? 1 : 0}
+        />
+      }
+      setting="reduce-motion"
+    >
+      <Switch
+        checked={p.reduceMotion || kept}
+        onCheckedChange={(v) => p.set("reduceMotion", v)}
+        label={t("motion.title")}
+        hideLabel
+        disabled={kept}
+      />
+    </Row>
+  );
+}
+
+/**
+ * The embers on Home are ambient motion: Performance mode and reduced motion (the system's, or
+ * "Animasyonları azalt") stop them, so the switch shows them off and fixed then, with the reason
+ * under it (it showed them on in gold while Home had none; TASTE-SWEEP).
+ */
+function ParticlesRow() {
+  const { t } = useTranslation();
+  const p = usePrefs();
+  const reduced = useReduceMotion();
+  const held = p.performanceMode || reduced;
+  return (
+    <Row
+      title={t("settings.appearance.particles")}
+      help={
+        p.performanceMode ? t("motion.embersPerf") : reduced ? t("motion.embersReduced") : undefined
+      }
+    >
+      <Switch
+        checked={p.particles && !held}
+        onCheckedChange={(v) => p.set("particles", v)}
+        label={t("settings.appearance.particles")}
+        hideLabel
+        disabled={held}
+      />
+    </Row>
+  );
+}
+
 function Appearance() {
   const { t } = useTranslation();
   const p = usePrefs();
@@ -289,6 +360,7 @@ function Appearance() {
       <Row
         title={t("settings.appearance.performance")}
         help={t("settings.appearance.performanceHelp")}
+        setting="performance"
       >
         <Switch
           checked={p.performanceMode}
@@ -297,16 +369,8 @@ function Appearance() {
           hideLabel
         />
       </Row>
-      <Row title={t("settings.appearance.particles")}>
-        {/* Performance mode turns the embers off: the switch says so while it is on. */}
-        <Switch
-          checked={p.particles && !p.performanceMode}
-          onCheckedChange={(v) => p.set("particles", v)}
-          label={t("settings.appearance.particles")}
-          hideLabel
-          disabled={p.performanceMode}
-        />
-      </Row>
+      <ReduceMotionRow />
+      <ParticlesRow />
       <Row title={t("settings.appearance.sounds")}>
         <Switch
           checked={p.sounds}
@@ -615,11 +679,15 @@ function GameDefaults() {
 export function SettingsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { section?: string };
+  const search = useSearch({ strict: false }) as { section?: string; focus?: string };
   const friendsOn = useSocialUi((s) => s.view.enabled);
   const shown = sections.filter((s) => s.id !== "friends" || friendsOn);
   const active = (shown.find((s) => s.id === search.section)?.id ?? "general") as SectionId;
   const glide = useMotionPrefs().layout;
+  // A row asked for by name (the command palette's settings rows): the page lands on it.
+  const arrival = useSettingLanding(search.focus, () => {
+    void navigate({ to: "/settings", search: { section: active }, replace: true });
+  });
 
   const body: Record<SectionId, ReactNode> = {
     general: <General />,
@@ -685,7 +753,7 @@ export function SettingsPage() {
           <h2 className="mb-1 font-display text-section font-semibold text-bone-50">
             {sectionTitle(t, active)}
           </h2>
-          {body[active]}
+          <SettingArrival.Provider value={arrival}>{body[active]}</SettingArrival.Provider>
         </div>
       </section>
     </div>
