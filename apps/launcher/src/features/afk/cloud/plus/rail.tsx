@@ -277,12 +277,12 @@ function Bar({ label, pct }: { label: string; pct: number }) {
       aria-valuenow={Math.round(value)}
       className="relative h-1 overflow-hidden rounded-full bg-white/8"
     >
+      {/* Bone, as the site's: gold is the screen's one action. Used up, a dimmer full bar beside
+          the word for it (a bright full one read as a goal reached; TOPUP's look). */}
       <div
         className={cn(
           "absolute inset-0 rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          value >= 100
-            ? "bg-gold-300"
-            : "bg-[linear-gradient(90deg,var(--color-gold-600),var(--color-gold-400))]",
+          value >= 100 ? "bg-ash-400/60" : "bg-bone-100/75",
         )}
         style={{ transform: `translateX(${value - 100}%)` }}
       />
@@ -298,7 +298,9 @@ function Window({ title, pct, resetAt }: { title: string; pct: number; resetAt: 
       <p className="flex items-baseline justify-between gap-2 text-[12.5px]">
         <span className="text-bone-100">{title}</span>
         <span className="text-ash-300 tabular-nums">
-          {t("afkPlus.quota.used", { percent: formatPercent(pct) })}
+          {pct >= 100
+            ? t("afkPlus.quota.usedUp")
+            : t("afkPlus.quota.used", { percent: formatPercent(pct) })}
         </span>
       </p>
       <Bar label={title} pct={pct} />
