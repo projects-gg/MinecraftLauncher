@@ -122,11 +122,12 @@ export const trAfkPlus = {
     outage: "Yapay zekâya şu an ulaşılamıyor, hesabın AFK'da kalıyor",
     quota: "Kontörün bitti, hesabın AFK'da kalıyor",
     quotaUntil: "Kontörün bitti, {{when}} yeniden cevap verir",
-    // Which window is full, when the allowance stopped at one of them.
-    quotaW5h: "5 saatlik sınır doldu",
-    quotaW5hUntil: "5 saatlik sınır doldu, {{when}} yenilenir",
-    quotaWeek: "Haftalık sınır doldu",
-    quotaWeekUntil: "Haftalık sınır doldu, {{when}} yenilenir",
+    // Which window ran out, when the allowance stopped at one of them: kontör, the site's word for
+    // it ("sınır" is the spending limits'; TOPUP's look).
+    quotaW5h: "5 saatlik kontörün bitti",
+    quotaW5hUntil: "5 saatlik kontörün bitti, {{when}} yenilenir",
+    quotaWeek: "Haftalık kontörün bitti",
+    quotaWeekUntil: "Haftalık kontörün bitti, {{when}} yenilenir",
     // Under the state while the allowance is used up (cloud-afk README "AFK+ quotas").
     quotaNote:
       "Şimdilik yalnız hazır mesajlarla cevap veriyor. Hesabın AFK'da kalıyor, bekleyen alımları onaylayabilirsin.",
@@ -195,6 +196,8 @@ export const trAfkPlus = {
     w5h: "5 saatlik",
     week: "Haftalık",
     used: "{{percent}} kullanıldı",
+    // A window used up: the word, as on the site (the line under it says when it renews).
+    usedUp: "Bitti",
     resets: "{{when}} yenilenir",
     notStarted: "İlk kullanımda başlar",
     replies: "Yaklaşık {{count}} cevap kaldı",

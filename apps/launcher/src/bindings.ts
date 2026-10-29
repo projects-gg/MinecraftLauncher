@@ -425,7 +425,7 @@ export const commands = {
 	 */
 	cloudAfkSend: (id: string, line: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_send", { id, line })),
 	/**  The machine's masked log before `before` (Unix seconds; none: the last hour). */
-	cloudAfkLogs: (id: string, before: number | null) => typedError<CloudLogPage, CmdError>(__TAURI_INVOKE("cloud_afk_logs", { id, before })),
+	cloudAfkLogs: (id: string, before: number | null) => typedError<CloudLogPage_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_logs", { id, before })),
 	/**  The console is on screen: its lines and state stream as `cloud-afk-live`. */
 	cloudAfkWatch: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_watch", { id })),
 	/**  The console left the screen (closed, the window hidden): the socket closes with the last one. */
@@ -2382,6 +2382,11 @@ export type CloudAccountCount = {
 export type CloudAccountFeatures = {
 	inventory?: CloudInventoryFeature,
 	consoleKinds?: boolean,
+	/**
+	 *  Console lines in the game's colours, with their hovers and clicks (CONSOLE-COLOR): Studio's
+	 *  switch while the account's machine gives them. Off from a service before it.
+	 */
+	consoleLooks?: boolean,
 	placeholders?: boolean,
 	/**
 	 *  Console kinds are on, but this account's player, private or server rules still match the
@@ -2554,6 +2559,11 @@ export type CloudCanBuy = {
 	until: number | null,
 };
 
+export type CloudClick = {
+	a: string,
+	v: string,
+};
+
 /**
  *  A command row of the view. `on` is `join`, `start`, `reconnect` (with `delay`), `interval`
  *  (with `every`) or `daily` (with `at`), kept as text.
@@ -2596,14 +2606,66 @@ export type CloudConsoleFile = {
  *  With console kinds (CAFK-FEAT) `c` says what it is (`chat`, `pm`, `sys`, `title`, `cli`, `err`;
  *  kept as text, an unknown one reads as `cli`), `who` the other player of a chat or private line,
  *  `goto: "inventory"` a machine line the console may link to the inventory. Older lines have none.
+ * 
+ *  With console looks (CONSOLE-COLOR) `st` gives the line's parts in the game's colours and flags
+ *  and `ev` what a part does when pointed at or clicked. Both are shown only as checked by the
+ *  view (`@pl/ui/console`); `text` stays the line for search, copy and everything else. A part or
+ *  event this launcher cannot read leaves the line without them, never without the line.
  */
-export type CloudConsoleLine = {
+export type CloudConsoleLine = CloudConsoleLine_Serialize | CloudConsoleLine_Deserialize;
+
+/**
+ *  One masked console line: `k` is `n` (normal), `e` (a client error) or `s` (a command row).
+ *  With console kinds (CAFK-FEAT) `c` says what it is (`chat`, `pm`, `sys`, `title`, `cli`, `err`;
+ *  kept as text, an unknown one reads as `cli`), `who` the other player of a chat or private line,
+ *  `goto: "inventory"` a machine line the console may link to the inventory. Older lines have none.
+ * 
+ *  With console looks (CONSOLE-COLOR) `st` gives the line's parts in the game's colours and flags
+ *  and `ev` what a part does when pointed at or clicked. Both are shown only as checked by the
+ *  view (`@pl/ui/console`); `text` stays the line for search, copy and everything else. A part or
+ *  event this launcher cannot read leaves the line without them, never without the line.
+ */
+export type CloudConsoleLine_Deserialize = {
 	at: number,
 	text: string,
 	k: string,
 	c: string | null,
 	who: string | null,
 	goto: string | null,
+	st?: CloudSpan[] | null,
+	ev?: CloudLineEvent_Deserialize[] | null,
+	/**
+	 *  A private line's direction when the machine knows it: `in` (to the player) or `out` (the
+	 *  player's own reply); kept as text.
+	 */
+	dir?: string | null,
+};
+
+/**
+ *  One masked console line: `k` is `n` (normal), `e` (a client error) or `s` (a command row).
+ *  With console kinds (CAFK-FEAT) `c` says what it is (`chat`, `pm`, `sys`, `title`, `cli`, `err`;
+ *  kept as text, an unknown one reads as `cli`), `who` the other player of a chat or private line,
+ *  `goto: "inventory"` a machine line the console may link to the inventory. Older lines have none.
+ * 
+ *  With console looks (CONSOLE-COLOR) `st` gives the line's parts in the game's colours and flags
+ *  and `ev` what a part does when pointed at or clicked. Both are shown only as checked by the
+ *  view (`@pl/ui/console`); `text` stays the line for search, copy and everything else. A part or
+ *  event this launcher cannot read leaves the line without them, never without the line.
+ */
+export type CloudConsoleLine_Serialize = {
+	at: number,
+	text: string,
+	k: string,
+	c: string | null,
+	who: string | null,
+	goto: string | null,
+	st?: CloudSpan[] | null,
+	ev?: CloudLineEvent_Serialize[] | null,
+	/**
+	 *  A private line's direction when the machine knows it: `in` (to the player) or `out` (the
+	 *  player's own reply); kept as text.
+	 */
+	dir?: string | null,
 };
 
 /**
@@ -2862,6 +2924,32 @@ export type CloudHold_Serialize =
  */
 ({ kind: "cause"; cause: string; at: number; row: string | null }) & { auto?: never; case?: never; category?: never; mode?: never; reason?: never; since?: never; until?: never } | ({ kind: "other" }) & { at?: never; auto?: never; case?: never; category?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never; until?: never };
 
+/**  A part's hover: the server's text, an item (as the inventory shows it) or an entity. */
+export type CloudHover = CloudHover_Serialize | CloudHover_Deserialize;
+
+/**  A hovered entity: its type's name in both languages, its own name if it has one. */
+export type CloudHoverEntity = CloudHoverEntity_Serialize | CloudHoverEntity_Deserialize;
+
+/**  A hovered entity: its type's name in both languages, its own name if it has one. */
+export type CloudHoverEntity_Deserialize = {
+	label?: CloudLocalized | null,
+	name?: string | null,
+	st?: CloudSpan[] | null,
+};
+
+/**  A hovered entity: its type's name in both languages, its own name if it has one. */
+export type CloudHoverEntity_Serialize = {
+	label?: CloudLocalized | null,
+	name?: string | null,
+	st?: CloudSpan[] | null,
+};
+
+/**  A part's hover: the server's text, an item (as the inventory shows it) or an entity. */
+export type CloudHover_Deserialize = ({ text: string; st?: CloudSpan[] | null }) & { entity?: never; item?: never } | ({ item: CloudInvItem }) & { entity?: never; st?: never; text?: never } | ({ entity: CloudHoverEntity_Deserialize }) & { item?: never; st?: never; text?: never };
+
+/**  A part's hover: the server's text, an item (as the inventory shows it) or an entity. */
+export type CloudHover_Serialize = ({ text: string; st?: CloudSpan[] | null }) & { entity?: never; item?: never } | ({ item: CloudInvItem }) & { entity?: never; st?: never; text?: never } | ({ entity: CloudHoverEntity_Serialize }) & { item?: never; st?: never; text?: never };
+
 export type CloudInvDurability = {
 	left?: number,
 	max?: number,
@@ -3009,6 +3097,30 @@ export type CloudLimits = {
 	consoleLinesPerMinute?: number,
 };
 
+/**
+ *  What a part does: a click (`a`: `run_command`, `suggest_command`, `open_url`,
+ *  `copy_to_clipboard`; `v` its command, address or text) and what pointing at it shows.
+ */
+export type CloudLineEvent = CloudLineEvent_Serialize | CloudLineEvent_Deserialize;
+
+/**
+ *  What a part does: a click (`a`: `run_command`, `suggest_command`, `open_url`,
+ *  `copy_to_clipboard`; `v` its command, address or text) and what pointing at it shows.
+ */
+export type CloudLineEvent_Deserialize = {
+	click?: CloudClick | null,
+	hover?: CloudHover_Deserialize | null,
+};
+
+/**
+ *  What a part does: a click (`a`: `run_command`, `suggest_command`, `open_url`,
+ *  `copy_to_clipboard`; `v` its command, address or text) and what pointing at it shows.
+ */
+export type CloudLineEvent_Serialize = {
+	click?: CloudClick | null,
+	hover?: CloudHover_Serialize | null,
+};
+
 /**  What the socket tells the launcher. */
 export type CloudLiveEvent = CloudLiveEvent_Serialize | CloudLiveEvent_Deserialize;
 
@@ -3022,7 +3134,7 @@ export type CloudLiveEvent_Deserialize =
  *  Masked console lines of a watched account. `snapshot`: the recent lines right after
  *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
  */
-({ kind: "lines"; acct: string; lines: CloudConsoleLine[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "lines"; acct: string; lines: CloudConsoleLine_Deserialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
 /**  The machine connected or went away. */
 ({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
@@ -3095,7 +3207,7 @@ export type CloudLiveEvent_Serialize =
  *  Masked console lines of a watched account. `snapshot`: the recent lines right after
  *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
  */
-({ kind: "lines"; acct: string; lines: CloudConsoleLine[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "lines"; acct: string; lines: CloudConsoleLine_Serialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
 /**  The machine connected or went away. */
 ({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
@@ -3197,8 +3309,17 @@ export type CloudLocalized = {
 };
 
 /**  `GET /accounts/:id/logs`: oldest first; `next` continues. */
-export type CloudLogPage = {
-	lines: CloudConsoleLine[],
+export type CloudLogPage = CloudLogPage_Serialize | CloudLogPage_Deserialize;
+
+/**  `GET /accounts/:id/logs`: oldest first; `next` continues. */
+export type CloudLogPage_Deserialize = {
+	lines: CloudConsoleLine_Deserialize[],
+	next: string | null,
+};
+
+/**  `GET /accounts/:id/logs`: oldest first; `next` continues. */
+export type CloudLogPage_Serialize = {
+	lines: CloudConsoleLine_Serialize[],
 	next: string | null,
 };
 
@@ -3590,6 +3711,13 @@ export type CloudSession =
 "signedOut" | "signedIn" | 
 /**  Signed in, but the accounts could not be read now. */
 "failed";
+
+/**
+ *  One part of a line (`[n, code]`, or `[n, code, e]` with an event): its length in UTF-16 code
+ *  units, its colour (`0`–`f`, `#rrggbb` or none) and flags (`k l m n o`), the index of its event
+ *  in `ev`.
+ */
+export type CloudSpan = [number, string] | [number, string, number];
 
 /**  `remaining` only below Studio's "Son N yer" threshold. */
 export type CloudStock = {

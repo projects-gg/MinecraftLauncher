@@ -1,0 +1,46 @@
+/* A console part with a hover or a click (CONSOLE-COLOR): the game's words with a quiet dotted
+   line under them, in their own colour; a click's part a button that reads as text, filled under
+   the pointer, a command or a link with a small line icon after it (TASTE-SWEEP). */
+.pl-con-hint {
+  text-decoration-style: dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+[data-pl-con-act] {
+  cursor: pointer;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+[data-pl-con-act]:hover {
+  text-decoration-color: currentColor;
+  background-color: color-mix(in srgb, currentColor 16%, transparent);
+}
+.pl-con-act-icon {
+  display: inline-block;
+  margin-left: 0.25em;
+  vertical-align: -0.1em;
+  opacity: 0.8;
+}
+/* A finger's target (about 44 px tall) without moving a word: the part's own box grows unseen. */
+@media (pointer: coarse) {
+  [data-pl-con-act] {
+    position: relative;
+  }
+  [data-pl-con-act]::after {
+    content: "";
+    position: absolute;
+    inset: -12px -6px;
+  }
+}
+/* Reduced motion (the root's mark: the system's setting or the app's own, reduced-motion.ts). */
+:where(:root[data-motion="reduce"]) [data-pl-con-act] {
+  transition: none;
+}
+[data-pl-con-act]:focus-visible {
+  outline: 2px solid var(--color-gold-300);
+  outline-offset: 1px;
+}
