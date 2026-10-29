@@ -34,6 +34,7 @@ pub mod server;
 pub mod shortcut;
 pub mod skins;
 pub mod social;
+pub mod subservers;
 pub mod troubleshoot;
 pub mod updates;
 pub mod versions;

@@ -24,6 +24,8 @@ import { useTranslation } from "react-i18next";
 import { AccountFace, type FaceAccount } from "@/features/accounts/account-face";
 import { useAccounts } from "@/features/accounts/use-accounts";
 import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launch";
+import { RoutePicker } from "@/features/autojoin/route-picker";
+import { useRoute } from "@/features/autojoin/use-route";
 import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
 import { helpsWithLaunchError } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
@@ -569,6 +571,7 @@ function StatusArea({
                   checked={autoJoin}
                   onCheckedChange={setAutoJoin}
                   address={selected.autoJoin}
+                  instance={selected}
                 />
               ) : null}
             </div>
@@ -582,19 +585,34 @@ function StatusArea({
 /**
  * "Doğrudan sunucuya bağlan" beside OYNA: a bone switch, so OYNA stays the bar's one gold, and its
  * words on one line (design.md §3; QA-TASTE). A narrow bar (1024 px) says it shorter and drops the
- * address (it is in the instance's settings), so "who is in game" keeps a whole name.
+ * address (it is in the instance's settings), so "who is in game" keeps a whole name. While Studio
+ * offers Projects' sub-servers (AUTOJOIN), the address line picks where the join goes after the
+ * lobby's login ("play.projects.gg → SkyBlock"); the narrow bar keeps only "SkyBlock" ("Lobi").
  */
 function AutoJoinSwitch({
   checked,
   onCheckedChange,
   address,
+  instance,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   address: string;
+  instance: InstanceSummary;
 }) {
   const { t } = useTranslation();
   const id = useId();
+  const { rows, current } = useRoute(instance);
+  const words = (
+    <>
+      <span className="block text-[13px] font-medium text-bone-100 @max-[560px]/bar:hidden">
+        {t("play.autoJoin")}
+      </span>
+      <span className="hidden text-[13px] font-medium text-bone-100 @max-[560px]/bar:block">
+        {t("qaFix.bar.autoJoinShort")}
+      </span>
+    </>
+  );
   return (
     <div className="flex shrink-0 items-center gap-3">
       <Switch
@@ -606,20 +624,30 @@ function AutoJoinSwitch({
         tone="bone"
         describedBy={`${id}-address`}
       />
-      <label htmlFor={id} className="cursor-pointer whitespace-nowrap select-none">
-        <span className="block text-[13px] font-medium text-bone-100 @max-[560px]/bar:hidden">
-          {t("play.autoJoin")}
-        </span>
-        <span className="hidden text-[13px] font-medium text-bone-100 @max-[560px]/bar:block">
-          {t("qaFix.bar.autoJoinShort")}
-        </span>
-        <span
-          id={`${id}-address`}
-          className="block text-[12px] text-ash-400 @max-[560px]/bar:hidden"
-        >
-          {address}
-        </span>
-      </label>
+      {current ? (
+        <div className="whitespace-nowrap select-none">
+          <label htmlFor={id} className="block cursor-pointer">
+            {words}
+          </label>
+          <RoutePicker
+            id={`${id}-address`}
+            instance={instance}
+            rows={rows}
+            current={current}
+            on={checked}
+          />
+        </div>
+      ) : (
+        <label htmlFor={id} className="cursor-pointer whitespace-nowrap select-none">
+          {words}
+          <span
+            id={`${id}-address`}
+            className="block text-[12px] text-ash-400 @max-[560px]/bar:hidden"
+          >
+            {address}
+          </span>
+        </label>
+      )}
     </div>
   );
 }
