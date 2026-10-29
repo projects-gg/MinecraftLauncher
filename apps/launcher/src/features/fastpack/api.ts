@@ -1,3 +1,4 @@
+import { queryOptions } from "@tanstack/react-query";
 import { commands, type FastPacksView } from "@/bindings";
 import { isTauri } from "@/lib/platform";
 import { mockFastPack } from "./mock";
@@ -24,3 +25,15 @@ const tauriFastPack: FastPackApi = {
 };
 
 export const fastPackApi: FastPackApi = isTauri() ? tauriFastPack : mockFastPack;
+
+/**
+ * The row's view for the install Play opens. The command bar loads it ahead and the row reads the
+ * same cache entry, so Genel opens with the row already in place (TASTE-SWEEP FASTPACK r1).
+ */
+export function fastPackStateQuery(instanceId: string | null) {
+  return queryOptions({
+    queryKey: ["fast-packs", instanceId],
+    queryFn: () => fastPackApi.state(instanceId),
+    staleTime: 60_000,
+  });
+}

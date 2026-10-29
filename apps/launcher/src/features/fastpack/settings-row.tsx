@@ -5,7 +5,7 @@ import { usePlayInstance } from "@/features/settings/graphics-section";
 import { Row } from "@/features/settings/row";
 import { api, type InstanceSummary } from "@/lib/api";
 import { usePrefs } from "@/stores/prefs";
-import { fastPackApi } from "./api";
+import { fastPackStateQuery } from "./api";
 import { fastPackLine, fastPackRow } from "./line";
 
 /** Before the instance list is read. */
@@ -17,7 +17,9 @@ const NO_INSTANCES: InstanceSummary[] = [];
  * config's `features.fastPacks` is on. Its one place: no mod list shows the mods. The line under
  * it says what it does; for the install Play opens (the command bar's rule) where it does
  * nothing, the reason takes the line's place and the switch is held off and dimmed (the stored
- * preference stays for the installs where it works).
+ * preference stays for the installs where it works). The view is the command bar's, read from
+ * the cache, and only asked once the install list is read: before that it would answer for no
+ * install and show a wrong first frame.
  */
 export function FastPackRow() {
   const { t } = useTranslation();
@@ -28,11 +30,9 @@ export function FastPackRow() {
     queryFn: () => api.instances(),
   });
   const { instance: play } = usePlayInstance(instances ?? NO_INSTANCES);
-  const playId = play?.id ?? null;
   const { data: view } = useQuery({
-    queryKey: ["fast-packs", playId],
-    queryFn: () => fastPackApi.state(playId),
-    staleTime: 60_000,
+    ...fastPackStateQuery(play?.id ?? null),
+    enabled: instances !== undefined,
   });
   if (!view?.shown) return null;
   const row = fastPackRow(on, fastPackLine(view), play?.mcVersion);
