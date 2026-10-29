@@ -2465,7 +2465,8 @@ pub(crate) mod tests {
                 "reads",
                 "links",
                 "people",
-                "people2"
+                "people2",
+                "people3"
             ]
         );
         assert!(scene.offers(|e| e.typing));

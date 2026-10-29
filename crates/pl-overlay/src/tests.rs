@@ -884,7 +884,8 @@ async fn chat2_from_the_panel_and_to_it() {
             "reads",
             "links",
             "people",
-            "people2"
+            "people2",
+            "people3"
         ])
     );
     let snapshot = game.next_of("snapshot").await;
