@@ -99,14 +99,20 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
       min:
         issue.field === "cooldown"
           ? (view.limits.minRuleCooldownSec ?? 10)
-          : (view.limits.minIntervalSec ?? 60),
+          : // The interval's fields are in minutes (as on the site): its shortest is said so too.
+            Math.max(1, Math.ceil((view.limits.minIntervalSec ?? 60) / 60)),
     });
   };
 }
 
+/** An interval's seconds as the minutes its fields show (the config keeps seconds). */
+function toMinutes(seconds: number): number {
+  return Number.isFinite(seconds) ? Math.round((seconds / 60) * 100) / 100 : seconds;
+}
+
 /**
- * Whole seconds, keeping what is typed (NaN while it is not a number, which the checks catch), with
- * the unit inside the field: the desktop settings' number field.
+ * A whole number (seconds, or an interval's minutes), keeping what is typed (NaN while it is not a
+ * number, which the checks catch), with the unit inside the field: the desktop settings' number field.
  */
 function NumberField({
   label,
@@ -455,7 +461,7 @@ function Times({
           <Input
             aria-label={t("cloudAfk.settings.commands.addTime")}
             value={adding}
-            placeholder="08:00"
+            placeholder={t("cloudAfk.settings.commands.timePlaceholder")}
             maxLength={5}
             inputMode="numeric"
             invalid={invalid}
@@ -574,17 +580,20 @@ function CommandRow({
           />
           {on === "interval" ? (
             <div className="flex items-center gap-1.5">
+              {/* In minutes, as the site says it ("5 dk ile 10 dk arası"): the config keeps
+                  seconds, the fields show and take whole minutes. */}
               <NumberField
                 label={t("cloudAfk.settings.commands.everyMin")}
                 hideLabel
-                value={command.every?.min ?? minInterval}
-                unit={t("cloudAfk.settings.seconds")}
+                value={toMinutes(command.every?.min ?? minInterval)}
+                unit={t("cloudAfk.settings.minutes")}
                 className="w-[110px]"
-                onChange={(min) =>
-                  onChange({ ...command, every: { min, max: command.every?.max ?? min } })
-                }
+                onChange={(minutes) => {
+                  const min = minutes * 60;
+                  onChange({ ...command, every: { min, max: command.every?.max ?? min } });
+                }}
               />
-              {/* "300 sn ile 600 sn arası", as the desktop panel's waits (a bare dash did not say
+              {/* "5 dk ile 10 dk arası", as the desktop panel's waits (a bare dash did not say
                   it is a random wait between the two; AFK-CLEAR). */}
               <span aria-hidden className="text-[13px] text-ash-300">
                 {t("afkPanel.rangeJoin")}
@@ -592,12 +601,13 @@ function CommandRow({
               <NumberField
                 label={t("cloudAfk.settings.commands.everyMax")}
                 hideLabel
-                value={command.every?.max ?? minInterval}
-                unit={t("cloudAfk.settings.seconds")}
+                value={toMinutes(command.every?.max ?? minInterval)}
+                unit={t("cloudAfk.settings.minutes")}
                 className="w-[110px]"
-                onChange={(max) =>
-                  onChange({ ...command, every: { min: command.every?.min ?? max, max } })
-                }
+                onChange={(minutes) => {
+                  const max = minutes * 60;
+                  onChange({ ...command, every: { min: command.every?.min ?? max, max } });
+                }}
               />
               {t("afkPanel.rangeAfter") ? (
                 <span aria-hidden className="text-[13px] text-ash-300">

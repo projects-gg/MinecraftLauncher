@@ -92,10 +92,12 @@ function Pick({
               className={cn(
                 "relative flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-3 py-2.5 text-left outline-none",
                 "bg-white/[0.03] ring-1 transition-[background-color,box-shadow,transform,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.985]",
-                on ? "bg-gold-500/[0.07] ring-gold-400/40" : "ring-white/7 hover:bg-white/[0.05]",
+                // The chosen account is the quiet plate with bone brackets (design.md §6): the
+                // dialog's gold is its own button.
+                on ? "bg-white/[0.06] ring-white/25" : "ring-white/7 hover:bg-white/[0.05]",
               )}
             >
-              {on ? <PixelBrackets size={8} className="-inset-0.5" /> : null}
+              {on ? <PixelBrackets size={8} tone="bone" className="-inset-0.5" /> : null}
               <AfkHead nickname={account.name} size={32} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-medium text-bone-50">

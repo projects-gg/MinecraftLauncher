@@ -37,18 +37,16 @@ function Section({
   );
 }
 
-/** Chips that settle one after another (short, capped stagger). */
+/** Chips that settle one after another (short, capped stagger), quiet: new is not a second gold. */
 function ChipRow({
   names,
   prefs,
   delay,
-  tone,
   children,
 }: {
   names: string[];
   prefs: MotionPrefs;
   delay: number;
-  tone?: "gold";
   children?: ReactNode;
 }) {
   return (
@@ -64,7 +62,7 @@ function ChipRow({
           }}
           className="inline-flex"
         >
-          <Chip tone={tone}>{name}</Chip>
+          <Chip>{name}</Chip>
         </motion.span>
       ))}
       {children}
@@ -307,7 +305,7 @@ export function FirstVisitResult({
     blocks.push(
       <Section key="new" prefs={prefs} index={at}>
         <p className="mb-1.5 text-[12.5px] text-ash-400">{t("modCenter.switch.newList")}</p>
-        <ChipRow names={result.newItems} prefs={prefs} delay={0.08 + stagger(at, 0.06)} tone="gold">
+        <ChipRow names={result.newItems} prefs={prefs} delay={0.08 + stagger(at, 0.06)}>
           {onOpenModCenter ? (
             <Button size="sm" variant="ghost" onClick={onOpenModCenter}>
               {t("modCenter.switch.openModCenter")}

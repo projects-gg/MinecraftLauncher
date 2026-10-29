@@ -319,7 +319,7 @@ export function AccountCard({
                         exit={calm({ opacity: 0, scale: 0.9, transition: { duration: 0.12 } })}
                         transition={{ duration: 0.24, ease: easeOutExpo }}
                       >
-                        <Chip tone="gold">{t("accounts.center.active")}</Chip>
+                        <Chip>{t("accounts.center.active")}</Chip>
                       </motion.span>
                     ) : null}
                   </AnimatePresence>

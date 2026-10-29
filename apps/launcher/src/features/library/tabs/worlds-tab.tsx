@@ -802,17 +802,19 @@ function RestoreDialog({
                 onClick={() => setReplace(option.value)}
                 className={cn(
                   "flex w-full cursor-pointer items-start gap-3 rounded-[var(--radius-panel)] px-3.5 py-3 text-left ring-1 transition-colors ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
-                  checked ? "bg-gold-500/10 ring-gold-400/50" : "ring-white/10 hover:bg-white/4",
+                  // The chosen row is the quiet plate with a bone dot, as every radio row (design.md
+                  // §6): the dialog's gold is its own button.
+                  checked ? "bg-white/[0.06] ring-white/25" : "ring-white/10 hover:bg-white/4",
                 )}
               >
                 <span
                   aria-hidden
                   className={cn(
                     "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full ring-2",
-                    checked ? "ring-gold-400" : "ring-ash-500",
+                    checked ? "ring-bone-100" : "ring-ash-500",
                   )}
                 >
-                  {checked ? <span className="size-2 rounded-full bg-gold-400" /> : null}
+                  {checked ? <span className="size-2 rounded-full bg-bone-50" /> : null}
                 </span>
                 <span>
                   <span className="block text-[13.5px] font-semibold text-bone-50">
