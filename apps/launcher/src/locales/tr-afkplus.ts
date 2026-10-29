@@ -156,12 +156,15 @@ export const trAfkPlus = {
   },
   panel: {
     title: "{{name}} için ProBot AI",
+    // The site's names in the site's order (PLUS-ACTIVITY, SETUP-UX): the feed is "Etkinlik", the
+    // week's statement "Özet". The site holds the conversations inside Etkinlik; here they keep
+    // their own place until the launcher's view takes them in.
     sections: {
-      feed: "Akış",
+      feed: "Etkinlik",
       messages: "Mesajlar",
       orders: "Siparişler",
       settings: "Ayarlar",
-      report: "Rapor",
+      report: "Özet",
     },
     sectionsLabel: "AFK+ bölümleri",
     loadFailed: "AFK+ ayarları yüklenemedi.",

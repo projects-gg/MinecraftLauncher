@@ -278,7 +278,7 @@ function mockMinecraft(): MinecraftNewsItem[] {
       title: "Minecraft 26.1 çıktı: Tiny Takeover",
       summary:
         "Yavru yaratıklar yenilenen görünümleri ve sesleriyle karşında. Golden Dandelion ile büyümelerini durdurabilir, Name Tag eşyasını artık kendin üretebilirsin.",
-      body: "Tiny Takeover güncellemesiyle yavru yaratıklar yepyeni görünümlere kavuşuyor. Yeni eşyalar ve seslerle dünyan artık çok daha sevimli bir hal alıyor.\n\n## Öne çıkanlar\n\n- Çoğu yavru yaratığın modeli ve dokusu baştan aşağı yenilendi.\n- **Golden Dandelion** eklendi; Dandelion ve Gold Nugget ile üretilen bu çiçekle yavru yaratıkların büyümesini durdurabilir veya yeniden başlatabilirsin.\n- **Name Tag** artık 1 Paper ve 1 metal parçacığı ile üretilebiliyor.\n- Yavru kurt, kedi, domuz, at ve tavuklar için yeni sevimli sesler geldi.",
+      body: "Tiny Takeover güncellemesiyle yavru yaratıklar yepyeni görünümlere kavuşuyor. Yeni eşyalar ve seslerle dünyan artık çok daha sevimli bir hal alıyor.\n\n## Öne çıkanlar\n\n- Çoğu yavru yaratığın modeli ve dokusu baştan aşağı yenilendi.\n- **Golden Dandelion** eklendi. Dandelion ve Gold Nugget ile üretilen bu çiçekle yavru yaratıkların büyümesini durdurabilir veya yeniden başlatabilirsin.\n- **Name Tag** artık 1 Paper ve 1 metal parçacığı ile üretilebiliyor.\n- Yavru kurt, kedi, domuz, at ve tavuklar için yeni sevimli sesler geldi.",
       coverUrl: cover("cover-11-scaffold"),
       coverBlurhash: "LRG?R]}p^4xE^5$$soWV9}IsEhR,",
       publishedAt: hoursAgo(24 * 24),
@@ -859,7 +859,7 @@ function fullDetailFor(summary: InstanceSummary): InstanceDetail {
       postExit: "",
       wrapper: "",
       notes: summary.managed
-        ? "Resmî paket. Mod listesi otomatik güncellenir; eklediğin modlara dokunulmaz."
+        ? "Resmî paket. Mod listesi otomatik güncellenir. Eklediğin modlara dokunulmaz."
         : "",
     },
     mods: [

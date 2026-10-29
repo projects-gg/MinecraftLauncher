@@ -132,11 +132,11 @@ export const enAfkPlus = {
   panel: {
     title: "{{name}}'s ProBot AI",
     sections: {
-      feed: "Feed",
+      feed: "Activity",
       messages: "Messages",
       orders: "Orders",
       settings: "Settings",
-      report: "Report",
+      report: "Summary",
     },
     sectionsLabel: "AFK+ sections",
     loadFailed: "Couldn't load the AFK+ settings.",
