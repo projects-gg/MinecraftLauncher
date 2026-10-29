@@ -156,9 +156,9 @@ function StateBlock({
       {action ? (
         <Button
           size="sm"
-          // Never gold on a card (one gold per screen, design.md §2): a start that waits for the
-          // player (the first one, after a safety stop or a server mute) is a bone plate; their own
-          // stop, and a start after it, are quiet.
+          // Never gold in the rail: the panel's gold is its save button (one gold per screen,
+          // design.md §2). A start that waits for the player (the first one, after a safety stop or
+          // a server mute) is a bone plate; their own stop, and a start after it, are quiet.
           variant={action === "start" && state.tone !== "muted" ? "bone" : "secondary"}
           // A stop, not a pause: it stays off until the player starts it again (the README's `player`).
           icon={
