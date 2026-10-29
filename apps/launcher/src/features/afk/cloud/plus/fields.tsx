@@ -5,7 +5,7 @@
 import { cn } from "@pl/ui";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { inputClass } from "../../settings/controls";
+import { inputClass, useOneGold } from "../../settings/controls";
 import { readTime } from "./model";
 import { amountWords, currentLang, formatAmount, parseAmount } from "./words";
 
@@ -140,19 +140,21 @@ export function AmountField({
 
 /**
  * A quiet text action ("Elle ekle", "Envanterden seç", "Harcananı sıfırla"). `bone` where gold
- * would be a second loud thing beside the card's answer ("Sınırlara git" on an approval).
+ * would be a second loud thing beside the card's answer ("Sınırlara git" on an approval), and
+ * always under the one-gold rule (`OneGold`: the setup steps and the question rows).
  */
 export function QuietLink({
   children,
   onClick,
   disabled = false,
-  tone = "gold",
+  tone: asked = "gold",
 }: {
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   tone?: "gold" | "bone";
 }) {
+  const tone = useOneGold() ? "bone" : asked;
   return (
     <button
       type="button"

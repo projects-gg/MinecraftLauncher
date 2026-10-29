@@ -803,7 +803,7 @@ export const enAfkPlus = {
     blockedRemove: "Unblock {{name}}",
     blockedFormat: "3-16 characters: letters, digits or underscores.",
     blockedDuplicate: "This player is already on the list.",
-    history: "History",
+    history: "Settings history",
     saved: "AFK+ settings saved",
     saveFailed: "Couldn't save the setting.",
     save: "Save",

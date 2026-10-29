@@ -10,6 +10,7 @@ import { cn, easeOutExpo, SwapLabel, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { OneGold } from "../../settings/controls";
 import { ItemSlot } from "./item-slot";
 
 const GLIDE = { layout: { duration: 0.3, ease: easeOutExpo } };
@@ -32,7 +33,8 @@ export function QuestionList({
           className,
         )}
       >
-        {children}
+        {/* The screen's gold is its save: switches and quiet links here are bone (design.md §2). */}
+        <OneGold>{children}</OneGold>
       </section>
     </LayoutGroup>
   );

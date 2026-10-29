@@ -6,10 +6,12 @@ import { Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  createContext,
   type InputHTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
+  useContext,
   useEffect,
   useId,
   useRef,
@@ -192,6 +194,23 @@ export function WideRow({
  * Title and help on the left, switch on the right. `lead`: the block's own switch (its feature's
  * name two steps larger than a row's, no hairline above).
  */
+const OneGoldScope = createContext(false);
+
+/**
+ * A part of the window under the one-gold rule (design.md §2): its switches when on and its quiet
+ * text links are bone, so the screen's gold is its one action (the save, "Devam"). The 7/24 Bulut
+ * question rows and setup steps (SETUP-UX-L); the rest keep the shared default until the
+ * launcher-wide change.
+ */
+export function OneGold({ children }: { children: ReactNode }) {
+  return <OneGoldScope.Provider value={true}>{children}</OneGoldScope.Provider>;
+}
+
+/** Whether this part of the window is under the one-gold rule (`OneGold`). */
+export function useOneGold(): boolean {
+  return useContext(OneGoldScope);
+}
+
 export function ToggleRow({
   title,
   help,
@@ -209,6 +228,7 @@ export function ToggleRow({
 }) {
   const id = useId();
   const glide = useGlide();
+  const tone = useOneGold() ? "bone" : "gold";
   return (
     <motion.div
       {...glide}
@@ -248,6 +268,7 @@ export function ToggleRow({
         label={title}
         hideLabel
         disabled={disabled}
+        tone={tone}
       />
     </motion.div>
   );

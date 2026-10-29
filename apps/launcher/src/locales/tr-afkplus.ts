@@ -872,7 +872,8 @@ export const trAfkPlus = {
     blockedRemove: "{{name}} engelini kaldır",
     blockedFormat: "3-16 karakter: harf, rakam ya da alt çizgi.",
     blockedDuplicate: "Bu oyuncu zaten listede.",
-    history: "Geçmiş",
+    // What it opens says what it is (the lead, 29 Oct 2026; the site's word).
+    history: "Ayar geçmişi",
     saved: "AFK+ ayarları kaydedildi",
     saveFailed: "Ayar kaydedilemedi.",
     save: "Kaydet",

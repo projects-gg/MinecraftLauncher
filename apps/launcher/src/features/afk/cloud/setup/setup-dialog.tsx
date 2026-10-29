@@ -11,6 +11,7 @@ import { Button, cn, Dialog, easeOutExpo, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { OneGold } from "../../settings/controls";
 import { ItemSlot } from "./item-slot";
 
 export interface FrameStep {
@@ -216,7 +217,10 @@ export function SetupDialog({
                 {lede ? (
                   <p className="mt-3 max-w-[58ch] text-[13px] text-pretty text-ash-300">{lede}</p>
                 ) : null}
-                <div className="mt-3">{children}</div>
+                {/* The step's gold is "Devam"/"Başlat": its switches and links are bone (§2). */}
+                <div className="mt-3">
+                  <OneGold>{children}</OneGold>
+                </div>
                 {failure ? (
                   <p role="alert" className="mt-3 text-[12.5px] text-flare-300">
                     {failure}
