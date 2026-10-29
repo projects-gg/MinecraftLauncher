@@ -1,4 +1,3 @@
-import { Warning } from "@phosphor-icons/react";
 import { ARM_MS, cn, focusPanel, Kbd, SwapLabel, Switch, toast, usePressGuard } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { type MouseEvent, type ReactNode, useEffect, useRef } from "react";
@@ -10,13 +9,7 @@ import { Row } from "@/features/settings/row";
 import { api, type InstanceSummary } from "@/lib/api";
 import { usePrefs } from "@/stores/prefs";
 import { overlayApi } from "./api";
-import {
-  OVERLAY_LINES,
-  type OverlayLineKind,
-  overlayHome,
-  overlayLine,
-  versionRange,
-} from "./line";
+import { modRows, OVERLAY_LINES, type OverlayLineKind, overlayHome, versionRange } from "./line";
 
 /** Before the instance list is read. */
 const NO_INSTANCES: InstanceSummary[] = [];
@@ -66,8 +59,9 @@ export function OverlayRow() {
  * Settings → Genel "Sohbette emoji seçici" (CHAT-EMOJI, on by default), right under the overlay's
  * switch: the chat screen's emoji button, which lives in the same mod. The mod goes into an
  * install for it too; with the overlay off it runs the picker alone, which needs no launcher
- * during the game, so "Kapansın" is no blocker here. While the overlay's switch is on its line
- * says what stands in the mod's way (and its action fixes both), so this line keeps its sentence.
+ * during the game, so "Kapansın" is no blocker here. Where the mod cannot go its switch is held
+ * off with the overlay's (`modRows`); the overlay's line says why (and its action fixes both), so
+ * this line keeps its sentence, unless that line speaks of "Kapansın".
  */
 export function EmojiRow() {
   return <ModSwitchRow which="emoji" />;
@@ -75,26 +69,28 @@ export function EmojiRow() {
 
 /**
  * A switch of the overlay's mod (`which`): the overlay or its emoji picker. The line under it says
- * how it opens;
- * while the switch is on but the overlay cannot work it says why instead, in the same cell, so
- * nothing below moves (`overlayLine`, the most basic blocker first): no install can carry it
- * (LIB1: the player deleted the official pack and has no Fabric install of a supported version),
- * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın", with "Kapanmak yerine küçülsün" (its
- * default); or the install Play opens is not Fabric, or not a version the mod is made for
- * (OVL-SEL1), with "Resmî pakete geç" (or the player's own install it works in, by name), which
- * selects it for Play (while that install's game is prepared or open, the line says it can switch
- * after the game). A line with an action is not the switch's label: a click beside the action
- * does nothing. The shortcut itself is set in the game's Controls.
+ * how it opens; where the overlay cannot work it says why instead, in the same cell, so nothing
+ * below moves (`overlayLine`, the most basic blocker first): no install can carry it (LIB1: the
+ * player deleted the official pack and has no Fabric install of a supported version), with
+ * "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın" while the switch is on, with "Kapanmak
+ * yerine küçülsün" (its default); or the install Play opens is not Fabric, or not a version the
+ * mod is made for (OVL-SEL1), or a release whose tested jar is still to come (OVL-AUTO), with
+ * "Resmî pakete geç" (or the player's own install it works in, by name), which selects it for Play
+ * (while that install's game is prepared or open, the line says it can switch after the game).
+ * Where the mod cannot go, the switch is held off and dimmed and the player's choice kept, the
+ * rule FASTPACK's row follows too (`modRows`): it is back on by itself where the mod works. A
+ * reason is a plain sentence (the launcher's one gold is OYNA). A line with an action is not the
+ * switch's label: a click beside the action does nothing. The shortcut itself is set in the
+ * game's Controls.
  */
 function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
   const { t } = useTranslation();
   const overlayOn = usePrefs((s) => s.inGameOverlay);
   const emojiOn = usePrefs((s) => s.chatEmoji);
-  const on = which === "overlay" ? overlayOn : emojiOn;
   const prefKey = which === "overlay" ? "inGameOverlay" : "chatEmoji";
   const title = which === "overlay" ? t("overlay.setting") : t("overlay.emojiSetting");
   // The picker needs no launcher during the game: "Kapansın" stands in the overlay's way only.
-  const leaves = usePrefs((s) => s.onGameStart === "close") && which === "overlay";
+  const leaves = usePrefs((s) => s.onGameStart === "close");
   const set = usePrefs((s) => s.set);
   const selectInstance = usePrefs((s) => s.selectInstance);
   const { data: instances } = useQuery({
@@ -112,9 +108,9 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
   const { instance: play, busy } = usePlayInstance(instances ?? NO_INSTANCES);
   const install = useInstallOfficial();
   const installing = install.isPending;
-  const line = overlayLine({
-    // The overlay's line above names what stands in the mod's way while it is on.
-    on: which === "overlay" ? on : on && !overlayOn,
+  const rows = modRows({
+    overlayOn,
+    emojiOn,
     leaves,
     instances,
     official,
@@ -122,6 +118,8 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
     play,
     locked: busy,
   });
+  const row = which === "overlay" ? rows.overlay : rows.emoji;
+  const line = row.line;
   // The install the switch selects: the same on both install lines and whichever install Play
   // opens, so the hidden lines carry it too and it is in place before its line shows (a switch
   // that came with its line under a resting pointer must not take that pointer's double click).
@@ -288,16 +286,6 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
                     active ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
                   )}
                 >
-                  {/* A line that says it will not work leads with the launcher's warning mark
-                      (gold, as in the help panel and the mod center). */}
-                  {kind === "opens" ? null : (
-                    <Warning
-                      size={13}
-                      weight="fill"
-                      aria-hidden
-                      className="mr-1.5 inline-block align-[-2px] text-gold-300"
-                    />
-                  )}
                   <span aria-hidden>{shownSentence(kind)}</span>
                   {action(kind, active)}
                 </span>
@@ -307,7 +295,13 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
         </>
       }
     >
-      <Switch checked={on} onCheckedChange={(v) => set(prefKey, v)} label={title} hideLabel />
+      <Switch
+        checked={row.checked}
+        onCheckedChange={(v) => set(prefKey, v)}
+        label={title}
+        hideLabel
+        disabled={row.held}
+      />
     </Row>
   );
 }
@@ -364,7 +358,7 @@ function focusRowSwitch(from: HTMLElement, keyHeld: boolean) {
 }
 
 /**
- * A line's action: gold words right after its sentence ("Resmî paketi kur", "Resmî pakete
+ * A line's action: bone words right after its sentence ("Resmî paketi kur", "Resmî pakete
  * geç"), reaching a little past them (`hit-area`). It comes with its line, maybe under a pointer
  * that was pressing the row's words: it ignores the rest of that double click and presses while
  * the pointer rests there for a moment (`usePressGuard`).

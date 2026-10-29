@@ -6,6 +6,7 @@ vi.mock("@/lib/api", () => ({ api: {} }));
 
 const {
   carriesOverlay,
+  modRows,
   newerThanAll,
   OVERLAY_LINES,
   officialMissing,
@@ -63,11 +64,13 @@ function line(
 }
 
 describe("the overlay switch's line", () => {
-  it("says how it opens while it is off, whatever else is true", () => {
-    expect(line(vanilla, { on: false })).toEqual({ kind: "opens" });
+  it("says why the install cannot carry it even while it is off, Kapansın only while on", () => {
+    expect(line(vanilla, { on: false })).toEqual({ kind: "notFabric", switchTo: projects });
     expect(
       line(vanilla, { on: false, leaves: true, instances: [vanilla], official: status() }),
-    ).toEqual({ kind: "opens" });
+    ).toEqual({ kind: "noHome" });
+    expect(line(projects, { on: false })).toEqual({ kind: "opens" });
+    expect(line(projects, { on: false, leaves: true })).toEqual({ kind: "opens" });
   });
 
   it("says how it opens while the install Play opens carries it", () => {
@@ -164,6 +167,94 @@ describe("the overlay switch's line", () => {
       "notYet",
       "waits",
     ]);
+  });
+});
+
+describe("the mod's two switches, by FASTPACK's rule (TASTE-SWEEP OVL-AUTO r2)", () => {
+  const next = instance("next", { mcVersion: "26.4" });
+  const rows = (play: InstanceSummary, extra: Partial<Parameters<typeof modRows>[0]> = {}) =>
+    modRows({
+      overlayOn: true,
+      emojiOn: true,
+      leaves: false,
+      instances: [projects, vanilla, forge, oldFabric],
+      official: status({ instanceId: "projects" }),
+      versions: VERSIONS,
+      play,
+      locked: false,
+      ...extra,
+    });
+
+  it("holds the overlay off where its version has no jar yet, and keeps the choice", () => {
+    expect(rows(next).overlay).toEqual({
+      line: { kind: "notYet", switchTo: projects },
+      checked: false,
+      held: true,
+    });
+    // Once the content brings 26.4's jar, the switch is back on by itself.
+    expect(rows(next, { versions: [...VERSIONS, "26.4"] }).overlay).toEqual({
+      line: { kind: "opens" },
+      checked: true,
+      held: false,
+    });
+    // As it is once Play opens an install that carries it.
+    expect(rows(projects).overlay).toEqual({ line: { kind: "opens" }, checked: true, held: false });
+  });
+
+  it("says why there while the switch is off too", () => {
+    expect(rows(next, { overlayOn: false }).overlay).toEqual({
+      line: { kind: "notYet", switchTo: projects },
+      checked: false,
+      held: true,
+    });
+    expect(rows(vanilla, { overlayOn: false }).overlay.held).toBe(true);
+    expect(rows(projects, { overlayOn: false }).overlay).toEqual({
+      line: { kind: "opens" },
+      checked: false,
+      held: false,
+    });
+  });
+
+  it("leaves the switch to the player while only Kapansın stands in the way", () => {
+    expect(rows(projects, { leaves: true }).overlay).toEqual({
+      line: { kind: "closes" },
+      checked: true,
+      held: false,
+    });
+    expect(rows(projects, { leaves: true, overlayOn: false }).overlay).toEqual({
+      line: { kind: "opens" },
+      checked: false,
+      held: false,
+    });
+  });
+
+  it("holds the emoji picker off with it and says the reason once", () => {
+    expect(rows(next).emoji).toEqual({ line: { kind: "opens" }, checked: false, held: true });
+    expect(rows(vanilla, { overlayOn: false }).emoji).toEqual({
+      line: { kind: "opens" },
+      checked: false,
+      held: true,
+    });
+    // Kapansın is nothing to the picker: while the overlay's line says that, the picker's line
+    // says why the mod cannot go into this install.
+    const closing = rows(next, { leaves: true });
+    expect(closing.overlay.line).toEqual({ kind: "closes" });
+    expect(closing.emoji).toEqual({
+      line: { kind: "notYet", switchTo: projects },
+      checked: false,
+      held: true,
+    });
+    // Where the mod goes, the picker follows its own choice.
+    expect(rows(projects, { leaves: true }).emoji).toEqual({
+      line: { kind: "opens" },
+      checked: true,
+      held: false,
+    });
+    expect(rows(projects, { emojiOn: false }).emoji).toEqual({
+      line: { kind: "opens" },
+      checked: false,
+      held: false,
+    });
   });
 });
 
