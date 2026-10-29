@@ -1,8 +1,11 @@
-// The cloud settings panel's sections (SHEET-UX): Bağlantı (name, address, version, console
-// language), Komutlar (rows by trigger), Oyun içi (anti-AFK, the inventory view, movement) and
-// Otomatik yanıt (the player's own name, rules). With the cloud features (only while the service
-// offers them): the inventory view's switch, placeholders in replies with their chips and "Dene",
-// and a line while old rules still match the old way.
+// The cloud settings' questions (SETUP-UX-L; SHEET-UX before it): the fields under "Nereye girsin?"
+// (address, version), "Nasıl giriş yapsın?" (the hidden login-time rows), "Girince ne yapsın?" (the
+// rows typed on joining), "Biri yazınca ne desin?" (two ready rules, the rules, the player's own
+// name under "Gelişmiş") and "Diğer ayarlar" (name, console language, anti-AFK, the inventory view,
+// movement, the rows that repeat on a clock). A command row stays under its question until it is
+// saved (`commandPlace`). With the cloud features (only while the service offers them): the
+// inventory view's switch, placeholders in replies with their chips and "Dene", and a line while
+// old rules still match the old way.
 import { ArrowDown, ArrowUp, Info, Plus, Trash, X } from "@phosphor-icons/react";
 import {
   Button,
@@ -49,11 +52,14 @@ import {
   type Rule,
   replyProblem,
   SOURCES,
-  TRIGGERS,
   type Trigger,
   typed,
   withTrigger,
 } from "./settings-model";
+import type { CommandPlace } from "./setup/answers";
+import { GameChat } from "./setup/game-chat";
+import { ItemSlot } from "./setup/item-slot";
+import { Advanced } from "./setup/question-list";
 
 export interface PartProps {
   draft: Draft;
@@ -63,6 +69,19 @@ export interface PartProps {
   /** Studio's switches of the cloud features (null: a service before them). */
   features: CloudFeatures | null;
 }
+
+/** The command rows' questions: where each row sits, and a new row's place. */
+export interface RowPlaces {
+  placeOf: (row: Command) => CommandPlace;
+  onAdded: (id: string, place: CommandPlace) => void;
+}
+
+/** The triggers a row under each question may take: a row never moves to another question. */
+const PLACE_TRIGGERS: Record<CommandPlace, readonly Trigger[]> = {
+  login: ["join", "start", "reconnect"],
+  join: ["join", "start", "reconnect"],
+  repeat: ["interval", "daily"],
+};
 
 /** The words of an issue, with Studio's numbers where it names them. */
 export function useIssueText(view: CloudEditData, draft?: Draft) {
@@ -99,14 +118,20 @@ export function useIssueText(view: CloudEditData, draft?: Draft) {
       min:
         issue.field === "cooldown"
           ? (view.limits.minRuleCooldownSec ?? 10)
-          : (view.limits.minIntervalSec ?? 60),
+          : // The interval's fields are in minutes (as on the site): its shortest is said so too.
+            Math.max(1, Math.ceil((view.limits.minIntervalSec ?? 60) / 60)),
     });
   };
 }
 
+/** An interval's seconds as the minutes its fields show (the config keeps seconds). */
+function toMinutes(seconds: number): number {
+  return Number.isFinite(seconds) ? Math.round((seconds / 60) * 100) / 100 : seconds;
+}
+
 /**
- * Whole seconds, keeping what is typed (NaN while it is not a number, which the checks catch), with
- * the unit inside the field: the desktop settings' number field.
+ * A whole number (seconds, or an interval's minutes), keeping what is typed (NaN while it is not a
+ * number, which the checks catch), with the unit inside the field: the desktop settings' number field.
  */
 function NumberField({
   label,
@@ -322,26 +347,13 @@ export function GamePart({ draft, setDraft, view, issues }: PartProps) {
 
 // --- Bağlantı ---------------------------------------------------------------------------------
 
-/** Bağlantı: the account's name, the server it joins, the game version, the console's language. */
-export function ConnectionPart({ draft, setDraft, view, issues }: PartProps) {
+/** "Diğer ayarlar": the account's in-game name and the console's language. */
+export function IdentityPart({ draft, setDraft, view, issues }: PartProps) {
   const { t } = useTranslation();
   const issueText = useIssueText(view, draft);
   const general = (field: string) => issueText(issueAt(issues, "general", null, field));
-  const versions: SelectOption<string>[] = [
-    { value: "auto", label: t("cloudAfk.settings.versionAuto") },
-    ...view.versions.versions.map((v) => ({
-      value: v.value,
-      label: v.label,
-      badge: v.value === view.versions.recommended ? t("cloudAfk.settings.recommended") : undefined,
-    })),
-  ];
-  // A stored version the machines no longer list stays choosable as it is.
-  if (draft.version !== "auto" && !versions.some((v) => v.value === draft.version)) {
-    versions.push({ value: draft.version, label: draft.version });
-  }
-  const changes = view.account.serverChanges;
   return (
-    <Block>
+    <>
       <SettingRow
         lead
         title={t("cloudAfk.settings.name")}
@@ -359,6 +371,41 @@ export function ConnectionPart({ draft, setDraft, view, issues }: PartProps) {
           className="w-[240px]"
         />
       </SettingRow>
+      <SettingRow title={t("cloudAfk.settings.lang")}>
+        <Segmented
+          value={draft.lang === "en" ? "en" : "tr"}
+          onValueChange={(lang) => setDraft((d) => ({ ...d, lang }))}
+          label={t("cloudAfk.settings.lang")}
+          options={[
+            { value: "tr", label: "Türkçe", lang: "tr" },
+            { value: "en", label: "English", lang: "en" },
+          ]}
+        />
+      </SettingRow>
+    </>
+  );
+}
+
+/** "Nereye girsin?": the server it joins and the game version. */
+export function ServerPart({ draft, setDraft, view, issues }: PartProps) {
+  const { t } = useTranslation();
+  const issueText = useIssueText(view, draft);
+  const general = (field: string) => issueText(issueAt(issues, "general", null, field));
+  const versions: SelectOption<string>[] = [
+    { value: "auto", label: t("cloudAfk.settings.versionAuto") },
+    ...view.versions.versions.map((v) => ({
+      value: v.value,
+      label: v.label,
+      badge: v.value === view.versions.recommended ? t("cloudAfk.settings.recommended") : undefined,
+    })),
+  ];
+  // A stored version the machines no longer list stays choosable as it is.
+  if (draft.version !== "auto" && !versions.some((v) => v.value === draft.version)) {
+    versions.push({ value: draft.version, label: draft.version });
+  }
+  const changes = view.account.serverChanges;
+  return (
+    <>
       <WideRow>
         <AddressField
           id="cloud-host"
@@ -393,18 +440,7 @@ export function ConnectionPart({ draft, setDraft, view, issues }: PartProps) {
           }
         />
       </SettingRow>
-      <SettingRow title={t("cloudAfk.settings.lang")}>
-        <Segmented
-          value={draft.lang === "en" ? "en" : "tr"}
-          onValueChange={(lang) => setDraft((d) => ({ ...d, lang }))}
-          label={t("cloudAfk.settings.lang")}
-          options={[
-            { value: "tr", label: "Türkçe", lang: "tr" },
-            { value: "en", label: "English", lang: "en" },
-          ]}
-        />
-      </SettingRow>
-    </Block>
+    </>
   );
 }
 
@@ -455,7 +491,7 @@ function Times({
           <Input
             aria-label={t("cloudAfk.settings.commands.addTime")}
             value={adding}
-            placeholder="08:00"
+            placeholder={t("cloudAfk.settings.commands.timePlaceholder")}
             maxLength={5}
             inputMode="numeric"
             invalid={invalid}
@@ -478,19 +514,30 @@ function Times({
 function CommandRow({
   command,
   index,
+  ordinal,
   count,
   part,
+  allowed,
+  placeholder,
   onChange,
   onMove,
   onRemove,
   focus,
 }: {
   command: Command;
+  /** The row's place among all the commands (its problems are named by it). */
   index: number;
+  /** Its place in its question's list, counted from 0. */
+  ordinal: number;
   count: number;
   part: PartProps;
+  /** The triggers its question offers. */
+  allowed: readonly Trigger[];
+  /** What an empty row shows (a login row: what a login command looks like). */
+  placeholder?: string;
   onChange: (command: Command) => void;
-  onMove: (to: number) => void;
+  /** Up (-1) or down (+1) in its question's list. */
+  onMove: (by: -1 | 1) => void;
   onRemove: () => void;
   focus: boolean;
 }) {
@@ -502,13 +549,13 @@ function CommandRow({
   // A save refused its text for content: "Yanlışsa bildir" under the sentence.
   const report = refusalReportText(issueAt(part.issues, "commands", index, "text"), command.words);
   const minInterval = part.view.limits.minIntervalSec ?? 60;
-  const triggers: SelectOption<Trigger>[] = TRIGGERS.map((value) => ({
+  const triggers: SelectOption<Trigger>[] = allowed.map((value) => ({
     value,
     label: t(`cloudAfk.settings.commands.triggers.${value}`),
   }));
-  const on = (TRIGGERS as readonly string[]).includes(command.on)
+  const on = allowed.includes(command.on as Trigger)
     ? (command.on as Trigger)
-    : "join";
+    : (allowed[0] ?? "join");
   const triggerError = at("delay") ?? at("every") ?? at("at");
   const ids = useId();
   return (
@@ -517,22 +564,22 @@ function CommandRow({
           the right edge as a reply rule's (SHEET-UX). */}
       <div className="flex items-center gap-3 py-1">
         <span className="min-w-0 flex-1 text-[12.5px] font-medium text-ash-400">
-          {t("afkPanel.commandOrdinal", { n: index + 1 })}
+          {t("afkPanel.commandOrdinal", { n: ordinal + 1 })}
         </span>
         <div className="flex items-center gap-0.5">
           <IconButton
             label={t("cloudAfk.settings.commands.moveUp")}
             icon={<ArrowUp size={15} />}
             size="sm"
-            disabled={index === 0}
-            onClick={() => onMove(index - 1)}
+            disabled={ordinal === 0}
+            onClick={() => onMove(-1)}
           />
           <IconButton
             label={t("cloudAfk.settings.commands.moveDown")}
             icon={<ArrowDown size={15} />}
             size="sm"
-            disabled={index === count - 1}
-            onClick={() => onMove(index + 1)}
+            disabled={ordinal === count - 1}
+            onClick={() => onMove(1)}
           />
           <IconButton
             label={t("cloudAfk.settings.commands.remove")}
@@ -567,6 +614,7 @@ function CommandRow({
           <span className="text-[13px] text-ash-300">
             {t("cloudAfk.settings.commands.trigger")}
           </span>
+          {/* Its question's triggers only: a row never jumps to another question. */}
           <Select
             value={on}
             onValueChange={(next) => onChange(withTrigger(command, next, minInterval))}
@@ -576,17 +624,20 @@ function CommandRow({
           />
           {on === "interval" ? (
             <div className="flex items-center gap-1.5">
+              {/* In minutes, as the site says it ("5 dk ile 10 dk arası"): the config keeps
+                  seconds, the fields show and take whole minutes. */}
               <NumberField
                 label={t("cloudAfk.settings.commands.everyMin")}
                 hideLabel
-                value={command.every?.min ?? minInterval}
-                unit={t("cloudAfk.settings.seconds")}
+                value={toMinutes(command.every?.min ?? minInterval)}
+                unit={t("cloudAfk.settings.minutes")}
                 className="w-[110px]"
-                onChange={(min) =>
-                  onChange({ ...command, every: { min, max: command.every?.max ?? min } })
-                }
+                onChange={(minutes) => {
+                  const min = minutes * 60;
+                  onChange({ ...command, every: { min, max: command.every?.max ?? min } });
+                }}
               />
-              {/* "300 sn ile 600 sn arası", as the desktop panel's waits (a bare dash did not say
+              {/* "5 dk ile 10 dk arası", as the desktop panel's waits (a bare dash did not say
                   it is a random wait between the two; AFK-CLEAR). */}
               <span aria-hidden className="text-[13px] text-ash-300">
                 {t("afkPanel.rangeJoin")}
@@ -594,12 +645,13 @@ function CommandRow({
               <NumberField
                 label={t("cloudAfk.settings.commands.everyMax")}
                 hideLabel
-                value={command.every?.max ?? minInterval}
-                unit={t("cloudAfk.settings.seconds")}
+                value={toMinutes(command.every?.max ?? minInterval)}
+                unit={t("cloudAfk.settings.minutes")}
                 className="w-[110px]"
-                onChange={(max) =>
-                  onChange({ ...command, every: { min: command.every?.min ?? max, max } })
-                }
+                onChange={(minutes) => {
+                  const max = minutes * 60;
+                  onChange({ ...command, every: { min: command.every?.min ?? max, max } });
+                }}
               />
               {t("afkPanel.rangeAfter") ? (
                 <span aria-hidden className="text-[13px] text-ash-300">
@@ -639,7 +691,7 @@ function CommandRow({
           accountId={part.view.account.id}
           rowId={command.id}
           label={t("cloudAfk.settings.commands.text")}
-          placeholder={t("cloudAfk.settings.commands.textPlaceholder")}
+          placeholder={placeholder ?? t("cloudAfk.settings.commands.textPlaceholder")}
           error={at("text")}
           autoFocus={focus}
         />
@@ -656,50 +708,101 @@ export const commandLimit = (view: CloudEditData) => Math.min(view.limits.maxCom
 /** How many reply rules the account may have (Studio's limit, at most 50). */
 export const ruleLimit = (view: CloudEditData) => Math.min(view.limits.maxRules ?? 10, 50);
 
-/** Komutlar: the rows by trigger; the section's title counts them. */
-export function CommandsPart(part: PartProps) {
+/** How many rows short of the limit the account's count starts to show beside "Komut ekle". */
+const COUNT_NEAR = 3;
+
+/**
+ * One question's command rows (the login, what it types on joining, or the rows on a clock), in
+ * their order among all the commands; a new row joins this question and keeps it until it is
+ * saved. Near Studio's limit, the account's count of every row sits beside "Komut ekle".
+ */
+export function CommandList({
+  part,
+  rows,
+  place,
+  addLabel,
+  empty,
+}: {
+  part: PartProps;
+  rows: RowPlaces;
+  place: CommandPlace;
+  addLabel: string;
+  /** Said while the question has no row. */
+  empty: string;
+}) {
   const { t } = useTranslation();
   const { draft, setDraft, view } = part;
   const [added, setAdded] = useState<string | null>(null);
   const commands = draft.config.commands;
+  const mine = commands.filter((command) => rows.placeOf(command) === place);
   const max = commandLimit(view);
+  const minInterval = view.limits.minIntervalSec ?? 60;
   const set = (next: Command[]) =>
     setDraft((d) => ({ ...d, config: { ...d.config, commands: next } }));
+  // Up or down among this question's rows: the two rows swap their places in the whole list.
+  const shift = (command: Command, ordinal: number, by: -1 | 1) => {
+    const other = mine[ordinal + by];
+    if (!other) return;
+    const from = commands.indexOf(command);
+    const to = commands.indexOf(other);
+    set(move(commands, from, to));
+  };
+  const add = () => {
+    const fresh = newCommand(draft.config);
+    // A login is hidden from the start (sealed on this computer before it is sent); a row on a
+    // clock starts with the service's shortest interval.
+    const row =
+      place === "login"
+        ? { ...fresh, words: { kind: "secret" as const, text: "", kept: false } }
+        : place === "repeat"
+          ? withTrigger(fresh, "interval", minInterval)
+          : fresh;
+    setAdded(row.id);
+    rows.onAdded(row.id, place);
+    set([...commands, row]);
+  };
   return (
-    <div className="flex flex-col gap-3 pt-2">
-      {commands.length ? (
+    <div className="flex flex-col gap-3 pt-1">
+      {mine.length ? (
         <ul className="flex flex-col gap-2">
-          {commands.map((command, index) => (
+          {mine.map((command, ordinal) => (
             <CommandRow
               key={command.id}
               command={command}
-              index={index}
-              count={commands.length}
+              index={commands.indexOf(command)}
+              ordinal={ordinal}
+              count={mine.length}
               part={part}
+              allowed={PLACE_TRIGGERS[place]}
+              placeholder={place === "login" ? t("setup.account.loginPlaceholder") : undefined}
               focus={command.id === added}
               onChange={(next) => set(commands.map((c) => (c.id === command.id ? next : c)))}
-              onMove={(to) => set(move(commands, index, to))}
+              onMove={(by) => shift(command, ordinal, by)}
               onRemove={() => set(commands.filter((c) => c.id !== command.id))}
             />
           ))}
         </ul>
       ) : (
-        <p className="py-3 text-[13px] text-ash-400">{t("cloudAfk.settings.commands.empty")}</p>
+        <p className="py-1 text-[13px] text-ash-400">{empty}</p>
       )}
-      <Button
-        variant="secondary"
-        size="sm"
-        icon={<Plus size={14} weight="bold" />}
-        className="self-start"
-        disabled={commands.length >= max}
-        onClick={() => {
-          const row = newCommand(draft.config);
-          setAdded(row.id);
-          set([...commands, row]);
-        }}
-      >
-        {t("cloudAfk.settings.commands.add")}
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<Plus size={14} weight="bold" />}
+          disabled={commands.length >= max}
+          onClick={add}
+        >
+          {addLabel}
+        </Button>
+        {/* The account's rows against Studio's limit, said only near it: far from it, a count of
+            rows this question does not show only puzzled (TASTE-SWEEP SETUP-UX-L r1). */}
+        {max - commands.length <= COUNT_NEAR ? (
+          <span className="text-[12.5px] text-ash-400 tabular-nums">
+            {t("cloudAfk.settings.commands.count", { count: commands.length, max })}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -777,7 +880,8 @@ function RuleRow({
       ? t("cloudAfk.settings.issues.ownerServer")
       : owner
         ? t("afkPanel.rule.ownerOnlyHelp", { name: owner })
-        : t("afkPanel.rule.ownerFirst");
+        : // The name waits under this question's "Gelişmiş" (SETUP-UX-L).
+          t("setup.account.ownerFirst");
   const ownerLocked = rule.from === "server" || (!owner && !rule.ownerOnly);
   return (
     <li className={cn(rowPanel, "flex flex-col px-3.5 pt-2")}>
@@ -915,8 +1019,78 @@ function RuleRow({
 }
 
 /**
- * Otomatik yanıt: the player's own name ("Yalnız ana hesabımdan" rules know them by it), then the
- * rules; the section's title counts them.
+ * "Hazır kurallar": the two replies players set up most, one press each into the draft (the
+ * password one hidden and empty: the player types it, it is sealed on this computer when saved).
+ */
+function ReadyRules({ part }: { part: PartProps }) {
+  const { t, i18n } = useTranslation();
+  const { draft, setDraft, view } = part;
+  const rules = draft.config.rules;
+  const locale = i18n.language === "en" ? "en-GB" : "tr-TR";
+  const has = (match: string) =>
+    rules.some(
+      (rule) => rule.pattern.trim().toLocaleLowerCase(locale) === match.toLocaleLowerCase(locale),
+    );
+  const full = rules.length >= ruleLimit(view);
+  const add = (kind: "away" | "login") => {
+    setDraft((d) => {
+      const rule = newRule(d.config, view.limits.minRuleCooldownSec ?? 10);
+      const next: Rule =
+        kind === "away"
+          ? {
+              ...rule,
+              pattern: t("setup.account.templates.away.match"),
+              reply: { kind: "plain", text: t("setup.account.templates.away.text") },
+            }
+          : {
+              ...rule,
+              pattern: t("setup.account.templates.login.match"),
+              from: "server",
+              reply: { kind: "secret", text: "", kept: false },
+            };
+      return { ...d, config: { ...d.config, rules: [...d.config.rules, next] } };
+    });
+  };
+  return (
+    <div className="flex flex-col">
+      <p className="text-[13px] font-semibold text-bone-100">{t("setup.account.ready")}</p>
+      {(["away", "login"] as const).map((kind) => {
+        const added = has(t(`setup.account.templates.${kind}.match`));
+        return (
+          <div
+            key={kind}
+            className="flex items-center gap-3 border-t border-white/6 py-2.5 first-of-type:border-t-0"
+          >
+            <ItemSlot item={kind === "away" ? "minecraft:paper" : "minecraft:trial_key"} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13.5px] font-medium text-bone-50">
+                {t(`setup.account.templates.${kind}.title`)}
+              </p>
+              <p className="text-[12.5px] text-pretty text-ash-400">
+                {t(`setup.account.templates.${kind}.reply`)}
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={added ? undefined : <Plus size={14} weight="bold" />}
+              disabled={added || full}
+              onClick={() => add(kind)}
+              className="shrink-0"
+            >
+              {added ? t("setup.account.added") : t("setup.account.add")}
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * "Biri yazınca ne desin?": the ready rules, the rules (counted against Studio's limit), the first
+ * one as the game's chat shows it, and the player's own name ("Yalnız bana yanıt versin" rules know
+ * them by it) under "Gelişmiş".
  */
 export function RepliesPart(part: PartProps) {
   const { t } = useTranslation();
@@ -927,9 +1101,81 @@ export function RepliesPart(part: PartProps) {
   const rules = draft.config.rules;
   const max = ruleLimit(view);
   const set = (next: Rule[]) => setDraft((d) => ({ ...d, config: { ...d.config, rules: next } }));
+  // What another player reads: the first rule with plain words, else the ready "away" rule.
+  const shown = rules.find((rule) => rule.pattern.trim() && rule.reply.kind === "plain");
+  const said =
+    shown?.reply.kind === "plain" && shown.reply.text.trim()
+      ? { match: shown.pattern.trim(), reply: shown.reply.text.trim() }
+      : {
+          match: t("setup.account.chatThem"),
+          reply: t("setup.account.templates.away.text"),
+        };
   return (
-    <>
-      <Block>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,260px)] items-start gap-5">
+        <ReadyRules part={part} />
+        <div className="flex flex-col">
+          <p className="mb-2 text-[12.5px] text-ash-400">{t("setup.chatCaption")}</p>
+          <GameChat
+            messages={[
+              {
+                key: `them:${said.match}`,
+                who: t("setup.plus.previewPlayer"),
+                text: said.match,
+                kind: "public",
+              },
+              {
+                key: `me:${said.reply}`,
+                who: view.account.name,
+                text: said.reply,
+                kind: "public",
+              },
+            ]}
+          />
+        </div>
+      </div>
+      {view.account.features?.legacyRules ? (
+        <p className="flex items-start gap-2 rounded-[var(--radius-panel)] bg-white/[0.035] px-3 py-2.5 text-[12.5px] text-bone-100 ring-1 ring-white/7">
+          <Info size={15} aria-hidden className="mt-px shrink-0 text-gold-300" />
+          <span>{t("cloudAfkFeat.settings.legacyRules")}</span>
+        </p>
+      ) : null}
+      {rules.length ? (
+        <ul className="flex flex-col gap-2">
+          {rules.map((rule, index) => (
+            <RuleRow
+              key={rule.id}
+              rule={rule}
+              index={index}
+              part={part}
+              focus={rule.id === added}
+              onChange={(next) => set(rules.map((r) => (r.id === rule.id ? next : r)))}
+              onRemove={() => set(rules.filter((r) => r.id !== rule.id))}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[13px] text-ash-400">{t("cloudAfk.settings.replies.empty")}</p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<Plus size={14} weight="bold" />}
+          disabled={rules.length >= max}
+          onClick={() => {
+            const row = newRule(draft.config, view.limits.minRuleCooldownSec ?? 10);
+            setAdded(row.id);
+            set([...rules, row]);
+          }}
+        >
+          {t("cloudAfk.settings.replies.add")}
+        </Button>
+        <span className="text-[12.5px] text-ash-400 tabular-nums">
+          {t("cloudAfk.settings.replies.count", { count: rules.length, max })}
+        </span>
+      </div>
+      <Advanced summary={t("cloudAfk.settings.owner")} open={Boolean(owner)}>
         <SettingRow
           lead
           title={t("cloudAfk.settings.owner")}
@@ -950,48 +1196,7 @@ export function RepliesPart(part: PartProps) {
             className="w-[240px]"
           />
         </SettingRow>
-      </Block>
-      <Block>
-        <div className="flex flex-col gap-3 py-3">
-          {view.account.features?.legacyRules ? (
-            <p className="flex items-start gap-2 rounded-[var(--radius-panel)] bg-white/[0.035] px-3 py-2.5 text-[12.5px] text-bone-100 ring-1 ring-white/7">
-              <Info size={15} aria-hidden className="mt-px shrink-0 text-gold-300" />
-              <span>{t("cloudAfkFeat.settings.legacyRules")}</span>
-            </p>
-          ) : null}
-          {rules.length ? (
-            <ul className="flex flex-col gap-2">
-              {rules.map((rule, index) => (
-                <RuleRow
-                  key={rule.id}
-                  rule={rule}
-                  index={index}
-                  part={part}
-                  focus={rule.id === added}
-                  onChange={(next) => set(rules.map((r) => (r.id === rule.id ? next : r)))}
-                  onRemove={() => set(rules.filter((r) => r.id !== rule.id))}
-                />
-              ))}
-            </ul>
-          ) : (
-            <p className="py-3 text-[13px] text-ash-400">{t("cloudAfk.settings.replies.empty")}</p>
-          )}
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<Plus size={14} weight="bold" />}
-            className="self-start"
-            disabled={rules.length >= max}
-            onClick={() => {
-              const row = newRule(draft.config, view.limits.minRuleCooldownSec ?? 10);
-              setAdded(row.id);
-              set([...rules, row]);
-            }}
-          >
-            {t("cloudAfk.settings.replies.add")}
-          </Button>
-        </div>
-      </Block>
-    </>
+      </Advanced>
+    </div>
   );
 }
