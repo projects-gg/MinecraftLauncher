@@ -219,7 +219,12 @@ function AfkCard({
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
           <div className="mt-auto flex gap-2 pt-3">
-            <AfkPrimaryAction account={account} onFixPassword={onSettings} className="flex-1" />
+            <AfkPrimaryAction
+              account={account}
+              card
+              onFixPassword={onSettings}
+              className="flex-1"
+            />
             <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
               {t("afk.console")}
             </Button>

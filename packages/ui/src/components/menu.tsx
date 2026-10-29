@@ -19,8 +19,9 @@ export interface MenuItem {
   danger?: boolean;
   disabled?: boolean;
   /**
-   * A choice rather than an action (sort order, a filter): a gold check marks it when `true`.
-   * Read out as a checkbox item, or a radio item with `radio` (one choice of a group).
+   * A choice rather than an action (sort order, a filter): a bone check marks it when `true` (the
+   * screen's one gold is its main action, design.md §2). Read out as a checkbox item, or a radio
+   * item with `radio` (one choice of a group).
    */
   checked?: boolean;
   radio?: boolean;
@@ -40,7 +41,7 @@ export interface MenuStripItem {
   label: string;
   content: ReactNode;
   onSelect: () => void;
-  /** It is the player's choice already (a reaction they gave): a gold ring. */
+  /** It is the player's choice already (a reaction they gave): the quiet plate (a chosen chip). */
   on?: boolean;
 }
 
@@ -61,7 +62,7 @@ function stripRow(strip: readonly MenuStripItem[] | undefined, parts: MenuParts)
           className={cn(
             "chamfer flex size-[34px] cursor-pointer items-center justify-center outline-none select-none [--cut:6px]",
             "transition-[background-color,transform,scale] duration-150 data-[highlighted]:bg-white/10 active:scale-[0.92]",
-            item.on && "bg-gold-500/16 data-[highlighted]:bg-gold-500/24",
+            item.on && "bg-white/14 data-[highlighted]:bg-white/18",
           )}
         >
           {item.content}
@@ -192,7 +193,7 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
             size={15}
             weight="bold"
             aria-hidden
-            className={cn("shrink-0 text-gold-400", !item.checked && "invisible")}
+            className={cn("shrink-0 text-bone-100", !item.checked && "invisible")}
           />
         )}
       </Item>

@@ -110,14 +110,14 @@ function TimeRow({
         {here && !account.expired ? t("afkClear.twin.timeLeft", { time: left }) : left}
       </span>
       {account.renewal.open && !account.expired ? (
-        // Quiet until the last week: gold on every card beside the main button and OYNA said
-        // "this needs you" where nothing did (AFK-CLEAR look 2).
+        // Quiet until the last week, then bone and bold beside the bold "5 gün kaldı" (a link is
+        // never gold: the screen's one gold is OYNA or its main action; design.md §2).
         <button
           type="button"
           onClick={() => void renew()}
           className={cn(
             "inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium underline-offset-2 transition-colors duration-150 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300",
-            soon ? "text-gold-300" : "text-ash-300 hover:text-bone-100",
+            soon ? "font-semibold text-bone-50" : "text-ash-300 hover:text-bone-100",
           )}
         >
           {t("cloudAfk.actions.renew")}
@@ -237,14 +237,16 @@ function PrimaryButton({
       </Button>
     );
   }
-  // Stopped until something is fixed (the state line's hint says what, "… düzelt, sonra başlat"):
-  // "Başlat" steps back from gold, which called for a start that would stop again (SMALL11).
-  // After a plain disconnect ("other") starting again is the fix, and it stays gold. A refused
-  // password has its own button, "Şifreyi düzelt" (AFK-CLEAR).
+  // One gold per screen (design.md §2, lead 29 Oct): a card's button is never gold. One that needs
+  // the player is a bone plate: "Şifreyi düzelt" (AFK-CLEAR), "Süre al", and "Başlat" after a plain
+  // disconnect ("other"), where starting again is the fix. Quiet: a start or a stop the player
+  // chose, a waiting button, and a start that waits on a fix (the state line's hint says what,
+  // "… düzelt, sonra başlat"; it would call for a start that stops again, SMALL11).
   const hold = account.hold;
-  const fixFirst =
-    action === "start" &&
-    ((hold?.kind === "cause" && hold.cause !== "other") || hold?.kind === "server_blocked");
+  const needsPlayer =
+    action === "fixPassword" ||
+    action === "renew" ||
+    (action === "start" && hold?.kind === "cause" && hold.cause === "other");
   const labels: Record<Exclude<CloudPrimary, "none">, string> = {
     start: t("cloudAfk.actions.start"),
     stop: plus ? t("afkPlus.card.stopAccount") : t("cloudAfk.actions.stop"),
@@ -277,8 +279,7 @@ function PrimaryButton({
       <span className={cn("inline-flex", className)}>
         <Button
           size="sm"
-          // Waiting, it steps back from gold as the other waiting buttons do (no live-looking plate).
-          variant={action === "stop" || fixFirst || waits ? "secondary" : "primary"}
+          variant={needsPlayer && !waits ? "bone" : "secondary"}
           icon={icons[action]}
           disabled={waits}
           aria-disabled={guard.armed ? undefined : true}
@@ -734,7 +735,12 @@ export function CloudCard({
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
           <div className="mt-auto flex gap-2 pt-3">
             {local ? (
-              <AfkPrimaryAction account={local} onFixPassword={hereSettings} className="flex-1" />
+              <AfkPrimaryAction
+                account={local}
+                card
+                onFixPassword={hereSettings}
+                className="flex-1"
+              />
             ) : (
               <PrimaryButton
                 account={account}

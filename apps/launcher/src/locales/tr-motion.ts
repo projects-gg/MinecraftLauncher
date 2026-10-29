@@ -7,8 +7,11 @@ export const trMotion = {
   help: "Pencereler ve menüler kaymadan açılır.",
   /** Under the switch while Performance mode keeps it on. */
   perfOn: "Performans modu açıkken açık kalır.",
-  /** Under the switch while the system keeps it on ("Windows ayarlarında açık."). */
-  systemOn: "{{system}} ayarlarında açık.",
+  /**
+   * Under the switch while the system keeps it on, in the same form as `perfOn` (TASTE-SWEEP r2):
+   * "Windows'ta" (Windows, macOS and Linux all take "'ta").
+   */
+  systemOn: "{{system}}'ta hareket azaltıldığı için açık kalır.",
   /** Under the embers' switch while it is held off. */
   embersPerf: "Performans modu açıkken kapalı kalır.",
   embersReduced: "Animasyonlar azaltıldığı için kapalı.",
