@@ -102,11 +102,11 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
     queryFn: () => api.instances(),
   });
   const { data: official } = useQuery(officialStatusQuery);
-  // The Minecraft versions the launcher ships the mod for (fixed for this build).
+  // The Minecraft versions the launcher has the mod for: its own jars', then the signed content's
+  // (OVL-AUTO), which a content refresh can add, so the page asks again when it opens.
   const { data: overlay } = useQuery({
     queryKey: ["overlay-state"],
     queryFn: () => overlayApi.state(),
-    staleTime: Number.POSITIVE_INFINITY,
   });
   // The install Play opens: the command bar's rule, the one "Grafik ve FPS" shows.
   const { instance: play, busy } = usePlayInstance(instances ?? NO_INSTANCES);
@@ -133,14 +133,24 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
   // The install the install lines named last: fading out after a switch, they keep their words.
   // Before they ever showed, Play's own.
   const named = useRef("");
-  if ((line.kind === "notFabric" || line.kind === "version" || line.kind === "waits") && play) {
+  // The Minecraft version the "not out yet" line named last (OVL-AUTO), kept the same way.
+  const namedVersion = useRef("");
+  if (
+    (line.kind === "notFabric" ||
+      line.kind === "version" ||
+      line.kind === "notYet" ||
+      line.kind === "waits") &&
+    play
+  ) {
     named.current = play.name;
+    namedVersion.current = play.mcVersion;
   }
   const shownName = shortName(named.current || (play?.name ?? ""));
+  const shownVersion = namedVersion.current || (play?.mcVersion ?? "");
   const hasAction = (kind: OverlayLineKind) =>
     kind === "noHome" ||
     kind === "closes" ||
-    ((kind === "notFabric" || kind === "version") && home !== undefined);
+    ((kind === "notFabric" || kind === "version" || kind === "notYet") && home !== undefined);
   const grid = useRef<HTMLSpanElement>(null);
   const words = useLineWords(hasAction(line.kind));
   // A line that goes takes the pointer's mark with it (no pointerleave reaches an inert line).
@@ -161,6 +171,8 @@ function ModSwitchRow({ which }: { which: "overlay" | "emoji" }) {
     // One need for both: a Fabric install on a version the overlay is made for.
     notFabric: t("overlay.needs", { name: shownName, range }),
     version: t("overlay.needs", { name: shownName, range }),
+    // OVL-AUTO: a newer release whose tested jar is still to come.
+    notYet: t("overlay.notYet", { version: shownVersion }),
     // The reason gives way to where it can switch after the game: both would not fit one line.
     waits: homeIsPack
       ? t("overlay.waitsOfficial", { name: shownName })

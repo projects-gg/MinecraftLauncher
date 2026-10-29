@@ -6,6 +6,7 @@ vi.mock("@/lib/api", () => ({ api: {} }));
 
 const {
   carriesOverlay,
+  newerThanAll,
   OVERLAY_LINES,
   officialMissing,
   overlayHasNoHome,
@@ -97,8 +98,27 @@ describe("the overlay switch's line", () => {
     );
     expect(line(instance("q", { loader: "quilt", mcVersion: "26.1.2" })).kind).toBe("notFabric");
     expect(line(oldFabric).kind).toBe("version");
-    expect(line(instance("next", { mcVersion: "26.4" })).kind).toBe("version");
     expect(line(instance("snap", { mcVersion: "26.2-pre1" })).kind).toBe("version");
+  });
+
+  it("says the jar for a newer release is not out yet (OVL-AUTO)", () => {
+    const next = instance("next", { mcVersion: "26.4" });
+    expect(line(next)).toEqual({ kind: "notYet", switchTo: projects });
+    expect(line(instance("later", { mcVersion: "27.1" })).kind).toBe("notYet");
+    // A version between two that have a jar is not "not yet": the version line names the range.
+    expect(
+      line(instance("gap", { mcVersion: "26.2" }), { versions: ["26.1.2", "26.3"] }).kind,
+    ).toBe("version");
+    // Snapshots of the next version, and other loaders on it, keep their own lines.
+    expect(line(instance("snap", { mcVersion: "26.4-snapshot-6" })).kind).toBe("version");
+    expect(line(instance("neo", { loader: "neoForge", mcVersion: "26.4" })).kind).toBe("notFabric");
+    // Once the signed content brings 26.4's jar, the install carries it.
+    expect(line(next, { versions: [...VERSIONS, "26.4"] })).toEqual({ kind: "opens" });
+    expect(
+      line(instance("patch", { mcVersion: "26.4.1" }), { versions: [...VERSIONS, "26.4"] }),
+    ).toEqual({ kind: "opens" });
+    // While its game runs, where it can switch after the game.
+    expect(line(next, { locked: true })).toEqual({ kind: "waits", switchTo: projects });
   });
 
   it("offers the official pack to switch to", () => {
@@ -114,13 +134,13 @@ describe("the overlay switch's line", () => {
   });
 
   it("offers nothing when no install carries it but the official pack is there", () => {
-    // The pack on a version the mod is not shipped for yet (OVL-AUTO's case).
+    // The pack on a version the mod has no tested jar for yet (OVL-AUTO's case).
     const ahead = instance("projects", { managed: true, mcVersion: "26.4" });
     const only = { instances: [ahead, vanilla], official: status({ instanceId: "projects" }) };
-    expect(line(ahead, only)).toEqual({ kind: "version", switchTo: undefined });
+    expect(line(ahead, only)).toEqual({ kind: "notYet", switchTo: undefined });
     // Nothing to switch to after the game either: the reason stays.
     expect(line(ahead, { ...only, locked: true })).toEqual({
-      kind: "version",
+      kind: "notYet",
       switchTo: undefined,
     });
   });
@@ -141,8 +161,27 @@ describe("the overlay switch's line", () => {
       "closes",
       "notFabric",
       "version",
+      "notYet",
       "waits",
     ]);
+  });
+});
+
+describe("a release newer than every jar (OVL-AUTO)", () => {
+  it("is a release above the newest version, not a patch of a covered one", () => {
+    expect(newerThanAll("26.4", VERSIONS)).toBe(true);
+    expect(newerThanAll("26.4.2", VERSIONS)).toBe(true);
+    expect(newerThanAll("27.0", VERSIONS)).toBe(true);
+    expect(newerThanAll("26.3", VERSIONS)).toBe(false);
+    expect(newerThanAll("26.3.1", VERSIONS)).toBe(false);
+    expect(newerThanAll("26.2.5", VERSIONS)).toBe(false);
+    expect(newerThanAll("1.21.11", VERSIONS)).toBe(false);
+  });
+
+  it("is never a snapshot, nor anything while no version is known", () => {
+    expect(newerThanAll("26.4-snapshot-6", VERSIONS)).toBe(false);
+    expect(newerThanAll("26w44a", VERSIONS)).toBe(false);
+    expect(newerThanAll("26.4", [])).toBe(false);
   });
 });
 

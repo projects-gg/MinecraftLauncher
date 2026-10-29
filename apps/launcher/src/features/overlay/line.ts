@@ -14,13 +14,13 @@ import type { InstanceSummary, OfficialStatus } from "@/lib/api";
  * - `closes`: "Oyun açılınca launcher: Kapansın" is chosen, with "Kapanmak yerine küçülsün";
  * - `notFabric`: the install Play opens is not Fabric (the backend's `NotFabric`);
  * - `version`: it is Fabric on a version the mod does not ship for (`NoJar`);
- * - `waits`: one of those two while its game is prepared or open: the command bar's picker is
- *   locked, so the line says where it can switch after the game.
- * `notFabric` and `version` say the same need ("Fabric 26.1.2–26.3", `versionRange`) and switch
- * Play to an install that carries it, named in the action.
- * A later state (OVL-AUTO: "not out for this Minecraft version yet", for a newer version whose
- * tested jar is still to come) is one more name here, one more sentence in `tr/en-overlay.ts` and
- * one more rule in `overlayLine`, before `version`.
+ * - `notYet` (OVL-AUTO): it is Fabric on a release newer than every version the launcher has a
+ *   tested jar for, its own or the signed content's: "not out for Minecraft 26.4 yet". A tested jar
+ *   comes through the content without a launcher update; an untested one never goes in;
+ * - `waits`: one of those while its game is prepared or open: the command bar's picker is locked,
+ *   so the line says where it can switch after the game.
+ * `notFabric` and `version` say the same need ("Fabric 26.1.2–26.3", `versionRange`); they and
+ * `notYet` switch Play to an install that carries it, named in the action.
  */
 export const OVERLAY_LINES = [
   "opens",
@@ -28,6 +28,7 @@ export const OVERLAY_LINES = [
   "closes",
   "notFabric",
   "version",
+  "notYet",
   "waits",
 ] as const;
 export type OverlayLineKind = (typeof OVERLAY_LINES)[number];
@@ -35,8 +36,8 @@ export type OverlayLineKind = (typeof OVERLAY_LINES)[number];
 export interface OverlayLine {
   kind: OverlayLineKind;
   /**
-   * The install the line selects or names (`notFabric`, `version`, `waits`): none while no other
-   * install can carry the overlay.
+   * The install the line selects or names (`notFabric`, `version`, `notYet`, `waits`): none while
+   * no other install can carry the overlay.
    */
   switchTo?: InstanceSummary;
 }
@@ -48,7 +49,10 @@ export interface OverlayLineInput {
   leaves: boolean;
   instances: readonly InstanceSummary[] | undefined;
   official: OfficialStatus | undefined;
-  /** The Minecraft versions this build ships the mod for (`overlay.state().versions`). */
+  /**
+   * The Minecraft versions the launcher has the mod for: its own jars', then the signed content's
+   * (`overlay.state().versions`).
+   */
   versions: readonly string[] | undefined;
   /** The install Play opens: the command bar's rule (`usePlayInstance`). */
   play: InstanceSummary | undefined;
@@ -72,7 +76,26 @@ export function overlayLine(input: OverlayLineInput): OverlayLine {
   const switchTo = overlayHome(instances, official, versions);
   // The switch waits for the game; with nothing to switch to, the reason stays as it is.
   if (locked && switchTo) return { kind: "waits", switchTo };
-  return { kind: play.loader === "fabric" ? "version" : "notFabric", switchTo };
+  if (play.loader !== "fabric") return { kind: "notFabric", switchTo };
+  return { kind: newerThanAll(play.mcVersion, versions) ? "notYet" : "version", switchTo };
+}
+
+/**
+ * Whether `minecraft` is a release newer than every one of `versions` (OVL-AUTO's "henüz yok":
+ * its tested jar is still to come). Snapshots and an empty list are not.
+ */
+export function newerThanAll(minecraft: string, versions: readonly string[]): boolean {
+  const have = releaseNumbers(minecraft);
+  if (!have || versions.length === 0) return false;
+  return versions.every((shipped) => {
+    const want = releaseNumbers(shipped);
+    if (!want) return true;
+    for (let i = 0; i < Math.max(have.length, want.length); i++) {
+      const d = (have[i] ?? 0) - (want[i] ?? 0);
+      if (d !== 0) return d > 0 && !shipsFor(shipped, minecraft);
+    }
+    return false;
+  });
 }
 
 /**
