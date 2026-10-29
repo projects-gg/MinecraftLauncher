@@ -167,9 +167,11 @@ final class EmojiPicker {
         for (int i = 0; i < Section.values().length; i++) {
             sections.add(new ArrayList<>());
         }
+        // What the player wrote last, shortcuts too (":ping:"): they were left out, so a shortcut used all day
+        // never came back to the top (BETA-FB). In this row a shortcut is a cell with its code.
         for (String code : recent) {
             for (Emoji e : list) {
-                if (e.code().equals(code) && e.kind() != EmojiKind.SHORTCUT) {
+                if (e.code().equals(code)) {
                     sections.get(Section.RECENT.ordinal()).add(e);
                     break;
                 }
@@ -219,7 +221,7 @@ final class EmojiPicker {
                     rowTop += SHORTCUT_H;
                     continue;
                 }
-                Component preview = Previews.of(e);
+                Component preview = cellPreview(e);
                 boolean picture = Previews.picture(e);
                 int previewWidth = font.width(preview);
                 int w = cellWidth(e, previewWidth, picture, contentWidth);
@@ -235,6 +237,14 @@ final class EmojiPicker {
         contentHeight = y;
     }
 
+    /**
+     * What a cell shows: the emoji as chat will show it, and a shortcut (only in the recent row) by its code as it goes
+     * into chat, as its row under Kısayollar starts.
+     */
+    private static Component cellPreview(Emoji e) {
+        return e.kind() == EmojiKind.SHORTCUT ? Component.literal(e.code()) : Previews.of(e);
+    }
+
     /** A symbol (or the pack's picture) in a square cell, an expression as wide as its words (one row at most). */
     private static int cellWidth(Emoji e, int previewWidth, boolean picture, int contentWidth) {
         boolean square = picture || e.kind() == EmojiKind.SYMBOL || previewWidth <= TILE - 4;
@@ -247,7 +257,7 @@ final class EmojiPicker {
         List<Emoji> row = new ArrayList<>();
         float x = 0;
         for (Emoji e : recent) {
-            Component preview = Previews.of(e);
+            Component preview = cellPreview(e);
             int w = cellWidth(e, font.width(preview), Previews.picture(e), contentWidth);
             if (x > 0 && x + w > contentWidth) {
                 break;

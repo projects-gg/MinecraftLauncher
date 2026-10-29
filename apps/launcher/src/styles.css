@@ -101,18 +101,14 @@ body[data-scroll-locked] > #layer-shield {
   }
 }
 
-/* Performance mode and reduced motion keep the cross-fade only. */
-html[data-perf="on"]::view-transition-new(page) {
-  animation-name: fade-in;
+/* Reduced motion keeps the cross-fade only: the root's `data-motion` (@pl/ui reduced-motion.ts),
+   the system's setting, "Animasyonları azalt" or Performance mode (BETA-FB). */
+html[data-motion="reduce"]::view-transition-old(page) {
+  animation: fade-out 110ms ease-out both;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(page) {
-    animation: fade-out 110ms ease-out both;
-  }
-  ::view-transition-new(page) {
-    animation: fade-in 150ms ease-out both;
-  }
+html[data-motion="reduce"]::view-transition-new(page) {
+  animation: fade-in 150ms ease-out both;
 }
 
 /* A language change (lib/i18n.ts, view transition type "language"): the whole window

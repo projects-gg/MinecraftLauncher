@@ -11,6 +11,7 @@ import {
   focusTabQuietly,
   GatedMotion,
   IconButton,
+  ReducedMotionConfig,
   Skeleton,
   scrimMotion,
   sheetMotion,
@@ -18,7 +19,7 @@ import {
   useInteractionMotion,
   useMotionPrefs,
 } from "@pl/ui";
-import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { Dialog, Tabs } from "radix-ui";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -100,7 +101,7 @@ export function SettingsPanel({
                       onClick={onClose}
                     />
                   </header>
-                  <MotionConfig reducedMotion="user">{children}</MotionConfig>
+                  <ReducedMotionConfig>{children}</ReducedMotionConfig>
                 </GatedMotion.aside>
               </Dialog.Content>
             </Dialog.Portal>

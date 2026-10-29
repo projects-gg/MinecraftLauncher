@@ -12,8 +12,8 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { Button, Chip, cn, easeOutExpo, IconButton, springSnappy } from "@pl/ui";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Button, Chip, cn, easeOutExpo, IconButton, springSnappy, useReduceMotion } from "@pl/ui";
+import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
@@ -54,7 +54,7 @@ const actionClass = "size-[34px] rounded-lg";
 /** "Sabitle": a pin that presses in (fills, turns gold) when pinned and pops out when not. */
 function PinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
-  const reduced = useReducedMotion();
+  const reduced = useReduceMotion();
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;

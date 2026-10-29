@@ -97,7 +97,8 @@ export const trCloudAfk = {
     settings: "Ayarlar",
     more: "Diğer işlemler",
     renew: "Süreyi uzat",
-    reactivate: "Yeniden etkinleştir",
+    /** An expired account comes back with new time: the button says that (the site's, SITE-W2B). */
+    reactivate: "Süre al",
     openSite: "afk.projects.gg'de aç",
     started: "{{name}} başlatıldı",
     stopped: "{{name}} durduruldu",
