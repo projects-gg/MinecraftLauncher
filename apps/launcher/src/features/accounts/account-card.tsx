@@ -12,7 +12,16 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { Button, Chip, cn, easeOutExpo, IconButton, springSnappy, useReduceMotion } from "@pl/ui";
+import {
+  Button,
+  Chip,
+  cn,
+  easeOutExpo,
+  IconButton,
+  springSnappy,
+  Tooltip,
+  useReduceMotion,
+} from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -83,15 +92,23 @@ function PinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void
   );
 }
 
-/** "Microsoft" on Microsoft accounts; an account with only a username has no chip (KEYS2). */
+/**
+ * The Microsoft mark alone on Microsoft accounts, its name in the tooltip and read out as "Microsoft
+ * hesabı": the word took the room of "Son oynama …", the line's one fact (TASTE-SWEEP SMALLS-L). An
+ * account with only a username has no chip (KEYS2).
+ */
 export function KindChip({ kind }: { kind: AccountSummary["kind"] }) {
   const { t } = useTranslation();
   if (kind !== "microsoft") return null;
   return (
-    <Chip className="shrink-0 gap-1.5 font-medium text-ash-300">
-      <MicrosoftMark size={10} />
-      {t("accounts.kind.microsoft")}
-    </Chip>
+    <Tooltip content={t("accounts.kind.microsoft")}>
+      <span className="inline-flex shrink-0">
+        <Chip className="px-[6px]">
+          <MicrosoftMark size={10} />
+          <span className="sr-only">{t("accounts.microsoft")}</span>
+        </Chip>
+      </span>
+    </Tooltip>
   );
 }
 

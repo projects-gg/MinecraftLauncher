@@ -887,7 +887,12 @@ function MeRow({ member }: { member: TeamMember }) {
       >
         <RoleBadge member={member} />
       </BadgedName>
-      <span className="text-[12px] text-ash-400">{t("teams.you")}</span>
+      {/* "Sen" in the column of the others' "Katıl"; the empty place after it is their "⋯",
+          which shows under the pointer (TASTE-SWEEP SMALLS-L). */}
+      <span className="flex items-center gap-2">
+        <span className="text-[12px] text-ash-400">{t("teams.you")}</span>
+        <span aria-hidden className="size-8 shrink-0" />
+      </span>
     </div>
   );
 }
