@@ -34,7 +34,9 @@ import {
   type ConsoleClick,
   ConsoleDirection,
   ConsoleText,
+  copiedPreview,
 } from "@pl/ui/console";
+import { fill, safeInvItem } from "@pl/ui/inventory";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
@@ -85,8 +87,11 @@ const STICK_PX = 32;
 /** Lines typed per account this session, newest last: ↑ and ↓ walk through them. */
 const histories = new Map<string, string[]>();
 
-/** A hover's item as the inventory shows it (the socket's item, checked by pl_cloud_afk). */
-const hoverItem = (raw: unknown) => toInvItem(raw as CloudInvItem);
+/**
+ * A hover's item as the inventory shows it: typed by pl_cloud_afk, then checked field by field by
+ * @pl/ui's safeInvItem (bounded plain text, the console's forbidden characters out).
+ */
+const hoverItem = (raw: unknown) => safeInvItem(toInvItem(raw as CloudInvItem));
 
 /** A line's time as the console shows it. */
 function clockOf(at: number): string {
@@ -493,7 +498,8 @@ export function CloudConsole({
           return;
         case "copy_to_clipboard":
           navigator.clipboard.writeText(click.v).then(
-            () => toast(CONSOLE_TEXTS[lang].copied),
+            // What was copied, shown (a part never copies something the player has not seen).
+            () => toast(fill(CONSOLE_TEXTS[lang].copiedValue, { value: copiedPreview(click.v) })),
             () => undefined,
           );
       }
