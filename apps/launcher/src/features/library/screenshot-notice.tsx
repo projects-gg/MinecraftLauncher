@@ -2,10 +2,10 @@
 // ones fanned out like prints. "Kopyala" puts the newest on the clipboard (straight into Discord
 // or WhatsApp); "Göster" opens that instance's gallery.
 import { Check, CopySimple } from "@phosphor-icons/react";
-import { Button, easeOutExpo, toast } from "@pl/ui";
+import { Button, easeOutExpo, toast, useReduceMotion } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
@@ -23,7 +23,7 @@ const fans: Record<number, string[]> = {
 };
 
 function Prints({ urls }: { urls: string[] }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   // The newest print lies on top.
   const stack = urls.slice(0, 3).reverse();
   const places = fans[stack.length] ?? [];
@@ -64,7 +64,7 @@ function Prints({ urls }: { urls: string[] }) {
  */
 function CopyNewest({ instanceId, fileName }: { instanceId: string; fileName: string }) {
   const { t } = useTranslation();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   const [copied, setCopied] = useState(false);
   const busy = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

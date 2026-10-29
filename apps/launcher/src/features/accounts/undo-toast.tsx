@@ -1,7 +1,7 @@
 // The toast after a removal: who left, what that means, "Geri al", and a thin line that drains
 // over the undo window (paused while the toasts are hovered, as Sonner pauses its timer).
 import { ArrowCounterClockwise } from "@phosphor-icons/react";
-import { toast } from "@pl/ui";
+import { motionReduced, toast } from "@pl/ui";
 import { useEffect, useRef } from "react";
 import type { AccountSummary } from "@/lib/api";
 import i18n from "@/lib/i18n";
@@ -12,7 +12,7 @@ function DrainLine() {
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const line = ref.current;
-    if (!line || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!line || motionReduced()) return;
     const animation = line.animate([{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], {
       duration: UNDO_MS,
       easing: "linear",

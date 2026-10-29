@@ -117,7 +117,8 @@ export interface ShortcutContext {
  * and closes the palette from anywhere, also from a text field (cmdk's own Ctrl+K moves its
  * selection up and marks the key handled, so that does not count). The pages type nothing, so
  * they work in text fields and from the palette, which they close. OYNA never starts from a text
- * field, where Ctrl+Enter may mean something, nor from the palette, where Enter picks a row.
+ * field, where Ctrl+Enter may mean something; the palette presses it itself, as its "Oyna" rows'
+ * key caps say (command-palette.tsx: cmdk took Ctrl+Enter as Enter on the row under the arrows).
  */
 export function shortcutAllowed(id: ShortcutId, context: ShortcutContext): boolean {
   if (context.blocked || context.overlay) return false;
@@ -185,15 +186,27 @@ export function hasOpenOverlay(root: Pick<ParentNode, "querySelector">): boolean
   return root.querySelector(OVERLAY_SELECTOR) !== null;
 }
 
+/** OYNA when a press starts a game ("Oyna", "Güncelle"), else null. */
+function readyPlayButton(root: Pick<ParentNode, "querySelector">): HTMLButtonElement | null {
+  const button = root.querySelector<HTMLButtonElement>("button[data-play-state]");
+  const state = button?.dataset.playState;
+  if (!button || button.disabled || (state !== "ready" && state !== "update")) return null;
+  return button;
+}
+
+/** Whether a press of OYNA would start a game now (`pressPlayButton` would press). */
+export function playButtonReady(root: Pick<ParentNode, "querySelector">): boolean {
+  return readyPlayButton(root) !== null;
+}
+
 /**
  * Presses OYNA the way a click does (its double-press guard included), and only when a click
  * starts a game ("Oyna", "Güncelle"): while a launch is prepared or the game opens a click
  * cancels it, and a shortcut never does that. Returns whether it pressed.
  */
 export function pressPlayButton(root: Pick<ParentNode, "querySelector">): boolean {
-  const button = root.querySelector<HTMLButtonElement>("button[data-play-state]");
-  const state = button?.dataset.playState;
-  if (!button || button.disabled || (state !== "ready" && state !== "update")) return false;
+  const button = readyPlayButton(root);
+  if (!button) return false;
   button.click();
   return true;
 }

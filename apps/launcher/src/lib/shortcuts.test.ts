@@ -8,6 +8,7 @@ import {
   isTypingTarget,
   type KeyPress,
   matchShortcut,
+  playButtonReady,
   pressPlayButton,
   SHORTCUT_PAGES,
   SHORTCUTS,
@@ -309,5 +310,14 @@ describe("DOM helpers", () => {
       expect(b.click).not.toHaveBeenCalled();
     }
     expect(pressPlayButton(rootWith(null))).toBe(false);
+  });
+
+  it("tells the palette whether Ctrl+Enter would start a game, without pressing", () => {
+    const ready = { disabled: false, dataset: { playState: "ready" }, click: vi.fn() };
+    expect(playButtonReady(rootWith(ready))).toBe(true);
+    expect(ready.click).not.toHaveBeenCalled();
+    const opening = { disabled: false, dataset: { playState: "opening" }, click: vi.fn() };
+    expect(playButtonReady(rootWith(opening))).toBe(false);
+    expect(playButtonReady(rootWith(null))).toBe(false);
   });
 });

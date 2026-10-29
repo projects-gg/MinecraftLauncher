@@ -1,5 +1,27 @@
-import { stillKeyframes } from "@pl/ui";
-import { describe, expect, it } from "vitest";
+import { motionReduced, setAppReducedMotion, stillKeyframes, subscribeReducedMotion } from "@pl/ui";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// "Animasyonları azalt" and Performance mode reduce motion as the system's setting does (BETA-FB).
+describe("the app's own reduced motion", () => {
+  afterEach(() => setAppReducedMotion(false));
+
+  it("counts beside the system's setting and tells every reader once", () => {
+    // No window here: the system asks for nothing.
+    expect(motionReduced()).toBe(false);
+    const heard = vi.fn();
+    const stop = subscribeReducedMotion(heard);
+    setAppReducedMotion(true);
+    expect(motionReduced()).toBe(true);
+    expect(heard).toHaveBeenCalledTimes(1);
+    // The same wish again changes nothing.
+    setAppReducedMotion(true);
+    expect(heard).toHaveBeenCalledTimes(1);
+    stop();
+    setAppReducedMotion(false);
+    expect(motionReduced()).toBe(false);
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
+});
 
 // Under reduced motion every Web Animation holds its movement at the final value (POLISH3).
 describe("stillKeyframes", () => {

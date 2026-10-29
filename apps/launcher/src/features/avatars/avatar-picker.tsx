@@ -2,8 +2,8 @@
 // picture or a Minecraft head in the friends profile later), then every bundled picture in
 // manifest order. Arrow keys move, Enter or a click picks; the gold pixel brackets mark the pick
 // and travel to the new one.
-import { cn, PixelBrackets, springSnappy } from "@pl/ui";
-import { MotionConfig, motion } from "motion/react";
+import { cn, PixelBrackets, ReducedMotionConfig, springSnappy } from "@pl/ui";
+import { motion } from "motion/react";
 import { type KeyboardEvent, type ReactNode, useId, useRef, useState } from "react";
 import { PresetFace } from "./preset-face";
 import { PRESET_AVATARS, type PresetAvatar } from "./presets";
@@ -96,7 +96,7 @@ export function AvatarPicker({
   };
 
   return (
-    <MotionConfig reducedMotion="user">
+    <ReducedMotionConfig>
       <div
         ref={listRef}
         role="listbox"
@@ -140,6 +140,6 @@ export function AvatarPicker({
           );
         })}
       </div>
-    </MotionConfig>
+    </ReducedMotionConfig>
   );
 }
