@@ -138,7 +138,7 @@ public final class OverlayState {
     }
 
     /**
-     * OVL-UX3 (R1): the player's rights in one crew, for the crew rows of its crewmates' menus in its chat: the
+     * OVL-UX3 (U1): the player's rights in one crew, for the crew rows of its crewmates' menus in its chat: the
      * player leads it ("Liderliği devret", "Ekipten çıkar" for anyone), names moderators there ({@code roles}), the
      * crew has its 4 moderators ({@code modsFull}), and the crewmates the rows may be about.
      */
@@ -1176,7 +1176,7 @@ public final class OverlayState {
     }
 
     /**
-     * R1: the crews' rights ({@code roles}: crew id to {@code lead}, {@code roles}, {@code modsFull}, {@code conv} and
+     * U1: the crews' rights ({@code roles}: crew id to {@code lead}, {@code roles}, {@code modsFull}, {@code conv} and
      * {@code mates}, each crewmate's {@code mod} and {@code kick}); at most 10 crews of 200 crewmates, anything else
      * skipped.
      */

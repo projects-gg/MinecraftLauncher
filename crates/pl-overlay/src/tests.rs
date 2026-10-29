@@ -1806,7 +1806,7 @@ async fn the_leaders_crew_rows_from_the_game() {
             .unwrap()
             .contains(&json!("people3"))
     );
-    // R1: the rights in both crews, only the crewmates a row may be about.
+    // U1: the rights in both crews, only the crewmates a row may be about.
     assert_eq!(
         game.next_of("lists").await["roles"],
         json!({

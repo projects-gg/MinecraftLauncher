@@ -1928,7 +1928,7 @@ impl<S: SocialActions> Session<S> {
         self.settle(friend, FriendAction::CrewInvite, doing);
     }
 
-    /// "Yeni kategori…" from the game (OVL-UX3, R5): a new category of that name at the end of the
+    /// "Yeni kategori…" from the game (OVL-UX3, U5): a new category of that name at the end of the
     /// list, with the friend in it, saved whole as "Kategoriye taşı" saves; the launcher's own
     /// `addGroup` ([`clean_group_name`], [`new_group_id`], at most [`MAX_GROUPS`]). A named move
     /// to a category that exists is no new one.
@@ -1972,7 +1972,7 @@ impl<S: SocialActions> Session<S> {
         self.settle(friend, FriendAction::Move, doing);
     }
 
-    /// A crew row from the game (OVL-UX3, R2–R4), checked again against the view as it is now
+    /// A crew row from the game (OVL-UX3, U2–U4), checked again against the view as it is now
     /// (the mod's rows came from `lists.roles`, which may be a little older), by the launcher's own
     /// rules: "Moderatör yap" / "Moderatörlükten al" and "Liderliği devret" only in a crew the
     /// player leads (moderators only while the service offers roles, at most

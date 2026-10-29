@@ -249,7 +249,7 @@ pub struct PeopleLists {
     pub projects: Vec<String>,
     /// Crewmates who are not friends, whose Discord profile is known (Q15).
     pub discord: Vec<String>,
-    /// OVL-UX3 (R1): the player's rights over crewmates, by crew ([`crew_roles`]).
+    /// OVL-UX3 (U1): the player's rights over crewmates, by crew ([`crew_roles`]).
     pub roles: BTreeMap<String, CrewRoles>,
 }
 

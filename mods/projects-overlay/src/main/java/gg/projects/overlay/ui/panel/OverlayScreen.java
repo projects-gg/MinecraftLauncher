@@ -113,6 +113,14 @@ public final class OverlayScreen extends Screen {
         public void chose(String friendId, FriendMenu.Action action, String choice) {
             onMenuChoice(friendId, action, choice);
         }
+
+        @Override
+        public void named(String friendId, String name) {
+            // "Yeni kategori…" (OVL-UX3): the launcher makes the category and moves them into it.
+            friends.setMenuFor(null);
+            clearChipMenu();
+            overlay.moveToNewCategory(friendId, name);
+        }
     });
     /** Whom the open menu is about, as the place that opened it named them (OVL-UX2: a crewmate is no friend). */
     private String menuName = "";
@@ -735,6 +743,11 @@ public final class OverlayScreen extends Screen {
                 out.add(new PersonMenu.Choice(group.id(), group.name(), false, group.id().equals(f.group())));
             }
             out.add(new PersonMenu.Choice("", Texts.str("people.move.rest"), false, f.group() == null));
+            if (state.has("people3")) {
+                // "Yeni kategori…" last, after a hairline; soft at the service's 20 categories (OVL-UX3).
+                out.add(new PersonMenu.Choice(PersonMenu.NEW_CHOICE, Texts.str("people.move.new"),
+                    state.groups().size() >= 20, false));
+            }
         } else if (action == FriendMenu.Action.CREW_INVITE) {
             for (OverlayState.CrewTarget crew : state.inviteCrews()) {
                 FriendMenu.Team place = teamPlace(f, crew);
@@ -1050,6 +1063,16 @@ public final class OverlayScreen extends Screen {
         boolean chosen = menu.choose(choice, width, height, now());
         syncMenu();
         return chosen;
+    }
+
+    /** Types into the open menu's "Yeni kategori…" field as the keys would (OVL-UX3; the scenario driver). */
+    public boolean typeMenu(String name) {
+        return menu.typeForDriver(name);
+    }
+
+    /** Whether the open menu shows "Yeni kategori…"'s field (OVL-UX3; the scenario driver checks it). */
+    public boolean menuNaming() {
+        return menu.naming();
     }
 
     /** A friend's chip menu as a right click on it (or, {@code keys}, Shift+F10) would open it (the scenario driver). */
@@ -1692,7 +1715,8 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        boolean typing = field.isFocused() && field.visible;
+        // A name typed into the menu's "Yeni kategori…" field types too (OVL-UX3).
+        boolean typing = field.isFocused() && field.visible || menu.naming();
         if (overlay.key().closes(event, typing)) {
             close();
             return true;
@@ -1755,7 +1779,8 @@ public final class OverlayScreen extends Screen {
     @Override
     public boolean charTyped(CharacterEvent event) {
         if (menu.isOpen()) {
-            // Nothing types under an open menu.
+            // Nothing types under an open menu; "Yeni kategori…"'s field in it does (OVL-UX3).
+            menu.charTyped(event.codepoint());
             return true;
         }
         boolean handled = super.charTyped(event);

@@ -197,7 +197,7 @@ pub enum FromGame {
     /// OVL-UX2 (Q9): "Çevrimiçi olunca bildir" on or off for this friend (`alert`).
     Alert { friend: String, on: bool },
     /// OVL-UX2 (Q10): "Kategoriye taşı": one of the player's categories by id, empty for the
-    /// implicit "Arkadaşlar". Answered with `friend-result`. OVL-UX3 (R5; from a mod whose hello
+    /// implicit "Arkadaşlar". Answered with `friend-result`. OVL-UX3 (U5; from a mod whose hello
     /// lists `people3`): `group` empty and a `name`: "Yeni kategori…", a new category of that name
     /// at the end of the list, with the friend in it.
     Move {
@@ -213,7 +213,7 @@ pub enum FromGame {
     /// OVL-UX2 (Q12): "Arkadaş ekle" (or "İsteği kabul et" when they asked first) on a crewmate who
     /// is not a friend yet. Answered with `friend-result` (`queued`: the request waits for them).
     AddFriend { friend: String },
-    /// OVL-UX3 (R2; from a mod whose hello lists `people3`): "Moderatör yap" (`on`) or
+    /// OVL-UX3 (U2; from a mod whose hello lists `people3`): "Moderatör yap" (`on`) or
     /// "Moderatörlükten al" on a crewmate of a crew the player leads. Answered with
     /// `friend-result`.
     CrewMod {
@@ -221,9 +221,9 @@ pub enum FromGame {
         friend: String,
         on: bool,
     },
-    /// OVL-UX3 (R3): "Liderliği devret" to a crewmate of a crew the player leads.
+    /// OVL-UX3 (U3): "Liderliği devret" to a crewmate of a crew the player leads.
     CrewLead { crew: String, friend: String },
-    /// OVL-UX3 (R4): "Ekipten çıkar": anyone out of a crew the player leads, or a plain member
+    /// OVL-UX3 (U4): "Ekipten çıkar": anyone out of a crew the player leads, or a plain member
     /// out of a crew whose moderators may remove members, by one of them.
     CrewRemove { crew: String, friend: String },
     /// OVL-LANG (G4; from a mod whose hello lists `lang`): the player picked the overlay's language
@@ -278,7 +278,7 @@ pub const FEATURE_INVITE: &str = "invite";
 /// those frames (signed in to friends).
 pub const FEATURE_PEOPLE2: &str = "people2";
 
-/// The `hello` feature of a mod with OVL-UX3's rows (R1: it reads `roles` in `lists`, sends
+/// The `hello` feature of a mod with OVL-UX3's rows (U1: it reads `roles` in `lists`, sends
 /// `crew-mod`, `crew-lead`, `crew-remove`, and `move` with a new category's `name`), and the
 /// `welcome` feature that says this launcher takes those frames (signed in to friends).
 pub const FEATURE_PEOPLE3: &str = "people3";
@@ -514,7 +514,7 @@ pub enum ToGame {
         /// at" in their menu).
         #[serde(skip_serializing_if = "Vec::is_empty")]
         discord: Vec<String>,
-        /// OVL-UX3 (R1): the player's rights over crewmates, by crew id: only crews the player
+        /// OVL-UX3 (U1): the player's rights over crewmates, by crew id: only crews the player
         /// leads or may remove members from (no entry: no crew rows there). Only to a mod that
         /// said `people3`.
         #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -683,7 +683,7 @@ pub struct CrewItem {
     pub full: bool,
 }
 
-/// The player's rights in one crew, for the crew rows of a crewmate's menu (OVL-UX3, R1), by the
+/// The player's rights in one crew, for the crew rows of a crewmate's menu (OVL-UX3, U1), by the
 /// launcher's own rules (`teams.ts` `canRemove`, `person-menu.tsx`), so the mod shows only rows
 /// that would go.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -1495,7 +1495,7 @@ mod tests {
             serde_json::json!({"t":"lists","groups":[],"crews":[],"crewmates":true,
                 "projects":["u-cem"],"discord":["u-cem","u-ali"]})
         );
-        // OVL-UX3 (R1): the crews the player has rights in, and the crewmates the rows are about.
+        // OVL-UX3 (U1): the crews the player has rights in, and the crewmates the rows are about.
         let roles = serde_json::to_value(ToGame::Lists {
             groups: Vec::new(),
             crews: Vec::new(),

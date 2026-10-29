@@ -164,7 +164,20 @@ public final class FriendMenu {
         }
     }
 
+    /** The most a friend category's name keeps (the launcher's {@code GROUP_NAME_MAX}; OVL-UX3). */
+    public static final int CATEGORY_NAME_MAX = 24;
+
     private FriendMenu() {
+    }
+
+    /**
+     * A new category's name as the launcher keeps it ({@code cleanGroupName}; "Yeni kategori…", OVL-UX3): spaces
+     * folded and trimmed, at most {@link #CATEGORY_NAME_MAX} characters. Empty: no name.
+     */
+    public static String cleanCategoryName(String typed) {
+        String folded = typed == null ? "" : typed.replaceAll("(?U)\\s+", " ").strip();
+        int[] points = folded.codePoints().limit(CATEGORY_NAME_MAX).toArray();
+        return new String(points, 0, points.length);
     }
 
     /** The rows, a {@code null} between groups (never first, last or twice). */

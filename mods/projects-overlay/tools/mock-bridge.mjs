@@ -30,6 +30,10 @@
 // "seen", crew messages' "by" (and a message from Cem, a crewmate who is not a friend). "favorite" and "alert" come
 // back as the friend's frame, "move", "crew-invite" and "add-friend" also with "friend-result"; "block" and "report"
 // take a crewmate too.
+// --people3 (with --people2) plays OVL-UX3: "people3" in the welcome, the player's rights in Gece Kuşları in the
+// lists' "roles" (the player leads it, roles on, Deniz moderates; its chat carries the rows), "crew-mod", "crew-lead"
+// and "crew-remove" answered with "friend-result" and the new rights (a hand-over leaves the player a moderator who
+// may not remove anyone; a removal takes them out), and a "move" with a "name" makes the category and moves them.
 // --link plays codeless Discord linking (docs/tasks/ovl2-protocol.md, SKIN1-O): "link" in the welcome; a mod's
 // "link-want" gets a made-up permit ("link-offer") for that name, or "link-clear" for the name "Nobody".
 // --host plays world sharing's host launcher (docs/tasks/ovl2-protocol.md, HOST1, H1-H17): "host" in the welcome;
@@ -414,6 +418,21 @@ const LISTS = {
   discord: ["u-cem"],
 };
 const CREWMATES = { "u-cem": "Cem" };
+if (args.people2 && args.people3) {
+  // OVL-UX3: the player leads Gece Kuşları (its chat carries the crew rows); Deniz moderates.
+  LISTS.roles = {
+    "t-gece": {
+      lead: true,
+      roles: true,
+      conv: "crew:gece",
+      mates: {
+        "f-mert": { kick: true },
+        "f-deniz": { mod: true, kick: true },
+        "u-cem": { kick: true },
+      },
+    },
+  };
+}
 if (args.people2) {
   const mark = (id, fields) =>
     Object.assign(
@@ -620,6 +639,7 @@ function welcome(socket) {
           ...(tagsOn ? ["tags"] : []),
           ...(args.people ? ["people", ...(inviteOn ? ["invite"] : [])] : []),
           ...(args.people && args.people2 ? ["people2"] : []),
+          ...(args.people && args.people2 && args.people3 ? ["people3"] : []),
           ...(args.link ? ["link"] : []),
           ...(args.host ? ["host"] : []),
         ],
@@ -888,6 +908,13 @@ function onFrame(socket, frame) {
         onPeople2(socket, frame);
       }
       break;
+    case "crew-mod":
+    case "crew-lead":
+    case "crew-remove":
+      if (args.people && args.people2 && args.people3) {
+        onPeople3(socket, frame);
+      }
+      break;
     case "typing":
       // The player writes in the panel: a launcher passes it to the friends service; the mock only logs it.
       break;
@@ -1067,6 +1094,20 @@ function onPeople2(socket, frame) {
       later(60, () => send(socket, { t: "friend", ...friend }));
       break;
     case "move": {
+      if (args.people3 && !frame.group && typeof frame.name === "string" && frame.name.trim()) {
+        // OVL-UX3: "Yeni kategori…": the category at the end of the list, the friend in it.
+        if (LISTS.groups.length >= 20) {
+          result(false, { reason: "failed" });
+          break;
+        }
+        const id = `n${Date.now().toString(36).slice(-7)}`;
+        LISTS.groups.push({ id, name: frame.name.trim().replace(/\s+/g, " ").slice(0, 24) });
+        friend.group = id;
+        later(40, () => send(socket, { t: "lists", ...LISTS }));
+        later(60, () => send(socket, { t: "friend", ...friend }));
+        result(true);
+        break;
+      }
       const known = LISTS.groups.some((g) => g.id === frame.group);
       if (frame.group && !known) {
         result(false, { reason: "failed" });
@@ -1091,6 +1132,60 @@ function onPeople2(socket, frame) {
     default:
       break;
   }
+}
+
+/**
+ * OVL-UX3: a crew row from a sender's menu in Gece Kuşları's chat, answered as the launcher would after the friends
+ * service took it: the new rights come as the lists again.
+ */
+function onPeople3(socket, frame) {
+  const result = (ok) =>
+    later(180, () =>
+      send(socket, {
+        t: "friend-result",
+        friend: frame.friend,
+        action: frame.t,
+        ok,
+        ...(ok ? {} : { reason: "failed" }),
+      }),
+    );
+  const crew = LISTS.roles?.[frame.crew];
+  const mate = crew?.mates?.[frame.friend];
+  if (!crew || !mate) {
+    result(false);
+    return;
+  }
+  switch (frame.t) {
+    case "crew-mod": {
+      const mods = Object.values(crew.mates).filter((m) => m.mod).length;
+      if (!crew.lead || !crew.roles || (frame.on === true && mods >= 4)) {
+        result(false);
+        return;
+      }
+      mate.mod = frame.on === true ? true : undefined;
+      crew.modsFull = Object.values(crew.mates).filter((m) => m.mod).length >= 4 || undefined;
+      break;
+    }
+    case "crew-lead":
+      if (!crew.lead) {
+        result(false);
+        return;
+      }
+      // The player is a moderator now: no crew rows are theirs any more in the mock.
+      delete LISTS.roles[frame.crew];
+      break;
+    case "crew-remove":
+      if (!mate.kick) {
+        result(false);
+        return;
+      }
+      delete crew.mates[frame.friend];
+      break;
+    default:
+      return;
+  }
+  later(60, () => send(socket, { t: "lists", ...LISTS }));
+  result(true);
 }
 
 function gone(socket, id) {
