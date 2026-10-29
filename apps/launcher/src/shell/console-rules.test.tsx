@@ -132,7 +132,9 @@ describe("a copy's toast", () => {
     const shown = copiedPreview(emoji);
     expect(shown.startsWith("x".repeat(27))).toBe(true);
     expect(shown.endsWith("z".repeat(27))).toBe(true);
-    expect(shown).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+    expect(shown).not.toMatch(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+    );
   });
 });
 
