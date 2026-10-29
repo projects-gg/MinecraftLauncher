@@ -27,11 +27,11 @@ import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launc
 import { RoutePicker } from "@/features/autojoin/route-picker";
 import { useRoute } from "@/features/autojoin/use-route";
 import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
+import { useFastPackSync } from "@/features/fastpack/use-fast-pack-sync";
 import { helpsWithLaunchError } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { useOfficialOffer } from "@/features/library/official";
-import { useFastPackSync } from "@/features/fastpack/use-fast-pack-sync";
 import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
 import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
 import { api, type InstanceSummary } from "@/lib/api";
