@@ -94,6 +94,7 @@ export const enTeams: typeof trTeams = {
   cancel: "Cancel",
   notices: {
     invite: "{{name}} invited you to {{team}}",
+    seeInvite: "See invite",
     kicked: "You were removed from {{team}}",
     kickedUnnamed: "You were removed from your crew",
     disbanded: "{{team}} was disbanded",

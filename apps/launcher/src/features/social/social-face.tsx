@@ -10,6 +10,7 @@ import { PresetFace } from "@/features/avatars/preset-face";
 import { presetAvatar } from "@/features/avatars/presets";
 import type { PresenceState } from "@/lib/api/social-types";
 import { pop, useSocialMotion } from "./motion";
+import { ownPhoto } from "./own-photo";
 
 export interface FaceSource {
   name: string;
@@ -75,12 +76,13 @@ export function SocialFace({
 }) {
   const preset = presetAvatar(source.avatar);
   const texture = source.avatar ? TEXTURE.exec(source.avatar)?.[1] : undefined;
+  const photo = ownPhoto(source.avatarUrl);
   const face = preset ? (
     <PresetFace avatar={preset} size={size} />
   ) : texture ? (
     <MinecraftHead hash={texture} size={size} />
-  ) : source.avatarUrl ? (
-    <Photo src={source.avatarUrl} name={source.name} size={size} />
+  ) : photo ? (
+    <Photo src={photo} name={source.name} size={size} />
   ) : (
     <PlayerHead name={source.name} size={size} />
   );
