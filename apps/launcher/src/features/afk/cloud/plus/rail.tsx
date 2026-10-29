@@ -107,6 +107,8 @@ function StateBlock({
   const guard = usePressGuard(action ?? "none");
   const queryClient = useQueryClient();
   const goToLimit = usePlusUi((s) => s.goToLimit);
+  // The setup's choices wait ("Daha sonra"): the button goes back to them (SETUP-UX-L).
+  const resumes = usePlusUi((s) => Boolean(s.setups[account.id]));
   // Buying waits for the spending limits: "Sınırlara git" to the first one missing, as last read.
   const goSpend = () => {
     const panel = queryClient.getQueryData<PlusPanel>(plusKey(account.id));
@@ -128,8 +130,10 @@ function StateBlock({
         >
           {away ? sentence.text : waits ? text : t("afkPlus.ai.setup")}
         </p>
-        <Button size="sm" variant="primary" onClick={onSetup} className="self-start">
-          {t("afkPlus.setup.open")}
+        {/* A bone plate, as the rail's other start that waits for the player: the gold is the
+            setup's own "Devam" and the panel's save (one gold per screen, design.md §2). */}
+        <Button size="sm" variant="bone" onClick={onSetup} className="self-start">
+          {resumes ? t("setup.plus.resume") : t("afkPlus.setup.open")}
         </Button>
       </div>
     );
@@ -273,12 +277,12 @@ function Bar({ label, pct }: { label: string; pct: number }) {
       aria-valuenow={Math.round(value)}
       className="relative h-1 overflow-hidden rounded-full bg-white/8"
     >
+      {/* Bone, as the site's: gold is the screen's one action. Used up, a dimmer full bar beside
+          the word for it (a bright full one read as a goal reached; TOPUP's look). */}
       <div
         className={cn(
           "absolute inset-0 rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          value >= 100
-            ? "bg-gold-300"
-            : "bg-[linear-gradient(90deg,var(--color-gold-600),var(--color-gold-400))]",
+          value >= 100 ? "bg-ash-400/60" : "bg-bone-100/75",
         )}
         style={{ transform: `translateX(${value - 100}%)` }}
       />
@@ -294,7 +298,9 @@ function Window({ title, pct, resetAt }: { title: string; pct: number; resetAt: 
       <p className="flex items-baseline justify-between gap-2 text-[12.5px]">
         <span className="text-bone-100">{title}</span>
         <span className="text-ash-300 tabular-nums">
-          {t("afkPlus.quota.used", { percent: formatPercent(pct) })}
+          {pct >= 100
+            ? t("afkPlus.quota.usedUp")
+            : t("afkPlus.quota.used", { percent: formatPercent(pct) })}
         </span>
       </p>
       <Bar label={title} pct={pct} />

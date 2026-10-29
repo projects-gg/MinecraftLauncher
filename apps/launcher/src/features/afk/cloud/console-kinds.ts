@@ -10,6 +10,11 @@ export interface KindLine {
   c?: string | null;
   who?: string | null;
   goto?: string | null;
+  /** Console looks (CONSOLE-COLOR): the parts and events, checked by `@pl/ui/console`. */
+  st?: unknown;
+  ev?: unknown;
+  /** A private line's direction (`in`, `out`) when the machine knows it. */
+  dir?: string | null;
 }
 
 export type LineKind = "command" | "chat" | "pm" | "sys" | "title" | "cli" | "err" | "console";

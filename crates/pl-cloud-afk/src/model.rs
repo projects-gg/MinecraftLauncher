@@ -498,6 +498,11 @@ pub struct AccountList {
 /// With console kinds (CAFK-FEAT) `c` says what it is (`chat`, `pm`, `sys`, `title`, `cli`, `err`;
 /// kept as text, an unknown one reads as `cli`), `who` the other player of a chat or private line,
 /// `goto: "inventory"` a machine line the console may link to the inventory. Older lines have none.
+///
+/// With console looks (CONSOLE-COLOR) `st` gives the line's parts in the game's colours and flags
+/// and `ev` what a part does when pointed at or clicked. Both are shown only as checked by the
+/// view (`@pl/ui/console`); `text` stays the line for search, copy and everything else. A part or
+/// event this launcher cannot read leaves the line without them, never without the line.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct CloudConsoleLine {
     pub at: i64,
@@ -506,6 +511,90 @@ pub struct CloudConsoleLine {
     pub c: Option<String>,
     pub who: Option<String>,
     pub goto: Option<String>,
+    // `lenient` reads the same type it writes (an odd value reads as none): the wire type is the
+    // field's own, which specta is told.
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<Vec<CloudSpan>>)]
+    pub st: Option<Vec<CloudSpan>>,
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<Vec<CloudLineEvent>>)]
+    pub ev: Option<Vec<CloudLineEvent>>,
+    /// A private line's direction when the machine knows it: `in` (to the player) or `out` (the
+    /// player's own reply); kept as text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+}
+
+/// A field that does not read is absent: one odd part never costs the line.
+fn lenient<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value).ok())
+}
+
+/// One part of a line (`[n, code]`, or `[n, code, e]` with an event): its length in UTF-16 code
+/// units, its colour (`0`–`f`, `#rrggbb` or none) and flags (`k l m n o`), the index of its event
+/// in `ev`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(untagged)]
+pub enum CloudSpan {
+    Plain(u32, String),
+    Event(u32, String, u8),
+}
+
+/// What a part does: a click (`a`: `run_command`, `suggest_command`, `open_url`,
+/// `copy_to_clipboard`; `v` its command, address or text) and what pointing at it shows.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct CloudLineEvent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub click: Option<CloudClick>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hover: Option<CloudHover>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct CloudClick {
+    pub a: String,
+    pub v: String,
+}
+
+/// A part's hover: the server's text, an item (as the inventory shows it) or an entity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(untagged)]
+pub enum CloudHover {
+    Text {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        st: Option<Vec<CloudSpan>>,
+    },
+    Item {
+        item: Box<crate::feat::CloudInvItem>,
+    },
+    Entity {
+        entity: CloudHoverEntity,
+    },
+}
+
+/// A hovered entity: its type's name in both languages, its own name if it has one.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct CloudHoverEntity {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<CloudLocalized>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub st: Option<Vec<CloudSpan>>,
 }
 
 /// `GET /accounts/:id/logs`: oldest first; `next` continues.
@@ -850,12 +939,13 @@ mod tests {
             .replace(
                 r#""rev": 7"#,
                 r#""features": {"inventory": {"mode": "full", "on": true}, "consoleKinds": true,
-                  "placeholders": false, "legacyRules": true}, "rev": 7"#,
+                  "consoleLooks": true, "placeholders": false, "legacyRules": true}, "rev": 7"#,
             );
         let account: CloudAccount = serde_json::from_str(&json).unwrap();
         let features = account.features.unwrap();
         assert_eq!(features.inventory.mode, "full");
         assert!(features.inventory.on && features.console_kinds && features.legacy_rules);
+        assert!(features.console_looks);
         assert_eq!(
             account.config.inventory,
             Some(CloudInventorySetting { enabled: true })
@@ -903,6 +993,8 @@ mod tests {
                   "rev": 7"#,
             );
         let account: CloudAccount = serde_json::from_str(&json).unwrap();
+        // A service before console looks: off.
+        assert!(!account.features.as_ref().unwrap().console_looks);
         assert_eq!(
             account.config.movement,
             Some(CloudMovementSetting { enabled: true })
@@ -927,5 +1019,77 @@ mod tests {
             CloudServer::new("mc.example.net", 25566).label(),
             "mc.example.net:25566"
         );
+    }
+
+    #[test]
+    fn a_line_carries_its_looks_and_events_and_never_loses_itself_to_them() {
+        let json = r##"{"at": 1, "text": "[Parti] FrostyOtter88 [Kabul et]", "k": "n", "c": "sys",
+            "st": [[8, "9"], [14, "7"], [10, "al", 0]],
+            "ev": [
+              {"click": {"a": "run_command", "v": "/party accept FrostyOtter88"},
+               "hover": {"text": "Kabul etmek için tıkla", "st": [[22, "a"]]}},
+              {"hover": {"item": {"id": "minecraft:diamond_sword", "count": 1, "name": "Kılıç"}}},
+              {"hover": {"entity": {"label": {"tr": "Zombi", "en": "Zombie"}, "name": "Kemik_Kral"}}}
+            ]}"##;
+        let line: CloudConsoleLine = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            line.st.as_deref(),
+            Some(
+                &[
+                    CloudSpan::Plain(8, "9".into()),
+                    CloudSpan::Plain(14, "7".into()),
+                    CloudSpan::Event(10, "al".into(), 0),
+                ][..]
+            )
+        );
+        let ev = line.ev.clone().unwrap();
+        assert_eq!(
+            ev[0].click,
+            Some(CloudClick {
+                a: "run_command".into(),
+                v: "/party accept FrostyOtter88".into()
+            })
+        );
+        assert!(
+            matches!(&ev[0].hover, Some(CloudHover::Text { st: Some(st), .. }) if st.len() == 1)
+        );
+        assert!(
+            matches!(&ev[1].hover, Some(CloudHover::Item { item }) if item.id == "minecraft:diamond_sword")
+        );
+        assert!(
+            matches!(&ev[2].hover, Some(CloudHover::Entity { entity }) if entity.label.as_ref().map(|l| l.tr.as_str()) == Some("Zombi"))
+        );
+        // To the view as it came: a part without an event stays two long, absent fields absent.
+        let out = serde_json::to_value(&line).unwrap();
+        assert_eq!(
+            out["st"],
+            serde_json::json!([[8, "9"], [14, "7"], [10, "al", 0]])
+        );
+        assert!(out["ev"][1].get("click").is_none());
+        let plain: CloudConsoleLine =
+            serde_json::from_str(r#"{"at": 1, "text": "selam", "k": "n"}"#).unwrap();
+        let out = serde_json::to_value(&plain).unwrap();
+        assert!(out.get("st").is_none() && out.get("ev").is_none() && out.get("dir").is_none());
+        // A private line's direction (the player's own reply), on to the view as it came.
+        let reply: CloudConsoleLine = serde_json::from_str(
+            r#"{"at": 1, "text": "✉ «« Kaan_07: sonra", "k": "n", "c": "pm", "who": "Kaan_07", "dir": "out"}"#,
+        )
+        .unwrap();
+        assert_eq!(reply.dir.as_deref(), Some("out"));
+        assert_eq!(serde_json::to_value(&reply).unwrap()["dir"], "out");
+        // Parts or events that do not read leave the line without them, never without the line.
+        for odd in [
+            r#""st": [[1]]"#,
+            r#""st": "9""#,
+            r#""st": [[1, "9", 300]]"#,
+            r#""ev": [{"click": {"a": "run_command"}}]"#,
+            r#""ev": {"click": 1}"#,
+        ] {
+            let line: CloudConsoleLine =
+                serde_json::from_str(&format!(r#"{{"at": 2, "text": "selam", "k": "n", {odd}}}"#))
+                    .unwrap();
+            assert_eq!(line.text, "selam", "{odd}");
+            assert!(line.st.is_none() && line.ev.is_none(), "{odd}");
+        }
     }
 }

@@ -47,6 +47,11 @@ notify = { version = "8", default-features = false, features = ["macos_fsevent"]
 # Free space where an install writes (the crate pl-data measures with).
 fs4 = "1.1.0"
 
+# Whether the game's output pipes still have a writer (launch/process.rs); the version and
+# features tokio's own `windows-sys` has, so its build is reused.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Pipes"] }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

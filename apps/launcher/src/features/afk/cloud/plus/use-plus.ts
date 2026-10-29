@@ -28,6 +28,29 @@ import { type PlusFeatures, plusMe, plusOffer } from "./types";
 
 export type PlusSection = "feed" | "messages" | "orders" | "settings" | "report";
 
+/**
+ * The first setup's choices while it is not started yet (SETUP-UX-L): "Daha sonra" and closing keep
+ * them on this computer for the session, the step included; "Başlat" saves them as one write.
+ */
+export interface PlusSetupChoices {
+  step: "orders" | "money" | "act" | "chat" | "talk";
+  perDealMax: number | null;
+  totalBudget: number | null;
+  /** "Şimdilik alım yapmasın": null while untouched (then on while no order buys anything). */
+  notNow: boolean | null;
+  authority: "reply" | "ask" | "deal";
+  approvalAbove: number | null;
+  newCounterpartApprovalAbove: number | null;
+  returnRow: string | null;
+  ads: boolean;
+  adEveryMin: number | null;
+  /** "Satılık ilan görünce satıcıya bir kez yazsın": the scan and the one message to a seller. */
+  writeSellers: boolean;
+  preset: string;
+  playerTalk: boolean;
+  intro: string;
+}
+
 interface PlusUi {
   /** The account whose AFK+ panel is open. */
   panelId: string | null;
@@ -44,8 +67,10 @@ interface PlusUi {
    * the panel closing (design.md G6-P), until saved or dropped with "Vazgeç".
    */
   drafts: Record<string, SettingsDraft>;
-  /** Accounts whose setup the player put off this session ("Sonra"). */
+  /** Accounts whose setup the player put off this session ("Daha sonra"). */
   setupLater: string[];
+  /** The first setup's choices per account, kept by "Daha sonra" until "Başlat". */
+  setups: Record<string, PlusSetupChoices>;
   openPanel: (id: string, section?: PlusSection) => void;
   closePanel: () => void;
   setSection: (section: PlusSection) => void;
@@ -56,6 +81,7 @@ interface PlusUi {
   goToLimit: (field: LimitField) => void;
   setDraft: (id: string, draft: SettingsDraft | null) => void;
   putOffSetup: (id: string) => void;
+  setSetup: (id: string, choices: PlusSetupChoices | null) => void;
 }
 
 export const usePlusUi = create<PlusUi>()((set) => ({
@@ -67,6 +93,7 @@ export const usePlusUi = create<PlusUi>()((set) => ({
   focusField: null,
   drafts: {},
   setupLater: [],
+  setups: {},
   openPanel: (panelId, section = "feed") => set({ panelId, section, thread: null }),
   closePanel: () => set({ panelId: null, thread: null, focusGroup: null, focusField: null }),
   setSection: (section) => set({ section, thread: null }),
@@ -86,6 +113,13 @@ export const usePlusUi = create<PlusUi>()((set) => ({
     set((state) => ({
       setupLater: state.setupLater.includes(id) ? state.setupLater : [...state.setupLater, id],
     })),
+  setSetup: (id, choices) =>
+    set((state) => {
+      const setups = { ...state.setups };
+      if (choices) setups[id] = choices;
+      else delete setups[id];
+      return { setups };
+    }),
 }));
 
 export const plusKey = (id: string) => ["afk-plus", id] as const;
