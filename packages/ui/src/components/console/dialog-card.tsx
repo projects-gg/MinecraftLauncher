@@ -194,15 +194,13 @@ export function DialogCard({
   return (
     <section
       aria-labelledby={titleId}
+      aria-roledescription={t.dialogLabel}
       className={cn(
         "flex flex-col gap-3 rounded-[10px] border border-white/[0.08] bg-obsidian-800/80 p-4 font-sans",
         className,
       )}
     >
-      <p className="text-[11.5px] font-medium tracking-wide text-ash-400 uppercase">
-        {t.dialogLabel}
-      </p>
-      <h3 id={titleId} className="-mt-2 font-mono text-[14px] font-semibold text-bone-50">
+      <h3 id={titleId} className="font-mono text-[14px] font-semibold text-bone-50">
         <ConsoleText text={dialog.title} st={dialog.titleSt} lang={lang} />
       </h3>
       {dialog.body.map((part, i) => (
