@@ -1445,6 +1445,46 @@ mod tests {
         assert!(exit.killed && exit.crash.is_none());
     }
 
+    /// A machine stalled when the game exits: its last lines are read however long the reader
+    /// takes, the drain (here 200 ms) counts only while another process holds a pipe open. The
+    /// reader takes 5 ms a line, a second for all two hundred.
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_slow_reader_still_gets_the_last_lines() {
+        let tmp = tempfile::tempdir().unwrap();
+        let command = LaunchCommand::for_tests(
+            PathBuf::from("cmd"),
+            vec![
+                "/C".to_owned(),
+                "for /L %i in (1,1,200) do @echo line %i".to_owned(),
+            ],
+            tmp.path().join("game"),
+        );
+        let process = GameProcess::spawn_draining(
+            &command,
+            SpawnOptions {
+                instance_id: "slow".into(),
+                logs_dir: tmp.path().join("logs"),
+                ..SpawnOptions::default()
+            },
+            Duration::from_millis(200),
+            Arc::new(|event| {
+                if matches!(event, GameEvent::Line(_)) {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            }),
+        )
+        .await
+        .unwrap();
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
+            .await
+            .unwrap();
+        assert_eq!(exit.code, Some(0));
+        let lines: Vec<String> = process.tail().into_iter().map(|l| l.message).collect();
+        assert_eq!(lines.len(), 200, "{lines:?}");
+        assert_eq!(lines.last().map(String::as_str), Some("line 200"));
+    }
+
     #[tokio::test]
     async fn killed_runs_are_not_crashes() {
         let tmp = tempfile::tempdir().unwrap();
