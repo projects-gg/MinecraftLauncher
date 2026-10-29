@@ -51,7 +51,10 @@ export interface AccountCardProps {
 
 const actionClass = "size-[34px] rounded-lg";
 
-/** "Sabitle": a pin that presses in (fills, turns gold) when pinned and pops out when not. */
+/**
+ * "Sabitle": a pin that presses in (fills, sits on the quiet plate, IconButton's active) when pinned
+ * and pops out when not. Bone, not gold: a pin is a choice (design.md §6).
+ */
 function PinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
   const reduced = useReduceMotion();
@@ -63,7 +66,7 @@ function PinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void
     <IconButton
       label={pinned ? t("accounts.center.unpin") : t("accounts.center.pin")}
       active={pinned}
-      className={cn(actionClass, pinned ? "text-gold-300 hover:text-gold-200" : "")}
+      className={actionClass}
       onClick={onToggle}
       icon={
         <motion.span
@@ -319,7 +322,7 @@ export function AccountCard({
                         exit={calm({ opacity: 0, scale: 0.9, transition: { duration: 0.12 } })}
                         transition={{ duration: 0.24, ease: easeOutExpo }}
                       >
-                        <Chip tone="gold">{t("accounts.center.active")}</Chip>
+                        <Chip>{t("accounts.center.active")}</Chip>
                       </motion.span>
                     ) : null}
                   </AnimatePresence>

@@ -97,8 +97,11 @@ export const trCloudAfk = {
     settings: "Ayarlar",
     more: "Diğer işlemler",
     renew: "Süreyi uzat",
-    /** An expired account comes back with new time: the button says that (the site's, SITE-W2B). */
-    reactivate: "Süre al",
+    /**
+     * An expired account comes back with new time: the button says that, and that it is bought (the
+     * site's word with it, SITE-W2B; "Süre al" read as free time).
+     */
+    reactivate: "Süre satın al",
     openSite: "afk.projects.gg'de aç",
     started: "{{name}} başlatıldı",
     stopped: "{{name}} durduruldu",
@@ -213,6 +216,8 @@ export const trCloudAfk = {
     ownerHelp:
       '"Yalnız bana yanıt versin" seçeneği açık kurallar yalnız bu oyuncu yazınca çalışır.',
     seconds: "sn",
+    /** An interval's unit, as on the site: "5 dk ile 10 dk arası". */
+    minutes: "dk",
     commands: {
       add: "Komut ekle",
       empty: "Henüz komut yok.",
@@ -233,6 +238,8 @@ export const trCloudAfk = {
       times: "Saatler",
       timesHelp: "Türkiye saatiyle.",
       addTime: "Saat ekle",
+      /** The empty time field says what goes in it, not a time of its own beside the chips. */
+      timePlaceholder: "ss:dd",
       removeTime: "{{time}} saatini kaldır",
       text: "Komut",
       textPlaceholder: "/kit ya da merhaba",
@@ -296,7 +303,7 @@ export const trCloudAfk = {
       range: "Bu değer kabul edilmiyor.",
       order: "En çok, en azdan küçük olamaz.",
       delay: "0 ile 60 saniye arasında gir.",
-      every: "En az {{min}} saniye, en çok bir gün.",
+      every: "En az {{min}} dakika, en çok bir gün.",
       cooldown: "En az {{min}} saniye, en çok bir gün.",
       antiAfk: "10 ile 3600 saniye arasında gir. En çok, en azdan küçük olamaz.",
       timesFormat: "Saati SS:DD biçiminde yaz.",

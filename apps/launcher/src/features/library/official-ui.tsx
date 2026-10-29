@@ -287,7 +287,7 @@ export function OfficialOfferDialog() {
             <Skeleton className="mt-1 h-3 w-24" />
           ) : null}
         </div>
-        <Chip tone="gold">{t("instances.managed")}</Chip>
+        <Chip>{t("instances.managed")}</Chip>
       </div>
     </Dialog>
   );
