@@ -388,7 +388,13 @@ export function CloudSection({
           </Button>
         </div>
       ) : all.length > 0 ? (
-        <ul ref={listRef} className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+        <ul
+          ref={listRef}
+          className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3"
+          // While the bar is up the list keeps its height below it, so the reveal (revealChosen)
+          // leaves the last row above the bar instead of a sliver of a card under it (TASTE-SWEEP).
+          style={barOpen ? { paddingBottom: BAR_ROOM } : undefined}
+        >
           <AnimatePresence initial={false} mode="popLayout">
             {accounts.map((account, index) => {
               const here = hereCopy(data, account.id, desktop);

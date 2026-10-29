@@ -97,7 +97,7 @@ function Pick({
                 on ? "bg-white/[0.06] ring-white/25" : "ring-white/7 hover:bg-white/[0.05]",
               )}
             >
-              {on ? <PixelBrackets size={8} tone="bone" className="-inset-0.5" /> : null}
+              {on ? <PixelBrackets size={8} className="-inset-0.5" /> : null}
               <AfkHead nickname={account.name} size={32} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-medium text-bone-50">

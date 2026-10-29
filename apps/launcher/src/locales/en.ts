@@ -1783,7 +1783,7 @@ export const en: DeepPartial<Strings> = {
         confirm: "Delete backup",
       },
       restoreTitle: "Restore this backup?",
-      restoreBody: "{{name}} ({{when}})",
+      restoreBody: "Backup: {{when}}",
       restoreNew: "Add as a new world",
       restoreNewHint: "The current world stays as it is. The backup opens as a separate world.",
       restoreReplace: "Replace the current world",

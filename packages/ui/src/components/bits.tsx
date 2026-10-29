@@ -121,20 +121,12 @@ export function Kbd({ children }: { children: ReactNode }) {
 }
 
 /**
- * The brand banner's pixel L-brackets. Marks selection only (selected instance, focused card).
+ * The brand banner's pixel L-brackets. Marks selection only (selected instance, focused card), in
+ * bone: the shape says chosen, the screen's gold is its main action's (design.md §1.3, §2).
  */
-export function PixelBrackets({
-  className,
-  size = 10,
-  tone = "gold",
-}: {
-  className?: string;
-  size?: number;
-  /** Bone where several can be chosen at once (a selection of cards): never a row of golds. */
-  tone?: "gold" | "bone";
-}) {
+export function PixelBrackets({ className, size = 10 }: { className?: string; size?: number }) {
   const arm = `${size}px`;
-  const corner = cn("absolute", tone === "bone" ? "bg-bone-100" : "bg-gold-300");
+  const corner = "absolute bg-bone-100";
   return (
     <span aria-hidden className={cn("pointer-events-none absolute -inset-1", className)}>
       <span className={cn(corner, "top-0 left-0 h-[2px]")} style={{ width: arm }} />
