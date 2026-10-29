@@ -235,8 +235,8 @@ public final class PeopleScenario implements ClientModInitializer {
         step(0.1, "esc", mc -> key(need(mc), InputConstants.KEY_ESCAPE, 0));
         // Ayşe in the world (as the launcher mirrors it): her menu sends her off, asked first.
         step(0.1, "Ayşe in the world", mc -> dev("host-mirror", "guests",
-            "[{\"guest\":\"g1\",\"friend\":\"f-ayse\",\"label\":\"Ayşe\",\"name\":\"Ayse\",\"state\":\"in\"},"
-            + "{\"guest\":\"\",\"friend\":\"f-mert\",\"label\":\"Mert\",\"state\":\"invited\"}]"));
+            "[{\"guest\":\"g1\",\"friend\":\"f-ayse\",\"label\":\"PixelAvci\",\"name\":\"PixelAvci\",\"state\":\"in\"},"
+            + "{\"guest\":\"\",\"friend\":\"f-mert\",\"label\":\"NetherKral\",\"state\":\"invited\"}]"));
         step(0.6, "Ayşe's menu", mc -> need(mc).openFriendMenu("f-ayse", false));
         step(0.4, "shot guest menu", mc -> shot(mc, "menu-guest"));
         step(0.1, "send off", mc -> need(mc).pressMenu(FriendMenu.Action.REMOVE_FROM_WORLD));

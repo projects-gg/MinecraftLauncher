@@ -147,17 +147,20 @@ const now = () => Date.now();
 const minutes = (m) => now() - m * 60000;
 const state = {
   me: { name: args.signedOut ? "" : "OVL2Test" },
+  // Shown names are gamer tags (owner, 28 Oct: no real names on screen); ids keep the old first names: f-ayse PixelAvci,
+  // f-elif ZumrutKilic, f-zeynep YildizTozu, f-deniz MaviElmas, f-mert NetherKral, f-can KorAtesi, f-ece SessizOkcu,
+  // u-cem DemirGolem_; a joined note's default TasDevi.
   friends: [
-    { id: "f-ayse", name: "Ayşe", where: "projects", joinable: true },
-    { id: "f-elif", name: "Elif", where: "server", joinable: true, host: "mc.ornek.net" },
-    { id: "f-zeynep", name: "Zeynep", where: "single", joinable: false },
-    { id: "f-deniz", name: "Deniz", where: "game", joinable: false },
-    { id: "f-mert", name: "Mert", where: "launcher", joinable: false },
-    { id: "f-can", name: "Can", where: "offline", joinable: false },
-    { id: "f-ece", name: "Ece", where: "offline", joinable: false },
+    { id: "f-ayse", name: "PixelAvci", where: "projects", joinable: true },
+    { id: "f-elif", name: "ZumrutKilic", where: "server", joinable: true, host: "mc.ornek.net" },
+    { id: "f-zeynep", name: "YildizTozu", where: "single", joinable: false },
+    { id: "f-deniz", name: "MaviElmas", where: "game", joinable: false },
+    { id: "f-mert", name: "NetherKral", where: "launcher", joinable: false },
+    { id: "f-can", name: "KorAtesi", where: "offline", joinable: false },
+    { id: "f-ece", name: "SessizOkcu", where: "offline", joinable: false },
   ],
   convs: [
-    { id: "dm:ayse", kind: "dm", title: "Ayşe", unread: 2, muted: false, writable: true },
+    { id: "dm:ayse", kind: "dm", title: "PixelAvci", unread: 2, muted: false, writable: true },
     {
       id: "crew:gece",
       kind: "crew",
@@ -166,10 +169,10 @@ const state = {
       muted: false,
       writable: true,
     },
-    { id: "dm:mert", kind: "dm", title: "Mert", unread: 0, muted: false, writable: true },
-    { id: "dm:zeynep", kind: "dm", title: "Zeynep", unread: 1, muted: false, writable: true },
+    { id: "dm:mert", kind: "dm", title: "NetherKral", unread: 0, muted: false, writable: true },
+    { id: "dm:zeynep", kind: "dm", title: "YildizTozu", unread: 1, muted: false, writable: true },
     { id: "crew:akinci", kind: "crew", title: "Akıncılar", unread: 0, muted: true, writable: true },
-    { id: "dm:can", kind: "dm", title: "Can", unread: 0, muted: false, writable: false },
+    { id: "dm:can", kind: "dm", title: "KorAtesi", unread: 0, muted: false, writable: false },
   ],
   history: {
     "dm:ayse": [
@@ -180,10 +183,16 @@ const state = {
         at: minutes(42),
         mine: true,
       },
-      { id: "m2", from: "Ayşe", text: "Evet, 21:00'de başlıyor.", at: minutes(40), mine: false },
+      {
+        id: "m2",
+        from: "PixelAvci",
+        text: "Evet, 21:00'de başlıyor.",
+        at: minutes(40),
+        mine: false,
+      },
       {
         id: "m3",
-        from: "Ayşe",
+        from: "PixelAvci",
         text: "Ekip toplanıyor, sen de gel!",
         at: minutes(39),
         mine: false,
@@ -191,14 +200,14 @@ const state = {
       },
       {
         id: "m4",
-        from: "Ayşe",
+        from: "PixelAvci",
         text: "Selam! Bu akşam oynuyor musun?",
         at: minutes(3),
         mine: false,
       },
       {
         id: "m5",
-        from: "Ayşe",
+        from: "PixelAvci",
         text: "Haritayı bu sefer ben seçeceğim.",
         at: minutes(2),
         mine: false,
@@ -207,14 +216,14 @@ const state = {
     "crew:gece": [
       {
         id: "m6",
-        from: "Mert",
+        from: "NetherKral",
         text: "Yarın 21:00'de antrenman var, unutmayın.",
         at: minutes(90),
         mine: false,
       },
       {
         id: "m7",
-        from: "Deniz",
+        from: "MaviElmas",
         text: "Ben gelemeyebilirim, haber veririm.",
         at: minutes(80),
         mine: false,
@@ -222,13 +231,25 @@ const state = {
       { id: "m8", from: "OVL2Test", text: "Tamam, ben oradayım.", at: minutes(75), mine: true },
     ],
     "dm:mert": [
-      { id: "m9", from: "Mert", text: "Kılıcı sende mi bıraktım?", at: minutes(300), mine: false },
+      {
+        id: "m9",
+        from: "NetherKral",
+        text: "Kılıcı sende mi bıraktım?",
+        at: minutes(300),
+        mine: false,
+      },
     ],
     "dm:zeynep": [
-      { id: "m10", from: "Zeynep", text: "Adamı gördün mü az önce?", at: minutes(1), mine: false },
+      {
+        id: "m10",
+        from: "YildizTozu",
+        text: "Adamı gördün mü az önce?",
+        at: minutes(1),
+        mine: false,
+      },
     ],
     "crew:akinci": [],
-    "dm:can": [{ id: "m11", from: "Can", text: "Görüşürüz!", at: minutes(4000), mine: false }],
+    "dm:can": [{ id: "m11", from: "KorAtesi", text: "Görüşürüz!", at: minutes(4000), mine: false }],
   },
   calls: [],
 };
@@ -252,7 +273,7 @@ if (args.chat2) {
     {
       id: "m2",
       sid: 102,
-      from: "Ayşe",
+      from: "PixelAvci",
       text: "Evet, 21:00'de başlıyor. Kurallar burada: https://www.youtube.com/watch?v=dQw4w9WgXcQ",
       at: minutes(40),
       mine: false,
@@ -263,7 +284,7 @@ if (args.chat2) {
     {
       id: "m3",
       sid: 103,
-      from: "Ayşe",
+      from: "PixelAvci",
       text: "",
       sticker: "pl1/gg",
       at: minutes(39),
@@ -279,12 +300,12 @@ if (args.chat2) {
       reply: {
         id: "m2",
         sid: 102,
-        from: "Ayşe",
+        from: "PixelAvci",
         text: "Evet, 21:00'de başlıyor. Kurallar burada:…",
       },
       reactions: [
-        { e: "❤️", n: 1, who: ["Ayşe"] },
-        { e: "🔥", n: 1, who: ["Ayşe"] },
+        { e: "❤️", n: 1, who: ["PixelAvci"] },
+        { e: "🔥", n: 1, who: ["PixelAvci"] },
       ],
     },
     {
@@ -302,29 +323,34 @@ if (args.chat2) {
     {
       id: "m6",
       sid: 106,
-      from: "Mert",
+      from: "NetherKral",
       text: "Yarın 21:00'de antrenman var, unutmayın.",
       at: minutes(90),
       mine: false,
       reactions: [
-        { e: "👍", n: 4, mine: true, who: ["Deniz", "Ayşe", "Can"] },
-        { e: "🔥", n: 2, who: ["Deniz", "Elif"] },
-        { e: "😂", n: 1, who: ["Can"] },
+        { e: "👍", n: 4, mine: true, who: ["MaviElmas", "PixelAvci", "KorAtesi"] },
+        { e: "🔥", n: 2, who: ["MaviElmas", "ZumrutKilic"] },
+        { e: "😂", n: 1, who: ["KorAtesi"] },
       ],
     },
     {
       id: "m7",
       sid: 107,
-      from: "Deniz",
+      from: "MaviElmas",
       text: "Ben gelemeyebilirim, haber veririm.",
       at: minutes(80),
       mine: false,
-      reply: { id: "m6", sid: 106, from: "Mert", text: "Yarın 21:00'de antrenman var, unutmayın." },
+      reply: {
+        id: "m6",
+        sid: 106,
+        from: "NetherKral",
+        text: "Yarın 21:00'de antrenman var, unutmayın.",
+      },
     },
     {
       id: "m7b",
       sid: 108,
-      from: "Deniz",
+      from: "MaviElmas",
       text: "",
       sticker: "pl1/sleepy",
       at: minutes(79),
@@ -383,7 +409,13 @@ const WEARS = {
   "f-deniz": "t-gece",
   "f-elif": "t-akn",
 };
-const NAMES = { Ayşe: "f-ayse", Can: "f-can", Mert: "f-mert", Deniz: "f-deniz", Elif: "f-elif" };
+const NAMES = {
+  PixelAvci: "f-ayse",
+  KorAtesi: "f-can",
+  NetherKral: "f-mert",
+  MaviElmas: "f-deniz",
+  ZumrutKilic: "f-elif",
+};
 const NOTES = [];
 // OVL-UX: friends' direct conversations (the mock's own ids), whose Discord is known, and whether the player is on
 // Projects ("invite").
@@ -417,7 +449,7 @@ const LISTS = {
   projects: ["u-cem"],
   discord: ["u-cem"],
 };
-const CREWMATES = { "u-cem": "Cem" };
+const CREWMATES = { "u-cem": "DemirGolem_" };
 if (args.people2 && args.people3) {
   // OVL-UX3: the player leads Gece Kuşları (its chat carries the crew rows); Deniz moderates.
   LISTS.roles = {
@@ -445,11 +477,11 @@ if (args.people2) {
   mark("f-mert", { crews: { "t-gece": "member" } });
   mark("f-can", { seen: "yesterday", group: "okul" });
   mark("f-ece", { seen: "week" });
-  const byName = { Mert: "f-mert", Deniz: "f-deniz", Cem: "u-cem" };
+  const byName = { NetherKral: "f-mert", MaviElmas: "f-deniz", DemirGolem_: "u-cem" };
   state.history["crew:gece"].splice(1, 0, {
     id: "m6c",
     sid: 1061,
-    from: "Cem",
+    from: "DemirGolem_",
     text: "Ben de gelirim, haritayı kim seçiyor?",
     at: minutes(85),
     mine: false,
@@ -473,7 +505,13 @@ if (args.team6) {
     }
   }
   // Ece came into the crew between Mert's and Deniz's messages (the player's own line comes on "joined").
-  NOTES.push({ conv: "crew:gece", id: "j:ece", kind: "joined", name: "Ece", at: minutes(85) });
+  NOTES.push({
+    conv: "crew:gece",
+    id: "j:ece",
+    kind: "joined",
+    name: "SessizOkcu",
+    at: minutes(85),
+  });
 }
 
 /** A conversation's messages as the launcher sends them now: crewmates' tags as they wear them today. */
@@ -774,14 +812,18 @@ function startCall(socket, id, crew, from) {
 }
 
 function demo(socket) {
-  later(500, () => incoming(socket, "dm:ayse", "Ayşe", "Akşam bedwars var mı? Ekip toplanıyor."));
-  later(2500, () => startCall(socket, "c1", "Gece Kuşları", "Mert"));
+  later(500, () =>
+    incoming(socket, "dm:ayse", "PixelAvci", "Akşam bedwars var mı? Ekip toplanıyor."),
+  );
+  later(2500, () => startCall(socket, "c1", "Gece Kuşları", "NetherKral"));
 }
 
 function stack(socket) {
-  later(0, () => incoming(socket, "dm:ayse", "Ayşe", "Akşam bedwars var mı? Ekip toplanıyor."));
-  later(350, () => startCall(socket, "c1", "Gece Kuşları", "Mert"));
-  later(700, () => incoming(socket, "crew:gece", "Deniz", "Ben de geliyorum, bekleyin beni!"));
+  later(0, () =>
+    incoming(socket, "dm:ayse", "PixelAvci", "Akşam bedwars var mı? Ekip toplanıyor."),
+  );
+  later(350, () => startCall(socket, "c1", "Gece Kuşları", "NetherKral"));
+  later(700, () => incoming(socket, "crew:gece", "MaviElmas", "Ben de geliyorum, bekleyin beni!"));
 }
 
 function onFrame(socket, frame) {
@@ -852,7 +894,7 @@ function onFrame(socket, frame) {
           t: "msg",
           conv: frame.conv,
           id: `m${nextId++}`,
-          from: "Ayşe",
+          from: "PixelAvci",
           text: "Tamam, 5 dk sonra oradayım!",
           at: now(),
           mine: false,
@@ -866,7 +908,7 @@ function onFrame(socket, frame) {
           t: "toast",
           kind: "message",
           key: frame.conv,
-          title: "Ayşe",
+          title: "PixelAvci",
           body: reply.text,
           conv: frame.conv,
         });
@@ -1284,27 +1326,32 @@ function onDev(socket, frame) {
       demo(socket);
       break;
     case "one":
-      incoming(socket, "dm:ayse", "Ayşe", "Akşam bedwars var mı? Ekip toplanıyor.");
+      incoming(socket, "dm:ayse", "PixelAvci", "Akşam bedwars var mı? Ekip toplanıyor.");
       break;
     case "stack":
       stack(socket);
       break;
     case "fourth":
-      incoming(socket, "dm:zeynep", "Zeynep", "Hadi gel, seni bekliyoruz. Kapıda buluşalım mı?");
+      incoming(
+        socket,
+        "dm:zeynep",
+        "YildizTozu",
+        "Hadi gel, seni bekliyoruz. Kapıda buluşalım mı?",
+      );
       break;
     case "more":
-      incoming(socket, "dm:ayse", "Ayşe", "Hâlâ orada mısın?");
+      incoming(socket, "dm:ayse", "PixelAvci", "Hâlâ orada mısın?");
       break;
     case "call":
       // A crew call (its card in the panel, its toast).
-      startCall(socket, "c1", "Gece Kuşları", "Mert");
+      startCall(socket, "c1", "Gece Kuşları", "NetherKral");
       break;
     case "crew-in":
       // TEAM6: a crewmate writes in crew chat (the toast and the message carry their tag).
       incoming(
         socket,
         frame.conv ?? "crew:gece",
-        frame.from ?? "Mert",
+        frame.from ?? "NetherKral",
         frame.text ?? "Ben hazırım, kim geliyor?",
       );
       break;
@@ -1312,9 +1359,9 @@ function onDev(socket, frame) {
       // TEAM6 §7: someone comes into the crew while the launcher runs.
       const note = {
         conv: frame.conv ?? "crew:gece",
-        id: `j:${frame.name ?? "Kaan"}:${now()}`,
+        id: `j:${frame.name ?? "TasDevi"}:${now()}`,
         kind: "joined",
-        name: frame.name ?? "Kaan",
+        name: frame.name ?? "TasDevi",
         at: now(),
       };
       if (frame.mine) {
@@ -1330,7 +1377,7 @@ function onDev(socket, frame) {
       mert.badge = "t-gk";
       WEARS["f-mert"] = "t-gk";
       for (const msg of state.history["crew:gece"]) {
-        if (msg.from === "Mert") {
+        if (msg.from === "NetherKral") {
           msg.badge = "t-gk";
         }
       }
@@ -1386,7 +1433,7 @@ function onDev(socket, frame) {
       incoming(
         socket,
         frame.conv ?? "dm:ayse",
-        frame.from ?? "Ayşe",
+        frame.from ?? "PixelAvci",
         "",
         frame.sticker ?? "pl1/party",
       );
@@ -1396,11 +1443,11 @@ function onDev(socket, frame) {
       const convId = frame.conv ?? "dm:ayse";
       const people = convId.startsWith("crew:")
         ? [
-            ["f-mert", "Mert"],
-            ["f-deniz", "Deniz"],
-            ["f-ece", "Ece"],
+            ["f-mert", "NetherKral"],
+            ["f-deniz", "MaviElmas"],
+            ["f-ece", "SessizOkcu"],
           ]
-        : [["f-ayse", "Ayşe"]];
+        : [["f-ayse", "PixelAvci"]];
       for (const [by, name] of people.slice(0, Number(frame.count ?? people.length))) {
         send(socket, { t: "typing", conv: convId, by, name });
       }
@@ -1481,7 +1528,7 @@ function onDev(socket, frame) {
         id: `c${nextId++}`,
         host: "127.0.0.1",
         port: Number(frame.port ?? 25599),
-        label: frame.label ?? "Arkadaş dünyası: Ayşe",
+        label: frame.label ?? "Arkadaş dünyası: PixelAvci",
       });
       break;
     case "host-mirror":
@@ -1543,11 +1590,11 @@ function onDev(socket, frame) {
 // ---- HOST1: the host launcher's side of world sharing ---------------------------------------------------------
 
 const FRIEND_LABELS = {
-  "f-ayse": "Ayşe",
-  "f-mert": "Mert",
-  "f-deniz": "Deniz",
-  "f-elif": "Elif",
-  "f-zeynep": "Zeynep",
+  "f-ayse": "PixelAvci",
+  "f-mert": "NetherKral",
+  "f-deniz": "MaviElmas",
+  "f-elif": "ZumrutKilic",
+  "f-zeynep": "YildizTozu",
 };
 const hosting = {
   world: null,
