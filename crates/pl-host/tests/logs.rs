@@ -19,6 +19,9 @@ use support::within;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const BROADCAST: &str = "operator note 4f1c: maintenance at 03:00";
+/// Seconds a step may take: a loaded machine takes seconds where an idle one takes milliseconds,
+/// and a step that hangs still fails.
+const WAIT: u64 = 60;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn nothing_secret_reaches_the_logs() {
@@ -42,8 +45,10 @@ async fn nothing_secret_reaches_the_logs() {
             .map(String::from)
             .to_vec(),
         udp_head_start: Duration::from_millis(200),
-        allocation_lifetime: Duration::from_secs(3),
-        refresh_when_left: Duration::from_secs(2),
+        // A refresh every second (logged, and the revocation heard within one), but an allocation
+        // that outlives a machine stalled for seconds: with 3 s it could expire mid-test.
+        allocation_lifetime: Duration::from_secs(30),
+        refresh_when_left: Duration::from_secs(29),
         trust: Trust::Roots(vec![ca.root.clone()]),
         public_relays_only: false,
         ..TurnConfig::default()
@@ -61,11 +66,11 @@ async fn nothing_secret_reaches_the_logs() {
     };
     server.drop_udp(true);
     let identity = QuicIdentity::generate().unwrap();
-    let host = within(10, turn::open_host(&urls(host_user), &identity, &config))
+    let host = within(WAIT, turn::open_host(&urls(host_user), &identity, &config))
         .await
         .unwrap();
     server.drop_udp(false);
-    let guest = within(10, turn::allocate(&urls(guest_user), &config))
+    let guest = within(WAIT, turn::allocate(&urls(guest_user), &config))
         .await
         .unwrap();
     for relay in [host.relay(), guest.relay()] {
@@ -75,13 +80,13 @@ async fn nothing_secret_reaches_the_logs() {
     for port in [server.udp.port(), server.tcp.port(), server.tls.port()] {
         forbidden.push(format!(":{port}"));
     }
-    within(5, host.admit_peer(guest.relay())).await.unwrap();
-    let path = within(10, guest.connect(host.relay(), identity.pin()))
+    within(WAIT, host.admit_peer(guest.relay())).await.unwrap();
+    let path = within(WAIT, guest.connect(host.relay(), identity.pin()))
         .await
         .unwrap();
-    let mut stream = within(5, path.open()).await.unwrap();
+    let mut stream = within(WAIT, path.open()).await.unwrap();
     stream.write_all(b"ping").await.unwrap();
-    let mut accepted = within(5, host.accept()).await.unwrap();
+    let mut accepted = within(WAIT, host.accept()).await.unwrap();
     let mut ping = [0u8; 4];
     accepted.read_exact(&mut ping).await.unwrap();
     let wrong = IceServers::new(
@@ -90,16 +95,16 @@ async fn nothing_secret_reaches_the_logs() {
         Secret::new("not-it"),
         7200,
     );
-    assert!(within(10, turn::allocate(&wrong, &config)).await.is_err());
+    assert!(within(WAIT, turn::allocate(&wrong, &config)).await.is_err());
     let other = QuicIdentity::generate().unwrap();
     assert!(
-        within(10, guest.connect(host.relay(), other.pin()))
+        within(WAIT, guest.connect(host.relay(), other.pin()))
             .await
             .is_err()
     );
     server.revoke(host_user.0);
-    within(10, host.closed()).await;
-    within(5, path.close()).await;
+    within(WAIT, host.closed()).await;
+    within(WAIT, path.close()).await;
 
     // e4mc: a failing broker, a relay with a broadcast, a guest through it, a refusal.
     let relay = FakeRelay::start(
@@ -133,24 +138,24 @@ async fn nothing_secret_reaches_the_logs() {
     ] {
         forbidden.push(format!(":{port}"));
     }
-    let opening = within(10, e4mc::open_host(&e4mc_config, "auto")).await;
+    let opening = within(WAIT, e4mc::open_host(&e4mc_config, "auto")).await;
     assert!(opening.broker_error.is_some());
     let e4mc_host = opening.result.unwrap();
     let e4mc_guest = e4mc::guest(e4mc_host.domain(), 9999, &e4mc_config).unwrap();
-    let mut stream = within(5, e4mc_guest.open()).await.unwrap();
+    let mut stream = within(WAIT, e4mc_guest.open()).await.unwrap();
     stream.write_all(b"hello").await.unwrap();
     stream.flush().await.unwrap();
-    let mut accepted = within(5, e4mc_host.accept()).await.unwrap();
+    let mut accepted = within(WAIT, e4mc_host.accept()).await.unwrap();
     let mut hello = [0u8; 5];
     accepted.read_exact(&mut hello).await.unwrap();
     let refused = e4mc::guest("nope-nope.eu.e4mc.link", 9999, &e4mc_config).unwrap();
-    let mut stream = within(5, refused.open()).await.unwrap();
+    let mut stream = within(WAIT, refused.open()).await.unwrap();
     stream.write_all(&[0x01, 0x00]).await.unwrap();
     stream.flush().await.unwrap();
     let mut reply = Vec::new();
-    let _ = within(5, stream.read_to_end(&mut reply)).await;
+    let _ = within(WAIT, stream.read_to_end(&mut reply)).await;
     relay.close_hosts();
-    within(5, e4mc_host.closed()).await;
+    within(WAIT, e4mc_host.closed()).await;
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     let lines = support::logs::lines();

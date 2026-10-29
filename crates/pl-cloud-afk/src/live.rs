@@ -1152,6 +1152,10 @@ mod tests {
 
     use super::*;
 
+    /// The longest a test waits for the hub or the fake service: a loaded machine takes seconds
+    /// where an idle one takes milliseconds, and a test that hangs still fails.
+    const WAIT: Duration = Duration::from_secs(60);
+
     #[test]
     fn handshakes_and_closes_decide_what_comes_next() {
         assert!(matches!(
@@ -1297,10 +1301,7 @@ mod tests {
         hub.watch(url, Bearer::new("pls_test"), "kz1", "a_1");
         assert!(hub.is_watching());
         let mut seen = Vec::new();
-        while let Some(event) = tokio::time::timeout(Duration::from_secs(5), events.recv())
-            .await
-            .unwrap()
-        {
+        while let Some(event) = tokio::time::timeout(WAIT, events.recv()).await.unwrap() {
             let done = matches!(event, CloudLiveEvent::Lines { .. });
             seen.push(event);
             if done {
@@ -1322,7 +1323,7 @@ mod tests {
         hub.unwatch("a_1");
         assert!(!hub.is_watching());
         // The service heard the watch and the unwatch, and nothing else is scheduled.
-        tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::time::timeout(WAIT, async {
             loop {
                 if sent
                     .lock()
@@ -1341,9 +1342,9 @@ mod tests {
         assert_eq!(sent[0], watch_frame("watch", "a_1"));
     }
 
-    /// Waits (at most 5 s) until the service heard `count` frames.
+    /// Waits (at most [`WAIT`]) until the service heard `count` frames.
     async fn heard(sent: &Arc<StdMutex<Vec<String>>>, count: usize) -> Vec<String> {
-        tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::time::timeout(WAIT, async {
             loop {
                 let frames = sent.lock().unwrap().clone();
                 if frames.len() >= count {

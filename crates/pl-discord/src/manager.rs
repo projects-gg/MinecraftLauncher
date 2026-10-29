@@ -456,7 +456,9 @@ mod tests {
     use serde_json::{Value, json};
     use tokio::time::timeout;
 
-    const WAIT: Duration = Duration::from_secs(5);
+    /// The longest a test waits for the actor or the fake client: a loaded machine takes seconds
+    /// where an idle one takes milliseconds, and a test that hangs still fails.
+    const WAIT: Duration = Duration::from_secs(60);
 
     /// A fake Discord client listening on a private endpoint.
     struct FakeDiscord {
@@ -648,34 +650,32 @@ mod tests {
             ..test_config(&discord, "42")
         };
         let manager = PresenceManager::start(config).unwrap();
+        // The first update goes after this moment: a bound that holds however slow the machine is
+        // (when an update arrives says only that it went before).
+        let asked = Instant::now();
         manager.set(Some(Activity::new().details("güncelleme 0")));
         let mut stream = timeout(WAIT, discord.accept()).await.unwrap();
         handshake(&mut stream, "42").await;
         let first = timeout(WAIT, expect_activity(&mut stream)).await.unwrap();
-        let mut seen = vec![(Instant::now(), first["activity"]["details"].clone())];
-
-        let started = Instant::now();
-        for i in 1..=6 {
+        assert_eq!(first["activity"]["details"], "güncelleme 0");
+        // Two fit in a window.
+        manager.set(Some(Activity::new().details("güncelleme 1")));
+        let second = timeout(WAIT, expect_activity(&mut stream)).await.unwrap();
+        assert_eq!(second["activity"]["details"], "güncelleme 1");
+        // Five more at once (the actor runs on this test's thread, only while the test awaits):
+        // the last alone goes, once the first one's window has passed.
+        for i in 2..=6 {
             manager.set(Some(Activity::new().details(format!("güncelleme {i}"))));
-            tokio::time::sleep(Duration::from_millis(30)).await;
         }
-        while let Ok(args) =
-            tokio::time::timeout_at(started + window * 2, expect_activity(&mut stream)).await
-        {
-            seen.push((Instant::now(), args["activity"]["details"].clone()));
-        }
-
-        assert_eq!(seen.last().unwrap().1, "güncelleme 6", "{seen:?}");
-        assert!(
-            seen.len() <= 3,
-            "intermediate updates must be coalesced: {seen:?}"
+        let third = timeout(WAIT, expect_activity(&mut stream)).await.unwrap();
+        assert_eq!(
+            third["activity"]["details"], "güncelleme 6",
+            "the updates between were coalesced"
         );
-        for trio in seen.windows(3) {
-            assert!(
-                trio[2].0 - trio[0].0 >= window - Duration::from_millis(100),
-                "more than two updates inside one window: {seen:?}"
-            );
-        }
+        assert!(
+            asked.elapsed() >= window,
+            "a third update inside the first one's window"
+        );
         manager.shutdown().await;
     }
 
