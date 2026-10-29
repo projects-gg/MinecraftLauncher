@@ -31,8 +31,8 @@ import {
   WideRow,
 } from "../settings/controls";
 import type { CloudEditData } from "./api";
-import { pausedRows, refusedCategory, refusedText } from "./moderation";
-import { PausedLine } from "./moderation-bits";
+import { pausedRows, refusalReportText, refusedCategory, refusedText } from "./moderation";
+import { PausedLine, RefusalReport } from "./moderation-bits";
 import { slotKey } from "./movement/model";
 import { hasPlaceholder, insertToken } from "./placeholders";
 import { ReplyTools } from "./reply-tools";
@@ -499,6 +499,11 @@ function CommandRow({
   const at = (field: string) => issueText(issueAt(part.issues, "commands", index, field));
   // A moderation case paused it (the view's `paused`): "Durduruldu" until it is edited and saved.
   const paused = pausedRows(part.view.account).get(command.id) ?? null;
+  // A save refused its text for content: "Yanlışsa bildir" under the sentence.
+  const report = refusalReportText(
+    issueAt(part.issues, "commands", index, "text"),
+    command.words,
+  );
   const minInterval = part.view.limits.minIntervalSec ?? 60;
   const triggers: SelectOption<Trigger>[] = TRIGGERS.map((value) => ({
     value,
@@ -641,6 +646,7 @@ function CommandRow({
           error={at("text")}
           autoFocus={focus}
         />
+        {report ? <RefusalReport accountId={part.view.account.id} text={report} /> : null}
         {paused ? <PausedLine category={paused} account={part.view.account} /> : null}
       </div>
     </li>
@@ -725,6 +731,7 @@ function RuleRow({
   const ids = useId();
   const replyRef = useRef<HTMLInputElement>(null);
   const reply = rule.reply;
+  const report = refusalReportText(issueAt(part.issues, "rules", index, "reply"), reply);
   // Placeholders: chips and "Dene" while this account may use them. With Studio's switch on, a
   // reply holding them is not sent while its machine cannot fill them or while it fails the save
   // checks (one stored before the switch), which the row says until the check itself shows.
@@ -839,6 +846,7 @@ function RuleRow({
               error={at("reply")}
               inputRef={replyRef}
             />
+            {report ? <RefusalReport accountId={part.view.account.id} text={report} /> : null}
             {placeholders && reply.kind === "plain" ? (
               <ReplyTools
                 rule={{

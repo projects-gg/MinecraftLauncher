@@ -1,8 +1,8 @@
 // 7/24 Bulut moderation on the player's side, without React (services/cloud-afk README
 // "Moderation player API", "Appeals", "Saving"): the card's one sentence, whether "İtiraz et" is
-// offered, a paused row's category, a refused save's words and the moderation notice's line. The
-// same words as afk.projects.gg; never a rule, a pattern, an id or a code. Pure, so it is tested
-// on its own.
+// offered, a paused row's category, a refused save's words, what "Yanlışsa bildir" sends and the
+// moderation notice's line. The same words as afk.projects.gg; never a rule, a pattern, an id or a
+// code. Pure, so it is tested on its own.
 import type { TFunction } from "i18next";
 import type { CloudAccount } from "./api";
 
@@ -162,6 +162,20 @@ export function refusedText(category: string, t: TFunction, locale: string): str
   return t("afkMod.refused", { kind: categoryText(category, t).toLocaleLowerCase(locale) });
 }
 
+/**
+ * What "Yanlışsa bildir" sends under a row a save refused for its content (README "Saving" →
+ * Refusal reports): the row's plain text as it was refused (an edit clears the refusal, and the
+ * link with it), or null. The service reads only plain texts, so a secret row is never refused.
+ */
+export function refusalReportText(
+  issue: { problem: string } | undefined,
+  words: { kind: string; text?: string },
+): string | null {
+  if (!issue || refusedCategory(issue.problem) === null || words.kind !== "plain") return null;
+  const text = words.text?.trim() ?? "";
+  return text ? text : null;
+}
+
 const NOTICE_STEPS = new Set([
   "warn",
   "restrict_rows",
@@ -170,6 +184,8 @@ const NOTICE_STEPS = new Set([
   "appeal_received",
   "upheld",
   "overturned",
+  // Staff lifted a decision no appeal asked about ("Haksız bul" in Studio).
+  "lifted",
 ]);
 
 /** The `moderation` notice's line (the account's name is its title); null for a step it does not know. */

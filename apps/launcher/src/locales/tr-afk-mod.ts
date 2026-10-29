@@ -1,7 +1,8 @@
 // 7/24 Bulut's moderation on the player's side (services/cloud-afk README "Moderation player API",
 // "Appeals"): the card's one sentence and "İtiraz et" (the form is the site's), "Durduruldu" on a
-// paused row, a refused save, and the moderation notice. The same words as afk.projects.gg and the
-// phone; never a rule's internals, a pattern, an id or a code. Root key `afkMod`.
+// paused row, a refused save with "Yanlışsa bildir", and the moderation notice. The same words as
+// afk.projects.gg and the phone; never a rule's internals, a pattern, an id or a code. Root key
+// `afkMod`.
 export const trAfkMod = {
   categories: {
     advertising: "Reklam",
@@ -48,6 +49,14 @@ export const trAfkMod = {
   },
   /** A save turned away (README "Saving"): not a punishment. */
   refused: "Bu satır {{kind}} içeriyor gibi görünüyor. Düzelt ya da sil.",
+  /** Under a refused save: the player tells staff it was wrong (README "Refusal reports"). */
+  report: {
+    link: "Yanlışsa bildir",
+    sending: "Gönderiliyor",
+    sent: "Sağ ol, bir yetkili bakacak. Bu arada satırı düzeltip kaydedebilirsin.",
+    limited: "Bugün en çok 3 kez bildirebilirsin.",
+    notRefused: "Bu satır artık kaydedilebilir.",
+  },
   /** The `moderation` notice's line under the account's name (the device writes it). */
   notice: {
     warn: "Uyarı: {{kind}}. Bir daha olursa hesap durdurulur.",
@@ -57,5 +66,6 @@ export const trAfkMod = {
     appeal_received: "İtirazın alındı. En geç 3 gün içinde bakacağız.",
     upheld: "İtirazını inceledik. Karar değişmedi.",
     overturned: "İtirazın kabul edildi. Verilen karar kaldırıldı.",
+    lifted: "Verilen karar kaldırıldı.",
   },
 };

@@ -1,11 +1,13 @@
 // 7/24 Bulut moderation on the cards and in the settings (README "Moderation player API"): the
-// card's one sentence with "İtiraz et" (it opens the site's appeal page in the browser), and the
-// line under a paused row: that it is stopped, why, what runs it again, and the appeal.
+// card's one sentence with "İtiraz et" (it opens the site's appeal page in the browser), the line
+// under a paused row (that it is stopped, why, what runs it again, and the appeal) and "Yanlışsa
+// bildir" under a row a save refused for its content.
 import { ArrowSquareOut, ShieldWarning } from "@phosphor-icons/react";
 import type { TFunction } from "i18next";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { afkFailed } from "../errors";
-import { type CloudAccount, cloudApi } from "./api";
+import { type CloudAccount, type CloudReportOutcome, cloudApi } from "./api";
 import { categoryText, moderationLine } from "./moderation";
 
 /** Opens the site's appeal page for the account in the browser. */
@@ -61,6 +63,48 @@ export function PausedLine({ category, account }: { category: string; account: C
         {t("afkMod.paused.line", { kind: categoryText(category, t) })}
       </span>
       {account.moderation?.appeal.can ? <AppealLink accountId={account.id} /> : null}
+    </p>
+  );
+}
+
+/**
+ * Under a row a save refused for its content (README "Saving" → Refusal reports): "Yanlışsa
+ * bildir" as a quiet underlined link (it stays here, so no arrow; the sheet's one gold is "Kaydet"),
+ * then one line in its place: sent, three today already, or the text saves now. A failure is the
+ * usual toast, and the link stays.
+ */
+export function RefusalReport({ accountId, text }: { accountId: string; text: string }) {
+  const { t } = useTranslation();
+  const [sending, setSending] = useState(false);
+  const [answer, setAnswer] = useState<CloudReportOutcome["kind"] | null>(null);
+  const send = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      setAnswer((await cloudApi.reportRefusal(accountId, text)).kind);
+    } catch (error) {
+      afkFailed(error, t("cloudAfk.actions.failed"));
+    } finally {
+      setSending(false);
+    }
+  };
+  if (answer) {
+    return (
+      <p role="status" className="text-[12.5px] text-ash-300">
+        {t(`afkMod.report.${answer}`)}
+      </p>
+    );
+  }
+  return (
+    <p className="text-[12.5px]">
+      <button
+        type="button"
+        onClick={() => void send()}
+        disabled={sending}
+        className="cursor-pointer rounded-sm font-medium text-bone-100 underline decoration-white/35 underline-offset-[3px] outline-none hover:decoration-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-default disabled:opacity-60"
+      >
+        {sending ? t("afkMod.report.sending") : t("afkMod.report.link")}
+      </button>
     </p>
   );
 }

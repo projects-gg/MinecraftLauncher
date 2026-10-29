@@ -37,6 +37,13 @@ export const enAfkMod = {
     line: "Stopped: {{kind}}. Fix it and save, and it runs again.",
   },
   refused: "This row seems to contain {{kind}}. Fix or delete it.",
+  report: {
+    link: "Report this as a mistake",
+    sending: "Sending",
+    sent: "Thanks, a staff member will look at it. Meanwhile, you can fix the line and save.",
+    limited: "You can send at most 3 reports a day.",
+    notRefused: "This row can be saved now.",
+  },
   notice: {
     warn: "Warning: {{kind}}. If it happens again, the account will be stopped.",
     restrict_rows: "A row was stopped ({{kind}}). Fix or delete it.",
@@ -45,5 +52,6 @@ export const enAfkMod = {
     appeal_received: "We got your appeal. We'll look at it within 3 days.",
     upheld: "We reviewed your appeal. The decision stands.",
     overturned: "Your appeal was accepted. The decision was lifted.",
+    lifted: "The decision was lifted.",
   },
 };
