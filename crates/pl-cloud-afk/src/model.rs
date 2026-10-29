@@ -511,17 +511,21 @@ pub struct CloudConsoleLine {
     pub c: Option<String>,
     pub who: Option<String>,
     pub goto: Option<String>,
+    // `lenient` reads the same type it writes (an odd value reads as none): the wire type is the
+    // field's own, which specta is told.
     #[serde(
         default,
         deserialize_with = "lenient",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<Vec<CloudSpan>>)]
     pub st: Option<Vec<CloudSpan>>,
     #[serde(
         default,
         deserialize_with = "lenient",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<Vec<CloudLineEvent>>)]
     pub ev: Option<Vec<CloudLineEvent>>,
     /// A private line's direction when the machine knows it: `in` (to the player) or `out` (the
     /// player's own reply); kept as text.
