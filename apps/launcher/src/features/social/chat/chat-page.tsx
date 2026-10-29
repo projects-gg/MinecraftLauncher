@@ -239,8 +239,8 @@ export function ChatHeader() {
             </div>
             {peer ? (
               <p className="truncate text-[12px] text-ash-300">
-              <PresenceText friend={peer} t={t} />
-            </p>
+                <PresenceText friend={peer} t={t} />
+              </p>
             ) : null}
           </div>
         </div>
