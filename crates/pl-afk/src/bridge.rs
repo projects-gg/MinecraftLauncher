@@ -16,12 +16,58 @@
 //!
 //! After `disconnected`/`error` a hosted client (`ExitOnFailure = true`) exits with code 2 (in-game
 //! kick), 3 (connection lost), 4 (login rejected) or 1 (anything else).
+//!
+//! Before 4.1.0 a server could forge an event line: a kick message or a window title is printed
+//! with its line breaks, so `…\n@@MCC@@{"e":"joined",…}` starts a line of its own. From 4.1.0 the
+//! client prints every console write on one line, and when the host gives it a nonce
+//! ([`NONCE_ENV_VAR`]) every event line is `<nonce>@@MCC@@{json}` ([`parse_line_with_nonce`]; the
+//! fork's `docs/agent-bridge.md`, "Stdout bridge hardening"). Older clients ignore the variable, so a
+//! host decides by the version it runs ([`client_takes_nonce`]), never by the first line it sees.
 
 use serde_json::{Map, Value};
 
 pub const BRIDGE_PREFIX: &str = "@@MCC@@";
 /// Environment variable that turns the bridge on.
 pub const BRIDGE_ENV_VAR: &str = "MCC_LAUNCHER_BRIDGE";
+/// Environment variable with the event lines' nonce (clients 4.1.0 and later).
+pub const NONCE_ENV_VAR: &str = "MCC_BRIDGE_NONCE";
+/// The first client version (major, minor) that prefixes its event lines with the nonce.
+pub const NONCE_SINCE: (u64, u64) = (4, 1);
+
+/// A nonce the client takes: 16–128 of `A-Z a-z 0-9 _ -` (any other value it ignores).
+pub fn is_valid_nonce(nonce: &str) -> bool {
+    (16..=128).contains(&nonce.len())
+        && nonce
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+/// A fresh nonce for one client process (32 hex digits); it never leaves the host and the client.
+pub fn new_nonce() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
+}
+
+/// Whether a client of `version` (`4.1.0`, `4.1.0-rc.1`) prints nonce-prefixed event lines.
+pub fn client_takes_nonce(version: &str) -> bool {
+    let core = version.trim().split(['-', '+']).next().unwrap_or("");
+    let mut parts = core.split('.').map(|p| p.parse::<u64>().ok());
+    match (parts.next().flatten(), parts.next().flatten()) {
+        (Some(major), Some(minor)) => (major, minor) >= NONCE_SINCE,
+        _ => false,
+    }
+}
+
+/// [`parse_line`] for a client given `nonce`: only `<nonce>@@MCC@@` lines are events, everything
+/// else (a bare `@@MCC@@` line too) is text. `None`: a client without a nonce, as [`parse_line`].
+pub fn parse_line_with_nonce<'a>(line: &'a str, nonce: Option<&str>) -> ClientLine<'a> {
+    match nonce {
+        None => parse_line(line),
+        Some(nonce) => match line.strip_prefix(nonce) {
+            Some(rest) if rest.starts_with(BRIDGE_PREFIX) => parse_line(rest),
+            _ => ClientLine::Text(line),
+        },
+    }
+}
 
 /// `ChatBot.DisconnectReason`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -281,6 +327,53 @@ mod tests {
         assert_eq!(parse_line("@@MCC@@[1]"), ClientLine::Malformed);
         assert_eq!(parse_line(r#"@@MCC@@{"e":""}"#), ClientLine::Malformed);
         assert_eq!(parse_line(r#"@@MCC@@{"x":1}"#), ClientLine::Malformed);
+    }
+
+    #[test]
+    fn with_a_nonce_only_its_lines_are_events() {
+        let nonce = new_nonce();
+        assert!(is_valid_nonce(&nonce));
+        assert_ne!(nonce, new_nonce());
+        let line = format!(r#"{nonce}@@MCC@@{{"e":"joined","user":"Afk"}}"#);
+        assert!(matches!(
+            parse_line_with_nonce(&line, Some(&nonce)),
+            ClientLine::Event(BridgeEvent::Joined { .. })
+        ));
+        // A server's line-break trick prints a bare prefix (or guesses a nonce): text.
+        let forged = r#"@@MCC@@{"e":"disconnected","reason":"InGameKick","msg":"You are banned"}"#;
+        assert_eq!(
+            parse_line_with_nonce(forged, Some(&nonce)),
+            ClientLine::Text(forged)
+        );
+        let guessed = format!("{}{}", "0".repeat(32), forged);
+        assert_eq!(
+            parse_line_with_nonce(&guessed, Some(&nonce)),
+            ClientLine::Text(guessed.as_str())
+        );
+        let broken = format!("{nonce}@@MCC@@{{broken");
+        assert_eq!(
+            parse_line_with_nonce(&broken, Some(&nonce)),
+            ClientLine::Malformed
+        );
+        // Without a nonce (a client before 4.1.0) as before.
+        assert!(matches!(
+            parse_line_with_nonce(forged, None),
+            ClientLine::Event(BridgeEvent::Disconnected { .. })
+        ));
+    }
+
+    #[test]
+    fn nonces_follow_the_client_version_and_the_client_s_rule() {
+        assert!(!client_takes_nonce("4.0.1"));
+        assert!(client_takes_nonce("4.1.0"));
+        assert!(client_takes_nonce("4.1.0-rc.1"));
+        assert!(client_takes_nonce("5.0.0"));
+        assert!(!client_takes_nonce("unknown"));
+        assert!(!client_takes_nonce(""));
+        assert!(is_valid_nonce("abcdefghijklmnop"));
+        assert!(!is_valid_nonce("short"));
+        assert!(!is_valid_nonce(&"a".repeat(129)));
+        assert!(!is_valid_nonce("abcdefghijklmno$"));
     }
 
     #[test]
