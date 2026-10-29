@@ -251,13 +251,17 @@ export function DialogCard({
               size="md"
               disabled={off}
               onClick={() => press(button)}
-              title={command && !dialog.play ? t.dialogPlayOnly : undefined}
             >
               <ConsoleText text={button.label} st={button.labelSt} lang={lang} />
             </Button>
           );
         })}
       </div>
+      {/* While the client joins, a command button is off: one plain line says why (a tooltip on a
+          disabled button never shows on touch). */}
+      {!dialog.play && dialog.buttons.some((button) => button.a === "run_command") ? (
+        <p className="text-[12.5px] text-ash-300">{t.dialogPlayOnly}</p>
+      ) : null}
       {error ? (
         <p role="alert" className="text-[12.5px] text-flare-400">
           {error}

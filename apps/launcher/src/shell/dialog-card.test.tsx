@@ -145,6 +145,18 @@ describe("DialogCard", () => {
     expect(screen.getByRole("alert").textContent).toBe("Bu düğme şu an çalışmadı.");
   });
 
+  it("says in one line that its commands wait for the game while the client joins", () => {
+    const dialog = safeDialog(RAW) as Dialog;
+    const { rerender } = render(
+      <DialogCard dialog={{ ...dialog, play: false }} lang="tr" clock="17:30:00" onAct={vi.fn()} />,
+    );
+    expect(screen.getByText("Gönder").closest("button")?.disabled).toBe(true);
+    expect(screen.getByText("Komut düğmeleri oyuna girince çalışır.")).not.toBeNull();
+    rerender(<DialogCard dialog={dialog} lang="tr" clock="17:30:00" onAct={vi.fn()} />);
+    expect(screen.getByText("Gönder").closest("button")?.disabled).toBe(false);
+    expect(screen.queryByText("Komut düğmeleri oyuna girince çalışır.")).toBeNull();
+  });
+
   it("asks before a command runs, with the command its inputs build", () => {
     const onAct = vi.fn();
     render(

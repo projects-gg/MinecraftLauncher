@@ -22,6 +22,7 @@ export interface ConsoleTexts {
   /** A server's dialog (DIALOG-CARD): where a command from it came from, its close, its label. */
   dialogSource: string;
   dialogClose: string;
+  /** Under the buttons while the client is still joining: its command buttons wait for the game. */
   dialogPlayOnly: string;
   dialogLabel: string;
   /** A press the machine or the client refused: the dialog had changed, or any other reason. */
@@ -46,7 +47,7 @@ export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
     pmOutSaid: "Senin özel mesajın",
     dialogSource: "Sunucu penceresinden",
     dialogClose: "Oyunda kapat",
-    dialogPlayOnly: "Oyuna girince",
+    dialogPlayOnly: "Komut düğmeleri oyuna girince çalışır.",
     dialogLabel: "Sunucu penceresi",
     dialogChanged: "Sunucu penceresi değişti.",
     dialogFailed: "Bu düğme şu an çalışmadı.",
@@ -67,7 +68,7 @@ export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
     pmOutSaid: "Your private message",
     dialogSource: "From the server's window",
     dialogClose: "Close in game",
-    dialogPlayOnly: "Once in game",
+    dialogPlayOnly: "Command buttons work once you're in the game.",
     dialogLabel: "Server window",
     dialogChanged: "The server's window changed.",
     dialogFailed: "This button didn't work just now.",
