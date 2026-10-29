@@ -500,10 +500,7 @@ function CommandRow({
   // A moderation case paused it (the view's `paused`): "Durduruldu" until it is edited and saved.
   const paused = pausedRows(part.view.account).get(command.id) ?? null;
   // A save refused its text for content: "Yanlışsa bildir" under the sentence.
-  const report = refusalReportText(
-    issueAt(part.issues, "commands", index, "text"),
-    command.words,
-  );
+  const report = refusalReportText(issueAt(part.issues, "commands", index, "text"), command.words);
   const minInterval = part.view.limits.minIntervalSec ?? 60;
   const triggers: SelectOption<Trigger>[] = TRIGGERS.map((value) => ({
     value,

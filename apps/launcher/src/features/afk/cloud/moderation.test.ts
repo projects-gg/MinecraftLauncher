@@ -129,7 +129,7 @@ describe("cloud AFK moderation on the card", () => {
     );
   });
 
-  it("offers \"Yanlışsa bildir\" under a plain row refused for its content, with its text", () => {
+  it('offers "Yanlışsa bildir" under a plain row refused for its content, with its text', () => {
     const refused = { problem: "content:advertising" };
     const plain = { kind: "plain", text: "  /msg Neon_Drift ucuz rank burada " };
     expect(refusalReportText(refused, plain)).toBe("/msg Neon_Drift ucuz rank burada");
