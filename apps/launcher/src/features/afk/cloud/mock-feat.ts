@@ -6,7 +6,8 @@
 //   account, waits for a reconnect, has no inventory on its version, is held by an AFK+ trade,
 //   has a chest or a server menu open, or answers slowly (the empty window shows meanwhile);
 // - `&legacy=1`: Madenci07's replies still match the old way;
-// - `&bars=0`: no status strip.
+// - `&bars=0`: no status strip;
+// - `&looks=1` (with `feat`): console looks (CONSOLE-COLOR), the lines in the game's colours.
 import {
   createMockMachine,
   type InvFrame,
@@ -23,8 +24,10 @@ import type {
   CloudConsoleLine,
   CloudFeatures,
   CloudInvItem,
+  CloudLineEvent,
   CloudLiveEvent,
   CloudReplyTry,
+  CloudSpan,
 } from "@/bindings";
 import type { TryRule } from "./api";
 
@@ -62,12 +65,129 @@ export function accountFeatures(id: string): CloudAccountFeatures | null {
       on: !(id === MADENCI && invScenario === "setting"),
     },
     consoleKinds: true,
+    consoleLooks: param("looks") === "1",
     placeholders: true,
     legacyRules: id === MADENCI && param("legacy") === "1",
   };
 }
 
-type Kind = [k: string, c: string, text: string, who?: string];
+/** A line's words and their looks (CONSOLE-COLOR), as the machine gives them. */
+function parts(...list: [text: string, code: string, event?: number][]): {
+  text: string;
+  st: CloudSpan[];
+} {
+  return {
+    text: list.map(([text]) => text).join(""),
+    st: list.map(([text, code, event]) =>
+      event === undefined ? [text.length, code] : [text.length, code, event],
+    ),
+  };
+}
+
+/** The evening's lines in the game's colours, at the end of the console (`&looks=1`). */
+function lookLines(endAt: number): CloudConsoleLine[] {
+  const line = (
+    ago: number,
+    c: string,
+    look: { text: string; st: CloudSpan[] },
+    ev?: CloudLineEvent[],
+    who?: string,
+  ): CloudConsoleLine => ({
+    at: endAt - ago,
+    k: "n",
+    c,
+    who: who ?? null,
+    goto: null,
+    ...look,
+    ...(ev ? { ev } : {}),
+  });
+  const sword: CloudInvItem = {
+    ...toCloudItem({
+      slot: 0,
+      id: "minecraft:diamond_sword",
+      count: 1,
+      label: { tr: "Elmas Kılıç", en: "Diamond Sword" },
+      name: "Keskin Kılıç",
+      nameStyle: [[12, "b"]],
+      lore: ["Sezon ödülü"],
+      loreStyle: [[[11, "7"]]],
+      enchanted: true,
+    }),
+  };
+  return [
+    line(150, "sys", parts(["[Duyuru] ", "6l", 0], ["Etkinlik 21:00'de başlıyor!", "e"]), [
+      {
+        hover: {
+          text: "Sunucu duyurusu\nKatılmak için: /etkinlik",
+          st: [
+            [16, "e"],
+            [24, "7"],
+          ],
+        },
+      },
+    ]),
+    line(
+      120,
+      "chat",
+      parts(["[Parti] ", "9"], ["GeceKurdu_", "b", 0], [": lobiye geliyorum", "f"]),
+      [
+        {
+          click: { a: "suggest_command", v: "/msg GeceKurdu_ " },
+          hover: {
+            entity: { label: { tr: "Oyuncu", en: "Player" }, name: "GeceKurdu_", st: [[10, "b"]] },
+          },
+        },
+      ],
+      "GeceKurdu_",
+    ),
+    line(
+      90,
+      "chat",
+      parts(["[Yetkili] ", "cl"], ["Mod_Kirpi", "c"], [": herkes spawn'a", "7"]),
+      undefined,
+      "Mod_Kirpi",
+    ),
+    {
+      ...line(
+        70,
+        "pm",
+        parts(["SessizOkcu sana fısıldıyor: pazar açık mı?", "7o"]),
+        undefined,
+        "SessizOkcu",
+      ),
+      dir: "in",
+    },
+    line(62, "sys", parts(["[Klan] ", "1l"], ["TasUsta: yarın baskın var", "1"])),
+    line(
+      55,
+      "sys",
+      parts(["Lavci_42 ", "e"], ["[Keskin Kılıç]", "b", 0], [" sandıktan çıkardı!", "7"]),
+      [{ hover: { item: sword } }],
+    ),
+    line(
+      40,
+      "sys",
+      parts(
+        ["[Parti] ", "9"],
+        ["GeceKurdu_ seni partiye çağırıyor ", "7"],
+        ["[Kabul et]", "al", 0],
+      ),
+      [
+        {
+          click: { a: "run_command", v: "/party accept GeceKurdu_" },
+          hover: { text: "Partiye katılmak için tıkla", st: [[27, "a"]] },
+        },
+      ],
+    ),
+    line(
+      20,
+      "sys",
+      parts(["Eski fiyat ", "7"], ["900", "7m"], [" yeni fiyat ", "7"], ["600 ripple", "an"]),
+    ),
+  ];
+}
+
+type Kind = [k: string, c: string, text: string, who?: string, dir?: "in" | "out"];
 
 /** The console as the machine writes it with kinds (a projects.gg evening). */
 const KIND_LINES: Kind[] = [
@@ -78,7 +198,7 @@ const KIND_LINES: Kind[] = [
   ["s", "sys", "/warp maden"],
   ["n", "sys", "Maden bölgesine ışınlandın."],
   ["n", "chat", "GeceKurdu_ » selam millet", "GeceKurdu_"],
-  ["n", "pm", "✉ »» ElmasKazma: Madenci07 akşam pvp var mı", "ElmasKazma"],
+  ["n", "pm", "✉ »» ElmasKazma: Madenci07 akşam pvp var mı", "ElmasKazma", "in"],
   ["n", "chat", "SessizOkcu » Madenci07 maden açık mı", "SessizOkcu"],
   ["n", "title", "Hoş geldin"],
   ["n", "cli", "[Envanter] Menü açıldı: Kitler"],
@@ -90,7 +210,8 @@ const KIND_LINES: Kind[] = [
 const LIVE_LINES: Kind[] = [
   ["n", "chat", "GeceKurdu_ » biri pazara gelsin", "GeceKurdu_"],
   ["n", "sys", "[Duyuru] Haftalık sıralama yenilendi."],
-  ["n", "pm", "✉ »» SessizOkcu: hoş geldin Madenci07", "SessizOkcu"],
+  ["n", "pm", "✉ »» SessizOkcu: hoş geldin Madenci07", "SessizOkcu", "in"],
+  ["n", "pm", "✉ «« SessizOkcu: sağ ol, birazdan geliyorum", "SessizOkcu", "out"],
   ["n", "sys", "[Projects] 15 dakika AFK ödülü: 120 altın."],
 ];
 
@@ -99,7 +220,7 @@ const LIVE_LINES: Kind[] = [
  * a server other than projects.gg sends no "[Projects]" lines.
  */
 function kindLine(
-  [k, c, text, who]: Kind,
+  [k, c, text, who, dir]: Kind,
   at: number,
   name: string,
   server: string,
@@ -113,6 +234,7 @@ function kindLine(
     c,
     who: who ?? null,
     goto: text.startsWith("[Envanter] Menü açıldı") ? "inventory" : null,
+    ...(dir ? { dir } : {}),
   };
 }
 
@@ -134,9 +256,13 @@ export function kindLines(
   const source =
     since !== null && since < endAt - count * 37 ? KIND_LINES.slice(JOIN_LINES) : KIND_LINES;
   const shown = Math.min(count, source.length);
-  return Array.from({ length: shown }, (_, i) =>
-    kindLine(source[i] ?? ["n", "sys", ""], endAt - (shown - i) * 37, name, server),
+  // With looks the evening's coloured lines come last, the rest three minutes before them.
+  const looks = param("looks") === "1";
+  const shift = looks ? 180 : 0;
+  const lines = Array.from({ length: shown }, (_, i) =>
+    kindLine(source[i] ?? ["n", "sys", ""], endAt - (shown - i) * 37 - shift, name, server),
   );
+  return looks ? [...lines, ...lookLines(endAt)] : lines;
 }
 
 export function liveKindLine(
