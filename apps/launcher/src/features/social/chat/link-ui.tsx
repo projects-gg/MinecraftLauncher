@@ -5,8 +5,9 @@
 // sits in the bubble under the text: a 10 px container, the site's own launcher icon and its
 // registrable domain alone in bold (never the page's own name for itself, never the address again:
 // the text above shows it; CONSOLE-COLOR's console card's rule), the title and the description (a
-// video's channel on its own quiet line under its title); a wide picture (a video, a stream, a projects.gg page) over the text, a squarer one (a mod's icon, a
-// channel's face) beside it. Its place is held from the start at its likely height; the content
+// video's channel instead, on its own quiet line under its title); a wide picture (a video, a
+// stream, a projects.gg page) over the text, a squarer one (a mod's icon, a channel's face) beside
+// it. Its place is held from the start at its likely height; the content
 // fades in (180 ms), a card that does not come turns into the plain one (icon, domain) at the same
 // size. The computer never fetches anything from a linked site: the hub makes the card, pictures
 // only from the trusted sites' own picture hosts.
@@ -405,7 +406,10 @@ export function LinkCard({
                   {title}
                 </span>
               ) : null}
-              {ready?.desc ? (
+              {/* A video without a wide picture keeps its channel too, in the description's place. */}
+              {channel ? (
+                <span className="block truncate text-[12px] leading-4 text-ash-400">{channel}</span>
+              ) : ready?.desc ? (
                 <span className="block truncate text-[12.5px] leading-[1.3] text-ash-300">
                   {ready.desc}
                 </span>

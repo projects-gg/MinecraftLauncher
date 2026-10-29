@@ -50,11 +50,17 @@ describe("a link's card", () => {
     expect(bold).toContain("kotu.example");
   });
 
-  it("puts a video's channel on its own quiet line under the title, never beside the domain", () => {
+  // With its wide picture (the banner) and without one (the row, where it takes the description's
+  // place).
+  const wide = { image: "data:image/png;base64,AAAA", w: 1280, h: 720 };
+  it.each([
+    ["with its picture", wide],
+    ["without a picture", {}],
+  ])("puts a video's channel on its own quiet line under the title (%s)", (_, picture) => {
     const { container } = render(
       <LinkCard
         link={link}
-        card={card({ kind: "video", title: "Son raunt", author: "KanalAdi" })}
+        card={card({ kind: "video", title: "Son raunt", author: "KanalAdi", ...picture })}
         waiting={false}
       />,
     );
