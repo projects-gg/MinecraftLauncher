@@ -47,6 +47,7 @@ import { enQaFix } from "./en-qa-fix";
 import { enReminders } from "./en-reminders";
 import { enReports } from "./en-reports";
 import { enSafety } from "./en-safety";
+import { enSetup } from "./en-setup";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
@@ -329,6 +330,7 @@ export const en: DeepPartial<Strings> = {
   playAcct: enPlayAcct,
   playAgain: enPlayAgain,
   chatProd: enChatProd,
+  setup: enSetup,
   motion: enMotion,
   nav: {
     home: "Home",

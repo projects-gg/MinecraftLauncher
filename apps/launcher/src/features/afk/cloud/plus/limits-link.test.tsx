@@ -20,6 +20,18 @@ describe("Sınırlara git", () => {
     expect(went).toEqual(["limits"]);
   });
 
+  it("names the approval limit beside an approval limit's reason (the site's word)", () => {
+    const went: string[] = [];
+    render(
+      <LimitLine approval onGo={() => went.push("approvalAbove")}>
+        Onay sınırının üstünde
+      </LimitLine>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Onay sınırına git" }));
+    expect(went).toEqual(["approvalAbove"]);
+    expect(screen.queryByRole("button", { name: "Sınırlara git" })).toBeNull();
+  });
+
   it.each<[string, boolean]>([
     ["above", true],
     ["new_counterpart", true],
