@@ -114,6 +114,11 @@ public final class PersonMenu {
     private boolean keys;
     // The question, when a row asks first.
     private FriendMenu.Action asking;
+    /**
+     * OVL-UX3: "Liderliği devret" leaves the player a moderator (the crew has roles and fewer than 4 others moderate;
+     * the launcher's {@code afterHandingOn}), else a member: its question says which.
+     */
+    private boolean leadKeepsModerator;
     private final List<FormattedCharSequence> question = new ArrayList<>(2);
     private final List<FormattedCharSequence> body = new ArrayList<>(3);
     private String cancelLabel = "";
@@ -147,6 +152,11 @@ public final class PersonMenu {
 
     public void setReducedMotion(boolean value) {
         reducedMotion = value;
+    }
+
+    /** OVL-UX3: what "Liderliği devret"'s question says the player becomes (set before the menu opens). */
+    public void setLeadKeepsModerator(boolean value) {
+        leadKeepsModerator = value;
     }
 
     /** Whether it is open (not fading out). */
@@ -355,6 +365,10 @@ public final class PersonMenu {
             case ALERT -> "people.alert";
             case MOVE -> "people.move";
             case CREW_INVITE -> row.done() ? "people.crew_invited" : "people.crew_invite";
+            case MAKE_MODERATOR -> "people.make_moderator";
+            case UNMAKE_MODERATOR -> "people.unmake_moderator";
+            case MAKE_FOUNDER -> "people.make_founder";
+            case REMOVE_MEMBER -> "people.remove_member";
             case REMOVE_FROM_WORLD -> "people.remove_from_world";
             case UNFRIEND -> "people.unfriend";
             case BLOCK -> "people.block";
@@ -374,6 +388,9 @@ public final class PersonMenu {
             case ALERT -> row.on() ? Icon.BELL_FILL : Icon.BELL;
             case MOVE -> Icon.FOLDER;
             case CREW_INVITE -> Icon.CREW;
+            case MAKE_MODERATOR, UNMAKE_MODERATOR -> Icon.SHIELD_STAR;
+            case MAKE_FOUNDER -> Icon.CROWN;
+            case REMOVE_MEMBER -> Icon.USER_MINUS;
             case REMOVE_FROM_WORLD -> Icon.SEND_OFF;
             case UNFRIEND -> Icon.UNFRIEND;
             case BLOCK -> Icon.BLOCK;
@@ -426,10 +443,13 @@ public final class PersonMenu {
         Font small = Fonts.small();
         Font ui = Fonts.ui();
         cancelLabel = Texts.str("people.cancel");
-        // "Dünyadan çıkar" asks in world sharing's own words (its page asks the same).
+        // "Dünyadan çıkar" asks in world sharing's own words (its page asks the same), the crew rows in the launcher's
+        // (OVL-UX3: who leads after the hand-over and what the player becomes, who leaves and that the code changes).
         String titleKey = switch (action) {
             case BLOCK -> "people.block.ask";
             case REMOVE_FROM_WORLD -> "host.remove.ask";
+            case MAKE_FOUNDER -> leadKeepsModerator ? "people.make_founder.ask_moderator" : "people.make_founder.ask";
+            case REMOVE_MEMBER -> "people.remove_member.ask";
             default -> "people.unfriend.ask";
         };
         String bodyKey = switch (action) {
@@ -440,6 +460,8 @@ public final class PersonMenu {
         confirmLabel = Texts.str(switch (action) {
             case BLOCK -> "people.block";
             case REMOVE_FROM_WORLD -> "people.remove_from_world";
+            case MAKE_FOUNDER -> "people.make_founder";
+            case REMOVE_MEMBER -> "people.remove_member";
             default -> "people.unfriend";
         });
         cancelW = ui.width(cancelLabel) + BUTTON_PAD * 2;
@@ -837,9 +859,15 @@ public final class PersonMenu {
         float by = buttonsY();
         drawButton(g, cancelX(), by, cancelW, cancelLabel, Frames.BUTTON_SECONDARY, Frames.BUTTON_SECONDARY_HOVER,
             cancelHover.value(now), Theme.BONE_100, button == 0 && PanelInput.keyboardMode());
-        drawButton(g, confirmX(), by, confirmW, confirmLabel, Frames.BUTTON_DANGER, Frames.BUTTON_DANGER_HOVER,
-            confirmHover.value(now), Theme.mix(Theme.FLARE_300, Theme.BONE_50, confirmHover.value(now) * 0.35f),
-            button == 1 && PanelInput.keyboardMode());
+        if (asking == FriendMenu.Action.MAKE_FOUNDER) {
+            // Handing the lead on loses nothing (the launcher's primary button there).
+            drawButton(g, confirmX(), by, confirmW, confirmLabel, Frames.BUTTON_PRIMARY, Frames.BUTTON_PRIMARY_HOVER,
+                confirmHover.value(now), Theme.GOLD_INK, button == 1 && PanelInput.keyboardMode());
+        } else {
+            drawButton(g, confirmX(), by, confirmW, confirmLabel, Frames.BUTTON_DANGER, Frames.BUTTON_DANGER_HOVER,
+                confirmHover.value(now), Theme.mix(Theme.FLARE_300, Theme.BONE_50, confirmHover.value(now) * 0.35f),
+                button == 1 && PanelInput.keyboardMode());
+        }
     }
 
     private static void drawButton(GuiGraphicsExtractor g, float bx, float by, float bw, String label, Frames face,

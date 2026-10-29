@@ -9,10 +9,9 @@ import java.util.List;
  * ({@code apps/launcher/src/features/social/menus.ts}, {@code personMenu}), in its order, with the rows the game can do
  * (FIX2-D: the same menu, in the same order, wherever a player shows: a friend's row, their conversation's chip, a
  * sender's name in crew chat). The groups: being together (join, play together, message, Discord, add as a friend),
- * the friend list (favourite, online notice, category, crew invite), the player's open world (send off), the
- * relationship (unfriend, block, report). A row shows only where the rules allow it. The launcher's crew rows
- * (moderator, leadership, remove from the crew) stay in the launcher: the bridge does not carry crew roles. Pure, so
- * it is tested on its own.
+ * the friend list (favourite, online notice, category, crew invite), the crew the menu opened from (moderator,
+ * leadership, remove from the crew; OVL-UX3, a sender in crew chat), the player's open world (send off), the
+ * relationship (unfriend, block, report). A row shows only where the rules allow it. Pure, so it is tested on its own.
  */
 public final class FriendMenu {
     /** A row's action. */
@@ -43,6 +42,14 @@ public final class FriendMenu {
         MOVE,
         /** "Ekibe davet et": the crew, or a list of them with several (OVL-UX2). */
         CREW_INVITE,
+        /** "Moderatör yap" in a crew the player leads (OVL-UX3); soft while it has its 4 moderators. */
+        MAKE_MODERATOR,
+        /** "Moderatörlükten al" (OVL-UX3). */
+        UNMAKE_MODERATOR,
+        /** "Liderliği devret", asked first (OVL-UX3). */
+        MAKE_FOUNDER,
+        /** "Ekipten çıkar", asked first (OVL-UX3). */
+        REMOVE_MEMBER,
         /** "Dünyadan çıkar": a guest of the player's open world, asked first (world sharing's own words). */
         REMOVE_FROM_WORLD,
         /** "Arkadaşlıktan çıkar", asked first. */
@@ -54,7 +61,8 @@ public final class FriendMenu {
 
         /** One sentence is asked before it goes. */
         public boolean asks() {
-            return this == REMOVE_FROM_WORLD || this == UNFRIEND || this == BLOCK;
+            return this == MAKE_FOUNDER || this == REMOVE_MEMBER || this == REMOVE_FROM_WORLD || this == UNFRIEND
+                || this == BLOCK;
         }
 
         /** Drawn in the error colour (the launcher's danger row). */
@@ -101,6 +109,19 @@ public final class FriendMenu {
     }
 
     /**
+     * The crew whose chat the menu opened from, and what the player may do about them there (OVL-UX3; the launcher's
+     * {@code PersonCrew}, from {@code lists.roles}). Only while the launcher takes the crew rows.
+     *
+     * @param roles          the player names moderators there (leads it, and the service offers roles)
+     * @param leader         the player leads the crew: "Liderliği devret"
+     * @param moderator      they are a moderator: "Moderatörlükten al" instead of "Moderatör yap"
+     * @param moderatorsFull the crew has its 4 moderators: "Moderatör yap" soft
+     * @param removable      the player may remove them: "Ekipten çıkar"
+     */
+    public record Crew(boolean roles, boolean leader, boolean moderator, boolean moderatorsFull, boolean removable) {
+    }
+
+    /**
      * Everything a person's menu depends on.
      *
      * @param friend        they are on the player's friend list (else a crewmate from crew chat)
@@ -120,15 +141,26 @@ public final class FriendMenu {
      * @param team          their place in the crews the player may invite to
      * @param teams         how many crews could be shown ("Ekibe davet et" opens a list with more than one)
      * @param addFriend     a crewmate who is not a friend: "Arkadaş ekle" and its state
+     * @param crew          the crew rows of the crew chat the menu opened from (OVL-UX3), or null
      */
     public record Input(boolean friend, boolean joinable, boolean people, boolean online, boolean invite,
         boolean inviteWaiting, WorldInvites.Offer world, boolean guest, boolean message, boolean discord,
-        boolean people2, boolean fav, boolean alert, boolean categories, Team team, int teams, AddFriend addFriend) {
+        boolean people2, boolean fav, boolean alert, boolean categories, Team team, int teams, AddFriend addFriend,
+        Crew crew) {
         /** OVL-UX's friend row (the rows before OVL-UX2). */
         public Input(boolean joinable, boolean people, boolean online, boolean invite, boolean inviteWaiting,
             WorldInvites.Offer world, boolean guest, boolean message, boolean discord) {
             this(true, joinable, people, online, invite, inviteWaiting, world, guest, message, discord, false, false,
-                false, false, Team.NONE, 0, AddFriend.HIDDEN);
+                false, false, Team.NONE, 0, AddFriend.HIDDEN, null);
+        }
+
+        /** OVL-UX2's menu (the rows before OVL-UX3's crew rows). */
+        public Input(boolean friend, boolean joinable, boolean people, boolean online, boolean invite,
+            boolean inviteWaiting, WorldInvites.Offer world, boolean guest, boolean message, boolean discord,
+            boolean people2, boolean fav, boolean alert, boolean categories, Team team, int teams,
+            AddFriend addFriend) {
+            this(friend, joinable, people, online, invite, inviteWaiting, world, guest, message, discord, people2, fav,
+                alert, categories, team, teams, addFriend, null);
         }
     }
 
@@ -180,6 +212,21 @@ public final class FriendMenu {
                 boolean list = in.teams() > 1;
                 boolean soft = !live || (!list && team != Team.INVITABLE);
                 out.add(new Row(Action.CREW_INVITE, soft, !list && team == Team.INVITED, false, list, false));
+            }
+        }
+        out.add(null);
+        // The crew the menu opened from (OVL-UX3): the launcher's crew rows, in its order.
+        Crew crew = in.crew();
+        if (crew != null && launcher) {
+            if (crew.leader() && crew.roles()) {
+                out.add(crew.moderator() ? new Row(Action.UNMAKE_MODERATOR, !live, false)
+                    : new Row(Action.MAKE_MODERATOR, !live || crew.moderatorsFull(), false));
+            }
+            if (crew.leader()) {
+                out.add(new Row(Action.MAKE_FOUNDER, !live, false));
+            }
+            if (crew.removable()) {
+                out.add(new Row(Action.REMOVE_MEMBER, !live, false));
             }
         }
         out.add(null);

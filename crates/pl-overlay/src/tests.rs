@@ -1810,7 +1810,7 @@ async fn the_leaders_crew_rows_from_the_game() {
     assert_eq!(
         game.next_of("lists").await["roles"],
         json!({
-            "t1": {"lead": true, "roles": true,
+            "t1": {"lead": true, "roles": true, "conv": "c:t1",
                 "mates": {"u-ali": {"mod": true, "kick": true}, "u-cem": {"kick": true}}},
             "t2": {"mates": {"u-cem": {"kick": true}}}
         })

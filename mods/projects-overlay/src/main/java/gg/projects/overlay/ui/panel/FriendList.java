@@ -85,6 +85,8 @@ public final class FriendList extends PanelWidget {
         FormattedCharSequence title;
         FormattedCharSequence name;
         FormattedCharSequence where;
+        /** No place line (it would only say the section's title again): the name sits in the row's middle. */
+        boolean lone;
         boolean online;
         boolean inGame;
         boolean joinable;
@@ -258,7 +260,11 @@ public final class FriendList extends PanelWidget {
                 // They invited the player to their open world (H13): "Dünyasında · 2/8" (the host counts).
                 where = Texts.str("friend.where.world", (world.guests() + 1) + "/" + (world.max() + 1));
             }
-            row.where = Texts.visual(Texts.fit(small, where, nameRoom));
+            // A line says only what its section's title does not: "Oyunda" under "Oyunda", "Çevrimdışı" under
+            // "Çevrimdışı" would be the title again, so the name stands alone in the middle of its row.
+            row.lone = world == null && (f.where().equals("game") && f.inGame()
+                || f.where().equals("offline") && !f.online() && f.seen() == null);
+            row.where = Texts.visual(row.lone ? "" : Texts.fit(small, where, nameRoom));
             row.face = Face.of(f.name());
             row.joinWidth = joinWidth;
             row.y = y;
@@ -575,23 +581,27 @@ public final class FriendList extends PanelWidget {
                 }
             }
             float tx = x0 + FACE + 8;
+            // A name without a place line sits in the middle of its row (the face's middle).
+            float nameMid = row.lone ? ROW_H / 2f : NAME_MID;
             if (row.chip != null) {
                 // An offline friend's chip rests quieter, as their name does.
                 Draw.pushAlpha(row.online ? 1f : 0.7f);
-                row.chip.draw(g, tx, y + NAME_MID);
+                row.chip.draw(g, tx, y + nameMid);
                 Draw.popAlpha();
             }
-            Draw.text(g, strong, row.name, tx + TagChip.room(row.chip), Fonts.centeredY(Fonts.Face.STRONG, y + NAME_MID),
+            Draw.text(g, strong, row.name, tx + TagChip.room(row.chip), Fonts.centeredY(Fonts.Face.STRONG, y + nameMid),
                 row.online ? Theme.BONE_100 : Theme.ASH_400);
             if (row.fav) {
                 // The launcher's star after a favourite's name: small, filled, gold (dimmer offline, as the name).
                 Draw.pushAlpha(row.online ? 1f : 0.7f);
                 Draw.icon(g, Icon.STAR_FILL, 8, Draw.snap(tx + TagChip.room(row.chip) + row.nameW + 3),
-                    Draw.snap(y + NAME_MID - 4.5f), Theme.GOLD_300);
+                    Draw.snap(y + nameMid - 4.5f), Theme.GOLD_300);
                 Draw.popAlpha();
             }
-            Draw.text(g, small, row.where, tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
-                ? Theme.ASH_300 : Theme.ASH_400);
+            if (!row.lone) {
+                Draw.text(g, small, row.where, tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
+                    ? Theme.ASH_300 : Theme.ASH_400);
+            }
             if (row.joinable) {
                 float jx = joinX(row);
                 float jy = y + (ROW_H - JOIN_H) / 2f;

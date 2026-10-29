@@ -322,12 +322,20 @@ fn crew_roles(view: &SocialView) -> BTreeMap<String, CrewRoles> {
             .iter()
             .filter(|member| member.moderator)
             .count();
+        // The crew's conversation: its senders' menus in crew chat carry the rows.
+        let conv = view
+            .chat
+            .iter()
+            .flat_map(|chat| chat.conversations.iter())
+            .find(|conv| conv.crew.as_deref() == Some(crew.id.as_str()))
+            .map(|conv| conv.id.clone());
         out.insert(
             crew.id.clone(),
             CrewRoles {
                 lead,
                 roles: lead && roles,
                 mods_full: lead && roles && moderators >= MAX_MODERATORS,
+                conv,
                 mates,
             },
         );
