@@ -353,7 +353,12 @@ impl CloudClient {
 
     /// A press on the card of the server's dialog (DIALOG-CARD): `{rev, i, inputs, cmd?}` or
     /// `{rev, cancel: true}`, checked again by the service, the machine and the client.
-    pub async fn press_dialog(&self, token: &Bearer, id: &str, press: serde_json::Value) -> Result<()> {
+    pub async fn press_dialog(
+        &self,
+        token: &Bearer,
+        id: &str,
+        press: serde_json::Value,
+    ) -> Result<()> {
         self.send(
             Method::POST,
             &account_path(id, "/dialog")?,
