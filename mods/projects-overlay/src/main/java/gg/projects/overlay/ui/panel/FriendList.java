@@ -551,7 +551,10 @@ public final class FriendList extends PanelWidget {
             boolean lit = isHovered() && mouseY >= y && mouseY < y + ROW_H && menuFor == null;
             boolean chosen = row.id.equals(selected) && keyboardFocus();
             boolean open = row.id.equals(menuFor);
-            if (lit || chosen || open) {
+            // Behind a dialog about this friend (a report, a question): the quiet plate says whom it is about, never
+            // the gold ring (BETA-FB: one gold, and the keys are the dialog's).
+            boolean about = PanelInput.behind() && row.id.equals(selected);
+            if (lit || chosen || open || about) {
                 Draw.frame(g, Frames.ROW_HOVER, x0 - 2, y + 1, w + 4, ROW_H - 2, 0x99FFFFFF);
             }
             if (chosen && !open) {

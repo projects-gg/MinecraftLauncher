@@ -1,9 +1,11 @@
 // Shared motion vocabulary (rules: docs/design.md §5). Entrances ease out; exits are ~30% faster;
 // only transform and opacity move, written as `transform` strings where an element enters or
-// leaves (hardware accelerated, smooth while the page is busy). "Reduce motion" keeps fades only;
-// Performance mode keeps fades and drops layout glides.
-import { type Transition, useReducedMotion } from "motion/react";
+// leaves (hardware accelerated, smooth while the page is busy). Reduced motion (the system's
+// setting or the app's own, reduced-motion.ts) keeps fades only; Performance mode drops layout
+// glides (the launcher counts it as reduced motion too, BETA-FB).
+import type { Transition } from "motion/react";
 import { usePerf } from "./perf";
+import { motionReduced, useReduceMotion } from "./reduced-motion";
 
 /** Entrance easing: fast start, long soft landing. */
 export const easeOutExpo = [0.16, 1, 0.3, 1] as const;
@@ -34,14 +36,14 @@ export const leave = (duration: number): Transition => ({
 });
 
 export interface MotionPrefs {
-  /** The OS asks for reduced motion: fades only, no movement. */
+  /** Motion is reduced (the system's setting or the app's own): fades only, no movement. */
   reduce: boolean;
   /** Layout glides may run (not reduced, not Performance mode). */
   layout: boolean;
 }
 
 export function useMotionPrefs(): MotionPrefs {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   const { performanceMode } = usePerf();
   return { reduce, layout: !reduce && !performanceMode };
 }
@@ -52,8 +54,7 @@ export function useMotionPrefs(): MotionPrefs {
  * ignores the CSS `scroll-behavior` that reduced motion sets.
  */
 export function scrollBehavior(): ScrollBehavior {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "smooth";
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  return motionReduced() ? "auto" : "smooth";
 }
 
 export const fadeUp = {

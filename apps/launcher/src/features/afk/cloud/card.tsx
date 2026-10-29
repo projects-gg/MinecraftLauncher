@@ -1,6 +1,6 @@
 // A cloud account on the AFK page: face, name and server, the state line, the paid time with
 // "Süreyi uzat" once renewal opens, and one main button (Başlat, Durdur, "Şifreyi düzelt" after the
-// server turned its password down, or "Yeniden etkinleştir" on the site once the time is up), the
+// server turned its password down, or "Süre al" on the site once the time is up), the
 // console and the settings. With the cloud features: "Envanter" and "Hareket" in its menu (the
 // panel's tabs), "Ayarlarını kopyala", and a box while several accounts are chosen (the chosen card
 // carries the brand's pixel brackets).
@@ -196,6 +196,7 @@ function PlaceRow({
 function PrimaryButton({
   account,
   away,
+  plus = false,
   onStart,
   onStop,
   onFixPassword,
@@ -204,6 +205,12 @@ function PrimaryButton({
   account: CloudAccount;
   /** Its machine is out of reach (CLOUD-STALE). */
   away: boolean;
+  /**
+   * An AFK+ account: "Durdur" sat right under "ProBot AI çalışıyor" and read as stopping the AI,
+   * where it takes the whole account out of the game, so it says "Hesabı durdur" (TASTE-SWEEP,
+   * the site's words).
+   */
+  plus?: boolean;
   onStart: () => void;
   onStop: () => void;
   onFixPassword: () => void;
@@ -240,7 +247,7 @@ function PrimaryButton({
     ((hold?.kind === "cause" && hold.cause !== "other") || hold?.kind === "server_blocked");
   const labels: Record<Exclude<CloudPrimary, "none">, string> = {
     start: t("cloudAfk.actions.start"),
-    stop: t("cloudAfk.actions.stop"),
+    stop: plus ? t("afkPlus.card.stopAccount") : t("cloudAfk.actions.stop"),
     renew: t("cloudAfk.actions.reactivate"),
     fixPassword: t("afkClear.fixPassword"),
   };
@@ -732,6 +739,7 @@ export function CloudCard({
               <PrimaryButton
                 account={account}
                 away={away}
+                plus={Boolean(onPlus)}
                 onStart={onStart}
                 onStop={onStop}
                 onFixPassword={onSettings}

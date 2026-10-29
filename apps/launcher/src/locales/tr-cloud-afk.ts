@@ -91,15 +91,14 @@ export const trCloudAfk = {
   },
   actions: {
     start: "Başlat",
-    // The account's, never ProBot AI's ("ProBot AI'ı durdur"): beside "ProBot AI çalışıyor" a bare
-    // "Durdur" was pressed to stop the AI (the site's word, 28 Oct 2026).
-    stop: "Hesabı durdur",
+    stop: "Durdur",
     reconnect: "Yeniden bağlan",
     console: "Konsol",
     settings: "Ayarlar",
     more: "Diğer işlemler",
     renew: "Süreyi uzat",
-    reactivate: "Yeniden etkinleştir",
+    /** An expired account comes back with new time: the button says that (the site's, SITE-W2B). */
+    reactivate: "Süre al",
     openSite: "afk.projects.gg'de aç",
     started: "{{name}} başlatıldı",
     stopped: "{{name}} durduruldu",

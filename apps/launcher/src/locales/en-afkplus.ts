@@ -28,8 +28,10 @@ export const enAfkPlus = {
   card: {
     open: "AFK+",
     openLabel: "Open the AFK+ panel of {{name}}",
-    approvals_one: "{{count}} waiting for you",
-    approvals_other: "{{count}} waiting for you",
+    // As the site says it (SITE-W2B): what waits, not a bare number.
+    approvals_one: "{{count}} decision waiting for you",
+    approvals_other: "{{count}} decisions waiting for you",
+    stopAccount: "Stop account",
     upgrade: "Upgrade to AFK+",
     noItem: "No item picked",
     unset: "Not set",
@@ -451,9 +453,9 @@ export const enAfkPlus = {
     far: "Is {{limit}} right as your top price? Your target is {{target}}.",
     yesRight: "Yes, that's right",
     fix: "Fix it",
-    overCap: "This is over your per-deal limit ({{cap}}).",
-    raise: "Raise the limit to {{amount}}",
-    useCap: "Use {{cap}}",
+    overCap: "The top price is over your per-deal limit ({{cap}}).",
+    raise: "Raise the per-deal limit to {{amount}}",
+    useCap: "Make the top price {{cap}}",
   },
   orders: {
     active: "Active",
