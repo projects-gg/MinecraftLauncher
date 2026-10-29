@@ -359,5 +359,6 @@
   "projects_overlay.chat_emoji.text": "Expressions",
   "projects_overlay.chat_emoji.shortcuts": "Shortcuts",
   "projects_overlay.chat_emoji.only": "Only on %s",
-  "projects_overlay.chat_emoji.full": "The chat line is full."
+  "projects_overlay.chat_emoji.full": "The chat line is full.",
+  "projects_overlay.route.travel": "Moving to %s…"
 }

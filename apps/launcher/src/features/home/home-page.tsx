@@ -1,8 +1,8 @@
 import { ArrowSquareOut, BookOpenText, WifiHigh, WifiSlash } from "@phosphor-icons/react";
-import { Button, easeOutExpo, Skeleton, useMotionPrefs } from "@pl/ui";
+import { Button, easeOutExpo, Skeleton, useMotionPrefs, useReduceMotion } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FriendsHomeStrip } from "@/features/social/home-strip";
@@ -94,7 +94,7 @@ const BACK_ONLINE_MS = 2400;
  */
 function ConnectionStrip() {
   const { t } = useTranslation();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   const { data } = useQuery({
     queryKey: ["content-status"],
     queryFn: () => api.contentStatus(),

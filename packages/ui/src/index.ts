@@ -113,6 +113,7 @@ export {
 } from "./native-menu";
 export {
   PerfProvider,
+  ReducedMotionConfig,
   useAmbientMotion,
   useInteractionMotion,
   useLiveMotion,
@@ -129,6 +130,15 @@ export {
   type PressGuard,
   usePressGuard,
 } from "./press-guard";
-export { guardReducedMotion, stillKeyframes } from "./reduced-motion";
+export {
+  guardReducedMotion,
+  motionReduced,
+  setAppReducedMotion,
+  stillKeyframes,
+  subscribeReducedMotion,
+  systemReducedMotion,
+  useReduceMotion,
+  useSystemReducedMotion,
+} from "./reduced-motion";
 export { fold, matchesQuery } from "./search";
 export { observeSkippedViewTransitions } from "./view-transitions";

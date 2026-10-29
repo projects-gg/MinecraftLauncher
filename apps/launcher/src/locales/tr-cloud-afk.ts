@@ -97,7 +97,8 @@ export const trCloudAfk = {
     settings: "Ayarlar",
     more: "Diğer işlemler",
     renew: "Süreyi uzat",
-    reactivate: "Yeniden etkinleştir",
+    /** An expired account comes back with new time: the button says that (the site's, SITE-W2B). */
+    reactivate: "Süre al",
     openSite: "afk.projects.gg'de aç",
     started: "{{name}} başlatıldı",
     stopped: "{{name}} durduruldu",
@@ -309,6 +310,7 @@ export const trCloudAfk = {
       ownerServer: "Sunucu mesajları bir oyuncudan gelmez. Bu kuralda kullanılamaz.",
       name: "Oyuncu adı 3-16 karakter olmalı: harf, rakam ya da alt çizgi.",
       nameDuplicate: "Aynı ad ve sunucuyla başka bir bulut hesabın var.",
+      nameProtected: "Bu ad sunucuda yetkililer için korunuyor.\nBaşka bir ad seç.",
       host: "Adres yalnız harf, rakam, nokta, tire ve alt çizgi içerebilir.",
       hostDot: "Tam adresi yaz. Örnek: play.projects.gg",
       hostPrivate: "Bu adrese bağlanılamaz.",

@@ -1,9 +1,17 @@
 // Microsoft sign-in: starts as soon as it opens (the player already pressed "Microsoft ile giriş
 // yap"), follows the browser steps, then says plainly what happened.
 import { Check, CircleNotch, Copy } from "@phosphor-icons/react";
-import { Button, ContentIcon, cn, easeOutExpo, PlayerHead, springSnappy } from "@pl/ui";
+import {
+  Button,
+  ContentIcon,
+  cn,
+  easeOutExpo,
+  PlayerHead,
+  ReducedMotionConfig,
+  springSnappy,
+} from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
@@ -315,7 +323,7 @@ export function MicrosoftLoginDialog({
       width={480}
       footer={footer}
     >
-      <MotionConfig reducedMotion="user">
+      <ReducedMotionConfig>
         <div className="flex min-h-[196px] flex-col justify-center py-2">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -338,7 +346,7 @@ export function MicrosoftLoginDialog({
             </motion.div>
           </AnimatePresence>
         </div>
-      </MotionConfig>
+      </ReducedMotionConfig>
     </AccountDialog>
   );
 }

@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useAfkWatch } from "@/features/afk/use-afk-watch";
+import { SUB_SERVERS_KEY } from "@/features/autojoin/use-route";
 import { officialStatusQuery, playTarget, useOfficialOffer } from "@/features/library/official";
 import { useSocialUi } from "@/features/social/store";
 import { api, type DeepLink } from "@/lib/api";
@@ -65,6 +66,8 @@ export function useDesktopEvents() {
         // Ready-made sets: a new catalog may bring an update to a set an instance has.
         void queryClient.invalidateQueries({ queryKey: ["mod-sets"] });
         void queryClient.invalidateQueries({ queryKey: ["mod-sets-instance"] });
+        // AUTOJOIN: Studio's switch and Projects' sub-servers beside "Doğrudan sunucuya bağlan".
+        void queryClient.invalidateQueries({ queryKey: [SUB_SERVERS_KEY] });
       }),
     [queryClient],
   );

@@ -537,16 +537,10 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .pl-inv-item,
-  .pl-inv-count,
-  .pl-inv-cursor,
-  .pl-inv-tip {
-    transition-property: opacity;
-  }
-  .pl-inv-held {
-    transition: none;
-  }
+/* Reduced motion (the root's mark: the system's setting or the app's own, reduced-motion.ts): the
+   held item lands under the pointer at once. The items, counts, cursor and tooltip only fade. */
+:where(:root[data-motion="reduce"]) .pl-inv-held {
+  transition: none;
 }
 html[data-perf="on"] .pl-inv-held {
   transition: none;

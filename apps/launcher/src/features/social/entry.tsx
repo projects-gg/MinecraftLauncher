@@ -64,9 +64,10 @@ export function openAction(t: TFunction, open: () => void): MenuItem {
 }
 
 /**
- * "Here it is": a gold ring around the button fades in and out once, when a Home invitation is
- * closed and when the button arrives at a new place. Opacity only, so it plays under reduced
- * motion too; a new cue plays it again.
+ * "Here it is": a gold ring on the button's edge fades in and out once, when a Home invitation is
+ * closed and when the button arrives at a new place. Inside the button, never around it: the glow
+ * it had around it ran past the window's top edge in the title bar (BETA-FB). Opacity only, so it
+ * plays under reduced motion too; a new cue plays it again.
  */
 export function EntryCue({
   cue,
@@ -83,7 +84,7 @@ export function EntryCue({
       key={cue}
       aria-hidden
       className={cn(
-        "pointer-events-none absolute shadow-[0_0_0_2px_var(--color-gold-300),0_0_18px_rgb(240_184_73/0.45)]",
+        "pointer-events-none absolute shadow-[inset_0_0_0_2px_var(--color-gold-300)]",
         className,
       )}
       initial={{ opacity: 0 }}
