@@ -691,8 +691,8 @@ public final class OverlayScreen extends Screen {
         boolean message = state.has("chat") && state.dm(f.id()) != null
             && !(conv != null && page == Page.CHATS && conv.equals(conversation));
         List<FriendMenu.Team> places = new ArrayList<>();
-        for (OverlayState.CrewTarget crew : state.inviteCrews()) {
-            places.add(teamPlace(f, crew));
+        for (OverlayState.CrewTarget target : state.inviteCrews()) {
+            places.add(teamPlace(f, target));
         }
         return new FriendMenu.Input(true, canJoin(f), state.has("people"), state.online(), state.has("invite"),
             state.inviteWaiting(f.id(), System.currentTimeMillis()), world, WorldInvites.guest(session, f.id()) != null,
