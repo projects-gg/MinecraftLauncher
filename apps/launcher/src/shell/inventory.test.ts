@@ -246,6 +246,25 @@ describe("anyone's text", () => {
     };
     expect(tooltipLines(full, "tr", tr).at(-1)?.text).toBe("ve daha fazlası...");
     expect(tooltipLines(full, "en", INVENTORY_TEXTS.en).at(-1)?.text).toBe("and more...");
+    // A newer machine counts the stacks: the exact number, as the game says it.
+    const counted = { ...full, inside: { ...full.inside, stacks: 16 } };
+    expect(tooltipLines(counted, "tr", tr).at(-1)).toEqual({
+      text: "ve 11 tane daha...",
+      color: TEXT_COLOR.white,
+      italic: true,
+    });
+    expect(tooltipLines(counted, "en", INVENTORY_TEXTS.en).at(-1)?.text).toBe("and 11 more...");
+    // Five stacks or fewer: nothing more to say.
+    const five = {
+      ...shulker,
+      inside: { count: 320, top: full.inside.top.slice(0, 5), stacks: 5 },
+    };
+    expect(tooltipLines(five, "tr", tr).at(-1)?.text).toBe("Toprak x 64");
+    // A count below the stacks listed, or not a whole number, is not trusted: as before.
+    for (const stacks of [3, 12.5, Number.NaN]) {
+      const odd = { ...full, inside: { ...full.inside, stacks } };
+      expect(tooltipLines(odd, "tr", tr).at(-1)?.text).toBe("ve daha fazlası...");
+    }
     const custom = SAMPLE_INVENTORY.items.find((i) => i.slot === 24) as InvItem;
     expect(tooltipLines(custom, "en", INVENTORY_TEXTS.en)[0]?.text).toBe("Ejderha Kılıcı");
   });

@@ -47,8 +47,11 @@ export interface InvItem {
   durability?: { left: number; max: number };
   ench?: InvEnchant[];
   enchanted?: boolean;
-  /** A shulker box or bundle: its items' total and its first 9 stacks. */
-  inside?: { count: number; top: InvInsideStack[] };
+  /**
+   * A shulker box or bundle: its items' total, its first 9 stacks and, from newer machines, how
+   * many stacks it holds (the game's count for "and N more...").
+   */
+  inside?: { count: number; top: InvInsideStack[]; stacks?: number };
   /** A potion's type, "minecraft:strong_healing". */
   potion?: string;
   /** A dye, or a potion's own colour: 0xRRGGBB. */
