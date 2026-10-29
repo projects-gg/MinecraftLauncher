@@ -437,12 +437,15 @@ export function PlusSetupWizard({
             ) : null}
           </>
         ) : null}
-        {/* On by default, said rather than hidden: it scans the chat and writes once to a seller. */}
-        <ToggleRow
-          title={t("setup.plus.writeSellers")}
-          checked={choices.writeSellers}
-          onCheckedChange={(writeSellers) => change({ writeSellers })}
-        />
+        {/* On by default, said rather than hidden: it scans the chat and writes once to a seller.
+            Its own block (a line and room above), never read as an option of the ads. */}
+        <div className="mt-3">
+          <ToggleRow
+            title={t("setup.plus.writeSellers")}
+            checked={choices.writeSellers}
+            onCheckedChange={(writeSellers) => change({ writeSellers })}
+          />
+        </div>
       </div>
     ) : (
       <div className="flex flex-col">

@@ -74,7 +74,7 @@ export const enSetup = {
       buy: "Turn it off and it buys nothing.",
       sell: "Turn it off and it sells nothing.",
     },
-    writeSellers: "Write to a seller once when it sees a sale post",
+    writeSellers: "Write to the seller once when an item you want is for sale",
     answers: {
       orders_one: "{{count}} order: {{names}}",
       orders_other: "{{count}} orders: {{names}}",
@@ -91,7 +91,7 @@ export const enSetup = {
       noAds: "Posts no ads",
       adsPlain: "Posts ads",
       adsStopped: "Posts no ads today",
-      writes: ", writes once to sellers it sees in chat.",
+      writes: ", writes once to the seller when an item you want is for sale.",
       scans: ", watches chat for sale posts.",
       noScan: ".",
       tone: "{{preset}}, like a player",

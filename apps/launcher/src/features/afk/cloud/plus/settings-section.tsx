@@ -655,14 +655,16 @@ function ChatEditor({ shown, set, panel, account }: EditorProps & { account: Clo
         </>
       ) : null}
       {/* The setup's switch, on by default and said: on scans the chat and writes to a seller once,
-          off keeps the scan as it is (the site's rule). */}
-      <ToggleRow
-        title={t("setup.plus.writeSellers")}
-        checked={d.scanChat && d.proactivePm}
-        onCheckedChange={(on) =>
-          setD(on ? { scanChat: true, proactivePm: true } : { proactivePm: false })
-        }
-      />
+          off keeps the scan as it is (the site's rule). Its own block, never read as the ads'. */}
+      <div className="mt-3">
+        <ToggleRow
+          title={t("setup.plus.writeSellers")}
+          checked={d.scanChat && d.proactivePm}
+          onCheckedChange={(on) =>
+            setD(on ? { scanChat: true, proactivePm: true } : { proactivePm: false })
+          }
+        />
+      </div>
       {/* The ad's text waits here while the server's profile offers more than one (the site's). */}
       <Advanced
         summary={`${t("setup.plus.adv.chat")}${choosable ? t("setup.plus.adv.chatText") : ""}`}

@@ -89,7 +89,7 @@ export const trSetup = {
     sidesHelp: { buy: "Kapatırsan hiçbir şey almaz.", sell: "Kapatırsan hiçbir şey satmaz." },
     // "Sohbette ne yapsın?": on means it scans the chat and writes to a seller once (both on by
     // default, said, not hidden); off keeps the scan and stops the writing.
-    writeSellers: "Satılık ilan görünce satıcıya bir kez yazsın",
+    writeSellers: "Aradığın eşya satılığa çıkınca satıcıya bir kez yazsın",
     // The answers under each question.
     answers: {
       orders: "{{count}} sipariş: {{names}}",
@@ -109,7 +109,7 @@ export const trSetup = {
       // An older service (no interval): the ads are on, nothing more to say.
       adsPlain: "İlan verir",
       adsStopped: "Bugün ilan vermez",
-      writes: ", satılık ilan görünce satıcıya bir kez yazar.",
+      writes: ", aradığın eşya satılığa çıkınca satıcıya bir kez yazar.",
       scans: ", satış ilanlarını tarar.",
       noScan: ".",
       tone: "{{preset}}, oyuncu gibi",

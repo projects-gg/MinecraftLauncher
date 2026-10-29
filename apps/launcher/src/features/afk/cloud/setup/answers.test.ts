@@ -193,15 +193,15 @@ describe("AFK+ answers", () => {
         lang === "tr" ? tr : en,
       ).chat;
     // Scanning and writing to a seller once are on by default, and the answer says so.
-    expect(at(60)).toBe("Saatte bir ilan verir, satılık ilan görünce satıcıya bir kez yazar.");
-    expect(at(120)).toBe("2 saatte bir ilan verir, satılık ilan görünce satıcıya bir kez yazar.");
-    expect(at(45)).toBe("45 dakikada bir ilan verir, satılık ilan görünce satıcıya bir kez yazar.");
-    expect(at(60, "en")).toBe("Posts an ad every hour, writes once to sellers it sees in chat.");
+    expect(at(60)).toBe("Saatte bir ilan verir, aradığın eşya satılığa çıkınca satıcıya bir kez yazar.");
+    expect(at(120)).toBe("2 saatte bir ilan verir, aradığın eşya satılığa çıkınca satıcıya bir kez yazar.");
+    expect(at(45)).toBe("45 dakikada bir ilan verir, aradığın eşya satılığa çıkınca satıcıya bir kez yazar.");
+    expect(at(60, "en")).toBe("Posts an ad every hour, writes once to the seller when an item you want is for sale.");
     expect(at(30, "en")).toBe(
-      "Posts an ad every 30 minutes, writes once to sellers it sees in chat.",
+      "Posts an ad every 30 minutes, writes once to the seller when an item you want is for sale.",
     );
     expect(plusAnswers(config({ discovery: on }), ctx("tr"), tr).chat).toBe(
-      "İlan verir, satılık ilan görünce satıcıya bir kez yazar.",
+      "İlan verir, aradığın eşya satılığa çıkınca satıcıya bir kez yazar.",
     );
     expect(
       plusAnswers(
