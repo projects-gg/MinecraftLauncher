@@ -11,7 +11,8 @@ const mark =
  * "partly" state for a group's own box. The tick and the bar crossfade, so a partly box never
  * flashes a tick on its way out; a press dips the box a little. The focus ring is a larger
  * chamfered layer (clip-path would cut an outline). Under the pointer an empty box's edge
- * brightens and a ticked one goes gold-400, as a switch's track does.
+ * brightens and a ticked one lightens, as a switch's track does. Ticked it is bone with a dark
+ * mark: the screen's one gold is its main action (design.md §2, lead 29 Oct).
  */
 export function Check({
   id,
@@ -41,8 +42,8 @@ export function Check({
         "transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.9] focus-visible:outline-none",
         "disabled:cursor-default disabled:opacity-45",
         // The box's colours: its edge, and its fill when ticked; both lighten under the pointer.
-        "[--check-edge:rgb(255_255_255/0.24)] [--check-on:var(--color-gold-500)]",
-        "enabled:hover:[--check-edge:rgb(255_255_255/0.4)] enabled:hover:[--check-on:var(--color-gold-400)]",
+        "[--check-edge:rgb(255_255_255/0.24)] [--check-on:var(--color-bone-100)]",
+        "enabled:hover:[--check-edge:rgb(255_255_255/0.4)] enabled:hover:[--check-on:var(--color-bone-50)]",
         className,
       )}
     >
@@ -64,7 +65,7 @@ export function Check({
           "group-data-[state=checked]/check:bg-(--check-on) group-data-[state=indeterminate]/check:bg-(--check-on)",
         )}
       />
-      <Checkbox.Indicator forceMount className="absolute inset-0 text-gold-ink">
+      <Checkbox.Indicator forceMount className="absolute inset-0 text-obsidian-900">
         <CheckIcon
           size={12}
           weight="bold"

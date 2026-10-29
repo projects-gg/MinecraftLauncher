@@ -93,9 +93,9 @@ function Pill() {
               faces.length ? "pr-3 pl-[3px]" : named ? "pr-3 pl-2.5" : "w-8 justify-center",
             )}
           >
-            <EntryCue cue={cue} className="-inset-px rounded-full" />
+            <EntryCue cue={cue} className="inset-0 rounded-full" />
             {/* Moved here: it lights up once it has landed. */}
-            <EntryCue cue={arrived ? 1 : 0} delay={0.42} className="-inset-px rounded-full" />
+            <EntryCue cue={arrived ? 1 : 0} delay={0.42} className="inset-0 rounded-full" />
             {faces.length ? (
               <span className="flex items-center">
                 <AnimatePresence initial={false} mode="popLayout">

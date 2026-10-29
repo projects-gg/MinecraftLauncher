@@ -47,7 +47,9 @@ export function CloudStateLine({
             "truncate",
             status.tone === "ok" && "text-ash-300",
             status.tone === "muted" && "text-ash-300",
-            status.tone === "warn" && "text-gold-300",
+            // "Süresi doldu": weight sets it apart, as "5 gün kaldı" does; gold is never a sentence,
+            // and the card's "Süre al" is a bone plate (one gold per screen; TASTE-SWEEP, BETA-FB).
+            status.tone === "warn" && "font-semibold text-bone-50",
             status.tone === "error" && "text-flare-400",
             status.tone === "stale" && "text-ash-400",
           )}

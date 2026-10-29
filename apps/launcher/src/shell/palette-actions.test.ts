@@ -72,10 +72,8 @@ const palette: { id: string; entries: Candidate[] }[] = [
     entries: [
       item("setting:graphics", tr.fps.title, PALETTE_WORDS.graphics),
       item("setting:help", trHelp.title, PALETTE_WORDS.help),
-      item("setting:performance", tr.palette.performanceOn, PALETTE_WORDS.performance, [
-        tr.palette.performanceOn,
-        tr.palette.performanceOff,
-      ]),
+      item("setting:performance", tr.settings.appearance.performance, PALETTE_WORDS.performance),
+      item("setting:reduce-motion", tr.motion.title, PALETTE_WORDS.reduceMotion),
       item("setting:java", tr.tuning.palette.java, PALETTE_WORDS.java),
       item("setting:cleanup", tr.tuning.palette.cleanup, PALETTE_WORDS.cleanup),
       item("setting:support", tr.tuning.palette.support, PALETTE_WORDS.support),
@@ -86,6 +84,10 @@ const palette: { id: string; entries: Candidate[] }[] = [
     entries: [
       item("action:new-instance", tr.palette.newInstance, PALETTE_WORDS.newInstance),
       item("action:copy-address", tr.tuning.palette.copyAddress, PALETTE_WORDS.copyAddress),
+      item("action:performance", tr.palette.performanceOn, undefined, [
+        tr.palette.performanceOn,
+        tr.palette.performanceOff,
+      ]),
       item("action:host-world", tr.small9.palette.openWorld, PALETTE_WORDS.hostWorld),
       item("action:afk-all", tr.palette.afkConnectAll, PALETTE_WORDS.afkConnectAll),
       item("action:updates", tr.palette.checkUpdates, PALETTE_WORDS.updates),
@@ -144,6 +146,14 @@ describe("palette search", () => {
     ["akıcı", "setting:graphics"],
     ["launcher kasıyor", "setting:performance"],
     ["performans modu", "setting:performance"],
+    // A setting's name finds its row, which goes to it (BETA-FB); the switch is its own action.
+    ["performans", "setting:performance"],
+    ["performans modunu aç", "action:performance"],
+    ["performans modunu kapat", "action:performance"],
+    ["animasyon", "setting:reduce-motion"],
+    ["animasyonları azalt", "setting:reduce-motion"],
+    ["hareketi azalt", "setting:reduce-motion"],
+    ["reduce motion", "setting:reduce-motion"],
     ["ip", "action:copy-address"],
     ["İP", "action:copy-address"],
     ["sunucu ip", "action:copy-address"],
@@ -199,6 +209,9 @@ describe("palette search", () => {
     const results = rank("kasıyor");
     expect(results.indexOf("instance:memory")).toBeGreaterThan(0);
     expect(results.indexOf("setting:performance")).toBeGreaterThan(0);
+    // The switch of Performance mode is not a fix for lag; "performans" shows it under its row.
+    expect(results).not.toContain("action:performance");
+    expect(rank("performans").indexOf("action:performance")).toBeGreaterThan(0);
     // A crash: the troubleshooter first, then the memory and the logs.
     const crash = rank("çöküyor");
     expect(crash[0]).toBe("setting:help");

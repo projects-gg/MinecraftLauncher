@@ -1,8 +1,8 @@
 import { Plus, WarningCircle } from "@phosphor-icons/react";
-import { Button, ContentIcon, EmptyState, Segmented, Skeleton } from "@pl/ui";
+import { Button, ContentIcon, EmptyState, ReducedMotionConfig, Segmented, Skeleton } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
@@ -247,7 +247,7 @@ export function ModCenter({
   }
 
   return (
-    <MotionConfig reducedMotion="user">
+    <ReducedMotionConfig>
       <LayoutGroup id={`mod-center-${instance.id}`}>
         <div className="flex min-h-0 max-w-[980px] flex-1 flex-col">
           {view.data || healthSection ? (
@@ -323,6 +323,6 @@ export function ModCenter({
         // The added set shows where its items are switched.
         onAdded={() => setSection("sets")}
       />
-    </MotionConfig>
+    </ReducedMotionConfig>
   );
 }

@@ -1869,10 +1869,18 @@ public final class OverlayScreen extends Screen {
         Perf.panel(started);
     }
 
-    /** The panel as it stands, without its entrance (the dialog over it draws this). */
+    /**
+     * The panel as it stands, without its entrance (the dialog over it draws this). The keys are the dialog's: no focus
+     * ring in the panel meanwhile (PanelInput); the friend the dialog is about keeps a quiet plate (FriendList).
+     */
     void drawStill(GuiGraphicsExtractor g, long now) {
         drawScrim(g, 1f);
-        drawPanel(g, -1, -1, now, 1f, 0f);
+        PanelInput.drawingBehind(true);
+        try {
+            drawPanel(g, -1, -1, now, 1f, 0f);
+        } finally {
+            PanelInput.drawingBehind(false);
+        }
     }
 
     private void drawPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, long now, float alpha, float dx) {

@@ -709,6 +709,14 @@ impl From<CloudError> for CmdError {
                     )
                     .into(),
                 ),
+                "name_protected" => (
+                    "BULUT-KORUMALI",
+                    pick(
+                        "Bu ad sunucuda yetkililer için korunuyor. Başka bir ad seç.",
+                        "This name is protected for staff on the server. Pick another name.",
+                    )
+                    .into(),
+                ),
                 "server_change_limit" => (
                     "BULUT-SUNUCU-DEGISTI",
                     pick(

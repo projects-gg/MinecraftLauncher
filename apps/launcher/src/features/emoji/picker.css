@@ -47,23 +47,22 @@
   opacity: 1;
 }
 
-/* The glyph lifts under the pointer and presses in; a still glyph under reduced motion. */
-@media (prefers-reduced-motion: no-preference) {
-  .picker-cell .emoji-glyph {
-    transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .picker-cell:active .emoji-glyph {
-    transform: scale(0.9);
-  }
+/* The glyph lifts under the pointer and presses in; a still glyph under reduced motion (the root's
+   `data-motion`: the system's setting or the launcher's own, @pl/ui reduced-motion.ts). */
+:where(:root:not([data-motion="reduce"])) .picker-cell .emoji-glyph {
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .picker-cell:hover .emoji-glyph {
+:where(:root:not([data-motion="reduce"])) .picker-cell:active .emoji-glyph {
+  transform: scale(0.9);
+}
+
+@media (hover: hover) {
+  :where(:root:not([data-motion="reduce"])) .picker-cell:hover .emoji-glyph {
     transform: scale(1.12);
   }
 
-  .picker-cell:hover:active .emoji-glyph {
+  :where(:root:not([data-motion="reduce"])) .picker-cell:hover:active .emoji-glyph {
     transform: scale(0.94);
   }
 }
