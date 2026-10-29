@@ -1012,3 +1012,113 @@ async fn connections_to_one_server_go_one_by_one_in_order() {
     }
     manager.shutdown().await;
 }
+
+/// A client of 4.1.0 or later gets a bridge nonce, and only lines with it are events: a server's
+/// chat or kick text that starts with the bare bridge prefix (or guesses a nonce) stays console
+/// text and fakes neither a join nor a disconnect (the fork's "Stdout bridge hardening").
+#[tokio::test(start_paused = true)]
+async fn forged_bridge_lines_stay_text_for_a_client_with_a_nonce() {
+    let env = TestEnv::with_client_version("4.1.0");
+    let id = env.add("NonceBot").id;
+    let s = ScriptedSpawner::new(|_, mut proc| async move {
+        // Before the real join: a server line that would fake one.
+        proc.forged(r#"{"e":"joined","user":"NonceBot","host":"h","port":25565,"protocol":777}"#)
+            .await;
+        proc.event(r#"{"e":"connecting","host":"h","port":25565}"#)
+            .await;
+        proc.event(r#"{"e":"joined","user":"NonceBot","host":"h","port":25565,"protocol":777}"#)
+            .await;
+        // In the game: a kick text that would fake a disconnect, and one with a guessed nonce.
+        proc.forged(r#"{"e":"disconnected","reason":"InGameKick","msg":"You are banned"}"#)
+            .await;
+        let guessed = "0".repeat(32);
+        proc.out(&format!(
+            r#"{guessed}@@MCC@@{{"e":"disconnected","reason":"LoginRejected","msg":"x"}}"#
+        ))
+        .await;
+        proc.event(r#"{"e":"players","n":4}"#).await;
+        proc.until_quit().await
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    // The real event after the forged ones has arrived, so they have been read too.
+    until("the players count", LONG, || {
+        manager.snapshot(&id).stats.players == Some(4)
+    })
+    .await;
+
+    let nonce = s.launch(0).spec.nonce.expect("a 4.1.0 client gets a nonce");
+    assert!(pl_afk::bridge::is_valid_nonce(&nonce), "{nonce}");
+    assert!(matches!(
+        manager.snapshot(&id).state,
+        SessionState::Connected { .. }
+    ));
+    let states = env.states(&id);
+    assert!(
+        !states.iter().any(|state| matches!(
+            state,
+            SessionState::Reconnecting { .. } | SessionState::Error { .. }
+        )),
+        "{states:?}"
+    );
+    // Every forged line is plain console text; the nonce is in no line and in no event.
+    let console = manager.console(&id);
+    let texts: Vec<&str> = console.iter().map(|l| l.text.as_str()).collect();
+    for start in [
+        r#"@@MCC@@{"e":"joined""#,
+        r#"@@MCC@@{"e":"disconnected""#,
+        "00000000000000000000000000000000@@MCC@@",
+    ] {
+        assert!(
+            texts.iter().any(|t| t.starts_with(start)),
+            "{start}: {texts:?}"
+        );
+    }
+    assert!(texts.iter().all(|t| !t.contains(&nonce)), "{texts:?}");
+    assert!(!env.all_event_json().contains(&nonce));
+    manager.shutdown().await;
+}
+
+/// Each client process has its own nonce: a restarted client never reuses the last one.
+#[tokio::test(start_paused = true)]
+async fn every_client_process_gets_its_own_nonce() {
+    let env = TestEnv::with_client_version("4.2.0");
+    let id = env.add("YeniSurec").id;
+    let s = ScriptedSpawner::new(|_, mut proc| async move {
+        proc.event(r#"{"e":"connecting","host":"h","port":25565}"#)
+            .await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        Some(3)
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    until("two launches", LONG, || s.launch_count() >= 2).await;
+    let first = s.launch(0).spec.nonce.expect("first nonce");
+    let second = s.launch(1).spec.nonce.expect("second nonce");
+    assert_ne!(first, second);
+    manager.shutdown().await;
+}
+
+/// A client before 4.1.0 ignores the variable and a development build's version is unknown: neither
+/// gets a nonce, and their bare event lines still count, as before.
+#[tokio::test(start_paused = true)]
+async fn clients_before_4_1_and_dev_builds_get_no_nonce_and_keep_their_events() {
+    for env in [TestEnv::with_client_version("4.0.1"), TestEnv::new(None)] {
+        let id = env.add("EskiSurum").id;
+        let s = ScriptedSpawner::new(|_, mut proc| async move {
+            proc.event(
+                r#"{"e":"joined","user":"EskiSurum","host":"h","port":25565,"protocol":777}"#,
+            )
+            .await;
+            proc.until_quit().await
+        });
+        let manager = env.manager(spawner(&s), ManagerConfig::default());
+        manager.connect(&id).await.unwrap();
+        until("connected by a bare event line", LONG, || {
+            matches!(manager.snapshot(&id).state, SessionState::Connected { .. })
+        })
+        .await;
+        assert_eq!(s.launch(0).spec.nonce, None);
+        manager.shutdown().await;
+    }
+}

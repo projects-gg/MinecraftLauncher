@@ -9,7 +9,7 @@ use std::process::Stdio;
 use pl_net::CancellationToken;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::bridge::BRIDGE_ENV_VAR;
+use crate::bridge::{BRIDGE_ENV_VAR, NONCE_ENV_VAR};
 
 /// Last argument that puts MCC in line-based, color-free console mode.
 pub const CONSOLE_MODE_ARG: &str = "BasicIO-NoColor";
@@ -20,6 +20,9 @@ pub struct LaunchSpec {
     pub exe: PathBuf,
     pub ini: PathBuf,
     pub cwd: PathBuf,
+    /// The bridge nonce of this process ([`NONCE_ENV_VAR`]), for clients 4.1.0 and later: only its
+    /// event lines count (`bridge::parse_line_with_nonce`). Never shown or logged.
+    pub nonce: Option<String>,
 }
 
 pub type BoxedReader = Box<dyn AsyncRead + Send + Unpin>;
@@ -46,10 +49,10 @@ pub trait ClientSpawner: Send + Sync {
     fn spawn(&self, spec: &LaunchSpec) -> std::io::Result<ClientProcess>;
 }
 
-/// Spawns the client as a child process: stdin/stdout/stderr piped, `MCC_LAUNCHER_BRIDGE=1`, no
-/// console window on Windows, killed if the launcher drops it. The running client is recorded in
-/// its account folder until it exits, so a launcher that crashed can stop it at its next start
-/// (see `orphans`).
+/// Spawns the client as a child process: stdin/stdout/stderr piped, `MCC_LAUNCHER_BRIDGE=1` (and
+/// the spec's `MCC_BRIDGE_NONCE`), no console window on Windows, killed if the launcher drops it.
+/// The running client is recorded in its account folder until it exits, so a launcher that crashed
+/// can stop it at its next start (see `orphans`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ProcessSpawner;
 
@@ -68,6 +71,11 @@ impl ClientSpawner for ProcessSpawner {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        match &spec.nonce {
+            Some(nonce) => command.env(NONCE_ENV_VAR, nonce),
+            // Never one inherited from this process's own environment.
+            None => command.env_remove(NONCE_ENV_VAR),
+        };
         #[cfg(windows)]
         command.creation_flags(CREATE_NO_WINDOW);
 
