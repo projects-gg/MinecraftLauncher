@@ -14,6 +14,8 @@
 //! media/<sha256>.<ext>    images and videos (served through Tauri's asset protocol)
 //! itemart/<sha256>.png    the item art's atlases and glyph pictures (only the current
 //!                         document's are kept)
+//! overlay/<sha256>.jar    the in-game overlay's jars from the index (OVL-AUTO), fetched when a
+//!                         game start needs one, checked in full on every use
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -23,7 +25,9 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use jiff::Timestamp;
-use pl_net::{Checksum, DownloadItem, DownloadOptions, Downloader, Http, NetError, VerifyMode};
+use pl_net::{
+    Checksum, DownloadItem, DownloadOptions, Downloader, HashAlgo, Http, NetError, VerifyMode,
+};
 use reqwest::StatusCode;
 use reqwest::header::{ETAG, IF_NONE_MATCH};
 use serde::de::DeserializeOwned;
@@ -34,7 +38,7 @@ use crate::error::{Error, Result};
 use crate::fsutil::{normalize_hex, read_optional, sha256_hex, write_atomic};
 use crate::model::{
     ChatEmojis, DocRef, FileRef, ItemArt, LauncherConfig, MediaRef, ModSetCatalog, NewsFeed,
-    PackManifest, PackRef, RootIndex,
+    OverlayJar, PackManifest, PackRef, RootIndex, overlay_jar_fault,
 };
 use crate::signing::{SignatureFile, VerifyingKey, verify_index};
 
@@ -50,6 +54,7 @@ const STATE_NAME: &str = "current.json";
 const DOCS_DIR: &str = "docs";
 const MEDIA_DIR: &str = "media";
 const ITEM_ART_DIR: &str = "itemart";
+const OVERLAY_DIR: &str = "overlay";
 /// Largest item art file (an atlas or a glyph picture) a client downloads.
 const MAX_ITEM_ART_FILE_BYTES: u64 = 16 << 20;
 const MAX_INDEX_BYTES: u64 = 4 << 20;
@@ -94,6 +99,8 @@ pub struct MediaPrefetch {
 pub struct GcReport {
     pub removed_docs: usize,
     pub removed_media: usize,
+    /// In-game overlay jars (OVL-AUTO).
+    pub removed_jars: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +124,8 @@ struct CacheState {
 struct Retained {
     docs: BTreeSet<String>,
     media: BTreeSet<String>,
+    /// SHA-256 of the overlay jars the index lists (OVL-AUTO).
+    overlay: BTreeSet<String>,
 }
 
 impl Retained {
@@ -126,6 +135,13 @@ impl Retained {
             index
                 .documents()
                 .map(|doc| doc.sha256.trim().to_ascii_lowercase()),
+        );
+        retained.overlay.extend(
+            index
+                .overlay
+                .iter()
+                .flat_map(|overlay| &overlay.jars)
+                .filter_map(OverlayJar::sha256),
         );
         if let Some((config, news)) = docs {
             retained.media.extend(
@@ -142,6 +158,7 @@ impl Retained {
     fn merge(&mut self, other: &Retained) {
         self.docs.extend(other.docs.iter().cloned());
         self.media.extend(other.media.iter().cloned());
+        self.overlay.extend(other.overlay.iter().cloned());
     }
 }
 
@@ -460,6 +477,44 @@ impl ContentClient {
     /// A verified [`DownloadItem`] for a [`FileRef`] (AFK client builds).
     pub fn download_item(&self, file: &FileRef, dest: impl Into<PathBuf>) -> Result<DownloadItem> {
         file.download_item(&self.mirrors, dest)
+    }
+
+    /// Local path of an in-game overlay jar the index lists (OVL-AUTO), downloading it on first
+    /// use. It is code the game runs, so every call checks the whole file against the signed entry
+    /// (size, SHA-256 and SHA-1); a copy that does not match is fetched again, and an entry whose
+    /// hashes disagree is refused. An entry that breaks a rule of the format is refused unread.
+    pub async fn overlay_jar(&self, jar: &OverlayJar) -> Result<PathBuf> {
+        if let Some(fault) = overlay_jar_fault(jar) {
+            return Err(Error::Invalid(format!(
+                "overlay jar for {}: {fault}",
+                jar.minecraft
+            )));
+        }
+        let (Some(sha256), Some(sha1)) = (jar.sha256(), jar.sha1()) else {
+            return Err(Error::Invalid("overlay jar without its hashes".into()));
+        };
+        let dest = self
+            .cache_dir
+            .join(OVERLAY_DIR)
+            .join(format!("{sha256}.jar"));
+        let lock = self.media_lock(&sha256);
+        let _guard = lock.lock().await;
+        let item = self.download_item(&jar.file, &dest)?;
+        let options = DownloadOptions {
+            concurrency: 1,
+            verify: VerifyMode::Full,
+            ..DownloadOptions::default()
+        };
+        self.downloader.download(item, &options).await?;
+        let actual = pl_net::hash_file(&dest, HashAlgo::Sha1).await?;
+        if actual != sha1 {
+            return Err(Error::Integrity {
+                what: format!("overlay jar for {}", jar.minecraft),
+                expected: sha1,
+                actual,
+            });
+        }
+        Ok(dest)
     }
 
     /// Deletes cached documents and media referenced by neither the current nor the
@@ -800,6 +855,7 @@ impl ContentClient {
         Ok(GcReport {
             removed_docs: sweep(&self.cache_dir.join(DOCS_DIR), &keep.docs).await?,
             removed_media: sweep(&self.cache_dir.join(MEDIA_DIR), &keep.media).await?,
+            removed_jars: sweep(&self.cache_dir.join(OVERLAY_DIR), &keep.overlay).await?,
         })
     }
 
@@ -1223,6 +1279,117 @@ mod tests {
             content.media(&bogus).await,
             Err(Error::UnsafePath { .. })
         ));
+    }
+
+    fn overlay_entry(bytes: &[u8], minecraft: &str) -> OverlayJar {
+        OverlayJar {
+            minecraft: minecraft.into(),
+            range: format!("~{minecraft}"),
+            version: format!("0.1.0+{minecraft}"),
+            proto: 1,
+            file: crate::studio::overlay_file_ref(bytes),
+            fabric_api: None,
+            commit: None,
+            tested_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn overlay_jars_are_fetched_on_use_and_checked_in_full_every_time() {
+        let server = TestServer::start().await;
+        let signer = key(1);
+        let bytes = b"PK\x03\x04 the overlay's jar for 26.4".to_vec();
+        let jar = overlay_entry(&bytes, "26.4");
+        let served = format!("/v1/{}", jar.file.path.as_deref().unwrap());
+        server.put(&served, bytes.clone());
+        let dir = tempfile::tempdir().unwrap();
+        let content = client(&[server.base()], dir.path(), &signer);
+
+        let path = content.overlay_jar(&jar).await.unwrap();
+        assert_eq!(
+            path,
+            dir.path()
+                .join(OVERLAY_DIR)
+                .join(format!("{}.jar", jar.file.sha256))
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        content.overlay_jar(&jar).await.unwrap();
+        assert_eq!(server.hits(&served), 1, "a sound copy is used again");
+
+        // A copy changed on disk (same size) is fetched again before it is used.
+        let mut changed = bytes.clone();
+        changed[5] ^= 0xff;
+        std::fs::write(&path, &changed).unwrap();
+        content.overlay_jar(&jar).await.unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(server.hits(&served), 2);
+
+        // An entry whose SHA-1 is not the file's is refused, though the SHA-256 matches.
+        let mut wrong_sha1 = jar.clone();
+        wrong_sha1.file.sha1 = Some("0".repeat(40));
+        assert!(matches!(
+            content.overlay_jar(&wrong_sha1).await,
+            Err(Error::Integrity { .. })
+        ));
+
+        // Other bytes on the mirror (size or SHA-256): nothing is kept.
+        let expected = overlay_entry(b"the bytes Studio signed", "26.5");
+        server.put(
+            &format!("/v1/{}", expected.file.path.as_deref().unwrap()),
+            b"the bytes on the mirror".to_vec(),
+        );
+        assert!(content.overlay_jar(&expected).await.is_err());
+        let mut longer = overlay_entry(b"the bytes Studio signed", "26.5");
+        longer.file.size += 1;
+        assert!(content.overlay_jar(&longer).await.is_err());
+        assert!(
+            !dir.path()
+                .join(OVERLAY_DIR)
+                .join(format!("{}.jar", expected.file.sha256))
+                .exists()
+        );
+
+        // An entry that breaks the format is refused unread.
+        let mut unhashed = jar.clone();
+        unhashed.file.sha1 = None;
+        assert!(matches!(
+            content.overlay_jar(&unhashed).await,
+            Err(Error::Invalid(_))
+        ));
+        assert_eq!(server.hits(&served), 2);
+    }
+
+    #[tokio::test]
+    async fn garbage_collection_keeps_the_overlay_jars_of_current_and_previous() {
+        let server = TestServer::start().await;
+        let signer = key(1);
+        let dir = tempfile::tempdir().unwrap();
+        let content = client(&[server.base()], dir.path(), &signer);
+        let mut jars = Vec::new();
+        for (sequence, minecraft) in [(1u64, "26.4"), (2, "26.5"), (3, "26.6")] {
+            let bytes = format!("jar for {minecraft}").into_bytes();
+            let jar = overlay_entry(&bytes, minecraft);
+            server.put(&format!("/v1/{}", jar.file.path.as_deref().unwrap()), bytes);
+            let mut publish = Publish::new(sequence);
+            publish.overlay = Some(crate::OverlayRelease {
+                jars: vec![jar.clone()],
+            });
+            publish.news.items[0].title = minecraft.into();
+            publish.put(&server, &signer);
+            content.refresh().await.unwrap();
+            content.overlay_jar(&jar).await.unwrap();
+            jars.push(jar);
+        }
+        let cached = |jar: &OverlayJar| {
+            dir.path()
+                .join(OVERLAY_DIR)
+                .join(format!("{}.jar", jar.file.sha256))
+                .exists()
+        };
+        // The third refresh's cleanup took the first jar; the other two stay.
+        assert!(!cached(&jars[0]));
+        assert!(cached(&jars[1]) && cached(&jars[2]));
+        assert_eq!(content.gc().await.unwrap().removed_jars, 0);
     }
 
     #[tokio::test]

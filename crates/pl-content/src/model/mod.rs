@@ -12,6 +12,7 @@ mod itemart;
 mod links;
 mod modset;
 mod news;
+mod overlay;
 mod pack;
 mod release;
 mod subserver;
@@ -62,6 +63,12 @@ pub use modset::{
     ModSetPurpose, ModSetText, ModSetVariant, is_projects_hosted, loader_name,
 };
 pub use news::{NEWS_FEED_SCHEMA, NewsCategory, NewsFeed, NewsItem, compare_news};
+pub use overlay::{
+    MAX_OVERLAY_JAR_BYTES, MAX_OVERLAY_JARS, MAX_OVERLAY_RANGE_LEN, MAX_OVERLAY_VERSION_LEN,
+    OVERLAY_CI_SCHEMA, OVERLAY_JAR_PREFIX, OverlayCiCount, OverlayCiJar, OverlayCiRelease,
+    OverlayCiTests, OverlayJar, OverlayJarFault, OverlayProblem, OverlayRelease,
+    is_overlay_version, overlay_jar_fault,
+};
 pub use pack::{
     ConfigPolicy, EnvSupport, FilePolicy, ItemCategory, ItemProblem, MRPACK_FORMAT_VERSION,
     ManifestProblem, ModrinthRef, OptionalGroup, PackDependencies, PackEnv, PackFile, PackHashes,

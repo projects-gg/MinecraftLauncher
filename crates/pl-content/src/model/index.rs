@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
-use super::{DocRef, FileRef, check_schema, default_schema, is_valid_id};
+use super::{DocRef, FileRef, OverlayRelease, check_schema, default_schema, is_valid_id};
 use crate::error::{Error, Result};
 
 /// Highest `RootIndex.schema` this build understands.
@@ -53,6 +53,12 @@ pub struct RootIndex {
     /// built-in list ([`crate::ChatEmojis::builtin`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_emojis: Option<DocRef>,
+    /// The in-game overlay's jars for Minecraft versions launchers do not ship (OVL-AUTO,
+    /// [`crate::OverlayRelease`]); launchers read it only while `features.overlayJars` is on. A
+    /// jar that breaks a rule is left out on its own; it never refuses the index. Absent while the
+    /// team publishes none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlay: Option<OverlayRelease>,
 }
 
 impl RootIndex {
@@ -651,6 +657,7 @@ mod tests {
             mod_sets: None,
             item_art: None,
             chat_emojis: None,
+            overlay: None,
         }
     }
 
