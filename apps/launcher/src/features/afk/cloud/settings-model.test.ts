@@ -403,7 +403,7 @@ describe("rows", () => {
 describe("issueKey", () => {
   it("names a text both languages have for every issue", () => {
     const fields: Record<string, string[]> = {
-      name: ["format", "duplicate"],
+      name: ["format", "duplicate", "protected"],
       server: ["format", "dot", "private", "self", "port", "blocked", "full", "changeLimit", "x"],
       port: ["port"],
       version: ["unknown"],
