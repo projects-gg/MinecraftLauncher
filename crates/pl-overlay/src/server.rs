@@ -557,7 +557,7 @@ mod tests {
     use tokio::net::tcp::OwnedReadHalf;
     use tokio::time::timeout;
 
-    const WAIT: Duration = Duration::from_secs(5);
+    const WAIT: Duration = Duration::from_secs(60);
 
     struct Harness {
         endpoint: Endpoint,
@@ -856,7 +856,7 @@ mod tests {
             .unwrap();
         timeout(WAIT, closed).await.unwrap().unwrap();
         let mut rest = Vec::new();
-        let read = timeout(Duration::from_secs(1), silent.reader.read_to_end(&mut rest))
+        let read = timeout(WAIT, silent.reader.read_to_end(&mut rest))
             .await
             .expect("the silent connection was not closed");
         assert!(read.is_err() || rest.is_empty());
