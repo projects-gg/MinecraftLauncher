@@ -359,5 +359,6 @@
   "projects_overlay.chat_emoji.text": "İfadeler",
   "projects_overlay.chat_emoji.shortcuts": "Kısayollar",
   "projects_overlay.chat_emoji.only": "Yalnız %s",
-  "projects_overlay.chat_emoji.full": "Sohbet satırı dolu."
+  "projects_overlay.chat_emoji.full": "Sohbet satırı dolu.",
+  "projects_overlay.route.travel": "%s sunucusuna geçiliyor…"
 }

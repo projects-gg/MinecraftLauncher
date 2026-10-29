@@ -348,6 +348,16 @@ pub async fn prepare_mod(
     }
 }
 
+/// AUTOJOIN: whether a start of `instance` would get this launcher's own overlay jar, as far as
+/// the settings and the shipped jars tell before the start (Fabric, a jar for its Minecraft
+/// version, the overlay or the chat's emoji picker on): only then is a sub-server offered beside
+/// "Doğrudan sunucuya bağlan". The start itself decides again ([`PreparedMod::ours`]).
+pub fn fits(state: &AppState, instance: &Instance) -> bool {
+    state.overlay.wants_mod()
+        && instance.loader.kind == LoaderKind::Fabric
+        && bundle().is_some_and(|bundle| bundle.jar_for(&instance.mc_version).is_some())
+}
+
 /// [`prepare_mod`] for a game started beside another game of the same folder (PLAY-AGAIN): the
 /// running game holds the mods folder, so nothing in it changes; the new game gets a bridge when
 /// the launcher's own jar is there and on.

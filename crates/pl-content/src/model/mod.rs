@@ -14,6 +14,7 @@ mod modset;
 mod news;
 mod pack;
 mod release;
+mod subserver;
 
 pub use chatemoji::{
     CHAT_EMOJIS_SCHEMA, ChatEmoji, ChatEmojiFault, ChatEmojiKind, ChatEmojiMeaning,
@@ -69,6 +70,11 @@ pub use pack::{
 pub use release::{
     ReleaseChannel, ReleasePlatform, UpdateDecision, release_bundle_allowed, release_channel_urls,
     rollout_bucket,
+};
+pub use subserver::{
+    MAX_SUB_SERVER_COMMAND_CHARS, MAX_SUB_SERVER_ID_CHARS, MAX_SUB_SERVER_NAME_CHARS,
+    MAX_SUB_SERVERS, SUB_SERVER_HOST, SubServer, SubServerFault, SubServerProblem,
+    is_sub_server_command, is_sub_server_host, is_sub_server_id, sub_server_fault,
 };
 
 /// Longest family or item id, in bytes.

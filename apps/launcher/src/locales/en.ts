@@ -5,6 +5,7 @@ import { enAfkMod } from "./en-afk-mod";
 import { enAfkPanel } from "./en-afk-panel";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enAfkPlus } from "./en-afkplus";
+import { enAutojoin } from "./en-autojoin";
 import { enBetaGate } from "./en-beta-gate";
 import { enChat } from "./en-chat";
 import { enChatProd } from "./en-chat-prod";
@@ -81,6 +82,7 @@ export const en: DeepPartial<Strings> = {
   libraryDrop: enLibraryDrop,
   updates: enUpdates,
   betaGate: enBetaGate,
+  autojoin: enAutojoin,
   shortcuts: enShortcuts,
   prepare: enPrepare,
   social: {

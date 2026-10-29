@@ -46,6 +46,14 @@ pub const PANEL_ARG: &str = "-Dprojects.overlay.panel=";
 /// from the game's first frame. Never passed while it is on.
 pub const EMOJI_ARG: &str = "-Dprojects.overlay.emoji=";
 
+/// AUTOJOIN: the Projects sub-server the player picked beside "Doğrudan sunucuya bağlan" for this
+/// launch, percent-encoded JSON `{"v":1,"name":"SkyBlock","command":"/aurora"}` ([`route_jvm_arg`]).
+/// While the mod holds one it registers the `projects:route` channel, and it sends the command
+/// once, after the lobby says `ready` there (its login, two-factor check and agreement done).
+/// Passed only when OYNA joins the instance's own Projects server and this launcher's mod is in
+/// place; never otherwise.
+pub const ROUTE_ARG: &str = "-Dprojects.overlay.route=";
+
 /// Whether a launch argument carries the session token and must be masked in logs.
 pub fn is_secret_jvm_arg(arg: &str) -> bool {
     arg.starts_with(TOKEN_ARG)
@@ -55,9 +63,25 @@ pub fn is_secret_jvm_arg(arg: &str) -> bool {
 /// bytes percent-encoded except letters, digits and `-._~`, so any name reaches the game intact
 /// whatever the code page Java reads its command line in (the mod's `WorldResume.decode`).
 pub fn world_jvm_arg(folder: &str) -> String {
-    let mut arg = String::with_capacity(WORLD_ARG.len() + folder.len() * 3);
-    arg.push_str(WORLD_ARG);
-    for byte in folder.bytes() {
+    percent_arg(WORLD_ARG, folder)
+}
+
+/// The JVM argument carrying the picked sub-server for the overlay ([`ROUTE_ARG`]): its JSON,
+/// percent-encoded like [`world_jvm_arg`] (the mod's `Route.decode`).
+pub fn route_jvm_arg(name: &str, command: &str) -> String {
+    // Written by hand so the order never depends on serde_json's map features.
+    let json = format!(
+        r#"{{"v":1,"name":{},"command":{}}}"#,
+        serde_json::Value::from(name),
+        serde_json::Value::from(command)
+    );
+    percent_arg(ROUTE_ARG, &json)
+}
+
+fn percent_arg(prefix: &str, value: &str) -> String {
+    let mut arg = String::with_capacity(prefix.len() + value.len() * 3);
+    arg.push_str(prefix);
+    for byte in value.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
             arg.push(char::from(byte));
         } else {
@@ -913,6 +937,37 @@ mod tests {
         );
         assert!(world_jvm_arg("Yeni Dünya").is_ascii());
         assert!(!is_secret_jvm_arg(&world_jvm_arg("w")));
+    }
+
+    #[test]
+    fn the_route_argument_carries_the_pick_as_json() {
+        // The same vector as the mod's RouteTest.
+        assert_eq!(
+            route_jvm_arg("SkyBlock", "/aurora"),
+            "-Dprojects.overlay.route=%7B%22v%22%3A1%2C%22name%22%3A%22SkyBlock%22%2C%22command%22%3A%22%2Faurora%22%7D"
+        );
+        let arg = route_jvm_arg("Açlık Oyunları", "/hg");
+        assert!(arg.is_ascii());
+        assert!(!is_secret_jvm_arg(&arg));
+        let raw = arg.strip_prefix(ROUTE_ARG).unwrap();
+        let mut bytes = Vec::new();
+        let mut rest = raw.as_bytes();
+        while let [first, tail @ ..] = rest {
+            if *first == b'%' {
+                bytes.push(
+                    u8::from_str_radix(std::str::from_utf8(&tail[..2]).unwrap(), 16).unwrap(),
+                );
+                rest = &tail[2..];
+            } else {
+                bytes.push(*first);
+                rest = tail;
+            }
+        }
+        let back: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            back,
+            serde_json::json!({"v": 1, "name": "Açlık Oyunları", "command": "/hg"})
+        );
     }
 
     #[test]

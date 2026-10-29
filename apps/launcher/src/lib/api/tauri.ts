@@ -84,6 +84,8 @@ const fileUrl = (path: string | null | undefined) => (path ? convertFileSrc(path
  */
 function storedPrefs(): {
   autoJoin?: boolean;
+  /** AUTOJOIN: each instance's Projects sub-server (its id); missing: the lobby. */
+  autoJoinRoutes?: Record<string, string>;
   concurrentDownloads?: number;
   verifyOnLaunch?: boolean;
   copyScreenshots?: boolean;
@@ -716,10 +718,18 @@ export const tauriApi: LauncherApi = {
           overlay: prefs.inGameOverlay ?? true,
           emoji: prefs.chatEmoji ?? true,
           account: options?.account?.id ?? null,
+          // AUTOJOIN: Rust keeps it only for OYNA to the instance's own server.
+          route: prefs.autoJoinRoutes?.[instanceId] ?? null,
         },
         channel,
       ),
     );
+  },
+  async instanceSubServers(instanceId) {
+    return ok(commands.instanceSubServers(instanceId));
+  },
+  async subServersTester() {
+    return ok(commands.subServersTester());
   },
   async cancelLaunch() {
     await commands.launchCancel();
