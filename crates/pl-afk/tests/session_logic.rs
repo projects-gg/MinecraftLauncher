@@ -1099,11 +1099,41 @@ async fn every_client_process_gets_its_own_nonce() {
     manager.shutdown().await;
 }
 
-/// A client before 4.1.0 ignores the variable and a development build's version is unknown: neither
-/// gets a nonce, and their bare event lines still count, as before.
+/// The version check never fails open: a `v` or a missing minor and patch still read as a version,
+/// and a release whose version does not read as one counts as a new client.
+#[tokio::test(start_paused = true)]
+async fn odd_release_versions_still_get_a_nonce() {
+    for version in ["v4.1.0", "5", "garbage"] {
+        let env = TestEnv::with_client_version(version);
+        let id = env.add("TuhafSurum").id;
+        let s = ScriptedSpawner::new(|_, mut proc| async move {
+            proc.event(
+                r#"{"e":"joined","user":"TuhafSurum","host":"h","port":25565,"protocol":777}"#,
+            )
+            .await;
+            proc.until_quit().await
+        });
+        let manager = env.manager(spawner(&s), ManagerConfig::default());
+        manager.connect(&id).await.unwrap();
+        until("connected by a nonce line", LONG, || {
+            matches!(manager.snapshot(&id).state, SessionState::Connected { .. })
+        })
+        .await;
+        assert!(s.launch(0).spec.nonce.is_some(), "{version}");
+        manager.shutdown().await;
+    }
+}
+
+/// A client before 4.1.0 (the v1 launcher's one adopted without a version file too) ignores the
+/// variable and a development build's version is unknown: none gets a nonce, and their bare event
+/// lines still count, as before.
 #[tokio::test(start_paused = true)]
 async fn clients_before_4_1_and_dev_builds_get_no_nonce_and_keep_their_events() {
-    for env in [TestEnv::with_client_version("4.0.1"), TestEnv::new(None)] {
+    for env in [
+        TestEnv::with_client_version("4.0.1"),
+        TestEnv::with_client_version(pl_afk::bridge::LEGACY_CLIENT_VERSION),
+        TestEnv::new(None),
+    ] {
         let id = env.add("EskiSurum").id;
         let s = ScriptedSpawner::new(|_, mut proc| async move {
             proc.event(

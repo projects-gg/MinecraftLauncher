@@ -33,6 +33,9 @@ pub const BRIDGE_ENV_VAR: &str = "MCC_LAUNCHER_BRIDGE";
 pub const NONCE_ENV_VAR: &str = "MCC_BRIDGE_NONCE";
 /// The first client version (major, minor) that prefixes its event lines with the nonce.
 pub const NONCE_SINCE: (u64, u64) = (4, 1);
+/// The version the launcher gives the v1 launcher's client when it adopts that folder without a
+/// `version.txt` (`commands/migrate.rs`): a client from before 4.1.0.
+pub const LEGACY_CLIENT_VERSION: &str = "legacy";
 
 /// A nonce the client takes: 16–128 of `A-Z a-z 0-9 _ -` (any other value it ignores).
 pub fn is_valid_nonce(nonce: &str) -> bool {
@@ -47,14 +50,35 @@ pub fn new_nonce() -> String {
     uuid::Uuid::new_v4().simple().to_string()
 }
 
-/// Whether a client of `version` (`4.1.0`, `4.1.0-rc.1`) prints nonce-prefixed event lines.
+/// Whether a released client of `version` prints nonce-prefixed event lines: from 4.1.0 (`4.1.0`,
+/// `v4.1.0`, `4.1.0-rc.1`; a missing part is 0, so `5` is 5.0.0). It never fails open: a version
+/// that does not read as one counts as a new client, so at worst an old client's event lines show
+/// as text; only [`LEGACY_CLIENT_VERSION`] counts as an old one. A development build is the
+/// caller's to leave out.
 pub fn client_takes_nonce(version: &str) -> bool {
-    let core = version.trim().split(['-', '+']).next().unwrap_or("");
-    let mut parts = core.split('.').map(|p| p.parse::<u64>().ok());
-    match (parts.next().flatten(), parts.next().flatten()) {
-        (Some(major), Some(minor)) => (major, minor) >= NONCE_SINCE,
-        _ => false,
+    if version == LEGACY_CLIENT_VERSION {
+        return false;
     }
+    match major_minor(version) {
+        Some(version) => version >= NONCE_SINCE,
+        None => {
+            // Not the text itself: it may be anything.
+            tracing::warn!("unreadable AFK client version, giving it a bridge nonce");
+            true
+        }
+    }
+}
+
+/// `(major, minor)` of a client version, without a leading `v` and a `-…`/`+…` suffix, a missing
+/// part as 0. `None` unless every dot-separated part is a number.
+fn major_minor(version: &str) -> Option<(u64, u64)> {
+    let version = version.trim();
+    let version = version.strip_prefix(['v', 'V']).unwrap_or(version);
+    let core = version.split(['-', '+']).next().unwrap_or_default();
+    let mut parts = core.split('.').map(|part| part.parse::<u64>().ok());
+    let major = parts.next().flatten()?;
+    let minor = parts.next().unwrap_or(Some(0))?;
+    parts.all(|part| part.is_some()).then_some((major, minor))
 }
 
 /// [`parse_line`] for a client given `nonce`: only `<nonce>@@MCC@@` lines are events, everything
@@ -364,12 +388,35 @@ mod tests {
 
     #[test]
     fn nonces_follow_the_client_version_and_the_client_s_rule() {
-        assert!(!client_takes_nonce("4.0.1"));
-        assert!(client_takes_nonce("4.1.0"));
-        assert!(client_takes_nonce("4.1.0-rc.1"));
-        assert!(client_takes_nonce("5.0.0"));
-        assert!(!client_takes_nonce("unknown"));
-        assert!(!client_takes_nonce(""));
+        for old in [
+            "4.0.1",
+            "v4.0.9",
+            "4",
+            "4.0",
+            "v3",
+            " 4.0.1 ",
+            LEGACY_CLIENT_VERSION,
+        ] {
+            assert!(!client_takes_nonce(old), "{old}");
+        }
+        for new in [
+            "4.1.0",
+            "v4.1.0",
+            "V4.1.0",
+            "4.1",
+            "4.1.0-rc.1",
+            "4.1.0+b7",
+            "5",
+            "5.0.0",
+        ] {
+            assert!(client_takes_nonce(new), "{new}");
+        }
+        // Never fails open: what does not read as a version counts as a new client.
+        for odd in [
+            "garbage", "unknown", "", "4.x", "4..1", "4.0.x", "-4.0", "vv4.0",
+        ] {
+            assert!(client_takes_nonce(odd), "{odd}");
+        }
         assert!(is_valid_nonce("abcdefghijklmnop"));
         assert!(!is_valid_nonce("short"));
         assert!(!is_valid_nonce(&"a".repeat(129)));

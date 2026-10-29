@@ -5,9 +5,10 @@
 //!
 //! Launch: re-read the latest account settings and login commands → write the MCC config (the
 //! login script only exists until the game is joined) → spawn `"<ini>" BasicIO-NoColor` with
-//! `MCC_LAUNCHER_BRIDGE=1`; a client of 4.1.0 or later also gets a fresh `MCC_BRIDGE_NONCE` per
-//! process, and then only lines with that nonce are events: a server's line that starts with the
-//! bare bridge prefix (a chat or kick text) stays text and cannot fake a join or a disconnect.
+//! `MCC_LAUNCHER_BRIDGE=1`; a released client of 4.1.0 or later (or of a version that does not
+//! read as one) also gets a fresh `MCC_BRIDGE_NONCE` per process, and then only lines with that
+//! nonce are events: a server's line that starts with the bare bridge prefix (a chat or kick text)
+//! stays text and cannot fake a join or a disconnect.
 //! Stop: `/quit`, then kill after the grace period. When the client exits on its own the
 //! [`restart`](crate::restart) policy decides between a backed-off restart and an error state.
 
@@ -714,8 +715,9 @@ impl Actor {
         } = prepared;
         self.account_dir = Some(dir.clone());
         // Decided by the version this session runs, never by the first line it sees: an older
-        // client ignores the variable and its bare event lines are the only ones it prints.
-        let nonce = client_takes_nonce(&client.version).then(new_nonce);
+        // client ignores the variable and its bare event lines are the only ones it prints. A
+        // development build has no version to go by and keeps the bare lines.
+        let nonce = (!client.dev && client_takes_nonce(&client.version)).then(new_nonce);
         let spec = LaunchSpec {
             exe: client.path.clone(),
             ini: dir.join(INI_FILE_NAME),
