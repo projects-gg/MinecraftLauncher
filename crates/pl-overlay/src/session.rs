@@ -16,6 +16,7 @@ use pl_social::{
     CallAnswer as SocialAnswer, ChatChangeView, ChatMessageView, ChatPage, ChatRejection,
     ChatTypingView, ErrorCode, FriendGroup, GroupMember, InviteResult, McIntent, ReportReason,
     ReportTarget, SendOutcome, SocialError, SocialNotice, SocialService, SocialView,
+    TEAM_FEATURE_ROLES, TeamRole,
 };
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
@@ -25,8 +26,9 @@ use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
     ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST, FEATURE_LANG,
-    FEATURE_LINK, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_TAGS, FriendAction,
-    FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
+    FEATURE_LINK, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_PEOPLE3,
+    FEATURE_TAGS, FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret,
+    SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -175,6 +177,25 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = pl_social::Result<SendOutcome>> + Send + 'static;
     /// OVL-UX2: "İsteği kabul et" on a crewmate who asked first.
     fn accept(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-UX3: "Moderatör yap" (`moderator`) or "Moderatörlükten al" in a crew the player leads.
+    fn set_team_moderator(
+        &self,
+        team: &str,
+        member: &str,
+        moderator: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-UX3: "Liderliği devret".
+    fn transfer_team_founder(
+        &self,
+        team: &str,
+        member: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-UX3: "Ekipten çıkar".
+    fn remove_team_member(
+        &self,
+        team: &str,
+        member: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
 }
 
 impl SocialActions for SocialService {
@@ -349,6 +370,40 @@ impl SocialActions for SocialService {
         let user = user.to_owned();
         async move { SocialService::accept(&service, &user).await }
     }
+
+    fn set_team_moderator(
+        &self,
+        team: &str,
+        member: &str,
+        moderator: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let team = team.to_owned();
+        let member = member.to_owned();
+        async move { SocialService::set_team_moderator(&service, &team, &member, moderator).await }
+    }
+
+    fn transfer_team_founder(
+        &self,
+        team: &str,
+        member: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let team = team.to_owned();
+        let member = member.to_owned();
+        async move { SocialService::transfer_team_founder(&service, &team, &member).await }
+    }
+
+    fn remove_team_member(
+        &self,
+        team: &str,
+        member: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let team = team.to_owned();
+        let member = member.to_owned();
+        async move { SocialService::remove_team_member(&service, &team, &member).await }
+    }
 }
 
 /// What the friends feature and the launcher tell a session.
@@ -419,6 +474,62 @@ const PEOPLE_WINDOW: Duration = Duration::from_secs(10);
 const DISCORD_REPEAT: Duration = Duration::from_secs(2);
 /// Longest note a report takes (the launcher's `NOTE_MAX`).
 const REPORT_NOTE_CHARS: usize = 200;
+
+/// As many friend categories as the service keeps (the launcher's `MAX_GROUPS`; OVL-UX3).
+const MAX_GROUPS: usize = 20;
+/// A category's name at most (the launcher's `GROUP_NAME_MAX`, what the service stores).
+const GROUP_NAME_MAX: usize = 24;
+/// The implicit "Arkadaşlar" category's id, never a new one's (the launcher's `REST`).
+const REST_GROUP: &str = "rest";
+
+/// A category's name as the launcher keeps it (its `cleanGroupName`): spaces folded and trimmed,
+/// at most [`GROUP_NAME_MAX`] characters.
+pub(crate) fn clean_group_name(name: &str) -> String {
+    name.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(GROUP_NAME_MAX)
+        .collect()
+}
+
+/// A new category's id as the launcher makes it (its `newGroupId`): 8 lower case letters and
+/// digits, not used yet and never [`REST_GROUP`].
+pub(crate) fn new_group_id(groups: &[FriendGroup]) -> String {
+    const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    loop {
+        let mut bytes = [0u8; 8];
+        rand::fill(&mut bytes[..]);
+        let id: String = bytes
+            .iter()
+            .map(|byte| char::from(ALPHABET[usize::from(*byte) % ALPHABET.len()]))
+            .collect();
+        if id != REST_GROUP && !groups.iter().any(|group| group.id == id) {
+            return id;
+        }
+    }
+}
+
+/// A crew row from the game (OVL-UX3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CrewRow {
+    /// "Moderatör yap" (`true`) or "Moderatörlükten al".
+    Moderator(bool),
+    /// "Liderliği devret".
+    Lead,
+    /// "Ekipten çıkar".
+    Remove,
+}
+
+impl CrewRow {
+    fn action(self) -> FriendAction {
+        match self {
+            Self::Moderator(_) => FriendAction::CrewMod,
+            Self::Lead => FriendAction::CrewLead,
+            Self::Remove => FriendAction::CrewRemove,
+        }
+    }
+}
 
 /// Called with `true` once the mod is greeted and `false` when it goes.
 pub(crate) type ConnectedFn = Arc<dyn Fn(bool) + Send + Sync>;
@@ -511,6 +622,9 @@ struct Live {
     /// The mod has the launcher's whole person menu (OVL-UX2: `people2` in its hello): it hears
     /// `lists` and the new `friend-result` actions.
     people2: bool,
+    /// The mod has OVL-UX3's crew rows and "Yeni kategori…" (`people3` in its hello): it hears
+    /// `roles` in `lists` and sends `crew-mod`, `crew-lead`, `crew-remove` and named `move`s.
+    people3: bool,
     /// The mod's words follow the launcher (OVL-LANG: `lang` in its hello): its welcome names the
     /// overlay's language and the player picks it there.
     langs: bool,
@@ -1264,8 +1378,10 @@ impl<S: SocialActions> Session<S> {
                 );
                 let tags = features.iter().any(|f| f == FEATURE_TAGS);
                 let people2 = features.iter().any(|f| f == FEATURE_PEOPLE2);
+                // The crew rows build on the whole person menu.
+                let people3 = people2 && features.iter().any(|f| f == FEATURE_PEOPLE3);
                 let langs = features.iter().any(|f| f == FEATURE_LANG);
-                let mut mirror = Mirror::for_mod(tags, people2);
+                let mut mirror = Mirror::for_mod(tags, people2).with_people3(people3);
                 mirror.set_lang(langs.then_some(self.lang));
                 let frames = mirror.greet(&self.scene, &self.launcher, self.config.reduced_motion);
                 // A reconnect forgets a "Bağlan" the earlier connection never answered.
@@ -1290,6 +1406,7 @@ impl<S: SocialActions> Session<S> {
                     link_wanted_at: None,
                     people: features.iter().any(|f| f == FEATURE_PEOPLE),
                     people2,
+                    people3,
                     langs,
                     emojis,
                     quiet: features.iter().any(|f| f == FEATURE_PANEL_OFF),
@@ -1448,9 +1565,26 @@ impl<S: SocialActions> Session<S> {
             // OVL-UX2: the rest of the launcher's person menu.
             FromGame::Favorite { friend, on } => self.on_mark(friend, on, FriendAction::Favorite),
             FromGame::Alert { friend, on } => self.on_mark(friend, on, FriendAction::Alert),
-            FromGame::Move { friend, group } => self.on_move(friend, &group),
+            FromGame::Move {
+                friend,
+                group,
+                name,
+            } => {
+                if name.is_empty() {
+                    self.on_move(friend, &group);
+                } else {
+                    self.on_move_new(friend, &group, &name);
+                }
+            }
             FromGame::CrewInvite { friend, crew } => self.on_crew_invite(friend, &crew),
             FromGame::AddFriend { friend } => self.on_add_friend(friend),
+            FromGame::CrewMod { crew, friend, on } => {
+                self.on_crew_row(&crew, friend, CrewRow::Moderator(on));
+            }
+            FromGame::CrewLead { crew, friend } => self.on_crew_row(&crew, friend, CrewRow::Lead),
+            FromGame::CrewRemove { crew, friend } => {
+                self.on_crew_row(&crew, friend, CrewRow::Remove);
+            }
             FromGame::Lang { lang } => self.on_lang_pick(&lang),
             FromGame::Emoji { on } => self.on_emoji_switch(on),
             FromGame::Hello { .. } | FromGame::Unknown => {}
@@ -1792,6 +1926,107 @@ impl<S: SocialActions> Session<S> {
         }
         let doing = self.social.invite_to_team(crew, &friend);
         self.settle(friend, FriendAction::CrewInvite, doing);
+    }
+
+    /// "Yeni kategori…" from the game (OVL-UX3, R5): a new category of that name at the end of the
+    /// list, with the friend in it, saved whole as "Kategoriye taşı" saves; the launcher's own
+    /// `addGroup` ([`clean_group_name`], [`new_group_id`], at most [`MAX_GROUPS`]). A named move
+    /// to a category that exists is no new one.
+    fn on_move_new(&mut self, friend: String, group: &str, name: &str) {
+        if !self.live.as_ref().is_some_and(|live| live.people3)
+            || !self.person_allowed(&friend, FriendAction::Move, Who::Friend, true)
+        {
+            return;
+        }
+        let clean = clean_group_name(name);
+        let doc =
+            self.view.groups.clone().filter(|doc| {
+                group.is_empty() && !clean.is_empty() && doc.groups.len() < MAX_GROUPS
+            });
+        let Some(doc) = doc else {
+            self.friend_result(
+                &friend,
+                FriendAction::Move,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+            return;
+        };
+        let id = new_group_id(&doc.groups);
+        let mut groups = doc.groups;
+        groups.push(FriendGroup {
+            id: id.clone(),
+            name: clean,
+        });
+        let mut members: Vec<GroupMember> = doc
+            .members
+            .into_iter()
+            .filter(|member| member.friend != friend)
+            .collect();
+        members.push(GroupMember {
+            friend: friend.clone(),
+            group: id,
+        });
+        tracing::info!("a new friend category from the in-game overlay");
+        let doing = self.social.save_groups(groups, members);
+        self.settle(friend, FriendAction::Move, doing);
+    }
+
+    /// A crew row from the game (OVL-UX3, R2–R4), checked again against the view as it is now
+    /// (the mod's rows came from `lists.roles`, which may be a little older), by the launcher's own
+    /// rules: "Moderatör yap" / "Moderatörlükten al" and "Liderliği devret" only in a crew the
+    /// player leads (moderators only while the service offers roles, at most
+    /// [`feed::MAX_MODERATORS`]), "Ekipten çıkar" as [`feed::may_remove`] says. Never the leader
+    /// nor the player. A moderator row that asks for what already is answers that it went.
+    fn on_crew_row(&mut self, crew: &str, friend: String, row: CrewRow) {
+        let action = row.action();
+        if !self.live.as_ref().is_some_and(|live| live.people3)
+            || !self.person_allowed(&friend, action, Who::FriendOrCrewmate, true)
+        {
+            return;
+        }
+        let view = Arc::clone(&self.view);
+        let roles = view.team_features.iter().any(|f| f == TEAM_FEATURE_ROLES);
+        let target = view
+            .teams
+            .then(|| view.crews.iter().find(|team| team.id == crew))
+            .flatten()
+            .and_then(|team| {
+                team.members
+                    .iter()
+                    .find(|member| member.id == friend && !member.me)
+                    .map(|member| (team, member))
+            });
+        let verdict = target.map(|(team, member)| {
+            let lead = team.role == TeamRole::Founder && member.role != TeamRole::Founder;
+            match row {
+                CrewRow::Moderator(on) if member.moderator == on => (lead && roles, true),
+                CrewRow::Moderator(on) => {
+                    let moderators = team.members.iter().filter(|m| m.moderator).count();
+                    (
+                        lead && roles && (!on || moderators < feed::MAX_MODERATORS),
+                        false,
+                    )
+                }
+                CrewRow::Lead => (lead, false),
+                CrewRow::Remove => (feed::may_remove(team, member, roles), false),
+            }
+        });
+        match verdict {
+            Some((true, true)) => self.friend_result(&friend, action, false, None),
+            Some((true, false)) => {
+                let doing: std::pin::Pin<Box<dyn Future<Output = pl_social::Result<()>> + Send>> =
+                    match row {
+                        CrewRow::Moderator(on) => {
+                            Box::pin(self.social.set_team_moderator(crew, &friend, on))
+                        }
+                        CrewRow::Lead => Box::pin(self.social.transfer_team_founder(crew, &friend)),
+                        CrewRow::Remove => Box::pin(self.social.remove_team_member(crew, &friend)),
+                    };
+                self.settle(friend, action, doing);
+            }
+            _ => self.friend_result(&friend, action, false, Some(FriendRefusal::Failed)),
+        }
     }
 
     /// "Arkadaş ekle" (or "İsteği kabul et") on a crewmate from crew chat: only while the service

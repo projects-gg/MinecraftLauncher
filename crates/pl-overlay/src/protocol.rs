@@ -197,11 +197,15 @@ pub enum FromGame {
     /// OVL-UX2 (Q9): "Çevrimiçi olunca bildir" on or off for this friend (`alert`).
     Alert { friend: String, on: bool },
     /// OVL-UX2 (Q10): "Kategoriye taşı": one of the player's categories by id, empty for the
-    /// implicit "Arkadaşlar". Answered with `friend-result`.
+    /// implicit "Arkadaşlar". Answered with `friend-result`. OVL-UX3 (R5; from a mod whose hello
+    /// lists `people3`): `group` empty and a `name`: "Yeni kategori…", a new category of that name
+    /// at the end of the list, with the friend in it.
     Move {
         friend: String,
         #[serde(default)]
         group: String,
+        #[serde(default)]
+        name: String,
     },
     /// OVL-UX2 (Q11): "Ekibe davet et": to one of the crews `lists` names. Answered with
     /// `friend-result`.
@@ -209,6 +213,19 @@ pub enum FromGame {
     /// OVL-UX2 (Q12): "Arkadaş ekle" (or "İsteği kabul et" when they asked first) on a crewmate who
     /// is not a friend yet. Answered with `friend-result` (`queued`: the request waits for them).
     AddFriend { friend: String },
+    /// OVL-UX3 (R2; from a mod whose hello lists `people3`): "Moderatör yap" (`on`) or
+    /// "Moderatörlükten al" on a crewmate of a crew the player leads. Answered with
+    /// `friend-result`.
+    CrewMod {
+        crew: String,
+        friend: String,
+        on: bool,
+    },
+    /// OVL-UX3 (R3): "Liderliği devret" to a crewmate of a crew the player leads.
+    CrewLead { crew: String, friend: String },
+    /// OVL-UX3 (R4): "Ekipten çıkar": anyone out of a crew the player leads, or a plain member
+    /// out of a crew whose moderators may remove members, by one of them.
+    CrewRemove { crew: String, friend: String },
     /// OVL-LANG (G4; from a mod whose hello lists `lang`): the player picked the overlay's language
     /// in its settings ("Dil": `tr` or `en`). The launcher keeps it for every game from now on and
     /// answers with a new `welcome` in that language; anything else is ignored.
@@ -260,6 +277,11 @@ pub const FEATURE_INVITE: &str = "invite";
 /// `move`, `crew-invite` and `add-friend`), and the `welcome` feature that says this launcher takes
 /// those frames (signed in to friends).
 pub const FEATURE_PEOPLE2: &str = "people2";
+
+/// The `hello` feature of a mod with OVL-UX3's rows (R1: it reads `roles` in `lists`, sends
+/// `crew-mod`, `crew-lead`, `crew-remove`, and `move` with a new category's `name`), and the
+/// `welcome` feature that says this launcher takes those frames (signed in to friends).
+pub const FEATURE_PEOPLE3: &str = "people3";
 
 /// The `hello` feature of a mod whose words follow the launcher (OVL-LANG, G1): it reads `lang` in
 /// `welcome`, shows the "Dil" row in its settings and sends `lang` when the player picks there.
@@ -492,6 +514,11 @@ pub enum ToGame {
         /// at" in their menu).
         #[serde(skip_serializing_if = "Vec::is_empty")]
         discord: Vec<String>,
+        /// OVL-UX3 (R1): the player's rights over crewmates, by crew id: only crews the player
+        /// leads or may remove members from (no entry: no crew rows there). Only to a mod that
+        /// said `people3`.
+        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+        roles: BTreeMap<String, CrewRoles>,
     },
     /// OVL-UX (P8): how a friend menu action went. `queued`: the invite waits for the friend
     /// (offline or on do-not-disturb); `reason` when it did not go. Only to a mod that said
@@ -534,6 +561,10 @@ pub enum FriendAction {
     Move,
     CrewInvite,
     AddFriend,
+    /// OVL-UX3: these go only to a mod that said `people3`.
+    CrewMod,
+    CrewLead,
+    CrewRemove,
 }
 
 /// Why a friend menu action did not go (OVL-UX).
@@ -650,6 +681,37 @@ pub struct CrewItem {
     /// Every place is taken: nobody more can be invited.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub full: bool,
+}
+
+/// The player's rights in one crew, for the crew rows of a crewmate's menu (OVL-UX3, R1), by the
+/// launcher's own rules (`teams.ts` `canRemove`, `person-menu.tsx`), so the mod shows only rows
+/// that would go.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewRoles {
+    /// The player leads the crew: "Liderliği devret", and "Ekipten çıkar" for anyone.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub lead: bool,
+    /// The leader names moderators here (the service offers roles): "Moderatör yap" and
+    /// "Moderatörlükten al".
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub roles: bool,
+    /// The crew has as many moderators as it may: "Moderatör yap" stays dimmed.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mods_full: bool,
+    /// The crewmates the rows may be about, by user id.
+    pub mates: BTreeMap<String, MateRights>,
+}
+
+/// One crewmate in [`CrewRoles`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct MateRights {
+    /// They are a moderator ("Moderatörlükten al" instead of "Moderatör yap").
+    #[serde(rename = "mod", skip_serializing_if = "std::ops::Not::not")]
+    pub moderator: bool,
+    /// The player may remove them ("Ekipten çıkar").
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub kick: bool,
 }
 
 /// A crew tag's card as the overlay shows it (TEAM6-O, T3): the chip (`tag` on the crew's colour)
@@ -1404,6 +1466,7 @@ mod tests {
             asking: Vec::new(),
             projects: Vec::new(),
             discord: Vec::new(),
+            roles: BTreeMap::new(),
         })
         .unwrap();
         assert_eq!(
@@ -1420,12 +1483,123 @@ mod tests {
             asking: Vec::new(),
             projects: vec!["u-cem".into()],
             discord: vec!["u-cem".into(), "u-ali".into()],
+            roles: BTreeMap::new(),
         })
         .unwrap();
         assert_eq!(
             mates,
             serde_json::json!({"t":"lists","groups":[],"crews":[],"crewmates":true,
                 "projects":["u-cem"],"discord":["u-cem","u-ali"]})
+        );
+        // OVL-UX3 (R1): the crews the player has rights in, and the crewmates the rows are about.
+        let roles = serde_json::to_value(ToGame::Lists {
+            groups: Vec::new(),
+            crews: Vec::new(),
+            crewmates: false,
+            asked: Vec::new(),
+            asking: Vec::new(),
+            projects: Vec::new(),
+            discord: Vec::new(),
+            roles: BTreeMap::from([
+                (
+                    "t1".to_owned(),
+                    CrewRoles {
+                        lead: true,
+                        roles: true,
+                        mods_full: true,
+                        mates: BTreeMap::from([
+                            (
+                                "u-cem".to_owned(),
+                                MateRights {
+                                    moderator: true,
+                                    kick: true,
+                                },
+                            ),
+                            (
+                                "u-ali".to_owned(),
+                                MateRights {
+                                    moderator: false,
+                                    kick: true,
+                                },
+                            ),
+                        ]),
+                    },
+                ),
+                (
+                    "t2".to_owned(),
+                    CrewRoles {
+                        mates: BTreeMap::from([(
+                            "u-ece".to_owned(),
+                            MateRights {
+                                moderator: false,
+                                kick: true,
+                            },
+                        )]),
+                        ..CrewRoles::default()
+                    },
+                ),
+            ]),
+        })
+        .unwrap();
+        assert_eq!(
+            roles,
+            serde_json::json!({"t":"lists","groups":[],"crews":[],"roles":{
+                "t1":{"lead":true,"roles":true,"modsFull":true,
+                    "mates":{"u-ali":{"kick":true},"u-cem":{"mod":true,"kick":true}}},
+                "t2":{"mates":{"u-ece":{"kick":true}}}}})
+        );
+        let made: FromGame =
+            serde_json::from_str(r#"{"t":"crew-mod","crew":"t1","friend":"u-ali","on":true}"#)
+                .unwrap();
+        assert_eq!(
+            made,
+            FromGame::CrewMod {
+                crew: "t1".into(),
+                friend: "u-ali".into(),
+                on: true
+            }
+        );
+        let handed: FromGame =
+            serde_json::from_str(r#"{"t":"crew-lead","crew":"t1","friend":"u-cem"}"#).unwrap();
+        assert_eq!(
+            handed,
+            FromGame::CrewLead {
+                crew: "t1".into(),
+                friend: "u-cem".into()
+            }
+        );
+        let removed: FromGame =
+            serde_json::from_str(r#"{"t":"crew-remove","crew":"t2","friend":"u-ece"}"#).unwrap();
+        assert_eq!(
+            removed,
+            FromGame::CrewRemove {
+                crew: "t2".into(),
+                friend: "u-ece".into()
+            }
+        );
+        // "Yeni kategori…": a move with a name and no category.
+        let fresh: FromGame =
+            serde_json::from_str(r#"{"t":"move","friend":"f1","name":"Okul arkadaşları"}"#)
+                .unwrap();
+        assert!(
+            matches!(fresh, FromGame::Move { ref group, ref name, .. } if group.is_empty() && name == "Okul arkadaşları")
+        );
+        // Without its state a moderator row is not one.
+        assert!(
+            serde_json::from_str::<FromGame>(r#"{"t":"crew-mod","crew":"t1","friend":"u-ali"}"#)
+                .is_err()
+        );
+        let result = serde_json::to_value(ToGame::FriendResult {
+            friend: "u-cem".into(),
+            action: FriendAction::CrewLead,
+            ok: true,
+            queued: false,
+            reason: None,
+        })
+        .unwrap();
+        assert_eq!(
+            result,
+            serde_json::json!({"t":"friend-result","friend":"u-cem","action":"crew-lead","ok":true})
         );
         let marked = serde_json::to_value(FriendView {
             id: "f1".into(),
