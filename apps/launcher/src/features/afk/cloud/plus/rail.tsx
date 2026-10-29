@@ -107,6 +107,8 @@ function StateBlock({
   const guard = usePressGuard(action ?? "none");
   const queryClient = useQueryClient();
   const goToLimit = usePlusUi((s) => s.goToLimit);
+  // The setup's choices wait ("Daha sonra"): the button goes back to them (SETUP-UX-L).
+  const resumes = usePlusUi((s) => Boolean(s.setups[account.id]));
   // Buying waits for the spending limits: "Sınırlara git" to the first one missing, as last read.
   const goSpend = () => {
     const panel = queryClient.getQueryData<PlusPanel>(plusKey(account.id));
@@ -128,8 +130,10 @@ function StateBlock({
         >
           {away ? sentence.text : waits ? text : t("afkPlus.ai.setup")}
         </p>
-        <Button size="sm" variant="primary" onClick={onSetup} className="self-start">
-          {t("afkPlus.setup.open")}
+        {/* A bone plate, as the rail's other start that waits for the player: the gold is the
+            setup's own "Devam" and the panel's save (one gold per screen, design.md §2). */}
+        <Button size="sm" variant="bone" onClick={onSetup} className="self-start">
+          {resumes ? t("setup.plus.resume") : t("afkPlus.setup.open")}
         </Button>
       </div>
     );

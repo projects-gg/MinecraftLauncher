@@ -114,7 +114,7 @@ const partValue = (draft: Draft, part: Part): unknown => {
  * yet is still the stored one, as on the desktop (the press alone brought up the change bar;
  * AFK-CLEAR look 2). A row whose plain words were emptied is a change.
  */
-function settled(draft: Draft, baseline: Draft): Draft {
+export function settled(draft: Draft, baseline: Draft): Draft {
   const untouched = (words: Words, before: Words | undefined): Words =>
     words.kind === "secret" &&
     !words.kept &&

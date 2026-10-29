@@ -1,25 +1,23 @@
-// A cloud account's settings in the shared settings panel (SHEET-UX), as the desktop AFK settings:
-// Bağlantı, Komutlar, Oyun içi and Otomatik yanıt in the rail, problems where they are, and the
-// change bar docked under the section while something is unsaved. Secret rows show their words
-// when this computer sealed them (the keychain copy), else "Göster" asks the account's machine.
-// Saving restarts a running account with the new settings; a server change seals the secrets this
-// computer has again and asks for the others. A press outside, Esc or the close button closes the
-// panel at any time; the edits wait as a draft.
-import {
-  ChatCircleText,
-  Copy,
-  Globe,
-  type Icon,
-  Keyboard,
-  PersonSimpleWalk,
-} from "@phosphor-icons/react";
-import { Button, toast } from "@pl/ui";
+// A cloud account's settings as questions (SETUP-UX-L, the site's account page; SHEET-UX before it):
+// in the shared right sheet, one quiet panel of rows, each a question with its item and its answer in
+// plain words, opening in place into its fields: Nereye girsin?, Nasıl giriş yapsın?, Girince ne
+// yapsın?, Biri yazınca ne desin? and Diğer ayarlar. Problems are marked on their question, a
+// question holding unsaved edits carries the gold dot, and the change bar docks under the list
+// while something is unsaved. While the account types nothing on joining and has no rule, a quiet
+// "Kurulumu bitir" over the list asks the first four questions one a step (the same fields, the
+// same save). Secret rows show their words when this computer sealed them (the keychain copy), else
+// "Göster" asks the account's machine. Saving restarts a running account with the new settings; a
+// server change seals the secrets this computer has again and asks for the others. A press
+// outside, Esc or the close button closes the panel at any time; the edits wait as a draft.
+import { Copy } from "@phosphor-icons/react";
+import { Button, Skeleton, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { LayoutGroup, motion } from "motion/react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { copyErrorDetails } from "@/features/content/jobs";
 import { afkFailed, isFriendly } from "../errors";
-import { SectionTitle } from "../settings/controls";
+import { Block } from "../settings/controls";
 import {
   draftKey,
   type HeldDraft,
@@ -27,42 +25,159 @@ import {
   remindKept,
   useAfkDrafts,
 } from "../settings/drafts";
-import { PanelBody, PanelSkeleton, SettingsPanel } from "../settings/panel";
+import { SettingsPanel } from "../settings/panel";
 import { type CloudAccount, type CloudEditData, cloudApi } from "./api";
-import { PlusChangeDock } from "./plus/change-dock";
+import { DOCK_HEIGHT, PlusChangeDock } from "./plus/change-dock";
 import {
+  type Command,
   type Draft,
   heldIssue,
   type Issue,
   isDirty,
   localIssues,
   loginPart,
-  PARTS,
-  type Part,
-  partOf,
   passwordIssue,
   serverChanges,
+  settled,
   toDraft,
   toEdit,
-  unsavedParts,
 } from "./settings-model";
 import {
-  CommandsPart,
-  ConnectionPart,
-  commandLimit,
+  CommandList,
   GamePart,
+  IdentityPart,
+  type PartProps,
   RepliesPart,
-  ruleLimit,
+  type RowPlaces,
+  ServerPart,
 } from "./settings-sections";
+import {
+  ACCOUNT_ITEMS,
+  ACCOUNT_STEPS,
+  type AccountQuestion,
+  type AccountStep,
+  accountAnswers,
+  accountNeedsSetup,
+  type CommandPlace,
+  commandPlace,
+} from "./setup/answers";
+import { QuestionList, QuestionRow } from "./setup/question-list";
+import { type FrameStep, SetupDialog } from "./setup/setup-dialog";
 import { isCloudActive, serverLabel, stoppedOnPassword } from "./status";
 import { CLOUD_KEY, startOrAsk, storeAccount, useCloudPage } from "./use-cloud";
 
-const ICONS: Record<Part, Icon> = {
-  connection: Globe,
-  commands: Keyboard,
-  game: PersonSimpleWalk,
-  replies: ChatCircleText,
-};
+const QUESTIONS: AccountQuestion[] = ["server", "login", "join", "replies", "more"];
+
+/** Accounts whose "Kurulumu bitir" was finished or put away this session: it goes for good then. */
+const setupPutAway = new Set<string>();
+
+/** The question a problem shows under. */
+function questionOf(
+  issue: Issue,
+  draft: Draft,
+  placeOf: (row: Command) => CommandPlace,
+): AccountQuestion {
+  if (issue.place === "commands") {
+    const row = issue.index === null ? undefined : draft.config.commands[issue.index];
+    const place = row ? placeOf(row) : "join";
+    return place === "repeat" ? "more" : place;
+  }
+  if (issue.place === "rules" || issue.field === "owner") return "replies";
+  if (issue.field === "server" || issue.field === "port" || issue.field === "version") {
+    return "server";
+  }
+  return "more";
+}
+
+/** What each question edits: a question holding edits not saved yet carries the gold dot. */
+function questionValue(
+  draft: Draft,
+  question: AccountQuestion,
+  placeOf: (row: Command) => CommandPlace,
+): string {
+  const rows = (place: CommandPlace) => draft.config.commands.filter((c) => placeOf(c) === place);
+  switch (question) {
+    case "server":
+      return JSON.stringify([draft.host, draft.port, draft.version]);
+    case "login":
+      return JSON.stringify(rows("login"));
+    case "join":
+      return JSON.stringify(rows("join"));
+    case "replies":
+      return JSON.stringify([draft.config.rules, draft.config.owner]);
+    case "more":
+      return JSON.stringify([
+        draft.name,
+        draft.lang,
+        draft.config.antiAfk,
+        draft.config.inventory,
+        draft.config.movement,
+        rows("repeat"),
+      ]);
+  }
+}
+
+/** One question's fields: the same in the list and in the setup's step. */
+function QuestionFields({
+  question,
+  part,
+  rows,
+}: {
+  question: AccountQuestion;
+  part: PartProps;
+  rows: RowPlaces;
+}) {
+  const { t } = useTranslation();
+  switch (question) {
+    case "server":
+      return <ServerPart {...part} />;
+    case "login":
+      return (
+        <CommandList
+          part={part}
+          rows={rows}
+          place="login"
+          addLabel={t("setup.account.loginAdd")}
+          empty={t("setup.account.loginEmpty")}
+        />
+      );
+    case "join":
+      return (
+        <CommandList
+          part={part}
+          rows={rows}
+          place="join"
+          addLabel={t("cloudAfk.settings.commands.add")}
+          empty={t("cloudAfk.settings.commands.empty")}
+        />
+      );
+    case "replies":
+      return <RepliesPart {...part} />;
+    case "more":
+      return (
+        <>
+          <Block>
+            <IdentityPart {...part} />
+          </Block>
+          <GamePart {...part} />
+          <Block>
+            <p className="pt-3 pb-1 text-[13px] font-semibold text-bone-100">
+              {t("setup.account.repeatTitle")}
+            </p>
+            <div className="pb-3">
+              <CommandList
+                part={part}
+                rows={rows}
+                place="repeat"
+                addLabel={t("cloudAfk.settings.commands.add")}
+                empty={t("cloudAfk.settings.commands.empty")}
+              />
+            </div>
+          </Block>
+        </>
+      );
+  }
+}
 
 function Editor({
   view,
@@ -86,17 +201,17 @@ function Editor({
     const held = useAfkDrafts.getState().held[slot] as HeldDraft<Draft> | undefined;
     return held ? rebaseDraft(held.draft, held.base, baseline) : baseline;
   });
-  // A stop that names a row opens the panel on it, a wrong password where the login line is; else
-  // where edits wait; else Bağlantı.
-  const [part, setPart] = useState<Part>(() => {
-    const stopped = heldIssue(view, draft);
-    if (stopped) return partOf(stopped);
-    return (
-      loginPart(view, draft) ??
-      PARTS.find((p) => unsavedParts(draft, baseline).has(p)) ??
-      "connection"
-    );
-  });
+  // Where each command row sits: as saved, or where it was added in this visit (until it is saved).
+  const [added, setAdded] = useState<ReadonlyMap<string, CommandPlace>>(new Map());
+  const saved = useMemo(
+    () => new Map(baseline.config.commands.map((row) => [row.id, row])),
+    [baseline],
+  );
+  const placeOf = useCallback((row: Command) => commandPlace(row, saved, added), [saved, added]);
+  const rows: RowPlaces = {
+    placeOf,
+    onAdded: (id, place) => setAdded((map) => new Map(map).set(id, place)),
+  };
   const [submitted, setSubmitted] = useState(false);
   const [serverIssues, setServerIssues] = useState<Issue[]>([]);
   const [failure, setFailure] = useState<{ message: string; error: unknown } | null>(null);
@@ -104,11 +219,9 @@ function Editor({
   // Which save runs: "start" also starts an account stopped on its password (AFK-CLEAR).
   const [saving, setSaving] = useState<"save" | "start" | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
-  const scroller = useRef<HTMLDivElement | null>(null);
   // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
-  // button waits, then the edits give way to the stored settings and the bar slides away (the
-  // editor stays: no section rises in again).
-  const saved = useRef(false);
+  // button waits, then the edits give way to the stored settings and the bar slides away.
+  const savedRef = useRef(false);
   const [settling, setSettling] = useState(false);
   // Studio's placeholder switch: its checks answer while typing too (the backend checks again).
   const features = useCloudPage().data?.overview.features ?? null;
@@ -119,12 +232,29 @@ function Editor({
     }),
     [features],
   );
+  // A stop that names a row opens its question, a wrong password the login's; else where edits wait.
+  const [open, setOpen] = useState<AccountQuestion | null>(() => {
+    const stopped = heldIssue(view, draft);
+    if (stopped) return questionOf(stopped, draft, placeOf);
+    const login = loginPart(view, draft);
+    if (login) return login === "replies" ? "replies" : "login";
+    const now = settled(draft, baseline);
+    return (
+      QUESTIONS.find(
+        (q) => questionValue(now, q, placeOf) !== questionValue(baseline, q, placeOf),
+      ) ?? null
+    );
+  });
+  // "Kurulumu bitir": the first four questions one a step, while the account needs them.
+  const [setup, setSetup] = useState<{ step: AccountStep; direction: 1 | -1 } | null>(null);
+  const offerSetup = accountNeedsSetup(baseline.config) && !setupPutAway.has(account.id);
 
   // Runs when a save comes back as the stored settings.
   useEffect(() => {
-    if (!saved.current) return;
-    saved.current = false;
+    if (!savedRef.current) return;
+    savedRef.current = false;
     setDraftState(baseline);
+    setAdded(new Map());
     setSubmitted(false);
     setServerIssues([]);
     setFailure(null);
@@ -135,7 +265,7 @@ function Editor({
   // "Ayarları bir kez kaydet" (old rules): saving is worth it even with nothing changed.
   const savable = dirty || Boolean(account.features?.legacyRules);
   useEffect(() => {
-    if (!saved.current) hold(slot, dirty ? { draft, base: baseline } : null);
+    if (!savedRef.current) hold(slot, dirty ? { draft, base: baseline } : null);
   }, [hold, slot, dirty, draft, baseline]);
 
   const setDraft = (update: (d: Draft) => Draft) => {
@@ -166,26 +296,42 @@ function Editor({
   // Shown with the rest, never blocking: see heldIssue and passwordIssue.
   const held = heldIssue(view, draft) ?? passwordIssue(view, draft);
   const shown = held ? [...issues, held] : issues;
-  const unsaved = unsavedParts(draft, baseline);
+  const now = settled(draft, baseline);
+  const unsaved = new Set(
+    QUESTIONS.filter((q) => questionValue(now, q, placeOf) !== questionValue(baseline, q, placeOf)),
+  );
+  const marked = new Set(shown.map((issue) => questionOf(issue, draft, placeOf)));
 
-  const goTo = (next: Part) => {
-    setPart(next);
-    scroller.current?.scrollTo({ top: 0 });
+  const goTo = (question: AccountQuestion) => {
+    setOpen(question);
+    requestAnimationFrame(() =>
+      document.getElementById(`question-${question}`)?.scrollIntoView({ block: "nearest" }),
+    );
   };
 
-  const save = async (start = false) => {
+  /** Saves; true once the stored settings took it. */
+  const save = async (start = false): Promise<boolean> => {
     setSubmitted(true);
     const found = [...localIssues(draft, view.limits, rules), ...issues];
-    if (found.length) {
-      const first = found[0];
-      if (first && !found.some((i) => partOf(i) === part)) goTo(partOf(first));
-      return;
+    const first = found[0];
+    if (first) {
+      if (setup) {
+        const step = questionOf(first, draft, placeOf);
+        if (step !== "more") setSetup({ step, direction: -1 });
+        else {
+          setSetup(null);
+          goTo(step);
+        }
+      } else if (!found.some((i) => questionOf(i, draft, placeOf) === open)) {
+        goTo(questionOf(first, draft, placeOf));
+      }
+      return false;
     }
     setSaving(start ? "start" : "save");
     try {
       const result = await cloudApi.save(account.id, toEdit(draft, baseline, view));
       if (result.kind === "saved") {
-        saved.current = true;
+        savedRef.current = true;
         setSettling(true);
         hold(slot, null);
         storeAccount(queryClient, result.account);
@@ -207,22 +353,26 @@ function Editor({
           description ? { description } : undefined,
         );
         void onSaved().finally(() => {
-          saved.current = false;
+          savedRef.current = false;
           setSettling(false);
         });
-      } else if (result.kind === "invalid") {
+        return true;
+      }
+      if (result.kind === "invalid") {
         setServerIssues(result.issues);
-        const first = result.issues[0];
-        if (first) goTo(partOf(first));
+        const refused = result.issues[0];
+        if (refused && !setup) goTo(questionOf(refused, draft, placeOf));
       } else {
         storeAccount(queryClient, result.account);
         setConflict(true);
       }
+      return false;
     } catch (error) {
       setFailure({
         message: isFriendly(error) ? error.message : t("cloudAfk.actions.failed"),
         error,
       });
+      return false;
     } finally {
       setSaving(null);
     }
@@ -231,6 +381,7 @@ function Editor({
   const discard = () => {
     hold(slot, null);
     setDraftState(baseline);
+    setAdded(new Map());
     setSubmitted(false);
     setServerIssues([]);
     setFailure(null);
@@ -252,7 +403,7 @@ function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const props = { draft, setDraft, view, issues: shown, features };
+  const part: PartProps = { draft, setDraft, view, issues: shown, features };
   // A mark on screen holds the save (a refused password's or a held row's never: see `held`).
   const blocking = issues.length > 0;
   // Stopped on a password the server refused: saving alone left the stop in place, so the main
@@ -268,23 +419,13 @@ function Editor({
           ? t("afkClear.saveStart")
           : t("cloudAfk.settings.save");
   const busy = saving !== null;
-  const count =
-    part === "commands"
-      ? t("cloudAfk.settings.commands.count", {
-          count: draft.config.commands.length,
-          max: commandLimit(view),
-        })
-      : part === "replies"
-        ? t("cloudAfk.settings.replies.count", {
-            count: draft.config.rules.length,
-            max: ruleLimit(view),
-          })
-        : null;
+  const answers = accountAnswers(draft, placeOf, t);
 
   const bar = (
     <PlusChangeDock
       dock={dock}
-      open={savable || conflict || Boolean(failure) || blocking}
+      // While the setup's own steps are on screen, its last step saves: the bar waits under it.
+      open={(savable || conflict || Boolean(failure) || blocking) && setup === null}
       label={t("afkPanel.barLabel")}
     >
       <div className="min-w-0 flex-1 text-[13px]">
@@ -346,40 +487,121 @@ function Editor({
     </PlusChangeDock>
   );
 
+  const putAway = () => {
+    setupPutAway.add(account.id);
+    setSetup(null);
+  };
+  const stepIndex = setup ? ACCOUNT_STEPS.indexOf(setup.step) : 0;
+  const setupSteps: FrameStep[] = ACCOUNT_STEPS.map((id) => ({
+    id,
+    question: t(`setup.account.questions.${id}`),
+    item: ACCOUNT_ITEMS[id],
+    answer: answers[id],
+  }));
+  const stepTo = (to: number) => {
+    const target = ACCOUNT_STEPS[to];
+    if (target) setSetup({ step: target, direction: to > stepIndex ? 1 : -1 });
+  };
+  const lastStep = stepIndex === ACCOUNT_STEPS.length - 1;
+
   return (
-    <PanelBody
-      label={t("cloudAfk.settings.title", { name: account.name })}
-      section={part}
-      onSection={goTo}
-      scrollerRef={(element) => {
-        scroller.current = element;
-      }}
-      dockRef={setDock}
-      bar={bar}
-      sections={PARTS.map((id) => ({
-        id,
-        label: t(`afkPanel.sections.${id}`),
-        icon: ICONS[id],
-        unsaved: unsaved.has(id),
-        problem: shown.some((i) => partOf(i) === id),
-      }))}
+    <motion.div
+      layoutScroll
+      className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
     >
-      <SectionTitle
-        title={t(`afkPanel.sections.${part}`)}
-        aside={
-          count ? <span className="text-[12.5px] text-ash-400 tabular-nums">{count}</span> : null
-        }
-      />
-      {part === "connection" ? (
-        <ConnectionPart {...props} />
-      ) : part === "commands" ? (
-        <CommandsPart {...props} />
-      ) : part === "game" ? (
-        <GamePart {...props} />
-      ) : (
-        <RepliesPart {...props} />
-      )}
-    </PanelBody>
+      <LayoutGroup>
+        <div className="panel-in flex flex-1 flex-col px-6 pt-5">
+          {offerSetup ? (
+            <div className="-mt-1 mb-2 flex justify-end">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSetup({ step: "server", direction: 1 })}
+              >
+                {t("setup.account.finish")}
+              </Button>
+            </div>
+          ) : null}
+          <QuestionList label={t("setup.questionsLabel")}>
+            {QUESTIONS.map((question) => (
+              <QuestionRow
+                key={question}
+                id={question}
+                item={ACCOUNT_ITEMS[question]}
+                question={
+                  question === "more" ? t("setup.other") : t(`setup.account.questions.${question}`)
+                }
+                answer={answers[question]}
+                open={open === question}
+                onToggle={() => setOpen((current) => (current === question ? null : question))}
+                dirty={unsaved.has(question)}
+                alert={marked.has(question)}
+              >
+                <QuestionFields question={question} part={part} rows={rows} />
+              </QuestionRow>
+            ))}
+          </QuestionList>
+          <div aria-hidden className="shrink-0" style={{ height: DOCK_HEIGHT + 16 }} />
+        </div>
+      </LayoutGroup>
+      <div ref={setDock} className="sticky bottom-0 z-10 h-0" />
+      {bar}
+      <SetupDialog
+        open={setup !== null}
+        title={t("setup.account.title")}
+        steps={setupSteps}
+        current={stepIndex}
+        direction={setup?.direction ?? 1}
+        onGo={stepTo}
+        onLater={putAway}
+        lede={setup ? t(`setup.account.ledes.${setup.step}`) : null}
+        onBack={stepIndex > 0 ? () => stepTo(stepIndex - 1) : undefined}
+        primary={{
+          label: lastStep
+            ? saving
+              ? t("cloudAfk.settings.saving")
+              : t("setup.account.done")
+            : t("setup.next"),
+          onClick: () => {
+            if (!lastStep) {
+              stepTo(stepIndex + 1);
+              return;
+            }
+            void save().then((done) => {
+              if (done) putAway();
+            });
+          },
+        }}
+        note={lastStep && isCloudActive(account) ? t("setup.account.reconnects") : null}
+        busy={busy || settling}
+        failure={failure?.message ?? (conflict ? t("cloudAfk.settings.conflict") : null)}
+      >
+        {setup ? <QuestionFields question={setup.step} part={part} rows={rows} /> : null}
+      </SetupDialog>
+    </motion.div>
+  );
+}
+
+/** While the account's settings load: the questions' rows. */
+function QuestionsSkeleton({ rows }: { rows: number }): ReactNode {
+  return (
+    <div className="flex-1 px-6 pt-5" aria-hidden>
+      <div className="rounded-[var(--radius-panel)] bg-white/[0.03] ring-1 ring-white/7 ring-inset">
+        {Array.from({ length: rows }, (_, i) => (
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: placeholders have no identity
+            key={i}
+            className="flex items-start gap-3.5 border-t border-white/6 px-[18px] py-[14px] first:border-t-0"
+          >
+            <Skeleton className="size-[40px] shrink-0" />
+            <div className="flex-1 space-y-2 pt-1">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3.5 w-[60%]" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -454,7 +676,7 @@ export function CloudSettingsSheet({
           </div>
         </div>
       ) : (
-        <PanelSkeleton rows={PARTS.length} />
+        <QuestionsSkeleton rows={QUESTIONS.length} />
       )}
     </SettingsPanel>
   );

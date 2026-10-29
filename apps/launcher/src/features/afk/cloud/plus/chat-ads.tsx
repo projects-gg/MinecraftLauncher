@@ -11,6 +11,7 @@ import { RadioGroup } from "radix-ui";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Hint } from "../../settings/controls";
+import { GameChat } from "../setup/game-chat";
 import { QuietLink } from "./fields";
 import { AD_EVERY_DEFAULT, AD_EVERY_MIN } from "./model";
 import type { PlusAdPreview } from "./types";
@@ -94,16 +95,17 @@ export function ChatAds({
           {line === null ? (
             <p className="pt-1.5 text-[12.5px] text-ash-400">{t(`afkPlus.settings.${quiet}`)}</p>
           ) : (
-            <div className="flex flex-col items-start gap-1 pt-1.5">
-              {/* A line of the game's chat, as the intro draws it. */}
-              <p
-                aria-live="polite"
-                className="w-full rounded-[var(--radius-panel)] bg-obsidian-950/70 px-3.5 py-2.5 font-display text-[13.5px] leading-snug text-bone-50 [text-shadow:0_1px_0_rgb(0_0_0/0.55)]"
-              >
-                <span className="sr-only">{`${t("afkPlus.settings.adSample")}: `}</span>
-                <span className="text-ash-300">{`${name}: `}</span>
-                {line}
+            <div className="flex w-full flex-col items-start gap-1 pt-1.5">
+              {/* A line of the game's public chat in its own letters (SETUP-UX-L, the setup's
+                  GameChat): the bot's name, then the text. Read once, in words. */}
+              <p aria-live="polite" className="sr-only">
+                {`${t("afkPlus.settings.adSample")}: ${name}: ${line}`}
               </p>
+              <GameChat
+                spoken={false}
+                className="w-full"
+                messages={[{ key: line, who: name, text: line, kind: "public" }]}
+              />
               {count > 1 ? (
                 <QuietLink tone="bone" onClick={() => setSample((shown) => (shown + 1) % count)}>
                   {t("afkPlus.settings.adNext")}

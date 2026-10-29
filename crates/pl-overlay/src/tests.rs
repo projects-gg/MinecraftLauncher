@@ -18,7 +18,9 @@ use crate::feed::tests::{chat2_view, message, view};
 use crate::protocol::ByeReason;
 use crate::{Endpoint, Overlay, OverlayConfig, OverlayStatus, PORT_ARG, SocialActions, TOKEN_ARG};
 
-const WAIT: Duration = Duration::from_secs(5);
+/// The longest a test waits for a frame or a call: a loaded machine takes seconds where an idle
+/// one takes milliseconds, and a test that hangs still fails.
+const WAIT: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
 struct Calls {
@@ -346,25 +348,33 @@ impl MockMod {
     }
 
     /// SKIN1-O: asks for the codeless linking permit and reads the answer (`link-offer` or
-    /// `link-clear`). A `history` asked for right after marks the end: when it comes first,
-    /// nothing answered (None).
-    async fn want_link(&mut self, name: &str) -> Option<serde_json::Value> {
-        // The session hears `link-want` at most every 250 ms.
+    /// `link-clear`), however long the permit's own task takes.
+    async fn want_link(&mut self, name: &str) -> serde_json::Value {
+        // The session hears `link-want` at most every 250 ms. It heard the last one before it
+        // answered it, so this one comes more than that after.
         tokio::time::sleep(Duration::from_millis(300)).await;
         self.send(serde_json::json!({"t":"link-want","name":name}))
             .await;
-        // The permit comes from a task of its own: let it land before the marker is asked for.
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        loop {
+            let frame = self.next().await.expect("the bridge closed");
+            if matches!(frame["t"].as_str(), Some("link-offer" | "link-clear")) {
+                return frame;
+            }
+        }
+    }
+
+    /// [`MockMod::want_link`] for a mod the session does not answer: it drops the question as it
+    /// reads it, so a `history` asked for right after comes before any answer.
+    async fn want_link_unanswered(&mut self, name: &str) {
+        self.send(serde_json::json!({"t":"link-want","name":name}))
+            .await;
         self.send(serde_json::json!({"t":"open-conv","conv":"d:f-ayse"}))
             .await;
         loop {
             let frame = self.next().await.expect("the bridge closed");
             match frame["t"].as_str() {
-                Some("link-offer" | "link-clear") => {
-                    self.next_of("history").await;
-                    return Some(frame);
-                }
-                Some("history") => return None,
+                Some("link-offer" | "link-clear") => panic!("an answer: {frame}"),
+                Some("history") => return,
                 _ => {}
             }
         }
@@ -936,8 +946,16 @@ async fn chat2_from_the_panel_and_to_it() {
     // The panel closes: no more "yazıyor…".
     game.send(serde_json::json!({"t":"panel","open":false}))
         .await;
-    // The panel's frame and the launcher's next update race: let the frame land first.
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // The panel's frame and the launcher's next update race. The session reads the game's frames
+    // in order and passes the player's typing on (at most once a second, the last a moment ago):
+    // once the service hears this one, the panel's frame has landed.
+    tokio::time::sleep(Duration::from_millis(1_100)).await;
+    game.send(serde_json::json!({"t":"typing","conv":"d:f-ayse:me"}))
+        .await;
+    eventually("the panel's frame landed", || {
+        social.calls().typing.len() == 2
+    })
+    .await;
     overlay.on_social(typing());
     overlay.on_social(SocialUpdate::Notice(SocialNotice::ChatMessage {
         conv: "d:f-ayse:me".into(),
@@ -1231,23 +1249,23 @@ async fn codeless_linking_vouches_only_for_the_games_own_account() {
     // An older mod asks nothing and hears nothing of it.
     let mut old = MockMod::connect_with(&endpoint, &["connect", "chat2"]).await;
     assert!(lists(&old.next_of("welcome").await, "link"));
-    assert_eq!(old.want_link("Ahmet").await, None);
+    old.want_link_unanswered("Ahmet").await;
     drop(old);
 
     let mut game = MockMod::connect_with(&endpoint, &["connect", "chat2", "link"]).await;
     assert!(lists(&game.next_of("welcome").await, "link"));
     // Another account than the one the game plays as: no permit, the service is not asked.
-    let other = game.want_link("Mehmet").await.unwrap();
+    let other = game.want_link("Mehmet").await;
     assert_eq!(other["t"], "link-clear");
     assert!(social.calls().permits.is_empty());
     // The game's own account (whatever its case): the permit, for the launcher's spelling.
-    let offer = game.want_link("ahmet").await.unwrap();
+    let offer = game.want_link("ahmet").await;
     assert_eq!(offer["t"], "link-offer");
     assert_eq!(offer["nonce"], NONCE);
     assert_eq!(offer["name"], "Ahmet");
     assert!(offer["expiresAt"].as_i64().unwrap() > now_ms() / 1000 + 1_700);
     // Asked again (`/discord eşle` later): the same permit, the service is not asked again.
-    let again = game.want_link("Ahmet").await.unwrap();
+    let again = game.want_link("Ahmet").await;
     assert_eq!(again["nonce"], NONCE);
     assert_eq!(social.calls().permits, ["Ahmet"]);
 
@@ -1277,7 +1295,7 @@ async fn without_codeless_linking_the_mod_hears_there_is_no_permit() {
         .unwrap();
     let mut game = MockMod::connect_with(&endpoint, &["link"]).await;
     assert!(!lists(&game.next_of("welcome").await, "link"));
-    assert_eq!(game.want_link("Ahmet").await.unwrap()["t"], "link-clear");
+    assert_eq!(game.want_link("Ahmet").await["t"], "link-clear");
 
     // Switched on: the welcome comes again with it.
     social.calls().codeless = true;
@@ -1286,7 +1304,7 @@ async fn without_codeless_linking_the_mod_hears_there_is_no_permit() {
 
     // The service refuses (linked, said "Hayır" lately, paused): none either.
     social.calls().refuse_permit = true;
-    assert_eq!(game.want_link("Ahmet").await.unwrap()["t"], "link-clear");
+    assert_eq!(game.want_link("Ahmet").await["t"], "link-clear");
     assert_eq!(social.calls().permits, ["Ahmet"]);
     overlay.stop(ByeReason::LauncherExit).await;
     // A refused permit was asked for, so the session closes what it may have opened.
@@ -1298,7 +1316,7 @@ async fn without_codeless_linking_the_mod_hears_there_is_no_permit() {
     let endpoint = overlay.start(social.clone(), "t").await.unwrap();
     let mut game = MockMod::connect_with(&endpoint, &["link"]).await;
     assert!(!lists(&game.next_of("welcome").await, "link"));
-    assert_eq!(game.want_link("Ahmet").await.unwrap()["t"], "link-clear");
+    assert_eq!(game.want_link("Ahmet").await["t"], "link-clear");
     assert!(social.calls().permits.is_empty());
     overlay.stop(ByeReason::LauncherExit).await;
     assert_eq!(social.calls().closed, 0);

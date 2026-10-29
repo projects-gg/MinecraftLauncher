@@ -7,14 +7,20 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { QuietLink } from "./fields";
 
-/** A line, with "Sınırlara git" after its words while `onGo` is given (under them when long). */
+/**
+ * A line, with "Sınırlara git" after its words while `onGo` is given (under them when long); beside
+ * an approval limit's reason it names that limit ("Onay sınırına git", the site's word).
+ */
 export function LimitLine({
   onGo,
+  approval = false,
   className,
   children,
 }: {
   /** Goes to the limit the line is about; null: the line alone. */
   onGo: (() => void) | null;
+  /** The limit is an approval limit ("Onay sınırı", "İlk anlaşmada onay sınırı"). */
+  approval?: boolean;
   className?: string;
   children: ReactNode;
 }) {
@@ -24,7 +30,7 @@ export function LimitLine({
     <p className={cn("flex flex-wrap items-baseline gap-x-2 gap-y-0.5", className)}>
       <span className="min-w-0">{children}</span>
       <QuietLink tone="bone" onClick={onGo}>
-        {t("afkPlus.settings.goToLimits")}
+        {t(approval ? "afkPlus.settings.goToApproval" : "afkPlus.settings.goToLimits")}
       </QuietLink>
     </p>
   );
