@@ -712,8 +712,8 @@ impl From<CloudError> for CmdError {
                 "name_protected" => (
                     "BULUT-KORUMALI",
                     pick(
-                        "Bu ad sunucuda yetkililer için korunuyor. 7/24 Bulut bu adla giriş yapamaz.",
-                        "This name is protected for staff on the server. 24/7 Cloud can't join with it.",
+                        "Bu ad sunucuda yetkililer için korunuyor. Başka bir ad seç.",
+                        "This name is protected for staff on the server. Pick another name.",
                     )
                     .into(),
                 ),
