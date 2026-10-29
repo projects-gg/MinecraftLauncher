@@ -166,6 +166,7 @@ export const enSetup = {
     },
     ownerFirst: "First enter the name you play with under Advanced.",
     loginAdd: "Add a login command",
+    loginPlaceholder: "/login yourpassword",
     loginEmpty: "If the server doesn't ask for a password, you can leave this empty.",
     repeatTitle: "Repeated commands",
     behaviourTitle: "Behaviour",

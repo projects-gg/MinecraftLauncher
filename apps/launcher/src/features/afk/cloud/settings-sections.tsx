@@ -515,6 +515,7 @@ function CommandRow({
   count,
   part,
   allowed,
+  placeholder,
   onChange,
   onMove,
   onRemove,
@@ -529,6 +530,8 @@ function CommandRow({
   part: PartProps;
   /** The triggers its question offers. */
   allowed: readonly Trigger[];
+  /** What an empty row shows (a login row: what a login command looks like). */
+  placeholder?: string;
   onChange: (command: Command) => void;
   /** Up (-1) or down (+1) in its question's list. */
   onMove: (by: -1 | 1) => void;
@@ -681,7 +684,7 @@ function CommandRow({
           accountId={part.view.account.id}
           rowId={command.id}
           label={t("cloudAfk.settings.commands.text")}
-          placeholder={t("cloudAfk.settings.commands.textPlaceholder")}
+          placeholder={placeholder ?? t("cloudAfk.settings.commands.textPlaceholder")}
           error={at("text")}
           autoFocus={focus}
         />
@@ -760,6 +763,7 @@ export function CommandList({
               count={mine.length}
               part={part}
               allowed={PLACE_TRIGGERS[place]}
+              placeholder={place === "login" ? t("setup.account.loginPlaceholder") : undefined}
               focus={command.id === added}
               onChange={(next) => set(commands.map((c) => (c.id === command.id ? next : c)))}
               onMove={(by) => shift(command, ordinal, by)}

@@ -186,6 +186,8 @@ export const trSetup = {
     // Under "Yalnız bana yanıt versin" while the name it listens to is not written yet.
     ownerFirst: "Önce Gelişmiş'te oynadığın hesabın adını yaz.",
     loginAdd: "Giriş komutu ekle",
+    // In an empty login row: what such a command looks like.
+    loginPlaceholder: "/login şifren",
     loginEmpty: "Sunucu şifre sormuyorsa boş bırakabilirsin.",
     repeatTitle: "Tekrarlanan komutlar",
     behaviourTitle: "Davranış",
