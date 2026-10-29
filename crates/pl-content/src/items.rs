@@ -825,7 +825,9 @@ mod tests {
 
         // The mod center's selection and what the mods folder shows do not move them.
         let named = only(FAST_PACK_ITEM, false);
-        assert!(resolve_items_with(&m, Some(&state), Some(&named), &FAST).is_enabled(FAST_PACK_ITEM));
+        assert!(
+            resolve_items_with(&m, Some(&state), Some(&named), &FAST).is_enabled(FAST_PACK_ITEM)
+        );
         let adopted = BTreeMap::from([(FAST_PACK_ITEM.to_owned(), true)]);
         assert!(!resolve_with(&m, Some(&state), None, &adopted, &OFF).is_enabled(FAST_PACK_ITEM));
 
@@ -889,7 +891,10 @@ mod tests {
             jar("mods/RPC-1.3.0.jar", &["rpc"]),
             jar("mods/sodium.jar", &["sodium"]),
         ];
-        assert_eq!(fast_pack_taken(&ours, Some(&state)), FastPackTaken::default());
+        assert_eq!(
+            fast_pack_taken(&ours, Some(&state)),
+            FastPackTaken::default()
+        );
 
         // The player's own copy (another file), FastPackLoad, PackForge, a nested declaration.
         for rival in ["quick-pack", "fastpackload", "packforge"] {
