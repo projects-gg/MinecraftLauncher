@@ -4,8 +4,8 @@
 // that names its domain ("Bu bağlantı ornek.com sitesine gidiyor.", "Vazgeç" / "Aç"). The card
 // sits in the bubble under the text: a 10 px container, the site's own launcher icon and its
 // registrable domain alone in bold (never the page's own name for itself, never the address again:
-// the text above shows it; CONSOLE-COLOR's console card's rule), the title and the description; a
-// wide picture (a video, a stream, a projects.gg page) over the text, a squarer one (a mod's icon, a
+// the text above shows it; CONSOLE-COLOR's console card's rule), the title and the description (a
+// video's channel on its own quiet line under its title); a wide picture (a video, a stream, a projects.gg page) over the text, a squarer one (a mod's icon, a
 // channel's face) beside it. Its place is held from the start at its likely height; the content
 // fades in (180 ms), a card that does not come turns into the plain one (icon, domain) at the same
 // size. The computer never fetches anything from a linked site: the hub makes the card, pictures
@@ -15,6 +15,7 @@ import {
   type Brand,
   BrandMark,
   Button,
+  cn,
   easeOutExpo,
   swallowDismissClick,
   Tooltip,
@@ -340,6 +341,9 @@ export function LinkCard({
   );
   const picture = ready?.image;
   const playable = ready?.kind === "video" || ready?.kind === "stream";
+  // A video's channel on its own quiet line under the title (never on the domain's line); the title
+  // keeps one line then, so the card stays the height its place was held at.
+  const channel = playable ? ready?.author : undefined;
 
   if (shape === "banner") {
     return (
@@ -367,8 +371,18 @@ export function LinkCard({
             <motion.span className="block" {...fade}>
               {siteLine}
               {title ? (
-                <span className="mt-1 line-clamp-2 text-[13px] leading-[1.25] font-semibold text-bone-50">
+                <span
+                  className={cn(
+                    "mt-1 text-[13px] leading-[1.25] font-semibold text-bone-50",
+                    channel ? "line-clamp-1" : "line-clamp-2",
+                  )}
+                >
                   {title}
+                </span>
+              ) : null}
+              {channel ? (
+                <span className="mt-0.5 block truncate text-[12px] leading-4 text-ash-400">
+                  {channel}
                 </span>
               ) : null}
             </motion.span>

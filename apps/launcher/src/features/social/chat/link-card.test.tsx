@@ -50,6 +50,29 @@ describe("a link's card", () => {
     expect(bold).toContain("kotu.example");
   });
 
+  it("puts a video's channel on its own quiet line under the title, never beside the domain", () => {
+    const { container } = render(
+      <LinkCard
+        link={link}
+        card={card({ kind: "video", title: "Son raunt", author: "KanalAdi" })}
+        waiting={false}
+      />,
+    );
+    const bold = [...container.querySelectorAll(".font-semibold")].map((e) => e.textContent);
+    expect(bold).toContain("kotu.example");
+    expect(bold).toContain("Son raunt");
+    expect(bold).not.toContain("KanalAdi");
+    const channel = [...container.querySelectorAll(".text-ash-400")].find(
+      (e) => e.textContent === "KanalAdi",
+    );
+    expect(channel).toBeTruthy();
+    // The domain's line holds the domain alone.
+    const domainLine = [...container.querySelectorAll(".font-semibold")].find(
+      (e) => e.textContent === "kotu.example",
+    )?.parentElement;
+    expect(domainLine?.textContent).toBe("kotu.example");
+  });
+
   it("shows only the domain when the card has nothing more", () => {
     const { container } = render(
       <LinkCard link={link} card={card({ state: "plain" })} waiting={false} />,
