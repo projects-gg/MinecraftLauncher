@@ -394,12 +394,13 @@ function LineAction({
       type="button"
       aria-label={name}
       aria-busy={busy || undefined}
-      // The words start right after the sentence (`SwapLabel` centres them). The underline fades
-      // in under the pointer; a press squeezes them as it does a button. The wider target only
-      // while it shows: Chromium reads a hidden line's action into the switch's description when
-      // it has the pseudo-element (measured).
+      // The words start right after the sentence (`SwapLabel` centres them). A link like every
+      // link (design.md §2): bone, bold and always underlined, the line full under the pointer; a
+      // press squeezes them as it does a button. The wider target only while it shows: Chromium
+      // reads a hidden line's action into the switch's description when it has the pseudo-element
+      // (measured).
       className={cn(
-        "relative ml-1.5 cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] [&_.swap-label]:justify-items-start",
+        "relative ml-1.5 cursor-pointer rounded-sm font-semibold text-bone-50 underline decoration-bone-50/45 underline-offset-[3px] outline-none transition-[text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97] [&_.swap-label]:justify-items-start",
         shown && "hit-area",
       )}
       onPointerLeave={guard.handlers.onPointerLeave}

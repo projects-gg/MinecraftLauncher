@@ -1885,6 +1885,7 @@ The index lists them as `overlay`:
       },
       "fabricApi": "0.170.0+26.4",
       "commit": "6b892a6a228d36d16b41e7c61b69fe8c0aa6749b",
+      "run": "https://github.com/projects-gg/MinecraftLauncher/actions/runs/18877003214",
       "testedAt": "2026-11-02T10:00:00Z"
     }
   ]
@@ -1898,7 +1899,7 @@ The index lists them as `overlay`:
 | `version` | The mod's version: 1–64 bytes of `[A-Za-z0-9.+_-]`, not starting with `.`. The jar goes into `mods/` as `projects-overlay-<version>.jar`. |
 | `proto` | The bridge protocol the jar speaks, an integer from 1: its `fabric.mod.json`'s `custom."projects:bridge".proto` (1 today). |
 | `file` | A `FileRef` with `sha256`, `sha1` (required here) and `size` (1 byte to 32 MiB); Studio uploads the jar to `files/<sha1>`. |
-| `fabricApi`, `commit`, `testedAt` | Optional, for Studio and the record: the Fabric API version the jar was built and tested with, the open repository's commit it was built from (its GPL source), when CI's tests passed. Launchers do not read them. |
+| `fabricApi`, `commit`, `run`, `testedAt` | Optional, for Studio and the record: the Fabric API version the jar was built and tested with, the open repository's commit it was built from (its GPL source), the CI run Studio took it from, when CI's tests passed. Launchers do not read them. |
 
 Rules:
 
@@ -1960,14 +1961,22 @@ Studio imports; it is never published as it is:
 }
 ```
 
-Studio imports a jar only when the report has `schema` 1 and `modId` `projects_overlay`, a
-40-character lowercase hex `commit`, both test suites ran something and nothing failed, and the
-jar itself agrees: the file named `file` lies beside the report with that size, SHA-1 and SHA-256;
-its own `fabric.mod.json` has the id `projects_overlay`, this `version`, `depends.minecraft` equal
-to `range` (which accepts `minecraft`) and `custom."projects:bridge".proto` equal to `proto`; it
-carries the GPL text (`LICENSE_projects-overlay`) and no test code (`gg/projects/overlay/dev/`,
+Where a jar comes from matters as much as what it is: Studio never takes a file the owner picks.
+It fetches the artifact itself, with the owner's GitHub connection, from a run of
+`.github/workflows/overlay-auto.yml` in `projects-gg/MinecraftLauncher` (not a fork) that finished
+with `conclusion: success` on `head_branch` `v2`, started by `push`, `schedule` or
+`workflow_dispatch`; the artifact must belong to that run and the report's `commit` must be the
+run's `head_sha`. CI uploads artifacts only when it runs on `refs/heads/v2`; anywhere else it is a
+dry run.
+
+Studio imports a jar only when, besides, the report has `schema` 1 and `modId` `projects_overlay`,
+both test suites ran something and nothing failed, and the jar itself agrees: the file named `file`
+lies beside the report in the artifact with that size, SHA-1 and SHA-256; its own `fabric.mod.json`
+has the id `projects_overlay`, this `version`, `depends.minecraft` equal to `range` (which accepts
+`minecraft`) and `custom."projects:bridge".proto` equal to `proto`; it carries the GPL text
+(`LICENSE_projects-overlay`) and no test code (`gg/projects/overlay/dev/`,
 `gg/projects/overlay/gametest/`). The report's word is never enough on its own: Studio reads the
-protocol and the range from the jar.
+protocol and the range from the jar. The index entry records the run (`run`).
 
 ## Launcher release channels
 

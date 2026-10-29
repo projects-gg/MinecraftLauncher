@@ -9,7 +9,7 @@ export const enOverlay = {
   toMinimize: "Minimise instead",
   packMissing: "None of your installs can run it.",
   needs: "Won't work in the {{name}} install: it needs Fabric {{range}}.",
-  notYet: "Not out for Minecraft {{version}} yet.",
+  notYet: "Not available for Minecraft {{version}} yet.",
   toOfficial: "Switch to the official pack",
   toInstall: "Switch to {{name}}",
   waitsOfficial: "Won't work in the {{name}} install. Switch to the official pack after this game.",

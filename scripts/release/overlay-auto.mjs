@@ -307,7 +307,7 @@ export function issueText(kind, data) {
     if (data.run) lines.push(`- Run: ${data.run}`);
     lines.push(
       "",
-      "Next: import the artifact in Projects Studio (Katman modu), which checks the jar again, then publish.",
+      "Next: in Projects Studio (Katman modu), take this run's jar: Studio fetches it from this run itself and checks it again. Then publish.",
     );
     return {
       title: `Overlay: Minecraft ${minecraft}: tested jar ready`,

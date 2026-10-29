@@ -760,6 +760,7 @@ mod tests {
             file,
             fabric_api: None,
             commit: None,
+            run: None,
             tested_at: None,
         };
         let release = OverlayRelease { jars: vec![jar] };

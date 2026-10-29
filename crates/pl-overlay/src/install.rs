@@ -512,17 +512,22 @@ pub async fn reconcile(request: Request<'_>) -> Outcome {
                 .bundle
                 .map(|bundle| (bundle.path(jar), Expected::Bundled(jar)))
                 .ok_or(OffReason::NoJar),
-            // Not fetched now (offline): the copy of ours already in place serves, once it passes
-            // the same check against the signed entry.
-            Some(Pick::Content(jar)) => fetched
-                .map(Path::to_path_buf)
-                .or_else(|| {
-                    ours.iter()
-                        .find(|our| our.enabled && our.base.eq_ignore_ascii_case(&jar.file))
-                        .map(|our| our.path.clone())
-                })
-                .map(|path| (path, Expected::Content(jar)))
-                .ok_or(OffReason::NotFetched),
+            Some(Pick::Content(jar)) => match fetched {
+                Some(path) => Ok((path.to_path_buf(), Expected::Content(jar))),
+                // Not fetched now (offline): the copy of ours already in place serves only when it
+                // passes the whole check against the signed entry right now; else nothing does.
+                None => {
+                    let in_place = ours
+                        .iter()
+                        .find(|our| our.enabled && our.base.eq_ignore_ascii_case(&jar.file));
+                    match in_place {
+                        Some(our) if file_matches(&our.path, Expected::Content(jar)).await => {
+                            Ok((our.path.clone(), Expected::Content(jar)))
+                        }
+                        _ => Err(OffReason::NotFetched),
+                    }
+                }
+            },
         }
     };
     let outcome = match wanted {
@@ -608,6 +613,13 @@ impl Expected<'_> {
     }
 }
 
+/// Whether the file at `path` is the jar `expected` describes (every hash its index has).
+async fn file_matches(path: &Path, expected: Expected<'_>) -> bool {
+    tokio::fs::read(path)
+        .await
+        .is_ok_and(|bytes| expected.matches(&bytes))
+}
+
 /// The wanted jar (its bytes at `source`): checked against its index, then in the folder as it
 /// would be, then written (unless it is there).
 async fn place(
@@ -669,10 +681,19 @@ async fn place(
 
     // The enabled file of ours under the jar's name is the jar (or is overwritten with it).
     let in_place = |our: &OurJar| our.enabled && our.base.eq_ignore_ascii_case(&file);
-    if !ours
+    // A copy already in place stays only when it is the jar: for the signed content's, its size and
+    // SHA-256 too, not its SHA-1 alone (else the checked bytes are written over it).
+    let mut kept = false;
+    if let Some(our) = ours
         .iter()
-        .any(|our| in_place(our) && our.sha1 == jar.sha1())
+        .find(|our| in_place(our) && our.sha1 == jar.sha1())
     {
+        kept = match jar {
+            Expected::Bundled(_) => true,
+            Expected::Content(_) => file_matches(&our.path, jar).await,
+        };
+    }
+    if !kept {
         let target = at.mods_dir.join(&file);
         if let Err(error) = pl_mc::paths::write_atomic(&target, &bytes).await {
             tracing::warn!(%error, "the overlay jar could not be written");

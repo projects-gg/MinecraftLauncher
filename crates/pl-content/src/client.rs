@@ -1290,6 +1290,7 @@ mod tests {
             file: crate::studio::overlay_file_ref(bytes),
             fabric_api: None,
             commit: None,
+            run: None,
             tested_at: None,
         }
     }

@@ -593,6 +593,7 @@ fn entry(bytes: &[u8], minecraft: &str) -> OverlayJar {
         file: pl_content::studio::overlay_file_ref(bytes),
         fabric_api: None,
         commit: None,
+        run: None,
         tested_at: None,
     }
 }
@@ -764,6 +765,49 @@ async fn a_published_jar_without_sha1_or_whose_range_misses_its_version_is_refus
     elsewhere.range = "~26.5".into();
     assert!(usable(vec![elsewhere.clone()]).is_empty());
     refused(elsewhere, &bytes).await;
+}
+
+#[tokio::test]
+async fn offline_a_copy_in_place_that_fails_the_check_is_refused_and_forgotten() {
+    let dir = tempfile::tempdir().unwrap();
+    let game = dir.path().join("game");
+    put(&game, API_264, &fabric_api_jar("0.170.0+26.4"));
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    let signed = entry(&bytes, "26.4");
+    let copy = fetched(dir.path(), &bytes);
+    let content = usable(vec![signed.clone()]);
+    let jars = Jars {
+        bundle: None,
+        content: &content,
+    };
+    assert_eq!(
+        run_with(&game, jars, Some(&copy), &env("26.4")).await,
+        Outcome::Ready { ours: true }
+    );
+
+    // The copy in place changes but keeps the SHA-1 our record and the entry name (as a SHA-1
+    // collision would): its size is the same, its SHA-256 is not the signed one.
+    let tampered = overlay_jar("0.1.0+26.4", "~26.4", "cj");
+    assert_eq!(tampered.len(), bytes.len());
+    std::fs::write(game.join("mods").join(JAR_264), &tampered).unwrap();
+    let mut record = ModRecord::load_blocking(&game);
+    record.files.get_mut(JAR_264).unwrap().sha1 = sha1(&tampered);
+    std::fs::write(ModRecord::path(&game), serde_json::to_vec(&record).unwrap()).unwrap();
+    let mut collided = signed;
+    collided.file.sha1 = Some(sha1(&tampered));
+    let content = usable(vec![collided]);
+    let jars = Jars {
+        bundle: None,
+        content: &content,
+    };
+
+    // Offline: it serves nothing, goes, and our record forgets it.
+    assert_eq!(
+        run_with(&game, jars, None, &env("26.4")).await,
+        Outcome::Off(OffReason::NotFetched)
+    );
+    assert_eq!(mods(&game), [API_264]);
+    assert!(ModRecord::load_blocking(&game).files.is_empty());
 }
 
 #[tokio::test]

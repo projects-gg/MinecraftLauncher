@@ -342,6 +342,12 @@ test("the workflow keeps to its permissions and never signs", () => {
   );
   assert.doesNotMatch(workflow, /secrets\.(?!GITHUB_TOKEN)/, "no secret but the run's own token");
   assert.doesNotMatch(workflow, /permissions:\s*\n\s+(contents|actions|packages|id-token): write/);
+  // Release artifacts only from v2's runs (Studio takes jars from nothing else); elsewhere a dry run.
+  assert.match(
+    workflow,
+    /- id: upload\n\s+name: Artifact for Studio\n\s+if: github\.ref == 'refs\/heads\/v2'/,
+  );
+  assert.match(workflow, /DRY_RUN: .*github\.ref != 'refs\/heads\/v2'/);
   // The game test's screenshots are the ones the report counts.
   const smoke = readFileSync(
     join(

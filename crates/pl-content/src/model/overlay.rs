@@ -56,6 +56,11 @@ pub struct OverlayJar {
     /// The open repository's commit it was built from (the GPL source). Launchers do not read it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
+    /// The CI run that built and tested it, which Studio took it from
+    /// (`https://github.com/projects-gg/MinecraftLauncher/actions/runs/<id>`). Launchers do not
+    /// read it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<String>,
     /// When CI's tests of it passed. Launchers do not read it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tested_at: Option<Timestamp>,
@@ -317,6 +322,9 @@ mod tests {
             },
             fabric_api: Some(format!("0.170.0+{minecraft}")),
             commit: Some("6b892a6a228d36d16b41e7c61b69fe8c0aa6749b".into()),
+            run: Some(
+                "https://github.com/projects-gg/MinecraftLauncher/actions/runs/18877003214".into(),
+            ),
             tested_at: Some("2026-11-02T10:00:00Z".parse().unwrap()),
         }
     }
@@ -445,6 +453,7 @@ mod tests {
         let mut bare = jar("26.4");
         bare.fabric_api = None;
         bare.commit = None;
+        bare.run = None;
         bare.tested_at = None;
         let written = serde_json::to_value(&bare).unwrap();
         assert_eq!(

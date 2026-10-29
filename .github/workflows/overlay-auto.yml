@@ -10,7 +10,9 @@ name: Overlay for new Minecraft versions
 #
 # A run on demand (Actions, or `gh workflow run overlay-auto.yml --ref v2 -f minecraft=26.3`) tries one version; its
 # dry run (the default) opens no issue. A push that changes this workflow or its script tries the newest target as a
-# dry run. Scheduled runs start once this file is on the default branch.
+# dry run. Only runs on v2 upload an artifact: Studio fetches jars itself from this workflow's green v2 runs (their
+# event push, schedule or workflow_dispatch) and nowhere else. Scheduled runs start once this file is on the default
+# branch.
 
 on:
   schedule:
@@ -41,7 +43,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DRY_RUN: ${{ github.event_name == 'push' || inputs.dry_run }}
+  # A dry run opens no issue: a push, a dispatch that asks for one, and any run off v2 (which also
+  # uploads no artifact: Studio takes jars only from v2's runs).
+  DRY_RUN: ${{ github.event_name == 'push' || inputs.dry_run || github.ref != 'refs/heads/v2' }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 jobs:
@@ -163,6 +167,7 @@ jobs:
 
       - id: upload
         name: Artifact for Studio
+        if: github.ref == 'refs/heads/v2'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: overlay-auto-${{ matrix.minecraft }}
@@ -172,6 +177,7 @@ jobs:
 
       - id: ready
         name: Ready issue text
+        if: github.ref == 'refs/heads/v2'
         env:
           ARTIFACT: ${{ steps.upload.outputs.artifact-url }}
         run: |
