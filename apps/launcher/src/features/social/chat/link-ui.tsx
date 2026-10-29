@@ -291,7 +291,10 @@ function CardFrame({
           type="button"
           aria-label={label}
           onClick={open}
-          className="group/card relative mt-1.5 mb-0.5 block w-full max-w-[280px] cursor-pointer overflow-hidden rounded-[var(--radius-panel)] border border-obsidian-700 bg-obsidian-800 text-left outline-none transition-[border-color,scale] duration-150 hover:border-white/14 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.99]"
+          // The bubble's whole width (CHAT-PROD leftovers: it stopped at 280 px beside longer text);
+          // alone with short words it asks for 280 px (`contain-intrinsic-inline-size`), never its
+          // title's full length, and a narrow bubble narrows it.
+          className="group/card relative mt-1.5 mb-0.5 block w-full [contain-intrinsic-inline-size:280px] [contain:inline-size] cursor-pointer overflow-hidden rounded-[var(--radius-panel)] border border-obsidian-700 bg-obsidian-800 text-left outline-none transition-[border-color,scale] duration-150 hover:border-white/14 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.99]"
         >
           {children}
         </button>
