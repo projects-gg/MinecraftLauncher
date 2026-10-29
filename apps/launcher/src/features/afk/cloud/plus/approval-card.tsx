@@ -382,6 +382,9 @@ export function ApprovalCard({
             <LimitLine
               key={line}
               onGo={limit && line === limitLine ? () => goToLimit(limit.field) : null}
+              approval={
+                limit?.field === "approvalAbove" || limit?.field === "newCounterpartApprovalAbove"
+              }
               className={cn(
                 "mt-0.5 text-[12.5px] tabular-nums [overflow-wrap:anywhere]",
                 pending ? "text-ash-300" : "text-ash-400",

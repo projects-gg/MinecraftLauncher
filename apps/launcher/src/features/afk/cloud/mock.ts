@@ -173,7 +173,13 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
         from: "player",
         ownerOnly: false,
         cooldown: 60,
-        reply: { secret: false, text: "Selam! Şu an AFK'yım.", preview: null, fp: null },
+        // The ready rule's own reply (setup.account.templates.away): its "Eklendi" names this rule.
+        reply: {
+          secret: false,
+          text: "Merhaba, şu an klavye başında değilim.",
+          preview: null,
+          fp: null,
+        },
         paused: null,
       },
       // With the cloud features: a rule whose reply names the sender and a part of its pattern.
@@ -339,6 +345,11 @@ function plainAccounts(which: Scenario): CloudAccount[] {
         : { state: "waiting", since: now - 30, reason: null, attempt: 2, retryAt: now + 14 },
       ...(movementFeature(GECE)?.on
         ? { config: { ...config("full"), movement: { enabled: true } } }
+        : {}),
+      // `&fresh=on`: a new account that types nothing on joining and has no rule (its settings
+      // offer "Kuruluma devam et", SETUP-UX-L).
+      ...(param("fresh") === "on"
+        ? { config: { ...config("plain"), owner: "", commands: [], rules: [] } }
         : {}),
       rev: 9,
     }),

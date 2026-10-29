@@ -48,6 +48,7 @@ import { trQaFix } from "./tr-qa-fix";
 import { trReminders } from "./tr-reminders";
 import { trReports } from "./tr-reports";
 import { trSafety } from "./tr-safety";
+import { trSetup } from "./tr-setup";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
@@ -124,6 +125,7 @@ export const tr = {
   playAcct: trPlayAcct,
   playAgain: trPlayAgain,
   chatProd: trChatProd,
+  setup: trSetup,
   motion: trMotion,
   nav: {
     home: "Ana sayfa",
