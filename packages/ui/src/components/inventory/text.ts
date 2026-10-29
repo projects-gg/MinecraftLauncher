@@ -268,9 +268,11 @@ export function readableColor(hex: string): string {
   return out;
 }
 
-const STYLE_CODE = /^(?:[0-9a-f]|#[0-9a-f]{6})?k?l?m?n?o?$/;
+/** A part's code (the frame's spans, a console line's `st`): colour, then the flags in order. */
+export const STYLE_CODE = /^(?:[0-9a-f]|#[0-9a-f]{6})?k?l?m?n?o?$/;
 
-function runLook(code: string, base: string): Omit<TextRun, "text"> {
+/** A part code's look: its colour made readable (none when the code has none) and its flags. */
+export function codeLook(code: string): Omit<TextRun, "text" | "color"> & { color?: string } {
   let color: string | undefined;
   let flags = code;
   if (code.startsWith("#")) {
@@ -280,13 +282,19 @@ function runLook(code: string, base: string): Omit<TextRun, "text"> {
     color = LEGACY_COLORS[Number.parseInt(code.slice(0, 1), 16)];
     flags = code.slice(1);
   }
-  const look: Omit<TextRun, "text"> = { color: color ? readableColor(color) : base };
+  const look: Omit<TextRun, "text" | "color"> & { color?: string } = {};
+  if (color) look.color = readableColor(color);
   if (flags.includes("k")) look.obfuscated = true;
   if (flags.includes("l")) look.bold = true;
   if (flags.includes("m")) look.strikethrough = true;
   if (flags.includes("n")) look.underlined = true;
   if (flags.includes("o")) look.italic = true;
   return look;
+}
+
+function runLook(code: string, base: string): Omit<TextRun, "text"> {
+  const look = codeLook(code);
+  return { ...look, color: look.color ?? base };
 }
 
 const sameLook = (a: Omit<TextRun, "text">, b: Omit<TextRun, "text">) =>
