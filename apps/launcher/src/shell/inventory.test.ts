@@ -30,6 +30,7 @@ import {
   planQuickMove,
 } from "../../../../packages/ui/src/components/inventory/plan";
 import * as rules from "../../../../packages/ui/src/components/inventory/rules";
+import { safeInvItem } from "../../../../packages/ui/src/components/inventory/safe-item";
 import {
   cleanText,
   durabilityColor,
@@ -264,6 +265,13 @@ describe("anyone's text", () => {
     for (const stacks of [3, 12.5, Number.NaN]) {
       const odd = { ...full, inside: { ...full.inside, stacks } };
       expect(tooltipLines(odd, "tr", tr).at(-1)?.text).toBe("ve daha fazlası...");
+    }
+    // The checked item (the site's live inventory, a console hover) keeps the count when it is a
+    // whole number from the stacks listed up to 256, and drops that field alone otherwise.
+    expect(safeInvItem(counted)?.inside).toEqual({ count: 1000, top: full.inside.top, stacks: 16 });
+    for (const stacks of [3, 12.5, 257, "16", null]) {
+      const odd = safeInvItem({ ...full, inside: { ...full.inside, stacks } });
+      expect(odd?.inside).toEqual({ count: 1000, top: full.inside.top });
     }
     const custom = SAMPLE_INVENTORY.items.find((i) => i.slot === 24) as InvItem;
     expect(tooltipLines(custom, "en", INVENTORY_TEXTS.en)[0]?.text).toBe("Ejderha Kılıcı");
