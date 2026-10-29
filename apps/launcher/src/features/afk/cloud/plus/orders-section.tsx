@@ -1111,7 +1111,10 @@ function OrderIntake({
           >
             <p
               id={`${id}-label`}
-              className={cn("mb-1.5 text-[13px] font-medium text-bone-100", quietLabel && "sr-only")}
+              className={cn(
+                "mb-1.5 text-[13px] font-medium text-bone-100",
+                quietLabel && "sr-only",
+              )}
             >
               {t("afkPlus.intake.label")}
             </p>
