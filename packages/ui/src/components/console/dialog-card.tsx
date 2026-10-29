@@ -6,6 +6,7 @@
 import { useId, useMemo, useState } from "react";
 import { cn } from "../../lib/cn";
 import { Button } from "../button";
+import { Field, Input, Select, Slider } from "../forms";
 import type { InventoryLang } from "../inventory/texts";
 import { Switch } from "../switch";
 import { ConsoleActionCard } from "./action-card";
@@ -18,6 +19,7 @@ import {
   dialogCommand,
   dialogInputs,
   initialValues,
+  numberText,
   snap,
 } from "./dialog";
 import type { ConsoleClick } from "./looks";
@@ -41,6 +43,11 @@ export interface DialogCardProps {
   className?: string;
 }
 
+// A multiline text in the house field's look (forms.tsx has no text area).
+const AREA =
+  "min-h-[78px] w-full rounded-md border border-white/10 bg-obsidian-800/80 px-3 py-2 text-[13.5px] leading-relaxed text-bone-50 transition-[border-color,box-shadow] duration-150 hover:border-white/18 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/25 focus:outline-none";
+
+/** An input in the house controls (Field, Input, Select, Slider, Switch: bone, design.md §2). */
 function InputField({
   input,
   value,
@@ -51,8 +58,6 @@ function InputField({
   onChange: (value: string | boolean | number) => void;
 }) {
   const id = useId();
-  const field =
-    "h-9 w-full rounded-md border border-white/10 bg-obsidian-900 px-3 font-mono text-[13px] text-bone-50 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/25 focus:outline-none";
   switch (input.kind) {
     case "bool":
       return (
@@ -62,75 +67,80 @@ function InputField({
           label={input.label}
         />
       );
-    case "option":
-      return (
-        <label htmlFor={id} className="flex flex-col gap-1.5 text-[12.5px] text-ash-300">
-          <span className={input.hideLabel ? "sr-only" : undefined}>{input.label}</span>
-          <select
-            id={id}
-            className={field}
-            value={String(value)}
-            onChange={(event) => onChange(event.target.value)}
-          >
-            {input.options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label || option.id}
-              </option>
-            ))}
-          </select>
-        </label>
+    case "option": {
+      const select = (
+        <Select
+          value={String(value)}
+          onValueChange={(next) => onChange(next)}
+          options={input.options.map((option) => ({
+            value: option.id,
+            label: option.label || option.id,
+          }))}
+          label={input.label}
+        />
       );
+      return input.hideLabel ? select : <Field label={input.label}>{select}</Field>;
+    }
     case "range": {
       const [lo, hi] =
         input.start <= input.end ? [input.start, input.end] : [input.end, input.start];
-      return (
-        <label htmlFor={id} className="flex flex-col gap-1.5 text-[12.5px] text-ash-300">
-          <span className="flex justify-between">
+      // A slider that cannot move (a server's start and end alike) shows its one value.
+      if (hi <= lo) {
+        return (
+          <p className="flex items-baseline justify-between text-[13px] font-medium text-bone-100">
             {input.label}
-            <span className="font-mono text-bone-100 tabular-nums">{String(value)}</span>
-          </span>
-          <input
-            id={id}
-            type="range"
-            min={lo}
-            max={hi}
-            step={input.step ?? "any"}
-            value={Number(value)}
-            onChange={(event) => onChange(snap(input, Number(event.target.value)))}
-            className="accent-gold-400"
-          />
-        </label>
+            <span className="font-display text-[15px] font-semibold text-bone-50 tabular-nums">
+              {numberText(lo)}
+            </span>
+          </p>
+        );
+      }
+      return (
+        <Slider
+          value={Number(value)}
+          onValueChange={(next) => onChange(snap(input, next))}
+          min={lo}
+          max={hi}
+          step={input.step ?? (hi - lo) / 100}
+          label={input.label}
+          format={numberText}
+        />
       );
     }
-    default:
-      return (
-        <label htmlFor={id} className="flex flex-col gap-1.5 text-[12.5px] text-ash-300">
-          <span className={input.hideLabel ? "sr-only" : undefined}>{input.label}</span>
-          {input.multiline ? (
-            <textarea
-              id={id}
-              rows={3}
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={input.max}
-              className={cn(field, "h-auto py-2 leading-relaxed")}
-              value={String(value)}
-              onChange={(event) => onChange(event.target.value)}
-            />
-          ) : (
-            <input
-              id={id}
-              type="text"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={input.max}
-              className={field}
-              value={String(value)}
-              onChange={(event) => onChange(event.target.value)}
-            />
-          )}
-        </label>
+    default: {
+      const label = input.hideLabel ? input.label : undefined;
+      const field = input.multiline ? (
+        <textarea
+          id={id}
+          rows={3}
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={input.max}
+          aria-label={label}
+          className={AREA}
+          value={String(value)}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : (
+        <Input
+          id={id}
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={input.max}
+          aria-label={label}
+          value={String(value)}
+          onChange={(event) => onChange(event.target.value)}
+        />
       );
+      return input.hideLabel ? (
+        field
+      ) : (
+        <Field label={input.label} htmlFor={id}>
+          {field}
+        </Field>
+      );
+    }
   }
 }
 
