@@ -116,6 +116,9 @@ impl Default for CloudInventoryFeature {
 pub struct CloudAccountFeatures {
     pub inventory: CloudInventoryFeature,
     pub console_kinds: bool,
+    /// Console lines in the game's colours, with their hovers and clicks (CONSOLE-COLOR): Studio's
+    /// switch while the account's machine gives them. Off from a service before it.
+    pub console_looks: bool,
     pub placeholders: bool,
     /// Console kinds are on, but this account's player, private or server rules still match the
     /// old way until its settings are saved once.
@@ -1143,8 +1146,7 @@ mod tests {
             text: text.into(),
             k: k.into(),
             c: c.map(str::to_owned),
-            who: None,
-            goto: None,
+            ..CloudConsoleLine::default()
         }
     }
 
