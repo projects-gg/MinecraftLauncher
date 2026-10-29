@@ -1,8 +1,8 @@
 // Reduced motion for the account surfaces: the same keyframes with every movement removed, so
-// things fade instead of sliding, scaling or blurring. (`MotionConfig reducedMotion="user"`
-// alone skips transform animations but can leave an entrance's starting scale on screen until
-// its fade ends, which reads as a snap.)
-import { useReducedMotion } from "motion/react";
+// things fade instead of sliding, scaling or blurring. (motion's reduced-motion config alone skips
+// transform animations but can leave an entrance's starting scale on screen until its fade ends,
+// which reads as a snap.)
+import { useReduceMotion } from "@pl/ui";
 
 const MOVEMENT = new Set(["x", "y", "scale", "scaleX", "scaleY", "rotate", "filter"]);
 
@@ -16,6 +16,6 @@ export function withoutMovement<T>(target: T): T {
 
 /** `calm(target)`: the target as is, or without movement when the player asked for less motion. */
 export function useCalm() {
-  const reduced = useReducedMotion();
+  const reduced = useReduceMotion();
   return <T>(target: T): T => (reduced ? withoutMovement(target) : target);
 }

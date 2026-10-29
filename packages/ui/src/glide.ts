@@ -21,6 +21,10 @@
 // that resizes, re-centres or scrolls with the new tab. It glides the same way (INTEGRATE1): at rest
 // it is a bar inside the chosen tab; a pick measures the old and the new bar inside the tab list at
 // the same moment and moves the new tab's own bar there from the old place, on the same spring.
+//
+// Under reduced motion (the system's or the app's own, Performance mode in the launcher; BETA-FB)
+// neither glides: the plate and the underline are simply there, the labels fade.
+import { motionReduced } from "./reduced-motion";
 
 export interface Spring {
   stiffness: number;
@@ -269,7 +273,7 @@ export function glidePlate(
   const target = options[will];
   const now = previous && previous.option === source ? glideNow(previous) : AT_REST;
   if (previous) stopGlide(previous);
-  if (!source || !target || source === target || reducedMotion()) return null;
+  if (!source || !target || source === target || motionReduced()) return null;
   const glide = control.querySelector<HTMLElement>(":scope > [data-glide]");
   const right = glide?.querySelector<HTMLElement>("[data-glide-right]");
   const left = glide?.querySelector<HTMLElement>("[data-glide-left]");
@@ -364,7 +368,7 @@ export function glideUnderline(
   const now = previous && previous.option === source ? glideNow(previous) : AT_REST;
   // Stopped before measuring: the old bar is measured where it rests.
   if (previous) stopGlide(previous);
-  if (!source || !target || source === target || reducedMotion()) return null;
+  if (!source || !target || source === target || motionReduced()) return null;
   const fromBar = source.querySelector<HTMLElement>("[data-underline]");
   const toBar = target.querySelector<HTMLElement>("[data-underline]");
   if (!fromBar || !toBar || typeof toBar.animate !== "function") return null;
@@ -384,12 +388,4 @@ export function glideUnderline(
     duration: frames.duration,
     animations: [toBar.animate(frames.frames, { duration: frames.duration })],
   };
-}
-
-function reducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
 }

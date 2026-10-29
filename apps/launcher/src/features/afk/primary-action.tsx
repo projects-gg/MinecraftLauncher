@@ -41,6 +41,7 @@ export function AfkPrimaryAction({
   account,
   size = "sm",
   quiet = false,
+  card = false,
   onFixPassword,
   className,
 }: {
@@ -48,6 +49,12 @@ export function AfkPrimaryAction({
   size?: "sm" | "md";
   /** Not the card's next step (a secondary look). */
   quiet?: boolean;
+  /**
+   * On an account card, beside the screen's one gold (design.md §2, lead 29 Oct): never gold. An
+   * action that needs the player ("Şifreyi düzelt", "Tekrar dene") is a bone plate, the rest the
+   * quiet secondary. The console's own button keeps its gold (the console's one action).
+   */
+  card?: boolean;
   /** Opens the settings on the login line; without it the button connects as before. */
   onFixPassword?: () => void;
   className?: string;
@@ -76,10 +83,18 @@ export function AfkPrimaryAction({
     else runAfk(api.afkStop(account.id), t("afk.stopFailed"));
   };
   const gold = action === "connect" || action === "retry" || action === "fixPassword";
+  const needsPlayer = action === "retry" || action === "fixPassword";
+  const variant = card
+    ? needsPlayer && !quiet
+      ? "bone"
+      : "secondary"
+    : gold && !quiet
+      ? "primary"
+      : "secondary";
   return (
     <Button
       size={size}
-      variant={gold && !quiet ? "primary" : "secondary"}
+      variant={variant}
       icon={ICONS[action](size === "sm" ? 14 : 15)}
       // Already on its way out: it can be connected again once it has stopped.
       disabled={account.state.kind === "stopping"}

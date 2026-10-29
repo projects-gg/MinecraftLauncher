@@ -1,5 +1,6 @@
-import { MotionConfig, useReducedMotion } from "motion/react";
+import { MotionConfig } from "motion/react";
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { useReduceMotion } from "./reduced-motion";
 
 /**
  * The page's CSP nonce (Tauri puts one on its own styles). Motion injects a style sheet for
@@ -64,6 +65,7 @@ export function PerfProvider({
     typeof document === "undefined" ? false : document.hidden,
   );
   const [nonce] = useState(styleNonce);
+  const reduce = useReduceMotion();
 
   useEffect(() => {
     const onChange = () => setHidden(document.hidden);
@@ -83,12 +85,13 @@ export function PerfProvider({
     }),
     [performanceMode, ambientPaused, unseen, hidden],
   );
-  // `reducedMotion="user"`: under the OS setting, transform and layout animations that a
-  // component did not already calm down itself jump to their end, while fades still play.
+  // While motion is reduced (the system's setting or the app's own, reduced-motion.ts), transform
+  // and layout animations that a component did not already calm down itself jump to their end,
+  // while fades still play. "always"/"never", not "user": "user" reads the system alone.
   return (
     <PerfContext.Provider value={value}>
       <RestingContext.Provider value={resting}>
-        <MotionConfig nonce={nonce} reducedMotion="user">
+        <MotionConfig nonce={nonce} reducedMotion={reduce ? "always" : "never"}>
           {children}
         </MotionConfig>
       </RestingContext.Provider>
@@ -98,6 +101,16 @@ export function PerfProvider({
 
 export function usePerf() {
   return useContext(PerfContext);
+}
+
+/**
+ * motion's config for a layer that sets its own (a sheet, a dialog, a picker): reduced motion as
+ * the app answers it (reduced-motion.ts), never motion's "user", which reads the system's setting
+ * alone and so kept sliding under "Animasyonları azalt" and Performance mode (BETA-FB).
+ */
+export function ReducedMotionConfig({ children }: { children: ReactNode }) {
+  const reduce = useReduceMotion();
+  return <MotionConfig reducedMotion={reduce ? "always" : "never"}>{children}</MotionConfig>;
 }
 
 /** True while nobody uses the window (see `PerfProvider`'s `resting`). */
@@ -111,7 +124,7 @@ export function useResting() {
  * window. OYNA's sheen is not ambient any more: it crosses when the pointer arrives (MOTION1).
  */
 export function useAmbientMotion() {
-  const reduce = useReducedMotion();
+  const reduce = useReduceMotion();
   const { performanceMode, ambientPaused } = usePerf();
   const resting = useResting();
   return !reduce && !performanceMode && !ambientPaused && !resting;
@@ -123,12 +136,12 @@ export function useAmbientMotion() {
  * game. Unlike ambient motion it does not wait for the player; what drives it also ends it.
  */
 export function useLiveMotion() {
-  const reduce = useReducedMotion();
+  const reduce = useReduceMotion();
   const { performanceMode, ambientPaused } = usePerf();
   return !reduce && !performanceMode && !ambientPaused;
 }
 
 /** True when transitions that answer user actions may animate. */
 export function useInteractionMotion() {
-  return !useReducedMotion();
+  return !useReduceMotion();
 }

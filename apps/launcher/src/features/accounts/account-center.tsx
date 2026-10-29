@@ -13,6 +13,7 @@ import {
   GatedMotion,
   IconButton,
   Kbd,
+  ReducedMotionConfig,
   returnFocusAfterKeys,
   Skeleton,
   scrimMotion,
@@ -29,7 +30,6 @@ import {
   AnimatePresence,
   type DragControls,
   LayoutGroup,
-  MotionConfig,
   motion,
   Reorder,
   useDragControls,
@@ -546,7 +546,7 @@ export function AccountCenter({
   };
 
   return (
-    <MotionConfig reducedMotion="user">
+    <ReducedMotionConfig>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: Ctrl+Z from anywhere in the center */}
       <div onKeyDown={onKeyDown} className={cn(variant === "embedded" && "pt-2")}>
         <LayoutGroup id={`account-center-${variant}`}>
@@ -664,7 +664,7 @@ export function AccountCenter({
           </div>
         </LayoutGroup>
       </div>
-    </MotionConfig>
+    </ReducedMotionConfig>
   );
 }
 

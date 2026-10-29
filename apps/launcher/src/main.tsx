@@ -2,6 +2,7 @@ import {
   guardNativeContextMenu,
   guardReducedMotion,
   PerfProvider,
+  setAppReducedMotion,
   Toaster,
   TooltipProvider,
 } from "@pl/ui";
@@ -92,6 +93,12 @@ function Providers() {
 const root = document.getElementById("root");
 if (!root) throw new Error("#root missing");
 
+// "Animasyonları azalt" and Performance mode ask for less motion as the system's setting does:
+// fades only, everywhere (BETA-FB; @pl/ui reduced-motion), from the first paint and on every change.
+const lessMotion = (prefs: { reduceMotion: boolean; performanceMode: boolean }) =>
+  prefs.reduceMotion || prefs.performanceMode;
+setAppReducedMotion(lessMotion(usePrefs.getState()));
+usePrefs.subscribe((state) => setAppReducedMotion(lessMotion(state)));
 // Under reduced motion, nothing that moves runs as a Web Animation either (@pl/ui reduced-motion).
 guardReducedMotion();
 // WebView2's own menu (Back, Refresh, Print...) only in text fields and over selected text; our

@@ -2,7 +2,7 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Cta, FeedOverride, MediaRef, NewsFeedConfig, check_schema, default_true,
+    Cta, FeedOverride, MediaRef, NewsFeedConfig, SubServer, check_schema, default_true,
     is_valid_minecraft_version,
 };
 use crate::error::Result;
@@ -324,6 +324,11 @@ pub struct ServerEntry {
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<MediaRef>,
+    /// The games behind a Projects lobby and the command that switches there (AUTOJOIN,
+    /// [`SubServer`]): offered only while `features.subServers` is on and only for a Projects
+    /// address ([`ServerEntry::usable_sub_servers`]). Left out while empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sub_servers: Vec<SubServer>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -477,7 +482,7 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 }
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
-/// `skins` and `worlds`, which stay off until Studio turns them on.
+/// `skins`, `worlds` and `subServers`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -509,6 +514,12 @@ pub struct Features {
     /// service's world sessions and the overlay mod that hosts are live; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub worlds: bool,
+    /// "play.projects.gg → SkyBlock" (AUTOJOIN): the player picks one of a Projects server's
+    /// [`ServerEntry::sub_servers`] beside "Doğrudan sunucuya bağlan" and the in-game overlay
+    /// switches there once after the lobby's login. Off by default until the lobby's script is
+    /// live; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub sub_servers: bool,
 }
 
 impl Default for Features {
@@ -523,6 +534,7 @@ impl Default for Features {
             chat: false,
             skins: false,
             worlds: false,
+            sub_servers: false,
         }
     }
 }

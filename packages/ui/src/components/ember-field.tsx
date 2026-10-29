@@ -1,7 +1,7 @@
-import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { useAmbientMotion, useResting } from "../perf";
+import { useReduceMotion } from "../reduced-motion";
 
 interface Ember {
   x: number;
@@ -101,7 +101,7 @@ export function EmberField({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const on = useAmbientMotion() && kind !== "none";
   const resting = useResting();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   // What the drawing loop heads for, read on every frame.
   const wish = useRef({ on, resting, reduce });
   // Starts the drawing loop unless it runs (a loop still fading out turns around instead).

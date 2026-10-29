@@ -1,8 +1,8 @@
 import { Check, CopySimple, MagnifyingGlass, Minus, Square, X } from "@phosphor-icons/react";
-import { cn, easeOutExpo, SignalBars, Tooltip } from "@pl/ui";
+import { cn, easeOutExpo, SignalBars, Tooltip, useReduceMotion } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountSwitcher } from "@/features/accounts/account-switcher";
@@ -25,7 +25,7 @@ const DEFAULT_SERVER_ADDRESS = "play.projects.gg";
 
 function ServerPill() {
   const { t } = useTranslation();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReduceMotion();
   // Every open launcher pings the game server, so keep it light: once a minute, only while the
   // window is on screen (react-query pauses intervals in the tray or minimized, see main.tsx)
   // and never while the player is already in the game.
