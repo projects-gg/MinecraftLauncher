@@ -49,6 +49,7 @@ import type {
   InvResult,
   TitleGlyph,
 } from "../../../../packages/ui/src/components/inventory/types";
+import { toInvItem } from "../features/afk/cloud/inventory/model";
 
 const tr = INVENTORY_TEXTS.tr;
 
@@ -272,6 +273,14 @@ describe("anyone's text", () => {
     for (const stacks of [3, 12.5, 257, "16", null]) {
       const odd = safeInvItem({ ...full, inside: { ...full.inside, stacks } });
       expect(odd?.inside).toEqual({ count: 1000, top: full.inside.top });
+    }
+    // The launcher's own frames (pl_cloud_afk reads the count up to 256): toInvItem keeps it when
+    // it is at least the stacks listed, so the desktop says the same.
+    const cloud = { ...full, inside: { ...full.inside, stacks: 16 } };
+    expect(tooltipLines(toInvItem(cloud), "tr", tr).at(-1)?.text).toBe("ve 11 tane daha...");
+    for (const stacks of [3, null, undefined]) {
+      const odd = toInvItem({ ...cloud, inside: { ...cloud.inside, stacks } });
+      expect(odd.inside).toEqual({ count: 1000, top: full.inside.top });
     }
     const custom = SAMPLE_INVENTORY.items.find((i) => i.slot === 24) as InvItem;
     expect(tooltipLines(custom, "en", INVENTORY_TEXTS.en)[0]?.text).toBe("Ejderha Kılıcı");

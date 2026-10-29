@@ -2945,10 +2945,10 @@ export type CloudHoverEntity_Serialize = {
 };
 
 /**  A part's hover: the server's text, an item (as the inventory shows it) or an entity. */
-export type CloudHover_Deserialize = ({ text: string; st?: CloudSpan[] | null }) & { entity?: never; item?: never } | ({ item: CloudInvItem }) & { entity?: never; st?: never; text?: never } | ({ entity: CloudHoverEntity_Deserialize }) & { item?: never; st?: never; text?: never };
+export type CloudHover_Deserialize = ({ text: string; st?: CloudSpan[] | null }) & { entity?: never; item?: never } | ({ item: CloudInvItem_Deserialize }) & { entity?: never; st?: never; text?: never } | ({ entity: CloudHoverEntity_Deserialize }) & { item?: never; st?: never; text?: never };
 
 /**  A part's hover: the server's text, an item (as the inventory shows it) or an entity. */
-export type CloudHover_Serialize = ({ text: string; st?: CloudSpan[] | null }) & { entity?: never; item?: never } | ({ item: CloudInvItem }) & { entity?: never; st?: never; text?: never } | ({ entity: CloudHoverEntity_Serialize }) & { item?: never; st?: never; text?: never };
+export type CloudHover_Serialize = ({ text: string; st?: CloudSpan[] | null }) & { entity?: never; item?: never } | ({ item: CloudInvItem_Serialize }) & { entity?: never; st?: never; text?: never } | ({ entity: CloudHoverEntity_Serialize }) & { item?: never; st?: never; text?: never };
 
 export type CloudInvDurability = {
 	left?: number,
@@ -2974,11 +2974,7 @@ export type CloudInvError = {
 	retryAfter?: number | null,
 };
 
-export type CloudInvInside = {
-	/**  The items' total. */
-	count?: number,
-	top?: CloudInvInsideStack[],
-};
+export type CloudInvInside = CloudInvInside_Serialize | CloudInvInside_Deserialize;
 
 /**  One of the first nine stacks inside a shulker box or bundle. */
 export type CloudInvInsideStack = {
@@ -2989,12 +2985,43 @@ export type CloudInvInsideStack = {
 	model?: string | null,
 };
 
+export type CloudInvInside_Deserialize = {
+	/**  The items' total. */
+	count?: number,
+	top?: CloudInvInsideStack[],
+	/**
+	 *  How many stacks it holds, as the game counts them for "and N more...", from machines that
+	 *  count them (CAFK-SVC); absent from older ones. Anything but a whole number up to 256 reads
+	 *  as absent and never costs the item; the view also wants at least the stacks listed.
+	 */
+	stacks?: number | null,
+};
+
+export type CloudInvInside_Serialize = {
+	/**  The items' total. */
+	count: number,
+	top: CloudInvInsideStack[],
+	/**
+	 *  How many stacks it holds, as the game counts them for "and N more...", from machines that
+	 *  count them (CAFK-SVC); absent from older ones. Anything but a whole number up to 256 reads
+	 *  as absent and never costs the item; the view also wants at least the stacks listed.
+	 */
+	stacks?: number | null,
+};
+
 /**
  *  `InvItem`: one stack in the player inventory (`slot` 5–8 armour, 9–35 main, 36–44 hotbar, 45
  *  off hand) or in an open window (`0 … size-1`); the cursor's item has no slot (0). `name`,
  *  `lore` and every label are anyone's plain text: never markup.
  */
-export type CloudInvItem = {
+export type CloudInvItem = CloudInvItem_Serialize | CloudInvItem_Deserialize;
+
+/**
+ *  `InvItem`: one stack in the player inventory (`slot` 5–8 armour, 9–35 main, 36–44 hotbar, 45
+ *  off hand) or in an open window (`0 … size-1`); the cursor's item has no slot (0). `name`,
+ *  `lore` and every label are anyone's plain text: never markup.
+ */
+export type CloudInvItem_Deserialize = {
 	slot?: number,
 	/**  `minecraft:diamond_sword`. */
 	id?: string,
@@ -3020,13 +3047,53 @@ export type CloudInvItem = {
 	skin?: string | null,
 	ench?: CloudInvEnchant[],
 	enchanted?: boolean,
-	inside?: CloudInvInside | null,
+	inside?: CloudInvInside_Deserialize | null,
 	/**  A potion's type, `minecraft:strong_healing`. */
 	potion?: string | null,
 	/**  A dye or a potion's own colour, `0xRRGGBB`. */
 	color?: number | null,
 	/**  Something could not be shown. */
 	partial?: boolean,
+};
+
+/**
+ *  `InvItem`: one stack in the player inventory (`slot` 5–8 armour, 9–35 main, 36–44 hotbar, 45
+ *  off hand) or in an open window (`0 … size-1`); the cursor's item has no slot (0). `name`,
+ *  `lore` and every label are anyone's plain text: never markup.
+ */
+export type CloudInvItem_Serialize = {
+	slot: number,
+	/**  `minecraft:diamond_sword`. */
+	id: string,
+	count: number,
+	label: CloudLocalized,
+	/**  A custom name (anvil) or a server's item name. */
+	name: string | null,
+	/**
+	 *  The name's look in the game (machine 0.3.2): spans over `name`, each its length in UTF-16
+	 *  code units and its code (a colour `0`–`f` or `#rrggbb`, then the flags among `klmno`).
+	 */
+	nameStyle: ([number, string])[],
+	/**  At most 32 lines of at most 80 characters. */
+	lore: string[],
+	/**  A look a `lore` line, or none (machine 0.3.2). */
+	loreStyle: (([number, string])[] | null)[],
+	durability: CloudInvDurability | null,
+	/**  `custom_model_data` (its first float, rounded down). */
+	cmd: number | null,
+	/**  The `item_model` component, when a server set one. */
+	model: string | null,
+	/**  A player head's skin: its texture's hash on Mojang's texture server (machine 0.3.2). */
+	skin: string | null,
+	ench: CloudInvEnchant[],
+	enchanted: boolean,
+	inside: CloudInvInside_Serialize | null,
+	/**  A potion's type, `minecraft:strong_healing`. */
+	potion: string | null,
+	/**  A dye or a potion's own colour, `0xRRGGBB`. */
+	color: number | null,
+	/**  Something could not be shown. */
+	partial: boolean,
 };
 
 /**
@@ -3165,12 +3232,12 @@ export type CloudLiveEvent_Deserialize =
  *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
  *  non-empty slot; `snap`: the first frame after a watch.
  */
-({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem | null; items: CloudInvItem[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Deserialize | null; items: CloudInvItem_Deserialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
  *  names this opening (every move names the one the player sees).
  */
-({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
+({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Deserialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
 /**
  *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
  *  sent it on; what the server did shows in the frames that follow.
@@ -3238,12 +3305,12 @@ export type CloudLiveEvent_Serialize =
  *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
  *  non-empty slot; `snap`: the first frame after a watch.
  */
-({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem | null; items: CloudInvItem[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Serialize | null; items: CloudInvItem_Serialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
  *  names this opening (every move names the one the player sees).
  */
-({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
+({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Serialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
 /**
  *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
  *  sent it on; what the server did shows in the frames that follow.
