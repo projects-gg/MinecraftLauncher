@@ -1523,7 +1523,7 @@ export const tr = {
         confirm: "Yedeği sil",
       },
       restoreTitle: "Yedek geri yüklensin mi?",
-      restoreBody: "{{name}} ({{when}})",
+      restoreBody: "Yedek: {{when}}",
       restoreNew: "Yeni dünya olarak ekle",
       restoreNewHint: "Şimdiki dünyaya dokunulmaz, yedek ayrı bir dünya olarak açılır.",
       restoreReplace: "Şimdiki dünyanın yerine koy",

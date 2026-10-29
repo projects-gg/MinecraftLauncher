@@ -760,12 +760,14 @@ function RestoreDialog({
   onClose: () => void;
   onRestore: (replace: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [replace, setReplace] = useState(false);
   useEffect(() => {
     if (backup) setReplace(false);
   }, [backup]);
-  const name = backup?.worldName ?? backup?.worldFolder ?? "";
+  // "Yedek: dün 03:33": the row it opened from names the world, the line says which backup.
+  const taken = formatWhen(backup?.createdAt);
+  const when = taken ? taken.charAt(0).toLocaleLowerCase(i18n.language) + taken.slice(1) : taken;
   const options = [
     {
       value: false,
@@ -782,7 +784,7 @@ function RestoreDialog({
     <ConfirmDialog
       open={Boolean(backup)}
       title={t("instance.worlds.restoreTitle")}
-      body={t("instance.worlds.restoreBody", { name, when: formatWhen(backup?.createdAt) })}
+      body={t("instance.worlds.restoreBody", { when })}
       confirmLabel={t("instance.worlds.restore")}
       danger={false}
       onConfirm={() => onRestore(worldExists && replace)}
