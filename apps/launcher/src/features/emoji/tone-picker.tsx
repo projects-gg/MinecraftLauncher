@@ -153,7 +153,7 @@ export function TonePicker({ tone, onTone }: { tone: SkinTone; onTone: (tone: Sk
                   {value === tone ? (
                     <span
                       aria-hidden
-                      className="absolute bottom-[3px] left-1/2 h-[2px] w-3 -translate-x-1/2 rounded-full bg-gold-400"
+                      className="absolute bottom-[3px] left-1/2 h-[2px] w-3 -translate-x-1/2 rounded-full bg-bone-100"
                     />
                   ) : null}
                   <span aria-hidden className="emoji-glyph text-[19px]">

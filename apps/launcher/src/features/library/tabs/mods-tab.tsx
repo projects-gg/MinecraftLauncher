@@ -135,7 +135,7 @@ function ModRow({
               recommended ones), kept by a copy or an older launcher: still listed, not removable. */}
           {fromPack ? <Chip className="shrink-0">{t("instance.mods.fromPack")}</Chip> : null}
           {entry?.update && !fromPack ? (
-            <Chip tone="gold" className="shrink-0">
+            <Chip className="shrink-0">
               {t("content.updates.newVersion", { version: entry.update.versionNumber })}
             </Chip>
           ) : null}

@@ -371,9 +371,7 @@ export function ModpackCard({ instance }: { instance: InstanceDetail }) {
               }}
               className="flex items-center gap-2.5"
             >
-              <Chip tone="gold">
-                {t("modpack.update.available", { version: update.data.versionNumber })}
-              </Chip>
+              <Chip>{t("modpack.update.available", { version: update.data.versionNumber })}</Chip>
               <Button
                 size="sm"
                 variant="primary"

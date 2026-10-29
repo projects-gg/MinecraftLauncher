@@ -91,7 +91,7 @@ function OptionRow({ option, onPick }: { option: InstanceVersion; onPick: () => 
           {option.minecraft}
         </span>
         <span className="relative flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-          {option.current ? <Chip tone="gold">{t("modCenter.versions.current")}</Chip> : null}
+          {option.current ? <Chip>{t("modCenter.versions.current")}</Chip> : null}
           {option.recommended ? <Chip>{t("modCenter.versions.recommended")}</Chip> : null}
           {option.snapshot ? <Chip>{t("modCenter.versions.snapshot")}</Chip> : null}
           {option.hasSet && !option.current ? <Chip>{t("modCenter.versions.hasSet")}</Chip> : null}

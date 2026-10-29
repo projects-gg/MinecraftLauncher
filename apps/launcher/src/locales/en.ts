@@ -47,6 +47,7 @@ import { enQaFix } from "./en-qa-fix";
 import { enReminders } from "./en-reminders";
 import { enReports } from "./en-reports";
 import { enSafety } from "./en-safety";
+import { enSetup } from "./en-setup";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
@@ -329,6 +330,7 @@ export const en: DeepPartial<Strings> = {
   playAcct: enPlayAcct,
   playAgain: enPlayAgain,
   chatProd: enChatProd,
+  setup: enSetup,
   motion: enMotion,
   nav: {
     home: "Home",
@@ -1783,7 +1785,7 @@ export const en: DeepPartial<Strings> = {
         confirm: "Delete backup",
       },
       restoreTitle: "Restore this backup?",
-      restoreBody: "{{name}} ({{when}})",
+      restoreBody: "Backup: {{when}}",
       restoreNew: "Add as a new world",
       restoreNewHint: "The current world stays as it is. The backup opens as a separate world.",
       restoreReplace: "Replace the current world",

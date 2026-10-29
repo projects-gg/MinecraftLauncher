@@ -5,9 +5,12 @@
 //!
 //! Launch: re-read the latest account settings and login commands → write the MCC config (the
 //! login script only exists until the game is joined) → spawn `"<ini>" BasicIO-NoColor` with
-//! `MCC_LAUNCHER_BRIDGE=1`. Stop: `/quit`, then kill after the grace period. When the client exits
-//! on its own the [`restart`](crate::restart) policy decides between a backed-off restart and an
-//! error state.
+//! `MCC_LAUNCHER_BRIDGE=1`; a released client of 4.1.0 or later (or of a version that does not
+//! read as one) also gets a fresh `MCC_BRIDGE_NONCE` per process, and then only lines with that
+//! nonce are events: a server's line that starts with the bare bridge prefix (a chat or kick text)
+//! stays text and cannot fake a join or a disconnect.
+//! Stop: `/quit`, then kill after the grace period. When the client exits on its own the
+//! [`restart`](crate::restart) policy decides between a backed-off restart and an error state.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,7 +24,9 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 
-use crate::bridge::{BridgeEvent, ClientLine, DisconnectReason, parse_line};
+use crate::bridge::{
+    BridgeEvent, ClientLine, DisconnectReason, client_takes_nonce, new_nonce, parse_line_with_nonce,
+};
 use crate::client::ClientStep;
 use crate::config::{
     ConfigFiles, INI_FILE_NAME, LOGIN_SCRIPT_FILE_NAME, build_config_in, has_login_commands,
@@ -380,6 +385,8 @@ struct Running {
     generation: u64,
     stdin: mpsc::UnboundedSender<String>,
     kill: CancellationToken,
+    /// This process's bridge nonce (clients 4.1.0 and later): only its event lines count.
+    nonce: Option<String>,
 }
 
 /// Everything a launch needs, gathered before spawning.
@@ -707,10 +714,15 @@ impl Actor {
             revision,
         } = prepared;
         self.account_dir = Some(dir.clone());
+        // Decided by the version this session runs, never by the first line it sees: an older
+        // client ignores the variable and its bare event lines are the only ones it prints. A
+        // development build has no version to go by and keeps the bare lines.
+        let nonce = (!client.dev && client_takes_nonce(&client.version)).then(new_nonce);
         let spec = LaunchSpec {
             exe: client.path.clone(),
             ini: dir.join(INI_FILE_NAME),
             cwd: dir.clone(),
+            nonce: nonce.clone(),
         };
 
         let process = match self.env.spawner.spawn(&spec) {
@@ -780,6 +792,7 @@ impl Actor {
             generation,
             stdin: stdin_tx,
             kill,
+            nonce,
         });
         {
             let mut shared = self.shared.lock();
@@ -839,11 +852,17 @@ impl Actor {
                 stream: Stream::Out,
                 text,
                 ..
-            } => match parse_line(&text) {
-                ClientLine::Event(event) => self.on_bridge(event),
-                ClientLine::Malformed => {}
-                ClientLine::Text(text) => self.append_console(text, ConsoleOrigin::Client, None),
-            },
+            } => {
+                // The line is the current process's (checked above): its nonce decides.
+                let nonce = self.process.as_ref().and_then(|p| p.nonce.as_deref());
+                match parse_line_with_nonce(&text, nonce) {
+                    ClientLine::Event(event) => self.on_bridge(event),
+                    ClientLine::Malformed => {}
+                    ClientLine::Text(text) => {
+                        self.append_console(text, ConsoleOrigin::Client, None);
+                    }
+                }
+            }
             Io::Line {
                 stream: Stream::Err,
                 text,

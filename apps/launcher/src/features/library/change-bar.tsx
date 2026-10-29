@@ -99,6 +99,13 @@ export function ChangeBar({
               exit={{ opacity: 0, transform: shift(12), transition: leave(0.3) }}
               className="absolute inset-x-0 bottom-3"
             >
+              {/* Rows the bar covers fade out just above it, so a card cut by the bar never shows
+                  as a sliver over its edge (TASTE-SWEEP: the cloud list at 1024, where the reveal
+                  stops at the section's header). */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-[linear-gradient(to_bottom,transparent,rgb(10_9_12/0.85))]"
+              />
               {/* The toasts' near-solid surface, not glass: inside the tab's scroller the blur
                   never reaches the rows under the bar, and their text showed through its tint
                   over "1 mod to remove." (POLISH6; the toasts had the same problem). */}
