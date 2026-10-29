@@ -77,7 +77,9 @@ describe("a server's dialog", () => {
     // The client's keys may hold capitals; a multiline text's initial may hold line breaks.
     const multiline = safeDialog({
       ...RAW,
-      inputs: [{ key: "Note_2", kind: "text", label: "Not", max: 64, multiline: true, initial: "a\nb" }],
+      inputs: [
+        { key: "Note_2", kind: "text", label: "Not", max: 64, multiline: true, initial: "a\nb" },
+      ],
     });
     expect(multiline?.inputs[0]).toMatchObject({ key: "Note_2", multiline: true, initial: "a\nb" });
     expect(

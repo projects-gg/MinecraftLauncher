@@ -147,7 +147,11 @@ function inputOf(value: unknown): DialogInput | null {
         if (!word(option.label, DIALOG.label) || options.some((o) => o.id === option.id))
           return null;
         const st = spansOf(option.label, option.labelSt);
-        options.push(st ? { id: option.id, label: option.label, labelSt: st } : { id: option.id, label: option.label });
+        options.push(
+          st
+            ? { id: option.id, label: option.label, labelSt: st }
+            : { id: option.id, label: option.label },
+        );
       }
       const initial = value.initial;
       if (typeof initial !== "string" || !options.some((o) => o.id === initial)) return null;
@@ -280,9 +284,7 @@ export function snap(input: Extract<DialogInput, { kind: "range" }>, value: numb
 export function inputText(input: DialogInput, value: unknown): string | null {
   switch (input.kind) {
     case "text":
-      return typeof value === "string" &&
-        value.length <= input.max &&
-        clean(value, input.multiline)
+      return typeof value === "string" && value.length <= input.max && clean(value, input.multiline)
         ? value
         : null;
     case "bool":
