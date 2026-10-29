@@ -86,7 +86,8 @@ function PickerLine({
             className="flex min-w-0 items-center gap-1 text-bone-100"
             {...swapIn(reduce)}
           >
-            <Check size={12} weight="bold" className="shrink-0 text-gold-400" />
+            {/* Bone: OYNA beside it is the bar's one gold (design.md §2). */}
+            <Check size={12} weight="bold" className="shrink-0 text-bone-100" />
             <span className="truncate">{t("prepare.ready")}</span>
           </motion.span>
         ) : (
@@ -132,9 +133,10 @@ function PickerItem({
             {loaderLine(instance, t(`loaders.${instance.loader}`))}
           </span>
         </span>
-        {instance.managed ? <Chip tone="gold">{t("instances.managed")}</Chip> : null}
+        {/* The chosen instance and the official mark are quiet: a choice is never a second gold. */}
+        {instance.managed ? <Chip>{t("instances.managed")}</Chip> : null}
         {chosen ? (
-          <Check size={16} className="shrink-0 text-gold-400" />
+          <Check size={16} className="shrink-0 text-bone-100" />
         ) : (
           <span aria-hidden className="size-4 shrink-0" />
         )}

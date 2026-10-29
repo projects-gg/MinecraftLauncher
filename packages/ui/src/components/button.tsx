@@ -21,11 +21,12 @@ const layers: Record<Variant, { border: string; fill: string; text: string }> = 
     fill: "bg-transparent group-hover:bg-white/6",
     text: "text-ash-300 group-hover:text-bone-100 font-medium",
   },
-  // A card's action that needs the player ("Şifreyi düzelt", "Süre al") beside the screen's one gold
-  // (design.md §2 and §6, lead 29 Oct): a bone plate with dark ink, never a second gold.
+  // A card's action that needs the player ("Şifreyi düzelt", "Süre satın al") beside the screen's
+  // one gold (design.md §2 and §6, lead 29 Oct): a dimmed bone plate with dark ink, never a second
+  // gold and never as bright as OYNA (§1.4); full bone under the pointer.
   bone: {
-    border: "bg-bone-100 group-hover:bg-bone-50",
-    fill: "bg-bone-100 group-hover:bg-bone-50",
+    border: "bg-bone-plate group-hover:bg-bone-100",
+    fill: "bg-bone-plate group-hover:bg-bone-100",
     text: "text-obsidian-900 font-semibold",
   },
   danger: {
@@ -145,7 +146,9 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
           // even where it opens beside it over the next card (SHEET-UX).
           "data-[state=open]:bg-white/8 data-[state=open]:text-bone-100",
           size === "sm" ? "size-8" : "size-[32px]",
-          active && "bg-white/8 text-gold-300",
+          // A chosen tool (a pin, a console tab) sits on the quiet plate (design.md §6): the
+          // screen's gold is its main action's.
+          active && "bg-[color:var(--segmented-plate,rgb(255_255_255/0.16))] text-bone-50",
           className,
         )}
         {...props}

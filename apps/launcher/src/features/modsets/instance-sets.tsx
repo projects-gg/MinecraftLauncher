@@ -250,7 +250,7 @@ function SetPanel({
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="truncate font-display text-[16px] font-semibold text-bone-50">{name}</h3>
             {set.installed && set.updateAvailable ? (
-              <Chip tone="gold">{t("modSets.center.update")}</Chip>
+              <Chip>{t("modSets.center.update")}</Chip>
             ) : null}
             {set.retired ? <Chip>{t("modSets.center.retired")}</Chip> : null}
           </div>

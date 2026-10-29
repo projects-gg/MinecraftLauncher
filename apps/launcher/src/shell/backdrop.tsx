@@ -1,6 +1,6 @@
 import { EmberField, type ParticleKind, useAmbientMotion, useLiveMotion } from "@pl/ui";
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { PerfAdvisor } from "@/features/perf/perf-advisor";
 
 /**
@@ -88,8 +88,13 @@ export function Backdrop({
             src={imageUrl}
             alt=""
             draggable={false}
-            className="absolute top-0 left-0 h-1/4 w-1/4 origin-top-left scale-[4.4] object-cover blur-[9px] brightness-[0.34] saturate-[1.15] will-change-transform [html[data-perf=on]_&]:blur-none [html[data-perf=on]_&]:brightness-[0.22]"
+            className="absolute top-0 left-0 h-1/4 w-1/4 origin-top-left scale-[4.4] object-cover blur-[9px] brightness-[0.34] saturate-[1.15] will-change-transform [html[data-perf=on]_&]:hidden"
           />
+          {/* Performance mode: the same art blurred once, ahead of time (TASTE-SWEEP, BETA-FB).
+              Without a filter the quarter-size copy above showed sharp and busy behind the pages
+              (its blur was simply switched off); a filter on that layer costs the compositor
+              every frame, so this one has none. */}
+          <PerfArt imageUrl={imageUrl} />
         </motion.div>
 
         {/* Scrims keep text legible over bright art (WCAG AA over the darkest-needed region). */}
@@ -113,5 +118,50 @@ export function Backdrop({
       </div>
       <PerfAdvisor home={home} />
     </>
+  );
+}
+
+/** The art's width in the pre-blurred copy: stretched over the window it reads as a ~40 px blur. */
+const PERF_ART_WIDTH = 48;
+
+/**
+ * Performance mode's page backdrop: the art drawn once into a tiny canvas (dimmed as the blurred
+ * layer is, brightness 0.22) and stretched over the window, so it is blurred with no filter at all.
+ * Hidden outside Performance mode; drawn again only when the season art changes. A canvas shows
+ * an image from another origin even when it cannot be read back, so nothing is exported.
+ */
+function PerfArt({ imageUrl }: { imageUrl: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const image = new Image();
+    let live = true;
+    image.decoding = "async";
+    image.onload = () => {
+      const canvas = ref.current;
+      if (!live || !canvas || image.naturalWidth === 0) return;
+      const width = PERF_ART_WIDTH;
+      const height = Math.max(1, Math.round((image.naturalHeight / image.naturalWidth) * width));
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(image, 0, 0, width, height);
+      // brightness(0.22) without a filter: black over it at 78 %.
+      context.fillStyle = "rgb(0 0 0 / 0.78)";
+      context.fillRect(0, 0, width, height);
+    };
+    image.src = imageUrl;
+    return () => {
+      live = false;
+    };
+  }, [imageUrl]);
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden
+      className="absolute inset-0 hidden size-full object-cover [html[data-perf=on]_&]:block"
+    />
   );
 }

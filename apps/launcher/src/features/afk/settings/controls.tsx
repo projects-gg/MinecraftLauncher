@@ -6,10 +6,12 @@ import { Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  createContext,
   type InputHTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
+  useContext,
   useEffect,
   useId,
   useRef,
@@ -186,6 +188,23 @@ export function WideRow({
       {children}
     </motion.div>
   );
+}
+
+const OneGoldScope = createContext(false);
+
+/**
+ * A part of the window under the one-gold rule (design.md §2) for what has no bone default of its
+ * own yet: its quiet text links are bone, so the screen's gold is its one action (the save,
+ * "Devam"). The 7/24 Bulut question rows and setup steps (SETUP-UX-L). Switches are bone everywhere
+ * already (@pl/ui's default, BETA-FB).
+ */
+export function OneGold({ children }: { children: ReactNode }) {
+  return <OneGoldScope.Provider value={true}>{children}</OneGoldScope.Provider>;
+}
+
+/** Whether this part of the window is under the one-gold rule (`OneGold`). */
+export function useOneGold(): boolean {
+  return useContext(OneGoldScope);
 }
 
 /**

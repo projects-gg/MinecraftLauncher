@@ -49,6 +49,7 @@ import { trQaFix } from "./tr-qa-fix";
 import { trReminders } from "./tr-reminders";
 import { trReports } from "./tr-reports";
 import { trSafety } from "./tr-safety";
+import { trSetup } from "./tr-setup";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
@@ -126,6 +127,7 @@ export const tr = {
   playAcct: trPlayAcct,
   playAgain: trPlayAgain,
   chatProd: trChatProd,
+  setup: trSetup,
   motion: trMotion,
   nav: {
     home: "Ana sayfa",
@@ -1523,7 +1525,7 @@ export const tr = {
         confirm: "Yedeği sil",
       },
       restoreTitle: "Yedek geri yüklensin mi?",
-      restoreBody: "{{name}} ({{when}})",
+      restoreBody: "Yedek: {{when}}",
       restoreNew: "Yeni dünya olarak ekle",
       restoreNewHint: "Şimdiki dünyaya dokunulmaz, yedek ayrı bir dünya olarak açılır.",
       restoreReplace: "Şimdiki dünyanın yerine koy",

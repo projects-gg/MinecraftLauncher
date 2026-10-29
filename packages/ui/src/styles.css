@@ -16,6 +16,9 @@
   --color-ash-300: #bdb6c3;
   --color-bone-100: #f3ebdd;
   --color-bone-50: #fbf6ec;
+  /* A bone plate button's fill, bone-100 dimmed to about 85 % (#d1cabf; ink obsidian-900 on it
+     ~11:1), so OYNA stays the one loud thing beside it (design.md §1.4, TASTE-SWEEP). */
+  --color-bone-plate: #d1cabf;
   --color-gold-200: #fae5b3;
   --color-gold-300: #f6d58e;
   --color-gold-400: #f0b849;
