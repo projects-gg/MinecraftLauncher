@@ -31,7 +31,6 @@ import {
   SettingRow,
   ToggleRow,
   TriggerField,
-  useOneGold,
   WideRow,
 } from "../settings/controls";
 import type { CloudEditData } from "./api";
@@ -215,7 +214,6 @@ function MovementBlock({
 }: Pick<PartProps, "draft" | "setDraft" | "view" | "issues">) {
   const { t } = useTranslation();
   const id = useId();
-  const oneGold = useOneGold();
   const movement = view.account.features?.movement;
   if (movement?.mode !== "on") return null;
   const on = draft.config.movement ?? movement.on ?? false;
@@ -257,7 +255,6 @@ function MovementBlock({
           }
           label={t("cloudAfkMove.setting.title")}
           hideLabel
-          tone={oneGold ? "bone" : "gold"}
           disabled={Boolean(waiting) && !on}
         />
       </div>
@@ -553,7 +550,6 @@ function CommandRow({
     : (allowed[0] ?? "join");
   const triggerError = at("delay") ?? at("every") ?? at("at");
   const ids = useId();
-  const oneGold = useOneGold();
   return (
     <li className={cn(rowPanel, "flex flex-col px-3.5 pt-2 pb-3")}>
       {/* Which row it is, quietly, then its own tools and its switch, "Kullan" right beside it on
@@ -597,7 +593,6 @@ function CommandRow({
             onCheckedChange={(enabled) => onChange({ ...command, enabled })}
             label={t("cloudAfk.settings.commands.use")}
             hideLabel
-            tone={oneGold ? "bone" : "gold"}
           />
         </span>
       </div>
@@ -814,7 +809,6 @@ function RuleRow({
   const at = (field: string) => issueText(issueAt(part.issues, "rules", index, field));
   const paused = pausedRows(part.view.account).get(rule.id) ?? null;
   const ids = useId();
-  const oneGold = useOneGold();
   const replyRef = useRef<HTMLInputElement>(null);
   const reply = rule.reply;
   // Placeholders: chips and "Dene" while this account may use them. With Studio's switch on, a
@@ -895,7 +889,6 @@ function RuleRow({
             onCheckedChange={(enabled) => onChange({ ...rule, enabled })}
             label={t("cloudAfk.settings.replies.use")}
             hideLabel
-            tone={oneGold ? "bone" : "gold"}
           />
         </span>
       </div>

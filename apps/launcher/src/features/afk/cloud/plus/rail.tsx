@@ -130,7 +130,9 @@ function StateBlock({
         >
           {away ? sentence.text : waits ? text : t("afkPlus.ai.setup")}
         </p>
-        <Button size="sm" variant="primary" onClick={onSetup} className="self-start">
+        {/* A bone plate, as the rail's other start that waits for the player: the gold is the
+            setup's own "Devam" and the panel's save (one gold per screen, design.md §2). */}
+        <Button size="sm" variant="bone" onClick={onSetup} className="self-start">
           {resumes ? t("setup.plus.resume") : t("afkPlus.setup.open")}
         </Button>
       </div>
