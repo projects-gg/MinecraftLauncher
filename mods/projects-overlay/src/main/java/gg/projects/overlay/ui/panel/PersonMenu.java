@@ -960,7 +960,8 @@ public final class PersonMenu {
             Draw.text(g, ui, line.label(), x + TEXT_X, Fonts.centeredY(Fonts.Face.UI, ry + ROW_H / 2f), ink);
             float markX = x + width - PAD - 4 - 8;
             if (line.checked()) {
-                Draw.icon(g, Icon.CHECK, 8, markX, ry + (ROW_H - 8) / 2f, Theme.GOLD_400);
+                // Bone, as checks are on every surface (design.md §2: a screen's one gold is its main action).
+                Draw.icon(g, Icon.CHECK, 8, markX, ry + (ROW_H - 8) / 2f, Theme.BONE_100);
             } else if (line.row() != null && !line.back() && line.row().sub()) {
                 Draw.icon(g, Icon.NEXT, 8, markX, ry + (ROW_H - 8) / 2f, Theme.ASH_400);
             }

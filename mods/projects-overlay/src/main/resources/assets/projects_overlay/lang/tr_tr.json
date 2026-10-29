@@ -91,7 +91,7 @@
   "projects_overlay.people.remove_member": "Ekipten çıkar",
   "projects_overlay.people.make_founder.ask": "%s lider olur, sen üye olursun.",
   "projects_overlay.people.make_founder.ask_moderator": "%s lider olur, sen moderatör olursun.",
-  "projects_overlay.people.remove_member.ask": "%s ekipten çıkar ve ekip kodu yenilenir.",
+  "projects_overlay.people.remove_member.ask": "%s ekipten çıkarılır ve ekip kodu yenilenir.",
   "projects_overlay.people.move.new": "Yeni kategori…",
   "projects_overlay.people.move.name": "Kategori adı",
   "projects_overlay.people.list.narration": "%s, %s seçenek",
