@@ -8,6 +8,8 @@ export {
   type ConsoleHover,
   type ConsoleRun,
   type ConsoleSpan,
+  clean,
+  copiedPreview,
   hoverEntityLines,
   hoverTextLines,
   lineRuns,
@@ -19,5 +21,6 @@ export {
   safeEvents,
   safeHover,
   safeUrl,
+  urlParts,
 } from "./looks";
 export { CONSOLE_TEXTS, type ConsoleTexts } from "./texts";

@@ -71,26 +71,43 @@ const ACTIONS: ReadonlySet<string> = new Set([
   "copy_to_clipboard",
 ]);
 
-/** Controls, line and paragraph separators, direction marks, embeddings, overrides, isolates. */
+/**
+ * The characters no click value, card text or hover carries (the contract's one list, the same in
+ * MCC, the machine, the Worker and here): controls (C0, DEL, C1), the soft hyphen, the combining
+ * grapheme joiner, the Arabic letter mark, the Hangul and Mongolian fillers, the zero-width spaces,
+ * joiners and direction marks (U+200B–U+200F), the separators, embeddings and overrides
+ * (U+2028–U+202E), the invisible operators (U+2060–U+2064), the isolates, U+FEFF and the
+ * halfwidth Hangul filler. Tag characters (U+E0000–U+E007F) are checked as their surrogate pair.
+ */
 function forbidden(unit: number): boolean {
   return (
     unit <= 0x1f ||
     (unit >= 0x7f && unit <= 0x9f) ||
+    unit === 0xad ||
+    unit === 0x34f ||
     unit === 0x61c ||
-    unit === 0x200e ||
-    unit === 0x200f ||
-    unit === 0x2028 ||
-    unit === 0x2029 ||
-    (unit >= 0x202a && unit <= 0x202e) ||
-    (unit >= 0x2066 && unit <= 0x2069)
+    unit === 0x115f ||
+    unit === 0x1160 ||
+    unit === 0x180e ||
+    (unit >= 0x200b && unit <= 0x200f) ||
+    (unit >= 0x2028 && unit <= 0x202e) ||
+    (unit >= 0x2060 && unit <= 0x2064) ||
+    (unit >= 0x2066 && unit <= 0x2069) ||
+    unit === 0x3164 ||
+    unit === 0xfeff ||
+    unit === 0xffa0
   );
 }
 
-function clean(text: string, newlines: boolean): boolean {
+/** The text holds none of the forbidden characters (`newlines`: a hover's `\n` may stay). */
+export function clean(text: string, newlines: boolean): boolean {
   for (let i = 0; i < text.length; i++) {
     const unit = text.charCodeAt(i);
     if (newlines && unit === 0x0a) continue;
     if (forbidden(unit)) return false;
+    // A tag character (U+E0000–U+E007F): U+DB40 and a low half from U+DC00 to U+DC7F.
+    const next = text.charCodeAt(i + 1);
+    if (unit === 0xdb40 && next >= 0xdc00 && next <= 0xdc7f) return false;
   }
   return true;
 }
@@ -98,15 +115,55 @@ function clean(text: string, newlines: boolean): boolean {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** A link the console may offer: https, a host, no sign-in in it, nothing hidden in spaces. */
-export function safeUrl(value: string): boolean {
-  if (!value.startsWith("https://") || /\s/.test(value)) return false;
+const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
+/**
+ * An address the console may open, cut at its host: `https://`, no white space and none of the
+ * forbidden characters, no sign-in before the host (`@`), a port of digits only, and a host of at
+ * least two plain ASCII labels: no IDN (Unicode or `xn--` punycode, look-alike letters), no IP
+ * address (v4 or v6), no `localhost`. Null when it is not one.
+ */
+export function urlParts(value: string): { host: string; rest: string } | null {
+  if (!value.startsWith("https://") || /[\s\u0085]/.test(value) || !clean(value, false))
+    return null;
+  const tail = value.slice("https://".length);
+  const end = tail.search(/[/?#]/);
+  const authority = end === -1 ? tail : tail.slice(0, end);
+  if (authority.includes("@") || authority.startsWith("[")) return null;
+  const colon = authority.indexOf(":");
+  const host = colon === -1 ? authority : authority.slice(0, colon);
+  const port = colon === -1 ? null : authority.slice(colon + 1);
+  if (port !== null && !/^\d{1,5}$/.test(port)) return null;
+  const labels = host.split(".");
+  if (labels.length < 2 || !labels.every((label) => LABEL.test(label))) return null;
+  if (labels.some((label) => label.toLowerCase().startsWith("xn--"))) return null;
+  if (/^\d+$/.test(labels[labels.length - 1] ?? "")) return null;
+  const lower = host.toLowerCase();
+  if (lower === "localhost" || lower.endsWith(".localhost")) return null;
   try {
+    // The browser must read the same host: no other parser's surprise.
     const url = new URL(value);
-    return url.protocol === "https:" && url.hostname !== "" && !url.username && !url.password;
+    if (url.protocol !== "https:" || url.hostname !== lower || url.username || url.password) {
+      return null;
+    }
   } catch {
-    return false;
+    return null;
   }
+  return { host: authority, rest: end === -1 ? "" : tail.slice(end) };
+}
+
+/** A link the console may offer (`urlParts`). */
+export function safeUrl(value: string): boolean {
+  return urlParts(value) !== null;
+}
+
+/** What a copy's toast shows of the copied text: at most 60 units, then "…" (never half a character). */
+export function copiedPreview(value: string): string {
+  if (value.length <= 60) return value;
+  let cut = 59;
+  const unit = value.charCodeAt(cut - 1);
+  if (unit >= 0xd800 && unit <= 0xdbff) cut -= 1;
+  return `${value.slice(0, cut)}…`;
 }
 
 /** A click as the contract allows it, else null: a value is never cut, an odd one never shown. */

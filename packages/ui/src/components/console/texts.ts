@@ -13,6 +13,8 @@ export interface ConsoleTexts {
   /** `{name}`: the player whose line it is. */
   fromPlayer: string;
   copied: string;
+  /** A copy's toast with what was copied (`{value}`: `copiedPreview`), so nothing is copied unseen. */
+  copiedValue: string;
   /** A private line's direction mark: read out for one to you, shown for your own. */
   pmIn: string;
   pmOut: string;
@@ -30,6 +32,7 @@ export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
     fromServer: "Sunucu mesajından",
     fromPlayer: "{name} adlı oyuncunun mesajından",
     copied: "Kopyalandı",
+    copiedValue: "Kopyalandı: {value}",
     pmIn: "Sana gelen özel mesaj",
     pmOut: "Sen",
     pmOutSaid: "Senin özel mesajın",
@@ -44,6 +47,7 @@ export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
     fromServer: "From the server's message",
     fromPlayer: "From {name}'s message",
     copied: "Copied",
+    copiedValue: "Copied: {value}",
     pmIn: "A private message to you",
     pmOut: "You",
     pmOutSaid: "Your private message",

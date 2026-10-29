@@ -6,7 +6,7 @@ import { type KeyboardEvent, useEffect, useId, useRef } from "react";
 import { cn } from "../../lib/cn";
 import { Button } from "../button";
 import { fill, type InventoryLang } from "../inventory/texts";
-import type { ConsoleClick } from "./looks";
+import { type ConsoleClick, urlParts } from "./looks";
 import { CONSOLE_TEXTS } from "./texts";
 
 export interface ConsoleActionCardProps {
@@ -37,6 +37,7 @@ export function ConsoleActionCard({
   const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const run = click.a === "run_command";
+  const link = run ? null : urlParts(click.v);
   // The safe choice has the focus: Enter never runs a command the player has not read.
   useEffect(() => {
     cancelRef.current?.focus();
@@ -61,9 +62,17 @@ export function ConsoleActionCard({
       <p id={titleId} className="text-[14px] font-medium text-bone-50">
         {run ? t.runTitle : t.openTitle}
       </p>
-      <p className="mt-2 rounded-md bg-obsidian-900 px-3 py-2 font-mono text-[13px] break-all text-bone-100 select-text">
-        {click.v}
-      </p>
+      {run || !link ? (
+        <p className="mt-2 rounded-md bg-obsidian-900 px-3 py-2 font-mono text-[13px] break-all text-bone-100 select-text">
+          {click.v}
+        </p>
+      ) : (
+        // The host alone and first, in bold: it is what a player reads to know where a link goes.
+        <div className="mt-2 rounded-md bg-obsidian-900 px-3 py-2 font-mono break-all select-text">
+          <p className="text-[14px] font-semibold text-bone-50">{link.host}</p>
+          {link.rest ? <p className="mt-0.5 text-[12.5px] text-ash-400">{link.rest}</p> : null}
+        </div>
+      )}
       <p className="mt-2 text-[12.5px] text-ash-400">
         {source}, {clock}
       </p>
