@@ -6,6 +6,7 @@ import { trAfkMod } from "./tr-afk-mod";
 import { trAfkPanel } from "./tr-afk-panel";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
+import { trAutojoin } from "./tr-autojoin";
 import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
 import { trChatProd } from "./tr-chat-prod";
@@ -33,6 +34,7 @@ import { trLib1 } from "./tr-lib1";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
 import { trModSets } from "./tr-modsets";
+import { trMotion } from "./tr-motion";
 import { trNewsColumn } from "./tr-news-column";
 import { trOverlay } from "./tr-overlay";
 import { trOverview } from "./tr-overview";
@@ -71,6 +73,7 @@ export const tr = {
   libraryDrop: trLibraryDrop,
   updates: trUpdates,
   betaGate: trBetaGate,
+  autojoin: trAutojoin,
   shortcuts: trShortcuts,
   prepare: trPrepare,
   social: trSocial,
@@ -123,6 +126,7 @@ export const tr = {
   playAcct: trPlayAcct,
   playAgain: trPlayAgain,
   chatProd: trChatProd,
+  motion: trMotion,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",
@@ -1050,7 +1054,7 @@ export const tr = {
     appearance: {
       performance: "Performans modu",
       performanceHelp:
-        "Video, kıvılcım ve bulanıklık efektlerini kapatır. Zayıf bilgisayarlarda önerilir.",
+        "Video, kıvılcım ve bulanıklık efektlerini kapatır, animasyonları azaltır. Zayıf bilgisayarlarda önerilir.",
       particles: "Ana sayfada kıvılcım efekti",
       sounds: "Arayüz sesleri",
       volume: "Ses düzeyi",

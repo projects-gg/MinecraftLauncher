@@ -11,13 +11,14 @@ import {
   focusPanel,
   GatedMotion,
   IconButton,
+  ReducedMotionConfig,
   Skeleton,
   scrimMotion,
   sheetMotion,
   sheetOutside,
   useInteractionMotion,
 } from "@pl/ui";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -201,7 +202,7 @@ export function FriendsSheet() {
                   onKeyDown={(event) => openPanelMenuFromKey(event, shown === "list", body.current)}
                   {...sheetMotion(!animate)}
                 >
-                  <MotionConfig reducedMotion="user">
+                  <ReducedMotionConfig>
                     <PanelContextMenu enabled={shown === "list"} bodyRef={body}>
                       <Header page={shown} />
                       <div
@@ -249,7 +250,7 @@ export function FriendsSheet() {
                         </AnimatePresence>
                       </div>
                     </PanelContextMenu>
-                  </MotionConfig>
+                  </ReducedMotionConfig>
                 </GatedMotion.aside>
               </Dialog.Content>
             </Dialog.Portal>

@@ -8,6 +8,9 @@ import gg.projects.overlay.chat.ChatEmojiBar;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.connect.Connector;
 import gg.projects.overlay.connect.MinecraftGame;
+import gg.projects.overlay.connect.Route;
+import gg.projects.overlay.connect.RouteMessages;
+import gg.projects.overlay.connect.RoutePayload;
 import gg.projects.overlay.connect.ServerTarget;
 import gg.projects.overlay.connect.WorldResume;
 import gg.projects.overlay.emoji.EmojiState;
@@ -33,6 +36,7 @@ import gg.projects.overlay.ui.panel.JoinScreen;
 import gg.projects.overlay.ui.panel.OverlayScreen;
 import gg.projects.overlay.ui.panel.SettingsList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -50,6 +54,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,6 +97,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private HostController host;
     /** The launcher's "Devam et" world, opened once the title screen drew a frame (OVL-FIX); null: none. */
     private WorldResume resume;
+    /** The Projects sub-server picked beside "Doğrudan sunucuya bağlan" (AUTOJOIN), until it is done; null: none. */
+    private Route route;
     /** The friend whose world "Katıl" was pressed for, and when (the launcher's {@code connect} follows). */
     private String pendingWorld;
     private long pendingWorldAt;
@@ -126,6 +133,10 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         Texts.speak(new LanguageChoice(System.getProperty(LanguageChoice.PROPERTY), Texts::gameLanguage));
         state = new OverlayState();
         resume = WorldResume.fromSystemProperty();
+        // The Projects sub-server picked for this launch (AUTOJOIN), in both modes; its channel is heard only while it
+        // waits for the lobby (startRoute).
+        route = Route.fromSystemProperty();
+        RoutePayload.registerType();
         settings = new SettingsStore(FabricLoader.getInstance().getGameDir());
         emojis = new EmojiState(EmojiState.onAtStart(System.getProperty(EmojiState.SWITCH_PROPERTY)));
         panel = !"off".equalsIgnoreCase(String.valueOf(System.getProperty(PANEL_PROPERTY)).strip());
@@ -186,6 +197,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         game = new MinecraftGame(this);
         connector = new Connector(game, frame -> bridge.send(frame));
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
+        startRoute();
 
         bridge = new BridgeClient(config, version(MOD_ID), version("minecraft"),
             () -> Texts.language().helloCode(), new BridgeClient.Listener() {
@@ -272,6 +284,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             ChatEmojiBar.attach(this, screen);
         });
         game = new MinecraftGame(this);
+        startRoute();
         ClientTickEvents.END_CLIENT_TICK.register(mc -> {
             emojiKeyTick(mc);
             if (resume != null) {
@@ -316,6 +329,70 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         LOG.info("Overlay's chat emoji picker on (the overlay itself is off); launcher bridge at 127.0.0.1:{}",
             config.port());
     }
+
+    /**
+     * AUTOJOIN, in both modes, only while the launcher passed a pick: the lobby's {@code ready} on {@code projects:route}
+     * sends the pick's command once; the game's joins and leaves end the route ({@link Route}), and the channel goes
+     * with it. Nothing is registered without a pick.
+     */
+    private void startRoute() {
+        if (route == null) {
+            return;
+        }
+        RoutePayload.listen(json -> {
+            if (RouteMessages.ready(json)) {
+                withRoute(r -> r.ready(routeGame, monotonicMs()));
+            }
+        });
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) ->
+            mc.execute(() -> withRoute(r -> r.joined(routeGame))));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) ->
+            mc.execute(() -> withRoute(r -> r.disconnected(routeGame))));
+        ClientTickEvents.END_CLIENT_TICK.register(mc -> withRoute(r -> r.tick(routeGame, monotonicMs())));
+        LOG.info("Waiting for the lobby to switch to {}", route.name());
+    }
+
+    private void withRoute(Consumer<Route> step) {
+        Route current = route;
+        if (current == null) {
+            return;
+        }
+        step.accept(current);
+        if (current.finished()) {
+            route = null;
+            RoutePayload.stopListening();
+        }
+    }
+
+    /** The game side of {@link Route}: the command goes as the player's own, the toast only with the panel. */
+    private final Route.Game routeGame = new Route.Game() {
+        @Override
+        public boolean onProjects() {
+            return OverlayClient.this.onProjects();
+        }
+
+        @Override
+        public void sendCommand(String command) {
+            ClientPacketListener connection = Minecraft.getInstance().getConnection();
+            if (connection != null) {
+                connection.sendCommand(command);
+            }
+        }
+
+        @Override
+        public void showTravel(String name) {
+            if (panel && toasts != null) {
+                toasts.travel(ToastCard.travel(Texts.str("route.travel", name)), reducedMotion());
+            }
+        }
+
+        @Override
+        public void endTravel() {
+            if (panel && toasts != null) {
+                toasts.endTravel();
+            }
+        }
+    };
 
     /** The running overlay, or null when the game was not started by Projects Launcher. */
     public static OverlayClient get() {

@@ -24,7 +24,8 @@ export function useOverlaySync() {
   const favorites = useSocialPrefs((s) => s.favorites);
   const onlineAlerts = useSocialPrefs((s) => s.onlineAlerts);
   const favoritesOnline = useSocialPrefs((s) => s.notifyFavoriteOnline);
-  // Performance mode or the system's reduced motion: the overlay's toasts appear in place.
+  // "Animasyonları azalt", Performance mode or the system's reduced motion: the overlay's panel
+  // and toasts appear in place too (its own "Animasyonları azalt" adds to it).
   const reducedMotion = !useMotionPrefs().layout;
 
   useEffect(() => {

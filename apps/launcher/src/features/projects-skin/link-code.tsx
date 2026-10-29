@@ -9,8 +9,8 @@
 // - Linked: a gold plate with a check comes over the cells (200 ms), then the caller swaps the box
 //   for the linked line.
 import { Check, CircleNotch } from "@phosphor-icons/react";
-import { cn, easeOutExpo, springSnappy } from "@pl/ui";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { cn, easeOutExpo, springSnappy, useReduceMotion } from "@pl/ui";
+import { AnimatePresence, motion } from "motion/react";
 import { type ClipboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
@@ -63,7 +63,7 @@ export function LinkCode({
 }) {
   const { t } = useTranslation();
   const calm = useCalm();
-  const reduced = useReducedMotion();
+  const reduced = useReduceMotion();
   const errorId = useId();
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);

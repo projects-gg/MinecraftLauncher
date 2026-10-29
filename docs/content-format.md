@@ -322,7 +322,12 @@ cache file extension.
         "kind": "image",
         "width": 64,
         "height": 64
-      }
+      },
+      "subServers": [
+        { "id": "skyblock", "name": "SkyBlock", "command": "/aurora" },
+        { "id": "smp", "name": "SMP", "command": "/smp" },
+        { "id": "testserver", "name": "TestServer", "command": "/testserver", "testersOnly": true }
+      ]
     }
   ],
   "links": {
@@ -352,7 +357,13 @@ cache file extension.
       "afk": { "details": "{afkCount} AFK hesap" }
     }
   },
-  "features": { "afk": true, "premiumLogin": true, "offlineAccounts": true, "modrinthBrowser": true },
+  "features": {
+    "afk": true,
+    "premiumLogin": true,
+    "offlineAccounts": true,
+    "modrinthBrowser": true,
+    "subServers": true
+  },
   "recommendedPack": "projects",
   "recommendedMinecraftVersion": "26.1.2",
   "newsFeed": {
@@ -366,7 +377,7 @@ cache file extension.
 
 Every field is optional (`{}` is a valid config). Defaults: no maintenance, no banners, bundled
 hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`,
-`teams` and `chat` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
+`teams`, `chat`, `skins`, `worlds` and `subServers` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
 news feed, the launcher's built-in recommended Minecraft version.
 
 - `banners[].level`: `info | warning | event | critical`; a banner is shown while
@@ -443,6 +454,34 @@ news feed, the launcher's built-in recommended Minecraft version.
   the privacy text names the relays and the telemetry. Writers omit it while it is `false`;
   launchers that do not know the field ignore it. Publishing it needs a Studio of `aa95309` or
   later (STUDIO3).
+- `servers[].subServers` (AUTOJOIN): the games behind a Projects lobby, in the order the launcher
+  offers them, each `{ id, name, command, testersOnly? }`. Only an entry whose `address` is
+  `projects.gg` or a subdomain carries them; at most 16. `id`: 1–32 bytes of `[a-z0-9-]`, not
+  starting or ending with `-`, unique in the entry; Studio gives it once and keeps it when the
+  name changes (launchers save the player's pick by it). `name`: 1–24 characters as players know
+  the game ("SkyBlock"), no spaces around it, no control, `§` or private use character, unique
+  without case. `command`: what the lobby takes to switch there, as a player types it: `/`, a
+  command name (not `/` or a space), words separated by single spaces, at most 64 characters, no
+  control, `§` or private use character (`/aurora`, `/testserver sky`). `testersOnly: true`: offered
+  only to a player the launcher knows is in the beta program (BETA-GATE's `GET /v1/beta` answers
+  `member`); hidden while the gate is off, the answer is anything else or unknown, or
+  `features.friends` is off; the lobby's own rules still decide on the server. A client leaves out
+  a row that breaks a rule and one whose `id` or `name` an earlier row has, and shows the rest;
+  Studio refuses to publish such a list. Writers omit the field while it is empty and
+  `testersOnly` while `false`.
+- `features.subServers`: "play.projects.gg → SkyBlock" (AUTOJOIN). While it is on, the launcher's
+  "Doğrudan sunucuya bağlan" offers the sub-servers of the instance's Projects server (the entry
+  with the same host, else the first Projects entry that has any) beside the lobby, the default;
+  the player's pick is kept per instance. Only a Fabric instance whose game gets the launcher's
+  own overlay mod (the in-game overlay or the chat's emoji picker on) is offered them. Pressing
+  OYNA with a pick passes its `command` to the overlay mod at the game's start (and only then:
+  not "Devam et", invites or event "Katıl"); the mod sends it once, as if the player typed it,
+  after the lobby's script says on the `projects:route` channel that its login, two-factor check
+  and agreement are done, and never on another server, a second time or after the game moved on.
+  Off by default; while it is `false` (or missing) launchers offer nothing and pass nothing. Turn
+  it on only after the lobby's script (`launcher-route.sk`) is live. Writers omit it while it is
+  `false`; launchers that do not know the field or `subServers` ignore them. Publishing either
+  needs a Studio of `aa95309` or later (STUDIO3).
 - `features.fastPacks`: "Hızlı doku paketi yükleme" (FASTPACK): desktop launchers show the setting
   (on by default) in Settings → Genel and install the official pack's fast-pack items while both
   are on ([Modpacks](#modpacks): `pSISfJ4O`, `d4phKsx2`). Off by default, outside the friends

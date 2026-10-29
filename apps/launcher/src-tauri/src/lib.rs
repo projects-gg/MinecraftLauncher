@@ -244,6 +244,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::instances::instance_set_shader,
             commands::instances::mod_set_enabled,
             commands::instances::instance_servers_edit,
+            commands::subservers::instance_sub_servers,
+            commands::subservers::sub_servers_tester,
             commands::instances::minecraft_versions,
             commands::instances::loader_versions,
             commands::launch::launch_instance,
