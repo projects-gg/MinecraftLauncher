@@ -55,6 +55,7 @@ import { REST } from "./groups";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { isJoinable, notifiesOnline, presenceLine } from "./model";
+import { PresenceText } from "./presence-text";
 import { rise, swap, useSocialMotion } from "./motion";
 import { usePersonItems } from "./person-menu";
 import { canInvite } from "./play-together";
@@ -276,7 +277,11 @@ function FriendCard({
                   : "text-ash-300",
             )}
           >
-            {world ? <WorldLine invite={world} /> : presenceLine(friend, t)}
+            {world ? (
+              <WorldLine invite={world} />
+            ) : (
+              <PresenceText friend={friend} t={t} joinable={joinable} />
+            )}
             {friend.dnd ? (
               <span className="text-gold-300"> ({t("social.presence.dnd")})</span>
             ) : null}
@@ -639,7 +644,11 @@ export function FriendRow({
                       )}
                       {...swap(reduce)}
                     >
-                      {world ? <WorldLine invite={world} /> : line}
+                      {world ? (
+                        <WorldLine invite={world} />
+                      ) : (
+                        <PresenceText friend={friend} t={t} joinable={joinable} />
+                      )}
                     </motion.span>
                   </AnimatePresence>
                 </span>

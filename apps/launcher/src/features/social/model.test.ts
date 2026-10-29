@@ -13,6 +13,7 @@ import {
   notifiesOnline,
   onlineFriends,
   presenceLine,
+  presenceParts,
   readBackup,
   wantsNotice,
 } from "./model";
@@ -140,18 +141,27 @@ describe("presenceLine", () => {
     expect(presenceLine(friend("1", "A"), t)).toBe("social.presence.offline");
   });
 
-  it("adds the version a friend plays to every place in game, as is (SOC9)", () => {
+  it("adds the version a friend plays to every place in game, as is, without a separator (SOC9)", () => {
     const playing = (game: Friend["game"]) => friend("1", "A", { state: "playing", game });
-    expect(presenceLine(playing({ where: "projects", ver: "1.21.4" }), t)).toBe(
-      "social.presence.projects · 1.21.4",
-    );
+    expect(presenceParts(playing({ where: "projects", ver: "1.21.4" }), t)).toEqual({
+      place: "social.presence.projects",
+      version: "1.21.4",
+    });
     expect(
-      presenceLine(playing({ where: "other", host: "mc.example.net", ver: "26.2" }), t),
-    ).toBe("social.presence.otherHost:mc.example.net · 26.2");
+      presenceParts(playing({ where: "other", host: "mc.example.net", ver: "26.2" }), t),
+    ).toEqual({ place: "social.presence.otherHost:mc.example.net", version: "26.2" });
+    expect(presenceParts(playing({ where: "other", ver: null }), t)).toEqual({
+      place: "social.presence.other",
+      version: null,
+    });
+    expect(presenceParts(friend("1", "A", { state: "launcher" }), t)).toEqual({
+      place: "social.presence.launcher",
+      version: null,
+    });
+    // As plain text (labels): a space, no separator character.
     expect(presenceLine(playing({ where: "singleplayer", ver: "25w14a" }), t)).toBe(
-      "social.presence.singleplayer · 25w14a",
+      "social.presence.singleplayer 25w14a",
     );
-    expect(presenceLine(playing({ where: "other", ver: null }), t)).toBe("social.presence.other");
   });
 
   it("knows projects.gg hosts", () => {

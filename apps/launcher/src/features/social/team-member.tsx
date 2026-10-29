@@ -46,6 +46,7 @@ import { JoinButton } from "./friend-row";
 import { openMenuFromKey } from "./menu-key";
 import { type PersonAction, personMenu } from "./menus";
 import { isJoinable, presenceLine } from "./model";
+import { PresenceText } from "./presence-text";
 import { rise, swap, useSocialMotion } from "./motion";
 import { type PersonQuestion, usePersonItems } from "./person-menu";
 import { SocialAvatar } from "./social-face";
@@ -379,9 +380,15 @@ function MemberCard({
                     : "text-ash-300",
             )}
           >
-            {member.blocked
-              ? t("teams.member.blocked")
-              : presenceLine(friend && member.state === "offline" ? friend : member, t)}
+            {member.blocked ? (
+              t("teams.member.blocked")
+            ) : (
+              <PresenceText
+                friend={friend && member.state === "offline" ? friend : member}
+                t={t}
+                joinable={joinable}
+              />
+            )}
           </p>
         </div>
       </div>
@@ -647,7 +654,15 @@ export function TeamMemberRow({
                         )}
                         {...swap(reduce)}
                       >
-                        {sub}
+                        {member.blocked ? (
+                          sub
+                        ) : (
+                          <PresenceText
+                            friend={friend && member.state === "offline" ? friend : member}
+                            t={t}
+                            joinable={joinable}
+                          />
+                        )}
                       </motion.span>
                     </AnimatePresence>
                   </span>

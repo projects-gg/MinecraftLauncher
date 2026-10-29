@@ -80,7 +80,8 @@ import {
 } from "./groups";
 import { canJoinInvite, joinInvite } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
-import { groupFriends, presenceLine } from "./model";
+import { groupFriends } from "./model";
+import { PresenceText } from "./presence-text";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
 import { NameWithMark } from "./person-mark";
 import { PersonContextMenu, PersonMoreButton, usePeopleItems } from "./person-menu";
@@ -440,7 +441,7 @@ function FriendGhost({ friend }: { friend: Friend }) {
           nameClassName="text-[14px] font-semibold text-bone-50"
         />
         <span className="block truncate text-[12.5px] leading-[18px] text-ash-400">
-          {presenceLine(friend, t)}
+          <PresenceText friend={friend} t={t} />
         </span>
       </span>
     </div>
