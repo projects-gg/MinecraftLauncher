@@ -871,7 +871,7 @@ export const trAfkPlus = {
     returnHelp:
       "Takas spawn'da yapılır. Sonra hesap orada kalır ya da seçtiğin komutla AFK yerine döner.",
     summaryAt: "Günlük özet saati",
-    saver: "Kontörün azalınca sohbeti kıssın",
+    saver: "Kontörün azalınca sohbeti kısa tutsun",
     savers: { "80": "%80 kullanılınca", "50": "%50 kullanılınca", off: "Kapalı" },
     blockedEmpty: "Engellediğin oyuncu yok.",
     blockedAdd: "Engelle",

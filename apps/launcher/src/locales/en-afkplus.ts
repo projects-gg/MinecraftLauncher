@@ -797,7 +797,7 @@ export const enAfkPlus = {
     returnHelp:
       "Trades happen at spawn. Then the account stays there or goes back to its AFK spot with the command you pick.",
     summaryAt: "Daily summary time",
-    saver: "Cut small talk when AI credits run low",
+    saver: "Keep chats short when AI credits run low",
     savers: { "80": "At 80% used", "50": "At 50% used", off: "Off" },
     blockedEmpty: "You haven't blocked anyone.",
     blockedAdd: "Block",
