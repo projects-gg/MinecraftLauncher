@@ -15,7 +15,7 @@
 //!   disabled copy renamed back as switched on) instead of undoing the change. Those adopted
 //!   choices rank below an explicit [`PackSelection`] and above the recorded choices;
 //! - an item a launcher setting owns ([`LauncherItems`]: the in-game overlay, [`OVERLAY_ITEM`];
-//!   "Hızlı doku paketi yükleme", [`FAST_PACK_ITEM`] and [`FAST_PACK_CACHE_ITEM`]) follows that
+//!   "Hızlı kaynak paketi yükleme", [`FAST_PACK_ITEM`] and [`FAST_PACK_CACHE_ITEM`]) follows that
 //!   setting alone: never recorded, adopted or new, and the mod center does not list it. A
 //!   launcher that ships the overlay's mod itself never installs that item, and keeps the pack's
 //!   Fabric API installed while the overlay is on ([`LauncherItems::needs`]). A fast-pack item
@@ -50,7 +50,7 @@ pub fn is_fabric_api(item: &PackItem) -> bool {
             .is_some_and(|modrinth| modrinth.project_id == FABRIC_API_PROJECT)
 }
 
-/// quick-pack's Modrinth project (FASTPACK): Settings → Genel "Hızlı doku paketi yükleme" owns
+/// quick-pack's Modrinth project (FASTPACK): Settings → Genel "Hızlı kaynak paketi yükleme" owns
 /// its choice ([`LauncherItems::fast_packs`]). Studio pins the file built for each family member's
 /// Minecraft version; a member without the item has nothing to install.
 pub const FAST_PACK_ITEM: &str = "pSISfJ4O";
@@ -122,7 +122,7 @@ pub struct LauncherItems {
     /// installed for the mod ([`Self::needs`]), so the pack, not a second copy, provides it. Off
     /// by default: older launchers and Studio's previews install the item.
     pub overlay_bundled: bool,
-    /// "Hızlı doku paketi yükleme" (FASTPACK) while the signed config's `features.fastPacks` is on
+    /// "Hızlı kaynak paketi yükleme" (FASTPACK) while the signed config's `features.fastPacks` is on
     /// too (the launcher passes the two together): the pack's [`FAST_PACK_ITEM`] and, once Studio
     /// lists it, [`FAST_PACK_CACHE_ITEM`] are installed. Off by default, so callers without the
     /// setting (Studio's previews) install neither.
@@ -784,7 +784,7 @@ mod tests {
         },
     };
 
-    /// "Hızlı doku paketi yükleme" on with the content flag, nothing of the player's in the way.
+    /// "Hızlı kaynak paketi yükleme" on with the content flag, nothing of the player's in the way.
     const FAST: LauncherItems = LauncherItems {
         fast_packs: true,
         ..OFF

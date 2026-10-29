@@ -263,7 +263,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             overlay::overlay_configure,
             overlay::overlay_state,
             overlay::overlay_connect_in_game,
-            // Settings → Genel "Hızlı doku paketi yükleme" (FASTPACK; shown only while the signed
+            // Settings → Genel "Hızlı kaynak paketi yükleme" (FASTPACK; shown only while the signed
             // config's features.fastPacks is on)
             fastpack::fast_packs_configure,
             fastpack::fast_packs_state,

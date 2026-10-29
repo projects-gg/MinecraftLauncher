@@ -4224,7 +4224,7 @@ export type FailureReason =
  */
 { kind: "refused"; cause: KickCause; message: string | null };
 
-/**  What Settings → Genel "Hızlı doku paketi yükleme" shows for the install Play opens. */
+/**  What Settings → Genel "Hızlı kaynak paketi yükleme" shows for the install Play opens. */
 export type FastPacksView = {
 	/**  The signed config's `features.fastPacks`: the switch shows. */
 	shown: boolean,

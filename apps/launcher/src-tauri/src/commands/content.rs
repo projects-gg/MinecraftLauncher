@@ -264,7 +264,7 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
         snapshot.config.features.friends,
         snapshot.config.features.worlds,
     );
-    // "Hızlı doku paketi yükleme" (FASTPACK): the next pack sync follows the flag.
+    // "Hızlı kaynak paketi yükleme" (FASTPACK): the next pack sync follows the flag.
     crate::fastpack::apply_flag(&state.root, snapshot.config.features.fast_packs);
     state
         .afk

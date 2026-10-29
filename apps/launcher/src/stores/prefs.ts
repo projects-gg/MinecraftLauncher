@@ -62,7 +62,7 @@ interface PrefsState {
    */
   chatEmoji: boolean;
   /**
-   * Settings → Genel "Hızlı doku paketi yükleme" (FASTPACK): the official pack installs its
+   * Settings → Genel "Hızlı kaynak paketi yükleme" (FASTPACK): the official pack installs its
    * fast-pack mods while Studio's `features.fastPacks` is on too (features/fastpack, src-tauri
    * fastpack.rs).
    */

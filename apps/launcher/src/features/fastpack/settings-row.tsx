@@ -6,17 +6,18 @@ import { Row } from "@/features/settings/row";
 import { api, type InstanceSummary } from "@/lib/api";
 import { usePrefs } from "@/stores/prefs";
 import { fastPackApi } from "./api";
-import { fastPackLine } from "./line";
+import { fastPackLine, fastPackRow } from "./line";
 
 /** Before the instance list is read. */
 const NO_INSTANCES: InstanceSummary[] = [];
 
 /**
- * Settings → Genel "Hızlı doku paketi yükleme" (FASTPACK, on by default): the official pack's
+ * Settings → Genel "Hızlı kaynak paketi yükleme" (FASTPACK, on by default): the official pack's
  * fast-pack mods (quick-pack) on the versions Studio lists them for, shown while the signed
  * config's `features.fastPacks` is on. Its one place: no mod list shows the mods. The line under
- * it says what it does; for the install Play opens (the command bar's rule) a second sentence
- * says where it does nothing.
+ * it says what it does; for the install Play opens (the command bar's rule) where it does
+ * nothing, the reason takes the line's place and the switch is held off and dimmed (the stored
+ * preference stays for the installs where it works).
  */
 export function FastPackRow() {
   const { t } = useTranslation();
@@ -34,17 +35,15 @@ export function FastPackRow() {
     staleTime: 60_000,
   });
   if (!view?.shown) return null;
-  const line = fastPackLine(view);
-  const absent =
-    line === "missing" ? t("fastPack.missing") : line === "notHere" ? t("fastPack.notHere") : null;
-  const help = absent ? `${t("fastPack.help")} ${absent}` : t("fastPack.help");
+  const row = fastPackRow(on, fastPackLine(view), play?.mcVersion);
   return (
-    <Row title={t("fastPack.setting")} help={help}>
+    <Row title={t("fastPack.setting")} help={t(row.help, { version: row.version })}>
       <Switch
-        checked={on}
+        checked={row.checked}
         onCheckedChange={(v) => set("fastPacks", v)}
         label={t("fastPack.setting")}
         hideLabel
+        disabled={row.disabled}
       />
     </Row>
   );

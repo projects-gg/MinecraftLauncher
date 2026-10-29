@@ -2,7 +2,7 @@ import { commands, type FastPacksView } from "@/bindings";
 import { isTauri } from "@/lib/platform";
 import { mockFastPack } from "./mock";
 
-/** "Hızlı doku paketi yükleme" in the launcher (`src-tauri/src/fastpack.rs`, `crates/pl-content`). */
+/** "Hızlı kaynak paketi yükleme" in the launcher (`src-tauri/src/fastpack.rs`, `crates/pl-content`). */
 export interface FastPackApi {
   /** The page's choice: called at its start and whenever it changes. */
   configure(enabled: boolean): Promise<void>;

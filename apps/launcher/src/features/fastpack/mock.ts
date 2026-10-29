@@ -2,7 +2,7 @@ import type { FastPacksView } from "@/bindings";
 import type { FastPackApi } from "./api";
 
 /**
- * "Hızlı doku paketi yükleme" in the browser preview: the switch shows (as with Studio's flag
+ * "Hızlı kaynak paketi yükleme" in the browser preview: the switch shows (as with Studio's flag
  * on), and `?fastPacks=missing` (the pack has no mod for the version Play opens), `?fastPacks=own`
  * (Play opens the player's own install) or `?fastPacks=off` (the flag off) show the other states;
  * localStorage `pl.mock.fastPacks` does the same.

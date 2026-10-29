@@ -1,4 +1,4 @@
-//! "Hızlı doku paketi yükleme" (FASTPACK): Settings → Genel's switch over the official pack's
+//! "Hızlı kaynak paketi yükleme" (FASTPACK): Settings → Genel's switch over the official pack's
 //! fast-pack items (quick-pack, and ResourcePackCached once Studio lists it), shown while the
 //! signed config's `features.fastPacks` is on. The page owns the choice and pushes it at its start
 //! and on every change; the data folder keeps a copy of it and of the last applied flag, so the
@@ -126,7 +126,7 @@ pub fn fast_packs_configure(state: State<'_, AppState>, enabled: bool) {
     }
 }
 
-/// What Settings → Genel "Hızlı doku paketi yükleme" shows for the install Play opens.
+/// What Settings → Genel "Hızlı kaynak paketi yükleme" shows for the install Play opens.
 #[derive(Debug, Clone, Copy, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FastPacksView {

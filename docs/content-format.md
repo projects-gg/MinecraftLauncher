@@ -482,7 +482,7 @@ news feed, the launcher's built-in recommended Minecraft version.
   it on only after the lobby's script (`launcher-route.sk`) is live. Writers omit it while it is
   `false`; launchers that do not know the field or `subServers` ignore them. Publishing either
   needs a Studio of `aa95309` or later (STUDIO3).
-- `features.fastPacks`: "Hızlı doku paketi yükleme" (FASTPACK): desktop launchers show the setting
+- `features.fastPacks`: "Hızlı kaynak paketi yükleme" (FASTPACK): desktop launchers show the setting
   (on by default) in Settings → Genel and install the official pack's fast-pack items while both
   are on ([Modpacks](#modpacks): `pSISfJ4O`, `d4phKsx2`). Off by default, outside the friends
   feature. While it is `false` (or missing) launchers show no switch and remove the copies a pack
@@ -1214,7 +1214,7 @@ a top-level `projects` object that other launchers ignore; Studio can export a r
     on, installs the pack's Fabric API item (item id or Modrinth project `P7dR8mSH`) as if a mod
     required it, because its own jar needs it. The item stays in the pack for older launchers.
   - The ids `pSISfJ4O` (quick-pack) and `d4phKsx2` (ResourcePackCached), the mods' Modrinth
-    projects, are reserved for the desktop launcher's setting "Hızlı doku paketi yükleme"
+    projects, are reserved for the desktop launcher's setting "Hızlı kaynak paketi yükleme"
     (FASTPACK). Studio adds them as ordinary Modrinth items to each family member's manifest, the
     file built for that member's Minecraft version (pinned by `modrinth.versionId` and the file's
     SHA-512), with `defaultEnabled: false` and no `requires`; a member without the item gets

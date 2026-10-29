@@ -413,7 +413,7 @@ pub(crate) fn notice(
 
 /// Background-sync policy for `game_dir`: files whose size and recorded hash match are not hashed
 /// again; the launcher's own items follow their settings ("Oyun içi katman", crate::overlay;
-/// "Hızlı doku paketi yükleme", crate::fastpack).
+/// "Hızlı kaynak paketi yükleme", crate::fastpack).
 pub(crate) async fn quick(game_dir: &Path, previous: Option<&PackState>) -> SyncPolicy {
     SyncPolicy {
         repair: false,

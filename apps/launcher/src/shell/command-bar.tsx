@@ -692,7 +692,7 @@ export function CommandBar() {
   // The instance OYNA plays is the one the launcher prepares in the background; its hint gives
   // way to the launch's own progress.
   usePrepareSync(selected, !instancesLoading);
-  // "Hızlı doku paketi yükleme" reaches the pack syncs that run while the page rests.
+  // "Hızlı kaynak paketi yükleme" reaches the pack syncs that run while the page rests.
   useFastPackSync();
   const prepareHint = usePrepare((s) => s.hint);
   const hint = !busy && prepareHint?.instanceId === selected?.id ? prepareHint : null;
