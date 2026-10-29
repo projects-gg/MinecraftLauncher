@@ -6,7 +6,7 @@ import { type KeyboardEvent, useEffect, useId, useRef } from "react";
 import { cn } from "../../lib/cn";
 import { Button } from "../button";
 import { fill, type InventoryLang } from "../inventory/texts";
-import { type ConsoleClick, urlParts } from "./looks";
+import { type ConsoleClick, domainParts, urlParts } from "./looks";
 import { CONSOLE_TEXTS } from "./texts";
 
 export interface ConsoleActionCardProps {
@@ -67,10 +67,17 @@ export function ConsoleActionCard({
           {click.v}
         </p>
       ) : (
-        // The host alone and first, in bold: it is what a player reads to know where a link goes.
-        <div className="mt-2 rounded-md bg-obsidian-900 px-3 py-2 font-mono break-all select-text">
-          <p className="text-[14px] font-semibold text-bone-50">{link.host}</p>
-          {link.rest ? <p className="mt-0.5 text-[12.5px] text-ash-400">{link.rest}</p> : null}
+        // The registrable domain alone and first, unbroken and in bold: it is what a player reads to
+        // know where a link goes (a host that starts with another site's name shows the real one).
+        // The whole address follows, muted, nothing of it hidden.
+        <div className="mt-2 rounded-md bg-obsidian-900 px-3 py-2 font-mono select-text">
+          <p className="overflow-x-auto text-[14px] font-semibold whitespace-nowrap text-bone-50">
+            {domainParts(link.host).domain}
+          </p>
+          <p className="mt-0.5 text-[12.5px] break-all text-ash-400">
+            {link.host}
+            {link.rest}
+          </p>
         </div>
       )}
       <p className="mt-2 text-[12.5px] text-ash-400">

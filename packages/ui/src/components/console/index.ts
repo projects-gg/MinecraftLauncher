@@ -10,6 +10,7 @@ export {
   type ConsoleSpan,
   clean,
   copiedPreview,
+  domainParts,
   hoverEntityLines,
   hoverTextLines,
   lineRuns,
