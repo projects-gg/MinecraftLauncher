@@ -357,6 +357,8 @@ export function CloudConsole({
           } catch {
             checked = null;
           }
+          // A new dialog or its close: an error of an earlier press or line no longer applies.
+          setSendError(null);
           setDialog(checked ? { rev: event.rev, dialog: checked, at: Date.now() / 1000 } : null);
           break;
         }
@@ -715,6 +717,7 @@ export function CloudConsole({
             lang={lang}
             clock={clockOf(card.at)}
             busy={pressing}
+            error={sendError}
             onAct={(act) => void pressDialog(act)}
             onClick={onDialogClick}
           />

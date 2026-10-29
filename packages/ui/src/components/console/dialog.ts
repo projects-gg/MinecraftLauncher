@@ -3,7 +3,9 @@
 // the inputs as the client takes them, and the command a run_command button would run, filled in
 // the way the client fills it (DialogManager.ApplyTemplate), so the card shows exactly what the
 // client is asked to run and the machine and the client refuse any other.
+import type { InventoryLang } from "../inventory/texts";
 import { type ConsoleSpan, clean, lineRuns, MAX_VALUE, safeClick } from "./looks";
+import { CONSOLE_TEXTS } from "./texts";
 
 export const DIALOG = {
   title: 128,
@@ -358,4 +360,13 @@ export function dialogPress(
   if (button.a !== "run_command") return { rev, i: button.i, inputs };
   const cmd = dialogCommand(dialog, button, values);
   return cmd === null ? null : { rev, i: button.i, inputs, cmd };
+}
+
+/**
+ * What the card says when a press is refused (`dialog_refused` with its `reason`): the dialog had
+ * changed (its new card is already there), or any other reason, without a detail.
+ */
+export function dialogRefusal(reason: unknown, lang: InventoryLang): string {
+  const t = CONSOLE_TEXTS[lang];
+  return reason === "stale" ? t.dialogChanged : t.dialogFailed;
 }

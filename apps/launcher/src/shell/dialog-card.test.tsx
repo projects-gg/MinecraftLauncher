@@ -5,6 +5,7 @@ import {
   type Dialog,
   DialogCard,
   dialogCommand,
+  dialogRefusal,
   initialValues,
   numberText,
   safeDialog,
@@ -120,9 +121,28 @@ describe("a server's dialog", () => {
     expect(snap(range, 0.6)).toBe(0.5);
     expect(snap(range, 2)).toBe(1);
   });
+
+  it("says why a press was refused without a detail", () => {
+    expect(dialogRefusal("stale", "tr")).toBe("Sunucu penceresi değişti.");
+    expect(dialogRefusal("cmd", "tr")).toBe("Bu düğme şu an çalışmadı.");
+    expect(dialogRefusal(undefined, "en")).toBe("This button didn't work just now.");
+  });
 });
 
 describe("DialogCard", () => {
+  it("shows a refused press under its buttons", () => {
+    render(
+      <DialogCard
+        dialog={safeDialog(RAW) as Dialog}
+        lang="tr"
+        clock="17:30:00"
+        error="Bu düğme şu an çalışmadı."
+        onAct={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toBe("Bu düğme şu an çalışmadı.");
+  });
+
   it("asks before a command runs, with the command its inputs build", () => {
     const onAct = vi.fn();
     render(

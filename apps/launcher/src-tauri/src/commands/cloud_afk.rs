@@ -817,6 +817,20 @@ impl From<CloudError> for CmdError {
                     )
                     .into(),
                 ),
+                // A press on a server's dialog card (DIALOG-CARD), as @pl/ui's dialogRefusal says it.
+                "dialog_refused" => (
+                    "BULUT-PENCERE",
+                    match error.extra_str("reason") {
+                        Some("stale") => {
+                            pick("Sunucu penceresi değişti.", "The server's window changed.")
+                        }
+                        _ => pick(
+                            "Bu düğme şu an çalışmadı.",
+                            "This button didn't work just now.",
+                        ),
+                    }
+                    .into(),
+                ),
                 _ => (
                     "BULUT",
                     pick(

@@ -36,6 +36,8 @@ export interface DialogCardProps {
   /** When it opened, as the console shows times. */
   clock: string;
   busy?: boolean;
+  /** Why the last press did not go through (`dialogRefusal`, or the app's own error text). */
+  error?: string | null;
   /** A button for the client (close, custom, a nested dialog, a confirmed command) or a close. */
   onAct: (act: DialogAct) => void;
   /** The card's local clicks: a confirmed link, a suggestion, a copy (the console's own handler). */
@@ -149,6 +151,7 @@ export function DialogCard({
   lang,
   clock,
   busy,
+  error,
   onAct,
   onClick,
   className,
@@ -255,6 +258,11 @@ export function DialogCard({
           );
         })}
       </div>
+      {error ? (
+        <p role="alert" className="text-[12.5px] text-flare-400">
+          {error}
+        </p>
+      ) : null}
       {dialog.cancel ? (
         <Button
           variant="ghost"

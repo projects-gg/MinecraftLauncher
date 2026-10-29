@@ -10,6 +10,7 @@ export {
   dialogCommand,
   dialogInputs,
   dialogPress,
+  dialogRefusal,
   initialValues,
   numberText,
   safeDialog,

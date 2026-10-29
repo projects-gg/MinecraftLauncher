@@ -24,6 +24,9 @@ export interface ConsoleTexts {
   dialogClose: string;
   dialogPlayOnly: string;
   dialogLabel: string;
+  /** A press the machine or the client refused: the dialog had changed, or any other reason. */
+  dialogChanged: string;
+  dialogFailed: string;
 }
 
 export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
@@ -45,6 +48,8 @@ export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
     dialogClose: "Oyunda kapat",
     dialogPlayOnly: "Oyuna girince",
     dialogLabel: "Sunucu penceresi",
+    dialogChanged: "Sunucu penceresi değişti.",
+    dialogFailed: "Bu düğme şu an çalışmadı.",
   },
   en: {
     entityType: "Type",
@@ -64,5 +69,7 @@ export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
     dialogClose: "Close in game",
     dialogPlayOnly: "Once in game",
     dialogLabel: "Server window",
+    dialogChanged: "The server's window changed.",
+    dialogFailed: "This button didn't work just now.",
   },
 };
