@@ -55,6 +55,20 @@ impl TestEnv {
         }
     }
 
+    /// [`new`](Self::new) with a released client of `version` installed instead of the dev
+    /// override (whose version is "dev"): the session then treats it as that version (for the
+    /// bridge nonce, clients 4.1.0 and later).
+    pub fn with_client_version(version: &str) -> Self {
+        let mut env = Self::new(None);
+        let source = env.dir.path().join("release");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(source.join(CLIENT_EXE_NAME), b"in-memory client").unwrap();
+        let runtime = AfkRuntime::new(env.paths.bin_dir());
+        runtime.adopt_folder(version, &source).unwrap();
+        env.runtime = Arc::new(runtime);
+        env
+    }
+
     pub fn sink(&self) -> EventSink {
         let events = self.events.clone();
         Arc::new(move |event| events.lock().push(event))
@@ -221,6 +235,8 @@ pub struct FakeProc {
     err: DuplexStream,
     input: tokio::io::Lines<BufReader<DuplexStream>>,
     received: Arc<Mutex<Vec<String>>>,
+    /// The bridge nonce the session gave this process (clients 4.1.0 and later).
+    pub nonce: Option<String>,
 }
 
 impl FakeProc {
@@ -232,7 +248,14 @@ impl FakeProc {
         let _ = self.err.write_all(format!("{line}\r\n").as_bytes()).await;
     }
 
+    /// An event line as the real client prints it: with its nonce when it was given one.
     pub async fn event(&mut self, json: &str) {
+        let nonce = self.nonce.clone().unwrap_or_default();
+        self.out(&format!("{nonce}@@MCC@@{json}")).await;
+    }
+
+    /// A line a server forged: the bare bridge prefix, without the nonce.
+    pub async fn forged(&mut self, json: &str) {
         self.out(&format!("@@MCC@@{json}")).await;
     }
 
@@ -323,6 +346,7 @@ impl ClientSpawner for ScriptedSpawner {
             err: proc_stderr,
             input: BufReader::new(proc_stdin).lines(),
             received: self.received.clone(),
+            nonce: spec.nonce.clone(),
         };
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
         let future = (self.script)(run, proc);

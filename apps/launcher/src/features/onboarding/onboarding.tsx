@@ -710,7 +710,7 @@ function ProjectsStep({
                 <p className="truncate font-display text-[19px] font-semibold text-bone-50/85">
                   {pack?.name ?? "Projects"}
                 </p>
-                <Chip tone="gold">{t("instances.managed")}</Chip>
+                <Chip>{t("instances.managed")}</Chip>
               </div>
               <p className="mt-0.5 text-[13px] text-ash-400">
                 {pack
@@ -740,7 +740,7 @@ function ProjectsStep({
                 <p className="truncate font-display text-[19px] font-semibold text-bone-50">
                   {instance.name}
                 </p>
-                {instance.managed ? <Chip tone="gold">{t("instances.managed")}</Chip> : null}
+                {instance.managed ? <Chip>{t("instances.managed")}</Chip> : null}
               </div>
               <p className="mt-0.5 text-[13px] text-ash-400">
                 Minecraft {instance.mcVersion}, {t(`loaders.${instance.loader}`)}

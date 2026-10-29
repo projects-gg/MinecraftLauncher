@@ -1,5 +1,5 @@
 // The words of a command or a reply, in the AFK surfaces' one look for secret lines (secret.tsx):
-// - plain words: a field, with "Gizle" beside it that makes them secret (a password command is
+// - plain words: a field, with "Gizli yap" beside it that makes them secret (a password command is
 //   secret at once, and says so);
 // - a stored secret, wherever its words are: the kept field (padlock, its command, dots) with
 //   "Değiştir" beside it, as on the desktop. Its eye shows the words for a few seconds: from this

@@ -212,10 +212,11 @@ export const enCloudAfk = {
     owner: "The name you play with",
     ownerHelp: 'With "Only reply to me" on, a rule answers only this player.',
     seconds: "s",
+    minutes: "min",
     commands: {
       add: "Add command",
       empty: "No commands yet.",
-      count: "{{count}}/{{max}} commands",
+      count: "{{count}}/{{max}} commands on this account",
       trigger: "When",
       triggers: {
         join: "On every join",
@@ -232,6 +233,7 @@ export const enCloudAfk = {
       times: "Times",
       timesHelp: "Turkey time.",
       addTime: "Add time",
+      timePlaceholder: "hh:mm",
       removeTime: "Remove {{time}}",
       text: "Command",
       textPlaceholder: "/kit or hello",
@@ -295,7 +297,8 @@ export const enCloudAfk = {
       range: "This value isn't accepted.",
       order: "At most can't be less than at least.",
       delay: "Enter 0 to 60 seconds.",
-      every: "At least {{min}} seconds, at most a day.",
+      // "min", not "minutes": the cloud's shortest is often 1.
+      every: "At least {{min}} min, at most a day.",
       cooldown: "At least {{min}} seconds, at most a day.",
       antiAfk: "Enter 10 to 3600 seconds. The second number can't be smaller than the first.",
       timesFormat: "Write the time as HH:MM.",
