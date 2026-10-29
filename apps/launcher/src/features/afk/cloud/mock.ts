@@ -331,11 +331,6 @@ function plainAccounts(which: Scenario): CloudAccount[] {
   const list = [
     account("a_7KQ2MZ3P9TW4XB1C", "Madenci07", "mc.madenciler.net", 25570, {
       version: "1.21.4",
-      // `&fresh=on`: a new account that types nothing on joining and has no rule (its settings
-      // offer "Kuruluma devam et", SETUP-UX-L).
-      ...(param("fresh") === "on"
-        ? { config: { ...config("plain"), owner: "", commands: [], rules: [] } }
-        : {}),
     }),
     account(GECE, "GeceBekcisi", "play.projects.gg", 0, {
       expiresAt: now + 5 * DAY + 4 * 3_600,
@@ -344,6 +339,11 @@ function plainAccounts(which: Scenario): CloudAccount[] {
         : { state: "waiting", since: now - 30, reason: null, attempt: 2, retryAt: now + 14 },
       ...(movementFeature(GECE)?.on
         ? { config: { ...config("full"), movement: { enabled: true } } }
+        : {}),
+      // `&fresh=on`: a new account that types nothing on joining and has no rule (its settings
+      // offer "Kuruluma devam et", SETUP-UX-L).
+      ...(param("fresh") === "on"
+        ? { config: { ...config("plain"), owner: "", commands: [], rules: [] } }
         : {}),
       rev: 9,
     }),

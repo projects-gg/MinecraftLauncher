@@ -412,7 +412,7 @@ function MoneyEditor({
                     limits.totalBudget === null
                       ? "afkPlus.settings.spentNoBudget"
                       : "afkPlus.settings.spentTotal",
-                    { amount: formatAmount(spent.total) },
+                    { amount: withMoney(formatAmount(spent.total), unit) },
                   )}
                 </span>
                 <QuietLink onClick={() => setConfirmReset(true)}>
@@ -448,7 +448,9 @@ function MoneyEditor({
             extra={
               spent && spent.today > 0 ? (
                 <p className="-mt-1 text-[12.5px] text-bone-100 tabular-nums">
-                  {t("afkPlus.settings.spentToday", { amount: formatAmount(spent.today) })}
+                  {t("afkPlus.settings.spentToday", {
+                    amount: withMoney(formatAmount(spent.today), unit),
+                  })}
                 </p>
               ) : null
             }

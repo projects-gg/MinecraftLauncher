@@ -3,9 +3,9 @@
 // in our obsidian tones. The item comes from the vanilla atlas the launcher draws from the player's
 // installed Minecraft (`PlusItemArt` around the panel): nothing of the game ships with us and no
 // picture comes from the network. Drawn at whole pixels: the 16 px textures at 2x, 1x on the
-// setup's rail. Decorative: the question beside it says what it is. Until the atlas is there (and
-// in the browser preview, which has none) the slot stays empty, as on the site: a category's
-// stand-in could read as another item.
+// setup's rail. Decorative: the question beside it says what it is. Without the atlas (no game
+// installed yet, the browser preview) there is no slot at all: an empty one read as a checkbox
+// beside its question, and a category's stand-in could read as another item.
 import { cn } from "@pl/ui";
 import { ItemSprite, useItemArt } from "@pl/ui/items";
 
@@ -14,6 +14,11 @@ const SIZES = {
   md: { box: 40, item: 32, radius: "rounded-[6px]" },
   lg: { box: 44, item: 32, radius: "rounded-[6px]" },
 } as const;
+
+/** Whether the game's item pictures are here (the slots show only then). */
+export function useHasItemArt(): boolean {
+  return Boolean(useItemArt()?.vanilla);
+}
 
 export function ItemSlot({
   item,
@@ -25,7 +30,8 @@ export function ItemSlot({
   size?: keyof typeof SIZES;
   className?: string;
 }) {
-  const art = useItemArt();
+  const shown = useHasItemArt();
+  if (!shown) return null;
   const { box, item: px, radius } = SIZES[size];
   return (
     <span
@@ -38,7 +44,7 @@ export function ItemSlot({
       )}
       style={{ width: box, height: box }}
     >
-      {art?.vanilla ? <ItemSprite id={item} size={px} /> : null}
+      <ItemSprite id={item} size={px} />
     </span>
   );
 }

@@ -829,6 +829,7 @@ function OrderIntake({
   onPick,
   onCard,
   onSaved,
+  quietLabel = false,
 }: {
   accountId: string;
   ctx: DraftContext;
@@ -837,6 +838,8 @@ function OrderIntake({
   active: number;
   orderMax: number;
   checksLeft: number | null;
+  /** The field's question is said above it already (the setup's step): only screen readers hear it. */
+  quietLabel?: boolean;
   /** Typed orders: on, switched off (the field is not shown), or the machine cannot be asked. */
   checks: IntakeChecks;
   canPick: boolean;
@@ -1106,7 +1109,10 @@ function OrderIntake({
             animate={{ opacity: 1, transform: "translateY(0px)", transition: enter(0.22) }}
             exit={{ opacity: 0, transition: leave(0.15) }}
           >
-            <p id={`${id}-label`} className="mb-1.5 text-[13px] font-medium text-bone-100">
+            <p
+              id={`${id}-label`}
+              className={cn("mb-1.5 text-[13px] font-medium text-bone-100", quietLabel && "sr-only")}
+            >
               {t("afkPlus.intake.label")}
             </p>
             <OrderCard
@@ -1162,7 +1168,7 @@ function OrderIntake({
             <label
               htmlFor={id}
               id={`${id}-label`}
-              className="text-[13px] font-medium text-bone-100"
+              className={cn("text-[13px] font-medium text-bone-100", quietLabel && "sr-only")}
             >
               {t("afkPlus.intake.label")}
             </label>
@@ -1803,8 +1809,9 @@ export function OrdersSection({ account, panel }: { account: CloudAccount; panel
 }
 
 /**
- * The order field with its form and inventory pick, without the list: the setup wizard's last step
- * ("Ne almak ya da satmak istiyorsun?"). `onSaved`: an order was saved (by the card or the form).
+ * The order field with its form and inventory pick, without the list: the setup's first step ("Ne
+ * alıp satsın?", which asks the field's question itself, so its label is for screen readers only).
+ * `onSaved`: an order was saved (by the card or the form).
  */
 export function OrderStarter({
   account,
@@ -1872,6 +1879,7 @@ export function OrderStarter({
         onForm={(request) => setForm(withSaved(request))}
         onPick={(field, then) => setPicking({ field, then })}
         onSaved={onSaved}
+        quietLabel
       />
       <OrderForm
         accountId={account.id}

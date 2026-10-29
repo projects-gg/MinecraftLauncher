@@ -3,7 +3,7 @@
 // stacks: an item that stacks fills a slot up to its stack size with its count in the corner in the
 // game's own digits; one that does not (an elytra, a totem) takes a slot each. Past nine slots the
 // row stays full; the sentence under it says the number. Decorative: that sentence carries the
-// meaning. The items come from the player's own game (empty slots until its atlas is there).
+// meaning. The items come from the player's own game (no row until its atlas is there).
 import { PixelLine } from "@pl/ui/inventory";
 import { ItemSprite, useItemArt } from "@pl/ui/items";
 import type { CSSProperties } from "react";
@@ -12,6 +12,8 @@ const SLOTS = 9;
 
 export function SlotRow({ item, count, stack }: { item: string; count: number; stack: number }) {
   const art = useItemArt();
+  // Without the game's pictures nine empty slots would read as nothing: the sentence says it alone.
+  if (!art?.vanilla) return null;
   const per = Math.max(1, stack);
   const filled = Math.min(SLOTS, Math.ceil(Math.max(0, count) / per));
   let left = Math.max(0, count);
@@ -30,7 +32,7 @@ export function SlotRow({ item, count, stack }: { item: string; count: number; s
             key={index}
             className="relative grid size-[36px] place-items-center shadow-[inset_1px_1px_0_rgb(0_0_0/0.55),inset_-1px_-1px_0_rgb(255_255_255/0.05)]"
           >
-            {here > 0 && art?.vanilla ? <ItemSprite id={item} size={32} /> : null}
+            {here > 0 ? <ItemSprite id={item} size={32} /> : null}
             {here > 1 ? (
               <span className="absolute right-px bottom-px">
                 <PixelLine text={String(here)} color="#fbf6ec" shadow="#3e3d3b" />

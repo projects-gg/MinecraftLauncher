@@ -11,7 +11,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { OneGold } from "../../settings/controls";
-import { ItemSlot } from "./item-slot";
+import { ItemSlot, useHasItemArt } from "./item-slot";
 
 const GLIDE = { layout: { duration: 0.3, ease: easeOutExpo } };
 
@@ -71,6 +71,8 @@ export function QuestionRow({
   const { t } = useTranslation();
   const { layout } = useMotionPrefs();
   const body = useId();
+  // The editor lines up with the question's words, past the item slot while there is one.
+  const slotted = useHasItemArt();
   return (
     <motion.div
       layout={layout ? "position" : false}
@@ -131,7 +133,7 @@ export function QuestionRow({
               transition: { duration: 0.22, ease: easeOutExpo },
             }}
             exit={{ opacity: 0, transition: { duration: 0.15 } }}
-            className="flex flex-col pr-[18px] pb-[18px] pl-[72px]"
+            className={cn("flex flex-col pr-[18px] pb-[18px]", slotted ? "pl-[72px]" : "pl-[18px]")}
           >
             {children}
           </motion.div>
