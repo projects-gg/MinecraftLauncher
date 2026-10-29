@@ -454,7 +454,8 @@ export function issueKey(issue: Issue): string {
   const { field, problem } = issue;
   switch (field) {
     case "name":
-      return problem === "duplicate" ? "nameDuplicate" : "name";
+      if (problem === "duplicate") return "nameDuplicate";
+      return problem === "protected" ? "nameProtected" : "name";
     case "server":
       if (problem === "dot") return "hostDot";
       if (problem === "private" || problem === "self") return "hostPrivate";

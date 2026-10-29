@@ -302,7 +302,7 @@ export function Hint({
 
 export function ErrorText({ children, id }: { children: ReactNode; id?: string }) {
   return (
-    <p id={id} role="alert" className="text-[12.5px] text-flare-400">
+    <p id={id} role="alert" className="whitespace-pre-line text-[12.5px] text-flare-400">
       {children}
     </p>
   );
