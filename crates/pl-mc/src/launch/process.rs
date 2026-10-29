@@ -9,15 +9,17 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTime};
 
 use parking_lot::Mutex;
 use pl_net::CancellationToken;
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader, ReadBuf};
 use tokio::task::JoinHandle;
 
 use crate::error::{Error, Result};
@@ -35,8 +37,15 @@ use crate::paths::write_atomic;
 pub const MAX_TAIL_LINES: usize = 3000;
 /// Size cap of the captured log file.
 pub const MAX_LOG_BYTES: u64 = 8 * 1024 * 1024;
-/// How long to wait for output pipes to close after the process exited.
+/// How long a reader still waits, once the game has exited and its own output is read, for a pipe
+/// another process holds open (something the game started and left running); counted only while
+/// that is so ([`drain_output`]).
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
+/// The longest the game's own last output may take to be read once it has exited (a stalled
+/// machine; [`drain_output`]).
+const DRAIN_LIMIT: Duration = Duration::from_secs(60);
+/// How often a reader that has not ended is looked at once the game has exited.
+const DRAIN_CHECK: Duration = Duration::from_millis(100);
 /// Crash report bytes read for analysis.
 const MAX_REPORT_BYTES: usize = 1024 * 1024;
 
@@ -334,9 +343,9 @@ impl GameProcess {
         Self::spawn_draining(command, options, DRAIN_TIMEOUT, on_event).await
     }
 
-    /// [`Self::spawn`], reading the output for up to `drain` once the process has exited. Tests
-    /// that check the last lines a process printed give it longer than a loaded machine takes to
-    /// read them: the 5 s ran out there, and lines still in the pipes were lost.
+    /// [`Self::spawn`] with `drain` in place of [`DRAIN_TIMEOUT`]. Tests that check the last lines
+    /// a process printed give it longer than a loaded machine takes to read them (where the pipe
+    /// cannot be asked, [`drain_output`], the drain runs from the exit).
     async fn spawn_draining(
         command: &LaunchCommand,
         options: SpawnOptions,
@@ -394,15 +403,15 @@ impl GameProcess {
         });
         (shared.on_event)(GameEvent::Started { pid });
 
-        let readers: Vec<JoinHandle<()>> = [
+        let readers: Vec<Output> = [
             child
                 .stdout
                 .take()
-                .map(|s| tokio::spawn(read_stream(s, Arc::clone(&shared)))),
+                .map(|s| Output::spawn(pipe::Pipe::of(&s), s, &shared)),
             child
                 .stderr
                 .take()
-                .map(|s| tokio::spawn(read_stream(s, Arc::clone(&shared)))),
+                .map(|s| Output::spawn(pipe::Pipe::of(&s), s, &shared)),
         ]
         .into_iter()
         .flatten()
@@ -593,12 +602,180 @@ async fn read_stream<R: AsyncRead + Unpin>(stream: R, shared: Arc<Shared>) {
     }
 }
 
+/// One of the game's output streams and its reader ([`drain_output`]).
+struct Output {
+    task: JoinHandle<()>,
+    /// Bytes the reader has taken from the pipe.
+    taken: Arc<AtomicU64>,
+    pipe: Option<pipe::Pipe>,
+}
+
+impl Output {
+    fn spawn<R: AsyncRead + Unpin + Send + 'static>(
+        pipe: Option<pipe::Pipe>,
+        stream: R,
+        shared: &Arc<Shared>,
+    ) -> Self {
+        let taken = Arc::new(AtomicU64::new(0));
+        let counted = Counted {
+            inner: stream,
+            taken: Arc::clone(&taken),
+        };
+        Self {
+            task: tokio::spawn(read_stream(counted, Arc::clone(shared))),
+            taken,
+            pipe,
+        }
+    }
+}
+
+/// A stream that counts the bytes taken from it.
+struct Counted<R> {
+    inner: R,
+    taken: Arc<AtomicU64>,
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for Counted<R> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        let before = buf.filled().len();
+        let polled = Pin::new(&mut this.inner).poll_read(cx, buf);
+        let read = buf.filled().len().saturating_sub(before);
+        this.taken
+            .fetch_add(u64::try_from(read).unwrap_or(u64::MAX), Ordering::SeqCst);
+        polled
+    }
+}
+
+/// Waits for the reader of one of the game's output streams once the game has exited. The pipe
+/// closes when the last process holding its writing end does, and what the game wrote is taken
+/// already or still in the pipe (its exit ended its writes): that is read to its end however long
+/// a stalled machine takes, up to [`DRAIN_LIMIT`]. A pipe another process still holds open
+/// (something the game started and left running) gets `drain` more, counted only while that is
+/// so, and then its reader is stopped: what comes from there is not the game's. Where the pipe
+/// cannot be asked, the reader gets `drain` from the exit.
+async fn drain_output(output: Output, drain: Duration) {
+    let Output {
+        mut task,
+        taken,
+        pipe,
+    } = output;
+    let abort = task.abort_handle();
+    let Some(pipe) = pipe else {
+        if tokio::time::timeout(drain, &mut task).await.is_err() {
+            abort.abort();
+        }
+        return;
+    };
+    // Where the game's own output ends in the stream.
+    let owed = match pipe.left() {
+        Some(PipeLeft::Unread(unread)) => taken.load(Ordering::SeqCst).saturating_add(unread),
+        Some(PipeLeft::Closed) | None => 0,
+    };
+    let limit = Instant::now() + DRAIN_LIMIT;
+    let mut held = Duration::ZERO;
+    while tokio::time::timeout(DRAIN_CHECK, &mut task).await.is_err() {
+        let reading = match pipe.left() {
+            // Every writer is gone: the reader's next turn ends it.
+            Some(PipeLeft::Closed) => true,
+            Some(PipeLeft::Unread(_)) => taken.load(Ordering::SeqCst) < owed,
+            None => false,
+        };
+        if reading && Instant::now() < limit {
+            continue;
+        }
+        held += DRAIN_CHECK;
+        if held >= drain {
+            abort.abort();
+            return;
+        }
+    }
+}
+
+/// What is left in one of the game's output pipes ([`drain_output`]).
+#[cfg_attr(not(windows), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PipeLeft {
+    /// Every writing end is closed and every byte taken.
+    Closed,
+    /// Bytes not taken yet (none: a writing end is still open somewhere).
+    Unread(u64),
+}
+
+/// The reading end of one of the game's output pipes, asked what is left in it
+/// (`PeekNamedPipe`).
+#[cfg(windows)]
+mod pipe {
+    use std::os::windows::io::{AsHandle, AsRawHandle, OwnedHandle};
+
+    use windows_sys::Win32::Foundation::{ERROR_BROKEN_PIPE, ERROR_PIPE_NOT_CONNECTED};
+    use windows_sys::Win32::System::Pipes::PeekNamedPipe;
+
+    use super::PipeLeft;
+
+    /// A handle of its own to the pipe: the reader owns the stream's.
+    pub(super) struct Pipe(OwnedHandle);
+
+    impl Pipe {
+        pub(super) fn of(stream: &impl AsHandle) -> Option<Self> {
+            stream.as_handle().try_clone_to_owned().ok().map(Self)
+        }
+
+        /// None when the pipe cannot tell.
+        pub(super) fn left(&self) -> Option<PipeLeft> {
+            let mut unread = 0u32;
+            // SAFETY: the handle stays open while `self` lives; nothing is copied out of the pipe
+            // (no buffer), and the one out pointer is a local that outlives the call.
+            let peeked = unsafe {
+                PeekNamedPipe(
+                    self.0.as_raw_handle(),
+                    std::ptr::null_mut(),
+                    0,
+                    std::ptr::null_mut(),
+                    &mut unread,
+                    std::ptr::null_mut(),
+                )
+            };
+            if peeked != 0 {
+                return Some(PipeLeft::Unread(u64::from(unread)));
+            }
+            let code = std::io::Error::last_os_error().raw_os_error();
+            match code.and_then(|code| u32::try_from(code).ok()) {
+                Some(ERROR_BROKEN_PIPE | ERROR_PIPE_NOT_CONNECTED) => Some(PipeLeft::Closed),
+                _ => None,
+            }
+        }
+    }
+}
+
+/// Elsewhere the pipe is not asked: a reader gets the drain from the game's exit.
+#[cfg(not(windows))]
+mod pipe {
+    use super::PipeLeft;
+
+    pub(super) enum Pipe {}
+
+    impl Pipe {
+        pub(super) fn of<T>(_stream: &T) -> Option<Self> {
+            None
+        }
+
+        pub(super) fn left(&self) -> Option<PipeLeft> {
+            match *self {}
+        }
+    }
+}
+
 struct Supervision {
     child: tokio::process::Child,
     kill: CancellationToken,
     shared: Arc<Shared>,
-    readers: Vec<JoinHandle<()>>,
-    /// How long the readers may still take once the process has exited ([`DRAIN_TIMEOUT`]).
+    readers: Vec<Output>,
+    /// How long a reader may wait for a pipe another process holds open ([`DRAIN_TIMEOUT`]).
     drain: Duration,
     exit: tokio::sync::watch::Sender<Option<GameExit>>,
     started: Instant,
@@ -678,11 +855,8 @@ async fn supervise(mut s: Supervision) {
     s.shared.ending.store(true, Ordering::SeqCst);
     let runtime = s.started.elapsed();
     let on_screen = (*s.shared.shown_after.lock()).map(|after| runtime.saturating_sub(after));
-    for reader in s.readers {
-        let abort = reader.abort_handle();
-        if tokio::time::timeout(s.drain, reader).await.is_err() {
-            abort.abort();
-        }
+    for output in s.readers {
+        drain_output(output, s.drain).await;
     }
     let code = match &status {
         Ok(status) => status.code(),
@@ -1443,6 +1617,80 @@ mod tests {
             .unwrap();
         assert!(asked.load(Ordering::SeqCst));
         assert!(exit.killed && exit.crash.is_none());
+    }
+
+    /// A machine stalled when the game exits: its last lines are read however long the reader
+    /// takes, the drain (here 200 ms) counts only while another process holds a pipe open. The
+    /// reader takes 5 ms a line, a second for all two hundred.
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_slow_reader_still_gets_the_last_lines() {
+        let tmp = tempfile::tempdir().unwrap();
+        let command = LaunchCommand::for_tests(
+            PathBuf::from("cmd"),
+            vec![
+                "/C".to_owned(),
+                "for /L %i in (1,1,200) do @echo line %i".to_owned(),
+            ],
+            tmp.path().join("game"),
+        );
+        let process = GameProcess::spawn_draining(
+            &command,
+            SpawnOptions {
+                instance_id: "slow".into(),
+                logs_dir: tmp.path().join("logs"),
+                ..SpawnOptions::default()
+            },
+            Duration::from_millis(200),
+            Arc::new(|event| {
+                if matches!(event, GameEvent::Line(_)) {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            }),
+        )
+        .await
+        .unwrap();
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
+            .await
+            .unwrap();
+        assert_eq!(exit.code, Some(0));
+        let lines: Vec<String> = process.tail().into_iter().map(|l| l.message).collect();
+        assert_eq!(lines.len(), 200, "{lines:?}");
+        assert_eq!(lines.last().map(String::as_str), Some("line 200"));
+    }
+
+    /// Something the game started and left running keeps writing to its output: the exit is told
+    /// a drain after, not once the longest wait for the game's own lines is over.
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_writer_left_running_does_not_hold_the_exit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let command = LaunchCommand::for_tests(
+            PathBuf::from("cmd"),
+            vec![
+                "/C".to_owned(),
+                "start /B ping -n 12 127.0.0.1 & exit 0".to_owned(),
+            ],
+            tmp.path().join("game"),
+        );
+        let started = Instant::now();
+        let process = GameProcess::spawn(
+            &command,
+            SpawnOptions {
+                instance_id: "left".into(),
+                logs_dir: tmp.path().join("logs"),
+                ..SpawnOptions::default()
+            },
+            Arc::new(|_| {}),
+        )
+        .await
+        .unwrap();
+        let exit = tokio::time::timeout(DEADLINE, process.wait())
+            .await
+            .unwrap();
+        assert_eq!(exit.code, Some(0));
+        let took = started.elapsed();
+        assert!(took < DRAIN_LIMIT, "the exit was told after {took:?}");
     }
 
     #[tokio::test]

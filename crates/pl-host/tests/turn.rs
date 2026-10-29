@@ -325,9 +325,11 @@ async fn private_relay_addresses_are_refused_unless_testing() {
 async fn refreshes_keep_it_alive_and_revocation_ends_it() {
     let ca = TestCa::new();
     let server = TurnServer::start(&ca, &[HOST, GUEST]).await;
+    // A refresh every second, and an allocation that outlives a machine stalled for some seconds
+    // (with 3 s, a stall of 2 let it expire); the wait below stays past the lifetime.
     let config = TurnConfig {
-        allocation_lifetime: Duration::from_secs(3),
-        refresh_when_left: Duration::from_secs(2),
+        allocation_lifetime: Duration::from_secs(6),
+        refresh_when_left: Duration::from_secs(5),
         permission_refresh: Duration::from_secs(1),
         channel_refresh: Duration::from_secs(1),
         ..config(&ca)
@@ -340,7 +342,7 @@ async fn refreshes_keep_it_alive_and_revocation_ends_it() {
     let path = within(10, guest.connect(host.relay(), identity.pin()))
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(3500)).await;
+    tokio::time::sleep(Duration::from_millis(6500)).await;
     exchange(&host, &path, 5_000).await;
     assert!(
         server.authenticated("refresh", HOST.0) >= 2,

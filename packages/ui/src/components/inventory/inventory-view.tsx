@@ -798,12 +798,23 @@ export function InventoryView({
     update();
     return () => query?.removeEventListener("change", update);
   }, []);
+  const [shift, setShift] = useState(0);
   const measure = useCallback(() => {
     const probe = probeRef.current;
     if (!probe) return;
     const unit = probe.getBoundingClientRect().width / 100;
     if (unit > 0) setPx((current) => (current === `${unit}px` ? current : `${unit}px`));
-  }, []);
+    // The art reaches past our sides: move it so the window is in the middle, or at our start
+    // edge for `align="start"` (GUI pixels).
+    const room = rootRef.current?.clientWidth ?? 0;
+    const past = unit > 0 && room > 0 && box.width * unit > room + 0.5;
+    const next = !past
+      ? 0
+      : align === "start"
+        ? box.left
+        : box.left + box.width / 2 - screen.width / 2;
+    setShift((current) => (current === next ? current : next));
+  }, [align, box.left, box.width, screen.width]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the size inputs change
   useLayoutEffect(() => {
     measure();
@@ -1034,6 +1045,7 @@ export function InventoryView({
 
   const rootStyle = {
     "--pl-inv-w": box.width,
+    "--pl-inv-ww": screen.width,
     // For `fit="contain"`: the art's height, and the line under the window (its gap and its
     // height, as tall as the hand slot) in CSS pixels.
     "--pl-inv-h": box.height,
@@ -1043,6 +1055,12 @@ export function InventoryView({
     ...(dpr ? { "--pl-inv-dpr": dpr } : {}),
   } as CSSProperties;
   const stageStyle = { "--pl-inv-gw": box.width, "--pl-inv-gh": box.height } as CSSProperties;
+  // The art wider than we are (the scale kept the window readable): the window in the middle, the
+  // art cut where it reaches past our sides.
+  const columnStyle =
+    shift !== 0
+      ? ({ translate: `calc(${shift} * var(--pl-inv-px)) 0` } as CSSProperties)
+      : undefined;
   const at = (x: number) => `calc(${x} * var(--pl-inv-px))`;
 
   const slotsLayer = (
@@ -1144,7 +1162,7 @@ export function InventoryView({
         }
       >
         <div className="pl-inv-stage" style={stageStyle} aria-hidden={live ? undefined : true}>
-          <div className="pl-inv-column">
+          <div className="pl-inv-column" style={columnStyle}>
             <div ref={panelRef} className="pl-inv-panel">
               <span
                 ref={probeRef}
@@ -1341,11 +1359,11 @@ export function InventoryView({
                   </Button>
                 ) : open && canMove ? (
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
-                    // The label's edge on the window's edge; the hover fill reaches past it. No
-                    // cross: beside a dialog's own one it read as closing the dialog (SITE-W2).
-                    className="-mr-3 shrink-0"
+                    // A quiet frame, so it reads as the button it is (TASTE-SWEEP). No cross:
+                    // beside a dialog's own one it read as closing the dialog (SITE-W2).
+                    className="shrink-0"
                     disabled={locked || menuOpen}
                     onClick={() => {
                       const state = planRef.current;

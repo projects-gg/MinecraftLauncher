@@ -7,6 +7,12 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+# No doc tests here: `cargo test` would still run rustdoc against the dependencies' rlibs in the
+# shared target directory, which another worktree's build may replace mid-run ("extern location
+# for pl_mc does not exist").
+[lib]
+doctest = false
+
 [dependencies]
 pl-mc = { workspace = true }
 # The troubleshooter's probes (`Probe`, `Reach`) and the system's view of the network.
