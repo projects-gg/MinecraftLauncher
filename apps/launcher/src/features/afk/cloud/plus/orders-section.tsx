@@ -81,6 +81,7 @@ import {
   orderState,
   sortedOrders,
 } from "./orders";
+import { moneyNameOf } from "./setup-parts";
 import { plusAi } from "./types";
 import { plusKey, storeSettings, usePlusFeatures } from "./use-plus";
 import { cardWords, currentLang, formatAmount, type Lang, qtyItem } from "./words";
@@ -858,6 +859,8 @@ function OrderIntake({
 }) {
   const { t } = useTranslation();
   const lang = currentLang();
+  // The example's amount with the server's money name, where its profile names one.
+  const money = moneyNameOf(server, lang);
   const { layout } = useMotionPrefs();
   const id = useId();
   const writes = useOrderWrites(accountId);
@@ -1190,7 +1193,11 @@ function OrderIntake({
                 spellCheck={false}
                 readOnly={checking}
                 disabled={resting}
-                placeholder={t("afkPlus.intake.placeholder")}
+                placeholder={
+                  money
+                    ? t("afkPlus.intake.placeholderMoney", { money })
+                    : t("afkPlus.intake.placeholder")
+                }
                 aria-describedby={`${id}-line`}
                 onChange={(event) => {
                   setText(event.target.value);

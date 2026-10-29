@@ -202,12 +202,9 @@ describe("AFK+ answers", () => {
     expect(at(45)).toBe(
       "45 dakikada bir ilan verir, aradığın eşya satılığa çıkınca satıcıya bir kez yazar.",
     );
-    expect(at(60, "en")).toBe(
-      "Posts an ad every hour, writes once to the seller when an item you want is for sale.",
-    );
-    expect(at(30, "en")).toBe(
-      "Posts an ad every 30 minutes, writes once to the seller when an item you want is for sale.",
-    );
+    // English says it short enough for the setup's rail in two lines.
+    expect(at(60, "en")).toBe("Posts an ad every hour, messages sellers once.");
+    expect(at(30, "en")).toBe("Posts an ad every 30 minutes, messages sellers once.");
     expect(plusAnswers(config({ discovery: on }), ctx("tr"), tr).chat).toBe(
       "İlan verir, aradığın eşya satılığa çıkınca satıcıya bir kez yazar.",
     );

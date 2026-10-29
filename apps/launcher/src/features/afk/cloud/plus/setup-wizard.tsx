@@ -1,14 +1,14 @@
 // The first setup of an AFK+ account (SETUP-UX-L): the site's five questions in the site's order, one
 // a step, in the launcher's morph Dialog (setup/setup-dialog.tsx): what it buys and sells (an order
-// in the player's own words, saved in the step), how much it may spend (two amounts, or "Şimdilik
-// alım yapmasın"; asked while there is a buy, on by itself while there is no order, skipped while
-// every order is a sale), what it does (the three authorities, the approval limits under the one
-// they work in, and where it goes after a trade), what it does in chat (ads, off by default; the
-// minutes only to a service that plans them), and how it talks (the tone, as the game shows a
-// private message; the introduction under "Gelişmiş"). "Başlat" saves it all as one write and
-// switches ProBot AI on. "Daha sonra", ✕ and Esc keep the choices for the session (`usePlusUi`).
-// The hard rules hold: buying needs both limits or "Şimdilik alım yapmasın"; the budget is never
-// said; an approval limit above the per-deal limit waits.
+// in the player's own words, saved in the step), how much it may spend (two amounts, or "Alım
+// yapsın" off; asked while there is a buy, off by itself while there is no order, skipped while
+// every order is a sale), what it does (the three authorities, the approval limit under the one it
+// works in; a first deal's own limit and where it goes after a trade under "Gelişmiş"), what it
+// does in chat (ads, off by default; the minutes only to a service that plans them), and how it
+// talks (the tone, as the game shows a private message; the introduction under "Gelişmiş").
+// "Başlat" saves it all as one write and switches ProBot AI on. "Daha sonra", ✕ and Esc keep the
+// choices for the session (`usePlusUi`). The hard rules hold: buying needs both limits or "Alım
+// yapsın" off; the budget is never said; an approval limit above the per-deal limit waits.
 import { cn, Segmented, Select, toast } from "@pl/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -312,8 +312,8 @@ export function PlusSetupWizard({
       </div>
     ) : step === "money" ? (
       <div className="flex flex-col">
-        {/* Quiet while "Şimdilik alım yapmasın" is on, never locked: typing an amount turns it off
-            (the site's rule; one choice, either amounts or no buying). */}
+        {/* Quiet while "Alım yapsın" is off, never locked: typing an amount turns it back on (the
+            site's rule; one choice, either amounts or no buying). */}
         <div
           className={cn(
             "grid min-w-0 grid-cols-2 gap-x-4 transition-opacity duration-150",
@@ -339,6 +339,12 @@ export function PlusSetupWizard({
             unit={moneyName}
             invalid={required && choices.totalBudget === null}
             error={amountError("totalBudget")}
+            // What it adds up and what happens when it is reached (the site's and the phone's line).
+            extra={
+              <p className="-mt-1 text-[12px] text-pretty text-ash-400">
+                {t("setup.plus.totalHelp")}
+              </p>
+            }
             onChange={(value) =>
               value !== undefined &&
               change(value === null ? { totalBudget: null } : { totalBudget: value, notNow: false })
@@ -350,11 +356,12 @@ export function PlusSetupWizard({
             {t("setup.plus.required")}
           </p>
         ) : null}
+        {/* Said the positive way (the phone's switch): on buys within the amounts above. */}
         <ToggleRow
-          title={t("setup.plus.notNow")}
-          help={t("setup.plus.notNowHelp")}
-          checked={notNow}
-          onCheckedChange={(on) => change({ notNow: on })}
+          title={t("setup.plus.buy")}
+          help={t("setup.plus.buyHelp")}
+          checked={!notNow}
+          onCheckedChange={(on) => change({ notNow: !on })}
         />
         {notNow ? null : (
           <div className="pt-3">
@@ -379,7 +386,8 @@ export function PlusSetupWizard({
                 value={choices.approvalAbove}
                 optional
                 unit={moneyName}
-                placeholder={t("afkPlus.settings.noAskShort")}
+                // Empty, it never asks: said under the box, never in it beside the money's name.
+                help={t("afkPlus.settings.emptyNoAsk")}
                 error={amountError("approvalAbove")}
                 extra={
                   <p className="-mt-1 text-[12px] text-ash-400">
@@ -388,12 +396,28 @@ export function PlusSetupWizard({
                 }
                 onChange={(value) => value !== undefined && change({ approvalAbove: value })}
               />
+            </div>
+          ) : null}
+        </AuthorityChoice>
+        {/* The two rare ones wait folded (TASTE-SWEEP SETUP-UX-L r1): a first deal's own approval
+            limit, only while it deals, and where it goes after a trade. A problem in the limit
+            opens it on "Devam". */}
+        <Advanced
+          summary={t(
+            choices.authority === "deal"
+              ? "setup.plus.adv.actSetupDeal"
+              : "setup.plus.adv.actSetup",
+          )}
+          open={showProblems && Boolean(problems.newCounterpartApprovalAbove)}
+        >
+          {choices.authority === "deal" ? (
+            <div className="grid grid-cols-2 gap-x-4 pt-2">
               <AmountField
                 label={t("afkPlus.settings.newCounterpart")}
                 value={choices.newCounterpartApprovalAbove}
                 optional
                 unit={moneyName}
-                placeholder={t("afkPlus.settings.noAskShort")}
+                help={t("afkPlus.settings.emptyNoAskNew")}
                 error={amountError("newCounterpartApprovalAbove")}
                 extra={
                   <p className="-mt-1 text-[12px] text-ash-400">
@@ -406,12 +430,12 @@ export function PlusSetupWizard({
               />
             </div>
           ) : null}
-        </AuthorityChoice>
-        <ReturnRowField
-          account={account}
-          value={choices.returnRow}
-          onChange={(returnRow) => change({ returnRow })}
-        />
+          <ReturnRowField
+            account={account}
+            value={choices.returnRow}
+            onChange={(returnRow) => change({ returnRow })}
+          />
+        </Advanced>
       </div>
     ) : step === "chat" ? (
       <div className="flex flex-col">
@@ -537,7 +561,7 @@ function ReturnRowField({
     <Labeled
       label={t("afkPlus.settings.returnRow")}
       help={t("afkPlus.settings.returnHelp")}
-      className="pt-4"
+      className="pt-2"
     >
       <Select
         label={t("afkPlus.settings.returnRow")}

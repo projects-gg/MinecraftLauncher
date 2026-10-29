@@ -250,14 +250,24 @@ function tagState(
 
 // --- Ne kadar harcayabilsin? ----------------------------------------------------------------------
 
-/** What an empty limit's box says (`emptyLimit`); buying nothing is said under it instead. */
-const EMPTY_SHORT: Record<EmptyLimit, string | null> = {
-  buysNothing: null,
-  noLimit: "afkPlus.settings.noLimitShort",
-  noAsk: "afkPlus.settings.noAskShort",
+/**
+ * What an empty limit means (`emptyLimit`), said under its field while it is empty: never in the
+ * box, where it read with the money's name beside it ("Sormaz ripple", TASTE-SWEEP SETUP-UX-L r1).
+ */
+const EMPTY_HELP: Record<EmptyLimit, string> = {
+  buysNothing: "afkPlus.settings.emptyBuysNothing",
+  noLimit: "afkPlus.settings.emptyNoLimit",
+  noAsk: "afkPlus.settings.emptyNoAsk",
 };
 
-/** A limit's field: its empty meaning in the box, its problem under it, its anchor for "Sınırlara git". */
+function emptyHelp(field: keyof PlusLimits): string | null {
+  // The first deal's limit only adds a question: empty, it asks nothing more than the other one.
+  if (field === "newCounterpartApprovalAbove") return "afkPlus.settings.emptyNoAskNew";
+  const empty = emptyLimit(field);
+  return empty ? EMPTY_HELP[empty] : null;
+}
+
+/** A limit's field: its empty meaning and its problem under it, its anchor for "Sınırlara git". */
 function LimitAmount({
   field,
   label,
@@ -289,16 +299,14 @@ function LimitAmount({
         ? t(`afkPlus.settings.limitErrors.${problem}`, { max: formatAmount(maxDeal) })
         : t("afkPlus.settings.limitErrors.amount")
       : null;
-  // Left empty: no daily cap or no question, said in the box; no buying at all, under it.
-  const empty = emptyLimit(field);
-  const short = empty ? EMPTY_SHORT[empty] : null;
+  // Left empty: no buying at all, no daily cap or no question, said under the field.
+  const help = emptyHelp(field);
   return (
     <AmountField
       label={label}
       value={shown.limits[field] as number | null}
-      optional={empty !== null}
-      placeholder={short ? t(short) : undefined}
-      help={empty === "buysNothing" ? t("afkPlus.settings.emptyBuysNothing") : undefined}
+      optional={emptyLimit(field) !== null}
+      help={help ? t(help) : undefined}
       error={error}
       extra={extra}
       unit={unit}
@@ -405,21 +413,28 @@ function MoneyEditor({
           field="totalBudget"
           label={t("afkPlus.settings.totalBudget")}
           extra={
-            spent && spent.total > 0 ? (
-              <p className="-mt-1 flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-bone-100">
-                <span className="tabular-nums">
-                  {t(
-                    limits.totalBudget === null
-                      ? "afkPlus.settings.spentNoBudget"
-                      : "afkPlus.settings.spentTotal",
-                    { amount: withMoney(formatAmount(spent.total), unit) },
-                  )}
-                </span>
-                <QuietLink onClick={() => setConfirmReset(true)}>
-                  {t("afkPlus.settings.resetSpent")}
-                </QuietLink>
+            <>
+              {/* What it adds up and what happens when it is reached, the reset right under it
+                  (the site's and the phone's line, TASTE-SWEEP SETUP-UX-L r1). */}
+              <p className="-mt-1 text-[12px] text-pretty text-ash-400">
+                {t("setup.plus.totalHelpSettings")}
               </p>
-            ) : null
+              {spent && spent.total > 0 ? (
+                <p className="flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-bone-100">
+                  <span className="tabular-nums">
+                    {t(
+                      limits.totalBudget === null
+                        ? "afkPlus.settings.spentNoBudget"
+                        : "afkPlus.settings.spentTotal",
+                      { amount: withMoney(formatAmount(spent.total), unit) },
+                    )}
+                  </span>
+                  <QuietLink onClick={() => setConfirmReset(true)}>
+                    {t("afkPlus.settings.resetSpent")}
+                  </QuietLink>
+                </p>
+              ) : null}
+            </>
           }
         />
       </div>
@@ -727,6 +742,8 @@ function TalkEditor({
   const shownTag = tag.on && tag.text.trim() && !tagProblem ? tag.text.trim() : null;
   return (
     <>
+      {/* Over the tone, as the setup's fifth step says it (TASTE-SWEEP SETUP-UX-L r1). */}
+      <p className="pb-1 text-[12.5px] text-ash-400">{t("setup.plus.saysAi")}</p>
       <Labeled label={t("afkPlus.settings.persona")}>
         <Segmented
           label={t("afkPlus.settings.persona")}
@@ -819,7 +836,7 @@ function TalkEditor({
 
 // --- Kimlere cevap versin? ------------------------------------------------------------------------
 
-/** "Kimlerle → Yalnız arkadaşlarımla": the in-game names it deals with (part of the draft). */
+/** "Kimlerle → Yalnız arkadaşlarınla": the in-game names it deals with (part of the draft). */
 function FriendsList({
   shown,
   set,

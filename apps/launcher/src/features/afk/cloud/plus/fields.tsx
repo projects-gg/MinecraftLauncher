@@ -141,7 +141,9 @@ export function AmountField({
 /**
  * A quiet text action ("Elle ekle", "Envanterden seç", "Harcananı sıfırla"). `bone` where gold
  * would be a second loud thing beside the card's answer ("Sınırlara git" on an approval), and
- * always under the one-gold rule (`OneGold`: the setup steps and the question rows).
+ * always under the one-gold rule (`OneGold`: the setup steps and the question rows). Bone is the
+ * text's own colour, so it is underlined like the site's and the phone's links ("Kalıbı kendim
+ * yazacağım", `TextAction`); gold says it by its colour.
  */
 export function QuietLink({
   children,
@@ -161,9 +163,11 @@ export function QuietLink({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "cursor-pointer rounded-sm text-[12.5px] font-medium underline-offset-2 outline-none",
-        tone === "gold" ? "text-gold-300 hover:text-gold-200" : "text-bone-100 hover:text-bone-50",
-        "transition-[color,opacity] duration-150 hover:underline focus-visible:ring-2 focus-visible:ring-gold-300",
+        "cursor-pointer rounded-sm text-[12.5px] font-medium outline-none",
+        tone === "gold"
+          ? "text-gold-300 underline-offset-2 hover:text-gold-200 hover:underline"
+          : "text-bone-100 underline decoration-white/30 underline-offset-[3px] hover:text-bone-50 hover:decoration-current",
+        "transition-[color,text-decoration-color,opacity] duration-150 focus-visible:ring-2 focus-visible:ring-gold-300",
         "disabled:cursor-not-allowed disabled:text-ash-500 disabled:no-underline",
       )}
     >

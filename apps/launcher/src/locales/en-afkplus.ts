@@ -381,7 +381,8 @@ export const enAfkPlus = {
   },
   intake: {
     label: "What do you want to buy or sell?",
-    placeholder: "e.g. Buying an Elytra, 40k max",
+    placeholder: "e.g. Buying 1 Elytra, 40k max",
+    placeholderMoney: "e.g. Buying 1 Elytra, 40k {{money}} max",
     check: "Check",
     reading: "Reading",
     form: "Add by hand",
@@ -629,7 +630,7 @@ export const enAfkPlus = {
     pays: { money: "Money", items: "Items", both: "Both" },
     who: "Trade with",
     whoAll: "Everyone",
-    whoFriends: "Only my friends",
+    whoFriends: "Only your friends",
     friendsPlaceholder: "Player name",
     friendsAdd: "Add a name",
     friendsRemove: "Remove {{name}}",
@@ -697,7 +698,7 @@ export const enAfkPlus = {
     scope: "Which messages it answers",
     scopes: {
       all: "Every private message",
-      trade: "Trade conversations",
+      trade: "Trade messages",
       off: "Ready replies only",
     },
     offTopic: "Stay on topic",
@@ -752,13 +753,14 @@ export const enAfkPlus = {
     newCounterpart: "Approval limit with a new player",
     newCounterpartHelp:
       "With a player it hasn't dealt with before, buys above this wait for your OK.",
-    noAskShort: "Never asks",
     // Read as one line around the box: "If you don't answer an approval [10] minutes later it counts as a no".
     // Read as one line around the box: "An unanswered approval counts as a no after [10] minutes".
     timeout: "An unanswered approval counts as a no after",
     timeoutShort: "Approval time",
     timeoutValue: "minutes",
-    noLimitShort: "No limit",
+    emptyNoAsk: "Leave it empty and it won't ask.",
+    emptyNoAskNew: "Leave it empty and it won't ask separately on a first deal.",
+    emptyNoLimit: "Leave it empty for no limit.",
     emptyBuysNothing: "Leave it empty and ProBot AI buys nothing.",
     needed: "Buying needs an amount per deal and a total spending limit.",
     secret: "ProBot AI never tells anyone your budget or limits.",

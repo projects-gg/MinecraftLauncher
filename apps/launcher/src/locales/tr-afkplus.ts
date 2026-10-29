@@ -427,7 +427,9 @@ export const trAfkPlus = {
   // "Siparişler": the field, its checks and the orders' list (afkplus-free.md §7.1, §7.6).
   intake: {
     label: "Ne almak ya da satmak istiyorsun?",
-    placeholder: "Örnek: Elytra alırım, en fazla 40 bin",
+    placeholder: "Örnek: 1 Elytra alırım, en fazla 40 bin",
+    // Where the server names its money ("ripple").
+    placeholderMoney: "Örnek: 1 Elytra alırım, en fazla 40 bin {{money}}",
     check: "Kontrol et",
     reading: "Okunuyor",
     form: "Elle ekle",
@@ -685,7 +687,8 @@ export const trAfkPlus = {
     pays: { money: "Para", items: "Eşya", both: "İkisi de" },
     who: "Kimlerle",
     whoAll: "Herkesle",
-    whoFriends: "Yalnız arkadaşlarımla",
+    // Said to the player ("sen"), in the case "Kimlerle" asks for.
+    whoFriends: "Yalnız arkadaşlarınla",
     friendsPlaceholder: "Oyuncu adı",
     friendsAdd: "Ad ekle",
     friendsRemove: "{{name}} adını çıkar",
@@ -718,7 +721,7 @@ export const trAfkPlus = {
     introHelp: "İlk mesajında kendini böyle tanıtır.",
     introPlaceholder: "KaraKartal'ın ProBot AI'ı",
     // Under "Diğer mesajlara uzakta olduğunu söylesin": the end of the away line ("Şu an AFK'yım: …").
-    status: "Uzaktayken ne desin",
+    status: "Uzaktayken ne desin?",
     statusText: "Kendi mesajın",
     statusPresets: {
       back_soon: "Biraz sonra dönerim",
@@ -747,10 +750,11 @@ export const trAfkPlus = {
       form: "Tek satır yaz. Komut ya da renk kodu yazılamaz.",
       other: "Bu metin kullanılamaz.",
     },
-    scope: "Hangi mesajlara cevap versin",
+    scope: "Hangi mesajlara cevap versin?",
     scopes: {
       all: "Her özel mesaja",
-      trade: "Takas konuşmalarına",
+      // The phone's word, and the answer's above it ("takas mesajlarına cevap verir").
+      trade: "Takas mesajlarına",
       off: "Yalnız hazır cevaplar",
     },
     // Small talk said as its opposite, on by default (27 Oct 2026).
@@ -807,15 +811,18 @@ export const trAfkPlus = {
     resetSpentDone: "Harcanan sıfırlandı",
     balanceFloor: "En az kalacak bakiye",
     approvalAbove: "Onay sınırı",
-    // Under the two approval limits, always: what the amount does (empty: `noAskShort`).
+    // Under the two approval limits, always: what the amount does (empty: `emptyNoAsk`).
     approvalHelp: "Bunun üstündeki alımları önce sana sorar.",
     newCounterpart: "İlk anlaşmada onay sınırı",
     newCounterpartHelp: "İlk kez anlaştığı oyuncudan bunun üstündeki alımları önce sana sorar.",
-    noAskShort: "Sormaz",
     timeout: "Onaya cevap vermezsen",
     timeoutShort: "Onay süresi",
     timeoutValue: "dakika sonra hayır sayılır",
-    noLimitShort: "Sınır yok",
+    // What an empty limit means, under its field while it is empty (never in the box, where it read
+    // with the money's name: "Sormaz ripple", TASTE-SWEEP SETUP-UX-L r1).
+    emptyNoAsk: "Boş bırakırsan sormaz.",
+    emptyNoAskNew: "Boş bırakırsan ilk anlaşmada ayrıca sormaz.",
+    emptyNoLimit: "Boş bırakırsan sınır olmaz.",
     // Under the per-deal and the total limit while empty: without both nothing is bought (the hard
     // rule), so never "Sınır yok" there (the site's words, SITE-W2).
     emptyBuysNothing: "Boş bırakırsan ProBot AI alım yapmaz.",

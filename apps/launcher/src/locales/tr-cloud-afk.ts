@@ -216,7 +216,9 @@ export const trCloudAfk = {
     commands: {
       add: "Komut ekle",
       empty: "Henüz komut yok.",
-      count: "{{count}}/{{max}} komut",
+      // Every row of the account against Studio's limit, shown near the limit only (a question shows
+      // its own rows, so a bare "4/20" counted rows it did not show).
+      count: "Hesapta {{count}}/{{max}} komut",
       trigger: "Ne zaman",
       triggers: {
         join: "Her girişte",

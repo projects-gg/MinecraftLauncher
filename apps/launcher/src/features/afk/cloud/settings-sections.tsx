@@ -695,10 +695,13 @@ export const commandLimit = (view: CloudEditData) => Math.min(view.limits.maxCom
 /** How many reply rules the account may have (Studio's limit, at most 50). */
 export const ruleLimit = (view: CloudEditData) => Math.min(view.limits.maxRules ?? 10, 50);
 
+/** How many rows short of the limit the account's count starts to show beside "Komut ekle". */
+const COUNT_NEAR = 3;
+
 /**
  * One question's command rows (the login, what it types on joining, or the rows on a clock), in
  * their order among all the commands; a new row joins this question and keeps it until it is
- * saved. The count of every row against Studio's limit sits beside "Komut ekle".
+ * saved. Near Studio's limit, the account's count of every row sits beside "Komut ekle".
  */
 export function CommandList({
   part,
@@ -779,9 +782,13 @@ export function CommandList({
         >
           {addLabel}
         </Button>
-        <span className="text-[12.5px] text-ash-400 tabular-nums">
-          {t("cloudAfk.settings.commands.count", { count: commands.length, max })}
-        </span>
+        {/* The account's rows against Studio's limit, said only near it: far from it, a count of
+            rows this question does not show only puzzled (TASTE-SWEEP SETUP-UX-L r1). */}
+        {max - commands.length <= COUNT_NEAR ? (
+          <span className="text-[12.5px] text-ash-400 tabular-nums">
+            {t("cloudAfk.settings.commands.count", { count: commands.length, max })}
+          </span>
+        ) : null}
       </div>
     </div>
   );

@@ -69,10 +69,17 @@ export const trSetup = {
       chat: "İstersen etkin siparişlerini genel sohbette duyurur.",
       talk: "Özel mesajlara bu tarzda cevap verir. Sorulursa yapay zekâ olduğunu söyler.",
     },
-    // "A limit or no buying for now" is one choice.
-    notNow: "Şimdilik alım yapmasın",
-    notNowHelp: "Aradığını bulunca yalnız haber verir.",
-    required: 'İki tutarı da yaz ya da "Şimdilik alım yapmasın"ı aç.',
+    // "Limits or no buying" is one choice, said the positive way (the phone's switch, TASTE-SWEEP
+    // SETUP-UX-L r1): off, the amounts wait quietly and typing one turns it back on.
+    buy: "Alım yapsın",
+    buyHelp: "Kapalıyken aradığını bulunca yalnız haber verir.",
+    required: 'İki tutarı da yaz ya da "Alım yapsın"ı kapat.',
+    // Under the total limit, always (the site's and the phone's words); in Ayarlar the reset sits
+    // right under it, so the line stops at what happens.
+    totalHelp: "Bütün alımların toplamı. Dolunca alım durur, Ayarlar'dan sıfırlarsın.",
+    totalHelpSettings: "Bütün alımların toplamı. Dolunca alım durur.",
+    // Over the tone in Ayarlar: the setup says it in its fifth step's lede.
+    saysAi: "Sorulursa yapay zekâ olduğunu söyler.",
     // How far the limits go with the first buy order's item, in the game's slots.
     fits: "Bu sınırlarla",
     fitDeal: "Tek anlaşmada {{count}} {{item}}",
@@ -137,6 +144,9 @@ export const trSetup = {
       moneyCurrency: "Günlük sınır, en az kalacak bakiye, para birimi",
       act: "Ödeme, onay bekleme süresi",
       actNoPay: "Onay bekleme süresi",
+      // The setup's third step folds the two rare ones (TASTE-SWEEP SETUP-UX-L r1).
+      actSetup: "Takastan sonra",
+      actSetupDeal: "İlk anlaşmada onay sınırı, takastan sonra",
       chat: "Satış ilanlarını taramak",
       // After `chat` while the ad's text can be chosen (ads on, more than one in the profile).
       chatText: ", ilan metni",
