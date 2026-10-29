@@ -185,7 +185,7 @@ export interface SelectOption<T extends string> {
   hint?: string;
   /**
    * A short quiet tag after the label ("Önerilen"), also shown in the closed select. Neutral, never
-   * gold (AFK-CLEAR): the gold is the page's main action and the chosen plates.
+   * gold (AFK-CLEAR): the gold is the page's main action (design.md §2).
    */
   badge?: string;
 }
@@ -214,8 +214,9 @@ const SelectItem = memo(function SelectItem({
         </RadixSelect.ItemText>
         {hint ? <span className="block text-[12px] text-ash-400">{hint}</span> : null}
       </span>
+      {/* A check mark is bone: the screen's one gold is its main action (design.md §2). */}
       <RadixSelect.ItemIndicator className="absolute right-2">
-        <Check size={15} className="text-gold-400" />
+        <Check size={15} className="text-bone-100" />
       </RadixSelect.ItemIndicator>
     </RadixSelect.Item>
   );
@@ -411,7 +412,7 @@ function SearchableSelect<T extends string>({
                   {o.hint ? <span className="block text-[12px] text-ash-400">{o.hint}</span> : null}
                 </span>
                 {o.value === value ? (
-                  <Check size={15} className="absolute right-2 text-gold-400" aria-hidden />
+                  <Check size={15} className="absolute right-2 text-bone-100" aria-hidden />
                 ) : null}
               </button>
             ))}
@@ -793,8 +794,8 @@ export function Slider({
         <span id={id} className="text-[13px] font-medium text-bone-100">
           {label}
         </span>
-        {/* The value in bone, not gold: the gold is the track's fill and the page's main action
-            (AFK-CLEAR; Studio's one-gold rule, design.md §9). */}
+        {/* The value, the fill and the thumb in bone: the screen's one gold is its main action
+            (design.md §2, lead 29 Oct; AFK-CLEAR made the value bone first). */}
         <span className="font-display text-[15px] font-semibold text-bone-50 tabular-nums">
           {format ? <SliderValue text={format(value)} /> : value}
         </span>
@@ -809,12 +810,12 @@ export function Slider({
         className="relative flex h-5 w-full cursor-pointer touch-none items-center select-none data-[disabled]:cursor-default"
       >
         <RadixSlider.Track className="relative h-1.5 grow overflow-hidden rounded-full bg-white/10">
-          <RadixSlider.Range className="absolute h-full bg-[linear-gradient(90deg,var(--color-gold-600),var(--color-gold-400))] transition-opacity duration-200 data-[disabled]:opacity-50" />
+          <RadixSlider.Range className="absolute h-full bg-bone-100 transition-opacity duration-200 data-[disabled]:opacity-50" />
         </RadixSlider.Track>
         <RadixSlider.Thumb
           aria-labelledby={id}
           aria-valuetext={format ? format(value) : undefined}
-          className="block size-[18px] rounded-full border-2 border-gold-300 bg-obsidian-900 shadow-[0_2px_8px_rgb(34_6_6/0.6)] transition-[transform,scale,border-color] duration-200 hover:scale-110 focus-visible:ring-4 focus-visible:ring-gold-400/30 focus-visible:outline-none data-[disabled]:scale-75 data-[disabled]:border-ash-400 data-[disabled]:hover:scale-75"
+          className="block size-[18px] rounded-full border-2 border-bone-100 bg-obsidian-900 shadow-[0_2px_8px_rgb(34_6_6/0.6)] transition-[transform,scale,border-color] duration-200 hover:scale-110 focus-visible:ring-4 focus-visible:ring-gold-400/30 focus-visible:outline-none data-[disabled]:scale-75 data-[disabled]:border-ash-400 data-[disabled]:hover:scale-75"
         />
       </RadixSlider.Root>
       {marks ? (

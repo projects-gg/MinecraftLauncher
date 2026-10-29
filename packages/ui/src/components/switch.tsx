@@ -13,7 +13,7 @@ export function Switch({
   className,
   id: idProp,
   describedBy,
-  tone = "gold",
+  tone = "bone",
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
@@ -29,8 +29,9 @@ export function Switch({
   /** The id of the row's help line, read with the switch's name. */
   describedBy?: string;
   /**
-   * "bone": the track is bone when on, for a switch beside the screen's gold action (the command
-   * bar's, next to OYNA), so the one loud thing stays the one gold.
+   * The track when on: bone (the default since the one-gold rule, design.md §2, lead 29 Oct: a
+   * screen's one gold is its main action, so switches, checks and links are bone). "gold" is kept
+   * only for a caller not yet moved over.
    */
   tone?: "gold" | "bone";
 }) {

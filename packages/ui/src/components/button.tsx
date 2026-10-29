@@ -2,7 +2,7 @@ import { type ButtonHTMLAttributes, forwardRef, type ReactNode } from "react";
 import { cn } from "../lib/cn";
 import { Tooltip } from "./tooltip";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "bone";
 type Size = "sm" | "md" | "lg";
 
 const layers: Record<Variant, { border: string; fill: string; text: string }> = {
@@ -20,6 +20,13 @@ const layers: Record<Variant, { border: string; fill: string; text: string }> = 
     border: "bg-transparent",
     fill: "bg-transparent group-hover:bg-white/6",
     text: "text-ash-300 group-hover:text-bone-100 font-medium",
+  },
+  // A card's action that needs the player ("Şifreyi düzelt", "Süre al") beside the screen's one gold
+  // (design.md §2 and §6, lead 29 Oct): a bone plate with dark ink, never a second gold.
+  bone: {
+    border: "bg-bone-100 group-hover:bg-bone-50",
+    fill: "bg-bone-100 group-hover:bg-bone-50",
+    text: "text-obsidian-900 font-semibold",
   },
   danger: {
     border: "bg-flare-400/45",
