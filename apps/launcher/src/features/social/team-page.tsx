@@ -645,7 +645,8 @@ function EditCrew({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
 /**
  * "Ekibi çağır" (this crew), soft while the five minutes since the last call run (it says how
  * long); beside it, with two or more crews to call, "Birden çok ekibi çağır" (the picker, this
- * crew ticked).
+ * crew ticked) as the button's own second plate, so the caret reads as part of it, not a stray
+ * mark (SMALLS-L).
  */
 function CallButton({ team, onCall }: { team: SocialTeam; onCall: () => void }) {
   const { t } = useTranslation();
@@ -660,7 +661,7 @@ function CallButton({ team, onCall }: { team: SocialTeam; onCall: () => void }) 
   const waiting = until > now;
   const several = features.multi && callableCrews(crews, features).length > 1;
   return (
-    <span className="inline-flex shrink-0 items-center gap-0.5">
+    <span className="inline-flex shrink-0 items-center gap-px">
       <Tooltip
         content={t("teams.call.wait", { count: waitMinutes(until, now) })}
         disabled={!waiting}
@@ -678,13 +679,19 @@ function CallButton({ team, onCall }: { team: SocialTeam; onCall: () => void }) 
         </span>
       </Tooltip>
       {several ? (
-        <IconButton
-          size="sm"
-          label={t("crews.call.several")}
-          icon={<CaretDown size={13} weight="bold" />}
-          disabled={waiting}
-          onClick={() => openPicker([team.id])}
-        />
+        <Tooltip content={t("crews.call.several")} disabled={waiting}>
+          <span className="inline-flex">
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={t("crews.call.several")}
+              icon={<CaretDown size={13} weight="bold" />}
+              disabled={waiting}
+              onClick={() => openPicker([team.id])}
+              className="px-2"
+            />
+          </span>
+        </Tooltip>
       ) : null}
     </span>
   );
