@@ -19,6 +19,11 @@ export interface ConsoleTexts {
   pmIn: string;
   pmOut: string;
   pmOutSaid: string;
+  /** A server's dialog (DIALOG-CARD): where a command from it came from, its close, its label. */
+  dialogSource: string;
+  dialogClose: string;
+  dialogPlayOnly: string;
+  dialogLabel: string;
 }
 
 export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
@@ -36,6 +41,10 @@ export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
     pmIn: "Sana gelen özel mesaj",
     pmOut: "Sen",
     pmOutSaid: "Senin özel mesajın",
+    dialogSource: "Sunucu penceresinden",
+    dialogClose: "Oyunda kapat",
+    dialogPlayOnly: "Oyuna girince",
+    dialogLabel: "Sunucu penceresi",
   },
   en: {
     entityType: "Type",
@@ -51,5 +60,9 @@ export const CONSOLE_TEXTS: Record<InventoryLang, ConsoleTexts> = {
     pmIn: "A private message to you",
     pmOut: "You",
     pmOutSaid: "Your private message",
+    dialogSource: "From the server's window",
+    dialogClose: "Close in game",
+    dialogPlayOnly: "Once in game",
+    dialogLabel: "Server window",
   },
 };

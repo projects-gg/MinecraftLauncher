@@ -17,6 +17,8 @@ export interface ConsoleActionCardProps {
   who?: string | null;
   /** The line's time as the console shows it. */
   clock: string;
+  /** Where it came from when it is no line ("Sunucu penceresinden"); else the line's sender. */
+  source?: string;
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -28,6 +30,7 @@ export function ConsoleActionCard({
   lang,
   who,
   clock,
+  source: from,
   busy,
   onConfirm,
   onCancel,
@@ -48,7 +51,7 @@ export function ConsoleActionCard({
       onCancel();
     }
   };
-  const source = who ? fill(t.fromPlayer, { name: who }) : t.fromServer;
+  const source = from ?? (who ? fill(t.fromPlayer, { name: who }) : t.fromServer);
   return (
     // A group of its own: Escape cancels from anywhere in it.
     <fieldset

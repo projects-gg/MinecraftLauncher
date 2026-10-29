@@ -1,5 +1,21 @@
 export { ConsoleActionCard, type ConsoleActionCardProps } from "./action-card";
 export { ConsoleText, type ConsoleTextProps } from "./console-text";
+export {
+  type Dialog,
+  type DialogButton,
+  type DialogInput,
+  type DialogPress,
+  type DialogText,
+  type DialogValues,
+  dialogCommand,
+  dialogInputs,
+  dialogPress,
+  initialValues,
+  numberText,
+  safeDialog,
+  snap,
+} from "./dialog";
+export { type DialogAct, DialogCard, type DialogCardProps } from "./dialog-card";
 export { ConsoleDirection } from "./direction";
 export {
   type ConsoleClick,

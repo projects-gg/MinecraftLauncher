@@ -351,6 +351,22 @@ impl CloudClient {
             .await
     }
 
+    /// A press on the card of the server's dialog (DIALOG-CARD): `{rev, i, inputs, cmd?}` or
+    /// `{rev, cancel: true}`, checked again by the service, the machine and the client.
+    pub async fn press_dialog(&self, token: &Bearer, id: &str, press: serde_json::Value) -> Result<()> {
+        self.send(
+            Method::POST,
+            &account_path(id, "/dialog")?,
+            Some(token),
+            Some(press),
+            &[],
+            Repeat::Never,
+        )
+        .await?
+        .into_result()
+        .map(|_| ())
+    }
+
     pub async fn logs(&self, token: &Bearer, id: &str, query: &LogQuery) -> Result<CloudLogPage> {
         let mut path = account_path(id, "/logs")?;
         let params = log_params(query);

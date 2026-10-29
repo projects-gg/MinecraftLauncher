@@ -1,6 +1,7 @@
 // 7/24 Bulut: what the AFK page asks of the backend (commands/cloud_afk.rs over pl-cloud-afk).
 // Nothing polls: the page reads the overview when it opens and after an action, and the console's
 // live socket runs only while a console is watched. Browser previews use the mock (mock.ts).
+import type { DialogPress } from "@pl/ui/console";
 import type { InvOp } from "@pl/ui/inventory";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -71,6 +72,11 @@ export interface CloudApi {
   restart(id: string): Promise<CloudAccount>;
   /** A console line; a password command is sealed before it leaves the launcher. No echo. */
   send(id: string, line: string): Promise<void>;
+  /**
+   * A press on the card of the server's dialog (DIALOG-CARD): `{rev, i, inputs, cmd?}` or `{rev,
+   * cancel: true}` as `dialogPress` builds it; the dialog's next frames show what came of it.
+   */
+  dialog(id: string, press: DialogPress): Promise<void>;
   /** The masked log before `before` (Unix seconds; null: the last hour). */
   logs(id: string, before: number | null): Promise<CloudLogPage>;
   /** The console is on screen: its lines and state stream through `onLive`. */
@@ -132,6 +138,9 @@ const tauriCloudApi: CloudApi = {
   restart: (id) => ok(commands.cloudAfkRestart(id)),
   send: async (id, line) => {
     await ok(commands.cloudAfkSend(id, line));
+  },
+  dialog: async (id, press) => {
+    await ok(commands.cloudAfkDialog(id, JSON.stringify(press)));
   },
   logs: (id, before) => ok(commands.cloudAfkLogs(id, before)),
   watch: async (id) => {

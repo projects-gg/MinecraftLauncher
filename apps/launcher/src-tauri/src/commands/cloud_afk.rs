@@ -187,6 +187,22 @@ pub async fn cloud_afk_send(
     Ok(service(&app, &state).send(&token, &id, &line).await?)
 }
 
+/// A press on the card of the server's dialog (DIALOG-CARD): the view's JSON (`{rev, i, inputs,
+/// cmd?}` or `{rev, cancel: true}`), checked again on the way; a command runs only as confirmed.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_dialog(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    press: String,
+) -> CmdResult<()> {
+    let token = token(&state)?;
+    Ok(service(&app, &state)
+        .press_dialog(&token, &id, &press)
+        .await?)
+}
+
 /// The machine's masked log before `before` (Unix seconds; none: the last hour).
 #[tauri::command]
 #[specta::specta]

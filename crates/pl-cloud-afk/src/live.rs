@@ -177,7 +177,17 @@ pub enum CloudLiveEvent {
         ok: bool,
         error: Option<CloudMovementError>,
     },
+    /// A watched account's server dialog (DIALOG-CARD): `dialog`, its JSON as the service checked
+    /// it (the view checks it again: `safeDialog`), or none when it closed. `rev` names it.
+    Dialog {
+        acct: String,
+        rev: u32,
+        dialog: Option<String>,
+    },
 }
+
+/// Most bytes of a dialog the launcher passes on (the service's cap).
+const MAX_DIALOG_BYTES: usize = 8 * 1024;
 
 /// An order's progress and live state as `aiord` brings them (`OrderView` without its status).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -710,6 +720,15 @@ enum Incoming {
         #[serde(default)]
         error: Option<CloudMovementError>,
     },
+    Dlg {
+        acct: String,
+        #[serde(default)]
+        rev: u32,
+        #[serde(default)]
+        dialog: Option<serde_json::Value>,
+        #[serde(default)]
+        clear: bool,
+    },
     Bye,
     Pong,
     #[serde(other)]
@@ -822,6 +841,20 @@ impl Incoming {
                 id,
                 ok: ok && error.is_none(),
                 error,
+            },
+            // A dialog out of shape or too large shows as none (the view checks the rest).
+            Self::Dlg {
+                acct,
+                rev,
+                dialog,
+                clear,
+            } => CloudLiveEvent::Dialog {
+                acct,
+                rev,
+                dialog: dialog
+                    .filter(|d| !clear && d.is_object())
+                    .map(|d| d.to_string())
+                    .filter(|d| d.len() <= MAX_DIALOG_BYTES),
             },
             _ => return None,
         })
@@ -1379,6 +1412,39 @@ mod tests {
         assert!(!hub.is_watching());
         let frames = heard(&sent, 5).await;
         assert_eq!(frames[4], watch_frame("unwatch", "a_1"));
+    }
+
+    #[test]
+    fn reads_a_server_dialog_as_its_json_or_none() {
+        let event = |text: &str| {
+            serde_json::from_str::<Incoming>(text)
+                .unwrap()
+                .feature_event()
+                .unwrap()
+        };
+        let CloudLiveEvent::Dialog { acct, rev, dialog } = event(
+            r#"{"t":"dlg","acct":"a_1","rev":3,"dialog":{"title":"Kurallar","body":[],"inputs":[],
+                "buttons":[{"i":1,"label":"Kapat","a":"close"}],"cancel":true,"play":true,"cols":1}}"#,
+        ) else {
+            panic!("no dialog");
+        };
+        assert_eq!((acct.as_str(), rev), ("a_1", 3));
+        let dialog: serde_json::Value = serde_json::from_str(&dialog.unwrap()).unwrap();
+        assert_eq!(dialog["title"], "Kurallar");
+        // Closed, out of shape or past the service's cap: none (the view shows no card).
+        for closed in [
+            r#"{"t":"dlg","acct":"a_1","rev":3,"clear":true}"#.to_owned(),
+            r#"{"t":"dlg","acct":"a_1","rev":4,"dialog":"Kurallar"}"#.to_owned(),
+            format!(
+                r#"{{"t":"dlg","acct":"a_1","rev":5,"dialog":{{"title":"{}"}}}}"#,
+                "x".repeat(9_000)
+            ),
+        ] {
+            assert!(
+                matches!(event(&closed), CloudLiveEvent::Dialog { dialog: None, .. }),
+                "{closed}"
+            );
+        }
     }
 
     #[test]
