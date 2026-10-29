@@ -155,9 +155,9 @@ describe("DialogCard", () => {
       />,
     );
     fireEvent.click(screen.getByText("Kurallar"));
-    // The link card: the host alone in bold, the rest of the address under it.
+    // The link card: the registrable domain alone in bold, the whole address muted under it.
     expect(screen.getByText("projects.gg").className).toContain("font-semibold");
-    expect(screen.getByText("/kurallar")).not.toBeNull();
+    expect(screen.getByText("projects.gg/kurallar")).not.toBeNull();
     fireEvent.click(screen.getByText("Aç"));
     expect(onClick).toHaveBeenCalledWith({ a: "open_url", v: "https://projects.gg/kurallar" });
     fireEvent.click(screen.getByText("Kabul"));
