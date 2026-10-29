@@ -790,6 +790,8 @@ fn refusal_issues(error: &CloudError) -> Option<Vec<CloudIssue>> {
             CloudIssue::from_path(if field.is_empty() { "commands" } else { field }, "limit")
         }
         "duplicate_account" => CloudIssue::from_path("name", "duplicate"),
+        // README "Protected names": the lobby keeps the name for staff (projects.gg only).
+        "name_protected" => CloudIssue::from_path("name", "protected"),
         "server_blocked" => CloudIssue::from_path("server", "blocked"),
         "server_full" => CloudIssue::from_path("server", "full"),
         "server_change_limit" => CloudIssue::from_path("server", "changeLimit"),
@@ -859,6 +861,29 @@ mod tests {
                 .unwrap_err();
             assert!(matches!(error, CloudError::Invalid(_)), "{text:?}");
         }
+    }
+
+    #[test]
+    fn a_protected_name_is_the_names_own_problem() {
+        // README "Protected names": the lobby keeps a staff name off the machines, so the editor
+        // says so under the name instead of "something went wrong".
+        let error = from_response(
+            409,
+            None,
+            json!({"error": {"code": "name_protected", "field": "name"}})
+                .to_string()
+                .as_bytes(),
+        );
+        let issues = refusal_issues(&error).unwrap();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(
+            (
+                issues[0].place.as_str(),
+                issues[0].field.as_str(),
+                issues[0].problem.as_str()
+            ),
+            ("general", "name", "protected")
+        );
     }
 
     #[test]
