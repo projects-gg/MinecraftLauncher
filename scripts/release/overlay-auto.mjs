@@ -68,6 +68,15 @@ export const GAMETEST_SHOTS = [
   "overlay-panel",
   "overlay-emoji",
 ];
+
+/**
+ * Whether the game test ran through, from the screenshot files it left: Fabric numbers them in
+ * the order taken ("0000_overlay-title.png"), and a bare name counts too.
+ */
+export function gametestRanThrough(files) {
+  const names = new Set(files.map((file) => file.replace(/^\d+_/, "")));
+  return GAMETEST_SHOTS.every((shot) => names.has(`${shot}.png`));
+}
 const MOJANG_VERSIONS = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 const MODRINTH_FABRIC_API = "https://api.modrinth.com/v2/project/P7dR8mSH/version";
 const USER_AGENT = "projects-gg/MinecraftLauncher overlay-auto (github.com/projects-gg)";
@@ -421,8 +430,7 @@ function report(flags) {
         .filter((name) => name.endsWith(".xml"))
         .map((name) => readFileSync(join(flags.junit, name), "utf8"))
     : [];
-  const shots = existsSync(flags.shots) ? readdirSync(flags.shots) : [];
-  const ranThrough = GAMETEST_SHOTS.every((shot) => shots.includes(`${shot}.png`));
+  const ranThrough = gametestRanThrough(existsSync(flags.shots) ? readdirSync(flags.shots) : []);
   const tests = {
     junit: junitTotals(xml),
     gametest: { passed: ranThrough ? 1 : 0, failed: ranThrough ? 0 : 1, skipped: 0 },
