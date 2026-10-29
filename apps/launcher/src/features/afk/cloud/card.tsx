@@ -660,8 +660,7 @@ export function CloudCard({
                 animate={{ opacity: 1, transition: enter(0.16) }}
                 exit={{ opacity: 0, transition: leave(0.12) }}
               >
-                {/* Bone: a selection holds several cards, and the page's gold is its action. */}
-                <PixelBrackets tone="bone" />
+                <PixelBrackets />
               </motion.span>
             ) : null}
           </AnimatePresence>
