@@ -33,6 +33,7 @@ import {
 import { mockOpening, mockWindowShown } from "./mock-opening";
 import { createMockSkins } from "./mock-skins";
 import { mockSocial } from "./mock-social";
+import { mockInstanceSubServers, mockSubServersTester } from "./mock-subservers";
 import { mockTrashedInstances } from "./mock-trash";
 import { mockWorldFromTitle } from "./mock-world-entry";
 import type {
@@ -1224,6 +1225,10 @@ export const mockApi: LauncherApi = {
     const who = mockFlag("worldOpen");
     return { open: who !== "", account: who && who !== "1" ? who : null };
   },
+  async instanceSubServers(instanceId: string) {
+    return mockInstanceSubServers(instances.find((instance) => instance.id === instanceId));
+  },
+  subServersTester: mockSubServersTester,
   async setScreenshotCopy() {},
   async updatePresence() {},
   async setPresenceEnabled() {},

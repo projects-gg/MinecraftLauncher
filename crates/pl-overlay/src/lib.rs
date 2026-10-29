@@ -7,7 +7,10 @@
 //! then both sides exchange newline-delimited JSON frames ([`protocol`]).
 //!
 //! Nothing here can make the game do anything: the launcher only sends things to show, and the mod
-//! only sends what the player did in its panel. What the mod hears is made from the friends
+//! only sends what the player did in its panel. The two exceptions the owner approved are a
+//! confirmed "Bağlan" ([`Overlay::connect_in_game`]) and, at the game's start, the Projects
+//! sub-server the player picked ([`route_pick`], [`route_jvm_arg`]), whose command the mod sends
+//! once after the lobby's login. What the mod hears is made from the friends
 //! feature's views (`feed`); which social events become in-game toasts is decided by [`policy`], in
 //! Rust, because the launcher's web view may rest while the window is hidden.
 //!
@@ -25,6 +28,7 @@ pub mod install;
 pub mod links;
 pub mod policy;
 pub mod protocol;
+mod route;
 mod server;
 mod session;
 #[cfg(test)]
@@ -36,9 +40,10 @@ pub use host::{HostSignal, HostSink, WorldsShown};
 pub use hub::{
     LANGUAGE_FILE, Overlay, OverlayConfig, OverlayStatus, read_language_pick, write_language_pick,
 };
+pub use route::{RouteLaunch, route_pick};
 pub use server::{
     BYE_TIMEOUT, Bridge, BridgeEvent, ConnId, Control, EMOJI_ARG, Endpoint, LANG_ARG, PANEL_ARG,
-    PORT_ARG, TOKEN_ARG, WORLD_ARG, is_secret_jvm_arg, world_jvm_arg,
+    PORT_ARG, ROUTE_ARG, TOKEN_ARG, WORLD_ARG, is_secret_jvm_arg, route_jvm_arg, world_jvm_arg,
 };
 pub use session::{CONNECT_WAIT, ConnectOutcome, PeopleChange, SocialActions};
 pub use token::SessionToken;

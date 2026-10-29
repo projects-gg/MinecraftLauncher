@@ -4,6 +4,7 @@ import type {
   LegacyImportRequest,
   LegacyScan,
   PresenceContext,
+  SubServerView,
   WorldOpenView,
 } from "@/bindings";
 import { isTauri } from "../platform";
@@ -144,6 +145,15 @@ export interface LauncherApi {
    * (PLAY-AGAIN: asked before any game beside the ones running).
    */
   gameMemoryFits(instanceId: string): Promise<boolean>;
+  /**
+   * AUTOJOIN: the Projects sub-servers "Doğrudan sunucuya bağlan" offers for the instance beside
+   * the lobby, in Studio's order; none while Studio's switch is off, the instance joins no
+   * Projects server or its game would not get our overlay mod. Rows marked `testersOnly` show
+   * only while `subServersTester` says yes.
+   */
+  instanceSubServers(instanceId: string): Promise<SubServerView[]>;
+  /** Whether this player is in the beta program (BETA-GATE answers "member"). */
+  subServersTester(): Promise<boolean>;
   /**
    * Whether the world `world` (its folder) of the instance is open in a game now, and whose
    * (PLAY-AGAIN: "Devam et" and a world's "Oyna" say so before a launch would stop on it).

@@ -196,6 +196,19 @@ export const commands = {
 	 */
 	instanceServersEdit: (instanceId: string, edit: ServerEdit) => typedError<ServerEditView, CmdError>(__TAURI_INVOKE("instance_servers_edit", { instanceId, edit })),
 	/**
+	 *  The sub-servers offered for `instance_id`, in Studio's order. None while `features.subServers`
+	 *  is off, the instance joins no Projects server, or the game would not get this launcher's own
+	 *  overlay mod (not Fabric, no jar of ours for its version, the overlay and the chat's emoji picker
+	 *  both off): the mod is what sends the pick's command.
+	 */
+	instanceSubServers: (instanceId: string) => typedError<SubServerView[], CmdError>(__TAURI_INVOKE("instance_sub_servers", { instanceId })),
+	/**
+	 *  Whether this player is in the beta program (BETA-GATE: the friends service answers `member`),
+	 *  for the rows marked "Yalnız testçiler". No while the gate is off, nobody is signed in, the
+	 *  friends feature is off or the service cannot tell; the lobby still applies its own rules.
+	 */
+	subServersTester: () => typedError<boolean, CmdError>(__TAURI_INVOKE("sub_servers_tester")),
+	/**
 	 *  Mojang's version list, newest first, with the launcher's recommended version marked (a
 	 *  recommendation Mojang does not list marks nothing).
 	 */
@@ -5288,6 +5301,13 @@ export type LaunchSettings = {
 	 *  back to the selected one.
 	 */
 	account?: string | null,
+	/**
+	 *  AUTOJOIN: the Projects sub-server picked beside "Doğrudan sunucuya bağlan" for this
+	 *  instance (its id; none: the lobby). Its command comes from the signed config, and the game
+	 *  gets it only when OYNA joins the instance's own server with our overlay mod in place
+	 *  (`pl_overlay::route_pick`).
+	 */
+	route?: string | null,
 };
 
 export type LeftoverKindView = "cache" | "downloads" | "logs" | "crashReports";
@@ -9479,6 +9499,16 @@ export type StepNote =
 export type StepStatus = "pending" | "running" | "done" | "failed" | 
 /**  Not run (not needed any more, or the repair was stopped). */
 "skipped";
+
+/**  One sub-server as the page offers it (the command stays in Rust). */
+export type SubServerView = {
+	/**  The pick the page keeps for the instance. */
+	id: string,
+	/**  "SkyBlock": the page writes "play.projects.gg → SkyBlock". */
+	name: string,
+	/**  Shown only while [`sub_servers_tester`] says yes. */
+	testersOnly: boolean,
+};
 
 export type SupportBundleView = {
 	path: string,
