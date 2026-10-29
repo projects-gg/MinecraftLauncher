@@ -1,6 +1,6 @@
 // A cloud account on the AFK page: face, name and server, the state line, the paid time with
 // "Süreyi uzat" once renewal opens, and one main button (Başlat, Durdur, "Şifreyi düzelt" after the
-// server turned its password down, or "Süre al" on the site once the time is up), the
+// server turned its password down, or "Süre satın al" on the site once the time is up), the
 // console and the settings. With the cloud features: "Envanter" and "Hareket" in its menu (the
 // panel's tabs), "Ayarlarını kopyala", and a box while several accounts are chosen (the chosen card
 // carries the brand's pixel brackets).
@@ -238,7 +238,7 @@ function PrimaryButton({
     );
   }
   // One gold per screen (design.md §2, lead 29 Oct): a card's button is never gold. One that needs
-  // the player is a bone plate: "Şifreyi düzelt" (AFK-CLEAR), "Süre al", and "Başlat" after a plain
+  // the player is a bone plate: "Şifreyi düzelt" (AFK-CLEAR), "Süre satın al", and "Başlat" after a plain
   // disconnect ("other"), where starting again is the fix. Quiet: a start or a stop the player
   // chose, a waiting button, and a start that waits on a fix (the state line's hint says what,
   // "… düzelt, sonra başlat"; it would call for a start that stops again, SMALL11).
@@ -660,7 +660,8 @@ export function CloudCard({
                 animate={{ opacity: 1, transition: enter(0.16) }}
                 exit={{ opacity: 0, transition: leave(0.12) }}
               >
-                <PixelBrackets />
+                {/* Bone: a selection holds several cards, and the page's gold is its action. */}
+                <PixelBrackets tone="bone" />
               </motion.span>
             ) : null}
           </AnimatePresence>

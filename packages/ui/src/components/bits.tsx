@@ -123,9 +123,18 @@ export function Kbd({ children }: { children: ReactNode }) {
 /**
  * The brand banner's pixel L-brackets. Marks selection only (selected instance, focused card).
  */
-export function PixelBrackets({ className, size = 10 }: { className?: string; size?: number }) {
+export function PixelBrackets({
+  className,
+  size = 10,
+  tone = "gold",
+}: {
+  className?: string;
+  size?: number;
+  /** Bone where several can be chosen at once (a selection of cards): never a row of golds. */
+  tone?: "gold" | "bone";
+}) {
   const arm = `${size}px`;
-  const corner = "absolute bg-gold-300";
+  const corner = cn("absolute", tone === "bone" ? "bg-bone-100" : "bg-gold-300");
   return (
     <span aria-hidden className={cn("pointer-events-none absolute -inset-1", className)}>
       <span className={cn(corner, "top-0 left-0 h-[2px]")} style={{ width: arm }} />

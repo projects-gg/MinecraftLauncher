@@ -145,7 +145,9 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
           // even where it opens beside it over the next card (SHEET-UX).
           "data-[state=open]:bg-white/8 data-[state=open]:text-bone-100",
           size === "sm" ? "size-8" : "size-[32px]",
-          active && "bg-white/8 text-gold-300",
+          // A chosen tool (a pin, a console tab) sits on the quiet plate (design.md §6): the
+          // screen's gold is its main action's.
+          active && "bg-[color:var(--segmented-plate,rgb(255_255_255/0.16))] text-bone-50",
           className,
         )}
         {...props}
