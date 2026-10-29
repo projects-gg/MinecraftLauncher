@@ -1,7 +1,7 @@
 // "Ekip kur" and the crew's "Düzenle": a live preview on top (the mark, the name, the tag, the
 // motto), then the name and the tag, the motto with its counter, and "Görünüm": 12 colours in one
 // row, 4 frames, 36 emblems (9 × 4), with "Rastgele" beside the heading. Pickers are APG radio
-// groups (arrows, Home/End; Tab leaves); the chosen tile wears a gold ring that fades in, a press
+// groups (arrows, Home/End; Tab leaves); the chosen tile wears a bone ring that fades in, a press
 // squeezes to 94 %. The preview's mark cross-fades in place when the look changes (one fade for
 // "Rastgele"). A service without looks gets today's editor: name, tag and the first 20 emblems.
 // The crew colour only fills the mark and tints the tag; gold stays the interface's accent.
@@ -50,13 +50,16 @@ export const fieldClass =
 const tileClass =
   "relative flex cursor-pointer items-center justify-center outline-none transition-[background-color,box-shadow,transform,scale] duration-150 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.94]";
 
-/** The ring of a chosen tile: gold, fading in and out (opacity only). */
+/**
+ * The ring of a chosen tile: bone, fading in and out (opacity only). A choice is never gold: the
+ * screen's one gold is its main action (design.md §2; the keyboard's focus ring stays gold).
+ */
 function ChosenRing({ on, className }: { on: boolean; className?: string }) {
   return (
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute -inset-[3px] ring-2 ring-gold-400 transition-opacity duration-150",
+        "pointer-events-none absolute -inset-[3px] ring-2 ring-bone-100 transition-opacity duration-150",
         on ? "opacity-100" : "opacity-0",
         className,
       )}
@@ -201,7 +204,7 @@ function EmblemPicker({
 }: {
   value: Emblem;
   emblems: readonly Emblem[];
-  /** The crew colour: the chosen emblem wears it, the others stay gold on obsidian. */
+  /** The crew colour: the chosen emblem wears it, the others stay quiet ash on obsidian. */
   color: CrewColor;
   onChange: (emblem: Emblem) => void;
 }) {
@@ -245,7 +248,7 @@ function EmblemPicker({
             <Glyph
               size={19}
               weight="fill"
-              color={chosen ? tone.glyph : "var(--color-gold-300)"}
+              color={chosen ? tone.glyph : "var(--color-ash-300)"}
               className="transition-colors duration-150"
             />
           </button>
