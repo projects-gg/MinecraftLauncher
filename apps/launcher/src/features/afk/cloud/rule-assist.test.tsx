@@ -6,7 +6,7 @@
 import { TooltipProvider } from "@pl/ui";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/lib/i18n";
 import { CommandError } from "@/lib/api/tauri";
 import { TriggerField } from "../settings/controls";
@@ -67,6 +67,33 @@ function Rule({
 
 const never: Suggest = () => new Promise(() => {});
 
+// "Oluştur" submits the box's form. happy-dom submits only on a click on the button itself, not on
+// the words inside it (a browser does both), so the click goes to the button by its name.
+const create = () => fireEvent.click(screen.getByRole("button", { name: "Oluştur" }));
+
+// The box fades. happy-dom leaves a cancelled animation's `finished` rejection unhandled (a browser
+// marks it handled, as the Web Animations spec says), so a fade cut short by the next step or the
+// cleanup failed the run with "AbortError: The animation was canceled". Here it is handled.
+const animate = Element.prototype.animate;
+beforeAll(() => {
+  Element.prototype.animate = function handledAnimate(
+    this: Element,
+    keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+    options?: number | KeyframeAnimationOptions,
+  ) {
+    const animation = animate.call(this, keyframes, options);
+    const cancel = animation.cancel;
+    animation.cancel = function handledCancel(this: Animation) {
+      this.finished.catch(() => undefined);
+      cancel.call(this);
+    };
+    return animation;
+  };
+});
+afterAll(() => {
+  Element.prototype.animate = animate;
+});
+
 beforeEach(() => localStorage.clear());
 afterEach(() => cleanup());
 
@@ -85,7 +112,7 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
     const words = screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz.");
     fireEvent.change(words, { target: { value: "  biri tp  ya da ışınla yazınca " } });
-    fireEvent.click(screen.getByText("Oluştur"));
+    create();
     expect(suggest).toHaveBeenCalledWith("biri tp ya da ışınla yazınca", false);
     expect(await screen.findByText(MADE.summary)).toBeTruthy();
     expect(screen.getByText("beni ışınla")).toBeTruthy();
@@ -120,7 +147,7 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
       target: { value: "selam" },
     });
-    fireEvent.click(screen.getByText("Oluştur"));
+    create();
     expect(await screen.findByText(plain.summary)).toBeTruthy();
     expect(screen.queryByText("Tekrar dene")).toBeNull();
     fireEvent.click(screen.getByText("Kullan"));
@@ -146,7 +173,7 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
       target: { value: "bir şeyler yazınca" },
     });
-    fireEvent.click(screen.getByText("Oluştur"));
+    create();
     expect((await screen.findByRole("alert")).textContent).toBe(unclear.message);
     expect(screen.getByTestId("rule").textContent).toBe("plain:");
   });
@@ -158,7 +185,7 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
       target: { value: "ş".repeat(201) },
     });
-    fireEvent.click(screen.getByText("Oluştur"));
+    create();
     expect(screen.getByRole("alert").textContent).toBe("En çok 200 karakter yazabilirsin.");
     expect(suggest).not.toHaveBeenCalled();
   });
