@@ -112,6 +112,9 @@ pub struct PlusCheckFeatures {
     pub custom_items: Option<bool>,
     /// "Para birimi": while off, a new money name is refused (the stored one may come back).
     pub currency: Option<bool>,
+    /// "Sipariş menüsünü kontrol et": while off, it cannot be switched on (the stored one may come
+    /// back, and off always passes).
+    pub order_menu: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -972,17 +975,20 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     let discovery_in = object(config.get("discovery"), "discovery")?;
     only(
         discovery_in,
-        &["scanChat", "proactivePm", "ads", "adTemplate", "adEveryMin"],
+        &[
+            "scanChat",
+            "proactivePm",
+            "ads",
+            "adTemplate",
+            "adEveryMin",
+            "orderMenu",
+        ],
         "discovery",
     )?;
     let scan_chat = boolean(discovery_in.get("scanChat"), "discovery.scanChat")?;
     let proactive_pm = boolean(discovery_in.get("proactivePm"), "discovery.proactivePm")?;
     let ads = boolean(discovery_in.get("ads"), "discovery.ads")?;
     let ad_template = string(discovery_in.get("adTemplate"), "discovery.adTemplate")?;
-    let ad_every_min = match discovery_in.get("adEveryMin") {
-        None => None,
-        value => Some(ad_minutes(value)?),
-    };
     let templates: &[String] = if mode == GENERIC {
         &[]
     } else {
@@ -993,6 +999,32 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     if !is_template_id(ad_template) || (ads && !templates.iter().any(|t| t == ad_template)) {
         return Err(PlusRefusal::invalid("discovery.adTemplate", "range"));
     }
+    let stored_discovery = stored.and_then(|doc| doc.get("discovery"));
+    // The ads' interval: a write without it keeps the stored one (a client that does not know it
+    // changes nothing); without a stored one, an hour.
+    let ad_every_min = match discovery_in.get("adEveryMin") {
+        None => stored_discovery
+            .and_then(|discovery| discovery.get("adEveryMin"))
+            .and_then(whole)
+            .filter(|minutes| AD_EVERY_MIN.contains(minutes))
+            .unwrap_or(AD_EVERY_DEFAULT),
+        value => ad_minutes(value)?,
+    };
+    // The order menu (DONUT-ORDER, "Sipariş menüsünü kontrol et"): a write without it keeps the
+    // stored one, which is stored only while on. While Studio's switch is off it cannot be switched
+    // on; the stored one sent back passes, and so does off.
+    let stored_menu = stored_discovery.and_then(|discovery| discovery.get("orderMenu"))
+        == Some(&Value::Bool(true));
+    let order_menu = match discovery_in.get("orderMenu") {
+        None => stored_menu,
+        value => {
+            let on = boolean(value, "discovery.orderMenu")?;
+            if on && !stored_menu && ctx.features.order_menu == Some(false) {
+                return Err(PlusRefusal::invalid("discovery.orderMenu", "feature"));
+            }
+            on
+        }
+    };
 
     let trade_in = object(config.get("trade"), "trade")?;
     only(trade_in, &["returnRow", "currency"], "trade")?;
@@ -1166,7 +1198,7 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
             "approvalAbove": approval_above, "newCounterpartApprovalAbove": new_counterpart,
             "approvalTimeoutMin": timeout},
         "discovery": {"scanChat": scan_chat, "proactivePm": proactive_pm, "ads": ads,
-            "adTemplate": ad_template},
+            "adTemplate": ad_template, "adEveryMin": ad_every_min},
         "trade": trade,
         "summaryAt": summary_at,
         "blocked": blocked,
@@ -1176,8 +1208,8 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     if ready {
         out["ready"] = Value::Bool(true);
     }
-    if let Some(minutes) = ad_every_min {
-        out["discovery"]["adEveryMin"] = Value::from(minutes);
+    if order_menu {
+        out["discovery"]["orderMenu"] = Value::Bool(true);
     }
     if out.to_string().len() > MAX_CONFIG_BYTES {
         return Err(PlusRefusal::TooLarge);
@@ -1191,6 +1223,8 @@ fn kind_or_range(value: Option<&Value>) -> &'static str {
 
 /// "Sohbete ilan" (trade-any-4): the minutes between ads a player may choose.
 const AD_EVERY_MIN: [i64; 4] = [30, 45, 60, 120];
+/// The minutes a document without a choice stores: an hour.
+const AD_EVERY_DEFAULT: i64 = 60;
 
 /// `discovery.adEveryMin`, where the document has it: one of [`AD_EVERY_MIN`] (a server's floor
 /// only raises the minutes the service uses, it refuses none of them). Any other number, a
@@ -1764,12 +1798,22 @@ mod tests {
             now: 1_792_900_000,
             ..PlusCheckContext::default()
         };
-        let minutes = |doc: &Value| -> Checked<Option<Value>> {
-            let out = check_config_value(doc, &ctx)?;
+        let minutes_in = |doc: &Value, ctx: &PlusCheckContext| -> Checked<Option<Value>> {
+            let out = check_config_value(doc, ctx)?;
             Ok(out["discovery"].get("adEveryMin").cloned())
         };
-        // None chosen (or an older service): none is made.
-        assert_eq!(minutes(&doc), Ok(None));
+        let minutes = |doc: &Value| minutes_in(doc, &ctx);
+        // None chosen and none stored: the document as the service stores it says the hour (the
+        // contract's reference); what a launcher write sends stays the player's (`checked_settings`).
+        assert_eq!(minutes(&doc), Ok(Some(Value::from(60))));
+        // None sent over a stored choice: the stored one stays.
+        let mut stored = doc.clone();
+        stored["discovery"]["adEveryMin"] = Value::from(120);
+        let kept = PlusCheckContext {
+            stored: Some(stored),
+            ..ctx.clone()
+        };
+        assert_eq!(minutes_in(&doc, &kept), Ok(Some(Value::from(120))));
         for chosen in AD_EVERY_MIN {
             let mut sent = doc.clone();
             sent["discovery"]["adEveryMin"] = Value::from(chosen);

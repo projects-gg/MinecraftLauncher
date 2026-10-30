@@ -7181,6 +7181,14 @@ export type PlusDiscovery_Deserialize = {
 	 *  in the document, and sent back so (never made here; an older service knows no such key).
 	 */
 	adEveryMin?: number | null,
+	/**
+	 *  "Sipariş menüsünü kontrol et" (DONUT-ORDER): the bot checks the server's order menu now and
+	 *  then. The service stores it only while on, so it reads `Some(true)` or None (not in the
+	 *  document: a write leaves the stored one, and an older service knows no such key);
+	 *  `Some(false)` is the player's switch going off (the service then leaves it out). It goes
+	 *  back as it came.
+	 */
+	orderMenu?: boolean | null,
 };
 
 export type PlusDiscovery_Serialize = {
@@ -7194,6 +7202,14 @@ export type PlusDiscovery_Serialize = {
 	 *  in the document, and sent back so (never made here; an older service knows no such key).
 	 */
 	adEveryMin?: number | null,
+	/**
+	 *  "Sipariş menüsünü kontrol et" (DONUT-ORDER): the bot checks the server's order menu now and
+	 *  then. The service stores it only while on, so it reads `Some(true)` or None (not in the
+	 *  document: a write leaves the stored one, and an older service knows no such key);
+	 *  `Some(false)` is the player's switch going off (the service then leaves it out). It goes
+	 *  back as it came.
+	 */
+	orderMenu?: boolean | null,
 };
 
 /**  A table written to the player's Downloads folder. */
@@ -7914,6 +7930,11 @@ export type PlusRulesFeatures = {
 	 *  as off, so the field stays hidden.
 	 */
 	currency?: boolean,
+	/**
+	 *  "Sipariş menüsünü kontrol et" (`discovery.orderMenu`, DONUT-ORDER), off by default: a
+	 *  missing one (an older service) reads as off, so the switch stays hidden.
+	 */
+	orderMenu?: boolean,
 };
 
 /**  How a settings save (or "Bu hale dön") ended. Problems are worded where they are. */
