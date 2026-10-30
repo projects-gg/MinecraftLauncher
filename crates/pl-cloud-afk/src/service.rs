@@ -29,6 +29,7 @@ use crate::model::{
     AccountPatch, CloudAccount, CloudAccountCount, CloudCanBuy, CloudLimits, CloudLocalized,
     CloudLogPage, CloudServer, CloudVersions, Me, Offer, ServiceMode, VaultKey,
 };
+use crate::pattern::PatternSuggestion;
 use crate::plus::{MePlus, PlusOffer};
 use crate::seal::{CONSOLE_ROW, RevealKey, RevealTarget, SealTarget, seal};
 use crate::server::{CloudAddressProblem, normalize, same_server};
@@ -80,6 +81,9 @@ pub struct CloudOverview {
     /// Studio's switches of the cloud features (CAFK-FEAT); None from a service before them, which
     /// shows none of them (bulk management included).
     pub features: Option<CloudFeatures>,
+    /// "ProBot AI ile kalıp kur" can answer now (`/offer` → `ai.patterns`); false hides the helper
+    /// and a rule's pattern is written by hand, as before it.
+    pub ai_patterns: bool,
 }
 
 impl CloudOverview {
@@ -102,6 +106,7 @@ impl CloudOverview {
             plus: None,
             plus_me: None,
             features: None,
+            ai_patterns: false,
         }
     }
 }
@@ -376,6 +381,7 @@ impl CloudService {
             limits: offer.limits.clone(),
             plus: offer.plus.clone(),
             features: offer.features.as_ref().map(CloudFeatures::from),
+            ai_patterns: offer.ai.as_ref().is_some_and(|ai| ai.patterns),
             ..CloudOverview::hidden()
         };
         let Some(token) = token else {
@@ -465,6 +471,22 @@ impl CloudService {
             return Err(CloudError::Invalid("refused text"));
         }
         report_outcome(self.inner.client.report_refusal(token, id, text).await)
+    }
+
+    /// "ProBot AI ile kalıp kur": a rule's trigger from the player's own words, its sentence in
+    /// `lang` (`tr` or `en`). `fresh`: "Tekrar dene", a new answer instead of the kept one.
+    pub async fn suggest_pattern(
+        &self,
+        token: &Bearer,
+        id: &str,
+        text: &str,
+        lang: &str,
+        fresh: bool,
+    ) -> Result<PatternSuggestion> {
+        self.inner
+            .client
+            .suggest_pattern(token, id, text, lang, fresh)
+            .await
     }
 
     /// Sends a console line; a password command is sealed here first. The console never echoes
