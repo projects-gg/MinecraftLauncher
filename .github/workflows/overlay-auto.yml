@@ -1,0 +1,230 @@
+name: Overlay for new Minecraft versions
+
+# The in-game overlay for Minecraft versions the launcher's jars do not cover (OVL-AUTO; docs/content-format.md,
+# "In-game overlay jars"). Every day it looks for Mojang releases that no target of mods/projects-overlay/build.gradle
+# takes and that Fabric API has a release for. For each, it builds the mod with the last compatibility class and runs
+# its JUnit tests and the client game test against the built jar. Green: the jar and overlay-release.json are left as
+# an artifact for Studio, and an `overlay-ready` issue says so. Red: an `overlay-compat` issue asks for a new
+# compatibility class. It holds no keys and publishes nothing: Studio imports the artifact, checks the jar itself and
+# signs the index on the owner's computer.
+#
+# A run on demand (Actions, or `gh workflow run overlay-auto.yml --ref v2 -f minecraft=26.3`) tries one version; its
+# dry run (the default) opens no issue. A push that changes this workflow or its script tries the newest target as a
+# dry run. Only runs on v2 upload an artifact: Studio fetches jars itself from this workflow's green v2 runs (their
+# event push, schedule or workflow_dispatch) and nowhere else. Scheduled runs start once this file is on the default
+# branch.
+
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+    inputs:
+      minecraft:
+        description: Try this Minecraft version (a target of build.gradle, or a newer release)
+        required: false
+        type: string
+      dry_run:
+        description: Open no issue, only print it
+        required: false
+        type: boolean
+        default: true
+  push:
+    branches: [v2]
+    paths:
+      - ".github/workflows/overlay-auto.yml"
+      - "scripts/release/overlay-auto.mjs"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: overlay-auto-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # A dry run opens no issue: a push, a dispatch that asks for one, and any run off v2 (which also
+  # uploads no artifact: Studio takes jars only from v2's runs).
+  DRY_RUN: ${{ github.event_name == 'push' || inputs.dry_run || github.ref != 'refs/heads/v2' }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  watch:
+    name: Versions to try
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tries: ${{ steps.watch.outputs.tries }}
+      any: ${{ steps.watch.outputs.any }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # Versions an earlier run already opened an issue for (open or closed), and the jars the live index lists.
+      - name: Earlier issues and published jars
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue list --repo "$GITHUB_REPOSITORY" --state all --label overlay-auto --limit 500 --json title > "$RUNNER_TEMP/issues.json"
+          curl -fsSL --max-time 30 https://cdn.projects.gg/v1/index.json -o "$RUNNER_TEMP/published.json" \
+            || echo '{}' > "$RUNNER_TEMP/published.json"
+
+      - id: watch
+        name: Pick the versions
+        env:
+          EVENT: ${{ github.event_name }}
+          MINECRAFT: ${{ inputs.minecraft }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            node scripts/release/overlay-auto.mjs watch --newest
+          elif [ -n "$MINECRAFT" ]; then
+            node scripts/release/overlay-auto.mjs watch --minecraft "$MINECRAFT"
+          elif [ "$EVENT" = "schedule" ]; then
+            node scripts/release/overlay-auto.mjs watch --issues "$RUNNER_TEMP/issues.json" --published "$RUNNER_TEMP/published.json"
+          else
+            node scripts/release/overlay-auto.mjs watch
+          fi
+
+  try:
+    name: Minecraft ${{ matrix.minecraft }}
+    needs: watch
+    if: needs.watch.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    # One build, the JUnit tests and one smoke test in the game.
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.watch.outputs.tries) }}
+    env:
+      KEY: ${{ matrix.key }}
+      MC: ${{ matrix.minecraft }}
+      COMPAT: ${{ matrix.compat }}
+      FABRIC_API: ${{ matrix.fabricApi }}
+      RANGE: ${{ matrix.range }}
+    defaults:
+      run:
+        working-directory: mods/projects-overlay
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Virtual display for the game test
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+
+      # A target's own row by its key; a new version with the last compatibility class and the Fabric API found for it.
+      - name: Gradle properties of the try
+        run: |
+          echo "OUT=$RUNNER_TEMP/overlay-auto" >> "$GITHUB_ENV"
+          if [ -n "$KEY" ]; then
+            echo "GRADLE_ARGS=-Pmc=$KEY" >> "$GITHUB_ENV"
+          else
+            echo "GRADLE_ARGS=-Pmc=$MC -Povl.compat=$COMPAT -Povl.fabricApi=$FABRIC_API -Povl.range=$RANGE" >> "$GITHUB_ENV"
+          fi
+
+      - id: build
+        name: Build and JUnit
+        run: |
+          set -o pipefail
+          ./gradlew build --no-daemon --console=plain $GRADLE_ARGS 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      - id: gametest
+        name: Client game test against the jar
+        run: |
+          set -o pipefail
+          ./gradlew runProductionClientGameTest --no-daemon --console=plain $GRADLE_ARGS 2>&1 | tee "$RUNNER_TEMP/gametest.log"
+
+      - id: report
+        name: Report
+        run: |
+          mkdir -p "$OUT" "$RUNNER_TEMP/shots"
+          # Fabric numbers the game test's screenshots (0000_overlay-title.png): copied by their own names.
+          find build/run/productionClientGameTest -name '*overlay-*.png' -print0 |
+            while IFS= read -r -d '' shot; do
+              cp "$shot" "$RUNNER_TEMP/shots/$(basename "$shot" | sed -E 's/^[0-9]+_//')"
+            done
+          jar=$(ls build/libs/projects-overlay-*+"$MC".jar)
+          node ../../scripts/release/overlay-auto.mjs report --jar "$jar" --junit build/test-results/test \
+            --shots "$RUNNER_TEMP/shots" --minecraft "$MC" --fabric-api "$FABRIC_API" --compat "$COMPAT" \
+            --range "$RANGE" --out "$OUT"
+          cp "$RUNNER_TEMP"/shots/overlay-*.png "$OUT/"
+
+      - id: upload
+        name: Artifact for Studio
+        if: github.ref == 'refs/heads/v2'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: overlay-auto-${{ matrix.minecraft }}
+          path: ${{ runner.temp }}/overlay-auto/
+          if-no-files-found: error
+          retention-days: 90
+
+      - id: ready
+        name: Ready issue text
+        if: github.ref == 'refs/heads/v2'
+        env:
+          ARTIFACT: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          node ../../scripts/release/overlay-auto.mjs issue --kind ready --minecraft "$MC" \
+            --report "$OUT/overlay-release.json" --run "$RUN_URL" --artifact "$ARTIFACT" --out "$RUNNER_TEMP/issue.md"
+
+      - id: compat
+        name: Compat issue text
+        if: failure() && !matrix.key && (steps.build.outcome == 'failure' || steps.gametest.outcome == 'failure')
+        env:
+          STEP: ${{ steps.build.outcome == 'failure' && 'Build and JUnit' || 'Client game test against the jar' }}
+        run: |
+          log="$RUNNER_TEMP/build.log"
+          if [ "$STEP" != "Build and JUnit" ]; then log="$RUNNER_TEMP/gametest.log"; fi
+          node ../../scripts/release/overlay-auto.mjs issue --kind compat --minecraft "$MC" --fabric-api "$FABRIC_API" \
+            --compat "$COMPAT" --step "$STEP" --run "$RUN_URL" --log "$log" --out "$RUNNER_TEMP/issue.md"
+
+      - name: Open the issue
+        if: always() && (steps.ready.outcome == 'success' || steps.compat.outcome == 'success')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ steps.ready.outputs.title || steps.compat.outputs.title }}
+          LABELS: ${{ steps.ready.outputs.labels || steps.compat.outputs.labels }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run, no issue: $TITLE ($LABELS)"
+            cat "$RUNNER_TEMP/issue.md"
+            exit 0
+          fi
+          for label in ${LABELS//,/ }; do
+            gh label create "$label" --repo "$GITHUB_REPOSITORY" --color 5319e7 --force > /dev/null
+          done
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label "$LABELS" --body-file "$RUNNER_TEMP/issue.md"
+
+      - name: Logs and screenshots of a red run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: overlay-auto-${{ matrix.minecraft }}-failed
+          path: |
+            ${{ runner.temp }}/*.log
+            mods/projects-overlay/build/run/productionClientGameTest/**/*.png
+            mods/projects-overlay/build/run/productionClientGameTest/logs/latest.log
+            mods/projects-overlay/build/run/productionClientGameTest/crash-reports/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -643,6 +643,25 @@ const instances: InstanceSummary[] = [
     : []),
   // `?modsets=demo`: an instance made from the PvP set (MODSET1).
   ...(modSetsFlag() === "demo" ? [DEMO_SET_INSTANCE] : []),
+  // `?overlayNext=1` (OVL-AUTO): a Fabric instance on a Minecraft release newer than every
+  // version the overlay has a tested jar for ("henüz yok" in Settings → Genel).
+  ...(mockFlag("overlayNext") === "1"
+    ? [
+        {
+          id: "kesif",
+          name: "Keşif",
+          icon: "compass" as const,
+          mcVersion: "26.4",
+          loader: "fabric" as const,
+          loaderVersion: "0.20.1",
+          managed: false,
+          lastPlayedAt: hoursAgo(1),
+          playTimeSecs: 2 * 3600,
+          state: "ready" as const,
+          createdAt: hoursAgo(30),
+        },
+      ]
+    : []),
 ];
 // `?join=offline`: no Projects instance yet and no connection to fetch its pack, so "Katıl"
 // cannot start the game and says why (FIX1, E1).

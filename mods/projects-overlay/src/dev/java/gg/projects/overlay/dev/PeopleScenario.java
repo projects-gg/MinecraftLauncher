@@ -11,10 +11,12 @@ import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.people.FriendMenu;
 import gg.projects.overlay.people.WorldInvites;
+import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.panel.OverlayScreen;
 import gg.projects.overlay.ui.panel.PanelInput;
 import gg.projects.overlay.ui.panel.PausePanelButton;
+import gg.projects.overlay.ui.panel.PersonMenu;
 import gg.projects.overlay.ui.panel.ReportScreen;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -75,6 +77,8 @@ public final class PeopleScenario implements ClientModInitializer {
     private CompletableFuture<Void> reload;
     /** OVL-UX2: the launcher (the mock's --people2) takes the whole person menu; its steps run only then. */
     private boolean people2;
+    /** OVL-UX3: the launcher (the mock's --people3) takes the crew rows and "Yeni kategori…"; their steps run only then. */
+    private boolean people3;
 
     @Override
     public void onInitializeClient() {
@@ -137,6 +141,8 @@ public final class PeopleScenario implements ClientModInitializer {
                 results.addProperty("meBadge", String.valueOf(overlay.state().meBadge()));
                 people2 = overlay.state().has("people2");
                 results.addProperty("people2", people2);
+                people3 = overlay.state().has("people3");
+                results.addProperty("people3", people3);
                 openWorld(mc);
                 worldTicks = 0;
             }
@@ -229,8 +235,8 @@ public final class PeopleScenario implements ClientModInitializer {
         step(0.1, "esc", mc -> key(need(mc), InputConstants.KEY_ESCAPE, 0));
         // Ayşe in the world (as the launcher mirrors it): her menu sends her off, asked first.
         step(0.1, "Ayşe in the world", mc -> dev("host-mirror", "guests",
-            "[{\"guest\":\"g1\",\"friend\":\"f-ayse\",\"label\":\"Ayşe\",\"name\":\"Ayse\",\"state\":\"in\"},"
-            + "{\"guest\":\"\",\"friend\":\"f-mert\",\"label\":\"Mert\",\"state\":\"invited\"}]"));
+            "[{\"guest\":\"g1\",\"friend\":\"f-ayse\",\"label\":\"PixelAvci\",\"name\":\"PixelAvci\",\"state\":\"in\"},"
+            + "{\"guest\":\"\",\"friend\":\"f-mert\",\"label\":\"NetherKral\",\"state\":\"invited\"}]"));
         step(0.6, "Ayşe's menu", mc -> need(mc).openFriendMenu("f-ayse", false));
         step(0.4, "shot guest menu", mc -> shot(mc, "menu-guest"));
         step(0.1, "send off", mc -> need(mc).pressMenu(FriendMenu.Action.REMOVE_FROM_WORLD));
@@ -314,6 +320,7 @@ public final class PeopleScenario implements ClientModInitializer {
             results.addProperty("madeReal", conv != null && OverlayClient.get().state().conversation(conv) != null);
         });
         people2Chats();
+        people3Rows();
         // The tag taken off: the header shows the name alone.
         step(0.2, "badge off", mc -> dev("badge-off"));
         step(0.8, "shot header without tag", mc -> {
@@ -367,6 +374,84 @@ public final class PeopleScenario implements ClientModInitializer {
             if (people2) {
                 action.accept(mc);
             }
+        });
+    }
+
+    /** A step that runs only with OVL-UX3's crew rows and "Yeni kategori…" (the mock's --people3). */
+    private void step3(double wait, String name, Consumer<Minecraft> action) {
+        step(wait, name, mc -> {
+            if (people3) {
+                action.accept(mc);
+            }
+        });
+    }
+
+    /**
+     * OVL-UX3: in Gece Kuşları's chat, which the player leads, a sender's menu carries the crew rows: Mert made a
+     * moderator, the hand-over asked and left (the mock keeps the player the leader), Cem removed after the question;
+     * then "Yeni kategori…" at the end of Ayşe's categories, typed into in place and made with Enter.
+     */
+    private void people3Rows() {
+        step3(0.2, "crew chat", mc -> need(mc).showConversation("crew:gece"));
+        step3(0.9, "Mert's crew rows", mc -> need(mc).openSenderMenuAt("m6"));
+        step3(0.4, "shot crew rows", mc -> {
+            shot(mc, "sender-menu-crew-rows");
+            results.addProperty("crewRowModerator", need(mc).menuHas(FriendMenu.Action.MAKE_MODERATOR));
+            results.addProperty("crewRowLead", need(mc).menuHas(FriendMenu.Action.MAKE_FOUNDER));
+            results.addProperty("crewRowRemove", need(mc).menuHas(FriendMenu.Action.REMOVE_MEMBER));
+        });
+        step3(0.1, "make Mert a moderator", mc -> need(mc).pressMenu(FriendMenu.Action.MAKE_MODERATOR));
+        step3(0.7, "shot made moderator", mc -> {
+            shot(mc, "note-made-moderator");
+            OverlayState.CrewRights rights = OverlayClient.get().state().crewRightsIn("crew:gece");
+            results.addProperty("mertModerator", rights != null && rights.mates().get("f-mert") != null
+                && rights.mates().get("f-mert").moderator());
+        });
+        step3(0.3, "hand over to Mert", mc -> {
+            need(mc).openSenderMenuAt("m6");
+            need(mc).pressMenu(FriendMenu.Action.MAKE_FOUNDER);
+        });
+        step3(0.4, "shot hand-over question", mc -> shot(mc, "ask-make-founder"));
+        step3(0.1, "keep the lead", mc -> need(mc).answerMenu(false));
+        step3(0.3, "remove Cem", mc -> {
+            need(mc).openSenderMenuAt("m6c");
+            need(mc).pressMenu(FriendMenu.Action.REMOVE_MEMBER);
+        });
+        step3(0.4, "shot removal question", mc -> shot(mc, "ask-remove-member"));
+        step3(0.1, "yes", mc -> need(mc).answerMenu(true));
+        step3(0.7, "shot removed", mc -> {
+            shot(mc, "note-removed-member");
+            OverlayState.CrewRights rights = OverlayClient.get().state().crewRightsIn("crew:gece");
+            results.addProperty("cemRemoved", rights != null && !rights.mates().containsKey("u-cem"));
+            PanelInput.clearPointer();
+        });
+        // "Yeni kategori…": the last of Ayşe's categories, a name typed in place, Enter.
+        step3(0.2, "friends", mc -> need(mc).showPage(OverlayScreen.Page.FRIENDS));
+        step3(0.3, "Ayşe's categories", mc -> {
+            need(mc).openFriendMenu("f-ayse", false);
+            need(mc).pressMenu(FriendMenu.Action.MOVE);
+        });
+        step3(0.4, "shot categories with new", mc -> shot(mc, "menu-categories-new"));
+        step3(0.1, "new category", mc -> results.addProperty("newPicked",
+            need(mc).chooseMenu(PersonMenu.NEW_CHOICE)));
+        step3(0.4, "shot name field", mc -> {
+            shot(mc, "menu-new-field");
+            results.addProperty("naming", need(mc).menuNaming());
+        });
+        step3(0.1, "type a name", mc -> need(mc).typeMenu("Hafta  sonu"));
+        step3(0.3, "shot typed", mc -> shot(mc, "menu-new-typed"));
+        step3(0.1, "enter", mc -> key(need(mc), InputConstants.KEY_RETURN, 0));
+        step3(0.8, "shot new category", mc -> {
+            shot(mc, "note-new-category");
+            OverlayState.Friend ayse = OverlayClient.get().state().friend("f-ayse");
+            String group = ayse == null ? null : ayse.group();
+            String name = null;
+            for (OverlayState.Group g : OverlayClient.get().state().groups()) {
+                if (g.id().equals(group)) {
+                    name = g.name();
+                }
+            }
+            results.addProperty("ayseNewCategory", String.valueOf(name));
         });
     }
 
