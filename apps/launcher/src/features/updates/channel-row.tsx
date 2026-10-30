@@ -35,7 +35,9 @@ function useLasted(on: boolean, ms: number): boolean {
 }
 
 /**
- * A line's action: gold words right after its sentence, as the overlay's lines carry theirs.
+ * A line's action: underlined bone words right after its sentence, the launcher's inline action
+ * ("Yanlışsa bildir"); a text link is never gold (docs/design.md §2: OYNA keeps the screen's one
+ * gold, only the warning's triangle is gold here).
  * `joined`: the words finish the sentence ("… Ar-Ge'deysen Discord ile giriş yap"), so a word space
  * leads them; `external`: they open the browser, so they carry the launcher's external-link mark.
  */
@@ -58,7 +60,7 @@ function LineAction({
       tabIndex={shown ? undefined : -1}
       onClick={onPress}
       className={cn(
-        "relative cursor-pointer rounded-sm font-medium text-gold-300 underline decoration-transparent underline-offset-2 outline-none transition-[text-decoration-color,scale] duration-150 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]",
+        "relative cursor-pointer rounded-sm font-medium text-bone-100 underline decoration-white/35 underline-offset-[3px] outline-none transition-[text-decoration-color,scale] duration-150 hover:decoration-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]",
         joined ? "ml-1" : "ml-1.5",
         shown && "hit-area",
       )}
