@@ -29,14 +29,16 @@ export function toInvItem(item: CloudInvItem): InvItem {
   }
   if (item.enchanted) out.enchanted = true;
   if (item.inside) {
-    out.inside = {
-      count: item.inside.count ?? 0,
-      top: (item.inside.top ?? []).map((s) => ({
-        id: s.id ?? "",
-        count: s.count ?? 1,
-        label: label(s.label),
-      })),
-    };
+    const top = (item.inside.top ?? []).map((s) => ({
+      id: s.id ?? "",
+      count: s.count ?? 1,
+      label: label(s.label),
+    }));
+    out.inside = { count: item.inside.count ?? 0, top };
+    // Newer machines count the stacks (pl_cloud_afk reads a whole number up to 256): kept when it
+    // is at least the stacks listed, as @pl/ui wants it.
+    const stacks = item.inside.stacks;
+    if (typeof stacks === "number" && stacks >= top.length) out.inside.stacks = stacks;
   }
   if (item.potion) out.potion = item.potion;
   if (typeof item.color === "number") out.color = item.color;
