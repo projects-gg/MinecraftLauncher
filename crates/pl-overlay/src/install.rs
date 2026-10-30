@@ -18,10 +18,16 @@
 //!   Fabric instance, or a Minecraft version without a jar, and ours goes (its disabled copies too).
 //! - Version switches park `mods/` with our jar in it; the record keeps those entries (they name
 //!   their Minecraft version) and drops only the current version's entries whose file is gone.
+//! - **Jars from the signed content** (OVL-AUTO, [`ContentJar`]) cover the Minecraft versions the
+//!   launcher's own jars leave out ([`Jars`]: its own jar wins wherever it has one). Only a jar of
+//!   this launcher's bridge protocol whose bytes match the signed entry (size, SHA-256 and SHA-1)
+//!   goes in; the caller fetches it first ([`Request::fetched`]).
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use pl_content::{OverlayJar, OverlayRelease, compare_minecraft_versions};
 use pl_mc::loaders::LoaderKind;
 use pl_mc::mods::check::{
     CheckEnvironment, FileOrigins, IssueKind, ModCheckReport, Severity, check_mods,
@@ -152,17 +158,158 @@ impl Bundle {
     }
 }
 
+/// A jar of the signed content's `overlay` (OVL-AUTO) this launcher may use: it keeps the format's
+/// rules, speaks this launcher's bridge protocol ([`crate::protocol::PROTO`]) and its range, which
+/// the launcher can read, accepts the version it was built for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContentJar {
+    /// The Minecraft version CI built and tested it for (`26.4`).
+    pub minecraft: String,
+    /// The versions it accepts, in Fabric's syntax (`~26.4`).
+    pub range: String,
+    /// Its file name in `mods/` (`projects-overlay-0.1.0+26.4.jar`).
+    pub file: String,
+    /// Lowercase hex.
+    pub sha1: String,
+    /// Lowercase hex.
+    pub sha256: String,
+    pub size: u64,
+    /// The signed entry, for the download.
+    pub entry: OverlayJar,
+}
+
+impl ContentJar {
+    /// The jars of `release` a launcher of bridge protocol `proto` may use, in the published
+    /// order. The others are left out (and logged): another protocol, a broken rule, a range it
+    /// cannot read or that does not accept the jar's own version, a file name it would not write.
+    pub fn usable(release: &OverlayRelease, proto: u32) -> Vec<Self> {
+        let mut usable = Vec::new();
+        for entry in release.usable(proto) {
+            let (Some(sha1), Some(sha256)) = (entry.sha1(), entry.sha256()) else {
+                continue;
+            };
+            let version = MinecraftVersion::parse(&entry.minecraft);
+            let jar = Self {
+                minecraft: entry.minecraft.clone(),
+                range: entry.range.clone(),
+                file: entry.file_name(),
+                sha1,
+                sha256,
+                size: entry.file.size,
+                entry: entry.clone(),
+            };
+            let fits = VersionReq::fabric(&jar.range).matches_minecraft(&version) == Some(true);
+            if fits && valid_file_name(&jar.file) {
+                usable.push(jar);
+            } else {
+                tracing::warn!(minecraft = %entry.minecraft, "a published overlay jar's range does not take its own version; left out");
+            }
+        }
+        let refused = release.jars.len() - usable.len();
+        if refused > 0 {
+            tracing::info!(
+                refused,
+                "published overlay jars of another bridge protocol or breaking a rule were left out"
+            );
+        }
+        usable
+    }
+}
+
+/// Every jar a start may get: the launcher's own first, then the signed content's for the
+/// versions its own leave out (OVL-AUTO).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Jars<'a> {
+    pub bundle: Option<&'a Bundle>,
+    pub content: &'a [ContentJar],
+}
+
+/// The jar a start of one Minecraft version gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pick<'a> {
+    /// The launcher's own.
+    Bundled(&'a BundledJar),
+    /// The signed content's; the caller fetches it before the start ([`Request::fetched`]).
+    Content(&'a ContentJar),
+}
+
+impl Pick<'_> {
+    /// Its file name in `mods/`.
+    pub fn file(&self) -> &str {
+        match self {
+            Self::Bundled(jar) => &jar.file,
+            Self::Content(jar) => &jar.file,
+        }
+    }
+}
+
+impl<'a> Jars<'a> {
+    /// The launcher's own jars alone.
+    pub fn bundled(bundle: Option<&'a Bundle>) -> Self {
+        Self {
+            bundle,
+            content: &[],
+        }
+    }
+
+    /// The jar for an instance on Minecraft `minecraft`: the launcher's own when it has one; else,
+    /// of the content's jars whose range accepts it, the one built for the highest version not
+    /// above it.
+    pub fn jar_for(&self, minecraft: &str) -> Option<Pick<'a>> {
+        if let Some(jar) = self.bundle.and_then(|bundle| bundle.jar_for(minecraft)) {
+            return Some(Pick::Bundled(jar));
+        }
+        let version = MinecraftVersion::parse(minecraft);
+        self.content
+            .iter()
+            .filter(|jar| VersionReq::fabric(&jar.range).matches_minecraft(&version) == Some(true))
+            .filter(|jar| {
+                compare_minecraft_versions(&jar.minecraft, minecraft) != Ordering::Greater
+            })
+            .max_by(|a, b| compare_minecraft_versions(&a.minecraft, &b.minecraft))
+            .map(Pick::Content)
+    }
+
+    /// The Minecraft versions some jar is for: the launcher's own, then the content's it lacks.
+    pub fn versions(&self) -> Vec<String> {
+        let mut versions = self.bundle.map(Bundle::versions).unwrap_or_default();
+        for jar in self.content {
+            if !versions.contains(&jar.minecraft) {
+                versions.push(jar.minecraft.clone());
+            }
+        }
+        versions
+    }
+
+    /// Whether any jar at all is there (the launcher has an overlay mod of its own).
+    pub fn any(&self) -> bool {
+        self.bundle.is_some() || !self.content.is_empty()
+    }
+
+    /// An exact copy of one of the jars under its own name.
+    fn ships(&self, file: &str, sha1: &str) -> bool {
+        self.bundle.is_some_and(|bundle| bundle.ships(file, sha1))
+            || self
+                .content
+                .iter()
+                .any(|jar| jar.file.eq_ignore_ascii_case(file) && jar.sha1 == sha1)
+    }
+}
+
+/// A jar name the launcher may write into `mods/`.
+fn valid_file_name(file: &str) -> bool {
+    !file.is_empty()
+        && file.len() <= 128
+        && file.to_ascii_lowercase().ends_with(".jar")
+        && !file.starts_with('.')
+        && file
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+'))
+}
+
 /// A jar name the launcher may write into `mods/` and a well-formed entry.
 fn valid_jar(jar: &BundledJar) -> bool {
-    let name_ok = !jar.file.is_empty()
-        && jar.file.len() <= 128
-        && jar.file.to_ascii_lowercase().ends_with(".jar")
-        && !jar.file.starts_with('.')
-        && jar
-            .file
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+'));
-    name_ok
+    valid_file_name(&jar.file)
         && jar.size > 0
         && jar.size <= MAX_JAR_BYTES
         && jar.sha1.len() == 40
@@ -241,8 +388,13 @@ pub fn is_owned(owned: &HashSet<String>, file_name: &str) -> bool {
 #[derive(Debug, Clone, Copy)]
 pub struct Request<'a> {
     pub game_dir: &'a Path,
-    /// The launcher's jars (`None`: a build without them).
-    pub bundle: Option<&'a Bundle>,
+    /// The jars a start may get: the launcher's own (none in a build without them), then the
+    /// signed content's.
+    pub jars: Jars<'a>,
+    /// The local copy of the content's jar [`Jars::jar_for`] picks for this version, which the
+    /// caller fetched; `None` when it could not be fetched now (or the pick is the launcher's own).
+    /// It is checked again against the signed entry before it goes in.
+    pub fetched: Option<&'a Path>,
     /// The instance as the pre-launch mod check sees it (version, loader, Java).
     pub env: &'a CheckEnvironment,
     /// "Oyun içi katman".
@@ -273,6 +425,9 @@ pub enum OffReason {
     NotFabric,
     /// The launcher has no jar for this Minecraft version (or none at all).
     NoJar,
+    /// The signed content's jar for this version could not be fetched now (OVL-AUTO); the next
+    /// start tries again.
+    NotFetched,
     /// Fabric API is there, switched off by the player (left alone).
     FabricApiOff,
     /// The mod check finds something about the jar in this folder (Fabric API still missing, the
@@ -296,7 +451,8 @@ struct OurJar {
 pub async fn reconcile(request: Request<'_>) -> Outcome {
     let Request {
         game_dir,
-        bundle,
+        jars,
+        fetched,
         env,
         enabled,
         ask_fabric_api,
@@ -321,7 +477,7 @@ pub async fn reconcile(request: Request<'_>) -> Outcome {
             .files
             .get(&base)
             .is_some_and(|entry| entry.sha1 == sha1)
-            || bundle.is_some_and(|bundle| bundle.ships(&base, &sha1));
+            || jars.ships(&base, &sha1);
         if mine {
             ours.push(OurJar {
                 base,
@@ -350,9 +506,29 @@ pub async fn reconcile(request: Request<'_>) -> Outcome {
     } else if env.loader != LoaderKind::Fabric {
         Err(OffReason::NotFabric)
     } else {
-        bundle
-            .and_then(|bundle| bundle.jar_for(&env.minecraft).map(|jar| (bundle, jar)))
-            .ok_or(OffReason::NoJar)
+        match jars.jar_for(&env.minecraft) {
+            None => Err(OffReason::NoJar),
+            Some(Pick::Bundled(jar)) => jars
+                .bundle
+                .map(|bundle| (bundle.path(jar), Expected::Bundled(jar)))
+                .ok_or(OffReason::NoJar),
+            Some(Pick::Content(jar)) => match fetched {
+                Some(path) => Ok((path.to_path_buf(), Expected::Content(jar))),
+                // Not fetched now (offline): the copy of ours already in place serves only when it
+                // passes the whole check against the signed entry right now; else nothing does.
+                None => {
+                    let in_place = ours
+                        .iter()
+                        .find(|our| our.enabled && our.base.eq_ignore_ascii_case(&jar.file));
+                    match in_place {
+                        Some(our) if file_matches(&our.path, Expected::Content(jar)).await => {
+                            Ok((our.path.clone(), Expected::Content(jar)))
+                        }
+                        _ => Err(OffReason::NotFetched),
+                    }
+                }
+            },
+        }
     };
     let outcome = match wanted {
         Err(reason) => {
@@ -369,10 +545,10 @@ pub async fn reconcile(request: Request<'_>) -> Outcome {
             remove(&ours, &mut record, |_| true).await;
             Outcome::Ready { ours: false }
         }
-        Ok((bundle, jar)) => {
+        Ok((source, expected)) => {
             place(
-                bundle,
-                jar,
+                &source,
+                expected,
                 Place {
                     mods_dir: &mods_dir,
                     snapshot: &snapshot,
@@ -399,28 +575,75 @@ struct Place<'a> {
     ask_fabric_api: bool,
 }
 
-/// The wanted jar: checked in the folder as it would be, then written (unless it is there).
+/// What the wanted jar's bytes must be.
+#[derive(Debug, Clone, Copy)]
+enum Expected<'a> {
+    /// The launcher's own: its size and SHA-1 in the shipped index.
+    Bundled(&'a BundledJar),
+    /// The signed content's: its size, SHA-256 and SHA-1 in the signed index.
+    Content(&'a ContentJar),
+}
+
+impl Expected<'_> {
+    fn file(&self) -> &str {
+        match self {
+            Self::Bundled(jar) => &jar.file,
+            Self::Content(jar) => &jar.file,
+        }
+    }
+
+    fn sha1(&self) -> &str {
+        match self {
+            Self::Bundled(jar) => &jar.sha1,
+            Self::Content(jar) => &jar.sha1,
+        }
+    }
+
+    /// Whether `bytes` are the jar, every hash the index has for it included.
+    fn matches(&self, bytes: &[u8]) -> bool {
+        let sha1 = || pl_net::hash_bytes(bytes, HashAlgo::Sha1);
+        match self {
+            Self::Bundled(jar) => bytes.len() as u64 == jar.size && sha1() == jar.sha1,
+            Self::Content(jar) => {
+                bytes.len() as u64 == jar.size
+                    && pl_net::hash_bytes(bytes, HashAlgo::Sha256) == jar.sha256
+                    && sha1() == jar.sha1
+            }
+        }
+    }
+}
+
+/// Whether the file at `path` is the jar `expected` describes (every hash its index has).
+async fn file_matches(path: &Path, expected: Expected<'_>) -> bool {
+    tokio::fs::read(path)
+        .await
+        .is_ok_and(|bytes| expected.matches(&bytes))
+}
+
+/// The wanted jar (its bytes at `source`): checked against its index, then in the folder as it
+/// would be, then written (unless it is there).
 async fn place(
-    bundle: &Bundle,
-    jar: &BundledJar,
+    source: &Path,
+    jar: Expected<'_>,
     at: Place<'_>,
     ours: &[OurJar],
     record: &mut ModRecord,
 ) -> Outcome {
-    let bytes = match tokio::fs::read(bundle.path(jar)).await {
-        Ok(bytes) if pl_net::hash_bytes(&bytes, HashAlgo::Sha1) == jar.sha1 => bytes,
+    let file = jar.file().to_owned();
+    let bytes = match tokio::fs::read(source).await {
+        Ok(bytes) if jar.matches(&bytes) => bytes,
         Ok(_) => {
-            tracing::warn!(file = %jar.file, "a shipped overlay jar does not match its index");
+            tracing::warn!(%file, "an overlay jar does not match its index; not used");
             remove(ours, record, |_| true).await;
             return Outcome::Off(OffReason::Failed);
         }
         Err(error) => {
-            tracing::warn!(%error, file = %jar.file, "a shipped overlay jar could not be read");
+            tracing::warn!(%error, %file, "an overlay jar could not be read");
             remove(ours, record, |_| true).await;
             return Outcome::Off(OffReason::Failed);
         }
     };
-    let candidate = ScannedJar::from_bytes(&jar.file, &bytes);
+    let candidate = ScannedJar::from_bytes(&file, &bytes);
     let mut jars: Vec<ScannedJar> = at
         .snapshot
         .jars
@@ -431,9 +654,9 @@ async fn place(
     // A file of someone else's with the jar's very name is never overwritten.
     if jars
         .iter()
-        .any(|scanned| scanned.file_name.eq_ignore_ascii_case(&jar.file))
+        .any(|scanned| scanned.file_name.eq_ignore_ascii_case(&file))
     {
-        tracing::warn!(file = %jar.file, "a file of the overlay jar's name is in the way");
+        tracing::warn!(%file, "a file of the overlay jar's name is in the way");
         remove(ours, record, |_| true).await;
         return Outcome::Off(OffReason::Failed);
     }
@@ -443,7 +666,7 @@ async fn place(
         at.env,
         &FileOrigins::default(),
     );
-    match verdict(&report, &jar.file) {
+    match verdict(&report, &file) {
         Verdict::Clean => {}
         Verdict::NeedsFabricApi if at.ask_fabric_api => return Outcome::NeedsFabricApi,
         Verdict::NeedsFabricApi | Verdict::Blocked => {
@@ -457,9 +680,21 @@ async fn place(
     }
 
     // The enabled file of ours under the jar's name is the jar (or is overwritten with it).
-    let in_place = |our: &OurJar| our.enabled && our.base.eq_ignore_ascii_case(&jar.file);
-    if !ours.iter().any(|our| in_place(our) && our.sha1 == jar.sha1) {
-        let target = at.mods_dir.join(&jar.file);
+    let in_place = |our: &OurJar| our.enabled && our.base.eq_ignore_ascii_case(&file);
+    // A copy already in place stays only when it is the jar: for the signed content's, its size and
+    // SHA-256 too, not its SHA-1 alone (else the checked bytes are written over it).
+    let mut kept = false;
+    if let Some(our) = ours
+        .iter()
+        .find(|our| in_place(our) && our.sha1 == jar.sha1())
+    {
+        kept = match jar {
+            Expected::Bundled(_) => true,
+            Expected::Content(_) => file_matches(&our.path, jar).await,
+        };
+    }
+    if !kept {
+        let target = at.mods_dir.join(&file);
         if let Err(error) = pl_mc::paths::write_atomic(&target, &bytes).await {
             tracing::warn!(%error, "the overlay jar could not be written");
             // A copy of ours under the name is an older jar then: everything of ours goes.
@@ -469,9 +704,9 @@ async fn place(
     }
     remove(ours, record, |our| !in_place(our)).await;
     record.files.insert(
-        jar.file.clone(),
+        file,
         RecordedJar {
-            sha1: jar.sha1.clone(),
+            sha1: jar.sha1().to_owned(),
             minecraft: at.env.minecraft.clone(),
         },
     );

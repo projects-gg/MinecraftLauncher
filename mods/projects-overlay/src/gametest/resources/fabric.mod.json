@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "projects_overlay_gametest",
+  "version": "0.0.0",
+  "name": "Projects Overlay game test",
+  "description": "Test only: the overlay's smoke test for a Minecraft version (OVL-AUTO). Never shipped.",
+  "license": "GPL-3.0-only",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": ["gg.projects.overlay.gametest.OverlaySmokeTest"]
+  },
+  "depends": {
+    "projects_overlay": "*"
+  }
+}
