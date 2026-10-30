@@ -3,6 +3,7 @@ package gg.projects.overlay.ui.panel;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.chat.ChatTime;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
@@ -18,8 +19,6 @@ import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import gg.projects.overlay.ui.draw.ShapeSet;
-import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -58,6 +57,13 @@ import org.joml.Matrix3x2fStack;
  * <p>Crew tags (TEAM6): in crew chat the name over someone's group carries the tag they wear ("[GK] Mert"); the
  * pointer resting on it opens the tag's bubble. Who came into the crew while the launcher ran shows as a quiet line
  * at its time among the messages ("Ece ekibe katıldı").
+ *
+ * <p>Days and times (CHAT-UX, as the launcher; {@link ChatTime}): a quiet day line over the first message of each
+ * local day ("Bugün", "Dün", "3 gün önce", "28 Ekim"); a group is one sender's messages up to five minutes apart on
+ * one day, broken by a day line, "Yeni mesajlar" or a quiet line, its time under its last message; the pointer
+ * resting on a bubble shows the message's full time ("28 Ekim 2026 Çarşamba 14:05"). At midnight a frame lays the
+ * list out again (no timer: the open screen draws every frame anyway). "Yeni mesajlar" is bone words between ash
+ * lines, as the launcher's (one gold per screen).
  */
 public final class MessageList extends PanelWidget {
     private static final int BUBBLE_PAD_X = 6;
@@ -84,6 +90,10 @@ public final class MessageList extends PanelWidget {
     private static final int META_GAP = 3;
     /** A quiet line among the messages ("Ece ekibe katıldı", TEAM6 §7). */
     private static final int ARRIVAL_H = 14;
+    /** A day line over the first message of a local day (CHAT-UX). */
+    private static final int DAY_H = 14;
+    /** The tooltip's "chip" while it says a message's full time (CHAT-UX); a reaction chip's index otherwise. */
+    private static final int TIME_TIP = -2;
     /** The fades at the list's edges; a message picked with the keys is brought out of them. */
     private static final int FADE = ShapeSet.LIST_FADE;
     /** From the newest message's bottom to the end of the content (its gap and the list's own margin). */
@@ -132,8 +142,11 @@ public final class MessageList extends PanelWidget {
     }
 
     private static final class Row {
-        /** The message, or null for a quiet line among them ("Ece ekibe katıldı"). */
+        /** The message, or null for a quiet line among them ("Ece ekibe katıldı") or a day line. */
         OverlayState.ChatLine line;
+        /** CHAT-UX: a day line's words ("Bugün", "3 gün önce", "28 Ekim"); null for any other row. */
+        FormattedCharSequence day;
+        float dayW;
         boolean mine;
         FormattedCharSequence name;
         /** The name's width (a right click on it opens the sender's menu, OVL-UX2). */
@@ -531,7 +544,9 @@ public final class MessageList extends PanelWidget {
         newBelowWidth = small.width(below) + 22f;
         setEmpty(Texts.str("chat.empty"), small);
         rows.clear();
-        nextTimeout = Long.MAX_VALUE;
+        ZoneId zone = ZoneId.systemDefault();
+        // The day lines move on at midnight while the overlay is open: that frame lays the list out again.
+        nextTimeout = ChatTime.nextDay(now, zone);
         int width = getWidth();
         int maxBubble = Math.max(60, Math.round(width * 0.78f));
         int textMax = maxBubble - 2 * BUBBLE_PAD_X;
@@ -552,12 +567,26 @@ public final class MessageList extends PanelWidget {
         Set<String> seenIds = new HashSet<>();
         int lastKnown = -1;
         int lastArrival = -1;
+        long lastDay = Long.MIN_VALUE;
         for (int i = 0; i < lines.size(); i++) {
             OverlayState.ChatLine line = lines.get(i);
             OverlayState.ChatLine next = i + 1 < lines.size() ? lines.get(i + 1) : null;
             while (nextJoin < joins.size() && joins.get(nextJoin).at() <= line.at) {
-                y = addJoin(joins.get(nextJoin++), y, previous != null, small, first, now, seenIds);
+                OverlayState.Arrival join = joins.get(nextJoin++);
+                long joinDay = ChatTime.day(join.at(), zone);
+                if (joinDay != lastDay) {
+                    y = addDay(join.at(), joinDay, y, previous != null, small, first, now, seenIds, zone);
+                    previous = rows.get(rows.size() - 1);
+                    lastDay = joinDay;
+                }
+                y = addJoin(join, y, previous != null, small, first, now, seenIds);
                 previous = rows.get(rows.size() - 1);
+            }
+            long day = ChatTime.day(line.at, zone);
+            if (day != lastDay) {
+                y = addDay(line.at, day, y, previous != null, small, first, now, seenIds, zone);
+                previous = rows.get(rows.size() - 1);
+                lastDay = day;
             }
             // A join line that comes before the next message ends this group.
             boolean joinNext = next != null && nextJoin < joins.size() && joins.get(nextJoin).at() <= next.at;
@@ -568,10 +597,12 @@ public final class MessageList extends PanelWidget {
             if (row.delivery == OverlayState.Delivery.PENDING) {
                 nextTimeout = Math.min(nextTimeout, line.createdAt + OverlayState.SEND_TIMEOUT_MS + 1);
             }
+            // A group: one sender, one local day, each message at most five minutes after the one before (CHAT-UX).
             boolean newGroup = previous == null || previous.line == null || previous.mine != line.mine
-                || !previous.line.from.equals(line.from) || i == dividerAt;
+                || !previous.line.from.equals(line.from) || i == dividerAt
+                || !ChatTime.together(previous.line.at, line.at, zone);
             boolean lastOfGroup = next == null || joinNext || next.mine != line.mine || !next.from.equals(line.from)
-                || i + 1 == dividerAt;
+                || i + 1 == dividerAt || !ChatTime.together(line.at, next.at, zone);
             if (i == dividerAt && i > 0) {
                 row.divider = true;
                 y += 2;
@@ -621,7 +652,7 @@ public final class MessageList extends PanelWidget {
             row.meta = lastOfGroup || row.delivery != OverlayState.Delivery.SENT || (line.edited && !line.deleted)
                 || row.seen;
             if (row.meta) {
-                String time = time(line.at);
+                String time = ChatTime.clock(line.at, zone);
                 row.time = Texts.visual(time);
                 row.timeW = small.width(time);
                 row.edited = line.edited && !line.deleted ? editedWord : null;
@@ -668,7 +699,14 @@ public final class MessageList extends PanelWidget {
             previous = row;
         }
         while (nextJoin < joins.size()) {
-            y = addJoin(joins.get(nextJoin++), y, previous != null, small, first, now, seenIds);
+            OverlayState.Arrival join = joins.get(nextJoin++);
+            long joinDay = ChatTime.day(join.at(), zone);
+            if (joinDay != lastDay) {
+                y = addDay(join.at(), joinDay, y, previous != null, small, first, now, seenIds, zone);
+                previous = rows.get(rows.size() - 1);
+                lastDay = joinDay;
+            }
+            y = addJoin(join, y, previous != null, small, first, now, seenIds);
             previous = rows.get(rows.size() - 1);
         }
         known.clear();
@@ -703,6 +741,29 @@ public final class MessageList extends PanelWidget {
         }
         rows.add(row);
         return top + ARRIVAL_H + ROW_GAP;
+    }
+
+    /**
+     * The day line over the first message (or quiet line) of a local day: "Bugün", "Dün", "3 gün önce", "28 Ekim"
+     * (CHAT-UX); returns where the next row starts. A new one fades in where it lands.
+     */
+    private float addDay(long at, long day, float y, boolean gapBefore, Font small, boolean first, long now,
+        Set<String> seenIds, ZoneId zone) {
+        float top = y + (gapBefore ? GROUP_GAP - ROW_GAP : 0);
+        Row row = new Row();
+        String words = ChatTime.dayLine(at, now, zone, Texts::str);
+        row.day = Texts.visual(words);
+        row.dayW = small.width(words);
+        row.arrivalWords = Component.literal(words);
+        row.y = top;
+        row.height = DAY_H;
+        String key = "day:" + day;
+        seenIds.add(key);
+        if (!known.contains(key) && !first) {
+            row.appearedAt = now;
+        }
+        rows.add(row);
+        return top + DAY_H + ROW_GAP;
     }
 
     /** The quoted message as one quiet line: "Ayşe: metin…", "Önceki bir mesaj", "Mesaj silindi". */
@@ -831,13 +892,6 @@ public final class MessageList extends PanelWidget {
             case "link", "phone", "words", "too-long", "limited-links" -> true;
             default -> false;
         };
-    }
-
-    private static String time(long at) {
-        LocalDateTime t = LocalDateTime.ofInstant(Instant.ofEpochMilli(at), ZoneId.systemDefault());
-        int h = t.getHour();
-        int m = t.getMinute();
-        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
     }
 
     private Component narrationOf(Row row) {
@@ -1498,8 +1552,26 @@ public final class MessageList extends PanelWidget {
         if (hoverTag) {
             hoverTool = -1;
         }
-        updateTooltip(hoverChip >= 0 ? hoverRow : -1, hoverChip);
+        int tip = hoverChip >= 0 ? hoverChip : timeTipAt(mouseX, cy);
+        updateTooltip(tip != -1 ? hoverRow : -1, tip);
         bubble.track(tag, onBubble, now);
+    }
+
+    /**
+     * {@link #TIME_TIP} while the pointer rests on a message's bubble and on nothing with its own press or tip (a link,
+     * the quote, the toolbar, a tag), else -1 (CHAT-UX).
+     */
+    private int timeTipAt(int mouseX, float cy) {
+        if (hoverRow < 0 || hoverTool >= 0 || hoverQuote || hoverLink || hoverTag || stripRow >= 0) {
+            return -1;
+        }
+        Row row = rows.get(hoverRow);
+        if (row.line == null) {
+            return -1;
+        }
+        float bx = bubbleX(row);
+        float top = row.y + row.bubbleTop;
+        return mouseX >= bx && mouseX < bx + row.bubbleW && cy >= top && cy < top + row.bubbleH ? TIME_TIP : -1;
     }
 
     private void updateTooltip(int row, int chip) {
@@ -1519,8 +1591,15 @@ public final class MessageList extends PanelWidget {
             tooltip = List.of();
             return;
         }
-        OverlayState.Reaction r = rows.get(row).line.reactions.get(chip);
         Font small = Fonts.small();
+        if (chip == TIME_TIP) {
+            // CHAT-UX: the message's full time, "28 Ekim 2026 Çarşamba 14:05".
+            String full = ChatTime.full(rows.get(row).line.at, ZoneId.systemDefault(), Texts::str);
+            tooltip = List.of(Texts.visual(full));
+            tooltipW = small.width(full) + 12;
+            return;
+        }
+        OverlayState.Reaction r = rows.get(row).line.reactions.get(chip);
         List<String> names = new ArrayList<>(4);
         if (r.mine()) {
             names.add(Texts.str("chat.reactions.you"));
@@ -1553,6 +1632,12 @@ public final class MessageList extends PanelWidget {
     private void drawRow(GuiGraphicsExtractor g, int index, Row row, float y, int x0, int w, float right, int mouseX,
         int mouseY, long now, Font ui, Font small) {
         float rowTop = y;
+        if (row.day != null) {
+            // The day line: quiet words in the middle, without lines, as the launcher's (CHAT-UX).
+            Draw.text(g, small, row.day, Draw.snap(x0 + (w - row.dayW) / 2f),
+                Fonts.centeredY(Fonts.Face.SMALL, y + DAY_H / 2f), Theme.ASH_400);
+            return;
+        }
         if (row.line == null) {
             // "Ece ekibe katıldı": the launcher's quiet line, its waving hand in gold.
             float lineW = 8 + 4 + row.arrivalW;
@@ -1563,12 +1648,13 @@ public final class MessageList extends PanelWidget {
             return;
         }
         if (row.divider) {
+            // Bone words between quiet lines, as the launcher's: gold is never a sentence (one gold per screen).
             float lw = dividerW;
             float mid = y + DIVIDER_H / 2f - 1;
-            Draw.hairline(g, x0, x0 + (w - lw) / 2f - 6, mid, Theme.withAlpha(Theme.GOLD_400, 0.35f));
-            Draw.hairline(g, x0 + (w + lw) / 2f + 6, right, mid, Theme.withAlpha(Theme.GOLD_400, 0.35f));
+            Draw.hairline(g, x0, x0 + (w - lw) / 2f - 6, mid, Theme.withAlpha(Theme.ASH_500, 0.45f));
+            Draw.hairline(g, x0 + (w + lw) / 2f + 6, right, mid, Theme.withAlpha(Theme.ASH_500, 0.45f));
             Draw.text(g, small, dividerWord, x0 + (w - lw) / 2f, Fonts.centeredY(Fonts.Face.SMALL, mid),
-                Theme.GOLD_300);
+                Theme.BONE_100);
         }
         if (row.name != null) {
             float ny = rowTop + (row.divider ? DIVIDER_H : 0);
@@ -1860,18 +1946,31 @@ public final class MessageList extends PanelWidget {
             return;
         }
         Row row = rows.get(tooltipRow);
-        if (tooltipChip >= row.chips) {
+        if (tooltipChip >= row.chips || row.line == null) {
             return;
         }
-        float rowW = chipsWidth(row);
         float right = getX() + getWidth();
-        float cx = row.mine ? right - rowW + row.chipX[tooltipChip] : getX() + row.chipX[tooltipChip];
-        float cy = getY() + row.y + row.chipsTop + row.chipY[tooltipChip] - scroll.value();
         float h = 6 + tooltip.size() * 10;
-        float x = Math.max(getX(), Math.min(right - tooltipW, cx + row.chipW[tooltipChip] / 2f - tooltipW / 2f));
-        float y = cy - h - 3;
-        if (y < getY()) {
-            y = cy + CHIP_H + 3;
+        float x;
+        float y;
+        if (tooltipChip == TIME_TIP) {
+            // Over the bubble on its sender's side, under it at the list's top.
+            float bx = bubbleX(row);
+            float by = getY() + row.y + row.bubbleTop - scroll.value();
+            x = Math.max(getX(), Math.min(right - tooltipW, row.mine ? bx + row.bubbleW - tooltipW : bx));
+            y = by - h - 3;
+            if (y < getY()) {
+                y = by + row.bubbleH + 3;
+            }
+        } else {
+            float rowW = chipsWidth(row);
+            float cx = row.mine ? right - rowW + row.chipX[tooltipChip] : getX() + row.chipX[tooltipChip];
+            float cy = getY() + row.y + row.chipsTop + row.chipY[tooltipChip] - scroll.value();
+            x = Math.max(getX(), Math.min(right - tooltipW, cx + row.chipW[tooltipChip] / 2f - tooltipW / 2f));
+            y = cy - h - 3;
+            if (y < getY()) {
+                y = cy + CHIP_H + 3;
+            }
         }
         float t = Math.min(1f, (now - tooltipSince - TOOLTIP_DELAY_MS) / 110f);
         Draw.pushAlpha(Ease.OUT.at(t));
