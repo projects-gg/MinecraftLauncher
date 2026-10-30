@@ -1,108 +1,100 @@
 <div align="center">
-<a href="https://projects.gg"><img src="https://projects.gg/medya/ProjectsLogo.png" alt="projects.gg"></a>
 
-## Projects Launcher
+<img src=".github/assets/readme/icon.png" width="96" height="96" alt="Projects Launcher icon">
 
-[![GNU](https://img.shields.io/github/license/projects-gg/MinecraftLauncher?&logo=github)](LICENSE)
-[![Join us on Discord (Turkish)](https://img.shields.io/discord/480094926164590593.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://projects.gg/discord)
+# Projects Launcher
 
-The Minecraft launcher of [projects.gg](https://projects.gg): every Minecraft version and mod
-loader, the server's official modpack kept up to date automatically, news on start, AFK accounts,
-and offline play when the internet or our servers are down. Windows, macOS and Linux.
+The Minecraft launcher of [projects.gg](https://projects.gg) for Windows, macOS and Linux.
+
+[![License: GPL-3.0](https://img.shields.io/github/license/projects-gg/MinecraftLauncher)](LICENSE)
+[![Discord](https://img.shields.io/discord/480094926164590593?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://projects.gg/discord)
+
+<img src=".github/assets/readme/home.webp" width="880" alt="The launcher's home screen with news, events and the Play button">
 
 </div>
 
-## Contact
+## What it does
 
-Join us on [Discord](https://projects.gg/discord) (Turkish).
+- **Instances.** Any Minecraft release with Fabric, Quilt, Forge or NeoForge. Each instance has
+  its own Java, memory, JVM arguments, mods, resource packs, shaders, worlds, screenshots and
+  servers.
+- **Mods from Modrinth.** Search, install and update mods, packs and shaders with their
+  dependencies. Import `.mrpack`, Prism Launcher, MultiMC and CurseForge instances; export
+  `.mrpack`.
+- **The Projects modpack.** The official instance follows the pack the team publishes and syncs
+  before each launch. Mods you add or turn off stay as you left them.
+- **Home.** Server news, patch notes and event countdowns, updated without a launcher update.
+- **Accounts.** Microsoft sign-in in your browser, or play with a username. Several accounts,
+  one click to switch; skins and capes for Microsoft accounts. Tokens live in the OS keychain.
+- **AFK accounts.** Keep extra accounts on a server with the Projects Console Client.
+- **Works offline.** Installed games and cached content are enough to play.
+- **Desktop.** Tray icon, start with the computer, `projects://` links, a Ctrl+K command palette,
+  Discord Rich Presence and help when the game crashes.
+- **Moving from v1.** Your username, Microsoft session, AFK accounts, worlds, screenshots and
+  packs come over on first start.
 
-## Downloads
+The launcher is in Turkish and English and updates itself from signed stable and beta channels.
 
-The latest version is on the [Projects landing page](https://projects.gg/indir/). Installed
-launchers update themselves in the background.
+<p align="center">
+  <img src=".github/assets/readme/mods.webp" width="880" alt="Searching Modrinth for mods inside an instance">
+</p>
 
-## What's inside (v2)
+## Download
 
-- **Instances like MultiMC/Prism:** any Minecraft version (year-based 26.x included), Fabric,
-  Quilt, Forge and NeoForge, per-instance Java, memory, JVM arguments, window and hooks; mods,
-  resource packs, shaders, worlds, screenshots and servers per instance; Modrinth browser with
-  dependency resolution and updates; `.mrpack`, Prism/MultiMC and CurseForge import, `.mrpack`
-  export.
-- **The official pack:** the "Projects" instance follows the pack published from Projects
-  Studio; files sync before each launch without touching anything the player added.
-- **Home:** season art, news, patch notes and event countdowns published without an app update;
-  maintenance notices; the big gold OYNA button.
-- **Accounts:** Microsoft sign-in (browser + PKCE, tokens in the OS keychain) and offline names;
-  skins and capes for Microsoft accounts.
-- **AFK accounts** through the Projects Console Client, with the full v1 settings.
-- **Offline first:** cached signed content and installed files are enough to play.
-- **Updates:** signed, channel-based (stable/beta), staged rollout, mandatory minimum version,
-  "What's new" after an update.
-- **Desktop:** tray icon, start with the computer, `projects://` links, Ctrl+K command palette,
-  modern Discord Rich Presence, crash assistant.
-- **Moving from v1:** nickname, premium session, AFK accounts, worlds, screenshots and packs are
-  imported on first start.
+Get the installer from [projects.gg](https://projects.gg/indir/) or from
+[Releases](https://github.com/projects-gg/MinecraftLauncher/releases). Installed launchers update
+themselves. Windows files follow our
+[code signing policy](https://projects.gg/kod-imzalama/#en).
 
-## Repository
+Questions and feedback: [Discord](https://projects.gg/discord) (Turkish).
 
-```
-apps/launcher     Tauri 2 app: React UI (src) + Rust shell (src-tauri)
-crates/pl-net     HTTP + parallel verified downloads
-crates/pl-mc      Minecraft: versions, install, Java, launch, instances, loaders, mods, Modrinth, modpacks
-crates/pl-auth    Microsoft + offline accounts, keychain secrets, skins
-crates/pl-content Signed content index, news/home models, modpack sync (shared with Studio)
-crates/pl-afk     AFK accounts (Projects Console Client)
-crates/pl-discord Discord Rich Presence
-crates/pl-data    Data folder: usage, cleanup policy, support bundles, logs, moving the folder
-crates/pl-desktop Desktop integration: projects:// links, desktop shortcuts and their icons
-crates/pl-social  Client for the optional friends service (HTTP API, presence WebSocket)
-packages/ui       Shared design system
-docs/             Content format specification
-```
+## Build from source
 
-Projects Studio (the team's publishing tool) and the online services the launcher talks to (the
-friends service, the Studio team gate) are developed in a separate repository that uses this one
-as a submodule. Nothing from it is built into the launcher.
-
-The signed content tree that Studio publishes and the launcher reads is specified in
-[`docs/content-format.md`](docs/content-format.md); its JSON examples are checked by the tests.
-
-Conventions: crates never depend on Tauri; the app crate exposes typed commands
-(tauri-specta generates `apps/launcher/src/bindings.ts`, regenerate with
-`cargo run -p projects-launcher --features export-bindings --bin export-bindings`; the feature keeps
-the tool out of the installers). Runtime secrets live in the OS keychain,
-never in files or in the repository. User-facing text is Turkish; code, comments, commit messages
-and developer documentation are English.
-
-## Building
-
-Requirements: Rust stable (see `rust-toolchain.toml`), Node 22+, pnpm 10, and the
+You need Rust stable (`rust-toolchain.toml`), Node 22+, pnpm 10 and the
 [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
 
 ```sh
 pnpm install
-pnpm --filter @pl/launcher tauri dev     # launcher with hot reload
-pnpm --filter @pl/launcher dev           # UI only, in a browser with mock data
-cargo test --workspace                   # Rust tests
-pnpm lint && pnpm typecheck              # Biome + TypeScript
+pnpm dev                     # the launcher with hot reload
+pnpm dev:web                 # the UI alone in a browser, with mock data
+cargo test --workspace       # Rust tests
+pnpm lint && pnpm typecheck && pnpm test
 ```
 
-Releases are built by GitHub Actions (`.github/workflows/release.yml`) from a `v*` tag: signed
-updater bundles for Windows, macOS and Linux, a draft GitHub release and, when the R2 secrets are
-configured, the update channel files on the CDN. A local installer needs the updater signing key
-in `TAURI_SIGNING_PRIVATE_KEY`:
+A local Windows installer needs an updater signing key in `TAURI_SIGNING_PRIVATE_KEY`:
 
 ```sh
 pnpm --filter @pl/launcher tauri build --bundles nsis
 ```
 
-### Microsoft sign-in in forks
+Release builds for all three systems come from GitHub Actions on a `v*` tag
+(`.github/workflows/release.yml`). The in-game overlay mod builds with Gradle and Java 25:
+`cd mods/projects-overlay && ./gradlew build`.
 
-Forks need their own Azure application. Register one at [portal.azure.com](https://portal.azure.com)
-→ *App registrations* → *New registration*: personal Microsoft accounts only, redirect URI
-`http://localhost` (public client), "Allow public client flows" on. Put its client id into
-`CLIENT_ID` in `crates/pl-auth/src/config.rs`. Client ids are public values, not secrets.
+**Microsoft sign-in in forks.** Register your own app at
+[portal.azure.com](https://portal.azure.com) (App registrations, personal Microsoft accounts
+only, redirect URI `http://localhost` as a public client, "Allow public client flows" on) and put
+its client id into `CLIENT_ID` in `crates/pl-auth/src/config.rs`. Client ids are public values.
+
+## Repository
+
+```
+apps/launcher           Tauri 2 app: React UI (src) and Rust shell (src-tauri)
+crates/pl-mc            Versions, installs, Java, launching, instances, loaders, mods, Modrinth, modpacks
+crates/pl-auth          Microsoft and username accounts, keychain, skins
+crates/pl-content       Signed content: news, home, the official pack
+crates/pl-*             Downloads, data folder, desktop links, Discord, imports and more
+mods/projects-overlay   In-game overlay (Fabric mod)
+packages/ui             Shared design system
+```
+
+The signed content format that the launcher reads is described in
+[`docs/content-format.md`](docs/content-format.md). Crates never depend on Tauri; the app exposes
+typed commands and `apps/launcher/src/bindings.ts` is generated with
+`cargo run -p projects-launcher --features export-bindings --bin export-bindings`. Code, comments
+and commit messages are in English.
 
 ## License
 
-All commits are licensed under the GNU license, unless otherwise noted in the patch headers.
+[GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`), including the overlay mod, unless a
+file header says otherwise.
