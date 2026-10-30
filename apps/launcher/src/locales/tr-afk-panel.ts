@@ -79,7 +79,8 @@ export const trAfkPanel = {
     hidePattern: "Kalıbı gizle",
     /** Named by what it does, as on afk.projects.gg ("ProBot AI … kalıp kurar"). */
     askAi: "ProBot AI ile kalıp kur",
-    change: "Değiştir",
+    /** Says what it changes: the secret reply beside it has its own "Değiştir" (TASTE-2). */
+    change: "Kalıbı değiştir",
     /**
      * The pattern helper (7/24 Bulut only; the service's "Pattern helper"): the player's own
      * words in, one plain sentence and example messages out. Its refusals come worded from the
@@ -93,7 +94,8 @@ export const trAfkPanel = {
       asking: "Hazırlanıyor",
       catches: "Yanıt verir",
       misses: "Yanıt vermez",
-      use: "Kullan",
+      // Not the rule's own "Kullan" switch in the same card (TASTE-2).
+      use: "Bu kalıbı kullan",
       retry: "Tekrar dene",
       close: "Kapat",
       tooLong: "En çok 200 karakter yazabilirsin.",

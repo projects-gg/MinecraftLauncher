@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 // "ProBot AI ile kalıp kur" in a 7/24 Bulut rule: offered only while the service's model can answer;
-// the box asks with the player's words, shows the sentence and examples, "Kullan" puts the trigger
-// in the rule and the field then reads as that sentence; "Kalıbı kendim yazacağım" waits in the box;
-// a refusal shows the command's own words.
+// the box asks with the player's words, shows the sentence and examples, "Bu kalıbı kullan" puts the
+// trigger in the rule and the field then reads as that sentence ("Kalıbı değiştir" opens the box
+// again); "Kalıbı kendim yazacağım" waits in the box; a refusal shows the command's own words.
 import { TooltipProvider } from "@pl/ui";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
@@ -123,13 +123,13 @@ describe("ProBot AI in a cloud rule's trigger", () => {
       expect(suggest).toHaveBeenLastCalledWith("biri tp ya da ışınla yazınca", true),
     );
 
-    fireEvent.click(await screen.findByText("Kullan"));
+    fireEvent.click(await screen.findByText("Bu kalıbı kullan"));
     expect(screen.getByTestId("rule").textContent).toBe(`regex:${MADE.match}`);
     // The field reads as the sentence, kept on this computer for this rule's pattern.
     expect(screen.getByText("Ne zaman yanıt verir?")).toBeTruthy();
     expect(screen.getAllByText(MADE.summary).length).toBeGreaterThan(0);
     expect(savedSentence("a_TEST1", "r1", MADE.match)).toBe(MADE.summary);
-    expect(screen.getByText("Değiştir")).toBeTruthy();
+    expect(screen.getByText("Kalıbı değiştir")).toBeTruthy();
     expect(screen.getByText("Düz söze dön")).toBeTruthy();
   });
 
@@ -150,7 +150,7 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     create();
     expect(await screen.findByText(plain.summary)).toBeTruthy();
     expect(screen.queryByText("Tekrar dene")).toBeNull();
-    fireEvent.click(screen.getByText("Kullan"));
+    fireEvent.click(screen.getByText("Bu kalıbı kullan"));
     expect(screen.getByTestId("rule").textContent).toBe("plain:selam");
     expect(screen.getByText("Mesajda geçen söz")).toBeTruthy();
   });

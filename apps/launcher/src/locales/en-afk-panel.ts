@@ -48,7 +48,7 @@ export const enAfkPanel = {
     showPattern: "Show the pattern",
     hidePattern: "Hide the pattern",
     askAi: "Build a pattern with ProBot AI",
-    change: "Change",
+    change: "Change the pattern",
     helper: {
       title: "ProBot AI",
       prompt: "Which messages should it answer? Say it in your own words.",
@@ -57,7 +57,7 @@ export const enAfkPanel = {
       asking: "Working on it",
       catches: "Replies to",
       misses: "Ignores",
-      use: "Use it",
+      use: "Use this pattern",
       retry: "Try again",
       close: "Close",
       tooLong: "Keep it under 200 characters.",

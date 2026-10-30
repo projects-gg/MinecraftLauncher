@@ -1,7 +1,8 @@
 // "ProBot AI ile kalıp kur" in a 7/24 Bulut rule, as on afk.projects.gg (AFKWEB-OWN): the player
 // says in their own words which messages the rule should answer, and a box under the rule shows
 // what ProBot AI made of it (one sentence, messages it answers and leaves alone, the pattern folded
-// away) with "Kullan" and "Tekrar dene". A pattern it made reads as its sentence in the rule's field;
+// away) with "Bu kalıbı kullan" and "Tekrar dene". A pattern it made reads as its sentence in the
+// rule's field ("Kalıbı değiştir" opens the box again);
 // the rule stores only the pattern, so this computer keeps the sentence (a per-viewer convenience:
 // elsewhere it reads as "Özel kalıp"). Offered only while the service says its model can answer
 // (`aiPatterns`); otherwise a rule is a plain phrase or a pattern written by hand, as before.
@@ -11,7 +12,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isFriendly } from "../errors";
-import { PatternFold, TextAction, type TriggerAssist } from "../settings/controls";
+import { ErrorText, PatternFold, TextAction, type TriggerAssist } from "../settings/controls";
 import type { PatternSuggestion } from "./api";
 
 /** A description, in characters (the service's limit). */
@@ -90,9 +91,10 @@ function Examples({ label, lines, dim }: { label: string; lines: string[]; dim?:
 }
 
 /**
- * ProBot AI's box under a rule: the player's words in, its sentence and examples out. "Kullan" puts
- * the trigger in the rule (saved with the sheet); "Tekrar dene" asks for a new answer instead of the
- * kept one (not for a plain phrase, which needs no model). Its refusals come worded by the command.
+ * ProBot AI's box under a rule: the player's words in, its sentence and examples out. "Bu kalıbı
+ * kullan" puts the trigger in the rule (saved with the sheet); "Tekrar dene" asks for a new answer
+ * instead of the kept one (not for a plain phrase, which needs no model). Its refusals come worded
+ * by the command.
  */
 export function PatternHelper({
   suggest,
@@ -200,10 +202,11 @@ export function PatternHelper({
           </Button>
         </div>
       </form>
+      {/* The sheet's one error style (TASTE-2). */}
       {error ? (
-        <p role="alert" className="mt-2 text-[12.5px] leading-snug text-flare-300">
-          {error}
-        </p>
+        <div className="mt-2">
+          <ErrorText>{error}</ErrorText>
+        </div>
       ) : null}
       <AnimatePresence initial={false} mode="wait">
         {result ? (
@@ -263,7 +266,7 @@ export function useRuleAssist({
 }: {
   accountId: string;
   ruleId: string;
-  /** The trigger field's id: "Kullan" and "Kapat" give it the focus back. */
+  /** The trigger field's id: "Bu kalıbı kullan" and "Kapat" give it the focus back. */
   fieldId: string;
   pattern: string;
   regex: boolean;

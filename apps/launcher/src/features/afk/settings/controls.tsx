@@ -650,7 +650,7 @@ export function TriggerField({
         </label>
       )}
       {sentence ? (
-        // Read after its label; focusable only for "Kullan" to land on.
+        // Read after its label; focusable only for "Bu kalıbı kullan" to land on.
         <div
           id={id}
           tabIndex={-1}
