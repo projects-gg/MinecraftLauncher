@@ -27,10 +27,12 @@ v1/files/<sha1>                    files we host for packs (own mods, configs) a
 v1/afk/<version>/<platform>.zip    AFK client builds
 v1/releases/<channel>.json         launcher update channel (stable, beta)
 v1/releases/<version>/…            installers / updater bundles and their .sig files
+v1/android/<channel>.json(.sig)    Android app update channel (stable; beta reserved)
+v1/android/<version>/…             the Android app's APKs
 ```
 
-Everything except `index.json`, `index.json.sig` and `releases/<channel>.json` is immutable:
-a path never changes content. `<sha256>` / `<sha1>` are the lowercase hex digest of the file
+Everything except `index.json`, `index.json.sig`, `releases/<channel>.json` and
+`android/<channel>.json` (with its `.sig`) is immutable: a path never changes content. `<sha256>` / `<sha1>` are the lowercase hex digest of the file
 itself; pack manifests are immutable per version (a change needs a new `versionId`).
 
 The Discord bot's news feed is a separate tree on its own mirrors, enabled and trusted through
@@ -2045,12 +2047,95 @@ protocol and the range from the jar. The index entry records the run (`run`).
   would break this writes nothing anywhere. A channel removed from Studio's draft is never deleted
   live.
 
+## Android release channel
+
+The Android app (`gg.projects.mobile`, distributed as a direct APK) updates itself from its own
+channel on the same mirrors (APK-UPD, 30 Oct 2026). `android/<channel>.json` names the release,
+`android/<channel>.json.sig` signs it, and the APK lives at
+`android/<versionName>/projects-launcher-<versionName>.apk`. The app reads `stable`; `beta` is
+reserved.
+
+<!-- android-channel example (checked by scripts/release/android-channel.test.mjs) -->
+```json
+{
+  "apk": {
+    "sha256": "5f2b0c1d9e8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c",
+    "signerSha256": [
+      "0aab804584dfccff406c80f982d05b5ffec537a89132e2fb4fd3fedde8108ba3"
+    ],
+    "size": 159383552,
+    "urls": [
+      "https://cdn.projects.gg/v1/android/0.4.6/projects-launcher-0.4.6.apk"
+    ]
+  },
+  "applicationId": "gg.projects.mobile",
+  "channel": "stable",
+  "minSdk": 21,
+  "notes": {
+    "en": "The app now updates itself.\nSee which version your friends are playing.",
+    "tr": "Uygulama artık kendini günceller.\nArkadaşlarının hangi sürümde oynadığını görürsün."
+  },
+  "pubDate": "2026-11-02T12:00:00Z",
+  "schema": 1,
+  "source": {
+    "tag": "android-0.4.6",
+    "url": "https://github.com/projects-gg/projects-mobile/tree/android-0.4.6"
+  },
+  "versionCode": 22,
+  "versionName": "0.4.6"
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `schema` | 1. A reader refuses a higher schema (and offers nothing). |
+| `channel` | The file's own channel. |
+| `applicationId` | The app's package; an app offers only its own (a debug build's `.debug` package never takes a release). |
+| `versionName` | Semver (`0.4.6`): the APK's folder and what the app shows. |
+| `versionCode` | Android's version code, 1 to 2,100,000,000. Offered only above the installed one; a channel never moves to a lower one. |
+| `minSdk` | The APK's minimum Android API level; a phone below it is not offered the release. |
+| `pubDate` | RFC 3339. |
+| `apk.urls` | 1 to 4 `https://` addresses of the same file, tried in order (the CDN first; one that answers 404 moves to the next). |
+| `apk.size`, `apk.sha256` | The file's size (1 byte to 512 MiB) and SHA-256 (lowercase hex). |
+| `apk.signerSha256` | The SHA-256 of each certificate that signs the APK (lowercase hex, `apksigner`'s digest without colons). |
+| `notes.tr`, `notes.en` | Release notes, plain text, one item per line, at most 20 lines and 1,500 characters each (writers); readers show the app language's notes (the other's when empty) and drop a leading `- `. |
+| `source` | Optional `{ tag, url }`: the source of this exact version (LGPL), the tag `android-<versionName>` of `projects-gg/projects-mobile`. |
+
+Unknown fields are ignored; a broken rule above refuses the whole file. Notes are display text:
+readers trim long ones instead of refusing the file.
+
+**Signature.** The channel is signed with the launcher's updater key and scheme (no key of its own):
+the `.sig` is what `tauri signer sign --app-version <versionName>` writes for the file named
+`android-<channel>.json`, the base64 of minisign's text, prehashed (`ED`: Ed25519 over the
+BLAKE2b-512 of the exact bytes), with the trusted comment's own signature. Readers accept `ED` only,
+verify both signatures with a key they trust (the app embeds the launcher's
+`plugins.updater.pubkey`, key id `260676434E1A5359`) and require the trusted comment's `file:` to
+be `android-<channel>.json` and its `version:` to be the file's `versionName`, so a signature made
+for anything else, a launcher installer included, never passes. A new key comes as the launcher's
+does: an app version that trusts the old and the new key first.
+
+**The app** reads the channel when its home screen opens, with "Güncellemeleri otomatik denetle"
+on, at most once a day after a read that verified (an hour after one that failed), never in the
+background; on a signature mismatch it reads both files once more with `?t=<ms>`. When every mirror
+answers 404 there is no release and its kept copy goes. It keeps the verified file and offers the
+update from it. Before downloading it reads the channel again; it installs only a download whose
+size and SHA-256 match and that Android reads as this package, this `versionCode` and signed by
+exactly the installed app's certificates, all of them listed in `apk.signerSha256`.
+
+**Writers.** `scripts/release/android-channel.mjs`: `make` reads the release APK (`aapt2`,
+`apksigner`), writes the file and signs it on the owner's machine; `publish` uploads, in this order,
+the APK (immutable, `public, max-age=31536000, immutable`), the `.sig`, then the channel file (both
+`public, max-age=60`), each read back, never moving the channel to a lower `versionCode`. Studio's
+clean-up (R2-PRUNE) does not manage `android/`: after each publish the script deletes an APK folder
+that no channel names once the next newer version's folder is 14 days old (players read a fresh
+channel before they download), and nothing when the listing or a channel file cannot be read.
+
 ## HTTP caching
 
 | Objects | `Cache-Control` |
 | --- | --- |
-| `index.json`, `index.json.sig`, `releases/<channel>.json` | `public, max-age=60` |
-| `config/*`, `news/*`, `modsets/*`, `itemart/*`, `emojis/*`, `media/*`, `files/*`, `packs/*/*.json`, `afk/*/*`, `releases/<version>/*` | `public, max-age=31536000, immutable` |
+| `index.json`, `index.json.sig`, `releases/<channel>.json`, `android/<channel>.json`, `android/<channel>.json.sig` | `public, max-age=60` |
+| `config/*`, `news/*`, `modsets/*`, `itemart/*`, `emojis/*`, `media/*`, `files/*`, `packs/*/*.json`, `afk/*/*`, `releases/<version>/*`, `android/<version>/*` | `public, max-age=31536000, immutable` |
 | Feed mirrors: `feed.json`, `feed.json.sig` | `public, max-age=60` |
 | Feed mirrors: `media/*` | `public, max-age=31536000, immutable` |
 
@@ -2068,7 +2153,8 @@ primary is down.
    `itemart/items.…`, `emojis/chat.…`.
 3. Check that every new object is readable with the expected size and hash.
 4. Upload `index.json.sig`, then `index.json` last (the commit point). For updates:
-   `releases/<version>/…` first, `releases/<channel>.json` last.
+   `releases/<version>/…` first, `releases/<channel>.json` last; for the Android app
+   `android/<version>/…` first, then `android/<channel>.json.sig`, `android/<channel>.json` last.
 5. Mirror to GitHub in the same order (immutable files and large release assets first, then
    one commit with `index.json` + `.sig`).
 6. Keep immutable files referenced by the previous indexes for a while; clients that have not
