@@ -2,12 +2,18 @@
 // A link's card names the site once: its registrable domain alone, in bold, from the address itself
 // (never the page's own name for itself), then the title and the description; never the address
 // again, which the message's text above already shows (CONSOLE-COLOR's console card's rule).
+import { setAppReducedMotion } from "@pl/ui";
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import "@/lib/i18n";
 import type { ChatCard } from "@/lib/api/social-types";
 import { LinkCard } from "./link-ui";
 
+// The card fades in. Under happy-dom an unmount in the middle of that fade rejects the cancelled
+// animation (an unhandled AbortError that fails the run), so these read the card with motion
+// reduced: it then shows at once, the words are the same.
+beforeAll(() => setAppReducedMotion(true));
+afterAll(() => setAppReducedMotion(false));
 afterEach(() => cleanup());
 
 const link = {
