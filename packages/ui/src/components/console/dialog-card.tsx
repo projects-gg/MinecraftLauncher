@@ -10,7 +10,7 @@ import { Field, Input, Select, Slider } from "../forms";
 import type { InventoryLang } from "../inventory/texts";
 import { Switch } from "../switch";
 import { ConsoleActionCard } from "./action-card";
-import { ConsoleText } from "./console-text";
+import { ActIcon, ConsoleText } from "./console-text";
 import {
   type Dialog,
   type DialogButton,
@@ -22,7 +22,7 @@ import {
   numberText,
   snap,
 } from "./dialog";
-import type { ConsoleClick } from "./looks";
+import { type ConsoleClick, lineRuns } from "./looks";
 import { CONSOLE_TEXTS } from "./texts";
 
 export type DialogAct =
@@ -244,6 +244,10 @@ export function DialogCard({
         {dialog.buttons.map((button) => {
           const command = button.a === "run_command";
           const off = busy || !inputs || (command && !dialogCommand(dialog, button, values));
+          // A command or a link ends in the console's line icon, in its label's last colour, as a
+          // console part does: the player sees which buttons ask before they act.
+          const glyph = command || button.a === "open_url";
+          const runs = glyph ? lineRuns(button.label, button.labelSt) : null;
           return (
             <Button
               key={button.i}
@@ -252,7 +256,12 @@ export function DialogCard({
               disabled={off}
               onClick={() => press(button)}
             >
-              <ConsoleText text={button.label} st={button.labelSt} lang={lang} />
+              <span>
+                <ConsoleText text={button.label} st={button.labelSt} lang={lang} />
+                {glyph ? (
+                  <ActIcon a={button.a} color={runs ? runs[runs.length - 1]?.color : undefined} />
+                ) : null}
+              </span>
             </Button>
           );
         })}
@@ -267,7 +276,8 @@ export function DialogCard({
           {error}
         </p>
       ) : null}
-      {dialog.cancel ? (
+      {/* The window's own close button closes it the same way: one way out, not two. */}
+      {dialog.cancel && !dialog.buttons.some((button) => button.a === "close") ? (
         <Button
           variant="ghost"
           size="sm"

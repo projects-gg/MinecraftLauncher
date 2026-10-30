@@ -83,12 +83,32 @@ function runStyle(run: ConsoleRun, hint = false): CSSProperties | undefined {
 }
 
 /** What a command and a link carry: a small line icon, so the card they open never surprises. */
-function ActIcon({ click }: { click: ConsoleClick }) {
-  if (click.a === "run_command") {
-    return <TerminalWindow className="pl-con-act-icon" size={12} weight="bold" aria-hidden />;
+/**
+ * The small line icon of what a click does, a command or a link: a console part's, and a dialog
+ * button's (DialogCard) in its label's colour.
+ */
+export function ActIcon({ a, color }: { a: string; color?: string }) {
+  if (a === "run_command") {
+    return (
+      <TerminalWindow
+        className="pl-con-act-icon"
+        size={12}
+        weight="bold"
+        color={color}
+        aria-hidden
+      />
+    );
   }
-  if (click.a === "open_url") {
-    return <ArrowSquareOut className="pl-con-act-icon" size={12} weight="bold" aria-hidden />;
+  if (a === "open_url") {
+    return (
+      <ArrowSquareOut
+        className="pl-con-act-icon"
+        size={12}
+        weight="bold"
+        color={color}
+        aria-hidden
+      />
+    );
   }
   return null;
 }
@@ -273,7 +293,7 @@ function ActivePart({
           : {})}
       >
         {run.text}
-        {click ? <ActIcon click={click} /> : null}
+        {click ? <ActIcon a={click.a} /> : null}
       </span>
       {tip && lines ? <GameTip ref={tipRef} lines={lines} anchor={tip.anchor} /> : null}
     </>

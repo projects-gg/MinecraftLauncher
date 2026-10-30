@@ -7,6 +7,7 @@ import {
   dialogCommand,
   dialogRefusal,
   initialValues,
+  lineRuns,
   numberText,
   safeDialog,
   snap,
@@ -201,5 +202,35 @@ describe("DialogCard", () => {
     });
     fireEvent.click(screen.getByText("Oyunda kapat"));
     expect(onAct).toHaveBeenCalledWith({ cancel: true });
+  });
+
+  it("marks a command and a link with the console's icon in the label's colour, one way out", () => {
+    const raw = {
+      ...RAW,
+      buttons: [{ ...RAW.buttons[0], labelSt: [[6, "a"]] }, RAW.buttons[1], RAW.buttons[2]],
+    };
+    const { rerender } = render(
+      <DialogCard dialog={safeDialog(raw) as Dialog} lang="tr" clock="17:30:00" onAct={vi.fn()} />,
+    );
+    const icon = (label: string) =>
+      screen.getByText(label).closest("button")?.querySelector("svg.pl-con-act-icon");
+    const green = lineRuns("Gönder", [[6, "a"]])?.[0]?.color;
+    expect(green).toBeTruthy();
+    expect(icon("Gönder")?.getAttribute("fill")).toBe(green);
+    expect(icon("Kurallar")?.getAttribute("fill")).toBe("currentColor");
+    expect(icon("Kabul")).toBeNull();
+    expect(screen.getByText("Oyunda kapat")).not.toBeNull();
+    // The window's own close button: the card's close would be a second way out of it.
+    const closing = { ...raw, buttons: [...raw.buttons, { i: 4, label: "Vazgeç", a: "close" }] };
+    rerender(
+      <DialogCard
+        dialog={safeDialog(closing) as Dialog}
+        lang="tr"
+        clock="17:30:00"
+        onAct={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Vazgeç")).not.toBeNull();
+    expect(screen.queryByText("Oyunda kapat")).toBeNull();
   });
 });
