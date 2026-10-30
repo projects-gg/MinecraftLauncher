@@ -39,6 +39,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
+import { FastPackRow } from "@/features/fastpack/settings-row";
 import { HelpSection } from "@/features/help/help-panel";
 import { platformName } from "@/features/home/community-links";
 import { EmojiRow, OverlayRow } from "@/features/overlay/settings-row";
@@ -203,6 +204,8 @@ function General() {
       <OverlayRow />
       {/* The same mod's emoji picker in the game's chat (CHAT-EMOJI), right under its switch. */}
       <EmojiRow />
+      {/* The official pack's other launcher-owned mods (FASTPACK; only while Studio's flag is on). */}
+      <FastPackRow />
       <Row title={t("shotCopy.setting")} help={t("shotCopy.settingHelp")}>
         <Switch
           checked={p.copyScreenshots}

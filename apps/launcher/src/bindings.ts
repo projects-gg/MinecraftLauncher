@@ -278,6 +278,12 @@ export const commands = {
 	overlayState: () => __TAURI_INVOKE<OverlayStateView>("overlay_state"),
 	/**  [`connect_in_game`] for the page. */
 	overlayConnectInGame: (target: string, game: number | null) => __TAURI_INVOKE<ConnectOutcome>("overlay_connect_in_game", { target, game }),
+	/**
+	 *  The page's choice: called at its start and on every change. The next sync of an official pack
+	 *  install (its next start, the mod center, background preparation) installs or removes the mods.
+	 */
+	fastPacksConfigure: (enabled: boolean) => __TAURI_INVOKE<void>("fast_packs_configure", { enabled }),
+	fastPacksState: (instanceId: string | null) => typedError<FastPacksView, CmdError>(__TAURI_INVOKE("fast_packs_state", { instanceId })),
 	/**  The view now (the page's start; every change after comes as `host-changed`). */
 	hostState: () => typedError<HostView_Serialize, CmdError>(__TAURI_INVOKE("host_state")),
 	/**
@@ -4423,6 +4429,19 @@ export type FailureReason =
  *  whitelist, ...): the session stopped instead of trying again.
  */
 { kind: "refused"; cause: KickCause; message: string | null };
+
+/**  What Settings → Genel "Hızlı kaynak paketi yükleme" shows for the install Play opens. */
+export type FastPacksView = {
+	/**  The signed config's `features.fastPacks`: the switch shows. */
+	shown: boolean,
+	/**  The install follows the official pack (the switch works there only). */
+	official: boolean,
+	/**
+	 *  Its pack lists quick-pack for the install's Minecraft version; true while that cannot be
+	 *  read (offline without a cache), so no line claims what is not known.
+	 */
+	available: boolean,
+};
 
 /**  What one check found. */
 export type Finding = {

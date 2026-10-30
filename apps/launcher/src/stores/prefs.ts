@@ -61,6 +61,12 @@ interface PrefsState {
    * game. The overlay's mod goes into an install for it too; with the overlay off it runs alone.
    */
   chatEmoji: boolean;
+  /**
+   * Settings → Genel "Hızlı kaynak paketi yükleme" (FASTPACK): the official pack installs its
+   * fast-pack mods while Studio's `features.fastPacks` is on too (features/fastpack, src-tauri
+   * fastpack.rs).
+   */
+  fastPacks: boolean;
   updateChannel: UpdateChannel;
   autoDownloadUpdates: boolean;
   discordEnabled: boolean;
@@ -121,6 +127,7 @@ export const usePrefs = create<PrefsState>()(
       copyScreenshots: false,
       inGameOverlay: true,
       chatEmoji: true,
+      fastPacks: true,
       updateChannel: "stable",
       autoDownloadUpdates: true,
       discordEnabled: true,
