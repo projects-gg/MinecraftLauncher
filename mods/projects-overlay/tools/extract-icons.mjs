@@ -57,6 +57,10 @@ const ICONS = [
   ["Bell", "fill", "BellFill"],
   ["FolderSimple", "regular"],
   ["UserCheck", "regular"],
+  // A crewmate's crew rows and "Yeni kategori…" (OVL-UX3).
+  ["ShieldStar", "regular"],
+  ["Crown", "regular"],
+  ["FolderSimplePlus", "regular"],
 ];
 
 // The crew palette's emblems (crew-look.ts EMBLEMS) and the icons team-emblem.tsx draws them with.

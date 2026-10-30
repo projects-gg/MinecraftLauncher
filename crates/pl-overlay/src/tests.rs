@@ -53,6 +53,8 @@ struct Calls {
     crew_invites: Vec<(String, String)>,
     crewmates_asked: Vec<String>,
     accepted: Vec<String>,
+    /// OVL-UX3: crew rows taken: (crew, member, what: `mod`, `unmod`, `lead` or `remove`).
+    crew_rows: Vec<(String, String, &'static str)>,
 }
 
 /// A permit as the service makes them: `i` and 32 base64url characters.
@@ -280,6 +282,44 @@ impl SocialActions for FakeSocial {
         calls.accepted.push(user.to_owned());
         std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
     }
+
+    fn set_team_moderator(
+        &self,
+        team: &str,
+        member: &str,
+        moderator: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        let what = if moderator { "mod" } else { "unmod" };
+        calls
+            .crew_rows
+            .push((team.to_owned(), member.to_owned(), what));
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
+
+    fn transfer_team_founder(
+        &self,
+        team: &str,
+        member: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls
+            .crew_rows
+            .push((team.to_owned(), member.to_owned(), "lead"));
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
+
+    fn remove_team_member(
+        &self,
+        team: &str,
+        member: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls
+            .crew_rows
+            .push((team.to_owned(), member.to_owned(), "remove"));
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
 }
 
 /// The mod's side of the bridge.
@@ -414,7 +454,7 @@ async fn a_game_session_from_greeting_to_goodbye() {
     assert_eq!(welcome["me"]["name"], "Ece");
     assert_eq!(
         welcome["features"],
-        serde_json::json!(["friends", "chat", "calls", "people", "people2"])
+        serde_json::json!(["friends", "chat", "calls", "people", "people2", "people3"])
     );
     let snapshot = game.next().await.unwrap();
     assert_eq!(snapshot["t"], "snapshot");
@@ -854,7 +894,8 @@ async fn chat2_from_the_panel_and_to_it() {
             "reads",
             "links",
             "people",
-            "people2"
+            "people2",
+            "people3"
         ])
     );
     let snapshot = game.next_of("snapshot").await;
@@ -1734,6 +1775,244 @@ async fn a_crewmates_katil_and_discord_reach_crew_chats_menu() {
     assert_eq!(game.next_of("friend-result").await["reason"], "failed");
     assert_eq!(opened.lock().unwrap().len(), 1);
     overlay.stop(ByeReason::LauncherExit).await;
+}
+
+/// OVL-UX3: the player leads "Gece Kuşları" (t1: Cem a member, Ali a moderator; the service offers
+/// roles) and moderates "Akıncılar" (t2: Boss leads, Veli moderates too, Cem is a member;
+/// moderators may remove members).
+fn people3_view() -> SocialView {
+    let mut v = people2_view();
+    v.team_features.push("roles".into());
+    let led = &mut v.crews[0];
+    led.role = pl_social::TeamRole::Founder;
+    led.members[0].role = pl_social::TeamRole::Founder;
+    let mut ali = led.members[1].clone();
+    ali.id = "u-ali".into();
+    ali.name = "Ali".into();
+    ali.moderator = true;
+    led.members.push(ali);
+    let mut other = crate::feed::tests::crew(
+        "t2",
+        "Akıncılar",
+        &[
+            ("u-boss", "Boss"),
+            ("me", "Ece"),
+            ("u-cem", "Cem"),
+            ("u-veli", "Veli"),
+        ],
+    );
+    other.members[0].role = pl_social::TeamRole::Founder;
+    other.moderator = true;
+    other.members[1].moderator = true;
+    other.members[3].moderator = true;
+    other.permissions.kick = pl_social::PermissionLevel::Moderators;
+    v.crews.push(other);
+    v
+}
+
+#[tokio::test]
+async fn the_leaders_crew_rows_from_the_game() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(people3_view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["people", "people2", "people3"]).await;
+    let welcome = game.next_of("welcome").await;
+    assert!(
+        welcome["features"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("people3"))
+    );
+    // U1: the rights in both crews, only the crewmates a row may be about.
+    assert_eq!(
+        game.next_of("lists").await["roles"],
+        json!({
+            "t1": {"lead": true, "roles": true, "conv": "c:t1",
+                "mates": {"u-ali": {"mod": true, "kick": true}, "u-cem": {"kick": true}}},
+            "t2": {"mates": {"u-cem": {"kick": true}}}
+        })
+    );
+    game.next_of("snapshot").await;
+
+    game.send(json!({"t":"crew-mod","crew":"t1","friend":"u-cem","on":true}))
+        .await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"u-cem","action":"crew-mod","ok":true})
+    );
+    game.send(json!({"t":"crew-mod","crew":"t1","friend":"u-ali","on":false}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    // Ali is a moderator as the view has it: nothing to do, and nothing went wrong.
+    game.send(json!({"t":"crew-mod","crew":"t1","friend":"u-ali","on":true}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    game.send(json!({"t":"crew-lead","crew":"t1","friend":"u-cem"}))
+        .await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"u-cem","action":"crew-lead","ok":true})
+    );
+    game.send(json!({"t":"crew-remove","crew":"t1","friend":"u-ali"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    let row = |what: &'static str, member: &str| ("t1".to_owned(), member.to_owned(), what);
+    assert_eq!(
+        social.calls().crew_rows,
+        [
+            row("mod", "u-cem"),
+            row("unmod", "u-ali"),
+            row("lead", "u-cem"),
+            row("remove", "u-ali"),
+        ]
+    );
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn a_moderators_rows_and_an_older_mod_go_by_the_launchers_rules_only() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(people3_view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod (OVL-UX2's menu): no rights in its lists, and its crew rows and named moves go
+    // nowhere.
+    let mut old = MockMod::connect_with(&endpoint, &["people", "people2"]).await;
+    assert!(old.next_of("lists").await.get("roles").is_none());
+    old.send(json!({"t":"crew-remove","crew":"t1","friend":"u-cem"}))
+        .await;
+    old.send(json!({"t":"move","friend":"f-ayse","name":"Yeni"}))
+        .await;
+    old.send(json!({"t":"crew-invite","friend":"f-ayse","crew":"t1"}))
+        .await;
+    assert_eq!(old.next_of("friend-result").await["action"], "crew-invite");
+    assert!(social.calls().crew_rows.is_empty());
+    assert!(social.calls().groups_saved.is_empty());
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, &["people", "people2", "people3"]).await;
+    game.next_of("snapshot").await;
+    // A moderator of t2 removes a plain member; never the leader, another moderator, and no
+    // leader's row.
+    game.send(json!({"t":"crew-remove","crew":"t2","friend":"u-cem"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    for refused in [
+        json!({"t":"crew-remove","crew":"t2","friend":"u-boss"}),
+        json!({"t":"crew-remove","crew":"t2","friend":"u-veli"}),
+        json!({"t":"crew-mod","crew":"t2","friend":"u-cem","on":true}),
+        json!({"t":"crew-lead","crew":"t2","friend":"u-cem"}),
+    ] {
+        game.send(refused.clone()).await;
+        assert_eq!(
+            game.next_of("friend-result").await["reason"],
+            "failed",
+            "{refused}"
+        );
+    }
+    assert_eq!(
+        social.calls().crew_rows,
+        [("t2".to_owned(), "u-cem".to_owned(), "remove")]
+    );
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn a_new_category_from_the_game_and_the_moderators_cap() {
+    use serde_json::json;
+
+    // t1 has four moderators: "Moderatör yap" goes no further.
+    let mut start = people3_view();
+    for (id, name) in [("u-a", "A"), ("u-b", "B"), ("u-c", "C")] {
+        let mut mate = start.crews[0].members[2].clone();
+        mate.id = id.into();
+        mate.name = name.into();
+        start.crews[0].members.push(mate);
+    }
+    let social = FakeSocial::new(start);
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["people", "people2", "people3"]).await;
+    assert_eq!(game.next_of("lists").await["roles"]["t1"]["modsFull"], true);
+    game.next_of("snapshot").await;
+    game.send(json!({"t":"crew-mod","crew":"t1","friend":"u-cem","on":true}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["reason"], "failed");
+    assert!(social.calls().crew_rows.is_empty());
+
+    // "Yeni kategori…": the name with its spaces folded, the friend in it, saved whole.
+    game.send(json!({"t":"move","friend":"f-ayse","name":"  Gece   Ekibi "}))
+        .await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"f-ayse","action":"move","ok":true})
+    );
+    {
+        let calls = social.calls();
+        let (groups, members) = calls.groups_saved.last().unwrap();
+        assert_eq!(groups.len(), 3);
+        let made = &groups[2];
+        assert_eq!(made.name, "Gece Ekibi");
+        assert!(
+            made.id.len() == 8
+                && made
+                    .id
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        );
+        assert!(
+            members
+                .iter()
+                .any(|m| m.friend == "f-ayse" && m.group == made.id)
+        );
+        assert!(
+            members
+                .iter()
+                .any(|m| m.friend == "f-can" && m.group == "g1")
+        );
+    }
+    // No name, or a named move into a category that exists: no new one.
+    game.send(json!({"t":"move","friend":"f-ayse","name":"   "}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["reason"], "failed");
+    game.send(json!({"t":"move","friend":"f-ayse","group":"g1","name":"Okul"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["reason"], "failed");
+    assert_eq!(social.calls().groups_saved.len(), 1);
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[test]
+fn a_new_categorys_name_and_id_are_the_launchers() {
+    use crate::session::{clean_group_name, new_group_id};
+
+    assert_eq!(
+        clean_group_name("  Okul \t  arkadaşları "),
+        "Okul arkadaşları"
+    );
+    assert_eq!(clean_group_name(&"ç".repeat(40)).chars().count(), 24);
+    assert_eq!(clean_group_name(" \n "), "");
+    let taken: Vec<pl_social::FriendGroup> = (0..19)
+        .map(|i| pl_social::FriendGroup {
+            id: format!("g{i}"),
+            name: format!("G{i}"),
+        })
+        .collect();
+    for _ in 0..50 {
+        let id = new_group_id(&taken);
+        assert_eq!(id.len(), 8);
+        assert!(
+            id != "rest"
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        );
+        assert!(!taken.iter().any(|g| g.id == id));
+    }
 }
 
 /// OVL-LANG: the overlay speaks the launcher's language until the player picks one in its settings;
