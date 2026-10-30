@@ -484,8 +484,8 @@ async function overview(): Promise<CloudPageData> {
       maintenance:
         which === "paused"
           ? {
-              tr: "Bulut sunucusu bakımda; 23:00'te döneriz.",
-              en: "The cloud server is under maintenance; back at 23:00.",
+              tr: "Bulut sunucusu bakımda. 23:00'te döneriz.",
+              en: "The cloud server is under maintenance, back at 23:00.",
             }
           : null,
       monthPrice: hidden ? null : "60.00",

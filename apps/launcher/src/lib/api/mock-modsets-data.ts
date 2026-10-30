@@ -13,8 +13,8 @@ export const mockSetCatalog: MockSetCard[] = [
   {
     id: "pvp",
     name: "PvP",
-    summary: "Alçak ateş, kısa kılıç, net HUD ve yüksek FPS; sunucu kurallarına uygun.",
-    summaryEn: "Low fire, short swords, a clear HUD and high FPS; within the server rules.",
+    summary: "Alçak ateş, kısa kılıç, net HUD ve yüksek FPS, sunucu kurallarına uygun.",
+    summaryEn: "Low fire, short swords, a clear HUD and high FPS, within the server rules.",
     purpose: "pvp",
     variants: [
       {
@@ -669,8 +669,8 @@ export const mockSetCatalog: MockSetCard[] = [
     id: "performans",
     name: "Performans",
     nameEn: "Performance",
-    summary: "Daha yüksek FPS ve daha az bellek; oyunun görünüşü değişmez.",
-    summaryEn: "Higher FPS and less memory; the game looks the same.",
+    summary: "Daha yüksek FPS ve daha az bellek. Oyunun görünüşü değişmez.",
+    summaryEn: "Higher FPS and less memory. The game looks the same.",
     purpose: "performance",
     variants: [
       {
@@ -1073,8 +1073,8 @@ export const mockSetCatalog: MockSetCard[] = [
     id: "gorsel",
     name: "Görsel",
     nameEn: "Visual",
-    summary: "Shader ile ışık, gölge ve su; iyi bir ekran kartı ister.",
-    summaryEn: "Light, shadows and water with shaders; needs a strong graphics card.",
+    summary: "Shader ile ışık, gölge ve su. İyi bir ekran kartı ister.",
+    summaryEn: "Light, shadows and water with shaders, needs a strong graphics card.",
     purpose: "visual",
     variants: [
       {
@@ -1085,7 +1085,7 @@ export const mockSetCatalog: MockSetCard[] = [
           {
             id: "izsIPI7a",
             title: "MakeUp - Ultra Fast",
-            summary: "Hafif ışık ve gölgeler; zayıf ekran kartında da akıcı.",
+            summary: "Hafif ışık ve gölgeler, zayıf ekran kartında da akıcı.",
             kind: "shaderPack",
             iconUrl:
               "https://cdn.modrinth.com/data/izsIPI7a/a08432baa86b8ffd58c08f4b3a001ef976ff764d_96.webp",
@@ -1101,7 +1101,7 @@ export const mockSetCatalog: MockSetCard[] = [
           {
             id: "HVnmMxH1",
             title: "Complementary Shaders - Reimagined",
-            summary: "Gerçekçi ışık ve su; iyi bir ekran kartı ister.",
+            summary: "Gerçekçi ışık ve su. İyi bir ekran kartı ister.",
             kind: "shaderPack",
             iconUrl:
               "https://cdn.modrinth.com/data/HVnmMxH1/79cb7c8123bbc54945305b2ebad6b8881efdf5f8_96.webp",
@@ -1160,7 +1160,7 @@ export const mockSetCatalog: MockSetCard[] = [
           {
             id: "izsIPI7a",
             title: "MakeUp - Ultra Fast",
-            summary: "Hafif ışık ve gölgeler; zayıf ekran kartında da akıcı.",
+            summary: "Hafif ışık ve gölgeler, zayıf ekran kartında da akıcı.",
             kind: "shaderPack",
             iconUrl:
               "https://cdn.modrinth.com/data/izsIPI7a/a08432baa86b8ffd58c08f4b3a001ef976ff764d_96.webp",
@@ -1176,7 +1176,7 @@ export const mockSetCatalog: MockSetCard[] = [
           {
             id: "HVnmMxH1",
             title: "Complementary Shaders - Reimagined",
-            summary: "Gerçekçi ışık ve su; iyi bir ekran kartı ister.",
+            summary: "Gerçekçi ışık ve su. İyi bir ekran kartı ister.",
             kind: "shaderPack",
             iconUrl:
               "https://cdn.modrinth.com/data/HVnmMxH1/79cb7c8123bbc54945305b2ebad6b8881efdf5f8_96.webp",

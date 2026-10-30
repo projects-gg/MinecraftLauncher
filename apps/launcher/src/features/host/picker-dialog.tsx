@@ -145,7 +145,10 @@ function GroupHeader({
   );
 }
 
-/** "3/7": the friends ticked (and already in the session) against the limit. */
+/**
+ * "3/7 arkadaş": the friends ticked (and already in the session) against the limit, with the word
+ * for what it counts (LANDING-L). Bone once someone is ticked: "Dünyayı aç" is the gold here.
+ */
 function Counter({ count, max }: { count: number; max: number }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
@@ -154,7 +157,7 @@ function Counter({ count, max }: { count: number; max: number }) {
       role="status"
       className={cn(
         "mr-auto inline-flex items-center gap-1.5 font-display text-[15px] font-semibold tabular-nums transition-colors duration-150",
-        count > 0 ? "text-gold-300" : "text-ash-400",
+        count > 0 ? "text-bone-100" : "text-ash-400",
       )}
     >
       <UsersThree size={16} weight="bold" aria-hidden />
@@ -164,7 +167,7 @@ function Counter({ count, max }: { count: number; max: number }) {
             {count}
           </motion.span>
         </AnimatePresence>
-        /{max}
+        /{max} {t("host.picker.unit")}
       </span>
       <span className="sr-only">{t("host.picker.countLabel", { count, max })}</span>
     </span>

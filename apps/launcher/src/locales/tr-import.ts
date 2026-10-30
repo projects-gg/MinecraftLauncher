@@ -8,12 +8,15 @@ export const trImport = {
     import: "Aktar",
     skip: "Aktarmadan devam et",
   },
-  /** Group headings: where the rows under them go. */
+  /**
+   * Group headings: where the rows under them go, as a sentence (LANDING-L: "Oynandıkları sürümün
+   * kurulumuna" was hard to read as a heading).
+   */
   groups: {
-    projects: "Projects kurulumuna",
+    projects: "Projects kurulumuna aktarılır",
     /** Each world goes into the instance of the version it was played on; one no instance fits stays. */
-    worlds: "Oynandıkları sürümün kurulumuna",
-    instances: "Yeni kurulum olarak",
+    worlds: "Her dünya kendi sürümünün kurulumuna aktarılır",
+    instances: "Yeni kurulum olarak aktarılır",
   },
   rows: {
     options: "Oyun ayarları",
@@ -36,7 +39,7 @@ export const trImport = {
     version: "{{loader}} {{version}}",
     mods: "{{count}} mod",
     /** After the mod count ("21 mod, 3 tanesi uymuyor"). */
-    leftMods: "{{count}} tanesi uymuyor",
+    leftMods: "{{count}} tanesi bu sürüme uymuyor",
     /** None of its mods fits the version it runs. */
     noModsFit: "Modları bu sürüme uymuyor",
     worlds: "{{count}} dünya",
