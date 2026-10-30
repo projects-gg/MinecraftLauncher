@@ -25,11 +25,11 @@ use crate::error::{CloudError, Result};
 use crate::feat::{CloudFeatures, PlaceholderRules};
 use crate::live::{LiveHub, LiveSink};
 use crate::migrate::{CloudMovePlan, MoveContext, plan};
-use crate::pattern::PatternSuggestion;
 use crate::model::{
     AccountPatch, CloudAccount, CloudAccountCount, CloudCanBuy, CloudLimits, CloudLocalized,
     CloudLogPage, CloudServer, CloudVersions, Me, Offer, ServiceMode, VaultKey,
 };
+use crate::pattern::PatternSuggestion;
 use crate::plus::{MePlus, PlusOffer};
 use crate::seal::{CONSOLE_ROW, RevealKey, RevealTarget, SealTarget, seal};
 use crate::server::{CloudAddressProblem, normalize, same_server};

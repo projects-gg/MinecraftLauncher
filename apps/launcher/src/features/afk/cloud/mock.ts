@@ -43,7 +43,6 @@ import {
   watchInventory,
 } from "./mock-feat";
 import { mockLive } from "./mock-live";
-import { mockAiPatterns, mockSuggestPattern } from "./mock-pattern";
 import {
   GECE,
   geceRunning,
@@ -52,6 +51,7 @@ import {
   unwatchMovement,
   watchMovement,
 } from "./mock-move";
+import { mockAiPatterns, mockSuggestPattern } from "./mock-pattern";
 import {
   mockMe as mockPlusMe,
   mockOffer as mockPlusOffer,

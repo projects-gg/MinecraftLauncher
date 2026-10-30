@@ -434,6 +434,13 @@ export const commands = {
 	cloudAfkEdit: (id: string) => typedError<CloudEditView_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_edit", { id })),
 	cloudAfkSave: (id: string, edit: CloudEdit) => typedError<CloudSaveOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_save", { id, edit })),
 	cloudAfkReveal: (id: string, rowId: string) => typedError<CloudRevealOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_reveal", { id, rowId })),
+	/**
+	 *  "ProBot AI ile kalıp kur" (the service's README "Pattern helper"): an auto-reply rule's trigger
+	 *  from the player's own words, its sentence in the launcher's language. Free for players; the
+	 *  service counts each call that reaches its model, so this never repeats by itself. `fresh`:
+	 *  "Tekrar dene", a new answer instead of the kept one.
+	 */
+	cloudAfkSuggestPattern: (id: string, text: string, fresh: boolean) => typedError<PatternSuggestion, CmdError>(__TAURI_INVOKE("cloud_afk_suggest_pattern", { id, text, fresh })),
 	/**  "Buluta taşı": the desktop account in the cloud's form, and what stays on the desktop. */
 	cloudAfkMovePlan: (desktopId: string) => typedError<CloudMovePlan, CmdError>(__TAURI_INVOKE("cloud_afk_move_plan", { desktopId })),
 	/**
@@ -3505,6 +3512,11 @@ export type CloudOverview_Deserialize = {
 	 *  shows none of them (bulk management included).
 	 */
 	features: CloudFeatures | null,
+	/**
+	 *  "ProBot AI ile kalıp kur" can answer now (`/offer` → `ai.patterns`); false hides the helper
+	 *  and a rule's pattern is written by hand, as before it.
+	 */
+	aiPatterns: boolean,
 };
 
 /**  The AFK page's look at 7/24 Bulut. */
@@ -3537,6 +3549,11 @@ export type CloudOverview_Serialize = {
 	 *  shows none of them (bulk management included).
 	 */
 	features: CloudFeatures | null,
+	/**
+	 *  "ProBot AI ile kalıp kur" can answer now (`/offer` → `ai.patterns`); false hides the helper
+	 *  and a rule's pattern is written by hand, as before it.
+	 */
+	aiPatterns: boolean,
 };
 
 /**  Which page of afk.projects.gg to open. */
@@ -6633,6 +6650,31 @@ export type PatternProblem =
  *  some chat lines.
  */
 "tooComplex";
+
+/**
+ *  `POST /accounts/:id/rules/pattern` → `suggestion`: a trigger made from the player's words. Every
+ *  field is the contract's (no defaults: one shape for both directions in the bindings).
+ */
+export type PatternSuggestion = {
+	/**
+	 *  False: the message contains `match` (any letter case); true: a pattern that starts with
+	 *  `(?i)`.
+	 */
+	regex: boolean,
+	/**  The rule's trigger, ready to save. */
+	match: string,
+	/**  One sentence a 13-year-old understands: when the rule answers. */
+	summary: string,
+	/**  One to three messages it answers. */
+	matches: string[],
+	/**  One or two similar messages it leaves alone. */
+	misses: string[],
+	/**
+	 *  `plain` (the words themselves, no model), `ai` or `cache`: "Tekrar dene" only after the
+	 *  model.
+	 */
+	source: string,
+};
 
 /**
  *  A mark the player changed on a friend from the game's person menu (OVL-UX2): the launcher's

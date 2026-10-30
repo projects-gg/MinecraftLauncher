@@ -10,7 +10,7 @@ import "@/lib/i18n";
 import { CommandError } from "@/lib/api/tauri";
 import { TriggerField } from "../settings/controls";
 import type { PatternSuggestion } from "./api";
-import { saveSentence, savedSentence, useRuleAssist } from "./rule-assist";
+import { savedSentence, saveSentence, useRuleAssist } from "./rule-assist";
 
 const MADE: PatternSuggestion = {
   regex: true,
@@ -88,7 +88,9 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     expect(screen.getByText("tpa geldim")).toBeTruthy();
 
     fireEvent.click(screen.getByText("Tekrar dene"));
-    await waitFor(() => expect(suggest).toHaveBeenLastCalledWith("biri tp ya da ışınla yazınca", true));
+    await waitFor(() =>
+      expect(suggest).toHaveBeenLastCalledWith("biri tp ya da ışınla yazınca", true),
+    );
 
     fireEvent.click(await screen.findByText("Kullan"));
     expect(screen.getByTestId("rule").textContent).toBe(`regex:${MADE.match}`);
@@ -111,10 +113,9 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     };
     render(<Rule available suggest={async () => plain} />);
     fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
-    fireEvent.change(
-      screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."),
-      { target: { value: "selam" } },
-    );
+    fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
+      target: { value: "selam" },
+    });
     fireEvent.click(screen.getByText("Oluştur"));
     expect(await screen.findByText(plain.summary)).toBeTruthy();
     expect(screen.queryByText("Tekrar dene")).toBeNull();
@@ -138,10 +139,9 @@ describe("ProBot AI in a cloud rule's trigger", () => {
       />,
     );
     fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
-    fireEvent.change(
-      screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."),
-      { target: { value: "bir şeyler yazınca" } },
-    );
+    fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
+      target: { value: "bir şeyler yazınca" },
+    });
     fireEvent.click(screen.getByText("Oluştur"));
     expect((await screen.findByRole("alert")).textContent).toBe(unclear.message);
     expect(screen.getByTestId("rule").textContent).toBe("plain:");
@@ -151,10 +151,9 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     const suggest = vi.fn<Suggest>(never);
     render(<Rule available suggest={suggest} />);
     fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
-    fireEvent.change(
-      screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."),
-      { target: { value: "ş".repeat(201) } },
-    );
+    fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
+      target: { value: "ş".repeat(201) },
+    });
     fireEvent.click(screen.getByText("Oluştur"));
     expect(screen.getByRole("alert").textContent).toBe("En çok 200 karakter yazabilirsin.");
     expect(suggest).not.toHaveBeenCalled();

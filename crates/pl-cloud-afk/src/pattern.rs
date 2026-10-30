@@ -56,7 +56,9 @@ impl PatternSuggestion {
             && self.misses.len() <= 2
             && self.matches.iter().chain(&self.misses).all(line);
         if !usable {
-            return Err(CloudError::Protocol("pattern suggestion out of contract".into()));
+            return Err(CloudError::Protocol(
+                "pattern suggestion out of contract".into(),
+            ));
         }
         self.pattern = pattern.to_owned();
         self.summary = self.summary.trim().to_owned();
@@ -130,7 +132,10 @@ mod tests {
         .expect("usable");
         assert!(made.regex);
         assert_eq!(made.pattern, "(?i)\\b(tp|[ıi][şs][ıi]nla)\\b");
-        assert_eq!(made.summary, "Mesajda \"tp\" ya da \"ışınla\" geçerse yanıt verir.");
+        assert_eq!(
+            made.summary,
+            "Mesajda \"tp\" ya da \"ışınla\" geçerse yanıt verir."
+        );
         assert_eq!(made.source, "ai");
         let plain = suggestion(json!({
             "regex": false,
@@ -173,7 +178,10 @@ mod tests {
             suggestion(changed).checked().is_err()
         };
         assert!(broken("match", json!("")));
-        assert!(broken("match", json!("(?i)(a+)+$")), "too complex for the machine");
+        assert!(
+            broken("match", json!("(?i)(a+)+$")),
+            "too complex for the machine"
+        );
         assert!(broken("match", json!("(?i)(unclosed")), "not a pattern");
         assert!(broken("summary", json!(" ")));
         assert!(broken("summary", json!("x".repeat(301))));
@@ -186,7 +194,8 @@ mod tests {
 
     #[test]
     fn a_missing_field_breaks_the_contract() {
-        let partial = json!({ "regex": false, "match": "selam", "summary": "S.", "matches": ["selam"] });
+        let partial =
+            json!({ "regex": false, "match": "selam", "summary": "S.", "matches": ["selam"] });
         assert!(serde_json::from_value::<PatternSuggestion>(partial).is_err());
     }
 
@@ -197,7 +206,10 @@ mod tests {
             Some("biri tp ya da ışınla yazınca")
         );
         assert_eq!(pattern_text("   "), None);
-        assert_eq!(pattern_text(&"ş".repeat(200)).map(|t| t.chars().count()), Some(200));
+        assert_eq!(
+            pattern_text(&"ş".repeat(200)).map(|t| t.chars().count()),
+            Some(200)
+        );
         assert_eq!(pattern_text(&"ş".repeat(201)), None);
         assert_eq!(pattern_text("tp\u{0000}"), None);
     }
@@ -213,7 +225,11 @@ mod tests {
             },
         };
         assert_eq!(
-            PatternTrouble::of(&refused(422, "pattern_failed", json!({"reason": "unclear"}))),
+            PatternTrouble::of(&refused(
+                422,
+                "pattern_failed",
+                json!({"reason": "unclear"})
+            )),
             Some(PatternTrouble::Unclear)
         );
         assert_eq!(

@@ -54,7 +54,7 @@ export function mockAiPatterns(): boolean {
 }
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function refuse(code: string, tr: string, en: string): never {
   const english = i18n.language.startsWith("en");
@@ -102,8 +102,10 @@ export async function mockSuggestPattern(text: string, fresh: boolean): Promise<
       "ProBot AI couldn't make a pattern from that. Try saying it another way.",
     );
   }
-  const alternatives = second === undefined ? escape(first) : `(${escape(first)}|${escape(second)})`;
-  const named = second === undefined ? `"${first}"` : `"${first}"${english ? " or " : " ya da "}"${second}"`;
+  const alternatives =
+    second === undefined ? escapeRe(first) : `(${escapeRe(first)}|${escapeRe(second)})`;
+  const named =
+    second === undefined ? `"${first}"` : `"${first}"${english ? " or " : " ya da "}"${second}"`;
   return {
     regex: true,
     match: `(?i)\\b${alternatives}\\b`,
