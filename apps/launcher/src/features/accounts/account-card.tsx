@@ -12,7 +12,16 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { Button, Chip, cn, easeOutExpo, IconButton, springSnappy, useReduceMotion } from "@pl/ui";
+import {
+  Button,
+  Chip,
+  cn,
+  easeOutExpo,
+  IconButton,
+  springSnappy,
+  Tooltip,
+  useReduceMotion,
+} from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -83,15 +92,23 @@ function PinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void
   );
 }
 
-/** "Microsoft" on Microsoft accounts; an account with only a username has no chip (KEYS2). */
+/**
+ * The Microsoft mark alone on Microsoft accounts, its name in the tooltip and read out as "Microsoft
+ * hesabı": the word took the room of "Son oynama …", the line's one fact (TASTE-SWEEP SMALLS-L). An
+ * account with only a username has no chip (KEYS2).
+ */
 export function KindChip({ kind }: { kind: AccountSummary["kind"] }) {
   const { t } = useTranslation();
   if (kind !== "microsoft") return null;
   return (
-    <Chip className="shrink-0 gap-1.5 font-medium text-ash-300">
-      <MicrosoftMark size={10} />
-      {t("accounts.kind.microsoft")}
-    </Chip>
+    <Tooltip content={t("accounts.kind.microsoft")}>
+      <span className="inline-flex shrink-0">
+        <Chip className="px-[6px]">
+          <MicrosoftMark size={10} />
+          <span className="sr-only">{t("accounts.microsoft")}</span>
+        </Chip>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -341,22 +358,31 @@ export function AccountCard({
                 <span className="mt-1.5 flex min-w-0 items-center gap-2 text-[12.5px] text-ash-400">
                   <KindChip kind={account.kind} />
                   <span className="truncate">
-                    {account.lastUsedAt
-                      ? t("accounts.center.lastPlayed", {
-                          when: formatRelative(account.lastUsedAt),
-                        })
-                      : t("accounts.center.neverPlayed")}
+                    {/* AFK now: where, beside "AFK'da" (never "Henüz oynanmadı": AFK sessions are
+                        not the player's own games, so they leave "Son oynama" alone). */}
+                    {afk
+                      ? afk.server
+                      : account.lastUsedAt
+                        ? t("accounts.center.lastPlayed", {
+                            when: formatRelative(account.lastUsedAt),
+                          })
+                        : t("accounts.center.neverPlayed")}
                   </span>
                 </span>
               </span>
             </button>
+            {/* Four columns on every row (skins, name, pin, remove): a row without one keeps its
+                place empty, so the same button sits under the same button down the list. */}
             {microsoft ? (
-              <IconButton
-                label={t("accounts.center.skins")}
-                icon={<TShirt size={18} />}
-                className={actionClass}
-                onClick={onSkins}
-              />
+              <>
+                <IconButton
+                  label={t("accounts.center.skins")}
+                  icon={<TShirt size={18} />}
+                  className={actionClass}
+                  onClick={onSkins}
+                />
+                <span aria-hidden className={cn(actionClass, "shrink-0")} />
+              </>
             ) : (
               <>
                 {onProjectsSkin ? (
@@ -366,7 +392,9 @@ export function AccountCard({
                     className={actionClass}
                     onClick={onProjectsSkin}
                   />
-                ) : null}
+                ) : (
+                  <span aria-hidden className={cn(actionClass, "shrink-0")} />
+                )}
                 <IconButton
                   label={t("accounts.center.edit")}
                   icon={<PencilSimple size={18} />}
