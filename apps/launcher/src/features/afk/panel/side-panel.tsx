@@ -116,7 +116,7 @@ export function useAfkPanel(): PanelControls {
  * A press or focus outside closes the panel as Esc does, except on a toast and on the title bar:
  * the panel starts under it at every width, so the window still moves and its buttons work.
  */
-function keepOpenOnBar(event: OutsideEvent) {
+export function keepOpenOnBar(event: OutsideEvent) {
   keepOpenOnToast(event);
   const target = event.target as Element | null;
   if (target?.closest?.("[data-titlebar]")) event.preventDefault();
