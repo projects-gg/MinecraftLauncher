@@ -54,7 +54,7 @@ export const trAfkMod = {
     link: "Yanlışsa bildir",
     sending: "Gönderiliyor",
     sent: "Sağ ol, bir yetkili bakacak. Bu arada satırı düzeltip kaydedebilirsin.",
-    limited: "Bugün en çok 3 kez bildirebilirsin.",
+    limited: "Bugün 3 kez bildirdin, yarın yeniden bildirebilirsin.",
     notRefused: "Bu satır artık kaydedilebilir.",
   },
   /** The `moderation` notice's line under the account's name (the device writes it). */

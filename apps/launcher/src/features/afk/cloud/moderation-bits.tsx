@@ -67,13 +67,31 @@ export function PausedLine({ category, account }: { category: string; account: C
   );
 }
 
+/** One of "Yanlışsa bildir"'s answers in the link's place: quiet, announced. */
+function ReportAnswer({ kind }: { kind: CloudReportOutcome["kind"] }) {
+  const { t } = useTranslation();
+  return (
+    <p role="status" className="text-[12.5px] text-ash-300">
+      {t(`afkMod.report.${kind}`)}
+    </p>
+  );
+}
+
 /**
  * Under a row a save refused for its content (README "Saving" → Refusal reports): "Yanlışsa
  * bildir" as a quiet underlined link (it stays here, so no arrow; the sheet's one gold is "Kaydet"),
- * then one line in its place: sent, three today already, or the text saves now. A failure is the
- * usual toast, and the link stays.
+ * then one line in its place: sent, three today already, or the text saves now (`onSaveable`: the
+ * refusal is lifted where the save is held). A failure is the usual toast, and the link stays.
  */
-export function RefusalReport({ accountId, text }: { accountId: string; text: string }) {
+export function RefusalReport({
+  accountId,
+  text,
+  onSaveable,
+}: {
+  accountId: string;
+  text: string;
+  onSaveable?: () => void;
+}) {
   const { t } = useTranslation();
   const [sending, setSending] = useState(false);
   const [answer, setAnswer] = useState<CloudReportOutcome["kind"] | null>(null);
@@ -81,20 +99,16 @@ export function RefusalReport({ accountId, text }: { accountId: string; text: st
     if (sending) return;
     setSending(true);
     try {
-      setAnswer((await cloudApi.reportRefusal(accountId, text)).kind);
+      const { kind } = await cloudApi.reportRefusal(accountId, text);
+      setAnswer(kind);
+      if (kind === "notRefused") onSaveable?.();
     } catch (error) {
       afkFailed(error, t("cloudAfk.actions.failed"));
     } finally {
       setSending(false);
     }
   };
-  if (answer) {
-    return (
-      <p role="status" className="text-[12.5px] text-ash-300">
-        {t(`afkMod.report.${answer}`)}
-      </p>
-    );
-  }
+  if (answer) return <ReportAnswer kind={answer} />;
   return (
     <p className="text-[12.5px]">
       <button
@@ -107,4 +121,38 @@ export function RefusalReport({ accountId, text }: { accountId: string; text: st
       </button>
     </p>
   );
+}
+
+/**
+ * A command's or a reply's line under its text: "Yanlışsa bildir" while a save refused `refused`
+ * for its content; once the service says that text saves now, its refusal is cleared
+ * (`onSaveable`: the mark, the "!" and the bar's line go, Kaydet opens) and "Bu satır artık
+ * kaydedilebilir." stays for as long as the row keeps that text (`current`). Always rendered, so
+ * what it was told outlives the refusal it answered.
+ */
+export function ReportLine({
+  accountId,
+  refused,
+  current,
+  onSaveable,
+}: {
+  accountId: string;
+  refused: string | null;
+  current: string | null;
+  onSaveable: () => void;
+}) {
+  const [saves, setSaves] = useState<string | null>(null);
+  if (refused) {
+    return (
+      <RefusalReport
+        accountId={accountId}
+        text={refused}
+        onSaveable={() => {
+          setSaves(refused);
+          onSaveable();
+        }}
+      />
+    );
+  }
+  return saves !== null && saves === current ? <ReportAnswer kind="notRefused" /> : null;
 }

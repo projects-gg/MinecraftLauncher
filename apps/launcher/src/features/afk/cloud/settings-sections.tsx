@@ -34,8 +34,14 @@ import {
   WideRow,
 } from "../settings/controls";
 import type { CloudEditData } from "./api";
-import { pausedRows, refusalReportText, refusedCategory, refusedText } from "./moderation";
-import { PausedLine, RefusalReport } from "./moderation-bits";
+import {
+  pausedRows,
+  refusalReportText,
+  refusedCategory,
+  refusedText,
+  reportedWords,
+} from "./moderation";
+import { PausedLine, ReportLine } from "./moderation-bits";
 import { slotKey } from "./movement/model";
 import { hasPlaceholder, insertToken } from "./placeholders";
 import { ReplyTools } from "./reply-tools";
@@ -68,6 +74,8 @@ export interface PartProps {
   issues: Issue[];
   /** Studio's switches of the cloud features (null: a service before them). */
   features: CloudFeatures | null;
+  /** "Yanlışsa bildir" heard the text saves now: that row's content refusal is lifted. */
+  clearRefusal?: (at: { place: string; index: number; field: string }) => void;
 }
 
 /** The command rows' questions: where each row sits, and a new row's place. */
@@ -695,7 +703,12 @@ function CommandRow({
           error={at("text")}
           autoFocus={focus}
         />
-        {report ? <RefusalReport accountId={part.view.account.id} text={report} /> : null}
+        <ReportLine
+          accountId={part.view.account.id}
+          refused={report}
+          current={reportedWords(command.words)}
+          onSaveable={() => part.clearRefusal?.({ place: "commands", index, field: "text" })}
+        />
         {paused ? <PausedLine category={paused} account={part.view.account} /> : null}
       </div>
     </li>
@@ -947,7 +960,12 @@ function RuleRow({
               error={at("reply")}
               inputRef={replyRef}
             />
-            {report ? <RefusalReport accountId={part.view.account.id} text={report} /> : null}
+            <ReportLine
+              accountId={part.view.account.id}
+              refused={report}
+              current={reportedWords(reply)}
+              onSaveable={() => part.clearRefusal?.({ place: "rules", index, field: "reply" })}
+            />
             {placeholders && reply.kind === "plain" ? (
               <ReplyTools
                 rule={{

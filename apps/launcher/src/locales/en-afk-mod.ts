@@ -41,7 +41,7 @@ export const enAfkMod = {
     link: "Report this as a mistake",
     sending: "Sending",
     sent: "Thanks, a staff member will look at it. Meanwhile, you can fix the line and save.",
-    limited: "You can send at most 3 reports a day.",
+    limited: "You've reported 3 times today. You can report again tomorrow.",
     notRefused: "This row can be saved now.",
   },
   notice: {

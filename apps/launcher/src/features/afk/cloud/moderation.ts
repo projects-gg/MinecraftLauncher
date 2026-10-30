@@ -171,9 +171,35 @@ export function refusalReportText(
   issue: { problem: string } | undefined,
   words: { kind: string; text?: string },
 ): string | null {
-  if (!issue || refusedCategory(issue.problem) === null || words.kind !== "plain") return null;
+  if (!issue || refusedCategory(issue.problem) === null) return null;
+  return reportedWords(words);
+}
+
+/** A row's words as "Yanlışsa bildir" sends and compares them: the plain text, trimmed; else null. */
+export function reportedWords(words: { kind: string; text?: string }): string | null {
+  if (words.kind !== "plain") return null;
   const text = words.text?.trim() ?? "";
   return text ? text : null;
+}
+
+/**
+ * The save's issues once "Yanlışsa bildir" answered that the row's text saves now (README "Saving"
+ * → Refusal reports, `not_refused`): that row's content refusal goes, and with it the field's mark,
+ * its question's "!" and the bar's "Önce işaretli alanları düzelt.", so Kaydet opens again. Every
+ * other issue stays.
+ */
+export function withoutRefusal<
+  T extends { place: string; index: number | null; field: string; problem: string },
+>(issues: T[], at: { place: string; index: number; field: string }): T[] {
+  return issues.filter(
+    (issue) =>
+      !(
+        issue.place === at.place &&
+        issue.index === at.index &&
+        issue.field === at.field &&
+        refusedCategory(issue.problem) !== null
+      ),
+  );
 }
 
 const NOTICE_STEPS = new Set([
