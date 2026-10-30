@@ -34,8 +34,14 @@ import {
   WideRow,
 } from "../settings/controls";
 import type { CloudEditData } from "./api";
-import { pausedRows, refusedCategory, refusedText } from "./moderation";
-import { PausedLine } from "./moderation-bits";
+import {
+  pausedRows,
+  refusalReportText,
+  refusedCategory,
+  refusedText,
+  reportedWords,
+} from "./moderation";
+import { PausedLine, ReportLine } from "./moderation-bits";
 import { slotKey } from "./movement/model";
 import { hasPlaceholder, insertToken } from "./placeholders";
 import { ReplyTools } from "./reply-tools";
@@ -68,6 +74,8 @@ export interface PartProps {
   issues: Issue[];
   /** Studio's switches of the cloud features (null: a service before them). */
   features: CloudFeatures | null;
+  /** "Yanlışsa bildir" heard the text saves now: that row's content refusal is lifted. */
+  clearRefusal?: (at: { place: string; index: number; field: string }) => void;
 }
 
 /** The command rows' questions: where each row sits, and a new row's place. */
@@ -546,6 +554,8 @@ function CommandRow({
   const at = (field: string) => issueText(issueAt(part.issues, "commands", index, field));
   // A moderation case paused it (the view's `paused`): "Durduruldu" until it is edited and saved.
   const paused = pausedRows(part.view.account).get(command.id) ?? null;
+  // A save refused its text for content: "Yanlışsa bildir" under the sentence.
+  const report = refusalReportText(issueAt(part.issues, "commands", index, "text"), command.words);
   const minInterval = part.view.limits.minIntervalSec ?? 60;
   const triggers: SelectOption<Trigger>[] = allowed.map((value) => ({
     value,
@@ -693,6 +703,12 @@ function CommandRow({
           error={at("text")}
           autoFocus={focus}
         />
+        <ReportLine
+          accountId={part.view.account.id}
+          refused={report}
+          current={reportedWords(command.words)}
+          onSaveable={() => part.clearRefusal?.({ place: "commands", index, field: "text" })}
+        />
         {paused ? <PausedLine category={paused} account={part.view.account} /> : null}
       </div>
     </li>
@@ -828,6 +844,7 @@ function RuleRow({
   const ids = useId();
   const replyRef = useRef<HTMLInputElement>(null);
   const reply = rule.reply;
+  const report = refusalReportText(issueAt(part.issues, "rules", index, "reply"), reply);
   // Placeholders: chips and "Dene" while this account may use them. With Studio's switch on, a
   // reply holding them is not sent while its machine cannot fill them or while it fails the save
   // checks (one stored before the switch), which the row says until the check itself shows.
@@ -942,6 +959,12 @@ function RuleRow({
               placeholder={t("cloudAfk.settings.replies.replyPlaceholder")}
               error={at("reply")}
               inputRef={replyRef}
+            />
+            <ReportLine
+              accountId={part.view.account.id}
+              refused={report}
+              current={reportedWords(reply)}
+              onSaveable={() => part.clearRefusal?.({ place: "rules", index, field: "reply" })}
             />
             {placeholders && reply.kind === "plain" ? (
               <ReplyTools

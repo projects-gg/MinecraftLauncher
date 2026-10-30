@@ -10,9 +10,12 @@ import {
   moderationLine,
   moderationNoticeText,
   pausedRows,
+  refusalReportText,
   refusedCategory,
   refusedText,
+  reportedWords,
   stopHint,
+  withoutRefusal,
 } from "./moderation";
 import { noticeWords } from "./plus/notice-words";
 
@@ -128,6 +131,48 @@ describe("cloud AFK moderation on the card", () => {
     );
   });
 
+  it('offers "Yanlışsa bildir" under a plain row refused for its content, with its text', () => {
+    const refused = { problem: "content:advertising" };
+    const plain = { kind: "plain", text: "  /msg Neon_Drift ucuz rank burada " };
+    expect(refusalReportText(refused, plain)).toBe("/msg Neon_Drift ucuz rank burada");
+    // Another issue, no issue, a secret or stored row, an empty row: no link.
+    expect(refusalReportText({ problem: "interval" }, plain)).toBe(null);
+    expect(refusalReportText(undefined, plain)).toBe(null);
+    expect(refusalReportText(refused, { kind: "secret", text: "/login Gizli42" })).toBe(null);
+    expect(refusalReportText(refused, { kind: "sealed" })).toBe(null);
+    expect(refusalReportText(refused, { kind: "plain", text: "   " })).toBe(null);
+    // Its three answers, in both languages.
+    expect(t("afkMod.report.sent")).toBe(
+      "Sağ ol, bir yetkili bakacak. Bu arada satırı düzeltip kaydedebilirsin.",
+    );
+    // The day's limit says this one did not go, and when it can.
+    expect(t("afkMod.report.limited")).toBe(
+      "Bugün 3 kez bildirdin, yarın yeniden bildirebilirsin.",
+    );
+    expect(te("afkMod.report.limited")).toBe(
+      "You've reported 3 times today. You can report again tomorrow.",
+    );
+    expect(t("afkMod.report.notRefused")).toBe("Bu satır artık kaydedilebilir.");
+  });
+
+  it("lifts a row's refusal once the text saves now, so nothing holds the save", () => {
+    const refusal = { place: "commands", index: 1, field: "text", problem: "content:advertising" };
+    const other = { place: "commands", index: 0, field: "every", problem: "range" };
+    const elsewhere = { place: "rules", index: 1, field: "reply", problem: "content:spam" };
+    expect(
+      withoutRefusal([other, refusal, elsewhere], { place: "commands", index: 1, field: "text" }),
+    ).toEqual([other, elsewhere]);
+    // The bar holds the save while any issue is left (settings.tsx `blocking`): none here.
+    expect(withoutRefusal([refusal], { place: "commands", index: 1, field: "text" })).toEqual([]);
+    // Only a content refusal goes: another problem of that field stays.
+    const empty = { place: "commands", index: 1, field: "text", problem: "empty" };
+    expect(withoutRefusal([empty], { place: "commands", index: 1, field: "text" })).toEqual([
+      empty,
+    ]);
+    expect(reportedWords({ kind: "plain", text: " /warp maden " })).toBe("/warp maden");
+    expect(reportedWords({ kind: "sealed" })).toBe(null);
+  });
+
   it("writes the moderation notice under the account's name", () => {
     expect(moderationNoticeText({ step: "suspend", category: "scam" }, t)).toBe(
       "Durduruldu: Dolandırıcılık. Yanlışlık olduğunu düşünüyorsan itiraz et.",
@@ -135,6 +180,11 @@ describe("cloud AFK moderation on the card", () => {
     expect(moderationNoticeText({ step: "overturned", category: "other" }, te)).toBe(
       "Your appeal was accepted. The decision was lifted.",
     );
+    // Staff lifted a decision no appeal asked about (Studio's "Haksız bul").
+    expect(moderationNoticeText({ step: "lifted", category: "spam" }, t)).toBe(
+      "Verilen karar kaldırıldı.",
+    );
+    expect(moderationNoticeText({ step: "lifted" }, te)).toBe("The decision was lifted.");
     expect(moderationNoticeText({ step: "note" }, t)).toBe(null);
     const words = noticeWords(
       {
