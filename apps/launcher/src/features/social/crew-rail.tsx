@@ -402,7 +402,8 @@ export function CrewRail({
           ))}
         </AnimatePresence>
       </Reorder.Group>
-      <Tooltip content={addLabel}>
+      {/* The tooltip says what the dot means, as the name read out does (SMALLS-L). */}
+      <Tooltip content={invites ? `${addLabel}, ${t("teams.invites")}` : addLabel}>
         <button
           ref={addRef}
           type="button"
@@ -449,7 +450,8 @@ export function CrewRail({
                 weight="bold"
                 className={cn(
                   "relative transition-colors duration-150",
-                  addSelected ? "text-gold-300" : "text-ash-300 group-hover/add:text-bone-100",
+                  // Chosen is bone, as the brackets around it: one gold per screen (design.md §2).
+                  addSelected ? "text-bone-50" : "text-ash-300 group-hover/add:text-bone-100",
                 )}
               />
             </span>

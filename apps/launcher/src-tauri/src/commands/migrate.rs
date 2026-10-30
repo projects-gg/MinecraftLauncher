@@ -306,11 +306,13 @@ pub async fn legacy_import(
             }
         }
         let bin = root.join("afk").join("bin");
+        // A v1 client without a version file gets the label pl-afk's bridge counts as old (no
+        // nonce): the same constant, so the two never drift apart (AFK-NONCE).
         let version = std::fs::read_to_string(bin.join("version.txt"))
             .map(|v| v.trim().to_owned())
             .ok()
             .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| "legacy".to_owned());
+            .unwrap_or_else(|| pl_afk::bridge::LEGACY_CLIENT_VERSION.to_owned());
         let runtime = state.afk.runtime().clone();
         let adopted =
             tauri::async_runtime::spawn_blocking(move || runtime.adopt_folder(&version, &bin))

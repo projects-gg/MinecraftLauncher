@@ -121,7 +121,8 @@ export function SkinStage({
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/45 ring-1 ring-white/6">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-8 bottom-7 h-14 rounded-[50%] bg-[radial-gradient(closest-side,rgb(232_154_44/0.24),transparent)]"
+          // The floor's light in bone, not a gold halo (one gold per screen, design.md §2).
+          className="pointer-events-none absolute inset-x-8 bottom-7 h-14 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--color-bone-100)_12%,transparent),transparent)]"
         />
         <div
           ref={scope}

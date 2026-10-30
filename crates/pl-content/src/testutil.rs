@@ -402,6 +402,7 @@ pub(crate) struct Publish {
     pub(crate) mod_sets: Option<ModSetCatalog>,
     pub(crate) item_art: Option<crate::ItemArt>,
     pub(crate) chat_emojis: Option<crate::ChatEmojis>,
+    pub(crate) overlay: Option<crate::OverlayRelease>,
 }
 
 impl Publish {
@@ -414,6 +415,7 @@ impl Publish {
             mod_sets: None,
             item_art: None,
             chat_emojis: None,
+            overlay: None,
         }
     }
 
@@ -427,6 +429,7 @@ impl Publish {
         builder.set_mod_sets(self.mod_sets.as_ref()).unwrap();
         builder.set_item_art(self.item_art.as_ref()).unwrap();
         builder.set_chat_emojis(self.chat_emojis.as_ref()).unwrap();
+        builder.set_overlay(self.overlay.clone()).unwrap();
         builder.set_sequence(self.sequence);
         let built = builder
             .build("2026-10-15T12:00:00Z".parse().unwrap())
