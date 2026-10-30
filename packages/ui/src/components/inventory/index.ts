@@ -37,6 +37,7 @@ export {
 export { glyphAdvance, LINE_BOX, textAdvance, wrapText } from "./pixel-font";
 export { PixelLine, type PixelLineProps } from "./pixel-text";
 export { InventoryPreview, type InventoryPreviewProps, PREVIEW_STATES } from "./preview";
+export { safeInvCursor, safeInvItem, safeInvItems } from "./safe-item";
 export {
   bareId,
   cleanText,

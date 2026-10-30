@@ -158,7 +158,11 @@ jobs:
         name: Report
         run: |
           mkdir -p "$OUT" "$RUNNER_TEMP/shots"
-          find build/run/productionClientGameTest -name 'overlay-*.png' -exec cp {} "$RUNNER_TEMP/shots/" \;
+          # Fabric numbers the game test's screenshots (0000_overlay-title.png): copied by their own names.
+          find build/run/productionClientGameTest -name '*overlay-*.png' -print0 |
+            while IFS= read -r -d '' shot; do
+              cp "$shot" "$RUNNER_TEMP/shots/$(basename "$shot" | sed -E 's/^[0-9]+_//')"
+            done
           jar=$(ls build/libs/projects-overlay-*+"$MC".jar)
           node ../../scripts/release/overlay-auto.mjs report --jar "$jar" --junit build/test-results/test \
             --shots "$RUNNER_TEMP/shots" --minecraft "$MC" --fabric-api "$FABRIC_API" --compat "$COMPAT" \

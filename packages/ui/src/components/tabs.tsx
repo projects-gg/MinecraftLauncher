@@ -104,7 +104,9 @@ export function Tabs<T extends string>({
                 <span className="sr-only">{item.alert}</span>
               </span>
             ) : typeof item.count === "number" ? (
-              <span className="rounded bg-white/8 px-1.5 text-[11px] text-ash-300 tabular-nums">
+              // Chamfered like every small chip (design.md: the rounded corner is for containers),
+              // in the bone of Studio's sidebar counts, so a count reads the same everywhere.
+              <span className="chamfer flex h-[18px] min-w-[18px] items-center justify-center bg-white/10 px-1 text-[11px] font-semibold text-bone-100 tabular-nums [--cut:4px]">
                 {item.count}
               </span>
             ) : null}

@@ -95,6 +95,8 @@ export const trTeams = {
   cancel: "Vazgeç",
   notices: {
     invite: "{{name}} seni {{team}} ekibine davet etti",
+    /** The invite toast's button: opens the list where the invite waits. */
+    seeInvite: "Daveti gör",
     kicked: "{{team}} ekibinden çıkarıldın",
     kickedUnnamed: "Ekipten çıkarıldın",
     disbanded: "{{team}} ekibi dağıtıldı",

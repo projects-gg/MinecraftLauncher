@@ -216,7 +216,7 @@ export const enCloudAfk = {
     commands: {
       add: "Add command",
       empty: "No commands yet.",
-      count: "{{count}}/{{max}} commands",
+      count: "{{count}}/{{max}} commands on this account",
       trigger: "When",
       triggers: {
         join: "On every join",

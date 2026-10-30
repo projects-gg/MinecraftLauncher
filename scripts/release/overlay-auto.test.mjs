@@ -14,6 +14,7 @@ import {
   describeTested,
   errorLines,
   GAMETEST_SHOTS,
+  gametestRanThrough,
   issueText,
   junitTotals,
   LABEL,
@@ -240,6 +241,16 @@ test("a jar counts as tested only when both suites ran green", () => {
   assert.ok(!testsPassed({ ...GREEN, gametest: { passed: 0, failed: 1, skipped: 0 } }));
   assert.ok(!testsPassed({ ...GREEN, junit: { passed: 0, failed: 0, skipped: 3 } }));
   assert.deepEqual(GAMETEST_SHOTS.length, 5);
+});
+
+test("the game test ran through when all its screenshots are there, as Fabric numbers them", () => {
+  // As the 26.3 run of 30 Oct left them.
+  const fabric = GAMETEST_SHOTS.map((shot, i) => `${String(i).padStart(4, "0")}_${shot}.png`);
+  assert.ok(gametestRanThrough(fabric));
+  assert.ok(gametestRanThrough(GAMETEST_SHOTS.map((shot) => `${shot}.png`)));
+  assert.ok(!gametestRanThrough(fabric.slice(0, 4)));
+  assert.ok(!gametestRanThrough([]));
+  assert.ok(!gametestRanThrough(fabric.map((file) => file.replace(".png", ".jpg"))));
 });
 
 test("the report describes the jar from the jar itself", () => {
