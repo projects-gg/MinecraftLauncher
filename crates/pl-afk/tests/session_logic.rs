@@ -329,6 +329,108 @@ async fn already_connected_stops_after_five_in_a_row() {
     manager.shutdown().await;
 }
 
+/// projects.gg's lobby: an account that does not log in sits in its login window for about two
+/// minutes and is kicked (pl-afk: `LoginTimeout`).
+const LOBBY_KICK: &str = "Uzun süredir şifre girilmediği için bağlantı kaybedildi.";
+
+/// Joins the lobby, waits there 2:05 without getting in, and is kicked for the login.
+async fn lobby_round(mut proc: common::FakeProc) -> Option<i32> {
+    proc.event(r#"{"e":"joined","user":"Lobide","host":"h","port":25565,"protocol":777}"#)
+        .await;
+    tokio::time::sleep(Duration::from_secs(125)).await;
+    proc.event(&format!(
+        r#"{{"e":"disconnected","reason":"InGameKick","msg":"{LOBBY_KICK}"}}"#
+    ))
+    .await;
+    proc.event(r#"{"e":"error","reason":"InGameKick","versionError":false}"#)
+        .await;
+    Some(2)
+}
+
+/// Past the two minutes in game that make a connection lasting, but kicked for the login: the
+/// count goes on, so the fifth kick in a row stops the session with the reason, backing off in
+/// between, instead of reconnecting every ~2:10 forever (REL-P, 31 Oct 2026).
+#[tokio::test(start_paused = true)]
+async fn a_lobby_that_kicks_at_its_login_window_stops_on_the_fifth_kick() {
+    let env = TestEnv::new(None);
+    let id = env.add("Lobide").id;
+    let s = ScriptedSpawner::new(|_, proc| lobby_round(proc));
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    until(
+        "stopped at the login window",
+        Duration::from_secs(3600),
+        || is_error(&env.last_state(&id)) && !manager.any_active(),
+    )
+    .await;
+    assert_eq!(s.launch_count(), 5);
+    assert_gaps_near(&gaps(&s, Duration::from_secs(125)), &[5, 10, 20, 40]);
+    assert_eq!(
+        env.last_state(&id),
+        Some(SessionState::Error {
+            reason: FailureReason::Refused {
+                cause: KickCause::LoginTimeout,
+                message: Some(LOBBY_KICK.into()),
+            },
+            retry_limit_reached: false,
+        })
+    );
+    tokio::time::sleep(Duration::from_secs(600)).await;
+    assert_eq!(s.launch_count(), 5, "no reconnect after the stop");
+    manager.shutdown().await;
+}
+
+/// A login command saved while the session waits to reconnect: the next launch runs it, and the
+/// kicks before no longer count (five more tries for the new command).
+#[tokio::test(start_paused = true)]
+async fn a_new_login_command_starts_the_count_over() {
+    let env = TestEnv::new(None);
+    let id = env.add("Lobide").id;
+    let s = ScriptedSpawner::new(|_, proc| lobby_round(proc));
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    until("third kick", Duration::from_secs(3600), || {
+        s.launch_count() == 3
+            && matches!(
+                env.last_state(&id),
+                Some(SessionState::Reconnecting {
+                    next_attempt_at: Some(_),
+                    ..
+                })
+            )
+    })
+    .await;
+    env.store
+        .set_login_commands(&id, &["/login Yeni-Sifre9".to_owned()])
+        .unwrap();
+    until(
+        "stopped at the login window",
+        Duration::from_secs(3600),
+        || is_error(&env.last_state(&id)) && !manager.any_active(),
+    )
+    .await;
+    assert_eq!(
+        s.launch_count(),
+        8,
+        "three kicks before the new command, five after"
+    );
+    assert_gaps_near(
+        &gaps(&s, Duration::from_secs(125)),
+        &[5, 10, 20, 5, 10, 20, 40],
+    );
+    assert!(matches!(
+        env.last_state(&id),
+        Some(SessionState::Error {
+            reason: FailureReason::Refused {
+                cause: KickCause::LoginTimeout,
+                ..
+            },
+            ..
+        })
+    ));
+    manager.shutdown().await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn kick_message_filter_decides_whether_to_reconnect() {
     let env = TestEnv::new(None);

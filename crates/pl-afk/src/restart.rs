@@ -6,11 +6,13 @@
 //! minutes (see [`RestartSchedule`]).
 //! The count starts over only after a lasting connection: joined and kicked a second later is a
 //! failure like any other, so a login plugin or an anti-bot kick no longer brings the client
-//! back every few seconds forever. Kicks reconnecting cannot fix (a ban, the whitelist, a wrong
-//! password, a premium-only server, a login from elsewhere; "already connected" and login
-//! timeouts after several in a row) stop the session with a [`KickCause`]. The legacy bugs stay
-//! fixed: the AutoRelog retry limit (-1 = unlimited) and the kick-message filter are honored, and
-//! every decision uses the latest settings.
+//! back every few seconds forever, and a kick for the login never ends a lasting connection
+//! however long the client sat at the login ([`RestartSchedule::lasting`]): a lobby that kicks
+//! at the end of a two-minute login window would start it over every round. Kicks reconnecting
+//! cannot fix (a ban, the whitelist, a wrong password, a premium-only server, a login from
+//! elsewhere; "already connected" and login timeouts after several in a row) stop the session
+//! with a [`KickCause`]. The legacy bugs stay fixed: the AutoRelog retry limit (-1 = unlimited)
+//! and the kick-message filter are honored, and every decision uses the latest settings.
 
 use std::time::Duration;
 
@@ -57,7 +59,7 @@ pub struct RestartSchedule {
     /// every further failure takes the next one; the last repeats. Empty means [`BACKOFF_STEPS`].
     pub backoff_steps: &'static [Duration],
     /// Time in game after which the connection counts as working: the next restart starts over
-    /// from the shortest delay.
+    /// from the shortest delay (unless a kick for the login ended it, see [`Self::lasting`]).
     pub stable_after: Duration,
 }
 
@@ -142,6 +144,16 @@ impl RestartSchedule {
         };
         self.delay(relog, attempt).mul_f64(0.8 + 0.4 * spread)
     }
+
+    /// The connection worked, so the failures before it no longer count: in game for
+    /// [`Self::stable_after`] and not ended by a kick for the login ([`KickCause::is_login`]).
+    /// projects.gg's lobby kicks an account that does not log in after about two minutes in its
+    /// login window, past `stable_after`: counted as lasting, every round started the count over
+    /// and the account reconnected every ~2:10 forever instead of stopping on the fifth
+    /// `LoginTimeout` in a row.
+    pub fn lasting(&self, in_game: Duration, cause: Option<KickCause>) -> bool {
+        in_game >= self.stable_after && !cause.is_some_and(KickCause::is_login)
+    }
 }
 
 /// Why a session stopped or is reconnecting. Messages come from the server or the client
@@ -225,6 +237,19 @@ impl KickCause {
         match self {
             Self::AlreadyConnected | Self::LoginTimeout => REPEATED_KICKS,
             _ => 1,
+        }
+    }
+
+    /// A kick for the login itself: the login plugin's time ran out or it refused the password,
+    /// the name is still online, the server lets in Microsoft accounts only. However long the
+    /// client sat at the login before it, it never got in ([`RestartSchedule::lasting`]).
+    pub fn is_login(self) -> bool {
+        match self {
+            Self::LoginTimeout
+            | Self::WrongPassword
+            | Self::AlreadyConnected
+            | Self::PremiumOnly => true,
+            Self::Banned | Self::NotWhitelisted | Self::LoggedInElsewhere => false,
         }
     }
 }
@@ -1116,5 +1141,33 @@ mod tests {
         );
         let other = Failure::merge(Some(version), Failure::new(None, Some("x"), false));
         assert_eq!(other.message.as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn a_kick_for_the_login_never_ends_a_lasting_connection() {
+        let schedule = RestartSchedule::default();
+        // projects.gg's lobby: about 2:05 in its login window, then its login timeout kick.
+        let lobby = Duration::from_secs(125);
+        for cause in [
+            KickCause::LoginTimeout,
+            KickCause::WrongPassword,
+            KickCause::AlreadyConnected,
+            KickCause::PremiumOnly,
+        ] {
+            assert!(cause.is_login(), "{cause:?}");
+            assert!(!schedule.lasting(lobby, Some(cause)), "{cause:?}");
+            assert!(!schedule.lasting(Duration::from_secs(36_000), Some(cause)));
+        }
+        // Every other end keeps the rule: two minutes in game is a connection that worked.
+        assert!(schedule.lasting(lobby, None));
+        for cause in [
+            KickCause::Banned,
+            KickCause::NotWhitelisted,
+            KickCause::LoggedInElsewhere,
+        ] {
+            assert!(!cause.is_login(), "{cause:?}");
+            assert!(schedule.lasting(lobby, Some(cause)), "{cause:?}");
+        }
+        assert!(!schedule.lasting(Duration::from_secs(119), None));
     }
 }
