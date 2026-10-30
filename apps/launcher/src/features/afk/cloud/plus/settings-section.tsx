@@ -81,6 +81,7 @@ import {
   WEEKDAYS,
   windowProblems,
   withCurrency,
+  withOrderMenu,
   withSettings,
 } from "./model";
 import { AuthorityChoice, MoneyFits, moneyNameOf, TalkPreview } from "./setup-parts";
@@ -682,6 +683,23 @@ function ChatEditor({ shown, set, panel, account }: EditorProps & { account: Clo
           }
         />
       </div>
+      {/* The server's order menu (DONUT-ORDER), only while Studio's switch is on: its own block
+          beside the chat's, as the contract places it. */}
+      {panel.settings.rules.features.orderMenu ? (
+        <div className="mt-3">
+          <ToggleRow
+            title={t("afkPlus.settings.orderMenu")}
+            help={t("afkPlus.settings.orderMenuHelp")}
+            checked={d.orderMenu === true}
+            onCheckedChange={(on) =>
+              set((s) => ({
+                ...s,
+                discovery: withOrderMenu(s.discovery, on, panel.settings.config.discovery),
+              }))
+            }
+          />
+        </div>
+      ) : null}
       {/* The ad's text waits here while the server's profile offers more than one (the site's). */}
       <Advanced
         summary={`${t("setup.plus.adv.chat")}${choosable ? t("setup.plus.adv.chatText") : ""}`}
@@ -1870,6 +1888,7 @@ export function SettingsSection({
       saver: features.saver,
       preview: panel.settings.adPreview ?? null,
       notify: notify.data ?? null,
+      orderMenu: panel.settings.rules.features.orderMenu,
     },
     t,
   );

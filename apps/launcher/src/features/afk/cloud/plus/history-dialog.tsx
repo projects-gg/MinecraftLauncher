@@ -1,6 +1,8 @@
 // "Ayar geçmişi" (QoL Q7): the last saved versions of the AFK+ settings, newest first, each with
-// when, where it was made and what it changed in words ("Elytra: sınır 40.000 yerine 45.000").
-// "Bu hâle dön" asks once in one sentence; the version comes back as a new one, so nothing is lost.
+// when, where it was made and what it changed in words, every amount with its unit and no ending
+// after a money's name ("Elitra: en fazla 45.000 ripple yerine 40.000 ripple"; the site's and the
+// phone's same form). "Bu hâle dön" asks once in one sentence; the version comes back as a new one,
+// so nothing is lost.
 import { Button, cn, Dialog, enter, leave, Skeleton, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -11,9 +13,10 @@ import type { CloudAccount } from "../api";
 import { type PlusHistoryEntry, type PlusPanel, plusApi } from "./api";
 import { itemLabel, type Namer, usePlusItemData } from "./items";
 import { type ConfigChange, configChanges, emptyLimit, type PlusLimits } from "./model";
+import { moneyText } from "./orders";
 import { clockText, dayGroup, dayText } from "./time";
 import { plusKey } from "./use-plus";
-import { currentLang, formatAmount } from "./words";
+import { currentLang, formatAmount, qtyItem } from "./words";
 
 const LIMIT_LABEL: Record<keyof PlusLimits, string> = {
   perDealMax: "perDealMax",
@@ -34,6 +37,8 @@ function useChangeText(panel: PlusPanel) {
     custom: panel.settings.config.customItems,
     unnamed: t("afkPlus.items.unnamed"),
   };
+  const lang = currentLang();
+  const server = panel.settings.server;
   return (change: ConfigChange): string => {
     const item = "item" in change ? itemLabel(change.item, namer) : "";
     switch (change.kind) {
@@ -49,13 +54,23 @@ function useChangeText(panel: PlusPanel) {
             : "afkPlus.history.orderRemovedSell",
           { item },
         );
-      case "order_amount":
+      case "order_amount": {
+        // Every amount with its unit: the server's money, or the paying item's count.
+        const unit = (value: number) =>
+          change.field === "qty"
+            ? formatAmount(value, lang)
+            : change.pay && change.pay !== "money"
+              ? qtyItem(formatAmount(value, lang), itemLabel(change.pay, namer), lang)
+              : moneyText(value, server, lang);
+        // A sell order's limit is its floor ("en az"), a buy order's its most ("en fazla").
+        const field = change.field === "limit" && change.side === "sell" ? "floor" : change.field;
         return t("afkPlus.history.orderAmount", {
           item,
-          field: t(`afkPlus.history.fields.${change.field}`),
-          from: formatAmount(change.from),
-          to: formatAmount(change.to),
+          field: t(`afkPlus.history.fields.${field}`),
+          from: unit(change.from),
+          to: unit(change.to),
         });
+      }
       case "order_toggled":
         return t(change.on ? "afkPlus.history.orderOn" : "afkPlus.history.orderOff", { item });
       case "order_other":
@@ -67,17 +82,32 @@ function useChangeText(panel: PlusPanel) {
           }),
         });
       case "limit": {
-        // Emptied: no buying at all for the two limits buying needs (the hard rule), else no limit.
-        const buysNothing = emptyLimit(change.field) === "buysNothing";
-        const none = t(buysNothing ? "afkPlus.history.noBuying" : "afkPlus.history.noLimit");
-        const value = (amount: number | null) =>
-          amount === null
-            ? none
-            : change.field === "approvalTimeoutMin"
-              ? t("afkPlus.units.minutes", { count: amount })
-              : formatAmount(amount);
+        const field = t(`afkPlus.settings.${LIMIT_LABEL[change.field]}`);
+        // Every amount with its unit: the server's money, the minutes.
+        const value = (amount: number) =>
+          change.field === "approvalTimeoutMin"
+            ? t("afkPlus.units.minutes", { count: amount })
+            : moneyText(amount, server, lang);
+        // An empty limit is never an amount, nor "sınırsız" where it means something else: it
+        // says what it means (the site's and the phone's final lines): no buying without the
+        // per-deal or the total limit, no question without an approval limit.
+        if (change.to === null) {
+          const empty = emptyLimit(change.field);
+          const means =
+            empty === "buysNothing"
+              ? "NoBuying"
+              : change.field === "approvalAbove"
+                ? "NoAsk"
+                : change.field === "newCounterpartApprovalAbove"
+                  ? "NoAskNew"
+                  : "";
+          return t(`afkPlus.history.cleared${means}`, { field });
+        }
+        if (change.from === null) {
+          return t("afkPlus.history.limitSet", { field, to: value(change.to) });
+        }
         return t("afkPlus.history.limit", {
-          field: t(`afkPlus.settings.${LIMIT_LABEL[change.field]}`),
+          field,
           from: value(change.from),
           to: value(change.to),
         });

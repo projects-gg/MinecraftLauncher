@@ -1,8 +1,17 @@
 // The AFK+ panel's left column, the site's rail in the launcher's words: the assistant's state in
-// one sentence with its one control (Durdur / Başlat), the sections with what waits in them (bone
-// figures, no badges: the gold is the panel's save button's), and the AI allowance: two bars, when
-// each renews, about how many replies are left. The bars move only when a number changes.
-import { ArrowSquareOut, Play, Stop } from "@phosphor-icons/react";
+// one sentence with its one control (Durdur / Başlat), the sections with their line icons and what
+// waits in them (bone figures, no badges: the gold is the panel's save button's), and the AI
+// allowance: two bars, when each renews, about how many replies are left. The bars move only when a
+// number changes.
+import {
+  ArrowSquareOut,
+  ChartBar,
+  GearSix,
+  Package,
+  Play,
+  Pulse,
+  Stop,
+} from "@phosphor-icons/react";
 import { Button, cn, enter, leave, toast, usePressGuard } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
@@ -36,14 +45,20 @@ import {
 } from "./use-plus";
 import { currentLang, trWith } from "./words";
 
-export const SECTIONS: PlusSection[] = ["feed", "messages", "orders", "settings", "report"];
+/** The site's and the phone's sections in their order ("Etkinlik" holds the conversations). */
+export const SECTIONS: PlusSection[] = ["feed", "orders", "settings", "report"];
 
-/** The sections Studio has not switched off (Mesajlar is QoL Q1, Rapor Q4). */
+/** Each section's line icon (the site's, the owner 29 Oct: icons beside the parts). */
+const SECTION_ICONS: Record<PlusSection, typeof Pulse> = {
+  feed: Pulse,
+  orders: Package,
+  settings: GearSix,
+  report: ChartBar,
+};
+
+/** The sections Studio has not switched off ("Özet" is QoL Q4). */
 export function visibleSections(features: PlusFeatureFlags): PlusSection[] {
-  return SECTIONS.filter(
-    (section) =>
-      (section !== "messages" || features.inbox) && (section !== "report" || features.report),
-  );
+  return SECTIONS.filter((section) => section !== "report" || features.report);
 }
 
 /** The colour of the assistant's state sentence: never gold, a sentence is not an action (flare for an error). */
@@ -195,26 +210,29 @@ function Nav({
   section,
   onSection,
   approvals,
-  messages,
+  waiting,
   orders,
   settingsDirty,
 }: {
   section: PlusSection;
   onSection: (section: PlusSection) => void;
   approvals: number;
-  messages: number;
+  waiting: number;
   orders: number;
   settingsDirty: boolean;
 }) {
   const { t } = useTranslation();
   const features = usePlusFeatures();
-  const counts: Partial<Record<PlusSection, number>> = { feed: approvals, messages, orders };
+  // "Etkinlik" counts what waits for the player's word there: approvals and the players whose
+  // message waits for an answer (the site's count, said in full to a screen reader).
+  const counts: Partial<Record<PlusSection, number>> = { feed: approvals + waiting, orders };
   return (
     <nav aria-label={t("afkPlus.panel.sectionsLabel")}>
       <ul className="space-y-0.5">
         {visibleSections(features).map((value) => {
           const on = value === section;
           const count = counts[value] ?? 0;
+          const Icon = SECTION_ICONS[value];
           return (
             <li key={value}>
               <button
@@ -222,7 +240,7 @@ function Nav({
                 aria-current={on ? "page" : undefined}
                 onClick={() => onSection(value)}
                 className={cn(
-                  "relative isolate flex h-[34px] w-full cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 text-left text-[13px] font-medium outline-none",
+                  "relative isolate flex h-[34px] w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] font-medium outline-none",
                   "transition-[color,background-color,transform,scale] duration-150 ease-out active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-gold-300",
                   on ? "text-bone-50" : "text-ash-300 hover:bg-white/5 hover:text-bone-50",
                 )}
@@ -235,10 +253,25 @@ function Nav({
                     transition={{ type: "spring", stiffness: 480, damping: 40 }}
                   />
                 ) : null}
-                <span className="truncate">{t(`afkPlus.panel.sections.${value}`)}</span>
+                {/* The line icon takes the words' tone: never gold, the gold is an action's. */}
+                <Icon size={16} aria-hidden className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">
+                  {t(`afkPlus.panel.sections.${value}`)}
+                </span>
                 {count > 0 ? (
-                  <span className="text-[12.5px] font-semibold text-bone-100 tabular-nums">
+                  <span
+                    className={cn(
+                      "text-[12.5px] font-semibold tabular-nums",
+                      // Bone while an approval runs out, quieter for messages alone (the site's).
+                      value === "feed" && approvals === 0 ? "text-ash-300" : "text-bone-100",
+                    )}
+                  >
                     {count}
+                    {value === "feed" ? (
+                      <span className="sr-only">
+                        , {t("afkPlus.panel.waiting", { count: approvals + waiting })}
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
                 {/* Unsaved settings wait: the tabs' small gold dot (design.md G6-P). */}
@@ -426,7 +459,7 @@ export function PlusRail({
   section,
   onSection,
   approvals,
-  messages,
+  waiting,
   orders,
   quota,
   saverAt = null,
@@ -438,7 +471,8 @@ export function PlusRail({
   section: PlusSection;
   onSection: (section: PlusSection) => void;
   approvals: number;
-  messages: number;
+  /** Players whose message waits for the player's answer ("Seni bekleyenler"). */
+  waiting: number;
   /** Orders that wait for the player (an OK, a trade to make). */
   orders: number;
   /** Null while the machine cannot be asked: the state line says so once, the block is not shown. */
@@ -461,7 +495,7 @@ export function PlusRail({
           section={section}
           onSection={onSection}
           approvals={approvals}
-          messages={messages}
+          waiting={waiting}
           orders={orders}
           settingsDirty={settingsDirty}
         />

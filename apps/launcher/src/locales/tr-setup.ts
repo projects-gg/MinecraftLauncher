@@ -119,6 +119,8 @@ export const trSetup = {
       writes: ", aradığın eşya satılığa çıkınca satıcıya bir kez yazar.",
       scans: ", satış ilanlarını tarar.",
       noScan: ".",
+      // After the chat's sentence while "Sipariş menüsünü kontrol etsin" is on (DONUT-ORDER).
+      menu: " Sipariş menüsünü de kontrol eder.",
       tone: "{{preset}}, oyuncu gibi",
       whoAll: "Herkesin her özel mesajına cevap verir",
       whoAllFriends: "Arkadaşlarının her özel mesajına cevap verir",

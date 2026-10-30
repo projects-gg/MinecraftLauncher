@@ -1490,9 +1490,10 @@ function OrderRow({
               >
                 {name}
               </span>
+              {/* The terms wrap rather than lose their end (the time left; the site's, TASTE-SWEEP r1). */}
               <span
                 className={cn(
-                  "block truncate text-[12px] tabular-nums",
+                  "block text-[12px] text-pretty tabular-nums",
                   resting ? "text-ash-400" : "text-ash-300",
                 )}
               >
@@ -1708,19 +1709,25 @@ export function OrdersSection({ account, panel }: { account: CloudAccount; panel
         onPick={(field, then) => setPicking({ field, then })}
       />
 
-      <motion.section layout={layout ? "position" : false} aria-labelledby="afk-plus-active">
-        <GroupTitle
-          id="afk-plus-active"
-          aside={
-            away && settings.asOf ? (
-              <span className="text-[12px] text-ash-400">
-                {t("afkPlus.orders.asOf", { time: clockOf(settings.asOf, lang) })}
-              </span>
-            ) : null
-          }
-        >
-          {t("afkPlus.orders.active")}
-        </GroupTitle>
+      <motion.section
+        layout={layout ? "position" : false}
+        aria-labelledby={active.length ? "afk-plus-active" : undefined}
+      >
+        {/* The title only over orders: no "Etkin" over an empty list (the site's, TASTE-SWEEP r1). */}
+        {active.length ? (
+          <GroupTitle
+            id="afk-plus-active"
+            aside={
+              away && settings.asOf ? (
+                <span className="text-[12px] text-ash-400">
+                  {t("afkPlus.orders.asOf", { time: clockOf(settings.asOf, lang) })}
+                </span>
+              ) : null
+            }
+          >
+            {t("afkPlus.orders.active")}
+          </GroupTitle>
+        ) : null}
         {active.length ? (
           <ul className="-mx-1.5 flex flex-col">
             <AnimatePresence initial={false}>
@@ -1749,8 +1756,11 @@ export function OrdersSection({ account, panel }: { account: CloudAccount; panel
             </AnimatePresence>
           </ul>
         ) : (
-          // Neutral, one line, no sprite (afkplus-free.md §7.1).
-          <p className="py-1.5 text-[13px] text-ash-300">{t("afkPlus.orders.empty")}</p>
+          // Neutral, one line, no sprite (afkplus-free.md §7.1); with finished orders under it, the
+          // line says there is no active one.
+          <p className="py-1.5 text-[13px] text-ash-300">
+            {t(finished.length ? "afkPlus.orders.noneActive" : "afkPlus.orders.empty")}
+          </p>
         )}
       </motion.section>
 

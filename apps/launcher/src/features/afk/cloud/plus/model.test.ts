@@ -29,12 +29,14 @@ import {
   readTime,
   type SettingsDraft,
   type SettingsPart,
+  sameSettings,
   settingsPart,
   spendingField,
   startState,
   tradeNoteKey,
   windowProblems,
   withCurrency,
+  withOrderMenu,
   withSettings,
 } from "./model";
 import type { PlusAi, PlusConfig, PlusOrder, PlusQuota } from "./types";
@@ -77,6 +79,7 @@ function config(parts: Partial<PlusConfig> = {}): PlusConfig {
       ads: false,
       adTemplate: "buy-basic",
       adEveryMin: null,
+      orderMenu: null,
     },
     trade: { returnRow: null, currency: null },
     summaryAt: "21:00",
@@ -295,6 +298,32 @@ describe("the Ayarlar draft", () => {
     const lang = editDraft(read, null, (shown) => ({ ...shown, lang: "en" }));
     expect(sent(read, lang).adEveryMin).toBe(120);
   });
+
+  it("writes the order menu only as the player switched it (DONUT-ORDER)", () => {
+    // Off is not in the document: the service stores it only while on.
+    const absent: PlusConfig["discovery"] = JSON.parse(
+      '{"scanChat": true, "proactivePm": true, "ads": false, "adTemplate": "buy-basic"}',
+    );
+    const on = withOrderMenu(absent, true, absent);
+    expect(on.orderMenu).toBe(true);
+    // Switched on and off again over a document without it: nothing to save.
+    const back = withOrderMenu(on, false, absent);
+    expect("orderMenu" in back).toBe(false);
+    expect(
+      sameSettings(
+        settingsPart(config({ discovery: absent })),
+        settingsPart(config({ discovery: back })),
+      ),
+    ).toBe(true);
+    // A preview's null comes back as null.
+    const none = { ...absent, orderMenu: null };
+    expect(withOrderMenu(withOrderMenu(none, true, none), false, none)).toEqual(none);
+    // Over a stored one, off goes as false for the service to leave it out.
+    const stored = { ...absent, orderMenu: true };
+    expect(withOrderMenu(stored, false, stored).orderMenu).toBe(false);
+    // The key goes last, where the read document has it.
+    expect(Object.keys(on).at(-1)).toBe("orderMenu");
+  });
 });
 
 describe("the money's name (Para birimi)", () => {
@@ -322,7 +351,13 @@ describe("the money's name (Para birimi)", () => {
         currency: "smp",
       },
     });
-    const features = { orders: true, audit: true, customItems: true, itemPay: false };
+    const features = {
+      orders: true,
+      audit: true,
+      customItems: true,
+      itemPay: false,
+      orderMenu: false,
+    };
     const on = { features: { ...features, currency: true } };
     const off = { features: { ...features, currency: false } };
     expect(currencyFieldState(money(null, false), off, "tr")).toEqual({ kind: "hidden" });
@@ -473,6 +508,7 @@ describe("AFK+ settings history", () => {
         field: "limit",
         from: 40_000,
         to: 45_000,
+        pay: "money",
       },
       { kind: "order_added", side: "sell", item: "minecraft:diamond" },
       { kind: "authority", from: "ask", to: "deal" },

@@ -617,6 +617,8 @@ export function mockConfig(): PlusConfig {
       adTemplate: "buy-basic",
       // Not picked yet (the service's hour); `floor`: an hour, the least the server takes.
       adEveryMin: adsScenario === "floor" ? 60 : null,
+      // "Sipariş menüsünü kontrol etsin" off: the service leaves it out of the document.
+      orderMenu: null,
     },
     // No name of the player's yet: amounts on SMP are bare until "Para birimi" names the money.
     trade: { returnRow: null, currency: null },
@@ -662,6 +664,8 @@ export function mockSettings(config: PlusConfig, aiRev: number): PlusSettings {
         customItems: true,
         itemPay: true,
         currency: true,
+        // Studio's "Sipariş menüsü" on in the preview, so its switch shows (off by default).
+        orderMenu: true,
       },
     },
     orders: mockOrderViews(),
@@ -874,7 +878,7 @@ export function mockAudit(): PlusAuditEntry[] {
     auditEntry(at(2 * 24 * 60 + 30), "resumed"),
     // Yesterday.
     auditEntry(at(26 * 60), "pm_in", { w: "Pixel_TR", x: "totem var 8500", o: "o2" }),
-    auditEntry(at(26 * 60 - 1), "reply", { w: "Pixel_TR", x: "[AFK+] 8.000 olur mu?", o: "o2" }),
+    auditEntry(at(26 * 60 - 1), "reply", { w: "Pixel_TR", x: "8.000 olur mu?", o: "o2" }),
     auditEntry(at(26 * 60 - 5), "agree", {
       w: "Pixel_TR",
       o: "o2",
@@ -911,7 +915,7 @@ export function mockAudit(): PlusAuditEntry[] {
       u: "money",
     }),
     auditEntry(at(9), "pm_in", { w: "Neon_Drift", x: "elytra var 45k", o: "o1" }),
-    auditEntry(at(8), "reply", { w: "Neon_Drift", x: "[AFK+] Merhaba, 34.000 olur mu?", o: "o1" }),
+    auditEntry(at(8), "reply", { w: "Neon_Drift", x: "Merhaba, 34.000 olur mu?", o: "o1" }),
     auditEntry(at(6), "counter", {
       w: "Neon_Drift",
       o: "o1",
@@ -966,7 +970,7 @@ export function mockThreads(): PlusInboxThread[] {
     {
       name: "Buzul_12",
       lastAt: now - 3 * HOUR,
-      last: { from: "bot", text: "[AFK+] Elytra hâlâ satılık mı? 33.000 düşünüyorum." },
+      last: { from: "bot", text: "Elytra hâlâ satılık mı? 33.000 düşünüyorum." },
       unread: 0,
       state: "active",
       handoffUntil: null,
@@ -988,16 +992,16 @@ export function mockLines(name: string): PlusInboxLine[] {
   if (name === "Neon_Drift") {
     return [
       { at: at(8), from: "them", text: "elytra var 45k", hidden: null },
-      { at: at(7), from: "bot", text: "[AFK+] Merhaba, 34.000 olur mu?", hidden: null },
+      { at: at(7), from: "bot", text: "Merhaba, 34.000 olur mu?", hidden: null },
       { at: at(5), from: "them", text: "40 olmaz mı", hidden: null },
-      { at: at(4), from: "bot", text: "[AFK+] 37.500 olur mu?", hidden: null },
+      { at: at(4), from: "bot", text: "37.500 olur mu?", hidden: null },
       { at: at(3), from: "them", text: "tamam anlaştık", hidden: null },
     ];
   }
   if (name === "MorKedi") {
     return [
       { at: at(55), from: "them", text: "elmas lazım 64 tane", hidden: null },
-      { at: at(54), from: "bot", text: "[AFK+] Var, tanesi 120. Olur mu?", hidden: null },
+      { at: at(54), from: "bot", text: "Var, tanesi 120. Olur mu?", hidden: null },
       { at: at(50), from: "them", text: "115 olur mu", hidden: null },
       { at: at(40), from: "you", text: "Akşam spawn'da olurum, orada konuşalım.", hidden: null },
     ];
@@ -1009,7 +1013,7 @@ export function mockLines(name: string): PlusInboxLine[] {
       {
         at: at(41),
         from: "bot",
-        text: "[AFK+] Takası yalnız /takas penceresinden yaparım.",
+        text: "Takası yalnız /takas penceresinden yaparım.",
         hidden: null,
       },
     ];
@@ -1018,7 +1022,7 @@ export function mockLines(name: string): PlusInboxLine[] {
     {
       at: at(190),
       from: "bot",
-      text: "[AFK+] Elytra hâlâ satılık mı? 33.000 düşünüyorum.",
+      text: "Elytra hâlâ satılık mı? 33.000 düşünüyorum.",
       hidden: null,
     },
   ];
