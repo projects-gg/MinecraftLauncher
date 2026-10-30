@@ -464,7 +464,24 @@ export const tauriApi: LauncherApi = {
       time: l.time,
       text: l.text,
       kind: l.kind === "script" ? ("script" as const) : ("chat" as const),
+      who: l.who,
+      st: l.st ?? undefined,
+      ev: l.ev ?? undefined,
     }));
+  },
+  async afkDialog(id) {
+    return commands.afkDialog(id);
+  },
+  async afkDialogPress(id, press) {
+    return ok(commands.afkDialogPress(id, JSON.stringify(press)));
+  },
+  onAfkDialog(listener) {
+    const unlisten = listen<AfkEvent>("afk-event", (event) => {
+      if (event.payload.kind.type === "dialog") listener(event.payload.accountId);
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
   },
   // The backend always sends complete pages (see afk-settings.ts for why the casts are safe).
   async afkSettings(id) {
