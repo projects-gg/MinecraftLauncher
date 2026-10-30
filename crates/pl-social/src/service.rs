@@ -162,6 +162,8 @@ struct Core {
     state: SocialState,
     activity: LocalStatus,
     game: Option<GameActivity>,
+    /// SOC9: the Minecraft version the game plays (checked), sent with the status while playing.
+    game_version: Option<String>,
     settings_version: Option<u64>,
     fetched_at: Option<Instant>,
     fetching: bool,
@@ -507,6 +509,7 @@ impl SocialService {
                 .split()
         };
         control.set_status(core.activity.clone());
+        control.set_game_version(core.game_version.clone());
         // Replacing the control closes the previous connection cleanly.
         core.presence = Some(control);
         core.chat_status = None;
@@ -3424,10 +3427,25 @@ impl SocialService {
         self.emit_view();
     }
 
+    /// SOC9: the Minecraft version the leading game plays (its instance's version), which friends
+    /// see next to where it is; None when it is not known. Kept for the next presence connection.
+    pub fn set_game_version(&self, version: Option<&str>) {
+        let mut core = self.lock();
+        core.game_version = version.and_then(crate::presence::game_version);
+        let version = core.game_version.clone();
+        if let Some(presence) = &core.presence {
+            presence.set_game_version(version);
+        }
+    }
+
     /// The game closed: back to "in the launcher".
     pub fn game_stopped(&self) {
         {
             let mut core = self.lock();
+            core.game_version = None;
+            if let Some(presence) = &core.presence {
+                presence.set_game_version(None);
+            }
             if core.game.take().is_none() && core.activity == LocalStatus::Launcher {
                 return;
             }

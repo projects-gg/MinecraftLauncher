@@ -487,11 +487,41 @@ impl Command {
     }
 }
 
+/// What this launcher tells the service it is doing: the status and (SOC9) the Minecraft version
+/// the game plays, which goes along only while playing.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct Outgoing {
+    status: LocalStatus,
+    version: Option<String>,
+}
+
+impl Outgoing {
+    /// As the service gets it: no version outside a game.
+    fn on_wire(&self) -> Self {
+        let playing = !matches!(self.status, LocalStatus::Launcher);
+        Self {
+            status: self.status.clone(),
+            version: self.version.clone().filter(|_| playing),
+        }
+    }
+}
+
+/// A version the service shows (`1.21.4`, `26.2`, `25w14a`): 1–24 of `0-9 A-Z a-z . _ + -`;
+/// anything else is not sent (the service would leave it out anyway).
+pub fn game_version(version: &str) -> Option<String> {
+    let fits = !version.is_empty()
+        && version.len() <= 24
+        && version
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'+' | b'-'));
+    fits.then(|| version.to_owned())
+}
+
 /// Controls the background presence task: status, invites and crew calls. Cheap to clone; once
 /// every control is gone the task closes the connection cleanly and stops.
 #[derive(Clone)]
 pub struct PresenceControl {
-    status: Arc<watch::Sender<LocalStatus>>,
+    status: Arc<watch::Sender<Outgoing>>,
     commands: mpsc::Sender<Command>,
     invite_timeout: Duration,
 }
@@ -506,17 +536,31 @@ impl PresenceControl {
     /// Sets what this launcher is doing. Only a real change is sent; returns whether it changed.
     pub fn set_status(&self, status: LocalStatus) -> bool {
         self.status.send_if_modified(|current| {
-            if *current == status {
+            if current.status == status {
                 false
             } else {
-                *current = status;
+                current.status = status;
+                true
+            }
+        })
+    }
+
+    /// SOC9: the Minecraft version the game plays (a vanilla id, checked by [`game_version`]),
+    /// sent with the status while playing; None when no game runs or it is not known.
+    pub fn set_game_version(&self, version: Option<String>) -> bool {
+        let version = version.as_deref().and_then(game_version);
+        self.status.send_if_modified(|current| {
+            if current.version == version {
+                false
+            } else {
+                current.version = version;
                 true
             }
         })
     }
 
     pub fn status(&self) -> LocalStatus {
-        self.status.borrow().clone()
+        self.status.borrow().status.clone()
     }
 
     /// Sends a "Birlikte oyna" invite to a friend (limits: one per friend per 5 minutes, 30 a
@@ -868,7 +912,7 @@ impl PresenceHandle {
         options: PresenceOptions,
         chat: Option<ChatSetup>,
     ) -> Self {
-        let (status, status_rx) = watch::channel(LocalStatus::Launcher);
+        let (status, status_rx) = watch::channel(Outgoing::default());
         let (commands, commands_rx) = mpsc::channel(32);
         let (events_tx, events) = mpsc::unbounded_channel();
         let endpoint = Endpoint {
@@ -895,6 +939,12 @@ impl PresenceHandle {
     /// Sets what this launcher is doing. Only a real change is sent; returns whether it changed.
     pub fn set_status(&self, status: LocalStatus) -> bool {
         self.control.set_status(status)
+    }
+
+    /// SOC9: the Minecraft version the game plays, sent while playing (see
+    /// [`PresenceControl::set_game_version`]).
+    pub fn set_game_version(&self, version: Option<String>) -> bool {
+        self.control.set_game_version(version)
     }
 
     pub fn status(&self) -> LocalStatus {
@@ -1059,7 +1109,7 @@ fn close_outcome(frame: Option<&CloseFrame>, restricted: Option<Option<i64>>) ->
 
 async fn run(
     endpoint: Endpoint,
-    mut status: watch::Receiver<LocalStatus>,
+    mut status: watch::Receiver<Outgoing>,
     mut commands: mpsc::Receiver<Command>,
     events: mpsc::UnboundedSender<PresenceEvent>,
     options: PresenceOptions,
@@ -1146,7 +1196,7 @@ type Pending = HashMap<u32, Reply>;
 /// One connection, from the handshake to its end.
 async fn session(
     socket: Socket,
-    status: &mut watch::Receiver<LocalStatus>,
+    status: &mut watch::Receiver<Outgoing>,
     commands: &mut mpsc::Receiver<Command>,
     events: &mpsc::UnboundedSender<PresenceEvent>,
     options: &PresenceOptions,
@@ -1429,7 +1479,7 @@ fn spread(keepalive: Duration) -> Duration {
 struct SessionState {
     greeted: bool,
     /// The status the service has for this connection (None before `hello`).
-    sent: Option<LocalStatus>,
+    sent: Option<Outgoing>,
     next_rid: u32,
     keepalive: Duration,
     /// Chat was asked for: where its sync starts.
@@ -1475,13 +1525,17 @@ async fn send(
 async fn send_status(
     state: &mut SessionState,
     sink: &mut Sink,
-    status: &mut watch::Receiver<LocalStatus>,
+    status: &mut watch::Receiver<Outgoing>,
 ) -> std::result::Result<(), tungstenite::Error> {
-    let desired = status.borrow_and_update().clone();
+    let desired = status.borrow_and_update().on_wire();
     if state.sent.as_ref() == Some(&desired) {
         return Ok(());
     }
-    send(sink, &ClientMessage::status(&desired)).await?;
+    send(
+        sink,
+        &ClientMessage::status(&desired.status, desired.version.as_deref()),
+    )
+    .await?;
     state.sent = Some(desired);
     Ok(())
 }
@@ -1521,7 +1575,7 @@ async fn on_text(
     text: &str,
     state: &mut SessionState,
     sink: &mut Sink,
-    status: &mut watch::Receiver<LocalStatus>,
+    status: &mut watch::Receiver<Outgoing>,
     events: &mpsc::UnboundedSender<PresenceEvent>,
     pending: &mut Pending,
 ) -> std::result::Result<(), Outcome> {
@@ -1549,8 +1603,8 @@ async fn on_text(
         } => {
             tracing::debug!(?caps, "presence connected");
             state.greeted = true;
-            // Every connection starts as "launcher" on the service.
-            state.sent = Some(LocalStatus::Launcher);
+            // Every connection starts as "launcher" on the service (no version: SOC9).
+            state.sent = Some(Outgoing::default());
             if let Some(seconds) = keepalive_seconds.filter(|s| (15..=300).contains(s)) {
                 state.keepalive = state.keepalive.min(Duration::from_secs(seconds));
             }

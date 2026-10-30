@@ -83,8 +83,13 @@ async function ok<T>(promise: Promise<Res<T>>): Promise<T> {
 
 const opt = <T>(value: T | null | undefined): T | undefined => value ?? undefined;
 
-function game(value: { where: SocialGame["where"]; host?: string | null } | null | undefined) {
-  return value ? { where: value.where, host: opt(value.host) } : undefined;
+function game(
+  value:
+    | { where: SocialGame["where"]; host?: string | null; ver?: string | null }
+    | null
+    | undefined,
+) {
+  return value ? { where: value.where, host: opt(value.host), ver: opt(value.ver) } : undefined;
 }
 
 function profile(v: ProfileView): SocialProfile {

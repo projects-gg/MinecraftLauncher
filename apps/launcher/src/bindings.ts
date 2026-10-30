@@ -4628,11 +4628,21 @@ export type GameLogView = {
 export type Game_Deserialize = {
 	where: GameLocation,
 	host?: string | null,
+	/**
+	 *  SOC9: the Minecraft version the friend plays (`1.21.4`), when their client says; shown
+	 *  also while they hide the server.
+	 */
+	ver?: string | null,
 };
 
 export type Game_Serialize = {
 	where: GameLocation,
 	host?: string | null,
+	/**
+	 *  SOC9: the Minecraft version the friend plays (`1.21.4`), when their client says; shown
+	 *  also while they hide the server.
+	 */
+	ver?: string | null,
 };
 
 /**  A graphics preset the launcher can write into `options.txt`. */

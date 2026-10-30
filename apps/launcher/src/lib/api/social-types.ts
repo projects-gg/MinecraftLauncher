@@ -25,6 +25,8 @@ export interface SocialGame {
   where: GameWhere;
   /** Another server's address, only when the friend shares it. */
   host?: string;
+  /** SOC9: the Minecraft version they play (`1.21.4`), when their client says. */
+  ver?: string | null;
 }
 
 /**

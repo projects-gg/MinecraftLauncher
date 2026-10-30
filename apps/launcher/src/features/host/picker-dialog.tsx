@@ -12,8 +12,9 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check } from "@/features/settings/cleanup/check";
-import { isJoinable, presenceLine } from "@/features/social/model";
+import { isJoinable } from "@/features/social/model";
 import { crossfade, swap, useSocialMotion } from "@/features/social/motion";
+import { PresenceText } from "@/features/social/presence-text";
 import { SocialAvatar } from "@/features/social/social-face";
 import { useSocialUi } from "@/features/social/store";
 import { CrewMark } from "@/features/social/team-emblem";
@@ -95,7 +96,11 @@ function PersonRow({
                 : "text-ash-400",
             )}
           >
-            {presenceLine(friend, t)}
+            <PresenceText
+              friend={friend}
+              t={t}
+              joinable={friend.state === "playing" && isJoinable(friend.game)}
+            />
           </span>
         </span>
         {fixed ? <GuestStateText state={fixed} /> : null}

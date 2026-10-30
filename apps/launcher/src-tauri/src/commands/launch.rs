@@ -1326,6 +1326,7 @@ async fn prepare_and_spawn(
         &state.social,
         game_id,
         options.quick_play.as_ref(),
+        Some(instance.mc_version.as_str()),
     );
     // A friend's world that turned the game away for missing mods says so in the log (HOST1).
     let log_worlds = state.worlds.clone();

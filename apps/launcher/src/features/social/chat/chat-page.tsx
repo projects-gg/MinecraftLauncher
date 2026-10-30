@@ -14,10 +14,10 @@ import { currentLanguage } from "@/lib/i18n";
 import { BadgeChip, useShownBadge } from "../crew-badge";
 import { untilText } from "../crew-notify";
 import { openInDiscord } from "../discord-link";
-import { presenceLine } from "../model";
 import { MUTE_PRESETS, muteUntilFor } from "../mute";
 import { PersonMark } from "../person-mark";
 import { PersonContextMenu } from "../person-menu";
+import { PresenceText } from "../presence-text";
 import { SocialAvatar } from "../social-face";
 import { useSocialPrefs, useSocialUi } from "../store";
 import type { ComposerState } from "./composer";
@@ -238,7 +238,9 @@ export function ChatHeader() {
               </RadixDialog.Title>
             </div>
             {peer ? (
-              <p className="truncate text-[12px] text-ash-300">{presenceLine(peer, t)}</p>
+              <p className="truncate text-[12px] text-ash-300">
+                <PresenceText friend={peer} t={t} />
+              </p>
             ) : null}
           </div>
         </div>

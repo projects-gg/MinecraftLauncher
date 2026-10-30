@@ -1088,6 +1088,7 @@ impl SocialState {
             (open.call.kind == CallKind::Join).then_some(Game {
                 location: GameLocation::Projects,
                 host: None,
+                ver: None,
             })
         });
         CrewCallView {
@@ -1700,6 +1701,7 @@ impl SocialState {
                         .map(|game| Game {
                             location: game.location,
                             host: None,
+                            ver: game.ver,
                         }),
                     discord_url: member.profile.discord_profile_url(),
                     joined_at: member.joined_at,
@@ -2188,6 +2190,7 @@ mod tests {
             game: game.map(|location| Game {
                 location,
                 host: (location == GameLocation::Projects).then(|| "play.projects.gg".into()),
+                ver: None,
             }),
             avatar: None,
             avatar_hash: None,
@@ -2203,6 +2206,7 @@ mod tests {
             server: Some(Game {
                 location: GameLocation::Projects,
                 host: Some("play.projects.gg".into()),
+                ver: None,
             }),
             quiet,
         }
@@ -2325,7 +2329,8 @@ mod tests {
             friend.game,
             Some(Game {
                 location: GameLocation::Other,
-                host: None
+                host: None,
+                ver: None,
             })
         );
         assert!(!friend.game.unwrap().joinable());
@@ -3425,6 +3430,7 @@ mod tests {
         bora.server = Some(Game {
             location: GameLocation::Other,
             host: Some("mc.example.com".into()),
+            ver: None,
         });
         // Only PvP, which is muted: shown, not announced.
         let quiet = state.apply(
@@ -3443,7 +3449,8 @@ mod tests {
             view.server,
             Some(Game {
                 location: GameLocation::Other,
-                host: Some("mc.example.com".into())
+                host: Some("mc.example.com".into()),
+                ver: None,
             })
         );
         // Zeki calls both crews: PvP is muted, Gece Kartalları is not.
@@ -3452,6 +3459,7 @@ mod tests {
         zeki.server = Some(Game {
             location: GameLocation::Projects,
             host: Some("play.projects.gg".into()),
+            ver: None,
         });
         zeki.answers.insert("1".into(), CallAnswer::Yes);
         zeki.answers.insert("2".into(), CallAnswer::Soon);
@@ -3520,6 +3528,7 @@ mod tests {
         call.server = Some(Game {
             location: GameLocation::Projects,
             host: Some("play.projects.gg".into()),
+            ver: None,
         });
         state.apply(
             &PresenceEvent::Call {
@@ -3534,6 +3543,7 @@ mod tests {
         call.server = Some(Game {
             location: GameLocation::Other,
             host: Some("mc.example.com".into()),
+            ver: None,
         });
         call.answers.insert(ME.into(), CallAnswer::Soon);
         let moved = state.apply(
