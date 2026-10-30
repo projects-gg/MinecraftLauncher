@@ -4,7 +4,7 @@
 import { TooltipProvider } from "@pl/ui";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Dialog } from "radix-ui";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/lib/i18n";
 import {
   AfkSidePanel,
@@ -32,16 +32,15 @@ function Panel({ onClose = () => {} }: { onClose?: () => void }) {
 }
 
 // happy-dom rejects an animation's `finished` when it is cancelled (motion's own, at unmount)
-// and nobody listens there: the rejection is handled here, the cancel stays as it is.
+// and nobody listens there: the rejection is handled here, the cancel stays as it is. Kept for the
+// whole file: motion stops its animations in a frame after the last test (the file's environment
+// is its own).
 const cancel = Animation.prototype.cancel;
 beforeAll(() => {
   Animation.prototype.cancel = function (this: Animation) {
     this.finished.catch(() => undefined);
     cancel.call(this);
   };
-});
-afterAll(() => {
-  Animation.prototype.cancel = cancel;
 });
 
 beforeEach(() => {
