@@ -47,7 +47,9 @@ use crate::model::{
     TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup, TeamNotifications,
     TeamNotificationsEdit, TeamRole,
 };
-use crate::presence::{ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, StopReason};
+use crate::presence::{
+    ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, RelVersion, StopReason,
+};
 use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer, is_projects_host};
 use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
@@ -166,6 +168,12 @@ struct Core {
     game_version: Option<String>,
     settings_version: Option<u64>,
     fetched_at: Option<Instant>,
+    /// SCALE-SOC: the relations version of the profile and lists this launcher holds, shared with
+    /// the presence task (every connect names it); None when it holds none it trusts.
+    rel: RelVersion,
+    /// Bumped by every event that changes the lists or the profile here: a read that started
+    /// before one may not set the version (its answer may miss the change).
+    rel_epoch: u64,
     fetching: bool,
     last_manual: Option<Instant>,
     /// "Verilerimi sil" is running here: the socket closing because the account is gone is this
@@ -240,6 +248,20 @@ struct PendingProfile {
 }
 
 impl Core {
+    /// SCALE-SOC: the profile or the lists changed here (an event, or the player's own change):
+    /// the copy is no longer the one its relations version describes, so the next connect names
+    /// none and a read already on its way may not set one.
+    fn forget_rel(&mut self) {
+        self.rel_epoch += 1;
+        self.rel.set(None);
+    }
+
+    /// SCALE-SOC: keeps the relations version a read brought, unless the copy changed since the
+    /// read started (`epoch`).
+    fn keep_rel(&mut self, rel: Option<String>, epoch: u64) {
+        self.rel.set(rel.filter(|_| self.rel_epoch == epoch));
+    }
+
     /// The player's profile as shown: the service's, with their own changes on the way applied
     /// (SOC-LAG). The view and everything that follows the player's switches (sending
     /// "yazıyor…", showing "Görüldü", where a call may start) read this one.
@@ -505,7 +527,12 @@ impl SocialService {
             let _runtime = self.inner.runtime.enter();
             let chat = core.chat_enabled.then(|| core.chat_setup.clone());
             session
-                .connect_presence_with(self.inner.config.presence, chat, core.worlds_enabled)
+                .connect_presence_with(
+                    self.inner.config.presence,
+                    chat,
+                    core.worlds_enabled,
+                    Some(core.rel.clone()),
+                )
                 .split()
         };
         control.set_status(core.activity.clone());
@@ -581,6 +608,9 @@ impl SocialService {
                 return;
             }
             let mut notices = core.state.apply(&event, unix_now());
+            if changes_relations(&event) {
+                core.forget_rel();
+            }
             observe_together(&mut core);
             let teams = core.teams && core.state.teams_supported();
             let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
@@ -599,12 +629,16 @@ impl SocialService {
                 _ => true,
             });
             match &event {
-                PresenceEvent::Connected { .. } => {
+                PresenceEvent::Connected { rel, .. } => {
+                    // SCALE-SOC: the service names the relations version as it is now; the one
+                    // this copy has means nothing the profile or the lists show changed meanwhile.
+                    let same = rel.is_some() && *rel == core.rel.get();
                     refetch = core.state.me().is_none()
                         || !core.state.loaded()
-                        || core
-                            .fetched_at
-                            .is_none_or(|at| at.elapsed() >= REFETCH_AFTER);
+                        || (!same
+                            && core
+                                .fetched_at
+                                .is_none_or(|at| at.elapsed() >= REFETCH_AFTER));
                 }
                 PresenceEvent::Stopped(StopReason::SignedOut | StopReason::AccountDeleted) => {
                     ended = true;
@@ -671,15 +705,23 @@ impl SocialService {
         let Some(session) = self.current_session(generation) else {
             return;
         };
+        let epoch = self.lock().rel_epoch;
         match session.friends().await {
-            Ok(overview) => {
+            Ok(mut overview) => {
                 {
                     let mut core = self.lock();
                     if core.generation != generation {
                         return;
                     }
+                    // SCALE-SOC: the profile read with the lists (a service with `rel=1`).
+                    if let Some(me) = overview.me.take() {
+                        core.settings_version = me.settings.as_ref().map(|s| s.version);
+                        core.state.set_me(me);
+                    }
+                    let rel = overview.rel.take();
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
+                    core.keep_rel(rel, epoch);
                     observe_together(&mut core);
                 }
                 self.emit_view();
@@ -692,7 +734,7 @@ impl SocialService {
 
     /// The profile and the friend list again (after a reconnect, or "Tekrar dene").
     async fn refetch(&self, generation: u64) {
-        let session = {
+        let (session, epoch) = {
             let mut core = self.lock();
             if core.generation != generation || core.fetching {
                 return;
@@ -701,12 +743,20 @@ impl SocialService {
                 return;
             };
             core.fetching = true;
-            session
+            (session, core.rel_epoch)
         };
-        let me = session.me().await;
-        let overview = match &me {
-            Ok(_) => Some(session.friends().await),
-            Err(_) => None,
+        // SCALE-SOC: the lists first, with the profile and the relations version (`rel=1`): one
+        // request. An older service brings no profile with them: then `GET /v1/me` as before;
+        // and when the lists fail, the profile still says whether the session holds.
+        let (me, overview) = match session.friends().await {
+            Ok(mut list) => match list.me.take() {
+                Some(me) => (Ok(me), Some(Ok(list))),
+                None => (session.me().await, Some(Ok(list))),
+            },
+            Err(error) => match session.me().await {
+                Ok(me) => (Ok(me), Some(Err(error))),
+                Err(me_error) => (Err(me_error), None),
+            },
         };
         let mut ended = false;
         let mut restricted = None;
@@ -734,9 +784,11 @@ impl SocialService {
                 }
             }
             match overview {
-                Some(Ok(overview)) => {
+                Some(Ok(mut overview)) => {
+                    let rel = overview.rel.take();
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
+                    core.keep_rel(rel, epoch);
                     observe_together(&mut core);
                 }
                 Some(Err(SocialError::Unauthorized)) => ended = true,
@@ -1034,6 +1086,9 @@ impl SocialService {
         }
     }
 
+    /// The player's own change, applied here once the service took it. SCALE-SOC: the copy no
+    /// longer matches its relations version (a later change elsewhere could bring the service
+    /// back to the version while this copy shows the change).
     fn update(&self, generation: u64, change: impl FnOnce(&mut Core)) {
         {
             let mut core = self.lock();
@@ -1041,6 +1096,7 @@ impl SocialService {
                 return;
             }
             change(&mut core);
+            core.forget_rel();
         }
         self.emit_view();
     }
@@ -1223,6 +1279,7 @@ impl SocialService {
                 && *answered == core.generation
             {
                 core.state.set_me(me.clone());
+                core.forget_rel();
             }
         }
         drop(turn);
@@ -1251,6 +1308,7 @@ impl SocialService {
             if core.groups_saved.is_none() {
                 core.groups_saved = core.state.groups().cloned();
             }
+            core.forget_rel();
             core.state.set_groups(FriendGroups {
                 version,
                 ..wanted.clone()
@@ -1505,6 +1563,7 @@ impl SocialService {
                 return Ok(());
             }
             core.state.set_crew_order(&order);
+            core.forget_rel();
             (before, core.generation)
         };
         self.emit_view();
@@ -1974,6 +2033,7 @@ impl SocialService {
             let before = core.state.team_notifications().unwrap_or_default();
             let shown = notifications_after(before, &edit);
             core.state.set_team_notifications(shown);
+            core.forget_rel();
             (before, shown, core.generation)
         };
         self.emit_view();
@@ -2025,6 +2085,7 @@ impl SocialService {
             let mut core = self.lock();
             let before = core.state.crew(&id).map(|entry| entry.notifications);
             core.state.set_crew_mute(&id, shown);
+            core.forget_rel();
             (before, core.generation)
         };
         self.emit_view();
@@ -3459,6 +3520,31 @@ impl SocialService {
     }
 }
 
+/// SCALE-SOC: whether `event` changes what the profile or the lists show (so the copy no longer
+/// matches its relations version). Presence, calls, plans, chat, invites to play, the game's and
+/// Cloud AFK's news do not: they are not in the version.
+fn changes_relations(event: &PresenceEvent) -> bool {
+    matches!(
+        event,
+        PresenceEvent::TeamRequests { .. }
+            | PresenceEvent::TeamChanged { .. }
+            | PresenceEvent::BadgeChanged { .. }
+            | PresenceEvent::MarkChanged { .. }
+            | PresenceEvent::TeamInvited(_)
+            | PresenceEvent::GroupsChanged(_)
+            | PresenceEvent::CrewNotifications(_)
+            | PresenceEvent::CrewMuted { .. }
+            | PresenceEvent::CrewOrder(_)
+            | PresenceEvent::FriendAdded { .. }
+            | PresenceEvent::FriendRemoved { .. }
+            | PresenceEvent::RequestReceived { .. }
+            | PresenceEvent::RequestCancelled { .. }
+            | PresenceEvent::StatusChanged(_)
+            | PresenceEvent::ProfileChanged { .. }
+            | PresenceEvent::Notice(_)
+    )
+}
+
 /// Who is on Projects together with the player now ("Birlikte oynanan süre"): the time since the
 /// last change is kept when it changes. Nobody while signed out or without crews on.
 fn observe_together(core: &mut Core) {
@@ -3558,6 +3644,7 @@ fn reset(core: &mut Core) {
     core.state = SocialState::default();
     core.settings_version = None;
     core.fetched_at = None;
+    core.forget_rel();
     core.fetching = false;
     core.deleting = false;
     core.qr = None;
@@ -4492,6 +4579,7 @@ mod tests {
             }],
             calls: vec![],
             clock: None,
+            rel: None,
             chat: None,
             plans: None,
         };
@@ -4531,6 +4619,123 @@ mod tests {
             .apply(&hello(&bora), unix_now());
         assert_eq!(forgetful.service.view().invites.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SCALE-SOC: a reconnect whose hello names the relations version this copy has reads nothing
+    /// again; another version reads the lists once, the profile with them (one request), and keeps
+    /// the new version; a copy an event changed reads again whatever hello says; an older
+    /// service (no version) reads as before.
+    #[tokio::test]
+    async fn a_reconnect_with_the_same_relations_version_reads_nothing_again() {
+        let version = Arc::new(Mutex::new(Some("0123456789abcdef".to_owned())));
+        let server = MockServer::start({
+            let version = version.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                    "/v1/me" => MockReply::json(200, ME),
+                    "/v1/friends" => {
+                        let mut list: serde_json::Value = serde_json::from_str(FRIENDS).unwrap();
+                        if let Some(rel) = version.lock().unwrap().clone() {
+                            list["rel"] = rel.into();
+                            list["me"] = serde_json::from_str(ME).unwrap();
+                        }
+                        MockReply::json(200, &list.to_string())
+                    }
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.configure(url(&server));
+        harness
+            .until("loaded", |view| {
+                view.loaded && view.auth == AuthPhase::SignedIn
+            })
+            .await;
+        let held = || harness.service.lock().rel.get();
+        assert_eq!(held().as_deref(), Some("0123456789abcdef"));
+        assert!(
+            server
+                .requests()
+                .iter()
+                .any(|r| r.target == "/v1/friends?rel=1")
+        );
+        let reads = |path: &str| server.requests().iter().filter(|r| r.path == path).count();
+        let connected = |rel: Option<&str>| PresenceEvent::Connected {
+            status: crate::model::StatusMode::Online,
+            friends: vec![],
+            invites: vec![],
+            calls: vec![],
+            clock: None,
+            rel: rel.map(str::to_owned),
+            chat: None,
+            plans: None,
+        };
+        // A reconnect long after the last read (the minute's rule is not what holds it back).
+        let reconnect = |rel: Option<&str>| {
+            let (generation, epoch) = {
+                let mut core = harness.service.lock();
+                core.fetched_at = Some(Instant::now() - Duration::from_secs(600));
+                (core.generation, core.epoch)
+            };
+            harness
+                .service
+                .on_presence(generation, epoch, connected(rel));
+        };
+        let settle = || async {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while harness.service.lock().fetching && Instant::now() < deadline {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        };
+        let (lists, profiles) = (reads("/v1/friends"), reads("/v1/me"));
+
+        // The same version: nothing is read.
+        reconnect(Some("0123456789abcdef"));
+        settle().await;
+        assert_eq!((reads("/v1/friends"), reads("/v1/me")), (lists, profiles));
+
+        // Another version: the lists once, the profile with them; the new version is kept.
+        *version.lock().unwrap() = Some("fedcba9876543210".into());
+        reconnect(Some("fedcba9876543210"));
+        settle().await;
+        assert_eq!(
+            (reads("/v1/friends"), reads("/v1/me")),
+            (lists + 1, profiles)
+        );
+        assert_eq!(held().as_deref(), Some("fedcba9876543210"));
+
+        // An event changed the copy: the version is forgotten, the next reconnect reads again.
+        let (generation, epoch) = {
+            let core = harness.service.lock();
+            (core.generation, core.epoch)
+        };
+        harness.service.on_presence(
+            generation,
+            epoch,
+            PresenceEvent::FriendRemoved {
+                id: "223456789012345678".into(),
+            },
+        );
+        assert_eq!(held(), None);
+        reconnect(Some("fedcba9876543210"));
+        settle().await;
+        assert_eq!(reads("/v1/friends"), lists + 2);
+        assert_eq!(held().as_deref(), Some("fedcba9876543210"));
+
+        // An older service brings no version and no profile with the lists: both, as before.
+        *version.lock().unwrap() = None;
+        reconnect(None);
+        settle().await;
+        assert_eq!(
+            (reads("/v1/friends"), reads("/v1/me")),
+            (lists + 3, profiles + 1)
+        );
+        assert_eq!(held(), None);
     }
 
     #[tokio::test]

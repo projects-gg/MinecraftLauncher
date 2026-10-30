@@ -8,7 +8,10 @@ use tokio::net::{TcpListener, TcpStream};
 #[derive(Debug, Clone)]
 pub(crate) struct Recorded {
     pub method: String,
+    /// The path without the query, as handlers match routes.
     pub path: String,
+    /// The whole request target, query included (`/v1/friends?rel=1`).
+    pub target: String,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
 }
@@ -136,7 +139,8 @@ async fn serve(
         let request_line = lines.next().unwrap_or_default();
         let mut parts = request_line.split(' ');
         let method = parts.next().unwrap_or_default().to_owned();
-        let path = parts.next().unwrap_or_default().to_owned();
+        let target = parts.next().unwrap_or_default().to_owned();
+        let path = target.split('?').next().unwrap_or_default().to_owned();
         let headers: Vec<(String, String)> = lines
             .filter_map(|line| line.split_once(':'))
             .map(|(key, value)| (key.trim().to_owned(), value.trim().to_owned()))
@@ -157,6 +161,7 @@ async fn serve(
         let recorded = Recorded {
             method,
             path,
+            target,
             headers,
             body,
         };
