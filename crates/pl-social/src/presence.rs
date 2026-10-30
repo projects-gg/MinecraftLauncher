@@ -1603,8 +1603,8 @@ async fn on_text(
         } => {
             tracing::debug!(?caps, "presence connected");
             state.greeted = true;
-            // Every connection starts as "launcher" on the service.
-            state.sent = Some(LocalStatus::Launcher);
+            // Every connection starts as "launcher" on the service (no version: SOC9).
+            state.sent = Some(Outgoing::default());
             if let Some(seconds) = keepalive_seconds.filter(|s| (15..=300).contains(s)) {
                 state.keepalive = state.keepalive.min(Duration::from_secs(seconds));
             }
