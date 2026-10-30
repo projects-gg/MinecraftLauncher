@@ -6,6 +6,8 @@ vi.mock("@/lib/api", () => ({ api: {} }));
 
 const {
   carriesOverlay,
+  modRows,
+  newerThanAll,
   OVERLAY_LINES,
   officialMissing,
   overlayHasNoHome,
@@ -62,11 +64,13 @@ function line(
 }
 
 describe("the overlay switch's line", () => {
-  it("says how it opens while it is off, whatever else is true", () => {
-    expect(line(vanilla, { on: false })).toEqual({ kind: "opens" });
+  it("says why the install cannot carry it even while it is off, Kapansın only while on", () => {
+    expect(line(vanilla, { on: false })).toEqual({ kind: "notFabric", switchTo: projects });
     expect(
       line(vanilla, { on: false, leaves: true, instances: [vanilla], official: status() }),
-    ).toEqual({ kind: "opens" });
+    ).toEqual({ kind: "noHome" });
+    expect(line(projects, { on: false })).toEqual({ kind: "opens" });
+    expect(line(projects, { on: false, leaves: true })).toEqual({ kind: "opens" });
   });
 
   it("says how it opens while the install Play opens carries it", () => {
@@ -97,8 +101,27 @@ describe("the overlay switch's line", () => {
     );
     expect(line(instance("q", { loader: "quilt", mcVersion: "26.1.2" })).kind).toBe("notFabric");
     expect(line(oldFabric).kind).toBe("version");
-    expect(line(instance("next", { mcVersion: "26.4" })).kind).toBe("version");
     expect(line(instance("snap", { mcVersion: "26.2-pre1" })).kind).toBe("version");
+  });
+
+  it("says the jar for a newer release is not out yet (OVL-AUTO)", () => {
+    const next = instance("next", { mcVersion: "26.4" });
+    expect(line(next)).toEqual({ kind: "notYet", switchTo: projects });
+    expect(line(instance("later", { mcVersion: "27.1" })).kind).toBe("notYet");
+    // A version between two that have a jar is not "not yet": the version line names the range.
+    expect(
+      line(instance("gap", { mcVersion: "26.2" }), { versions: ["26.1.2", "26.3"] }).kind,
+    ).toBe("version");
+    // Snapshots of the next version, and other loaders on it, keep their own lines.
+    expect(line(instance("snap", { mcVersion: "26.4-snapshot-6" })).kind).toBe("version");
+    expect(line(instance("neo", { loader: "neoForge", mcVersion: "26.4" })).kind).toBe("notFabric");
+    // Once the signed content brings 26.4's jar, the install carries it.
+    expect(line(next, { versions: [...VERSIONS, "26.4"] })).toEqual({ kind: "opens" });
+    expect(
+      line(instance("patch", { mcVersion: "26.4.1" }), { versions: [...VERSIONS, "26.4"] }),
+    ).toEqual({ kind: "opens" });
+    // While its game runs, where it can switch after the game.
+    expect(line(next, { locked: true })).toEqual({ kind: "waits", switchTo: projects });
   });
 
   it("offers the official pack to switch to", () => {
@@ -114,13 +137,13 @@ describe("the overlay switch's line", () => {
   });
 
   it("offers nothing when no install carries it but the official pack is there", () => {
-    // The pack on a version the mod is not shipped for yet (OVL-AUTO's case).
+    // The pack on a version the mod has no tested jar for yet (OVL-AUTO's case).
     const ahead = instance("projects", { managed: true, mcVersion: "26.4" });
     const only = { instances: [ahead, vanilla], official: status({ instanceId: "projects" }) };
-    expect(line(ahead, only)).toEqual({ kind: "version", switchTo: undefined });
+    expect(line(ahead, only)).toEqual({ kind: "notYet", switchTo: undefined });
     // Nothing to switch to after the game either: the reason stays.
     expect(line(ahead, { ...only, locked: true })).toEqual({
-      kind: "version",
+      kind: "notYet",
       switchTo: undefined,
     });
   });
@@ -141,8 +164,115 @@ describe("the overlay switch's line", () => {
       "closes",
       "notFabric",
       "version",
+      "notYet",
       "waits",
     ]);
+  });
+});
+
+describe("the mod's two switches, by FASTPACK's rule (TASTE-SWEEP OVL-AUTO r2)", () => {
+  const next = instance("next", { mcVersion: "26.4" });
+  const rows = (play: InstanceSummary, extra: Partial<Parameters<typeof modRows>[0]> = {}) =>
+    modRows({
+      overlayOn: true,
+      emojiOn: true,
+      leaves: false,
+      instances: [projects, vanilla, forge, oldFabric],
+      official: status({ instanceId: "projects" }),
+      versions: VERSIONS,
+      play,
+      locked: false,
+      ...extra,
+    });
+
+  it("holds the overlay off where its version has no jar yet, and keeps the choice", () => {
+    expect(rows(next).overlay).toEqual({
+      line: { kind: "notYet", switchTo: projects },
+      checked: false,
+      held: true,
+    });
+    // Once the content brings 26.4's jar, the switch is back on by itself.
+    expect(rows(next, { versions: [...VERSIONS, "26.4"] }).overlay).toEqual({
+      line: { kind: "opens" },
+      checked: true,
+      held: false,
+    });
+    // As it is once Play opens an install that carries it.
+    expect(rows(projects).overlay).toEqual({ line: { kind: "opens" }, checked: true, held: false });
+  });
+
+  it("says why there while the switch is off too", () => {
+    expect(rows(next, { overlayOn: false }).overlay).toEqual({
+      line: { kind: "notYet", switchTo: projects },
+      checked: false,
+      held: true,
+    });
+    expect(rows(vanilla, { overlayOn: false }).overlay.held).toBe(true);
+    expect(rows(projects, { overlayOn: false }).overlay).toEqual({
+      line: { kind: "opens" },
+      checked: false,
+      held: false,
+    });
+  });
+
+  it("leaves the switch to the player while only Kapansın stands in the way", () => {
+    expect(rows(projects, { leaves: true }).overlay).toEqual({
+      line: { kind: "closes" },
+      checked: true,
+      held: false,
+    });
+    expect(rows(projects, { leaves: true, overlayOn: false }).overlay).toEqual({
+      line: { kind: "opens" },
+      checked: false,
+      held: false,
+    });
+  });
+
+  it("holds the emoji picker off with it and says the reason once", () => {
+    expect(rows(next).emoji).toEqual({ line: { kind: "opens" }, checked: false, held: true });
+    expect(rows(vanilla, { overlayOn: false }).emoji).toEqual({
+      line: { kind: "opens" },
+      checked: false,
+      held: true,
+    });
+    // Kapansın is nothing to the picker: while the overlay's line says that, the picker's line
+    // says why the mod cannot go into this install.
+    const closing = rows(next, { leaves: true });
+    expect(closing.overlay.line).toEqual({ kind: "closes" });
+    expect(closing.emoji).toEqual({
+      line: { kind: "notYet", switchTo: projects },
+      checked: false,
+      held: true,
+    });
+    // Where the mod goes, the picker follows its own choice.
+    expect(rows(projects, { leaves: true }).emoji).toEqual({
+      line: { kind: "opens" },
+      checked: true,
+      held: false,
+    });
+    expect(rows(projects, { emojiOn: false }).emoji).toEqual({
+      line: { kind: "opens" },
+      checked: false,
+      held: false,
+    });
+  });
+});
+
+describe("a release newer than every jar (OVL-AUTO)", () => {
+  it("is a release above the newest version, not a patch of a covered one", () => {
+    expect(newerThanAll("26.4", VERSIONS)).toBe(true);
+    expect(newerThanAll("26.4.2", VERSIONS)).toBe(true);
+    expect(newerThanAll("27.0", VERSIONS)).toBe(true);
+    expect(newerThanAll("26.3", VERSIONS)).toBe(false);
+    expect(newerThanAll("26.3.1", VERSIONS)).toBe(false);
+    expect(newerThanAll("26.2.5", VERSIONS)).toBe(false);
+    expect(newerThanAll("1.21.11", VERSIONS)).toBe(false);
+  });
+
+  it("is never a snapshot, nor anything while no version is known", () => {
+    expect(newerThanAll("26.4-snapshot-6", VERSIONS)).toBe(false);
+    expect(newerThanAll("26w44a", VERSIONS)).toBe(false);
+    expect(newerThanAll("26.4", [])).toBe(false);
   });
 });
 

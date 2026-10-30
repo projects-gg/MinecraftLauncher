@@ -21,8 +21,9 @@ use crate::error::{Error, Result};
 use crate::fsutil::sha256_hex;
 use crate::json::to_canonical_json;
 use crate::model::{
-    AfkRelease, ChatEmojis, DocRef, ItemArt, LauncherConfig, MediaKind, MediaRef, ModSetCatalog,
-    NewsFeed, PackHashes, PackManifest, PackRef, ROOT_INDEX_SCHEMA, RootIndex,
+    AfkRelease, ChatEmojis, DocRef, FileRef, ItemArt, LauncherConfig, MediaKind, MediaRef,
+    ModSetCatalog, NewsFeed, OverlayRelease, PackHashes, PackManifest, PackRef, ROOT_INDEX_SCHEMA,
+    RootIndex,
 };
 use crate::path::check_mirror_path;
 use crate::signing::{SignatureFile, SigningKey, sign_index};
@@ -86,6 +87,7 @@ pub struct IndexBuilder {
     mod_sets: Option<DocRef>,
     item_art: Option<DocRef>,
     chat_emojis: Option<DocRef>,
+    overlay: Option<OverlayRelease>,
     documents: BTreeMap<String, PublishedDoc>,
 }
 
@@ -107,6 +109,7 @@ impl IndexBuilder {
             mod_sets: previous.mod_sets.clone(),
             item_art: previous.item_art.clone(),
             chat_emojis: previous.chat_emojis.clone(),
+            overlay: previous.overlay.clone(),
             documents: BTreeMap::new(),
         }
     }
@@ -322,6 +325,21 @@ impl IndexBuilder {
         self.afk = release;
     }
 
+    /// The in-game overlay's jars (OVL-AUTO); `None` or a release without jars drops the field.
+    /// Every jar must keep the format's rules ([`OverlayRelease::problems`]); their files
+    /// ([`overlay_file_ref`]) are uploaded by the caller before the index.
+    pub fn set_overlay(&mut self, overlay: Option<OverlayRelease>) -> Result<()> {
+        let overlay = overlay.filter(|overlay| !overlay.jars.is_empty());
+        if let Some(problem) = overlay
+            .as_ref()
+            .and_then(|overlay| overlay.problems().into_iter().next())
+        {
+            return Err(Error::Invalid(problem.to_string()));
+        }
+        self.overlay = overlay;
+        Ok(())
+    }
+
     /// Forces a specific sequence (recovery or tests). It must exceed the previous one.
     pub fn set_sequence(&mut self, sequence: u64) {
         self.sequence = Some(sequence);
@@ -367,6 +385,7 @@ impl IndexBuilder {
             mod_sets: self.mod_sets,
             item_art: self.item_art,
             chat_emojis: self.chat_emojis,
+            overlay: self.overlay,
         };
         index.validate()?;
         let index_bytes = edited_json(&index, edit)?;
@@ -461,6 +480,19 @@ pub fn media_path(sha256: &str, extension: &str) -> String {
 /// `files/<sha1>`: a file we host for packs.
 pub fn hosted_file_path(sha1: &str) -> String {
     format!("files/{sha1}")
+}
+
+/// The [`FileRef`] of an in-game overlay jar Studio uploads (OVL-AUTO): `files/<sha1>`, with its
+/// SHA-256, SHA-1 and size.
+pub fn overlay_file_ref(bytes: &[u8]) -> FileRef {
+    let sha1 = pl_net::hash_bytes(bytes, pl_net::HashAlgo::Sha1);
+    FileRef {
+        path: Some(hosted_file_path(&sha1)),
+        urls: Vec::new(),
+        sha256: sha256_hex(bytes),
+        sha1: Some(sha1),
+        size: bytes.len() as u64,
+    }
 }
 
 /// `afk/<version>/<platform>.zip`
@@ -709,6 +741,58 @@ mod tests {
         let mut broken = emojis;
         broken.emojis[0].look = Some("&".into());
         assert!(IndexBuilder::new().set_chat_emojis(Some(&broken)).is_err());
+    }
+
+    #[test]
+    fn overlay_jars_go_into_the_index_and_stay_with_the_next_publish() {
+        let bytes = b"PK\x03\x04 projects overlay".to_vec();
+        let file = overlay_file_ref(&bytes);
+        let sha1 = pl_net::hash_bytes(&bytes, pl_net::HashAlgo::Sha1);
+        assert_eq!(file.path.as_deref(), Some(hosted_file_path(&sha1).as_str()));
+        assert_eq!(file.sha1.as_deref(), Some(sha1.as_str()));
+        assert_eq!(file.sha256, sha256_hex(&bytes));
+        assert_eq!(file.size, bytes.len() as u64);
+        let jar = crate::OverlayJar {
+            minecraft: "26.4".into(),
+            range: "~26.4".into(),
+            version: "0.1.0+26.4".into(),
+            proto: 1,
+            file,
+            fabric_api: None,
+            commit: None,
+            run: None,
+            tested_at: None,
+        };
+        let release = OverlayRelease { jars: vec![jar] };
+        let mut builder = IndexBuilder::new();
+        builder.set_config(&sample_config(None)).unwrap();
+        builder.set_news(&sample_news(None)).unwrap();
+        builder.set_overlay(Some(release.clone())).unwrap();
+        let built = builder.build(at("2026-10-15T12:00:00Z")).unwrap();
+        assert_eq!(built.index.overlay.as_ref(), Some(&release));
+        let text = String::from_utf8(built.index_bytes.clone()).unwrap();
+        assert!(text.contains("\"overlay\""), "{text}");
+
+        let kept = IndexBuilder::from_previous(&built.index)
+            .build(at("2026-10-15T12:01:00Z"))
+            .unwrap();
+        assert_eq!(kept.index.overlay, built.index.overlay);
+        // No jars: the field goes.
+        let mut emptied = IndexBuilder::from_previous(&built.index);
+        emptied
+            .set_overlay(Some(OverlayRelease::default()))
+            .unwrap();
+        let emptied = emptied.build(at("2026-10-15T12:02:00Z")).unwrap();
+        assert_eq!(emptied.index.overlay, None);
+        assert!(
+            !String::from_utf8(emptied.index_bytes)
+                .unwrap()
+                .contains("overlay")
+        );
+        // A jar that breaks a rule is refused.
+        let mut broken = release;
+        broken.jars[0].file.sha1 = None;
+        assert!(IndexBuilder::new().set_overlay(Some(broken)).is_err());
     }
 
     #[test]

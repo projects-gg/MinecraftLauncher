@@ -55,12 +55,13 @@ export function parseTargets(gradle) {
   const block = /def targets = \[([\s\S]*?)\n\]/.exec(gradle);
   if (!block) throw new Error("build.gradle has no `def targets = [ ... ]` block");
   const row =
-    /'([^']+)'\s*:\s*\[\s*minecraft:\s*'([^']+)',\s*fabricApi:\s*'([^']+)',\s*range:\s*'([^']+)'/g;
+    /'([^']+)'\s*:\s*\[\s*minecraft:\s*'([^']+)',\s*fabricApi:\s*'([^']+)',\s*range:\s*'([^']+)'(?:,\s*compat:\s*'([^']+)')?/g;
   const targets = [...block[1].matchAll(row)].map((m) => ({
     key: m[1],
     minecraft: m[2],
     fabricApi: m[3],
     range: m[4],
+    ...(m[5] ? { compat: m[5] } : {}),
   }));
   if (!targets.length) throw new Error("build.gradle lists no Minecraft version in `targets`");
   return targets;
@@ -131,9 +132,26 @@ export function zipEntryNames(zip) {
 
 /**
  * The scenario driver of local test runs (build.gradle's `dev` source set: scripted scenarios, the
- * end-to-end rigs' hooks) is never part of a jar the launcher ships.
+ * end-to-end rigs' hooks) and the client game test (`gametest`, OVL-AUTO) are never part of a jar
+ * the launcher ships or Studio publishes.
  */
-export const DEV_ENTRIES = [/^gg\/projects\/overlay\/dev\//, /^projects_overlay_dev\./];
+export const DEV_ENTRIES = [
+  /^gg\/projects\/overlay\/dev\//,
+  /^projects_overlay_dev\./,
+  /^gg\/projects\/overlay\/gametest\//,
+];
+
+/** The key of the bridge protocol stamp in a jar's `fabric.mod.json` `custom` block (OVL-AUTO). */
+export const BRIDGE_STAMP = "projects:bridge";
+
+/** The bridge protocol a jar's `fabric.mod.json` says it speaks; throws without a sound stamp. */
+export function bridgeProto(meta, file) {
+  const proto = meta.custom?.[BRIDGE_STAMP]?.proto;
+  if (!Number.isInteger(proto) || proto < 1) {
+    throw new Error(`${file}: no bridge protocol stamp (custom."${BRIDGE_STAMP}".proto)`);
+  }
+  return proto;
+}
 
 /** The jar's own `fabric.mod.json`. */
 export function modJson(jar) {
@@ -158,12 +176,13 @@ export function describeJar(file, bytes, target) {
     throw new Error(`${file}: no GPL text (${LICENSE_ENTRY})`);
   }
   const dev = zipEntryNames(bytes).find((name) => DEV_ENTRIES.some((re) => re.test(name)));
-  if (dev) throw new Error(`${file}: carries the test scenario driver (${dev})`);
+  if (dev) throw new Error(`${file}: carries test code (${dev})`);
   return {
     minecraft: target.minecraft,
     range,
     file,
     version: String(meta.version),
+    proto: bridgeProto(meta, file),
     sha1: sha1(bytes),
     size: bytes.length,
   };
