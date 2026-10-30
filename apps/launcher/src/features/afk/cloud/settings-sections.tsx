@@ -34,8 +34,14 @@ import {
   WideRow,
 } from "../settings/controls";
 import { type CloudEditData, cloudApi } from "./api";
-import { pausedRows, refusedCategory, refusedText } from "./moderation";
-import { PausedLine } from "./moderation-bits";
+import {
+  pausedRows,
+  refusalReportText,
+  refusedCategory,
+  refusedText,
+  reportedWords,
+} from "./moderation";
+import { PausedLine, ReportLine } from "./moderation-bits";
 import { slotKey } from "./movement/model";
 import { hasPlaceholder, insertToken } from "./placeholders";
 import { ReplyTools } from "./reply-tools";
@@ -71,6 +77,8 @@ export interface PartProps {
   features: CloudFeatures | null;
   /** "ProBot AI ile kalıp kur" can answer now (the overview's `aiPatterns`). */
   aiPatterns: boolean;
+  /** "Yanlışsa bildir" heard the text saves now: that row's content refusal is lifted. */
+  clearRefusal?: (at: { place: string; index: number; field: string }) => void;
 }
 
 /** The command rows' questions: where each row sits, and a new row's place. */
@@ -549,6 +557,8 @@ function CommandRow({
   const at = (field: string) => issueText(issueAt(part.issues, "commands", index, field));
   // A moderation case paused it (the view's `paused`): "Durduruldu" until it is edited and saved.
   const paused = pausedRows(part.view.account).get(command.id) ?? null;
+  // A save refused its text for content: "Yanlışsa bildir" under the sentence.
+  const report = refusalReportText(issueAt(part.issues, "commands", index, "text"), command.words);
   const minInterval = part.view.limits.minIntervalSec ?? 60;
   const triggers: SelectOption<Trigger>[] = allowed.map((value) => ({
     value,
@@ -696,6 +706,12 @@ function CommandRow({
           error={at("text")}
           autoFocus={focus}
         />
+        <ReportLine
+          accountId={part.view.account.id}
+          refused={report}
+          current={reportedWords(command.words)}
+          onSaveable={() => part.clearRefusal?.({ place: "commands", index, field: "text" })}
+        />
         {paused ? <PausedLine category={paused} account={part.view.account} /> : null}
       </div>
     </li>
@@ -831,6 +847,7 @@ function RuleRow({
   const ids = useId();
   const replyRef = useRef<HTMLInputElement>(null);
   const reply = rule.reply;
+  const report = refusalReportText(issueAt(part.issues, "rules", index, "reply"), reply);
   const accountId = part.view.account.id;
   // ProBot AI builds the trigger from the player's words; its box sits under the rule's first row.
   const { assist, box } = useRuleAssist({
@@ -958,6 +975,12 @@ function RuleRow({
               placeholder={t("cloudAfk.settings.replies.replyPlaceholder")}
               error={at("reply")}
               inputRef={replyRef}
+            />
+            <ReportLine
+              accountId={part.view.account.id}
+              refused={report}
+              current={reportedWords(reply)}
+              onSaveable={() => part.clearRefusal?.({ place: "rules", index, field: "reply" })}
             />
             {placeholders && reply.kind === "plain" ? (
               <ReplyTools

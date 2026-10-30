@@ -946,6 +946,31 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     }
 
     /**
+     * "Yeni kategori…" (OVL-UX3): a new category of that name with the friend in it; the launcher keeps the name as its
+     * own list does, and the note names it.
+     */
+    public void moveToNewCategory(String friendId, String name) {
+        OverlayState.Friend friend = state.friend(friendId);
+        personAction(friendId, friend == null ? "" : friend.name(), name, Protocol.moveToNew(friendId, name),
+            "failed");
+    }
+
+    /** "Moderatör yap" ({@code on}) or "Moderatörlükten al" on a crewmate of a crew the player leads (OVL-UX3). */
+    public void crewModerator(String crew, String id, String name, boolean on) {
+        personAction(id, name, on ? "on" : "off", Protocol.crewModerator(crew, id, on), "failed");
+    }
+
+    /** "Liderliği devret" (OVL-UX3; after its question). */
+    public void crewLead(String crew, String id, String name) {
+        personAction(id, name, null, Protocol.crewLead(crew, id), "failed");
+    }
+
+    /** "Ekipten çıkar" (OVL-UX3; after its question). */
+    public void crewRemove(String crew, String id, String name) {
+        personAction(id, name, null, Protocol.crewRemove(crew, id), "failed");
+    }
+
+    /**
      * The pause menu's Projects button (OVL-UX): opens the panel where it was last, as F7 does; closing it goes back to
      * the pause menu and the game stays paused.
      */

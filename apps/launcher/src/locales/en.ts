@@ -18,6 +18,7 @@ import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
+import { enFastPack } from "./en-fastpack";
 import { enFix2 } from "./en-fix2";
 import { enFps } from "./en-fps";
 import { enFriendGroups } from "./en-friend-groups";
@@ -216,8 +217,10 @@ export const en: DeepPartial<Strings> = {
       shareServer: "Show the address when I'm on other servers",
       shareLastSeen: "Show when I was last seen",
       notifications: "Notifications",
-      favoriteOnline: "When my favourites come online",
-      favoriteProjects: "When my favourites join Projects",
+      favorites: "Your favourite friends",
+      crewGroup: "Your crew",
+      favoriteOnline: "When they come online",
+      favoriteProjects: "When they join Projects",
       backup: "Settings backup",
       backupToggle: "Back up my launcher settings",
       backupWhen: "Last backup {{when}}",
@@ -310,6 +313,7 @@ export const en: DeepPartial<Strings> = {
   help: enHelp,
   crewWave2: enCrewWave2,
   overlay: enOverlay,
+  fastPack: enFastPack,
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,
@@ -419,7 +423,8 @@ export const en: DeepPartial<Strings> = {
     lastPlayed: "Last played {{when}}",
     neverPlayed: "Not played yet",
     playTime: "{{time}} played",
-    session: "Session: {{time}}",
+    // The game on the command bar, never "Session" (the account menu's sign-in session ends).
+    session: "In game: {{time}}",
     oneAtATime: "Only one game can run at a time.",
     offlineMode: "Can't reach the internet. Continuing with the installed files.",
     packUpdated: "{{name}} updated to {{version}}",

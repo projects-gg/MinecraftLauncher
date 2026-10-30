@@ -119,6 +119,9 @@ pub struct CloudAccountFeatures {
     /// Console lines in the game's colours, with their hovers and clicks (CONSOLE-COLOR): Studio's
     /// switch while the account's machine gives them. Off from a service before it.
     pub console_looks: bool,
+    /// A server's dialog as a card the player may press (DIALOG-CARD): Studio's switch while the
+    /// account's machine reports dialogs. Off from a service before it.
+    pub dialog_cards: bool,
     pub placeholders: bool,
     /// Console kinds are on, but this account's player, private or server rules still match the
     /// old way until its settings are saved once.
@@ -163,12 +166,36 @@ pub struct CloudInvInsideStack {
     pub model: Option<String>,
 }
 
+/// The most stacks `inside.stacks` may say (afk-host's cap).
+pub const MAX_INSIDE_STACKS: u32 = 256;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
 pub struct CloudInvInside {
     /// The items' total.
     pub count: u32,
     pub top: Vec<CloudInvInsideStack>,
+    /// How many stacks it holds, as the game counts them for "and N more...", from machines that
+    /// count them (CAFK-SVC); absent from older ones. Anything but a whole number up to 256 reads
+    /// as absent and never costs the item; the view also wants at least the stacks listed.
+    #[serde(
+        default,
+        deserialize_with = "stack_count",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<u32>)]
+    pub stacks: Option<u32>,
+}
+
+/// `inside.stacks` as read: a whole number from 0 to [`MAX_INSIDE_STACKS`], else absent.
+fn stack_count<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    Ok(safe_int(&value)
+        .and_then(|n| u32::try_from(n).ok())
+        .filter(|n| *n <= MAX_INSIDE_STACKS))
 }
 
 /// `InvItem`: one stack in the player inventory (`slot` 5–8 armour, 9–35 main, 36–44 hotbar, 45
@@ -1285,6 +1312,36 @@ mod tests {
             serde_json::to_value(&open).unwrap()["type"],
             Value::from("generic_9x3")
         );
+    }
+
+    #[test]
+    fn a_container_reads_its_stack_count_leniently() {
+        let read = |stacks: &str| -> CloudInvItem {
+            serde_json::from_str(&format!(
+                r#"{{"slot":17,"id":"minecraft:shulker_box","count":1,
+                    "label":{{"tr":"Shulker Kutusu","en":"Shulker Box"}},
+                    "inside":{{"count":1000,"top":[{{"id":"minecraft:dirt","count":64}}]{stacks}}}}}"#
+            ))
+            .unwrap()
+        };
+        let stacks = |s: &str| read(s).inside.unwrap().stacks;
+        assert_eq!(stacks(r#","stacks":16"#), Some(16));
+        assert_eq!(stacks(r#","stacks":256"#), Some(256));
+        // An older machine sends none; it writes none back either.
+        assert_eq!(stacks(""), None);
+        let old = serde_json::to_value(read("")).unwrap();
+        assert!(old["inside"].get("stacks").is_none());
+        assert_eq!(
+            serde_json::to_value(read(r#","stacks":16"#)).unwrap()["inside"]["stacks"],
+            Value::from(16)
+        );
+        // An odd count is absent; the item and the rest of its inside still read.
+        for odd in ["257", "-1", "12.5", r#""16""#, "null", "[16]", "true"] {
+            let item = read(&format!(r#","stacks":{odd}"#));
+            let inside = item.inside.expect("the inside reads");
+            assert_eq!(inside.stacks, None, "{odd}");
+            assert_eq!((inside.count, inside.top.len()), (1000, 1), "{odd}");
+        }
     }
 
     #[test]

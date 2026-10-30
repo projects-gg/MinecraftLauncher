@@ -2,7 +2,7 @@
 // "40 bin") and says the number in words under it, so a zero too many shows before it costs
 // anything (afkplus.md §1.4), and a 24-hour time typed quickly ("0830" → "08:30"; the browser's
 // own time field shows "08:00 AM" on an English Windows to a Turkish player).
-import { cn } from "@pl/ui";
+import { ContentIcon, type ContentIconKind, cn } from "@pl/ui";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { inputClass, useOneGold } from "../../settings/controls";
@@ -313,6 +313,27 @@ export function IntField({
 }
 
 /** A group's heading inside the panel's sections (Tektur, the launcher's section voice). */
+/** A section with nothing in it: a quiet sprite, one sentence and, when it helps, one action. */
+export function QuietEmpty({
+  icon,
+  children,
+  action,
+}: {
+  icon: ContentIconKind;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3.5 rounded-[var(--radius-panel)] bg-white/[0.03] px-4 py-4">
+      <span className="chamfer grid size-10 shrink-0 place-items-center bg-obsidian-800 [--cut:6px]">
+        <ContentIcon kind={icon} size={16} quiet />
+      </span>
+      <p className="max-w-[52ch] min-w-0 flex-1 text-[13px] text-ash-300">{children}</p>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+  );
+}
+
 export function GroupTitle({
   children,
   id,

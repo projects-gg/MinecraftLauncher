@@ -99,6 +99,7 @@ export const enSetup = {
       writes: ", messages sellers once.",
       scans: ", watches chat for sale posts.",
       noScan: ".",
+      menu: " Checks the order menu too.",
       tone: "{{preset}}, like a player",
       whoAll: "Answers every private message",
       whoAllFriends: "Answers every private message from your friends",

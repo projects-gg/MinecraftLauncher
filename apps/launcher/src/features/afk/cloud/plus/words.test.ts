@@ -78,10 +78,11 @@ describe("AFK+ amounts", () => {
 
   it("say a span of days once", () => {
     const day = (d: number, m: number) => new Date(2026, m - 1, d, 12).getTime() / 1000;
-    // ICU puts thin spaces around the range's dash (CLDR 42+); older ones put none.
-    expect(rangeText(day(16, 10), day(23, 10), "tr")).toMatch(/^16\s?–\s?23 Ekim$/);
-    expect(rangeText(day(16, 10), day(23, 10), "en")).toMatch(/^16\s?–\s?23 October$/);
-    expect(rangeText(day(28, 9), day(5, 10), "tr")).toMatch(/^28 Eylül\s–\s5 Ekim$/);
+    // ICU puts thin spaces around the range's dash (CLDR 42+); older ones put none. The dash is a
+    // plain hyphen, as the site writes it.
+    expect(rangeText(day(16, 10), day(23, 10), "tr")).toMatch(/^16\s?-\s?23 Ekim$/);
+    expect(rangeText(day(16, 10), day(23, 10), "en")).toMatch(/^16\s?-\s?23 October$/);
+    expect(rangeText(day(28, 9), day(5, 10), "tr")).toMatch(/^28 Eylül\s-\s5 Ekim$/);
   });
 
   it("are read out in words, so a zero too many shows", () => {

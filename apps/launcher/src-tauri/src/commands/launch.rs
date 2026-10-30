@@ -583,7 +583,7 @@ async fn pack_missing(manifest: &PackManifest, game_dir: &Path) -> u64 {
     let policy = SyncPolicy {
         repair: false,
         quick_check: true,
-        items: crate::overlay::pack_items(),
+        items: crate::fastpack::pack_items(game_dir, previous.as_ref()).await,
     };
     match plan_sync(manifest, game_dir, previous.as_ref(), None, &policy).await {
         Ok(plan) => plan.downloads.iter().map(|download| download.size).sum(),
@@ -1326,6 +1326,7 @@ async fn prepare_and_spawn(
         &state.social,
         game_id,
         options.quick_play.as_ref(),
+        Some(instance.mc_version.as_str()),
     );
     // A friend's world that turned the game away for missing mods says so in the log (HOST1).
     let log_worlds = state.worlds.clone();

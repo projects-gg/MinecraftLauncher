@@ -116,12 +116,19 @@ describe("AFK notices in words", () => {
     expect(sold?.body).toBe('afkPlus.notices.dealSold {"deal":"64 Diamond = 7.680"}');
   });
 
-  it("count new messages and open the messages", () => {
+  it("count new messages and open Etkinlik, where the conversations are", () => {
     expect(noticeWords(notice("message", { count: "3" }), t, "tr")?.body).toBe(
       'afkPlus.notices.messages {"count":3}',
     );
     expect(noticeWords(notice("message", {}), t, "tr")?.body).toBe("afkPlus.notices.message");
-    expect(noticeWords(notice("message", {}), t, "tr")?.target).toEqual({ panel: "messages" });
+    expect(noticeWords(notice("message", {}), t, "tr")?.target).toEqual({ panel: "feed" });
+    expect(noticeWords(notice("incident", {}), t, "tr")?.target).toEqual({ panel: "feed" });
+  });
+
+  it("open Özet from the daily summary", () => {
+    expect(noticeWords(notice("summary", { pms: "4", deals: "1" }), t, "tr")?.target).toEqual({
+      panel: "report",
+    });
   });
 
   it("word the allowance by which window ran out", () => {

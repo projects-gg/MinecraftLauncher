@@ -411,13 +411,14 @@ pub(crate) fn notice(
     })
 }
 
-/// Background-sync policy: files whose size and recorded hash match are not hashed again; the
-/// launcher's own items follow their settings ("Oyun içi katman", crate::overlay).
-pub(crate) fn quick() -> SyncPolicy {
+/// Background-sync policy for `game_dir`: files whose size and recorded hash match are not hashed
+/// again; the launcher's own items follow their settings ("Oyun içi katman", crate::overlay;
+/// "Hızlı kaynak paketi yükleme", crate::fastpack).
+pub(crate) async fn quick(game_dir: &Path, previous: Option<&PackState>) -> SyncPolicy {
     SyncPolicy {
         repair: false,
         quick_check: true,
-        items: crate::overlay::pack_items(),
+        items: crate::fastpack::pack_items(game_dir, previous).await,
     }
 }
 
@@ -506,7 +507,8 @@ pub async fn mod_center(
         PackSource::Dropped(dropped) => view.dropped = Some(dropped),
         PackSource::Ready { pack, manifest } => {
             let previous = PackState::load(&game_dir).await.map_err(pack_error)?;
-            let plan = plan_sync(&manifest, &game_dir, previous.as_ref(), None, &quick())
+            let policy = quick(&game_dir, previous.as_ref()).await;
+            let plan = plan_sync(&manifest, &game_dir, previous.as_ref(), None, &policy)
                 .await
                 .map_err(pack_error)?;
             view.items = item_views(&manifest, &plan.items);
@@ -554,7 +556,7 @@ pub async fn mod_center_preview(
         &game_dir,
         previous.as_ref(),
         Some(&selection),
-        &quick(),
+        &quick(&game_dir, previous.as_ref()).await,
     )
     .await
     .map_err(pack_error)?;
@@ -624,7 +626,7 @@ pub(crate) async fn apply_selection(
         &game_dir,
         previous.as_ref(),
         Some(&selection),
-        &quick(),
+        &quick(&game_dir, previous.as_ref()).await,
     )
     .await
     .map_err(pack_error)?;

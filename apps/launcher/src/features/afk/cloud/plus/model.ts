@@ -93,6 +93,26 @@ export const AD_EVERY_MIN = [30, 45, 60, 120] as const;
 /** The service's minutes while the player has picked none. */
 export const AD_EVERY_DEFAULT = 60;
 
+/**
+ * "Sipariş menüsünü kontrol etsin" (DONUT-ORDER, `discovery.orderMenu`): the service stores it only
+ * while on, and a write without it keeps the stored one. On writes `true`; off writes `false` only
+ * over a stored one (the service then leaves it out), else it goes back to the read document's own
+ * form (left out), so switching it on and off again leaves nothing unsaved. The key goes last,
+ * where the read document has it.
+ */
+export function withOrderMenu(
+  discovery: PlusConfig["discovery"],
+  on: boolean,
+  stored: PlusConfig["discovery"],
+): PlusConfig["discovery"] {
+  const { orderMenu: _was, ...rest } = discovery;
+  if (on) return { ...rest, orderMenu: true };
+  if (stored.orderMenu === true) return { ...rest, orderMenu: false };
+  return (
+    "orderMenu" in stored ? { ...rest, orderMenu: stored.orderMenu } : rest
+  ) as PlusConfig["discovery"];
+}
+
 // --- The "Ayarlar" draft ---------------------------------------------------------------------------
 
 /** What "Ayarlar" edits as one draft; orders, the switch, a break and blocked names save at once. */
@@ -617,6 +637,8 @@ export type ConfigChange =
       field: "target" | "limit" | "qty";
       from: number;
       to: number;
+      /** What the order pays with (`money` or the paying item): the amounts' unit. */
+      pay: string;
     }
   | { kind: "order_toggled"; side: Side; item: string; on: boolean }
   | { kind: "order_other"; side: Side; item: string }
@@ -656,6 +678,7 @@ function diffOrders(
           field,
           from: was[field],
           to: order[field],
+          pay: order.pay,
         });
         told = true;
       }

@@ -138,6 +138,19 @@ public final class OverlayState {
     }
 
     /**
+     * OVL-UX3 (U1): the player's rights in one crew, for the crew rows of its crewmates' menus in its chat: the
+     * player leads it ("Liderliği devret", "Ekipten çıkar" for anyone), names moderators there ({@code roles}), the
+     * crew has its 4 moderators ({@code modsFull}), and the crewmates the rows may be about.
+     */
+    public record CrewRights(String crew, String conv, boolean lead, boolean roles, boolean modsFull,
+        Map<String, MateRights> mates) {
+    }
+
+    /** One crewmate in {@link CrewRights}: a moderator, and whether the player may remove them. */
+    public record MateRights(boolean moderator, boolean kick) {
+    }
+
+    /**
      * A crew tag's card (TEAM6): the chip ({@code tag} on the crew's colour) and the bubble it opens. {@code since}
      * is the month the crew was founded ("2026-09", empty when not known); {@code mine}: the player is in it.
      */
@@ -329,6 +342,8 @@ public final class OverlayState {
     // ---- The rest of the launcher's person menu (OVL-UX2) ----
     private List<Group> groups = List.of();
     private List<CrewTarget> inviteCrews = List.of();
+    /** OVL-UX3: the player's rights by crew ({@code lists.roles}). */
+    private Map<String, CrewRights> crewRights = Map.of();
     private boolean crewmatesAsk;
     private final Set<String> asked = new HashSet<>();
     private final Set<String> asking = new HashSet<>();
@@ -653,6 +668,22 @@ public final class OverlayState {
         return groups;
     }
 
+    /**
+     * OVL-UX3: the player's rights in the crew whose chat {@code conv} is, while the launcher takes the crew rows (its
+     * welcome lists {@code people3}); null otherwise (no crew rows there).
+     */
+    public CrewRights crewRightsIn(String conv) {
+        if (conv == null || !has("people3")) {
+            return null;
+        }
+        for (CrewRights rights : crewRights.values()) {
+            if (conv.equals(rights.conv())) {
+                return rights;
+            }
+        }
+        return null;
+    }
+
     /** OVL-UX2 (Q7): the crews the player may invite friends to (empty: none, or crews off). */
     public List<CrewTarget> inviteCrews() {
         return inviteCrews;
@@ -740,6 +771,7 @@ public final class OverlayState {
         personNote = null;
         groups = List.of();
         inviteCrews = List.of();
+        crewRights = Map.of();
         crewmatesAsk = false;
         asked.clear();
         asking.clear();
@@ -790,10 +822,15 @@ public final class OverlayState {
                 }
                 yield ok ? (queued ? "request_sent" : "now_friends") : "failed";
             }
+            // OVL-UX3: a crewmate's crew rows (the moderator row's detail says which way it went).
+            case "crew-mod" -> ok ? ("off".equals(detail) ? "unmade_moderator" : "made_moderator") : "failed";
+            case "crew-lead" -> ok ? "made_founder" : "failed";
+            case "crew-remove" -> ok ? "removed_member" : "failed";
             default -> null;
         };
         if (key != null) {
-            personNote = new PersonNote(key, name, null, !ok, now, detail);
+            // The moderator row's detail only chose the words.
+            personNote = new PersonNote(key, name, null, !ok, now, action.equals("crew-mod") ? null : detail);
         }
     }
 
@@ -1125,6 +1162,7 @@ public final class OverlayState {
         });
         groups = List.copyOf(nextGroups);
         inviteCrews = List.copyOf(nextCrews);
+        crewRights = rightsOf(frame.get("roles"));
         crewmatesAsk = Protocol.bool(frame, "crewmates", false);
         asked.clear();
         asking.clear();
@@ -1135,6 +1173,41 @@ public final class OverlayState {
         matesDiscord.clear();
         putIds(arr(frame, "projects"), matesHere);
         putIds(arr(frame, "discord"), matesDiscord);
+    }
+
+    /**
+     * U1: the crews' rights ({@code roles}: crew id to {@code lead}, {@code roles}, {@code modsFull}, {@code conv} and
+     * {@code mates}, each crewmate's {@code mod} and {@code kick}); at most 10 crews of 200 crewmates, anything else
+     * skipped.
+     */
+    private static Map<String, CrewRights> rightsOf(JsonElement roles) {
+        if (roles == null || !roles.isJsonObject()) {
+            return Map.of();
+        }
+        Map<String, CrewRights> out = new HashMap<>();
+        for (Map.Entry<String, JsonElement> e : roles.getAsJsonObject().entrySet()) {
+            String crew = e.getKey();
+            if (crew.isEmpty() || crew.length() > 64 || !e.getValue().isJsonObject() || out.size() >= 10) {
+                continue;
+            }
+            JsonObject o = e.getValue().getAsJsonObject();
+            Map<String, MateRights> mates = new HashMap<>();
+            JsonElement list = o.get("mates");
+            if (list != null && list.isJsonObject()) {
+                for (Map.Entry<String, JsonElement> m : list.getAsJsonObject().entrySet()) {
+                    String id = m.getKey();
+                    if (!id.isEmpty() && id.length() <= 64 && m.getValue().isJsonObject() && mates.size() < 200) {
+                        JsonObject r = m.getValue().getAsJsonObject();
+                        mates.put(id, new MateRights(Protocol.bool(r, "mod", false), Protocol.bool(r, "kick", false)));
+                    }
+                }
+            }
+            String conv = Protocol.str(o, "conv", "");
+            out.put(crew, new CrewRights(crew, conv.isEmpty() || conv.length() > 128 ? null : conv,
+                Protocol.bool(o, "lead", false), Protocol.bool(o, "roles", false), Protocol.bool(o, "modsFull", false),
+                Map.copyOf(mates)));
+        }
+        return Map.copyOf(out);
     }
 
     private static void putIds(JsonArray list, Set<String> into) {

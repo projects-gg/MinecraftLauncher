@@ -121,7 +121,7 @@ const seeds: Seed[] = [
   {
     id: "HVnmMxH1",
     title: "Complementary Reimagined",
-    summary: "Gerçekçi ışık ve gölgeler; güçlü bir ekran kartı ister.",
+    summary: "Gerçekçi ışık ve gölgeler. Güçlü bir ekran kartı ister.",
     category: "visual",
     iconUrl: icon("HVnmMxH1"),
     projectId: "HVnmMxH1",
@@ -171,7 +171,7 @@ const seeds: Seed[] = [
     // Hosted by us (not on Modrinth): its page is set by hand in Studio.
     id: "wi-zoom",
     title: "WI Zoom",
-    summary: "Yakınlaştırma tuşu; fare tekerleğiyle yakınlığı ayarlarsın.",
+    summary: "Yakınlaştırma tuşu. Fare tekerleğiyle yakınlığı ayarlarsın.",
     category: "gameplay",
     iconUrl:
       "https://raw.githubusercontent.com/Wurst-Imperium/WI-Zoom/v1.7-MC26.1.2/src/main/resources/assets/wi_zoom/icon.png",

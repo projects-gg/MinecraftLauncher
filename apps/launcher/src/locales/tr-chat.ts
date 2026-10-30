@@ -4,7 +4,8 @@ export const trChat = {
   tabs: {
     friends: "Arkadaşlar",
     messages: "Mesajlar",
-    crew: "Ekip",
+    // The crew page's first tab, under its "Ekip" title: never "Ekip" again (CHAT-PROD leftovers).
+    crew: "Genel bakış",
     chat: "Sohbet",
   },
   list: {
@@ -95,7 +96,8 @@ export const trChat = {
     reply: "Yanıtla",
   },
   settings: {
-    crewChat: "Ekip sohbeti bildirimleri",
+    // Under the crew's own notification group: the group says whose.
+    crewChat: "Sohbet mesajları",
   },
   consent: "Sohbet mesajların yalnız iletilmek için sunucuda en çok 7 gün tutulur.",
   waiting_one: "{{count}} okunmamış mesaj",

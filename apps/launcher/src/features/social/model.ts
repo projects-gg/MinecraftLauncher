@@ -247,21 +247,43 @@ export function playingPeople(
   return [...friends, ...crew];
 }
 
-/** One short line under a friend's name. */
+/** Where a friend plays, as the line under their name says it. */
+function placeLine(friend: Friend, t: TFunction): string {
+  switch (friend.game?.where) {
+    case "projects":
+      return t("social.presence.projects");
+    case "singleplayer":
+      return t("social.presence.singleplayer");
+    case "other":
+      return friend.game.host
+        ? t("social.presence.otherHost", { host: friend.game.host })
+        : t("social.presence.other");
+    default:
+      return t("social.presence.playing");
+  }
+}
+
+/**
+ * The line under a friend's name in two parts: where they are and (SOC9, in game) the Minecraft
+ * version they play, as the service sends it. Shown with colour between them, never a separator
+ * character (`PresenceText`).
+ */
+export function presenceParts(
+  friend: Friend,
+  t: TFunction,
+): { place: string; version: string | null } {
+  if (friend.state === "playing") {
+    return { place: placeLine(friend, t), version: friend.game?.ver ?? null };
+  }
+  return { place: presenceLine(friend, t), version: null };
+}
+
+/** One short line under a friend's name, as plain text (labels, keys): the version after a space. */
 export function presenceLine(friend: Friend, t: TFunction): string {
   if (friend.state === "playing") {
-    switch (friend.game?.where) {
-      case "projects":
-        return t("social.presence.projects");
-      case "singleplayer":
-        return t("social.presence.singleplayer");
-      case "other":
-        return friend.game.host
-          ? t("social.presence.otherHost", { host: friend.game.host })
-          : t("social.presence.other");
-      default:
-        return t("social.presence.playing");
-    }
+    const place = placeLine(friend, t);
+    const version = friend.game?.ver;
+    return version ? `${place} ${version}` : place;
   }
   if (friend.state === "launcher") return t("social.presence.launcher");
   return friend.lastSeen

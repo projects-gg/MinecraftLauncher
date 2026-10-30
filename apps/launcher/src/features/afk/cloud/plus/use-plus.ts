@@ -26,7 +26,8 @@ import {
 import { configAfterControl, type LimitField, type SettingsDraft } from "./model";
 import { type PlusFeatures, plusMe, plusOffer } from "./types";
 
-export type PlusSection = "feed" | "messages" | "orders" | "settings" | "report";
+/** The panel's sections, the site's and the phone's names and order ("Etkinlik" holds the conversations). */
+export type PlusSection = "feed" | "orders" | "settings" | "report";
 
 /**
  * The first setup's choices while it is not started yet (SETUP-UX-L): "Daha sonra" and closing keep
@@ -55,7 +56,7 @@ interface PlusUi {
   /** The account whose AFK+ panel is open. */
   panelId: string | null;
   section: PlusSection;
-  /** The conversation "Mesajlar" shows. */
+  /** The player whose conversation is open under their row in "Etkinlik" ("Cevap yaz"). */
   thread: string | null;
   /** The setup wizard is open for this account. */
   wizardFor: string | null;
@@ -304,6 +305,23 @@ export function usePlusPanel(id: string | null) {
     enabled: Boolean(id),
     staleTime: 0,
     gcTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
+/**
+ * The conversations' list (Studio's `features.inbox`): who wrote in the last 7 days, read when the
+ * panel opens and again when the stream says a message came, never on a timer. "Etkinlik" takes
+ * who waits for an answer from it, the rail its count; a conversation itself is read only when its
+ * row opens it.
+ */
+export function usePlusInbox(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: inboxKey(id),
+    queryFn: () => plusApi.inbox(id, null),
+    enabled,
+    staleTime: 15_000,
     refetchOnWindowFocus: false,
     retry: false,
   });

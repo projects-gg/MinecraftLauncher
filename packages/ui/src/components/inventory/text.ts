@@ -387,15 +387,22 @@ export function tooltipLines(
       const text = fill(texts.insideStack, { item: labelOf(stack.label, lang), n: stack.count });
       lines.push({ text, color: TEXT_COLOR.white });
     }
-    // The game counts the stacks it did not list. The frame lists the first 9: when they hold
-    // every item, the rest are known; otherwise there are more than the frame tells. Both in the
-    // game's style for that line: white italic.
+    // The game counts the stacks it did not list. Newer machines say how many stacks there are.
+    // Without that, the frame's first 9 tell it when they hold every item; otherwise there are
+    // more than the frame tells. Both in the game's style for that line: white italic.
     const listed = inside.top.reduce((sum, stack) => sum + stack.count, 0);
-    if (listed < inside.count) {
+    const stacks = inside.stacks;
+    const counted =
+      typeof stacks === "number" && Number.isInteger(stacks) && stacks >= inside.top.length
+        ? stacks
+        : null;
+    if (counted === null && listed < inside.count) {
       lines.push({ text: texts.insideMoreUnknown, color: TEXT_COLOR.white, italic: true });
-    } else if (inside.top.length > shown.length) {
-      const n = inside.top.length - shown.length;
-      lines.push({ text: fill(texts.insideMore, { n }), color: TEXT_COLOR.white, italic: true });
+    } else {
+      const n = (counted ?? inside.top.length) - shown.length;
+      if (n > 0) {
+        lines.push({ text: fill(texts.insideMore, { n }), color: TEXT_COLOR.white, italic: true });
+      }
     }
   }
   for (const enchant of item.ench ?? []) {

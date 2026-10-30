@@ -27,6 +27,7 @@ import {
 } from "../settings/drafts";
 import { SettingsPanel } from "../settings/panel";
 import { type CloudAccount, type CloudEditData, cloudApi } from "./api";
+import { withoutRefusal } from "./moderation";
 import { DOCK_HEIGHT, PlusChangeDock } from "./plus/change-dock";
 import {
   type Command,
@@ -406,7 +407,16 @@ function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const part: PartProps = { draft, setDraft, view, issues: shown, features, aiPatterns };
+  const part: PartProps = {
+    draft,
+    setDraft,
+    view,
+    issues: shown,
+    features,
+    aiPatterns,
+    // "Yanlışsa bildir" heard the text saves now: its refusal no longer holds the save.
+    clearRefusal: (at) => setServerIssues((list) => withoutRefusal(list, at)),
+  };
   // A mark on screen holds the save (a refused password's or a held row's never: see `held`).
   const blocking = issues.length > 0;
   // Stopped on a password the server refused: saving alone left the stop in place, so the main

@@ -135,6 +135,10 @@ pub struct Game {
     pub location: GameLocation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    /// SOC9: the Minecraft version the friend plays (`1.21.4`), when their client says; shown
+    /// also while they hide the server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ver: Option<String>,
 }
 
 impl Game {
@@ -389,6 +393,9 @@ pub(crate) enum ClientMessage {
         host: Option<String>,
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         singleplayer: bool,
+        /// SOC9: the Minecraft version the game plays, only while playing.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        ver: Option<String>,
     },
     Invite {
         to: String,
@@ -498,22 +505,27 @@ pub(crate) enum ClientMessage {
 }
 
 impl ClientMessage {
-    pub(crate) fn status(status: &LocalStatus) -> Self {
+    /// The status message; `ver` (SOC9) goes along only while playing.
+    pub(crate) fn status(status: &LocalStatus, ver: Option<&str>) -> Self {
+        let ver = ver.map(str::to_owned);
         match status {
             LocalStatus::Launcher => Self::Status {
                 state: "launcher",
                 host: None,
                 singleplayer: false,
+                ver: None,
             },
             LocalStatus::Playing { host } => Self::Status {
                 state: "playing",
                 host: host.clone(),
                 singleplayer: false,
+                ver,
             },
             LocalStatus::Singleplayer => Self::Status {
                 state: "playing",
                 host: None,
                 singleplayer: true,
+                ver,
             },
         }
     }
@@ -889,7 +901,8 @@ mod tests {
 
     #[test]
     fn status_messages() {
-        let json = |s: &LocalStatus| serde_json::to_string(&ClientMessage::status(s)).unwrap();
+        let json =
+            |s: &LocalStatus| serde_json::to_string(&ClientMessage::status(s, None)).unwrap();
         assert_eq!(
             json(&LocalStatus::Launcher),
             r#"{"t":"status","state":"launcher"}"#
@@ -903,6 +916,36 @@ mod tests {
         assert_eq!(
             json(&LocalStatus::Singleplayer),
             r#"{"t":"status","state":"playing","singleplayer":true}"#
+        );
+        // SOC9: the game's version goes along while playing, never in the launcher.
+        let with = |s: &LocalStatus| {
+            serde_json::to_string(&ClientMessage::status(s, Some("1.21.4"))).unwrap()
+        };
+        assert_eq!(
+            with(&LocalStatus::Playing {
+                host: Some("projects.gg".into())
+            }),
+            r#"{"t":"status","state":"playing","host":"projects.gg","ver":"1.21.4"}"#
+        );
+        assert_eq!(
+            with(&LocalStatus::Singleplayer),
+            r#"{"t":"status","state":"playing","singleplayer":true,"ver":"1.21.4"}"#
+        );
+        assert_eq!(
+            with(&LocalStatus::Launcher),
+            r#"{"t":"status","state":"launcher"}"#
+        );
+        let seen: Presence = serde_json::from_str(
+            r#"{"id":"1","state":"playing","status":"online","game":{"where":"other","ver":"26.2"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            seen.game,
+            Some(Game {
+                location: GameLocation::Other,
+                host: None,
+                ver: Some("26.2".into()),
+            })
         );
         assert_eq!(
             serde_json::to_string(&ClientMessage::Invite {
@@ -990,7 +1033,7 @@ mod tests {
         .unwrap();
         assert!(matches!(
             hidden,
-            ServerMessage::Presence { presence } if presence.game == Some(Game { location: GameLocation::Other, host: None })
+            ServerMessage::Presence { presence } if presence.game == Some(Game { location: GameLocation::Other, host: None, ver: None })
         ));
         let future: ServerMessage = serde_json::from_str(r#"{"t":"emoji","x":1}"#).unwrap();
         assert!(matches!(future, ServerMessage::Unknown));
@@ -1168,7 +1211,8 @@ mod tests {
                     call.server,
                     Some(Game {
                         location: GameLocation::Other,
-                        host: Some("mc.example.com".into())
+                        host: Some("mc.example.com".into()),
+                        ver: None,
                     })
                 );
             }

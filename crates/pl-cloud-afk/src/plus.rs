@@ -655,6 +655,13 @@ pub struct PlusDiscovery {
     /// in the document, and sent back so (never made here; an older service knows no such key).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ad_every_min: Option<u32>,
+    /// "Sipariş menüsünü kontrol et" (DONUT-ORDER): the bot checks the server's order menu now and
+    /// then. The service stores it only while on, so it reads `Some(true)` or None (not in the
+    /// document: a write leaves the stored one, and an older service knows no such key);
+    /// `Some(false)` is the player's switch going off (the service then leaves it out). It goes
+    /// back as it came.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_menu: Option<bool>,
 }
 
 impl Default for PlusDiscovery {
@@ -665,6 +672,7 @@ impl Default for PlusDiscovery {
             ads: false,
             ad_template: "buy-basic".into(),
             ad_every_min: None,
+            order_menu: None,
         }
     }
 }
@@ -883,6 +891,10 @@ pub struct PlusRulesFeatures {
     /// as off, so the field stays hidden.
     #[serde(default)]
     pub currency: bool,
+    /// "Sipariş menüsünü kontrol et" (`discovery.orderMenu`, DONUT-ORDER), off by default: a
+    /// missing one (an older service) reads as off, so the switch stays hidden.
+    #[serde(default)]
+    pub order_menu: bool,
 }
 
 impl Default for PlusRulesFeatures {
@@ -893,6 +905,7 @@ impl Default for PlusRulesFeatures {
             custom_items: true,
             item_pay: false,
             currency: false,
+            order_menu: false,
         }
     }
 }
@@ -2604,6 +2617,30 @@ mod tests {
         let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
         assert_eq!(config.discovery.ad_every_min, Some(45));
         assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+    }
+
+    #[test]
+    fn the_order_menu_goes_back_as_it_came() {
+        // Off is not in the document (the service stores it only while on): none is written.
+        let config: PlusConfig = serde_json::from_value(document()).unwrap();
+        assert_eq!(config.discovery.order_menu, None);
+        let written = serde_json::to_value(&config).unwrap();
+        assert_eq!(written["discovery"].get("orderMenu"), None);
+        // On goes back on; the player's "off" goes as false, for the service to leave it out.
+        for on in [true, false] {
+            let mut doc = document();
+            doc["discovery"]["orderMenu"] = json!(on);
+            let config: PlusConfig = serde_json::from_value(doc.clone()).unwrap();
+            assert_eq!(config.discovery.order_menu, Some(on));
+            assert_eq!(serde_json::to_value(&config).unwrap(), doc);
+        }
+        // Studio's switch: an older service names none, so the switch stays hidden.
+        let rules: PlusRules =
+            serde_json::from_value(json!({"features": {"orders": true}})).unwrap();
+        assert!(!rules.features.order_menu);
+        let rules: PlusRules =
+            serde_json::from_value(json!({"features": {"orderMenu": true}})).unwrap();
+        assert!(rules.features.order_menu);
     }
 
     #[test]

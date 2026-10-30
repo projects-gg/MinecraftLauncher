@@ -80,12 +80,14 @@ export function dayText(at: number, lang: Lang): string {
   return new Intl.DateTimeFormat(locale(lang), { day: "numeric", month: "long" }).format(at * 1000);
 }
 
-/** "16–23 Ekim" / "16–23 October", across months "28 Eylül – 5 Ekim": a span of days, both in. */
+/**
+ * "16-23 Ekim" / "16-23 October", across months "28 Eylül - 5 Ekim": a span of days, both in, with a
+ * plain hyphen as the site writes it (TASTE-SWEEP r1: a long dash made it read as a sentence).
+ */
 export function rangeText(from: number, to: number, lang: Lang): string {
-  return new Intl.DateTimeFormat(locale(lang), { day: "numeric", month: "long" }).formatRange(
-    from * 1000,
-    to * 1000,
-  );
+  return new Intl.DateTimeFormat(locale(lang), { day: "numeric", month: "long" })
+    .formatRange(from * 1000, to * 1000)
+    .replace(/[–—]/g, "-");
 }
 
 /** "14:05": the time of day of a line. */

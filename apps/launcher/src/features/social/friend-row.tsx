@@ -58,6 +58,7 @@ import { isJoinable, notifiesOnline, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
 import { usePersonItems } from "./person-menu";
 import { canInvite } from "./play-together";
+import { PresenceText } from "./presence-text";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
@@ -276,7 +277,11 @@ function FriendCard({
                   : "text-ash-300",
             )}
           >
-            {world ? <WorldLine invite={world} /> : presenceLine(friend, t)}
+            {world ? (
+              <WorldLine invite={world} />
+            ) : (
+              <PresenceText friend={friend} t={t} joinable={joinable} />
+            )}
             {friend.dnd ? (
               <span className="text-gold-300"> ({t("social.presence.dnd")})</span>
             ) : null}
@@ -639,7 +644,11 @@ export function FriendRow({
                       )}
                       {...swap(reduce)}
                     >
-                      {world ? <WorldLine invite={world} /> : line}
+                      {world ? (
+                        <WorldLine invite={world} />
+                      ) : (
+                        <PresenceText friend={friend} t={t} joinable={joinable} />
+                      )}
                     </motion.span>
                   </AnimatePresence>
                 </span>

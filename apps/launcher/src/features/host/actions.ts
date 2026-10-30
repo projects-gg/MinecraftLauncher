@@ -57,7 +57,7 @@ export function retryOpen(session: Extract<HostSession, { phase: "failed" }>) {
   });
 }
 
-/** "Projects'te buluşun": the friends get a "Birlikte oyna" invite there, the player "Bağlan". */
+/** "Projects'te birlikte oyna": the friends get a "Birlikte oyna" invite there, the player "Bağlan". */
 export async function meetOnProjects(friends: string[]) {
   useHostUi.getState().showFailure(null);
   const done = await attempt(() => hostApi.meetOnProjects(friends));

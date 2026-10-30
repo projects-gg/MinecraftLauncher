@@ -16,6 +16,8 @@ const LIMIT = {
   spans: 64,
   ench: 32,
   inside: 9,
+  /** A container's stack count (afk-host's cap). */
+  stacks: 256,
   count: 1_000_000,
 } as const;
 
@@ -122,6 +124,9 @@ export function safeInvItem(value: unknown): InvItem | null {
     const top = value.inside.top.map(stackOf);
     if (insideCount !== undefined && top.every(Boolean)) {
       item.inside = { count: insideCount, top: top as InvInsideStack[] };
+      // A newer machine counts the stacks: at least the ones listed; otherwise that field drops alone.
+      const stacks = int(value.inside.stacks, top.length, LIMIT.stacks);
+      if (stacks !== undefined) item.inside.stacks = stacks;
     }
   }
   if (typeof value.potion === "string" && ID.test(value.potion)) item.potion = value.potion;

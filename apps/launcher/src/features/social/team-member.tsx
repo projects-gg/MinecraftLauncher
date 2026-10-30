@@ -45,9 +45,10 @@ import { openInDiscord } from "./discord-link";
 import { JoinButton } from "./friend-row";
 import { openMenuFromKey } from "./menu-key";
 import { type PersonAction, personMenu } from "./menus";
-import { isJoinable, presenceLine } from "./model";
+import { isJoinable, presenceLine, presenceParts } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
 import { type PersonQuestion, usePersonItems } from "./person-menu";
+import { PresenceText } from "./presence-text";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
 import { afterHandingOn, canRemove, daysSince, MAX_MODERATORS } from "./teams";
@@ -379,9 +380,15 @@ function MemberCard({
                     : "text-ash-300",
             )}
           >
-            {member.blocked
-              ? t("teams.member.blocked")
-              : presenceLine(friend && member.state === "offline" ? friend : member, t)}
+            {member.blocked ? (
+              t("teams.member.blocked")
+            ) : (
+              <PresenceText
+                friend={friend && member.state === "offline" ? friend : member}
+                t={t}
+                joinable={joinable}
+              />
+            )}
           </p>
         </div>
       </div>
@@ -570,7 +577,11 @@ export function TeamMemberRow({
     member.blocked ||
     (member.state === "playing" && !joinable) ||
     (member.state === "offline" && Boolean(friend?.lastSeen));
-  const sub = shown ? presence : null;
+  // Under the crew page's place heading a joinable crewmate's line is the version alone, in ash, when
+  // it is known: the heading gives the place, the version says what to start before "Katıl".
+  const versionOnly =
+    !shown && joinable && line === "where" ? presenceParts(member, t).version : null;
+  const sub = shown ? presence : versionOnly;
 
   // Questions are asked in the card: it opens at the question once the menu is gone.
   const openAt = (question: Question) =>
@@ -643,11 +654,19 @@ export function TeamMemberRow({
                         key={sub}
                         className={cn(
                           "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
-                          joinable ? "text-jade-400" : "text-ash-400",
+                          joinable && !versionOnly ? "text-jade-400" : "text-ash-400",
                         )}
                         {...swap(reduce)}
                       >
-                        {sub}
+                        {member.blocked || versionOnly ? (
+                          sub
+                        ) : (
+                          <PresenceText
+                            friend={friend && member.state === "offline" ? friend : member}
+                            t={t}
+                            joinable={joinable}
+                          />
+                        )}
                       </motion.span>
                     </AnimatePresence>
                   </span>

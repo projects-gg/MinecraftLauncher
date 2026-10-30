@@ -70,7 +70,7 @@ export const trTeams = {
     unmakeModerator: "Moderatörlükten al",
     unmadeModerator: "{{name}} artık üye",
     remove: "Ekipten çıkar",
-    removeAsk: "{{name}} ekipten çıkar ve ekip kodu yenilenir.",
+    removeAsk: "{{name}} ekipten çıkarılır ve ekip kodu yenilenir.",
     removed: "{{name}} ekipten çıkarıldı",
     blocked: "Engelledin",
     since_one: "{{count}} gündür ekipte",
@@ -217,8 +217,10 @@ export const trTeams = {
   },
   notify: {
     title: "Ekip bildirimleri",
-    calls: "Ekip çağrıları",
-    projects: "Ekip arkadaşların Projects'e girince",
+    // Under that title (the bell's panel) or "Ekibin" (Settings): the group says whose, so the
+    // switches do not say "Ekip" again (CHAT-PROD leftovers).
+    calls: "Çağrılar",
+    projects: "Projects'e girince",
     crewJoined: "{{name}} Projects'e girdi",
     crewJoinedMany_one: "{{name}} ve {{count}} ekip arkadaşın Projects'e girdi",
     crewJoinedMany_other: "{{name}} ve {{count}} ekip arkadaşın Projects'e girdi",

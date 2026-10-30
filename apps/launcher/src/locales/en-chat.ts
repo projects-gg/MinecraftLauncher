@@ -3,7 +3,7 @@ export const enChat = {
   tabs: {
     friends: "Friends",
     messages: "Messages",
-    crew: "Crew",
+    crew: "Overview",
     chat: "Chat",
   },
   list: {
@@ -94,7 +94,7 @@ export const enChat = {
     reply: "Reply",
   },
   settings: {
-    crewChat: "Crew chat notifications",
+    crewChat: "Chat messages",
   },
   consent: "Chat messages stay on our server only to be delivered, for at most 7 days.",
   waiting_one: "{{count}} unread message",

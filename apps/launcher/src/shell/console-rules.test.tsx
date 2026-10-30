@@ -3,7 +3,14 @@
 // same rules as MCC's ConsoleLooks, afk-host's looks.rs and the Worker's console.ts; the shared
 // cases are the Worker's test-vectors/console-looks-v1.json). Invisible characters are built from
 // their code points, so no file of ours hides one.
-import { ConsoleActionCard, copiedPreview, safeClick, safeHover, urlParts } from "@pl/ui/console";
+import {
+  ConsoleActionCard,
+  copiedPreview,
+  domainParts,
+  safeClick,
+  safeHover,
+  urlParts,
+} from "@pl/ui/console";
 import { safeInvCursor, safeInvItem, safeInvItems } from "@pl/ui/inventory";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -76,31 +83,58 @@ describe("a link's address", () => {
     );
   });
 
-  it("shows the host alone and first on the card, the rest under it", () => {
+  const card = (v: string) =>
     render(
       <ConsoleActionCard
-        click={{ a: "open_url", v: "https://forum.projects.gg/t/etkinlik" }}
+        click={{ a: "open_url", v }}
         lang="tr"
         clock="17:25:22"
         onConfirm={() => undefined}
         onCancel={() => undefined}
       />,
     );
-    const host = screen.getByText("forum.projects.gg");
-    expect(host.className).toContain("font-semibold");
-    expect(screen.getByText("/t/etkinlik").className).toContain("text-ash-400");
+
+  it("shows the registrable domain alone, first and unbroken, the whole address under it", () => {
+    card("https://forum.projects.gg/t/etkinlik");
+    const domain = screen.getByText("projects.gg");
+    expect(domain.className).toContain("font-semibold");
+    expect(domain.className).toContain("whitespace-nowrap");
+    expect(screen.getByText("forum.projects.gg/t/etkinlik").className).toContain("text-ash-400");
+  });
+
+  it("shows the real domain of a host that starts with another site's name (TASTE-SWEEP)", () => {
+    card("https://forum.projects.gg.giris-yap.example/");
+    expect(screen.getByText("giris-yap.example").className).toContain("font-semibold");
+    expect(screen.queryByText("projects.gg")).toBeNull();
+    expect(domainParts("forum.projects.gg.evil.example")).toEqual({
+      sub: "forum.projects.gg.",
+      domain: "evil.example",
+    });
+    expect(domainParts("forum.projects.gg")).toEqual({ sub: "forum.", domain: "projects.gg" });
+    // A country's generic second level: three labels.
+    expect(domainParts("www.kpss.com.tr").domain).toBe("kpss.com.tr");
+    expect(domainParts("shop.example.co.uk:8443").domain).toBe("example.co.uk");
+    expect(domainParts("projects.gg").sub).toBe("");
   });
 });
 
 describe("a copy's toast", () => {
-  it("shows what was copied, at most 60 units", () => {
+  it("shows what was copied, at most 60 units, its start and its end", () => {
     expect(copiedPreview("PROMO-2026")).toBe("PROMO-2026");
-    const long = "x".repeat(100);
-    expect(copiedPreview(long)).toBe(`${"x".repeat(59)}…`);
-    expect(copiedPreview(long).length).toBe(60);
-    // Never half a character.
-    const emoji = `${"x".repeat(58)}🙂🙂`;
-    expect(copiedPreview(emoji)).toBe(`${"x".repeat(58)}…`);
+    const long = `${"a".repeat(50)}${"b".repeat(50)}`;
+    expect(copiedPreview(long)).toBe(`${"a".repeat(28)} … ${"b".repeat(28)}`);
+    expect(copiedPreview(long).length).toBeLessThanOrEqual(60);
+    // White space cannot push a command out of sight (pasting would bring it).
+    const padded = `mc.server.net${" ".repeat(80)}/op Kaan_07`;
+    expect(copiedPreview(padded)).toBe("mc.server.net /op Kaan_07");
+    // Never half a character, at either cut.
+    const emoji = `${"x".repeat(27)}🙂${"y".repeat(30)}🙂${"z".repeat(27)}`;
+    const shown = copiedPreview(emoji);
+    expect(shown.startsWith("x".repeat(27))).toBe(true);
+    expect(shown.endsWith("z".repeat(27))).toBe(true);
+    expect(shown).not.toMatch(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+    );
   });
 });
 
