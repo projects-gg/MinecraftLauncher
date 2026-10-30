@@ -217,7 +217,9 @@ export const tr = {
     lastPlayed: "Son oynama {{when}}",
     neverPlayed: "Henüz oynanmadı",
     playTime: "{{time}} oynandı",
-    session: "Oturum: {{time}}",
+    // The game on the command bar, never "Oturum": the account menu's "Oturumun süresi doldu" is the
+    // sign-in (LANDING-L, PLAY-AGAIN).
+    session: "Oyunda: {{time}}",
     oneAtATime: "Aynı anda yalnızca bir oyun açılabilir.",
     offlineMode: "İnternete ulaşılamadı. Kurulu dosyalarla devam ediliyor.",
     packUpdated: "{{name}} paketi {{version}} sürümüne güncellendi",

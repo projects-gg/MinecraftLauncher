@@ -344,9 +344,10 @@ export function mockCustomItems(): PlusCustomItem[] {
   const now = nowSecs();
   return [
     {
+      // A vanilla item the player named in the game (sample data names only real items).
       k: "c1",
-      name: "Yakut",
-      base: "minecraft:paper",
+      name: "Zümrüt",
+      base: "minecraft:emerald",
       fp: "5f5dd9c2dc066136a75abba069336cad",
       look: { cmd: 10001, model: null },
       from: "inv",
@@ -1164,12 +1165,12 @@ export function mockReport(): PlusWeeklyReport {
 
 // --- "Envanterden seç" ----------------------------------------------------------------------------
 
-const YAKUT: InvItem = {
+const ZUMRUT: InvItem = {
   slot: 16,
-  id: "minecraft:paper",
+  id: "minecraft:emerald",
   count: 12,
-  label: { tr: "Kâğıt", en: "Paper" },
-  name: "Yakut",
+  label: { tr: "Zümrüt", en: "Emerald" },
+  name: "Zümrüt",
   cmd: 10001,
 };
 
@@ -1193,7 +1194,7 @@ export function mockPickInventory(_id: string): {
   if (pickScenario === "loading") {
     return { status: "waiting", reason: null, locked: false, inventory: null, window: null };
   }
-  const items = pickScenario === "empty" ? [] : [...SAMPLE_INVENTORY.items, YAKUT];
+  const items = pickScenario === "empty" ? [] : [...SAMPLE_INVENTORY.items, ZUMRUT];
   return {
     status: "ok",
     reason: null,
@@ -1294,7 +1295,7 @@ export function mockNotice(event: string): AfkNotice {
     event === "confirm_item"
       ? { tr: "Ejder Kılıcı", en: "Ejder Kılıcı" }
       : event === "handoff"
-        ? { tr: "Yakut", en: "Yakut" }
+        ? { tr: "Zümrüt", en: "Emerald" }
         : event === "approval" || event === "deal_done"
           ? { tr: "Elitra", en: "Elytra" }
           : undefined;
