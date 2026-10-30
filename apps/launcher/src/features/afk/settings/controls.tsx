@@ -2,7 +2,7 @@
 // rows (words on the left, the control on the right edge, a hairline between rows), one block per
 // feature led by its switch, and folds that show a feature's fields only while its switch is on
 // (they fade in place and the rows below glide, never a height animation; docs/design.md §5).
-import { Info, Plus, WarningCircle } from "@phosphor-icons/react";
+import { CaretRight, Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -512,24 +512,89 @@ export function AddressField({
   );
 }
 
-/** A quiet way under a field, underlined so it reads as an action (afk.projects.gg's look). */
-export function TextAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+/**
+ * A quiet way under a field, underlined so it reads as an action (afk.projects.gg's look). `strong`:
+ * the brighter of the two, for ProBot AI's way; never gold (the sheet's one gold is its save).
+ */
+export function TextAction({
+  onClick,
+  strong,
+  children,
+}: {
+  onClick: () => void;
+  strong?: boolean;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="cursor-pointer self-start rounded-sm text-left text-[12.5px] font-medium text-ash-300 underline decoration-white/25 underline-offset-[3px] transition-colors duration-150 outline-none hover:text-bone-100 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300"
+      className={cn(
+        "cursor-pointer self-start rounded-sm text-left text-[12.5px] font-medium underline underline-offset-[3px] outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
+        strong
+          ? "text-bone-100 decoration-white/35 transition-[text-decoration-color] duration-150 hover:decoration-bone-100"
+          : "text-ash-300 decoration-white/25 transition-colors duration-150 hover:text-bone-100 hover:decoration-current",
+      )}
     >
       {children}
     </button>
   );
 }
 
+/** A pattern, small and folded away: most players never need to read it (afk.projects.gg). */
+export function PatternFold({ pattern }: { pattern: string }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex cursor-pointer items-center gap-1 rounded-sm text-[12px] text-ash-400 transition-colors duration-150 outline-none hover:text-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300"
+      >
+        <CaretRight
+          size={11}
+          weight="bold"
+          aria-hidden
+          className={cn("transition-transform duration-150", open && "rotate-90")}
+        />
+        {open ? t("afkPanel.rule.hidePattern") : t("afkPanel.rule.showPattern")}
+      </button>
+      {open ? (
+        <code
+          id={id}
+          data-selectable
+          className="mt-1 block font-mono text-[12px] break-all text-ash-300"
+        >
+          {pattern}
+        </code>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * ProBot AI's part in a 7/24 Bulut rule's trigger (the desktop has none): a pattern it made reads
+ * as its sentence, and "ProBot AI ile kalıp kur" opens its box under the rule, where "Kalıbı kendim
+ * yazacağım" waits too (`cloud/rule-assist.tsx`).
+ */
+export interface TriggerAssist {
+  /** The sentence of the pattern ProBot AI made; null: the field (a phrase, or written by hand). */
+  sentence: string | null;
+  /** Its box is open under the rule: the field's own way to it steps aside. */
+  open: boolean;
+  onOpen: () => void;
+}
+
 /**
  * An auto-reply rule's trigger, desktop and 7/24 Bulut, as on afk.projects.gg: a plain phrase by
- * default ("Mesajda geçen söz"). A pattern written by hand is the one advanced way ("Kalıbı kendim
+ * default ("Mesajda geçen söz"). A pattern written by hand is the advanced way ("Kalıbı kendim
  * yazacağım"), monospace with its one line of help; "Düz söze dön" goes back. The owner, 25 Oct:
- * players have no technical knowledge, so a "Düzenli ifade" switch in every rule gave way to this.
+ * players have no technical knowledge, so a "Düzenli ifade" switch in every rule gave way to this,
+ * and on 7/24 Bulut ProBot AI builds the pattern from the player's own words (`assist`).
  */
 export function TriggerField({
   id,
@@ -540,6 +605,7 @@ export function TriggerField({
   error,
   maxLength,
   autoFocus,
+  assist,
 }: {
   id: string;
   value: string;
@@ -550,12 +616,15 @@ export function TriggerField({
   error: string | null;
   maxLength: number;
   autoFocus?: boolean;
+  /** 7/24 Bulut while its ProBot AI can answer. */
+  assist?: TriggerAssist;
 }) {
   const { t } = useTranslation();
   // The pattern given up for a plain phrase comes back with "Kalıbı kendim yazacağım" (this visit).
   const kept = useRef<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const helpId = useId();
+  const sentence = regex ? (assist?.sentence ?? null) : null;
   const switchWay = () => {
     if (regex) {
       kept.current = value;
@@ -566,34 +635,65 @@ export function TriggerField({
     }
     requestAnimationFrame(() => input.current?.focus());
   };
+  const label = !regex
+    ? t("afkPanel.rule.match")
+    : sentence
+      ? t("afkPanel.rule.matchWhen")
+      : t("afkPanel.rule.pattern");
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <label htmlFor={id} className="text-[13px] font-medium text-bone-100">
-        {regex ? t("afkPanel.rule.pattern") : t("afkPanel.rule.match")}
-      </label>
-      <Input
-        ref={input}
-        id={id}
-        value={value}
-        placeholder={regex ? t("afkPanel.rule.patternPlaceholder") : placeholder}
-        spellCheck={false}
-        autoComplete="off"
-        maxLength={maxLength}
-        invalid={Boolean(error)}
-        autoFocus={autoFocus}
-        aria-describedby={regex ? helpId : undefined}
-        onChange={(event) => onChange(event.target.value, regex)}
-        className={cn("h-9", regex && "font-mono text-[13px]")}
-      />
+      {sentence ? (
+        <span className="text-[13px] font-medium text-bone-100">{label}</span>
+      ) : (
+        <label htmlFor={id} className="text-[13px] font-medium text-bone-100">
+          {label}
+        </label>
+      )}
+      {sentence ? (
+        // Read after its label; focusable only for "Kullan" to land on.
+        <div
+          id={id}
+          tabIndex={-1}
+          className="rounded-md bg-obsidian-800/60 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+        >
+          <p className="text-[13.5px] leading-snug text-bone-100">{sentence}</p>
+          <PatternFold pattern={value} />
+        </div>
+      ) : (
+        <Input
+          ref={input}
+          id={id}
+          value={value}
+          placeholder={regex ? t("afkPanel.rule.patternPlaceholder") : placeholder}
+          spellCheck={false}
+          autoComplete="off"
+          maxLength={maxLength}
+          invalid={Boolean(error)}
+          autoFocus={autoFocus}
+          aria-describedby={regex ? helpId : undefined}
+          onChange={(event) => onChange(event.target.value, regex)}
+          className={cn("h-9", regex && "font-mono text-[13px]")}
+        />
+      )}
       {error ? <ErrorText>{error}</ErrorText> : null}
-      {regex ? (
+      {regex && !sentence ? (
         <p id={helpId} className="text-[12px] leading-snug text-ash-400">
           {t("afkPanel.rule.patternHelp")}
         </p>
       ) : null}
-      <TextAction onClick={switchWay}>
-        {regex ? t("afkPanel.rule.toPlain") : t("afkPanel.rule.writeMyself")}
-      </TextAction>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {assist && !assist.open ? (
+          <TextAction strong onClick={assist.onOpen}>
+            {sentence ? t("afkPanel.rule.change") : t("afkPanel.rule.askAi")}
+          </TextAction>
+        ) : null}
+        {/* With ProBot AI, writing a pattern by hand waits in its box. */}
+        {regex || !assist ? (
+          <TextAction onClick={switchWay}>
+            {regex ? t("afkPanel.rule.toPlain") : t("afkPanel.rule.writeMyself")}
+          </TextAction>
+        ) : null}
+      </div>
     </div>
   );
 }

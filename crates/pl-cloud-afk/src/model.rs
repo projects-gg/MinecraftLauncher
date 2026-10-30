@@ -112,6 +112,16 @@ pub struct Offer {
     pub plus: Option<PlusOffer>,
     /// Studio's switches of the cloud features (CAFK-FEAT); None from a service before them.
     pub features: Option<OfferFeatures>,
+    /// The service's own AI uses; None from a service before the pattern helper.
+    pub ai: Option<OfferAi>,
+}
+
+/// `GET /offer` → `ai`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OfferAi {
+    /// The pattern helper ("ProBot AI ile kalıp kur") can ask its model now.
+    pub patterns: bool,
 }
 
 impl Offer {

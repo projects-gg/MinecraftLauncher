@@ -41,6 +41,7 @@ mod live;
 mod migrate;
 mod model;
 mod movement;
+mod pattern;
 mod plus;
 mod plus_audit;
 mod plus_check;
@@ -80,9 +81,10 @@ pub use model::{
     CloudLocalized, CloudLogPage, CloudModAppeal, CloudModPaused, CloudModeration,
     CloudPayloadView, CloudPlanPrice, CloudRenewal, CloudRestriction, CloudRuleView, CloudSales,
     CloudServer, CloudServerChanges, CloudSpan, CloudStock, CloudVersionOption, CloudVersions,
-    CommandInput, ConfigInput, Me, MeUser, Offer, PayloadInput, RevealAnswer, RuleInput,
+    CommandInput, ConfigInput, Me, MeUser, Offer, OfferAi, PayloadInput, RevealAnswer, RuleInput,
     ServiceMode, VaultKey,
 };
+pub use pattern::{PATTERN_TEXT_MAX, PatternSuggestion, PatternTrouble, pattern_text};
 pub use movement::{
     CloudBlock, CloudMovementError, CloudMovementFeature, CloudMovementFollow,
     CloudMovementSetting, CloudMovementState, CloudPos, MOVE_GOTO_MAX_BLOCKS, MOVE_STEP_MAX,

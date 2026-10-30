@@ -21,6 +21,7 @@ use crate::model::{
     AccountList, AccountPatch, CloudAccount, CloudLogPage, CloudVersions, Me, Offer, RevealAnswer,
     VaultKey,
 };
+use crate::pattern::{PatternSuggestion, pattern_text};
 
 /// The production API.
 pub const PRODUCTION_URL: &str = "https://afk.projects.gg/api/v1/";
@@ -387,6 +388,35 @@ impl CloudClient {
         Ok(answer)
     }
 
+    /// "ProBot AI ile kalıp kur" (README "Pattern helper"): a rule's trigger from the player's own
+    /// words, its sentence in `lang` (`en`, else `tr`). Never repeated by itself: the service
+    /// counts each call that reaches its model.
+    pub async fn suggest_pattern(
+        &self,
+        token: &Bearer,
+        id: &str,
+        text: &str,
+        lang: &str,
+        fresh: bool,
+    ) -> Result<PatternSuggestion> {
+        #[derive(Deserialize)]
+        struct Answer {
+            suggestion: PatternSuggestion,
+        }
+        let reply = self
+            .send(
+                Method::POST,
+                &account_path(id, "/rules/pattern")?,
+                Some(token),
+                Some(pattern_body(text, lang, fresh)?),
+                &[],
+                Repeat::Never,
+            )
+            .await?
+            .into_result()?;
+        reply.json::<Answer>()?.suggestion.checked()
+    }
+
     // --- plumbing ----------------------------------------------------------------------------
 
     pub(crate) async fn get<T: DeserializeOwned>(
@@ -526,6 +556,18 @@ fn log_params(query: &LogQuery) -> String {
     params.finish()
 }
 
+/// The pattern helper's request: the description folded as the service reads it; `fresh` only
+/// when asked ("Tekrar dene").
+fn pattern_body(text: &str, lang: &str, fresh: bool) -> Result<serde_json::Value> {
+    let text = pattern_text(text).ok_or(CloudError::Invalid("pattern text"))?;
+    let lang = if lang == "en" { "en" } else { "tr" };
+    let mut body = serde_json::json!({ "text": text, "lang": lang });
+    if fresh {
+        body["fresh"] = serde_json::Value::Bool(true);
+    }
+    Ok(body)
+}
+
 /// `accounts/<id><rest>`, refusing ids that could leave the route.
 pub(crate) fn account_path(id: &str, rest: &str) -> Result<String> {
     let safe = !id.is_empty()
@@ -662,6 +704,28 @@ mod tests {
         assert!(account_path("../me", "").is_err());
         assert!(account_path("", "").is_err());
         assert!(account_path("a/b", "").is_err());
+    }
+
+    #[test]
+    fn the_pattern_request_is_the_contracts() {
+        assert_eq!(
+            pattern_body("  biri tp   yazınca ", "tr", false).unwrap(),
+            serde_json::json!({ "text": "biri tp yazınca", "lang": "tr" })
+        );
+        assert_eq!(
+            pattern_body("when someone says tp", "en", true).unwrap(),
+            serde_json::json!({ "text": "when someone says tp", "lang": "en", "fresh": true })
+        );
+        assert_eq!(
+            pattern_body("tp", "de", false).unwrap()["lang"],
+            serde_json::json!("tr")
+        );
+        assert!(pattern_body(" ", "tr", false).is_err());
+        assert!(pattern_body(&"a".repeat(201), "tr", false).is_err());
+        assert_eq!(
+            account_path("a_7KQ2MZ3P9TW4XB1C", "/rules/pattern").unwrap(),
+            "accounts/a_7KQ2MZ3P9TW4XB1C/rules/pattern"
+        );
     }
 
     #[test]

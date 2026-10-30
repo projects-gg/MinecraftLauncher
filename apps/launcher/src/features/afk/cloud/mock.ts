@@ -43,6 +43,7 @@ import {
   watchInventory,
 } from "./mock-feat";
 import { mockLive } from "./mock-live";
+import { mockAiPatterns, mockSuggestPattern } from "./mock-pattern";
 import {
   GECE,
   geceRunning,
@@ -504,6 +505,7 @@ async function overview(): Promise<CloudPageData> {
       plus: hidden ? null : mockPlusOffer(),
       plusMe: which === "signedout" || hidden ? null : mockPlusMe(),
       features: hidden ? null : offerFeatures(),
+      aiPatterns: !hidden && mockAiPatterns(),
     },
     twins,
   };
@@ -875,6 +877,7 @@ export const mockCloudApi: CloudApi = {
     if (fail === "limited") return { kind: "limited", retry_after: 60 };
     return { kind: "shown", text: "/login EskiSifre42" };
   },
+  suggestPattern: (_id, text, fresh) => mockSuggestPattern(text, fresh),
   async movePlan(desktopId) {
     await delay(260);
     const desktop = (await api.afkAccounts()).find((a) => a.id === desktopId);

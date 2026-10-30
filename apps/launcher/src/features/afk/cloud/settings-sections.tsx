@@ -33,12 +33,13 @@ import {
   TriggerField,
   WideRow,
 } from "../settings/controls";
-import type { CloudEditData } from "./api";
+import { type CloudEditData, cloudApi } from "./api";
 import { pausedRows, refusedCategory, refusedText } from "./moderation";
 import { PausedLine } from "./moderation-bits";
 import { slotKey } from "./movement/model";
 import { hasPlaceholder, insertToken } from "./placeholders";
 import { ReplyTools } from "./reply-tools";
+import { useRuleAssist } from "./rule-assist";
 import { WordsField } from "./secret-field";
 import {
   type Command,
@@ -68,6 +69,8 @@ export interface PartProps {
   issues: Issue[];
   /** Studio's switches of the cloud features (null: a service before them). */
   features: CloudFeatures | null;
+  /** "ProBot AI ile kalıp kur" can answer now (the overview's `aiPatterns`). */
+  aiPatterns: boolean;
 }
 
 /** The command rows' questions: where each row sits, and a new row's place. */
@@ -828,6 +831,18 @@ function RuleRow({
   const ids = useId();
   const replyRef = useRef<HTMLInputElement>(null);
   const reply = rule.reply;
+  const accountId = part.view.account.id;
+  // ProBot AI builds the trigger from the player's words; its box sits under the rule's first row.
+  const { assist, box } = useRuleAssist({
+    accountId,
+    ruleId: rule.id,
+    fieldId: `${ids}-match`,
+    pattern: rule.pattern,
+    regex: rule.regex,
+    available: part.aiPatterns,
+    suggest: (text, fresh) => cloudApi.suggestPattern(accountId, text, fresh),
+    onChange: (pattern, regex) => onChange({ ...rule, pattern, regex }),
+  });
   // Placeholders: chips and "Dene" while this account may use them. With Studio's switch on, a
   // reply holding them is not sent while its machine cannot fill them or while it fails the save
   // checks (one stored before the switch), which the row says until the check itself shows.
@@ -927,6 +942,7 @@ function RuleRow({
             error={at("match")}
             maxLength={256}
             autoFocus={focus}
+            assist={assist}
           />
           <div className="flex min-w-0 flex-col gap-2">
             <WordsField
@@ -965,6 +981,7 @@ function RuleRow({
             {paused ? <PausedLine category={paused} account={part.view.account} /> : null}
           </div>
         </div>
+        {box}
         <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/6 pt-3 pb-3">
           <div className="flex items-center gap-2">
             <span className="text-[13px] text-ash-300">{t("cloudAfk.settings.replies.from")}</span>

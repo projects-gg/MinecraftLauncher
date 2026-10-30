@@ -224,7 +224,10 @@ function Editor({
   const savedRef = useRef(false);
   const [settling, setSettling] = useState(false);
   // Studio's placeholder switch: its checks answer while typing too (the backend checks again).
-  const features = useCloudPage().data?.overview.features ?? null;
+  const page = useCloudPage().data;
+  const features = page?.overview.features ?? null;
+  // "ProBot AI ile kalıp kur" in the rules while the service's model can answer.
+  const aiPatterns = page?.overview.aiPatterns ?? false;
   const rules = useMemo(
     () => ({
       on: Boolean(features?.placeholders),
@@ -403,7 +406,7 @@ function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const part: PartProps = { draft, setDraft, view, issues: shown, features };
+  const part: PartProps = { draft, setDraft, view, issues: shown, features, aiPatterns };
   // A mark on screen holds the save (a refused password's or a held row's never: see `held`).
   const blocking = issues.length > 0;
   // Stopped on a password the server refused: saving alone left the stop in place, so the main

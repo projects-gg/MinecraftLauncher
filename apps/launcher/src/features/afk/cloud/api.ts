@@ -24,6 +24,7 @@ import {
   type CloudSaveOutcome_Serialize,
   type CmdError,
   commands,
+  type PatternSuggestion,
   type CloudPage as SitePage,
 } from "@/bindings";
 import { CommandError } from "@/lib/api/tauri";
@@ -51,6 +52,7 @@ export type {
   CloudMovePlan,
   CloudReplyTry,
   CloudRevealOutcome,
+  PatternSuggestion,
   SitePage,
 };
 
@@ -82,6 +84,11 @@ export interface CloudApi {
   save(id: string, edit: CloudEdit): Promise<CloudSaveResult>;
   /** "Göster": one stored secret row's words, from the machine; never kept. */
   reveal(id: string, rowId: string): Promise<CloudRevealOutcome>;
+  /**
+   * "ProBot AI ile kalıp kur": a rule's trigger from the player's own words, in the launcher's
+   * language (`fresh`: "Tekrar dene"). Never repeated by itself: each answer of the model counts.
+   */
+  suggestPattern(id: string, text: string, fresh: boolean): Promise<PatternSuggestion>;
   /** "Buluta taşı": the desktop account in the cloud's form. */
   movePlan(desktopId: string): Promise<CloudMovePlan>;
   move(desktopId: string, cloudId: string, rev: number, run: boolean): Promise<CloudMoveData>;
@@ -147,6 +154,7 @@ const tauriCloudApi: CloudApi = {
   edit: (id) => ok(commands.cloudAfkEdit(id)),
   save: (id, edit) => ok(commands.cloudAfkSave(id, edit)),
   reveal: (id, rowId) => ok(commands.cloudAfkReveal(id, rowId)),
+  suggestPattern: (id, text, fresh) => ok(commands.cloudAfkSuggestPattern(id, text, fresh)),
   movePlan: (desktopId) => ok(commands.cloudAfkMovePlan(desktopId)),
   move: (desktopId, cloudId, rev, run) => ok(commands.cloudAfkMove(desktopId, cloudId, rev, run)),
   connectHere: () => commands.cloudAfkConnectHere(),

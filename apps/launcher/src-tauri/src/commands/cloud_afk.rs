@@ -11,6 +11,7 @@ use std::sync::{Arc, OnceLock};
 use pl_cloud_afk::{
     Bearer, CloudAccount, CloudConfig, CloudEdit, CloudEditView, CloudError, CloudLogPage,
     CloudMovePlan, CloudOverview, CloudSaveOutcome, CloudServer, CloudService, Copies, LiveSink,
+    PatternSuggestion, PatternTrouble,
 };
 use pl_lang::{Lang, pick};
 use serde::{Deserialize, Serialize};
@@ -280,6 +281,56 @@ pub async fn cloud_afk_reveal(
             }),
             _ => Err(error.into()),
         },
+    }
+}
+
+/// "ProBot AI ile kalıp kur" (the service's README "Pattern helper"): an auto-reply rule's trigger
+/// from the player's own words, its sentence in the launcher's language. Free for players; the
+/// service counts each call that reaches its model, so this never repeats by itself. `fresh`:
+/// "Tekrar dene", a new answer instead of the kept one.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_suggest_pattern(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    text: String,
+    fresh: bool,
+) -> CmdResult<PatternSuggestion> {
+    let token = token(&state)?;
+    let lang = Lang::current().pick("tr", "en");
+    Ok(service(&app, &state)
+        .suggest_pattern(&token, &id, &text, lang, fresh)
+        .await?)
+}
+
+/// The pattern helper's refusals in afk.projects.gg's words (its "ProBot AI" box).
+fn pattern_words(trouble: PatternTrouble) -> (&'static str, String) {
+    match trouble {
+        PatternTrouble::Unclear => (
+            "BULUT-KALIP",
+            pick(
+                "ProBot AI bundan bir kalıp çıkaramadı. Başka sözlerle anlatmayı dene.",
+                "ProBot AI couldn't make a pattern from that. Try saying it another way.",
+            )
+            .into(),
+        ),
+        PatternTrouble::Busy => (
+            "BULUT-YZ-YOGUN",
+            pick(
+                "ProBot AI şu an çok yoğun. Biraz sonra tekrar dene.",
+                "ProBot AI is busy right now. Try again in a moment.",
+            )
+            .into(),
+        ),
+        PatternTrouble::Off => (
+            "BULUT-YZ-KAPALI",
+            pick(
+                "ProBot AI şu an yardım edemiyor. Düz bir söz yazabilir ya da kalıbı kendin yazabilirsin.",
+                "ProBot AI can't help right now. Use a plain phrase or write the pattern yourself.",
+            )
+            .into(),
+        ),
     }
 }
 
@@ -608,6 +659,14 @@ impl From<CloudError> for CmdError {
                 "BULUT-SATIR",
                 pick("Bu satır gönderilemez.", "This line can't be sent.").into(),
             ),
+            CloudError::Invalid("pattern text") => (
+                "BULUT-KALIP-UZUN",
+                pick(
+                    "En çok 200 karakter yazabilirsin.",
+                    "Keep it under 200 characters.",
+                )
+                .into(),
+            ),
             CloudError::Invalid("no machine yet") => (
                 "BULUT-YER",
                 pick(
@@ -625,6 +684,9 @@ impl From<CloudError> for CmdError {
                 .into(),
             ),
             CloudError::Refused { code, .. } => match code.as_str() {
+                "pattern_failed" | "ai_unavailable" => {
+                    pattern_words(PatternTrouble::of(&error).unwrap_or(PatternTrouble::Off))
+                }
                 "host_offline" => (
                     "BULUT-SUNUCU",
                     pick(
