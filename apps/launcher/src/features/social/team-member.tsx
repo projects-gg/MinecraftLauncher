@@ -45,7 +45,7 @@ import { openInDiscord } from "./discord-link";
 import { JoinButton } from "./friend-row";
 import { openMenuFromKey } from "./menu-key";
 import { type PersonAction, personMenu } from "./menus";
-import { isJoinable, presenceLine } from "./model";
+import { isJoinable, presenceLine, presenceParts } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
 import { type PersonQuestion, usePersonItems } from "./person-menu";
 import { PresenceText } from "./presence-text";
@@ -577,7 +577,11 @@ export function TeamMemberRow({
     member.blocked ||
     (member.state === "playing" && !joinable) ||
     (member.state === "offline" && Boolean(friend?.lastSeen));
-  const sub = shown ? presence : null;
+  // Under the crew page's place heading a joinable crewmate's line is the version alone, in ash, when
+  // it is known: the heading gives the place, the version says what to start before "Katıl".
+  const versionOnly =
+    !shown && joinable && line === "where" ? presenceParts(member, t).version : null;
+  const sub = shown ? presence : versionOnly;
 
   // Questions are asked in the card: it opens at the question once the menu is gone.
   const openAt = (question: Question) =>
@@ -650,11 +654,11 @@ export function TeamMemberRow({
                         key={sub}
                         className={cn(
                           "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
-                          joinable ? "text-jade-400" : "text-ash-400",
+                          joinable && !versionOnly ? "text-jade-400" : "text-ash-400",
                         )}
                         {...swap(reduce)}
                       >
-                        {member.blocked ? (
+                        {member.blocked || versionOnly ? (
                           sub
                         ) : (
                           <PresenceText

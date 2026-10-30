@@ -394,7 +394,7 @@ function previewTeam(founder: boolean, moderator = false): SocialTeam {
         name: "MaviElmas",
         avatar: "preset:knight",
         state: "playing",
-        game: { where: "projects", host: "play.projects.gg" },
+        game: { where: "projects", host: "play.projects.gg", ver: "1.21.4" },
       }),
       teamMember(undefined, {
         id: "702",
