@@ -1260,7 +1260,7 @@ fn parse_custom_items(value: &Value, now: i64) -> Checked<Vec<Value>> {
             reason: "text".into(),
             problem: Some(problem.into()),
         };
-        let name = check_persona(raw, MAX_INTRO).map_err(&text_refusal)?;
+        let name = check_persona(raw, MAX_INTRO).map_err(text_refusal)?;
         if name.is_empty() || cp(&name) > CUSTOM_NAME_MAX {
             return Err(text_refusal("length"));
         }
