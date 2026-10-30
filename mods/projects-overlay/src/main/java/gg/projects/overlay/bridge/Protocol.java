@@ -73,6 +73,7 @@ public final class Protocol {
             }
             features.add(PEOPLE);
             features.add(PEOPLE2);
+            features.add(PEOPLE3);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -286,6 +287,47 @@ public final class Protocol {
     /** "Arkadaş ekle" or "İsteği kabul et" on a crewmate (Q12). */
     public static JsonObject addFriend(String crewmate) {
         return friendFrame("add-friend", crewmate);
+    }
+
+    // ---- OVL-UX3: a crewmate's crew rows and "Yeni kategori…" (rows U1-U5 of docs/tasks/ovl2-protocol.md) --------
+
+    /**
+     * The crew rows' feature in {@code hello} (U1): the mod reads {@code roles} in {@code lists} and sends the frames
+     * below; the launcher's {@code welcome} lists it when it takes them. Sent beside {@link #PEOPLE2}.
+     */
+    public static final String PEOPLE3 = "people3";
+
+    /** "Moderatör yap" ({@code on}) or "Moderatörlükten al" on a crewmate of a crew the player leads (U2). */
+    public static JsonObject crewModerator(String crew, String crewmate, boolean on) {
+        JsonObject o = friendFrame("crew-mod", crewmate);
+        o.addProperty("crew", crew);
+        o.addProperty("on", on);
+        return o;
+    }
+
+    /** "Liderliği devret" to a crewmate (U3). */
+    public static JsonObject crewLead(String crew, String crewmate) {
+        JsonObject o = friendFrame("crew-lead", crewmate);
+        o.addProperty("crew", crew);
+        return o;
+    }
+
+    /** "Ekipten çıkar" (U4). */
+    public static JsonObject crewRemove(String crew, String crewmate) {
+        JsonObject o = friendFrame("crew-remove", crewmate);
+        o.addProperty("crew", crew);
+        return o;
+    }
+
+    /**
+     * "Yeni kategori…" (U5): a new category of that name at the end of the player's list, with the friend in it (the
+     * launcher folds the name's spaces and keeps 24 characters).
+     */
+    public static JsonObject moveToNew(String friend, String name) {
+        JsonObject o = friendFrame("move", friend);
+        o.addProperty("group", "");
+        o.addProperty("name", name);
+        return o;
     }
 
     private static JsonObject friendFrame(String type, String friend) {

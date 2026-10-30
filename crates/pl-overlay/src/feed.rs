@@ -24,16 +24,17 @@ use pl_social::{
     ChatMessageView, ChatPage, Connection, CrewBadgeView, GameLocation, MeView, MessageState,
     PermissionLevel, PresenceState, SendFailure as SocialFailure, SocialNotice, SocialView,
     StatusMode, TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS,
-    TeamRole, TeamView,
+    TEAM_FEATURE_ROLES, TeamMemberView, TeamRole, TeamView,
 };
 
 use crate::links::{self, LinkLists};
 use crate::policy::{self, CrewMute, CrewSettings, Mute, Notice, NotifyPrefs, Situation};
 use crate::protocol::{
     AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, CrewItem,
-    CrewPlace, FEATURE_INVITE, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_TAGS, FriendView,
-    GroupItem, LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, Me, MsgView, NoteKind,
-    PROTO, Place, ReactionView, ReplyView, SendFailure, ToGame, ToastView, WorldMark,
+    CrewPlace, CrewRoles, FEATURE_INVITE, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_PEOPLE3,
+    FEATURE_TAGS, FriendView, GroupItem, LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME,
+    MAX_QUOTE_CHARS, MateRights, Me, MsgView, NoteKind, PROTO, Place, ReactionView, ReplyView,
+    SendFailure, ToGame, ToastView, WorldMark,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
@@ -248,10 +249,13 @@ pub struct PeopleLists {
     pub projects: Vec<String>,
     /// Crewmates who are not friends, whose Discord profile is known (Q15).
     pub discord: Vec<String>,
+    /// OVL-UX3 (U1): the player's rights over crewmates, by crew ([`crew_roles`]).
+    pub roles: BTreeMap<String, CrewRoles>,
 }
 
 impl PeopleLists {
-    fn frame(&self) -> ToGame {
+    /// The frame, with the crews' rights only for a mod that has the crew rows (`people3`).
+    fn frame(&self, people3: bool) -> ToGame {
         ToGame::Lists {
             groups: self.groups.clone(),
             crews: self.crews.clone(),
@@ -260,8 +264,83 @@ impl PeopleLists {
             asking: self.asking.clone(),
             projects: self.projects.clone(),
             discord: self.discord.clone(),
+            roles: if people3 {
+                self.roles.clone()
+            } else {
+                BTreeMap::new()
+            },
         }
     }
+}
+
+/// The most moderators a crew may have besides its leader (the service's limit; the launcher's
+/// `MAX_MODERATORS`).
+pub const MAX_MODERATORS: usize = 4;
+
+/// Whether the player may remove `member` from `crew` (the launcher's `canRemove`): never the
+/// leader nor themself; the leader anyone else; with roles on, a moderator whose crew lets
+/// moderators remove members a plain member.
+pub fn may_remove(crew: &TeamView, member: &TeamMemberView, roles: bool) -> bool {
+    if member.me || member.role == TeamRole::Founder {
+        return false;
+    }
+    crew.role == TeamRole::Founder
+        || (roles && !member.moderator && allows(crew.permissions.kick, crew))
+}
+
+/// The player's rights over crewmates, by crew (OVL-UX3, `lists.roles`), the launcher's rules
+/// (`person-menu.tsx`): the leader hands the lead on and removes anyone, and names or takes back
+/// moderators while the service offers roles ("Moderatör yap" dimmed at [`MAX_MODERATORS`]); a
+/// moderator whose crew lets moderators remove members removes plain ones ([`may_remove`]). Only
+/// crews with one of these rights, only the crewmates a row may be about, only while crews are on.
+fn crew_roles(view: &SocialView) -> BTreeMap<String, CrewRoles> {
+    if !view.teams {
+        return BTreeMap::new();
+    }
+    let roles = view.team_features.iter().any(|f| f == TEAM_FEATURE_ROLES);
+    let mut out = BTreeMap::new();
+    for crew in &view.crews {
+        let lead = crew.role == TeamRole::Founder;
+        let mates: BTreeMap<String, MateRights> = crew
+            .members
+            .iter()
+            .filter(|member| !member.me && member.role != TeamRole::Founder)
+            .map(|member| {
+                let rights = MateRights {
+                    moderator: member.moderator,
+                    kick: may_remove(crew, member, roles),
+                };
+                (member.id.clone(), rights)
+            })
+            .filter(|(_, rights)| lead || rights.kick)
+            .collect();
+        if !lead && mates.is_empty() {
+            continue;
+        }
+        let moderators = crew
+            .members
+            .iter()
+            .filter(|member| member.moderator)
+            .count();
+        // The crew's conversation: its senders' menus in crew chat carry the rows.
+        let conv = view
+            .chat
+            .iter()
+            .flat_map(|chat| chat.conversations.iter())
+            .find(|conv| conv.crew.as_deref() == Some(crew.id.as_str()))
+            .map(|conv| conv.id.clone());
+        out.insert(
+            crew.id.clone(),
+            CrewRoles {
+                lead,
+                roles: lead && roles,
+                mods_full: lead && roles && moderators >= MAX_MODERATORS,
+                conv,
+                mates,
+            },
+        );
+    }
+    out
 }
 
 /// Whether the player's place in `crew` has a right at `level` (the launcher's `allows`): the
@@ -403,6 +482,8 @@ impl Scene {
         // The launcher's whole person menu (OVL-UX2): favourites, online notices, categories,
         // crew invites, crewmates' friend requests, a crewmate's "Katıl" and Discord.
         features.push(FEATURE_PEOPLE2.to_owned());
+        // OVL-UX3: a crewmate's crew rows and "Yeni kategori…".
+        features.push(FEATURE_PEOPLE3.to_owned());
         if may_invite(view, me) {
             features.push(FEATURE_INVITE.to_owned());
         }
@@ -504,6 +585,7 @@ impl Scene {
                 .filter(|mate| discord_profile(&mate.discord_url))
                 .map(|mate| mate.id.clone())
                 .collect(),
+            roles: crew_roles(view),
         };
 
         let mut friends: Vec<FriendView> = view
@@ -840,6 +922,8 @@ pub struct Mirror {
     /// The mod has the launcher's whole person menu (`people2` in its hello): it hears `lists`
     /// (OVL-UX2).
     people2: bool,
+    /// The mod has the crew rows (`people3` in its hello): its `lists` carry `roles` (OVL-UX3).
+    people3: bool,
     lists: Option<PeopleLists>,
 }
 
@@ -852,6 +936,12 @@ impl Mirror {
             people2,
             ..Self::default()
         }
+    }
+
+    /// For a mod that also has OVL-UX3's crew rows (`people3` in its hello), or not.
+    pub fn with_people3(mut self, people3: bool) -> Self {
+        self.people3 = people3;
+        self
     }
 
     /// The language the mod's words follow from now on (OVL-LANG; a mod whose hello lists
@@ -890,6 +980,7 @@ impl Mirror {
         let (friends, convs, calls) = fitting_snapshot(scene);
         let tags = self.tags;
         let people2 = self.people2;
+        let people3 = self.people3;
         let lang = self.lang;
         *self = Self {
             identity: Some(identity),
@@ -902,6 +993,7 @@ impl Mirror {
             badges: BTreeMap::new(),
             joins: HashSet::new(),
             people2,
+            people3,
             lists: None,
         };
         let snapshot = ToGame::Snapshot {
@@ -923,7 +1015,7 @@ impl Mirror {
         // The lists before the friends that name their categories and crews (OVL-UX2).
         if people2 && scene.signed_in {
             self.lists = Some(scene.lists.clone());
-            frames.push(scene.lists.frame());
+            frames.push(scene.lists.frame(people3));
         }
         frames.push(snapshot);
         if tags {
@@ -975,7 +1067,7 @@ impl Mirror {
         }
         if self.people2 && scene.signed_in && self.lists.as_ref() != Some(&scene.lists) {
             self.lists = Some(scene.lists.clone());
-            frames.push(scene.lists.frame());
+            frames.push(scene.lists.frame(self.people3));
         }
         diff(
             &mut self.friends,
@@ -1810,7 +1902,7 @@ pub(crate) mod tests {
         assert_eq!(scene.me, "Ece");
         assert_eq!(
             scene.features,
-            ["friends", "chat", "calls", "people", "people2"]
+            ["friends", "chat", "calls", "people", "people2", "people3"]
         );
         // In game first, then the launcher, then offline.
         let order: Vec<&str> = scene.friends.iter().map(|f| f.name.as_str()).collect();
@@ -1963,7 +2055,7 @@ pub(crate) mod tests {
         no_chat.chat = None;
         let again = mirror.update(&Scene::from_view(&no_chat, &prefs, NOW), "2.0.0", false);
         assert!(
-            matches!(again[0], ToGame::Welcome { ref features, .. } if features == &["friends", "calls", "people", "people2"])
+            matches!(again[0], ToGame::Welcome { ref features, .. } if features == &["friends", "calls", "people", "people2", "people3"])
         );
         // So does the reduced-motion choice.
         let again = mirror.update(&Scene::from_view(&no_chat, &prefs, NOW), "2.0.0", true);
@@ -2373,7 +2465,8 @@ pub(crate) mod tests {
                 "reads",
                 "links",
                 "people",
-                "people2"
+                "people2",
+                "people3"
             ]
         );
         assert!(scene.offers(|e| e.typing));
@@ -2396,7 +2489,10 @@ pub(crate) mod tests {
             chat.on = false;
         }
         let scene = Scene::from_view(&off, &NotifyPrefs::default(), NOW);
-        assert_eq!(scene.features, ["friends", "calls", "people", "people2"]);
+        assert_eq!(
+            scene.features,
+            ["friends", "calls", "people", "people2", "people3"]
+        );
     }
 
     #[test]
@@ -2802,7 +2898,9 @@ pub(crate) mod tests {
         let scene = Scene::from_view(&team6_view(), &prefs, NOW);
         assert_eq!(
             scene.features,
-            ["friends", "chat", "calls", "tags", "people", "people2"]
+            [
+                "friends", "chat", "calls", "tags", "people", "people2", "people3"
+            ]
         );
         assert_eq!(
             scene.badges.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -2990,7 +3088,9 @@ pub(crate) mod tests {
         assert!(scene.may_invite());
         assert_eq!(
             scene.features,
-            ["friends", "chat", "calls", "people", "people2", "invite"]
+            [
+                "friends", "chat", "calls", "people", "people2", "people3", "invite"
+            ]
         );
         v.activity = pl_social::ActivityView::Playing {
             host: Some("mc.example.net".into()),

@@ -131,7 +131,8 @@ fn mods(game: &Path) -> Vec<String> {
 async fn run(game: &Path, bundle: Option<&Bundle>, env: &CheckEnvironment, on: bool) -> Outcome {
     reconcile(Request {
         game_dir: game,
-        bundle,
+        jars: Jars::bundled(bundle),
+        fetched: None,
         env,
         enabled: on,
         ask_fabric_api: true,
@@ -195,7 +196,8 @@ async fn asks_for_fabric_api_before_anything_moves() {
     // Still none on the second try (Modrinth unreachable): no overlay, never a missing mod.
     let second = reconcile(Request {
         game_dir: &game,
-        bundle: Some(&bundle),
+        jars: Jars::bundled(Some(&bundle)),
+        fetched: None,
         env: &env("26.2"),
         enabled: true,
         ask_fabric_api: false,
@@ -219,7 +221,8 @@ async fn asks_for_fabric_api_before_anything_moves() {
     );
     let without = reconcile(Request {
         game_dir: &game,
-        bundle: Some(&bundle),
+        jars: Jars::bundled(Some(&bundle)),
+        fetched: None,
         env: &env("26.2"),
         enabled: true,
         ask_fabric_api: false,
@@ -573,4 +576,299 @@ fn versions_pick_their_jar() {
     assert_eq!(pick("26.3"), Some("26.3"));
     assert_eq!(pick("26.1.1"), None);
     assert_eq!(pick("26.4"), None);
+}
+
+// --- OVL-AUTO: jars from the signed content ------------------------------------------------------
+
+const JAR_264: &str = "projects-overlay-0.1.0+26.4.jar";
+const API_264: &str = "fabric-api-0.170.0+26.4.jar";
+
+/// The signed index's entry for `bytes`, built for `minecraft` (range `~<minecraft>`).
+fn entry(bytes: &[u8], minecraft: &str) -> OverlayJar {
+    OverlayJar {
+        minecraft: minecraft.into(),
+        range: format!("~{minecraft}"),
+        version: format!("0.1.0+{minecraft}"),
+        proto: crate::protocol::PROTO,
+        file: pl_content::studio::overlay_file_ref(bytes),
+        fabric_api: None,
+        commit: None,
+        run: None,
+        tested_at: None,
+    }
+}
+
+fn usable(entries: Vec<OverlayJar>) -> Vec<ContentJar> {
+    ContentJar::usable(&OverlayRelease { jars: entries }, crate::protocol::PROTO)
+}
+
+/// What the caller fetched: `bytes` in a folder of their own.
+fn fetched(dir: &Path, bytes: &[u8]) -> PathBuf {
+    let path = dir.join("fetched").join(format!("{}.jar", sha1(bytes)));
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+async fn run_with(
+    game: &Path,
+    jars: Jars<'_>,
+    fetched: Option<&Path>,
+    env: &CheckEnvironment,
+) -> Outcome {
+    reconcile(Request {
+        game_dir: game,
+        jars,
+        fetched,
+        env,
+        enabled: true,
+        ask_fabric_api: true,
+    })
+    .await
+}
+
+#[tokio::test]
+async fn a_published_jar_covers_a_version_the_launcher_has_none_for() {
+    let dir = tempfile::tempdir().unwrap();
+    let game = dir.path().join("game");
+    let bundle = three(&dir.path().join("bundle"), "b1");
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    let content = usable(vec![entry(&bytes, "26.4")]);
+    let copy = fetched(dir.path(), &bytes);
+    put(&game, API_264, &fabric_api_jar("0.170.0+26.4"));
+    let jars = Jars {
+        bundle: Some(&bundle),
+        content: &content,
+    };
+
+    assert_eq!(
+        run_with(&game, jars, Some(&copy), &env("26.4")).await,
+        Outcome::Ready { ours: true }
+    );
+    assert_eq!(mods(&game), [API_264, JAR_264]);
+    assert_eq!(
+        std::fs::read(game.join("mods").join(JAR_264)).unwrap(),
+        bytes
+    );
+    let record = ModRecord::load_blocking(&game);
+    assert_eq!(record.files[JAR_264].sha1, sha1(&bytes));
+    assert_eq!(record.files[JAR_264].minecraft, "26.4");
+
+    // Offline at the next start: the copy in place passes the same check and serves.
+    assert_eq!(
+        run_with(&game, jars, None, &env("26.4")).await,
+        Outcome::Ready { ours: true }
+    );
+    assert_eq!(mods(&game), [API_264, JAR_264]);
+
+    // Taken out of the index: ours goes at the next start.
+    assert_eq!(
+        run_with(&game, Jars::bundled(Some(&bundle)), None, &env("26.4")).await,
+        Outcome::Off(OffReason::NoJar)
+    );
+    assert_eq!(mods(&game), [API_264]);
+    assert!(ModRecord::load_blocking(&game).files.is_empty());
+}
+
+#[tokio::test]
+async fn the_launchers_own_jar_wins_over_a_published_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let game = dir.path().join("game");
+    let bundle = three(&dir.path().join("bundle"), "b1");
+    let published = overlay_jar("0.1.0+26.2", "~26.2", "ci");
+    let content = usable(vec![entry(&published, "26.2")]);
+    let copy = fetched(dir.path(), &published);
+    put(&game, API_262, &fabric_api_jar("0.161.0+26.2"));
+    let jars = Jars {
+        bundle: Some(&bundle),
+        content: &content,
+    };
+    assert!(matches!(jars.jar_for("26.2"), Some(Pick::Bundled(_))));
+    assert_eq!(
+        run_with(&game, jars, Some(&copy), &env("26.2")).await,
+        Outcome::Ready { ours: true }
+    );
+    let written = std::fs::read(game.join("mods").join(JAR_262)).unwrap();
+    assert_eq!(sha1(&written), bundle.jar_for("26.2").unwrap().sha1);
+}
+
+/// A published jar for 26.4 whose fetched copy is `copy`: refused, nothing goes in.
+async fn refused(entry: OverlayJar, copy: &[u8]) {
+    let dir = tempfile::tempdir().unwrap();
+    let game = dir.path().join("game");
+    put(&game, API_264, &fabric_api_jar("0.170.0+26.4"));
+    let content = usable(vec![entry]);
+    let path = fetched(dir.path(), copy);
+    let outcome = run_with(
+        &game,
+        Jars {
+            bundle: None,
+            content: &content,
+        },
+        Some(&path),
+        &env("26.4"),
+    )
+    .await;
+    assert!(
+        matches!(outcome, Outcome::Off(OffReason::Failed | OffReason::NoJar)),
+        "{outcome:?}"
+    );
+    assert_eq!(mods(&game), [API_264]);
+    assert!(ModRecord::load_blocking(&game).files.is_empty());
+}
+
+#[tokio::test]
+async fn a_published_jar_of_another_bridge_protocol_is_refused() {
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    let mut other = entry(&bytes, "26.4");
+    other.proto = crate::protocol::PROTO + 1;
+    assert!(usable(vec![other.clone()]).is_empty());
+    refused(other, &bytes).await;
+}
+
+#[tokio::test]
+async fn a_fetched_jar_of_another_size_is_refused() {
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    let mut signed = entry(&bytes, "26.4");
+    signed.file.size += 1;
+    refused(signed, &bytes).await;
+}
+
+#[tokio::test]
+async fn a_fetched_jar_with_another_sha256_is_refused() {
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    let other = overlay_jar("0.1.0+26.4", "~26.4", "cj");
+    assert_eq!(bytes.len(), other.len());
+    // Size and SHA-1 of the copy, SHA-256 of the signed bytes.
+    let mut signed = entry(&bytes, "26.4");
+    signed.file.sha1 = Some(sha1(&other));
+    refused(signed, &other).await;
+}
+
+#[tokio::test]
+async fn a_fetched_jar_with_another_sha1_is_refused() {
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    // Size and SHA-256 of the copy, another SHA-1.
+    let mut signed = entry(&bytes, "26.4");
+    signed.file.sha1 = Some(sha1(b"something else"));
+    refused(signed, &bytes).await;
+}
+
+#[tokio::test]
+async fn a_published_jar_without_sha1_or_whose_range_misses_its_version_is_refused() {
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    let mut unhashed = entry(&bytes, "26.4");
+    unhashed.file.sha1 = None;
+    assert!(usable(vec![unhashed.clone()]).is_empty());
+    refused(unhashed, &bytes).await;
+    let mut elsewhere = entry(&bytes, "26.4");
+    elsewhere.range = "~26.5".into();
+    assert!(usable(vec![elsewhere.clone()]).is_empty());
+    refused(elsewhere, &bytes).await;
+}
+
+#[tokio::test]
+async fn offline_a_copy_in_place_that_fails_the_check_is_refused_and_forgotten() {
+    let dir = tempfile::tempdir().unwrap();
+    let game = dir.path().join("game");
+    put(&game, API_264, &fabric_api_jar("0.170.0+26.4"));
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    let signed = entry(&bytes, "26.4");
+    let copy = fetched(dir.path(), &bytes);
+    let content = usable(vec![signed.clone()]);
+    let jars = Jars {
+        bundle: None,
+        content: &content,
+    };
+    assert_eq!(
+        run_with(&game, jars, Some(&copy), &env("26.4")).await,
+        Outcome::Ready { ours: true }
+    );
+
+    // The copy in place changes but keeps the SHA-1 our record and the entry name (as a SHA-1
+    // collision would): its size is the same, its SHA-256 is not the signed one.
+    let tampered = overlay_jar("0.1.0+26.4", "~26.4", "cj");
+    assert_eq!(tampered.len(), bytes.len());
+    std::fs::write(game.join("mods").join(JAR_264), &tampered).unwrap();
+    let mut record = ModRecord::load_blocking(&game);
+    record.files.get_mut(JAR_264).unwrap().sha1 = sha1(&tampered);
+    std::fs::write(ModRecord::path(&game), serde_json::to_vec(&record).unwrap()).unwrap();
+    let mut collided = signed;
+    collided.file.sha1 = Some(sha1(&tampered));
+    let content = usable(vec![collided]);
+    let jars = Jars {
+        bundle: None,
+        content: &content,
+    };
+
+    // Offline: it serves nothing, goes, and our record forgets it.
+    assert_eq!(
+        run_with(&game, jars, None, &env("26.4")).await,
+        Outcome::Off(OffReason::NotFetched)
+    );
+    assert_eq!(mods(&game), [API_264]);
+    assert!(ModRecord::load_blocking(&game).files.is_empty());
+}
+
+#[tokio::test]
+async fn a_jar_that_could_not_be_fetched_means_no_overlay_this_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let game = dir.path().join("game");
+    put(&game, API_264, &fabric_api_jar("0.170.0+26.4"));
+    let bytes = overlay_jar("0.1.0+26.4", "~26.4", "ci");
+    let content = usable(vec![entry(&bytes, "26.4")]);
+    assert_eq!(
+        run_with(
+            &game,
+            Jars {
+                bundle: None,
+                content: &content
+            },
+            None,
+            &env("26.4")
+        )
+        .await,
+        Outcome::Off(OffReason::NotFetched)
+    );
+    assert_eq!(mods(&game), [API_264]);
+}
+
+#[test]
+fn published_jars_fill_the_versions_the_launcher_leaves_out() {
+    let dir = tempfile::tempdir().unwrap();
+    let bundle = three(dir.path(), "b1");
+    let mut patch = entry(b"jar for 26.4.1", "26.4.1");
+    patch.version = "0.1.0+26.4.1".into();
+    let content = usable(vec![
+        entry(b"jar for 26.3", "26.3"),
+        entry(b"jar for 26.4", "26.4"),
+        patch,
+        entry(b"jar for 26.5", "26.5"),
+    ]);
+    assert_eq!(content.len(), 4);
+    let jars = Jars {
+        bundle: Some(&bundle),
+        content: &content,
+    };
+    let pick = |minecraft: &str| match jars.jar_for(minecraft) {
+        Some(Pick::Bundled(jar)) => format!("own {}", jar.minecraft),
+        Some(Pick::Content(jar)) => format!("published {}", jar.minecraft),
+        None => "none".to_owned(),
+    };
+    assert_eq!(pick("26.3"), "own 26.3");
+    assert_eq!(pick("26.3.1"), "own 26.3");
+    assert_eq!(pick("26.4"), "published 26.4");
+    // Both 26.4 jars take 26.4.2: the one built for the newer version not above it.
+    assert_eq!(pick("26.4.2"), "published 26.4.1");
+    assert_eq!(pick("26.5"), "published 26.5");
+    assert_eq!(pick("26.6"), "none");
+    assert_eq!(
+        jars.versions(),
+        ["26.1.2", "26.2", "26.3", "26.4", "26.4.1", "26.5"]
+    );
+    assert!(jars.any() && Jars::bundled(None).versions().is_empty());
+    assert_eq!(
+        jars.jar_for("26.4").map(|pick| pick.file().to_owned()),
+        Some(JAR_264.to_owned())
+    );
 }

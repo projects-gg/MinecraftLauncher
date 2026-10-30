@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { crc32, deflateRawSync } from "node:zlib";
 
 import {
+  bridgeProto,
   checkBundle,
   DEV_ENTRIES,
   describeJar,
@@ -69,11 +70,12 @@ function makeZip(entries) {
 const GPL =
   "                    GNU GENERAL PUBLIC LICENSE\n                       Version 3, 29 June 2007\n";
 
-function overlayJar(version, range, extra = "", license = GPL) {
+function overlayJar(version, range, extra = "", license = GPL, proto = 1) {
   const json = JSON.stringify({
     schemaVersion: 1,
     id: "projects_overlay",
     version,
+    ...(proto === null ? {} : { custom: { "projects:bridge": { proto } } }),
     depends: { minecraft: range, "fabric-screen-api-v1": "*" },
   });
   return makeZip([
@@ -84,8 +86,14 @@ function overlayJar(version, range, extra = "", license = GPL) {
 }
 
 const TARGETS = [
-  { key: "26.1.2", minecraft: "26.1.2", fabricApi: "0.152.1+26.1.2", range: "~26.1.2" },
-  { key: "26.2", minecraft: "26.2", fabricApi: "0.161.0+26.2", range: "~26.2" },
+  {
+    key: "26.1.2",
+    minecraft: "26.1.2",
+    fabricApi: "0.152.1+26.1.2",
+    range: "~26.1.2",
+    compat: "mc26_1",
+  },
+  { key: "26.2", minecraft: "26.2", fabricApi: "0.161.0+26.2", range: "~26.2", compat: "mc26_2" },
 ];
 
 /** A sound folder for TARGETS with source stamp `stamp`. */
@@ -147,6 +155,7 @@ test("a built jar is described from its own fabric.mod.json", () => {
     range: "~26.2",
     file: "projects-overlay-0.1.0+26.2.jar",
     version: "0.1.0+26.2",
+    proto: 1,
     sha1: sha1(bytes),
     size: bytes.length,
   });
@@ -156,6 +165,32 @@ test("a built jar is described from its own fabric.mod.json", () => {
   );
   const other = makeZip([["fabric.mod.json", JSON.stringify({ id: "sodium", version: "1" })]]);
   assert.throws(() => describeJar("x.jar", other, TARGETS[1]), /mod id sodium/);
+});
+
+test("a jar says the bridge protocol it speaks (OVL-AUTO)", () => {
+  const unstamped = overlayJar("0.1.0+26.2", "~26.2", "", GPL, null);
+  assert.throws(() => describeJar("x.jar", unstamped, TARGETS[1]), /no bridge protocol stamp/);
+  for (const bad of [0, -1, 1.5, "1"]) {
+    const jar = overlayJar("0.1.0+26.2", "~26.2", "", GPL, bad);
+    assert.throws(() => describeJar("x.jar", jar, TARGETS[1]), /no bridge protocol stamp/);
+  }
+  const next = overlayJar("0.1.0+26.2", "~26.2", "", GPL, 2);
+  assert.equal(describeJar("x.jar", next, TARGETS[1]).proto, 2);
+  assert.equal(bridgeProto({ custom: { "projects:bridge": { proto: 1 } } }, "x.jar"), 1);
+
+  // The mod's own fabric.mod.json carries the stamp, and the protocol the Java side and the
+  // launcher speak is the same number (the mod's JUnit checks the Java side too).
+  const meta = JSON.parse(
+    readFileSync(join(MOD_DIR, "src", "main", "resources", "fabric.mod.json"), "utf8"),
+  );
+  const stamped = String(meta.custom["projects:bridge"].proto);
+  const java = readFileSync(
+    join(MOD_DIR, "src", "main", "java", "gg", "projects", "overlay", "bridge", "Protocol.java"),
+    "utf8",
+  );
+  assert.equal(/public static final int VERSION = (\d+);/.exec(java)?.[1], stamped);
+  const rust = readFileSync(join(ROOT, "crates", "pl-overlay", "src", "protocol.rs"), "utf8");
+  assert.equal(/pub const PROTO: u32 = (\d+);/.exec(rust)?.[1], stamped);
 });
 
 test("a jar without the GPL text is refused", () => {
@@ -171,24 +206,26 @@ test("a jar without the GPL text is refused", () => {
   assert.match(readFileSync(join(ROOT, "LICENSE"), "utf8"), /GNU GENERAL PUBLIC LICENSE/);
 });
 
-test("a jar with the test scenario driver is refused", () => {
+test("a jar with test code is refused", () => {
   const json = JSON.stringify({
     schemaVersion: 1,
     id: "projects_overlay",
     version: "0.1.0+26.2",
+    custom: { "projects:bridge": { proto: 1 } },
     depends: { minecraft: "~26.2" },
   });
   for (const entry of [
     "gg/projects/overlay/dev/H1eScenario.class",
     "gg/projects/overlay/dev/mixin/WindowNoFocusMixin.class",
     "projects_overlay_dev.mixins.json",
+    "gg/projects/overlay/gametest/OverlaySmokeTest.class",
   ]) {
     const jar = makeZip([
       ["fabric.mod.json", json],
       [LICENSE_ENTRY, GPL],
       [entry, "x"],
     ]);
-    assert.throws(() => describeJar("x.jar", jar, TARGETS[1]), /test scenario driver/);
+    assert.throws(() => describeJar("x.jar", jar, TARGETS[1]), /carries test code/);
   }
   assert.deepEqual(zipEntryNames(overlayJar("0.1.0+26.2", "~26.2")), [
     "fabric.mod.json",

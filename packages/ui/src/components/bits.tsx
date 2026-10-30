@@ -141,7 +141,10 @@ export function PixelBrackets({ className, size = 10 }: { className?: string; si
   );
 }
 
-/** Square pixel-art player head with a lettered fallback. */
+/**
+ * Square pixel-art player head. Without a picture, its first letter on the quiet plate in bone,
+ * not gold: a face is not an action, and the screen's one gold is its main action (design.md §2).
+ */
 export function PlayerHead({
   src,
   name,
@@ -156,7 +159,7 @@ export function PlayerHead({
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-head)] bg-gold-700/40 ring-1 ring-white/10",
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-head)] bg-white/[0.07] ring-1 ring-white/10",
         className,
       )}
       style={{ width: size, height: size }}
@@ -172,7 +175,7 @@ export function PlayerHead({
         />
       ) : (
         <span
-          className="font-display font-bold text-gold-200"
+          className="font-display font-bold text-bone-100"
           style={{ fontSize: Math.round(size * 0.45) }}
         >
           {name.slice(0, 1).toLocaleUpperCase("tr")}
