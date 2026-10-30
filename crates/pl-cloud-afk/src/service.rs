@@ -488,6 +488,21 @@ impl CloudService {
         self.inner.client.send_sealed(token, id, &sealed).await
     }
 
+    /// A press on the card of the server's dialog (DIALOG-CARD), as the view built it (JSON text:
+    /// `{rev, i, inputs, cmd?}` or `{rev, cancel: true}`); the service, the machine and the client
+    /// check it again, and a command runs only as the player confirmed it.
+    pub async fn press_dialog(&self, token: &Bearer, id: &str, press: &str) -> Result<()> {
+        if press.len() > 4 * 1024 {
+            return Err(CloudError::Invalid("dialog press"));
+        }
+        let press: serde_json::Value =
+            serde_json::from_str(press).map_err(|_| CloudError::Invalid("dialog press"))?;
+        if !press.is_object() {
+            return Err(CloudError::Invalid("dialog press"));
+        }
+        self.inner.client.press_dialog(token, id, press).await
+    }
+
     /// The machine's masked log before `before` (Unix seconds; none: the last hour), 200 lines.
     pub async fn logs(
         &self,

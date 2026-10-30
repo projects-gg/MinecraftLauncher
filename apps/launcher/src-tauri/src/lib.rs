@@ -309,6 +309,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::cloud_afk::cloud_afk_stop,
             commands::cloud_afk::cloud_afk_restart,
             commands::cloud_afk::cloud_afk_send,
+            commands::cloud_afk::cloud_afk_dialog,
             commands::cloud_afk::cloud_afk_logs,
             commands::cloud_afk::cloud_afk_watch,
             commands::cloud_afk::cloud_afk_unwatch,
