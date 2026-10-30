@@ -7,8 +7,9 @@
 //! sign-out or a reconfiguration is never overwritten by a call that was still running.
 //!
 //! Free-plan rules (docs/social.md §2): the friend list is fetched at start and after a
-//! reconnect, never on a timer; presence arrives as events; nothing retries in a loop (the
-//! presence task backs off by itself, a manual "try again" is throttled).
+//! reconnect, never on a timer; after a reconnect only when the service's relations version
+//! differs from the one the list came with (SCALE-SOC); presence arrives as events; nothing
+//! retries in a loop (the presence task backs off by itself, a manual "try again" is throttled).
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
