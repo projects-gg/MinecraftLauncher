@@ -261,6 +261,8 @@ impl AppState {
         let presence = PresenceManager::start_on(&handle, PresenceConfig::new(DISCORD_CLIENT_ID));
         // Before the friends feature: what it tells the page also feeds a running game's overlay.
         let overlay = crate::overlay::create(app, &root);
+        // "Hızlı kaynak paketi yükleme": the kept choice, before any pack sync can run.
+        crate::fastpack::load(&root);
         let social = crate::commands::social::create(
             app,
             &http,

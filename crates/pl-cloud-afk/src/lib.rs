@@ -119,7 +119,8 @@ pub use seal::{
 };
 pub use server::{CloudAddressProblem, check_port, normalize, normalize_host, same_server};
 pub use service::{
-    CloudEdit, CloudEditView, CloudOverview, CloudSaveOutcome, CloudService, CloudSession,
+    CloudEdit, CloudEditView, CloudOverview, CloudReportOutcome, CloudSaveOutcome, CloudService,
+    CloudSession,
 };
 pub use service_feat::{CloudCopyOutcome, CloudCopyRow, CloudCopySecret, CloudCopySource};
 pub use service_plus::{

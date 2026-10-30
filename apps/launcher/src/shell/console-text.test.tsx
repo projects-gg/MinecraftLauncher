@@ -209,10 +209,10 @@ describe("ConsoleActionCard", () => {
       />,
     );
     expect(screen.getByText("Open this link?")).not.toBeNull();
-    // The host alone, first and in bold (what a player reads to know where a link goes), the
-    // rest of the address muted under it.
-    expect(screen.getByText("forum.projects.gg").className).toContain("font-semibold");
-    expect(screen.getByText("/t/etkinlik").className).toContain("text-ash-400");
+    // The registrable domain alone, first and in bold (what a player reads to know where a link
+    // goes), the whole address muted under it.
+    expect(screen.getByText("projects.gg").className).toContain("font-semibold");
+    expect(screen.getByText("forum.projects.gg/t/etkinlik").className).toContain("text-ash-400");
     expect(screen.getByText("From LavaPanda_7's message, 17:25:22")).not.toBeNull();
     expect(screen.getByText("Open")).not.toBeNull();
   });

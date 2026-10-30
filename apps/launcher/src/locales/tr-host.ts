@@ -36,7 +36,11 @@ export const trHost = {
     privacy: "IP adresin arkadaşlarına görünmez.",
     open: "Dünyayı aç",
     invite: "Davet et",
-    meet: "Projects'te buluşun",
+    // What it does (LANDING-L: "buluşun" did not say): the friends get "Birlikte oyna" there and the
+    // player goes in.
+    meet: "Projects'te birlikte oyna",
+    /** After "3/7": what the picker counts (LANDING-L: a bare "3/7" beside a world's "2/8"). */
+    unit: "arkadaş",
   },
   overlay: {
     body: "Dünya paylaşımı için oyun içi katman açık olmalı.",
@@ -63,8 +67,10 @@ export const trHost = {
     commandsOff: "Komutlar kapalı",
     voice: "Sesli sohbet şimdilik misafirlerde çalışmıyor.",
     retry: "Tekrar dene",
-    meet: "Projects'te buluşun",
+    meet: "Projects'te birlikte oyna",
     dismiss: "Kapat",
+    /** After "2/8": what the world counts (its host too). */
+    unit: "kişi",
     step: {
       backup: "Dünyanın yedeği alınıyor",
       starting: "Oyun dünyana açılıyor",

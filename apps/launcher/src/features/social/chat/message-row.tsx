@@ -500,6 +500,14 @@ function MessageRowView({
     </AnimatePresence>
   );
 
+  // A reply's quote sits inside its bubble, at the top; a sticker or a few big emoji have no bubble,
+  // so theirs stays over them.
+  const bubbled = !(sticker && !gone) && !big;
+  const quote =
+    quoted && !gone ? (
+      <QuoteBlock quoted={quoted} mine={mine} inside={bubbled} onJump={actions.onJump} />
+    ) : null;
+
   // What stands in the bubble's place: a sticker, a few large emoji, or the bubble.
   const body =
     sticker && !gone ? (
@@ -530,6 +538,7 @@ function MessageRowView({
         gone={gone}
         sizeKey={gone ? `gone:${tombstone}` : `text:${text}:${message.card?.state ?? ""}`}
       >
+        {quote}
         {words2}
       </Bubble>
     );
@@ -588,9 +597,7 @@ function MessageRowView({
               />
             </PersonContextMenu>
           ) : null}
-          {quoted && !gone ? (
-            <QuoteBlock quoted={quoted} mine={mine} onJump={actions.onJump} />
-          ) : null}
+          {bubbled ? null : quote}
           {/* The bubble and, beside it in the row's free side, its toolbar. */}
           <div className="relative max-w-full">
             {body}

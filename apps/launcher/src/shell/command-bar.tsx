@@ -27,6 +27,7 @@ import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launc
 import { RoutePicker } from "@/features/autojoin/route-picker";
 import { useRoute } from "@/features/autojoin/use-route";
 import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
+import { useFastPackSync } from "@/features/fastpack/use-fast-pack-sync";
 import { helpsWithLaunchError, helpToastLine } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
@@ -693,6 +694,9 @@ export function CommandBar() {
   // The instance OYNA plays is the one the launcher prepares in the background; its hint gives
   // way to the launch's own progress.
   usePrepareSync(selected, !instancesLoading);
+  // "Hızlı kaynak paketi yükleme" reaches the pack syncs that run while the page rests, and its
+  // row's view for this instance is ready before Settings → Genel opens.
+  useFastPackSync(selected?.id ?? null, !instancesLoading);
   const prepareHint = usePrepare((s) => s.hint);
   const hint = !busy && prepareHint?.instanceId === selected?.id ? prepareHint : null;
 

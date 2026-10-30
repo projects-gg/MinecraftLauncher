@@ -1,6 +1,7 @@
 // 7/24 Bulut: what the AFK page asks of the backend (commands/cloud_afk.rs over pl-cloud-afk).
 // Nothing polls: the page reads the overview when it opens and after an action, and the console's
 // live socket runs only while a console is watched. Browser previews use the mock (mock.ts).
+import type { DialogPress } from "@pl/ui/console";
 import type { InvOp } from "@pl/ui/inventory";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -20,6 +21,7 @@ import {
   type CloudMoveResult_Serialize,
   type CloudPageView_Serialize,
   type CloudReplyTry,
+  type CloudReportOutcome,
   type CloudRevealOutcome,
   type CloudSaveOutcome_Serialize,
   type CmdError,
@@ -50,6 +52,7 @@ export type {
   CloudMovementError,
   CloudMovePlan,
   CloudReplyTry,
+  CloudReportOutcome,
   CloudRevealOutcome,
   SitePage,
 };
@@ -71,6 +74,11 @@ export interface CloudApi {
   restart(id: string): Promise<CloudAccount>;
   /** A console line; a password command is sealed before it leaves the launcher. No echo. */
   send(id: string, line: string): Promise<void>;
+  /**
+   * A press on the card of the server's dialog (DIALOG-CARD): `{rev, i, inputs, cmd?}` or `{rev,
+   * cancel: true}` as `dialogPress` builds it; the dialog's next frames show what came of it.
+   */
+  dialog(id: string, press: DialogPress): Promise<void>;
   /** The masked log before `before` (Unix seconds; null: the last hour). */
   logs(id: string, before: number | null): Promise<CloudLogPage>;
   /** The console is on screen: its lines and state stream through `onLive`. */
@@ -82,6 +90,8 @@ export interface CloudApi {
   save(id: string, edit: CloudEdit): Promise<CloudSaveResult>;
   /** "Göster": one stored secret row's words, from the machine; never kept. */
   reveal(id: string, rowId: string): Promise<CloudRevealOutcome>;
+  /** "Yanlışsa bildir": a row's text a save refused for its content, to staff (3 a day). */
+  reportRefusal(id: string, text: string): Promise<CloudReportOutcome>;
   /** "Buluta taşı": the desktop account in the cloud's form. */
   movePlan(desktopId: string): Promise<CloudMovePlan>;
   move(desktopId: string, cloudId: string, rev: number, run: boolean): Promise<CloudMoveData>;
@@ -133,6 +143,9 @@ const tauriCloudApi: CloudApi = {
   send: async (id, line) => {
     await ok(commands.cloudAfkSend(id, line));
   },
+  dialog: async (id, press) => {
+    await ok(commands.cloudAfkDialog(id, JSON.stringify(press)));
+  },
   logs: (id, before) => ok(commands.cloudAfkLogs(id, before)),
   watch: async (id) => {
     await ok(commands.cloudAfkWatch(id));
@@ -147,6 +160,7 @@ const tauriCloudApi: CloudApi = {
   edit: (id) => ok(commands.cloudAfkEdit(id)),
   save: (id, edit) => ok(commands.cloudAfkSave(id, edit)),
   reveal: (id, rowId) => ok(commands.cloudAfkReveal(id, rowId)),
+  reportRefusal: (id, text) => ok(commands.cloudAfkReportRefusal(id, text)),
   movePlan: (desktopId) => ok(commands.cloudAfkMovePlan(desktopId)),
   move: (desktopId, cloudId, rev, run) => ok(commands.cloudAfkMove(desktopId, cloudId, rev, run)),
   connectHere: () => commands.cloudAfkConnectHere(),

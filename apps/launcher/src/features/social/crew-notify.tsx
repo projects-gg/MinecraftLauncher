@@ -307,9 +307,12 @@ function AllMutedLine({ state }: { state: string | null }) {
  * several crews the bell's panel is its crew's (`crew`) and Settings' is every crew's.
  */
 export function CrewNotifyGroup({
+  title,
   titleClassName,
   crew,
 }: {
+  /** Settings' "Bildirimler" names the group by whose it is ("Ekibin"); the bell says "Ekip bildirimleri". */
+  title?: string;
   titleClassName: string;
   crew?: string;
 }) {
@@ -322,7 +325,7 @@ export function CrewNotifyGroup({
   return (
     <div>
       <div className="flex min-h-8 items-center gap-3">
-        <p className={cn("min-w-0 flex-1", titleClassName)}>{t("teams.notify.title")}</p>
+        <p className={cn("min-w-0 flex-1", titleClassName)}>{title ?? t("teams.notify.title")}</p>
         {target || settings ? <MuteControl muted={muted} crew={target} all={all} /> : null}
       </div>
       <AnimatePresence initial={false}>

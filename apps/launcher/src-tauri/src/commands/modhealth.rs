@@ -782,7 +782,7 @@ impl RepairHost for LauncherHost<'_> {
             &self.game_dir,
             previous.as_ref(),
             Some(&selection),
-            &quick(),
+            &quick(&self.game_dir, previous.as_ref()).await,
         )
         .await
         .map_err(pack_failure)?;

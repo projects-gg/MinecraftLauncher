@@ -18,8 +18,10 @@ export const trAfkPlus = {
     soldOut: "Şu an boş AFK+ yeri yok",
     closed: "AFK+ şu an satışta değil",
     chatLabel: "Örnek bir pazarlık",
-    // A real haggle as the player reads it in the game's chat ([AFK+] marks the bot's lines). Its
-    // last step reads as any other offer: "son teklif" would give the limit away (§3.5).
+    // A real haggle as the player reads it in the game's chat, each line after its speaker's name
+    // (never the [AFK+] tag: the player's choice, off by default). Its last step reads as any
+    // other offer: "son teklif" would give the limit away (§3.5). The lines stay as players type
+    // them ("elytra"); the outcome under them is the system's sentence, in the game's name.
     chat: {
       // A gamer tag, as the site's demo seller (no real first name in sample data).
       them: "Neon_Drift",
@@ -29,7 +31,7 @@ export const trAfkPlus = {
       c4: "37.500 olur mu?",
       c5: "tamam, anlaştık",
     },
-    outcome: "Elytra 37.500'e alındı. Sınırının 2.500 altında.",
+    outcome: "Elitra 37.500'e alındı. Sınırının 2.500 altında.",
     promise: "Belirlediğin fiyatı aşmaz, büyük alımlarda önce sana sorar.",
     // Where AFK+ works, said where the player decides (Studio's "Her sunucuda").
     projectsOnly: "AFK+ şimdilik yalnız Projects'te çalışır.",
@@ -157,13 +159,17 @@ export const trAfkPlus = {
   },
   panel: {
     title: "{{name}} için ProBot AI",
+    // The site's names in the site's order (PLUS-ACTIVITY, SETUP-UX): the feed is "Etkinlik" and
+    // holds the conversations too, the week's statement "Özet".
     sections: {
-      feed: "Akış",
-      messages: "Mesajlar",
+      feed: "Etkinlik",
       orders: "Siparişler",
       settings: "Ayarlar",
-      report: "Rapor",
+      report: "Özet",
     },
+    // Beside "Etkinlik": approvals and players waiting for the player's answer, said to a screen
+    // reader after the bare number.
+    waiting: "{{count}} seni bekliyor",
     sectionsLabel: "AFK+ bölümleri",
     loadFailed: "AFK+ ayarları yüklenemedi.",
     site: "afk.projects.gg'de aç",
@@ -217,43 +223,65 @@ export const trAfkPlus = {
     saver:
       "Kontörün azaldığı için ProBot AI yalnız pazarlık mesajlarına cevap verir, genel sohbette satılık eşya aramaz.",
   },
-  // "Akış": the audit log (afkplus-free.md §5.4).
+  // "Etkinlik": every step the assistant took and how it ended (afkplus-free.md §5.4), a player's
+  // day in one row with its conversation (PLUS-ACTIVITY; the site's and the phone's words).
   audit: {
+    // What waits for the player: approvals, "Takası sen yap", first sights, messages to answer.
     approvalsTitle: "Seni bekleyenler",
     // What closed in the last ten minutes, under what still waits (never read as still open).
     approvalsRecent: "Kapananlar",
-    // The log under what waits, inside "Akış" (the section): never the section's name again.
-    title: "Kayıtlar",
-    filter: "Kayıtları süz",
+    title: "Etkinlik",
+    filter: "Etkinliği süz",
     filters: {
       all: "Tümü",
       deals: "Anlaşmalar",
-      messages: "Mesajlar",
-      warnings: "Uyarılar",
+      messages: "Yazışmalar",
+      warnings: "Retler",
     },
+    search: "Oyuncu ya da eşya ara",
+    noMatch: "Bu aramayla eşleşen bir şey yok.",
+    // A player's message that waits for the player's answer, among what waits.
+    wrote: "{{name}} sana yazdı",
+    reply: "Cevap yaz",
+    // The conversation's title under a player's steps (the row already names the player).
+    conversation: "Yazışma",
+    // The slim line over the list: today's trades, what was spent against the total limit (the
+    // kontör is the rail's alone, in view beside it).
+    summary: "Bugünün özeti",
+    tradesToday: "Bugün {{count}} takas",
+    tradesNone: "Bugün takas yok",
+    spentOf: "Harcanan: {{spent}} / {{total}}",
     today: "Bugün",
     yesterday: "Dün",
-    older: "Daha eski",
+    older: "Önceki günler",
     retry: "Tekrar dene",
     reconnecting: "Canlı bağlantı koptu, yeniden bağlanılıyor.",
-    empty: "Henüz kayıt yok. ProBot AI bir mesaj aldığında burada görürsün.",
-    noneHere: "Bu türde kayıt yok.",
-    off: "Kayıtlar şu an kapalı.",
+    empty: "Henüz bir şey yok. ProBot AI bir mesaj aldığında burada görürsün.",
+    noneHere: "Bu türde bir şey yok.",
+    off: "Etkinlik şu an kapalı.",
     offline: "Daha önce gördüklerin aşağıda. Yenileri bağlantı dönünce görünür.",
-    offlineEmpty: "Kayıtlar bağlantı dönünce görünür.",
-    kept: "Kayıt 7 gün tutulur.",
+    offlineEmpty: "Etkinlik bağlantı dönünce görünür.",
+    kept: "Ayrıntı 7 gün saklanır, daha eskisi Özet'teki takas listesinde.",
     hidden: "Uygunsuz mesaj gizlendi.",
     show: "Göster",
-    someone: "Bir oyuncu",
+    // ProBot AI was never started ("Daha sonra" in the setup): it cannot get a message yet.
+    notStarted: "ProBot AI'ı başlatınca yaptıkları burada görünür.",
+    // One line per step. A player's steps sit under their name (the row), so no line says it again
+    // (TASTE-SWEEP r1, the site's same lines); `p` a price, `deal` "1 Elitra = 37.500 ripple", `i`
+    // the item when the entry names one.
     lines: {
-      pm_in: "{{w}} yazdı:",
+      pm_in: "Yazdı:",
       reply: "ProBot AI cevap verdi:",
       owner_msg: "Sen yazdın:",
-      // A player's name never takes a suffix (its sound is unknown): subject, "ile" or before a colon.
-      offer: "{{w}} ile pazarlıkta {{p}} teklif edildi",
-      // The comma keeps the name and the price apart ("Kaan_07, 40.000 istedi").
-      counter: "{{w}}, {{p}} istedi",
-      agree: "ProBot AI {{w}} ile anlaştı: {{deal}}",
+      // ProBot AI's offer and the other player's ask, with what they bargain over.
+      offer: "ProBot AI, {{i}} için {{p}} teklif etti",
+      offerBare: "ProBot AI {{p}} teklif etti",
+      counter: "{{i}} için {{p}} istedi",
+      counterBare: "{{p}} istedi",
+      agree: "ProBot AI anlaştı: {{deal}}",
+      // An approval's steps say the deal when the entry carries it ("Onayın istendi: 2 Netherit
+      // Külçesi = 9 Elmas"), as the order menu's (afk-agent README, "Audit log").
+      withDeal: "{{line}}: {{deal}}",
       ask_owner: "Onayın istendi",
       ask_ownerOf: "{{i}} için onayın istendi",
       owner_ok: "Onayladın",
@@ -268,13 +296,28 @@ export const trAfkPlus = {
       handoff_no: "Takas olmadı",
       cancel: "Pazarlık bırakıldı: {{r}}",
       refuse: "Cevap verilmedi: {{r}}",
-      refuseWho: "{{w}} yazdı, cevap verilmedi: {{r}}",
+      refuseWho: "Yazdı, cevap verilmedi: {{r}}",
+      // An older agent's find (no `r`): the old line.
       found: "Sohbette satılık bulundu: {{i}}, {{p}}",
       foundBare: "Sohbette satılık bulundu: {{i}}",
+      // Where a seller or an order was seen (DONUT-ORDER: `r` menu, chat, pm). `what` is "64 Elmas"
+      // (the count when it is known), with the price after a comma where the entry has one.
+      foundMenu: "Sipariş menüsünde buldu: {{what}}, tanesi {{each}}",
+      foundMenuBare: "Sipariş menüsünde buldu: {{what}}",
+      foundChat: "Sohbette buldu: {{what}}",
+      foundPm: "Mesajda buldu: {{what}}",
+      // The deal notation as everywhere in the log ("=", not an arrow).
+      menu_done: "Sipariş menüsünde teslim etti: {{deal}}",
+      menu_fail: "Sipariş menüsünde teslim etmedi: {{what}} ({{r}})",
+      menu_failBare: "Sipariş menüsünde teslim etmedi: {{r}}",
+      ads_stopped: "Sohbet ilanları durdu: sunucu spam uyarısı verdi",
+      ads_stoppedBare: "Sohbet ilanları durdu",
       confirm_item: "Eşya için onayın istendi",
       confirm_itemOf: "{{i}} için onayın istendi",
       order_done: "Sipariş tamamlandı",
+      order_doneOf: "{{i}} siparişi tamamlandı",
       order_expired: "Siparişin süresi doldu",
+      order_expiredOf: "{{i}} siparişinin süresi doldu",
       paused: "ProBot AI durdu: {{r}}",
       pausedBare: "ProBot AI durdu",
       resumed: "ProBot AI yeniden çalışıyor",
@@ -282,6 +325,18 @@ export const trAfkPlus = {
       gate: "Güvenlik kuralı bir işlemi durdurdu",
       gateWhy: "Güvenlik kuralı bir işlemi durdurdu: {{r}}",
       other: "Bir işlem kaydedildi",
+    },
+    // Why a delivery to the server's order menu did not happen (`menu_fail`'s `r`; afk-agent README,
+    // "Audit log").
+    menuReasons: {
+      mismatch: "pencere teslimatı göstermedi",
+      window: "pencere tanınmadı",
+      timeout: "zaman aşımı",
+      unclear: "teslim görülmedi",
+      inventory: "eşyalar konamadı",
+      gate: "izin verilmedi",
+      item: "izin verilmedi",
+      other: "başka bir neden",
     },
     reasons: {
       blocked: "engellediğin oyuncu",
@@ -354,9 +409,9 @@ export const trAfkPlus = {
     rejected: "Reddin iletildi",
     closedMeanwhile: "Bu onay artık beklemiyor.",
   },
-  // "Takas sende": the deal is agreed and the player makes the trade (afkplus-free.md §4.4).
+  // "Takası sen yap": the deal is agreed and the player makes the trade (afkplus-free.md §4.4).
   handoff: {
-    title: "Takas sende",
+    title: "Takası sen yap",
     body: "{{who}} ile anlaştın: {{deal}}. Takası oyunda yap, sonra burada işaretle.",
     yes: "Takas oldu",
     no: "Olmadı",
@@ -383,9 +438,8 @@ export const trAfkPlus = {
     yesDone: "Eşya tanındı",
     noDone: "Bu eşya kabul edilmeyecek",
   },
+  // A player's conversation, opened under their row in "Etkinlik" (PLUS-ACTIVITY).
   messages: {
-    title: "Mesajlar",
-    empty: "Henüz mesaj yok.",
     you: "Sen",
     assistant: "ProBot AI",
     reply: "Cevap yaz",
@@ -398,19 +452,14 @@ export const trAfkPlus = {
     hidden: "Uygunsuz mesaj gizlendi.",
     show: "Göster",
     blocked: "Bu oyuncuyu engelledin. ProBot AI ona cevap vermez.",
-    // A blocked player's conversation in the list, in place of its last line.
-    blockedTag: "Engellendi",
     block: "Engelle",
     unblock: "Engeli kaldır",
     blockedDone: "{{name}} engellendi",
     unblockedDone: "{{name}} engeli kaldırıldı",
     addFriend: "Arkadaşlarıma ekle",
     friendAdded: "{{name}} arkadaşlarına eklendi",
-    back: "Mesajlar",
-    offline: "Mesajlar bağlantı dönünce görünür.",
-    offlineBody: "Mesajlar bağlantı dönünce görünür. Ayarlarını yine de değiştirebilirsin.",
+    offline: "Yazışma bağlantı dönünce görünür.",
     sendAway: "7/24 Bulut'a şu an ulaşılamıyor. Mesaj gönderilmedi.",
-    unread: "{{count}} okunmamış",
     more: "Konuşma işlemleri",
     rejected: {
       link: "Bağlantı paylaşılamaz.",
@@ -430,9 +479,9 @@ export const trAfkPlus = {
   // "Siparişler": the field, its checks and the orders' list (afkplus-free.md §7.1, §7.6).
   intake: {
     label: "Ne almak ya da satmak istiyorsun?",
-    placeholder: "Örnek: 1 Elytra alırım, en fazla 40 bin",
+    placeholder: "Örnek: 1 Elitra alırım, en fazla 40 bin",
     // Where the server names its money ("ripple").
-    placeholderMoney: "Örnek: 1 Elytra alırım, en fazla 40 bin {{money}}",
+    placeholderMoney: "Örnek: 1 Elitra alırım, en fazla 40 bin {{money}}",
     check: "Kontrol et",
     reading: "Okunuyor",
     form: "Elle ekle",
@@ -518,6 +567,8 @@ export const trAfkPlus = {
     active: "Etkin",
     finished: "Biten",
     empty: "Henüz sipariş yok.",
+    // No active order while finished ones are listed under "Biten".
+    noneActive: "Etkin sipariş yok.",
     // The row's progress in words: "0 / 2 alındı".
     progressBought: "{{got}} / {{qty}} alındı",
     progressSold: "{{got}} / {{qty}} satıldı",
@@ -527,7 +578,8 @@ export const trAfkPlus = {
     perPiece: "tanesi {{terms}}",
     inTotal: "toplam {{terms}}",
     endsToday: "bugün bitiyor",
-    daysLeft: "{{count}} gün kaldı",
+    // A no-break space between the number and its unit: "2 gün" never breaks apart.
+    daysLeft: "{{count}}\u00a0gün kaldı",
     asOf: "Son bilgi {{time}}",
     edit: "Düzenle",
     pause: "Durdur",
@@ -555,7 +607,7 @@ export const trAfkPlus = {
   // An order's state, in a word in its row (README "Status and progress").
   status: {
     waiting_ok: "Onayın bekleniyor",
-    your_trade: "Takas sende",
+    your_trade: "Takası sen yap",
     trading: "Takasta",
     done: "Tamamlandı",
     expired: "Süresi doldu",
@@ -849,6 +901,12 @@ export const trAfkPlus = {
     ads: "Sohbete ilan versin",
     adsHelp: "Hazır metinle, 30 dakikada bir.",
     adTemplate: "İlan metni",
+    // DONUT-ORDER (`discovery.orderMenu`), shown only while Studio's switch is on: in the question's
+    // voice like the switches beside it ("Sohbete ilan versin").
+    orderMenu: "Sipariş menüsünü kontrol etsin",
+    // It hands the player's items over (TASTE-SWEEP r2): said where the switch is turned on.
+    orderMenuHelp:
+      "Sunucuda sipariş menüsü varsa arada bakar, satış siparişlerine uyan isteklere eşyanı teslim eder.",
     // "Sohbete ilan" as the service plans it (TRADE-ANY trade-any-4, chat-ads.tsx): what it posts,
     // how often (the server's floor closes the shorter ones), the next ad, a spam warning, today's
     // stop. An older service plans none: "adsHelp" stays.
@@ -923,22 +981,31 @@ export const trAfkPlus = {
     orderAddedSell: "{{item}} satış siparişi eklendi",
     orderRemoved: "{{item}} alım siparişi silindi",
     orderRemovedSell: "{{item}} satış siparişi silindi",
-    // As every change of an amount reads ("sınırsız" takes no number's ending).
+    // Every amount with its unit ("45.000 ripple", "9 Elmas"), both changes said one way and no
+    // ending after a money's name (no safe rule for every server's name; the site's and the
+    // phone's same form).
     orderAmount: "{{item}}: {{field}} {{from}} yerine {{to}}",
     orderOn: "{{item}} siparişi sürdürüldü",
     orderOff: "{{item}} siparişi durduruldu",
     orderOther: "{{item}} siparişi düzenlendi",
     fields: {
       target: "hedef",
-      limit: "sınır",
+      limit: "en fazla",
+      // A sell order's limit: its lowest price.
+      floor: "en az",
       qty: "adet",
     },
     authority: "ProBot AI'ın yetkisi: {{to}}",
-    fineTune: "İnce ayar değişti",
+    // Buying and selling, the payment and who it trades with ("İnce ayar" is no group any more).
+    fineTune: "Takas izinleri değişti",
     limit: "{{field}}: {{from}} yerine {{to}}",
-    noLimit: "sınırsız",
-    // The per-deal or the total limit emptied: nothing is bought then, never "sınırsız".
-    noBuying: "alım yok",
+    // An empty limit says what it means, never "sınırsız" for "no buying" or "doesn't ask" (the
+    // site's and the phone's same lines): set from empty, and emptied.
+    limitSet: "{{field}}: {{to}} oldu",
+    cleared: "{{field}} boşaltıldı",
+    clearedNoBuying: "{{field}} boşaltıldı, alım yok",
+    clearedNoAsk: "{{field}} boşaltıldı, sormaz",
+    clearedNoAskNew: "{{field}} boşaltıldı, ayrıca sormaz",
     persona: "ProBot AI ayarları değişti",
     replies: "Cevap ayarları değişti",
     schedule: "Çalışma saatleri değişti",
@@ -961,8 +1028,9 @@ export const trAfkPlus = {
       spent: "Harcanan",
       earned: "Kazanılan",
       // Against the orders' own limits: what a buy saved, what a sale got above its lowest price.
-      belowLimit: "Sınırından az ödenen",
-      aboveFloor: "En az fiyatından fazla alınan",
+      // What bargaining saved and earned, said as a 13-year-old says it (the site's, TASTE-SWEEP r1).
+      belowLimit: "Pazarlıkla cebinde kalan",
+      aboveFloor: "Pazarlıkla fazladan kazandığın",
       blocked: "Engellenen şüpheli mesaj",
       allowance: "Kullanılan kontör",
     },
@@ -992,7 +1060,7 @@ export const trAfkPlus = {
     status: "Durum",
     approval: "Onay",
     approvalKinds: {
-      auto: "Sormadan (ince ayarına göre)",
+      auto: "Sana sormadan, ayarına göre",
       approved: "Sen onayladın",
       owner: "Takası sen yaptın, sen bildirdin",
     },

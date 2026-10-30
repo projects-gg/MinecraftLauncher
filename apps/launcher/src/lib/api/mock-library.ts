@@ -519,7 +519,7 @@ function editMockServers(instanceId: string, edit: ServerEdit): SavedServerEntry
       throw failure(
         pick(
           "Sunucu listesi oyunda değişmiş. Liste yenilendi, tekrar dene.",
-          "The server list changed in the game. The list is refreshed; try again.",
+          "The server list changed in the game. The list is refreshed. Try again.",
         ),
         "SUNUCU-DEGISTI",
       );

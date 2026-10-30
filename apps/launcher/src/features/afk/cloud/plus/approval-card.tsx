@@ -6,7 +6,7 @@
 // the other stays quiet).
 // - a deal the bot agreed and asks the OK for: "Onayla", "Reddet" and "Fiyatı düşür" (a buy for
 //   money: a lower ceiling the bot haggles to, while the assistant runs);
-// - "Takas sende": the deal is agreed and the player makes the trade (a server without a verified
+// - "Takası sen yap": the deal is agreed and the player makes the trade (a server without a verified
 //   profile, or an order the player trades): "Takas oldu" counts it (the player's word), "Olmadı"
 //   lets the order go on; "Oyuna gir" stops the cloud bot and joins its server with its account;
 // - a first sight: a custom item that had no fingerprint showed up in a trade window: "Evet, bu"
@@ -57,7 +57,7 @@ function useMinutesLeft(expiresAt: number): number {
 type T = (key: string, values?: Record<string, unknown>) => string;
 type Kind = "deal" | "handoff" | "confirm_item";
 
-/** The time an approval still waits, in the words of its kind ("Takas sende" waits a day). */
+/** The time an approval still waits, in the words of its kind ("Takası sen yap" waits a day). */
 function leftWords(kind: Kind, left: number, t: T): string {
   if (kind === "handoff") {
     // Down to the hour: a deadline never reads later than it is.

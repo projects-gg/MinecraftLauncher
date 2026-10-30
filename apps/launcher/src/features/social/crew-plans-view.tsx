@@ -1040,20 +1040,24 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
 
   return (
     <section className="mt-5">
-      <div className="mb-2.5 flex min-h-8 items-center gap-2">
+      {/* "Plan yap" ends where the members' "Katıl" plates do, in the same plate (LANDING-L: the two
+          stood out of line): their rows keep 8 px on the right and, after an 8 px gap, the place of
+          their "⋯" (SMALLS-L), so this row keeps both too. */}
+      <div className="mb-2.5 flex min-h-8 items-center gap-2 pr-2">
         <h3 className="min-w-0 flex-1 text-[13px] font-semibold text-ash-300">
           {t("crewWave2.plans.title")}
         </h3>
         {may && !forming && !full && !limit ? (
           <Button
             size="sm"
-            variant="ghost"
+            variant="secondary"
             icon={<CalendarPlus size={15} />}
             onClick={() => setForming(true)}
           >
             {t("crewWave2.plans.make")}
           </Button>
         ) : null}
+        <span aria-hidden className="size-8 shrink-0" />
       </div>
       {may && limit ? (
         <p className="mb-2 flex items-start gap-2.5 px-1 text-[13px] leading-snug text-ash-300">

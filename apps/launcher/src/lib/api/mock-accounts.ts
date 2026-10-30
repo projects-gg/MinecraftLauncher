@@ -27,7 +27,7 @@ const accountNotFound = () =>
     "HESAP-YOK",
     pick(
       "Hesap bulunamadı. Hesap listesi değişmiş olabilir, tekrar dene.",
-      "Account not found. The account list may have changed; try again.",
+      "Account not found. The account list may have changed. Try again.",
     ),
   );
 const nameTaken = () =>

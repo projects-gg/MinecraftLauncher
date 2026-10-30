@@ -129,6 +129,30 @@ pub struct CloudEdit {
     pub config: Option<CloudEditConfig>,
 }
 
+/// How "Yanlışsa bildir" ended (README "Saving" → Refusal reports).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CloudReportOutcome {
+    /// Staff will look at it (also when the same text was reported before).
+    Sent,
+    /// The text saves now (or nothing is refused any more): nothing to report.
+    NotRefused,
+    /// Three reports today already.
+    Limited,
+}
+
+/// The service's answer to a refusal report, as the editor says it.
+fn report_outcome(result: Result<()>) -> Result<CloudReportOutcome> {
+    match result {
+        Ok(()) => Ok(CloudReportOutcome::Sent),
+        Err(error) => match error.code() {
+            "not_refused" => Ok(CloudReportOutcome::NotRefused),
+            "rate_limited" => Ok(CloudReportOutcome::Limited),
+            _ => Err(error),
+        },
+    }
+}
+
 /// How a save ended. Problems are worded by the UI where they are.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -428,6 +452,21 @@ impl CloudService {
         Ok(account)
     }
 
+    /// "Yanlışsa bildir" under a save refused for its content: the row's plain text goes (a secret
+    /// row is never read for content), and the service reads it again with its rules.
+    pub async fn report_refusal(
+        &self,
+        token: &Bearer,
+        id: &str,
+        text: &str,
+    ) -> Result<CloudReportOutcome> {
+        let text = text.trim();
+        if text.is_empty() || text.encode_utf16().count() > 256 {
+            return Err(CloudError::Invalid("refused text"));
+        }
+        report_outcome(self.inner.client.report_refusal(token, id, text).await)
+    }
+
     /// Sends a console line; a password command is sealed here first. The console never echoes
     /// it: the server's answer shows.
     pub async fn send(&self, token: &Bearer, id: &str, line: &str) -> Result<()> {
@@ -447,6 +486,21 @@ impl CloudService {
         };
         let sealed = seal(&key, line, &target).map_err(|e| CloudError::Seal(e.to_string()))?;
         self.inner.client.send_sealed(token, id, &sealed).await
+    }
+
+    /// A press on the card of the server's dialog (DIALOG-CARD), as the view built it (JSON text:
+    /// `{rev, i, inputs, cmd?}` or `{rev, cancel: true}`); the service, the machine and the client
+    /// check it again, and a command runs only as the player confirmed it.
+    pub async fn press_dialog(&self, token: &Bearer, id: &str, press: &str) -> Result<()> {
+        if press.len() > 4 * 1024 {
+            return Err(CloudError::Invalid("dialog press"));
+        }
+        let press: serde_json::Value =
+            serde_json::from_str(press).map_err(|_| CloudError::Invalid("dialog press"))?;
+        if !press.is_object() {
+            return Err(CloudError::Invalid("dialog press"));
+        }
+        self.inner.client.press_dialog(token, id, press).await
     }
 
     /// The machine's masked log before `before` (Unix seconds; none: the last hour), 200 lines.
@@ -783,6 +837,46 @@ mod tests {
     use super::*;
     use crate::client::api_url;
     use crate::error::from_response;
+
+    #[test]
+    fn a_refusal_report_answers_in_three_ways() {
+        // README "Saving" → Refusal reports: 201, the text saves now, or three today already.
+        let refused = |status: u16, code: &str| {
+            Err(from_response(
+                status,
+                None,
+                json!({"error": {"code": code}}).to_string().as_bytes(),
+            ))
+        };
+        assert_eq!(report_outcome(Ok(())).unwrap(), CloudReportOutcome::Sent);
+        assert_eq!(
+            report_outcome(refused(409, "not_refused")).unwrap(),
+            CloudReportOutcome::NotRefused
+        );
+        assert_eq!(
+            report_outcome(refused(429, "rate_limited")).unwrap(),
+            CloudReportOutcome::Limited
+        );
+        // Anything else is the error it is (the editor says it as any other).
+        let other = report_outcome(refused(503, "unavailable")).unwrap_err();
+        assert_eq!(other.code(), "unavailable");
+        let words = serde_json::to_value(CloudReportOutcome::NotRefused).unwrap();
+        assert_eq!(words, json!({"kind": "notRefused"}));
+    }
+
+    #[tokio::test]
+    async fn a_refusal_report_takes_a_rows_text_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = offline_service(dir.path());
+        let long = "x".repeat(257);
+        for text in ["", "   ", long.as_str()] {
+            let error = service
+                .report_refusal(&Bearer::new("pls_test"), "a_1", text)
+                .await
+                .unwrap_err();
+            assert!(matches!(error, CloudError::Invalid(_)), "{text:?}");
+        }
+    }
 
     #[test]
     fn a_protected_name_is_the_names_own_problem() {

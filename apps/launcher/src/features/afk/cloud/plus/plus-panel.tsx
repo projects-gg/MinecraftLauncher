@@ -27,20 +27,27 @@ import { afkFailed, isFriendly } from "../../errors";
 import { type CloudAccount, cloudApi } from "../api";
 import { serverLabel } from "../status";
 import { useCloudPage } from "../use-cloud";
+import { waitingThreads } from "./activity";
 import { type PlusApproval, plusApi } from "./api";
 import { useJoinForTrade } from "./approval-card";
 import { useApprovalNow, waitsNow } from "./approval-clock";
 import { AuditSection } from "./audit-section";
 import { PlusItemArt } from "./item-icon";
 import { type Namer, usePlusItemData } from "./items";
-import { MessagesSection } from "./messages-section";
 import { OrdersSection } from "./orders-section";
 import { PlusRail, visibleSections } from "./rail";
 import { ReportSection } from "./report-section";
 import { SettingsSection } from "./settings-section";
 import { PlusSetupWizard } from "./setup-wizard";
 import { plusAi } from "./types";
-import { isPlusAccount, usePlusFeatures, usePlusLive, usePlusPanel, usePlusUi } from "./use-plus";
+import {
+  isPlusAccount,
+  usePlusFeatures,
+  usePlusInbox,
+  usePlusLive,
+  usePlusPanel,
+  usePlusUi,
+} from "./use-plus";
 
 const NONE: PlusApproval[] = [];
 
@@ -112,6 +119,8 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
   const dirty = usePlusUi((s) => Boolean(s.drafts[account.id]));
   const query = usePlusPanel(account.id);
   const link = usePlusLive(account.id);
+  // The conversations' list: who waits for an answer ("Seni bekleyenler", the rail's count).
+  const inbox = usePlusInbox(account.id, features.inbox);
   const panel = query.data;
   const needsSetup = panel?.settings.aiRev === 0;
   const items = usePlusItemData(panel?.settings.server.mc ?? null);
@@ -133,18 +142,14 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
   const now = useApprovalNow(panel?.approvals ?? NONE);
   const waitingNow = panel?.approvals.filter((a) => waitsNow(a, now)) ?? null;
   const pending = waitingNow?.length ?? account.ai?.pendingApprovals ?? 0;
-  const unread = account.ai?.newMessages?.count ?? 0;
+  const toAnswer = features.inbox ? waitingThreads(inbox.data?.threads ?? []).length : 0;
   const ai = plusAi(account);
   const away = Boolean(panel?.machineAway) || ai?.state === "unknown";
   const maintenance = ai?.reason === "service" && ai.state === "paused";
   const awayNotice =
-    away && (section === "feed" || section === "messages" || section === "orders") ? (
+    away && (section === "feed" || section === "orders") ? (
       <PanelNotice icon={<CloudSlash size={18} />} title={t("afkPlus.panel.away.title")}>
-        {[
-          t("afkPlus.panel.away.body"),
-          // The messages say their own line in their section (no blank pane under its title).
-          pending && section !== "messages" ? t("afkPlus.panel.away.approvals") : null,
-        ]
+        {[t("afkPlus.panel.away.body"), pending ? t("afkPlus.panel.away.approvals") : null]
           .filter(Boolean)
           .join(" ")}
       </PanelNotice>
@@ -198,7 +203,7 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
             section={section}
             onSection={setSection}
             approvals={pending}
-            messages={unread}
+            waiting={toAnswer}
             orders={waiting}
             quota={panel.quota}
             saverAt={features.saver ? (panel.settings.config.replies.saveAt ?? null) : null}
@@ -214,19 +219,17 @@ function PanelBody({ account, onClose }: { account: CloudAccount; onClose: () =>
               {awayNotice ?? serviceNotice}
               {section === "feed" ? (
                 <AuditSection
-                  accountId={account.id}
-                  approvals={panel.approvals}
+                  account={account}
+                  panel={panel}
                   namer={namer}
-                  server={panel.settings.server}
                   link={link}
-                  machineAway={panel.machineAway}
                   enabled={features.audit && panel.settings.rules.features.audit}
+                  inboxOn={features.inbox}
+                  threads={inbox.data?.threads ?? null}
                   canLower={ai?.state === "on"}
                   maintenance={maintenance}
                   onJoin={join.ask}
                 />
-              ) : section === "messages" ? (
-                <MessagesSection accountId={account.id} />
               ) : section === "orders" ? (
                 <OrdersSection account={account} panel={panel} />
               ) : section === "settings" ? (

@@ -157,13 +157,77 @@ export function safeUrl(value: string): boolean {
   return urlParts(value) !== null;
 }
 
-/** What a copy's toast shows of the copied text: at most 60 units, then "…" (never half a character). */
+/**
+ * Second-level labels a country's registry keeps generic (`com.tr`, `co.uk`, `org.tr`…): under one
+ * of them a registrable domain is three labels.
+ */
+const GENERIC_SECOND_LEVEL = new Set([
+  "ac",
+  "av",
+  "bel",
+  "biz",
+  "co",
+  "com",
+  "dr",
+  "edu",
+  "gen",
+  "go",
+  "gob",
+  "gouv",
+  "gov",
+  "ind",
+  "info",
+  "k12",
+  "ltd",
+  "me",
+  "mil",
+  "name",
+  "ne",
+  "net",
+  "nom",
+  "or",
+  "org",
+  "plc",
+  "pol",
+  "sch",
+  "tsk",
+  "tv",
+  "web",
+]);
+
+/**
+ * A link's host (`urlParts`'s, its port left out) split for the card: the registrable domain, which
+ * tells a player where the link really goes (the last two labels, or three under a country's
+ * generic second level such as `com.tr`), and the labels before it. A host that starts with
+ * another site's name (`forum.projects.gg.example.net`) thus shows `example.net`.
+ */
+export function domainParts(host: string): { sub: string; domain: string } {
+  const labels = (host.split(":")[0] ?? host).split(".");
+  const top = labels[labels.length - 1] ?? "";
+  const second = (labels[labels.length - 2] ?? "").toLowerCase();
+  const size = labels.length >= 3 && top.length === 2 && GENERIC_SECOND_LEVEL.has(second) ? 3 : 2;
+  return {
+    sub: labels.length > size ? `${labels.slice(0, -size).join(".")}.` : "",
+    domain: labels.slice(-size).join("."),
+  };
+}
+
+const highHalf = (unit: number) => unit >= 0xd800 && unit <= 0xdbff;
+const lowHalf = (unit: number) => unit >= 0xdc00 && unit <= 0xdfff;
+
+/**
+ * What a copy's toast shows of the copied text: runs of white space as one space, so that padding
+ * cannot push a command out of sight, and at most 60 units: a longer text shows its start and its
+ * end around "…", both of which a paste would bring (never half a character).
+ */
 export function copiedPreview(value: string): string {
-  if (value.length <= 60) return value;
-  let cut = 59;
-  const unit = value.charCodeAt(cut - 1);
-  if (unit >= 0xd800 && unit <= 0xdbff) cut -= 1;
-  return `${value.slice(0, cut)}…`;
+  const text = value.replace(/\s+/g, " ");
+  if (text.length <= 60) return text;
+  let head = 28;
+  if (highHalf(text.charCodeAt(head - 1))) head -= 1;
+  let tail = text.length - 28;
+  if (lowHalf(text.charCodeAt(tail))) tail += 1;
+  return `${text.slice(0, head)} … ${text.slice(tail)}`;
 }
 
 /** A click as the contract allows it, else null: a value is never cut, an odd one never shown. */

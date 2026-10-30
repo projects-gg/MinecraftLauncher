@@ -1,16 +1,11 @@
-// "Mesajlar" (QoL Q1): every player who wrote to the bot in the last 7 days, and one conversation
-// at a time. The owner answers in their own words (no [AFK+] mark: a person writes); then the
+// A player's conversation with the bot (QoL Q1), opened under their row in "Etkinlik" ("Cevap yaz";
+// PLUS-ACTIVITY: the conversations are no section of their own any more, the site's and the phone's
+// same place). The owner answers in their own words (no [AFK+] mark: a person writes); then the
 // assistant stays quiet in that conversation for 30 minutes, "Şimdi devret" hands it back. A reply
 // goes only to someone who wrote in the last 24 hours. Unsafe lines come folded. Read live from the
-// machine: when it is away, one quiet sentence. The conversation slides in from the side it
-// belongs to; the composer is the chat's (rounded field, the send button turning gold).
-import {
-  CaretLeft,
-  DotsThreeVertical,
-  PaperPlaneRight,
-  Prohibit,
-  UserPlus,
-} from "@phosphor-icons/react";
+// machine only while it is open: when it is away, one quiet sentence. The composer is the chat's
+// (rounded field, the send button turning gold only once there is something to send).
+import { DotsThreeVertical, PaperPlaneRight, Prohibit, UserPlus } from "@phosphor-icons/react";
 import {
   Button,
   cn,
@@ -18,10 +13,9 @@ import {
   IconButton,
   leave,
   Menu,
-  PlayerHead,
   Skeleton,
+  scrollBehavior,
   toast,
-  useMotionPrefs,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -31,15 +25,13 @@ import { afkFailed } from "../../errors";
 import {
   type PlusInboxLine,
   type PlusInboxPage,
-  type PlusInboxThread,
   type PlusPanel,
   type PlusThreadPage,
   plusApi,
 } from "./api";
-import { QuietEmpty } from "./audit-section";
-import { GroupTitle } from "./fields";
+import { QuietEmpty } from "./fields";
 import { PLUS_LIMITS } from "./model";
-import { clockText, dayGroup, dayText, untilPhrase } from "./time";
+import { clockText, untilPhrase } from "./time";
 import {
   inboxKey,
   plusKey,
@@ -47,83 +39,8 @@ import {
   threadKey,
   usePlusControl,
   usePlusInstantSave,
-  usePlusUi,
 } from "./use-plus";
 import { currentLang } from "./words";
-
-/** "14:05" today, "Dün", else the day: when a conversation last moved. */
-function useWhen() {
-  const { t } = useTranslation();
-  const lang = currentLang();
-  return (at: number) => {
-    const group = dayGroup(at, Date.now());
-    if (group === "today") return clockText(at, lang);
-    if (group === "yesterday") return t("afkPlus.audit.yesterday");
-    return dayText(at, lang);
-  };
-}
-
-function ThreadRow({ thread, onOpen }: { thread: PlusInboxThread; onOpen: () => void }) {
-  const { t } = useTranslation();
-  const when = useWhen();
-  const who =
-    thread.last.from === "you"
-      ? `${t("afkPlus.messages.you")}: `
-      : thread.last.from === "bot"
-        ? `${t("afkPlus.messages.assistant")}: `
-        : "";
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={onOpen}
-        className={cn(
-          "group flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-left outline-none",
-          "transition-[background-color,transform,scale] duration-150 ease-out hover:bg-white/5 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-gold-300",
-        )}
-      >
-        <PlayerHead name={thread.name} size={32} className="shrink-0" />
-        <span className="min-w-0 flex-1">
-          <span className="flex items-baseline justify-between gap-3">
-            <span className="min-w-0 truncate text-[13.5px] font-medium text-bone-50">
-              {thread.name}
-            </span>
-            <span className="shrink-0 text-[12px] text-ash-400 tabular-nums">
-              {when(thread.lastAt)}
-            </span>
-          </span>
-          <span className="mt-0.5 flex items-center justify-between gap-3">
-            {/* A blocked player's last line says nothing worth reading: the state, in words. */}
-            {thread.state === "blocked" ? (
-              <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ash-400">
-                <Prohibit size={13} className="shrink-0" aria-hidden />
-                <span className="truncate">{t("afkPlus.messages.blockedTag")}</span>
-              </span>
-            ) : (
-              <span
-                className={cn(
-                  "truncate text-[12.5px]",
-                  thread.unread ? "text-bone-100" : "text-ash-300",
-                )}
-              >
-                {who}
-                {thread.last.text}
-              </span>
-            )}
-            {thread.unread ? (
-              <span className="shrink-0 font-display text-[12.5px] font-semibold text-gold-200 tabular-nums">
-                <span aria-hidden>{thread.unread}</span>
-                <span className="sr-only">
-                  {t("afkPlus.messages.unread", { count: thread.unread })}
-                </span>
-              </span>
-            ) : null}
-          </span>
-        </span>
-      </button>
-    </li>
-  );
-}
 
 function Line({ line }: { line: PlusInboxLine }) {
   const { t } = useTranslation();
@@ -155,7 +72,7 @@ function Line({ line }: { line: PlusInboxLine }) {
             <button
               type="button"
               onClick={() => setShown(true)}
-              className="cursor-pointer rounded-sm font-medium text-gold-300 not-italic underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+              className="cursor-pointer rounded-sm font-medium text-bone-100 not-italic underline underline-offset-2 outline-none hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300"
             >
               {t("afkPlus.messages.show")}
             </button>
@@ -176,10 +93,13 @@ function Composer({
   accountId,
   name,
   page,
+  autoFocus = false,
 }: {
   accountId: string;
   name: string;
   page: PlusThreadPage;
+  /** Opened by "Cevap yaz": the field takes the focus once (the scroll is the conversation's). */
+  autoFocus?: boolean;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -189,6 +109,12 @@ function Composer({
   const field = useRef<HTMLTextAreaElement>(null);
   const ready = text.trim().length > 0 && !sending;
   const length = [...text].length;
+  const focusOnce = useRef(autoFocus);
+  useEffect(() => {
+    if (!focusOnce.current) return;
+    focusOnce.current = false;
+    field.current?.focus({ preventScroll: true });
+  }, []);
 
   const send = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -279,7 +205,8 @@ function Composer({
           className={cn(
             "group/send relative mb-[3px] inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md outline-none",
             "transition-[transform,scale,color] duration-150 ease-out active:scale-[0.94] focus-visible:ring-2 focus-visible:ring-gold-300",
-            ready ? "text-gold-ink" : "cursor-default text-ash-500",
+            // Empty: the quiet plate (the site's); gold only once there is something to send.
+            ready ? "text-gold-ink" : "cursor-default bg-white/[0.05] text-ash-400",
           )}
         >
           <span
@@ -315,16 +242,22 @@ function Composer({
   );
 }
 
-function Conversation({
+/**
+ * The conversation with one player, under their steps: its title ("Yazışma"; the row above names
+ * the player), its lines, the hand-back while the player holds it, and the reply field (or why
+ * there is none). Opening it reads it and marks it read up to its newest line.
+ */
+export function Conversation({
   accountId,
   name,
   blocked,
-  onBack,
+  autoFocus = false,
 }: {
   accountId: string;
   name: string;
   blocked: boolean;
-  onBack: () => void;
+  /** Opened by "Cevap yaz": the reply field takes the focus once it shows. */
+  autoFocus?: boolean;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -341,10 +274,11 @@ function Conversation({
   const end = useRef<HTMLDivElement>(null);
   const lastAt = page?.lines.at(-1)?.at ?? 0;
 
-  // Read up to the newest line once it is on screen; the rail and the card count what is left.
+  // Read up to the newest line once it is on screen; "Seni bekleyenler" and the rail count what is
+  // left. The reply field comes into view (the least scroll that shows it).
   useEffect(() => {
     if (!lastAt) return;
-    end.current?.scrollIntoView({ block: "end" });
+    end.current?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() });
     void plusApi
       .read(accountId, name, lastAt)
       .then(() => {
@@ -410,17 +344,11 @@ function Conversation({
     page?.handoffUntil && page.handoffUntil * 1000 > Date.now() ? page.handoffUntil : null;
 
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="mb-3 flex items-center gap-2">
-        <IconButton
-          label={t("afkPlus.messages.back")}
-          icon={<CaretLeft size={16} weight="bold" />}
-          size="sm"
-          onClick={onBack}
-        />
-        <h3 className="min-w-0 flex-1 truncate font-display text-[15px] font-semibold text-bone-50">
-          {name}
-        </h3>
+    <section aria-label={t("afkPlus.audit.conversation")} className="flex flex-col">
+      <header className="mb-2.5 flex items-center gap-2">
+        <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-bone-100">
+          {t("afkPlus.audit.conversation")}
+        </h4>
         <Menu
           trigger={
             <IconButton
@@ -458,13 +386,12 @@ function Conversation({
         <QuietEmpty icon="server">{t("afkPlus.messages.offline")}</QuietEmpty>
       ) : (
         <>
-          <ul className="flex flex-1 flex-col gap-2.5 pb-3">
+          <ul className="flex flex-col gap-2.5 pb-3">
             {page.lines.map((line, index) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: lines have no ids and only ever append; two in one second share `at`
               <Line key={`${line.at}-${index}`} line={line} />
             ))}
           </ul>
-          <div ref={end} />
           <AnimatePresence initial={false}>
             {handoff ? (
               <motion.div
@@ -485,89 +412,20 @@ function Conversation({
               </motion.div>
             ) : null}
           </AnimatePresence>
-          {/* Docked at the bottom of the panel while the conversation scrolls under it. A blocked
-              player's conversation says so where the reply would go, with the way back. */}
-          <div className="sticky bottom-0 -mx-6 mt-auto border-t border-white/7 bg-[color-mix(in_oklab,var(--color-obsidian-900)_95%,transparent)] px-6 pt-3">
-            {blocked ? (
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel)] bg-obsidian-950/45 px-3.5 py-2.5 ring-1 ring-white/8">
-                <p className="min-w-0 text-[12.5px] text-ash-300">
-                  {t("afkPlus.messages.blocked")}
-                </p>
-                <Button size="sm" variant="ghost" onClick={() => void toggleBlock()}>
-                  {t("afkPlus.messages.unblock")}
-                </Button>
-              </div>
-            ) : (
-              <Composer accountId={accountId} name={name} page={page} />
-            )}
-          </div>
+          {/* A blocked player's conversation says so where the reply would go, with the way back. */}
+          {blocked ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel)] bg-obsidian-950/45 px-3.5 py-2.5 ring-1 ring-white/8">
+              <p className="min-w-0 text-[12.5px] text-ash-300">{t("afkPlus.messages.blocked")}</p>
+              <Button size="sm" variant="ghost" onClick={() => void toggleBlock()}>
+                {t("afkPlus.messages.unblock")}
+              </Button>
+            </div>
+          ) : (
+            <Composer accountId={accountId} name={name} page={page} autoFocus={autoFocus} />
+          )}
+          <div ref={end} />
         </>
       )}
-    </div>
-  );
-}
-
-export function MessagesSection({ accountId }: { accountId: string }) {
-  const { t } = useTranslation();
-  const { reduce } = useMotionPrefs();
-  const thread = usePlusUi((s) => s.thread);
-  const setThread = usePlusUi((s) => s.setThread);
-  const query = useQuery({
-    queryKey: inboxKey(accountId),
-    queryFn: () => plusApi.inbox(accountId, null),
-    staleTime: 15_000,
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
-  const threads = query.data?.threads ?? [];
-  const open = threads.find((one) => one.name === thread);
-  const slide = (x: number) => (reduce ? "none" : `translateX(${x}px)`);
-
-  return (
-    <AnimatePresence mode="popLayout" initial={false}>
-      {thread ? (
-        <motion.div
-          key={`thread-${thread}`}
-          initial={{ opacity: 0, transform: slide(18) }}
-          animate={{ opacity: 1, transform: slide(0), transition: enter(0.26) }}
-          exit={{ opacity: 0, transform: slide(18), transition: leave(0.18) }}
-          className="flex flex-1 flex-col"
-        >
-          <Conversation
-            accountId={accountId}
-            name={thread}
-            blocked={open?.state === "blocked"}
-            onBack={() => setThread(null)}
-          />
-        </motion.div>
-      ) : (
-        <motion.div
-          key="list"
-          initial={{ opacity: 0, transform: slide(-18) }}
-          animate={{ opacity: 1, transform: slide(0), transition: enter(0.26) }}
-          exit={{ opacity: 0, transform: slide(-18), transition: leave(0.18) }}
-        >
-          <GroupTitle>{t("afkPlus.messages.title")}</GroupTitle>
-          {query.isLoading ? (
-            <div className="space-y-2.5 pt-1" aria-hidden>
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : query.isError ? (
-            // The panel's notice says the machine is away; here, what waits and what still works.
-            <QuietEmpty icon="server">{t("afkPlus.messages.offlineBody")}</QuietEmpty>
-          ) : threads.length ? (
-            <ul className="-mx-3 flex flex-col">
-              {threads.map((one) => (
-                <ThreadRow key={one.name} thread={one} onOpen={() => setThread(one.name)} />
-              ))}
-            </ul>
-          ) : (
-            <QuietEmpty icon="chat">{t("afkPlus.messages.empty")}</QuietEmpty>
-          )}
-        </motion.div>
-      )}
-    </AnimatePresence>
+    </section>
   );
 }

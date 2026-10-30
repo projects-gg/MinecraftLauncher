@@ -119,6 +119,9 @@ pub struct CloudAccountFeatures {
     /// Console lines in the game's colours, with their hovers and clicks (CONSOLE-COLOR): Studio's
     /// switch while the account's machine gives them. Off from a service before it.
     pub console_looks: bool,
+    /// A server's dialog as a card the player may press (DIALOG-CARD): Studio's switch while the
+    /// account's machine reports dialogs. Off from a service before it.
+    pub dialog_cards: bool,
     pub placeholders: bool,
     /// Console kinds are on, but this account's player, private or server rules still match the
     /// old way until its settings are saved once.

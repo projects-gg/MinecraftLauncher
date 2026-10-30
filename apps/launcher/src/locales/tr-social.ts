@@ -131,8 +131,12 @@ export const trSocial = {
     shareServer: "Başka sunuculardaysam adresini göster",
     shareLastSeen: "Son görülmemi göster",
     notifications: "Bildirimler",
-    favoriteOnline: "Favorilerim çevrimiçi olunca",
-    favoriteProjects: "Favorilerim Projects'e girince",
+    // Two groups under "Bildirimler", each saying whose (CHAT-PROD leftovers: "Favorilerim…" beside
+    // "Ekip arkadaşların…" mixed who is speaking, and every switch repeated its group's word).
+    favorites: "Favori arkadaşların",
+    crewGroup: "Ekibin",
+    favoriteOnline: "Çevrimiçi olunca",
+    favoriteProjects: "Projects'e girince",
     backup: "Ayar yedeği",
     backupToggle: "Launcher ayarlarımı yedekle",
     backupWhen: "Son yedek {{when}}",
