@@ -38,7 +38,7 @@ import { planWhen, withPlanNote } from "./crew-plans";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
 import { homeShowsCall } from "./home-strip";
-import { showInviteToast } from "./invite-toast";
+import { showInviteToast, showTeamInviteToast } from "./invite-toast";
 import { gameBusy, joinProjects } from "./join";
 import { JoinDialog } from "./join-dialog";
 import { dayMonth } from "./limits";
@@ -278,13 +278,8 @@ function handleNotice(notice: SocialNotice) {
         announce(text);
         break;
       }
-      const from = notice.invite.from;
-      toast(<MarkedSentence text={sentence} name={from.name} mark={from.mark} />, {
-        action: {
-          label: i18n.t("social.notices.show"),
-          onClick: () => useSocialUi.getState().openPanel({ page: "list" }),
-        },
-      });
+      // With the inviter's face and the crew's mark, as a call's toast (SMALLS-L).
+      showTeamInviteToast(notice.invite);
       break;
     }
     case "crewCall": {

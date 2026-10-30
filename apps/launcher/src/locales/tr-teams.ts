@@ -70,7 +70,7 @@ export const trTeams = {
     unmakeModerator: "Moderatörlükten al",
     unmadeModerator: "{{name}} artık üye",
     remove: "Ekipten çıkar",
-    removeAsk: "{{name}} ekipten çıkar ve ekip kodu yenilenir.",
+    removeAsk: "{{name}} ekipten çıkarılır ve ekip kodu yenilenir.",
     removed: "{{name}} ekipten çıkarıldı",
     blocked: "Engelledin",
     since_one: "{{count}} gündür ekipte",
@@ -95,6 +95,8 @@ export const trTeams = {
   cancel: "Vazgeç",
   notices: {
     invite: "{{name}} seni {{team}} ekibine davet etti",
+    /** The invite toast's button: opens the list where the invite waits. */
+    seeInvite: "Daveti gör",
     kicked: "{{team}} ekibinden çıkarıldın",
     kickedUnnamed: "Ekipten çıkarıldın",
     disbanded: "{{team}} ekibi dağıtıldı",

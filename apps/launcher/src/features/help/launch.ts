@@ -16,3 +16,12 @@ const OWN_FIX: ReadonlySet<string> = new Set([
 export function helpsWithLaunchError(code: string): boolean {
   return !OWN_FIX.has(code);
 }
+
+/**
+ * The error's line on a toast whose button is "Sorunu bul": without the message's closing "Tekrar
+ * dene." ("Try again."), which asked for one thing while the button offered another.
+ */
+export function helpToastLine(message: string): string {
+  const line = message.replace(/\s*(?:Tekrar dene|Try again)\.$/u, "").trim();
+  return line || message;
+}

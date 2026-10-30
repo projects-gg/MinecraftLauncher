@@ -246,8 +246,9 @@ pub struct HomeView {
 pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     APPLIED_SEQUENCE.store(snapshot.index.sequence, Ordering::SeqCst);
     // The chat emojis for the in-game overlay's picker (CHAT-EMOJI) are read on a task: the next
-    // game start, or the refresh that applied this, hands them over.
-    crate::overlay::content_applied(&snapshot.index);
+    // game start, or the refresh that applied this, hands them over. The overlay's jars from the
+    // index (OVL-AUTO) count from the next start on.
+    crate::overlay::content_applied(snapshot);
     crate::commands::social::apply_flag(
         &state.social,
         snapshot.config.features.friends,
