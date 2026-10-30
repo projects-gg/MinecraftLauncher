@@ -4,7 +4,7 @@
 import { TooltipProvider } from "@pl/ui";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Dialog } from "radix-ui";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/lib/i18n";
 import {
   AfkSidePanel,
@@ -30,6 +30,19 @@ function Panel({ onClose = () => {} }: { onClose?: () => void }) {
     </TooltipProvider>
   );
 }
+
+// happy-dom rejects an animation's `finished` when it is cancelled (motion's own, at unmount)
+// and nobody listens there: the rejection is handled here, the cancel stays as it is.
+const cancel = Animation.prototype.cancel;
+beforeAll(() => {
+  Animation.prototype.cancel = function (this: Animation) {
+    this.finished.catch(() => undefined);
+    cancel.call(this);
+  };
+});
+afterAll(() => {
+  Animation.prototype.cancel = cancel;
+});
 
 beforeEach(() => {
   useAfkPanelSize.setState({ full: false });

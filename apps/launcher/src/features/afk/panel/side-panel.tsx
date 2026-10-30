@@ -202,6 +202,8 @@ export function AfkSidePanel({
         [{ transform: `translateX(${shift}px)` }, { transform: "translateX(0px)" }],
         { duration: SETTLE_MS, easing: DRAWER },
       );
+      // A grab or a close cancels it, which rejects `finished`: nobody waits on it.
+      run.finished.catch(() => undefined);
       const done = () => {
         if (settling.current === run) settling.current = null;
         delete surface.dataset.settling;
