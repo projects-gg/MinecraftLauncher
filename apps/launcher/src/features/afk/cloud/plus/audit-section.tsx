@@ -660,8 +660,9 @@ export function AuditSection({
         : null
     : null;
   const trades = tradesToday(all, now);
+  // Not while the machine is away: its counts would be stale (the line over the list says so).
   const summary =
-    audit.data && !off ? (
+    audit.data && !off && !away ? (
       <ul
         aria-label={t("afkPlus.audit.summary")}
         className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-ash-300 tabular-nums"

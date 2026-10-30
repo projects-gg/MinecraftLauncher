@@ -149,7 +149,7 @@ export const trSetup = {
       // The setup's third step folds the two rare ones (TASTE-SWEEP SETUP-UX-L r1).
       actSetup: "Takastan sonra",
       actSetupDeal: "İlk anlaşmada onay sınırı, takastan sonra",
-      chat: "Satış ilanlarını taramak",
+      chat: "Satış ilanlarını tarama",
       // After `chat` while the ad's text can be chosen (ads on, more than one in the profile).
       chatText: ", ilan metni",
       talk: "Tanıtım yazısı, mesaj etiketi, dil, konu sınırı",

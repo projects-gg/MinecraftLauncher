@@ -4,7 +4,7 @@
 // questions with ready answers, "Kaydet"); nothing is stored before "Kaydet". "Formla ekle" and
 // "Envanterden seç" are the ways without the model. Then the orders: the active ones (what waits
 // for the player first), the finished ones under them; a row says the order's state in a word in
-// its own place, a handoff ("Takas sende") opens under its row. Things that come and go fade in
+// its own place, a handoff ("Takası sen yap") opens under its row. Things that come and go fade in
 // place and the rows below glide (not in Performance mode).
 import {
   ArrowClockwise,

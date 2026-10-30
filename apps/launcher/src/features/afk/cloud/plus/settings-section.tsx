@@ -338,7 +338,9 @@ function SpentMeter({
   const { t } = useTranslation();
   const { layout } = useMotionPrefs();
   const share = Math.min(1, Math.max(0, spent / total));
-  // It fills once, the first time it shows (scaleX, 300 ms); after that it is just there.
+  // It fills once, the first time it shows (scaleX, 300 ms); after that it is just there. Bone as
+  // the rail's kontör bars (gold is the sheet's one action), flare from 90 %: at the limit the bot
+  // buys nothing more (TASTE-2 r1).
   const [grow] = useState(() => layout && !metersShown.has(accountId));
   useEffect(() => {
     metersShown.add(accountId);
@@ -350,7 +352,10 @@ function SpentMeter({
         className="block h-[3px] w-full max-w-[320px] overflow-hidden rounded-full bg-white/10"
       >
         <motion.span
-          className="block h-full w-full origin-left rounded-full bg-gold-500"
+          className={cn(
+            "block h-full w-full origin-left rounded-full",
+            share >= 0.9 ? "bg-flare-400/80" : "bg-bone-100/75",
+          )}
           initial={grow ? { transform: "scaleX(0)" } : false}
           animate={{ transform: `scaleX(${share})` }}
           transition={{ duration: 0.3, ease: easeOutExpo }}

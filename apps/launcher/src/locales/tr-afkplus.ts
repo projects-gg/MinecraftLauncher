@@ -409,9 +409,9 @@ export const trAfkPlus = {
     rejected: "Reddin iletildi",
     closedMeanwhile: "Bu onay artık beklemiyor.",
   },
-  // "Takas sende": the deal is agreed and the player makes the trade (afkplus-free.md §4.4).
+  // "Takası sen yap": the deal is agreed and the player makes the trade (afkplus-free.md §4.4).
   handoff: {
-    title: "Takas sende",
+    title: "Takası sen yap",
     body: "{{who}} ile anlaştın: {{deal}}. Takası oyunda yap, sonra burada işaretle.",
     yes: "Takas oldu",
     no: "Olmadı",
@@ -607,7 +607,7 @@ export const trAfkPlus = {
   // An order's state, in a word in its row (README "Status and progress").
   status: {
     waiting_ok: "Onayın bekleniyor",
-    your_trade: "Takas sende",
+    your_trade: "Takası sen yap",
     trading: "Takasta",
     done: "Tamamlandı",
     expired: "Süresi doldu",

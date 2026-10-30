@@ -427,13 +427,13 @@ export function mockOrders(): PlusOrder[] {
     }),
     order({
       id: "o4",
-      item: "custom:c1",
+      item: "minecraft:emerald",
       qty: 5,
       req: { ench: {}, dur: 0, named: false, cursed: false },
       target: 4_000,
       limit: 4_500,
       trade: "owner",
-      note: "yakut alırım 5 tane, tanesi en fazla 900",
+      note: "zümrüt alırım 5 tane, tanesi en fazla 900",
       at: now - DAY,
     }),
     order({
@@ -781,8 +781,9 @@ function approvalList(): PlusApproval[] {
       id: "01JBXK3D2E7Q2M9R3T5W8Y0ZB2",
       kind: "handoff",
       order: "o4",
-      deal: { side: "buy", item: "custom:c1", qty: 2, price: 1_800, pay: "money" },
-      counterpart: "Neon_Drift",
+      // Kirpi_Gamer's own trade: Neon_Drift's elytra talk ends in the approval below (TASTE-2 r1).
+      deal: { side: "buy", item: "minecraft:emerald", qty: 2, price: 1_800, pay: "money" },
+      counterpart: "Kirpi_Gamer",
       why: [],
       createdAt: now - 40 * MIN,
       expiresAt: now + 23 * HOUR,
@@ -811,8 +812,9 @@ function approvalList(): PlusApproval[] {
       id: "01JBXK3D2E7Q2M9R3T5W8Y0ZD4",
       kind: "deal",
       order: "o1",
-      // A buy for money above the approval limit, from a new player, in its last two minutes.
-      deal: { side: "buy", item: "minecraft:elytra", qty: 1, price: 38_000, pay: "money" },
+      // A buy for money above the approval limit, from a new player, in its last two minutes: the
+      // price Neon_Drift agreed to in the talk (mockLines), asked right after it.
+      deal: { side: "buy", item: "minecraft:elytra", qty: 1, price: 37_500, pay: "money" },
       counterpart: "Neon_Drift",
       why: ["above", "new_counterpart"],
       createdAt: now - 8 * MIN,
@@ -907,28 +909,38 @@ export function mockAudit(): PlusAuditEntry[] {
       a: "01JBXK3D2E7Q2M9R3T5W8Y0ZC3",
     }),
     auditEntry(at(40), "handoff", {
-      w: "Neon_Drift",
+      w: "Kirpi_Gamer",
       o: "o4",
-      i: "custom:c1",
+      i: "minecraft:emerald",
       q: 2,
       p: 1_800,
       u: "money",
     }),
-    auditEntry(at(9), "pm_in", { w: "Neon_Drift", x: "elytra var 45k", o: "o1" }),
-    auditEntry(at(8), "reply", { w: "Neon_Drift", x: "Merhaba, 34.000 olur mu?", o: "o1" }),
-    auditEntry(at(6), "counter", {
+    // Neon_Drift's talk at its lines' times (mockLines), then the approval it ended in.
+    auditEntry(at(14), "pm_in", { w: "Neon_Drift", x: "elytra var 45k", o: "o1" }),
+    auditEntry(at(13), "reply", { w: "Neon_Drift", x: "Merhaba, 34.000 olur mu?", o: "o1" }),
+    auditEntry(at(11), "counter", {
       w: "Neon_Drift",
       o: "o1",
       i: "minecraft:elytra",
       p: 40_000,
       u: "money",
     }),
-    auditEntry(at(5), "offer", {
+    auditEntry(at(10), "offer", {
       w: "Neon_Drift",
       o: "o1",
       i: "minecraft:elytra",
       p: 37_500,
       u: "money",
+    }),
+    auditEntry(at(8), "ask_owner", {
+      w: "Neon_Drift",
+      o: "o1",
+      i: "minecraft:elytra",
+      q: 1,
+      p: 37_500,
+      u: "money",
+      a: "01JBXK3D2E7Q2M9R3T5W8Y0ZD4",
     }),
     auditEntry(at(3), "owner_msg", { w: "MorKedi", x: "Akşam spawn'da olurum." }),
     auditEntry(at(2), "ask_owner", {
@@ -953,7 +965,7 @@ export function mockThreads(): PlusInboxThread[] {
   return [
     {
       name: "Neon_Drift",
-      lastAt: now - 3 * MIN,
+      lastAt: now - 9 * MIN,
       last: { from: "them", text: "tamam anlaştık" },
       unread: 2,
       state: "active",
@@ -991,11 +1003,11 @@ export function mockLines(name: string): PlusInboxLine[] {
   const at = (minutesAgo: number) => now - minutesAgo * MIN;
   if (name === "Neon_Drift") {
     return [
-      { at: at(8), from: "them", text: "elytra var 45k", hidden: null },
-      { at: at(7), from: "bot", text: "Merhaba, 34.000 olur mu?", hidden: null },
-      { at: at(5), from: "them", text: "40 olmaz mı", hidden: null },
-      { at: at(4), from: "bot", text: "37.500 olur mu?", hidden: null },
-      { at: at(3), from: "them", text: "tamam anlaştık", hidden: null },
+      { at: at(14), from: "them", text: "elytra var 45k", hidden: null },
+      { at: at(13), from: "bot", text: "Merhaba, 34.000 olur mu?", hidden: null },
+      { at: at(11), from: "them", text: "40 olmaz mı", hidden: null },
+      { at: at(10), from: "bot", text: "37.500 olur mu?", hidden: null },
+      { at: at(9), from: "them", text: "tamam anlaştık", hidden: null },
     ];
   }
   if (name === "MorKedi") {
@@ -1078,7 +1090,7 @@ export function mockReceipts(): PlusReceipt[] {
   return [
     receipt(0.07, "sell", "minecraft:diamond", 20, 2_400, "MorKedi", { order: "o3" }),
     receipt(1.08, "buy", "minecraft:totem_of_undying", 1, 8_000, "Pixel_TR", { order: "o2" }),
-    receipt(1.5, "buy", "custom:c1", 3, 2_700, "Neon_Drift", { approval: "owner", review: true }),
+    receipt(1.5, "buy", "custom:c1", 3, 2_700, "Kirpi_Gamer", { approval: "owner", review: true }),
     receipt(2.3, "buy", "minecraft:diamond_pickaxe", 1, 16_400, "Buzul_12", {
       approval: "approved",
       order: "o8",
@@ -1089,7 +1101,7 @@ export function mockReceipts(): PlusReceipt[] {
       currency: null,
       approval: "approved",
     }),
-    receipt(8.6, "buy", "minecraft:elytra", 1, 36_000, "Neon_Drift"),
+    receipt(8.6, "buy", "minecraft:elytra", 1, 36_000, "Buzul_12"),
   ];
 }
 
