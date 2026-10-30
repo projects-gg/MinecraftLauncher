@@ -365,6 +365,7 @@ const CONTENT_TYPES = [
   [/\.zip$/, "application/zip"],
   [/\.deb$/, "application/vnd.debian.binary-package"],
   [/\.rpm$/, "application/x-rpm"],
+  [/\.apk$/, "application/vnd.android.package-archive"],
 ];
 
 export function contentType(name) {
@@ -462,8 +463,12 @@ export class R2Client {
     this.region = region;
   }
 
-  async request(method, key, { body, headers = {} } = {}) {
-    const path = `/${this.bucket}/${key}`;
+  /**
+   * `key` null addresses the bucket itself (a listing). `query` is a canonical query string
+   * (`canonicalQuery`), signed and sent as it is.
+   */
+  async request(method, key, { body, headers = {}, query = "" } = {}) {
+    const path = key === null ? `/${this.bucket}` : `/${this.bucket}/${key}`;
     const payload = body ?? Buffer.alloc(0);
     const payloadHash = body ? sha256Hex(payload) : EMPTY_SHA256;
     let lastError;
@@ -471,6 +476,7 @@ export class R2Client {
       const signed = signRequest({
         method,
         path,
+        query,
         // Uncompressed answers: Cloudflare gzips text (.sig, .json) otherwise, and a gzipped HEAD
         // has no Content-Length and only a weak ETag, so the upload check could not compare them.
         headers: { host: this.endpoint.host, "accept-encoding": "identity", ...headers },
@@ -482,7 +488,8 @@ export class R2Client {
       });
       const { host: _host, ...sendHeaders } = signed;
       try {
-        const res = await fetch(new URL(uriEncode(path, true), this.endpoint), {
+        const target = uriEncode(path, true) + (query ? `?${query}` : "");
+        const res = await fetch(new URL(target, this.endpoint), {
           method,
           headers: sendHeaders,
           body: method === "PUT" ? payload : undefined,
@@ -530,4 +537,71 @@ export class R2Client {
     const res = await this.request("PUT", key, { body, headers });
     if (!res.ok) throw new Error(`PUT ${key}: HTTP ${res.status} ${await res.text()}`);
   }
+
+  /**
+   * Every object under `prefix` (ListObjectsV2, all pages): `[{ key, size, lastModified }]` with
+   * `lastModified` in milliseconds. Throws when any page fails or cannot be read, so a caller never
+   * acts on a partial listing.
+   */
+  async list(prefix) {
+    const objects = [];
+    let token = null;
+    for (let page = 0; page < 1000; page++) {
+      const params = { "list-type": "2", prefix };
+      if (token) params["continuation-token"] = token;
+      const res = await this.request("GET", null, { query: canonicalQuery(params) });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`LIST ${prefix}: HTTP ${res.status} ${text}`);
+      const listing = parseListing(text);
+      objects.push(...listing.objects);
+      if (!listing.truncated) return objects;
+      if (!listing.next)
+        throw new Error(`LIST ${prefix}: a truncated page without a continuation token`);
+      token = listing.next;
+    }
+    throw new Error(`LIST ${prefix}: too many pages`);
+  }
+
+  async delete(key) {
+    const res = await this.request("DELETE", key);
+    if (!res.ok && res.status !== 404)
+      throw new Error(`DELETE ${key}: HTTP ${res.status} ${await res.text()}`);
+  }
+}
+
+/** SigV4's canonical query string: names sorted, names and values RFC 3986 encoded. */
+export function canonicalQuery(params) {
+  return Object.keys(params)
+    .sort()
+    .map((name) => `${uriEncode(name, false)}=${uriEncode(String(params[name]), false)}`)
+    .join("&");
+}
+
+function xmlText(value) {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&amp;/g, "&");
+}
+
+/** One ListObjectsV2 page: its objects, whether more follow and the token for them. */
+export function parseListing(xml) {
+  if (!/<ListBucketResult[\s>]/.test(xml)) throw new Error("not a ListObjectsV2 answer");
+  const objects = [];
+  for (const [, body] of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+    const key = /<Key>([\s\S]*?)<\/Key>/.exec(body)?.[1];
+    const size = /<Size>(\d+)<\/Size>/.exec(body)?.[1];
+    const modified = /<LastModified>([^<]+)<\/LastModified>/.exec(body)?.[1];
+    const lastModified = modified ? Date.parse(modified) : Number.NaN;
+    if (key === undefined || size === undefined || Number.isNaN(lastModified)) {
+      throw new Error("a listing entry without a key, a size or a date");
+    }
+    objects.push({ key: xmlText(key), size: Number(size), lastModified });
+  }
+  const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
+  const next = /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml)?.[1];
+  return { objects, truncated, next: next ? xmlText(next) : null };
 }
