@@ -73,6 +73,33 @@ export const trAfkPanel = {
     patternHelp: "Düzenli ifade. Büyük küçük harf fark etmesin diye başına (?i) yaz.",
     writeMyself: "Kalıbı kendim yazacağım",
     toPlain: "Düz söze dön",
+    /** A pattern ProBot AI made shows as its sentence under this label (7/24 Bulut). */
+    matchWhen: "Ne zaman yanıt verir?",
+    showPattern: "Kalıbı göster",
+    hidePattern: "Kalıbı gizle",
+    /** Named by what it does, as on afk.projects.gg ("ProBot AI … kalıp kurar"). */
+    askAi: "ProBot AI ile kalıp kur",
+    /** Says what it changes: the secret reply beside it has its own "Değiştir" (TASTE-2). */
+    change: "Kalıbı değiştir",
+    /**
+     * The pattern helper (7/24 Bulut only; the service's "Pattern helper"): the player's own
+     * words in, one plain sentence and example messages out. Its refusals come worded from the
+     * launcher's command, in the site's words.
+     */
+    helper: {
+      title: "ProBot AI",
+      prompt: "Hangi mesajlara yanıt versin? Kendi sözlerinle yaz.",
+      placeholder: "Örnek: biri tp ya da ışınla yazınca",
+      ask: "Oluştur",
+      asking: "Hazırlanıyor",
+      catches: "Yanıt verir",
+      misses: "Yanıt vermez",
+      // Not the rule's own "Kullan" switch in the same card (TASTE-2).
+      use: "Bu kalıbı kullan",
+      retry: "Tekrar dene",
+      close: "Kapat",
+      tooLong: "En çok 200 karakter yazabilirsin.",
+    },
     cooldown: "İki yanıt arası",
     ownerOnly: "Yalnız bana yanıt versin",
     /** The cloud: the player's own name from above the rules. */

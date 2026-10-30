@@ -676,12 +676,15 @@ export function Segmented<T extends string>({
         </ToggleGroup.Item>
       ))}
       {/* The plate while it glides (glide.ts): a window over the row, gold, with every label in
-          ink where the labels are. Two clipping layers hold its two edges and cut corners. */}
+          ink where the labels are. Two clipping layers hold its two edges and cut corners. Their
+          boxes reach a control's width past it and `clip-path` clips only what is drawn, so the
+          window hides its overflow: else, after a pick, a scroller around the control grew a
+          horizontal bar (Settings → Güncellemeler, BETA-13's smoke). */}
       <span
         aria-hidden
         data-glide=""
         style={optionCut}
-        className="pointer-events-none invisible absolute inset-0 z-10 group-data-[gliding]/control:visible"
+        className="pointer-events-none invisible absolute inset-0 z-10 overflow-hidden group-data-[gliding]/control:visible"
       >
         <span data-glide-right="" className="chamfer-end absolute">
           <span data-glide-left="" className={cn("chamfer-start absolute h-full", PLATE_FILL)}>

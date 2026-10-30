@@ -53,6 +53,7 @@ import {
   unwatchMovement,
   watchMovement,
 } from "./mock-move";
+import { mockAiPatterns, mockSuggestPattern } from "./mock-pattern";
 import {
   mockMe as mockPlusMe,
   mockOffer as mockPlusOffer,
@@ -506,6 +507,7 @@ async function overview(): Promise<CloudPageData> {
       plus: hidden ? null : mockPlusOffer(),
       plusMe: which === "signedout" || hidden ? null : mockPlusMe(),
       features: hidden ? null : offerFeatures(),
+      aiPatterns: !hidden && mockAiPatterns(),
     },
     twins,
   };
@@ -890,6 +892,7 @@ export const mockCloudApi: CloudApi = {
     if (end === "saves") return { kind: "notRefused" };
     return { kind: "sent" };
   },
+  suggestPattern: (_id, text, fresh) => mockSuggestPattern(text, fresh),
   async movePlan(desktopId) {
     await delay(260);
     const desktop = (await api.afkAccounts()).find((a) => a.id === desktopId);

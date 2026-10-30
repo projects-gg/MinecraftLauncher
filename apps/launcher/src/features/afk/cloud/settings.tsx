@@ -225,7 +225,10 @@ function Editor({
   const savedRef = useRef(false);
   const [settling, setSettling] = useState(false);
   // Studio's placeholder switch: its checks answer while typing too (the backend checks again).
-  const features = useCloudPage().data?.overview.features ?? null;
+  const page = useCloudPage().data;
+  const features = page?.overview.features ?? null;
+  // "ProBot AI ile kalıp kur" in the rules while the service's model can answer.
+  const aiPatterns = page?.overview.aiPatterns ?? false;
   const rules = useMemo(
     () => ({
       on: Boolean(features?.placeholders),
@@ -410,6 +413,7 @@ function Editor({
     view,
     issues: shown,
     features,
+    aiPatterns,
     // "Yanlışsa bildir" heard the text saves now: its refusal no longer holds the save.
     clearRefusal: (at) => setServerIssues((list) => withoutRefusal(list, at)),
   };

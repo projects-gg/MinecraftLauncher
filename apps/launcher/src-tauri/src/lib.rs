@@ -319,6 +319,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::cloud_afk::cloud_afk_save,
             commands::cloud_afk::cloud_afk_reveal,
             commands::cloud_afk::cloud_afk_report_refusal,
+            commands::cloud_afk::cloud_afk_suggest_pattern,
             commands::cloud_afk::cloud_afk_move_plan,
             commands::cloud_afk::cloud_afk_move,
             commands::cloud_afk::cloud_afk_connect_here,
