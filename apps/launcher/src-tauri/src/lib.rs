@@ -295,6 +295,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::afk::afk_stop_all,
             commands::afk::afk_send,
             commands::afk::afk_console,
+            commands::afk::afk_dialog,
+            commands::afk::afk_dialog_press,
             commands::afk::afk_any_active,
             commands::afk::afk_reconnect,
             commands::afk::afk_settings,

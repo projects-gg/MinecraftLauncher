@@ -9,7 +9,7 @@ use std::process::Stdio;
 use pl_net::CancellationToken;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::bridge::{BRIDGE_ENV_VAR, NONCE_ENV_VAR};
+use crate::bridge::{BRIDGE_ENV_VAR, CONSOLE_KINDS_ENV_VAR, NONCE_ENV_VAR};
 
 /// Last argument that puts MCC in line-based, color-free console mode.
 pub const CONSOLE_MODE_ARG: &str = "BasicIO-NoColor";
@@ -37,6 +37,9 @@ pub struct LaunchSpec {
     /// The bridge nonce of this process ([`NONCE_ENV_VAR`]), for clients 4.1.0 and later: only its
     /// event lines count (`bridge::parse_line_with_nonce`). Never shown or logged.
     pub nonce: Option<String>,
+    /// Console writes as `line` events, with their looks and the server's dialogs
+    /// ([`CONSOLE_KINDS_ENV_VAR`]; with a nonce only, clients 4.2.4 and later).
+    pub console_kinds: bool,
 }
 
 /// The nonce stays out of every log line and panic message.
@@ -47,6 +50,7 @@ impl std::fmt::Debug for LaunchSpec {
             .field("ini", &self.ini)
             .field("cwd", &self.cwd)
             .field("nonce", &self.nonce.as_ref().map(|_| "<redacted>"))
+            .field("console_kinds", &self.console_kinds)
             .finish()
     }
 }
@@ -105,6 +109,10 @@ fn client_command(spec: &LaunchSpec) -> tokio::process::Command {
         Some(nonce) => command.env(NONCE_ENV_VAR, nonce),
         None => command.env_remove(NONCE_ENV_VAR),
     };
+    // The client tells its events from text by the nonce alone: never the kinds without it.
+    if spec.console_kinds && spec.nonce.is_some() {
+        command.env(CONSOLE_KINDS_ENV_VAR, "1");
+    }
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
     command
@@ -171,6 +179,7 @@ mod tests {
             ini: PathBuf::from("MinecraftClient.ini"),
             cwd: PathBuf::from("account"),
             nonce: nonce.map(str::to_owned),
+            console_kinds: false,
         }
     }
 
@@ -201,6 +210,21 @@ mod tests {
             }
             assert_eq!(set.len(), CONTROL_ENV_VARS.len() + 2);
         }
+
+        // The console kinds: ours with a nonce only, never the launcher's own.
+        let kinds = envs(&LaunchSpec {
+            console_kinds: true,
+            ..spec(Some(NONCE))
+        });
+        assert_eq!(
+            kinds.get(CONSOLE_KINDS_ENV_VAR),
+            Some(&Some("1".to_owned()))
+        );
+        let no_nonce = envs(&LaunchSpec {
+            console_kinds: true,
+            ..spec(None)
+        });
+        assert_eq!(no_nonce.get(CONSOLE_KINDS_ENV_VAR), Some(&None));
     }
 
     #[test]

@@ -275,6 +275,19 @@ impl CloudService {
         &self.inner.client
     }
 
+    /// Studio's console switches as the offer says them, `(looks, dialog cards)`, for the desktop
+    /// console (AFK-UX); both off from a service before them. None while the service does not
+    /// answer (the last known ones stand). Reads the cached offer when it is fresh.
+    pub async fn console_switches(&self) -> Option<(bool, bool)> {
+        let offer = self.offer(false).await?;
+        Some(
+            offer
+                .features
+                .as_ref()
+                .map_or((false, false), |f| (f.console_looks, f.dialog_cards)),
+        )
+    }
+
     /// The offer, cached (`force`: read it again now, "Tekrar dene").
     pub(crate) async fn offer(&self, force: bool) -> Option<Offer> {
         if !force && let Some(cached) = self.inner.offer.lock().fresh(OFFER_FRESH, OFFER_FAILED) {

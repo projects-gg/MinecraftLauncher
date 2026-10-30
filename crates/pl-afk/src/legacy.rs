@@ -68,6 +68,8 @@ pub fn parse_settings(json: &str) -> AfkSettings {
     match serde_json::from_str::<Value>(json) {
         Ok(Value::Object(object)) => AfkSettings {
             show_script_commands: Obj(&object).bool("ShowScriptCommands", false),
+            console_looks: Obj(&object).bool("ConsoleLooks", false),
+            dialog_cards: Obj(&object).bool("DialogCards", false),
         },
         _ => AfkSettings::default(),
     }
@@ -90,16 +92,18 @@ pub(crate) fn write_accounts(
 }
 
 pub(crate) fn write_settings(settings: &AfkSettings) -> Result<String> {
-    struct Out(bool);
-    impl Serialize for Out {
+    struct Out<'a>(&'a AfkSettings);
+    impl Serialize for Out<'_> {
         fn serialize<S: Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
-            let mut st = s.serialize_struct("Data", 1)?;
-            st.serialize_field("ShowScriptCommands", &self.0)?;
+            let mut st = s.serialize_struct("Data", 3)?;
+            st.serialize_field("ShowScriptCommands", &self.0.show_script_commands)?;
+            // The v1 launcher reads only its own field.
+            st.serialize_field("ConsoleLooks", &self.0.console_looks)?;
+            st.serialize_field("DialogCards", &self.0.dialog_cards)?;
             st.end()
         }
     }
-    serde_json::to_string_pretty(&Out(settings.show_script_commands))
-        .map_err(|e| AfkError::json("settings.json", e))
+    serde_json::to_string_pretty(&Out(settings)).map_err(|e| AfkError::json("settings.json", e))
 }
 
 // --- Reading -------------------------------------------------------------------------------------
@@ -665,11 +669,23 @@ mod tests {
     fn settings_round_trip_and_fallback() {
         let text = write_settings(&AfkSettings {
             show_script_commands: true,
+            ..AfkSettings::default()
         })
         .unwrap();
         assert!(text.contains("\"ShowScriptCommands\": true"));
         assert!(parse_settings(&text).show_script_commands);
         assert!(!parse_settings("{broken").show_script_commands);
         assert!(!parse_settings("[]").show_script_commands);
+        // Studio's console switches as last known.
+        let switches = AfkSettings {
+            console_looks: true,
+            dialog_cards: true,
+            ..AfkSettings::default()
+        };
+        assert_eq!(
+            parse_settings(&write_settings(&switches).unwrap()),
+            switches
+        );
+        assert!(!parse_settings(&text).console_looks);
     }
 }

@@ -31,8 +31,8 @@ use crate::process::{ClientSpawner, ProcessSpawner};
 use crate::restart::{FailureReason, RestartSchedule};
 use crate::runtime::{AfkClientRelease, AfkRuntime, ClientExe};
 use crate::session::{
-    AfkActivity, AfkEventKind, EventSink, READER_DRAIN, Session, SessionEnv, SessionSnapshot,
-    SessionState, SessionStats,
+    AfkActivity, AfkEventKind, ConsoleFeatures, DialogOutcome, DialogView, EventSink, PRESS_ANSWER,
+    READER_DRAIN, Session, SessionEnv, SessionSnapshot, SessionState, SessionStats,
 };
 use crate::store::AccountStore;
 use crate::versions::VersionCatalog;
@@ -247,6 +247,7 @@ impl AfkManager {
             tracing::info!(purged, "deleted stale AFK login scripts");
         }
         let resolver_runtime = runtime.clone();
+        let remembered = store.afk_settings();
         let env = Arc::new(SessionEnv {
             store: store.clone(),
             resolve_client: Arc::new(move || resolver_runtime.resolve()),
@@ -259,6 +260,10 @@ impl AfkManager {
             pacer: ConnectPacer::default(),
             connect_spacing: options.config.connect_spacing,
             reader_drain: options.config.reader_drain,
+            console_features: RwLock::new(ConsoleFeatures {
+                looks: remembered.console_looks,
+                dialogs: remembered.dialog_cards,
+            }),
         });
         Self {
             inner: Arc::new(Inner {
@@ -1088,6 +1093,47 @@ impl AfkManager {
             .unwrap_or_default()
     }
 
+    /// Studio's console switches as 7/24 Bulut's offer says them now: a client launched from now
+    /// on gives the console its looks and the server's dialogs while one is on (and it is 4.2.4 or
+    /// later). Remembered, so an account that connects before the offer is read again uses them.
+    pub fn set_console_features(&self, features: ConsoleFeatures) {
+        let changed = {
+            let mut current = self.inner.env.console_features.write();
+            let changed = *current != features;
+            *current = features;
+            changed
+        };
+        if changed
+            && let Err(error) = self
+                .inner
+                .store
+                .set_console_switches(features.looks, features.dialogs)
+        {
+            tracing::warn!(%error, "could not remember the console switches");
+        }
+    }
+
+    /// The switches a launch uses now.
+    pub fn console_features(&self) -> ConsoleFeatures {
+        *self.inner.env.console_features.read()
+    }
+
+    /// The server's dialog open for the account, as its console card shows it.
+    pub fn dialog(&self, account_id: &str) -> Option<DialogView> {
+        self.existing(account_id).and_then(|s| s.dialog())
+    }
+
+    /// Presses the account's dialog card (`press`: its JSON as the view built it) and waits a
+    /// moment for the client's answer; no answer counts as a press that did not work.
+    pub async fn press_dialog(&self, account_id: &str, press: &str) -> Result<DialogOutcome> {
+        let session = self.existing(account_id).ok_or(AfkError::NotRunning)?;
+        let answer = session.press_dialog(press.to_owned())?;
+        Ok(match tokio::time::timeout(PRESS_ANSWER, answer).await {
+            Ok(Ok(outcome)) => outcome,
+            _ => DialogOutcome::refused("failed"),
+        })
+    }
+
     // --- Accounts ------------------------------------------------------------------------------
 
     pub fn accounts(&self) -> Vec<AfkAccount> {
@@ -1215,6 +1261,7 @@ fn manager_futures_are_send(manager: &AfkManager) {
     send(manager.shutdown());
     send(manager.remove_account("id"));
     send(manager.reconnect("id"));
+    send(manager.press_dialog("id", "{}"));
     send(
         manager
             .clone()

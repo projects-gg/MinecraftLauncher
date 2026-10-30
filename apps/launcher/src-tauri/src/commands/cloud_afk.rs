@@ -136,6 +136,13 @@ pub async fn cloud_afk_overview(
         .session_token()
         .map(|token| Bearer::new(token.expose()));
     let overview = cloud.overview(token.as_ref(), force).await;
+    // Studio's console switches drive the desktop console too (AFK-UX): from the offer just read
+    // (cached), applied from each account's next launch; unknown while the service is away.
+    if let Some((looks, dialogs)) = cloud.console_switches().await {
+        state
+            .afk
+            .set_console_features(pl_afk::ConsoleFeatures { looks, dialogs });
+    }
     let twins = twins_of(&state, &overview.accounts);
     Ok(CloudPageView { overview, twins })
 }
