@@ -544,9 +544,13 @@ public final class MessageList extends PanelWidget {
         newBelowWidth = small.width(below) + 22f;
         setEmpty(Texts.str("chat.empty"), small);
         rows.clear();
+        // The frames' clock (`now`) counts from the game's start, messages carry wall times: the day lines and a
+        // message's ten seconds to be answered read the wall clock, and the next moment either changes is put on the
+        // frames' clock, where a frame lays the list out again (the day lines at midnight; no timer).
         ZoneId zone = ZoneId.systemDefault();
-        // The day lines move on at midnight while the overlay is open: that frame lays the list out again.
-        nextTimeout = ChatTime.nextDay(now, zone);
+        ChatTime.Words words = Texts::str;
+        long wall = System.currentTimeMillis();
+        nextTimeout = now + (ChatTime.nextDay(wall, zone) - wall);
         int width = getWidth();
         int maxBubble = Math.max(60, Math.round(width * 0.78f));
         int textMax = maxBubble - 2 * BUBBLE_PAD_X;
@@ -575,7 +579,8 @@ public final class MessageList extends PanelWidget {
                 OverlayState.Arrival join = joins.get(nextJoin++);
                 long joinDay = ChatTime.day(join.at(), zone);
                 if (joinDay != lastDay) {
-                    y = addDay(join.at(), joinDay, y, previous != null, small, first, now, seenIds, zone);
+                    y = addDay(ChatTime.dayLine(join.at(), wall, zone, words), joinDay, y, previous != null, small,
+                        first, now, seenIds);
                     previous = rows.get(rows.size() - 1);
                     lastDay = joinDay;
                 }
@@ -584,7 +589,8 @@ public final class MessageList extends PanelWidget {
             }
             long day = ChatTime.day(line.at, zone);
             if (day != lastDay) {
-                y = addDay(line.at, day, y, previous != null, small, first, now, seenIds, zone);
+                y = addDay(ChatTime.dayLine(line.at, wall, zone, words), day, y, previous != null, small, first, now,
+                    seenIds);
                 previous = rows.get(rows.size() - 1);
                 lastDay = day;
             }
@@ -593,9 +599,11 @@ public final class MessageList extends PanelWidget {
             Row row = new Row();
             row.line = line;
             row.mine = line.mine;
-            row.delivery = line.deliveryAt(now);
+            row.delivery = line.deliveryAt(wall);
             if (row.delivery == OverlayState.Delivery.PENDING) {
-                nextTimeout = Math.min(nextTimeout, line.createdAt + OverlayState.SEND_TIMEOUT_MS + 1);
+                // Unanswered for ten seconds it says so, with "Tekrar dene" (CHAT-UX: it read the frames' clock as a
+                // wall time, so it never did).
+                nextTimeout = Math.min(nextTimeout, now + (line.createdAt + OverlayState.SEND_TIMEOUT_MS + 1 - wall));
             }
             // A group: one sender, one local day, each message at most five minutes after the one before (CHAT-UX).
             boolean newGroup = previous == null || previous.line == null || previous.mine != line.mine
@@ -663,7 +671,7 @@ public final class MessageList extends PanelWidget {
                 y += SMALL_H;
             }
             if (failed) {
-                String reason = line.failureAt(now);
+                String reason = line.failureAt(wall);
                 String why = failureText(reason, line.failureRule);
                 row.reason = Texts.visual(why);
                 row.reasonW = small.width(why);
@@ -702,7 +710,8 @@ public final class MessageList extends PanelWidget {
             OverlayState.Arrival join = joins.get(nextJoin++);
             long joinDay = ChatTime.day(join.at(), zone);
             if (joinDay != lastDay) {
-                y = addDay(join.at(), joinDay, y, previous != null, small, first, now, seenIds, zone);
+                y = addDay(ChatTime.dayLine(join.at(), wall, zone, words), joinDay, y, previous != null, small, first,
+                    now, seenIds);
                 previous = rows.get(rows.size() - 1);
                 lastDay = joinDay;
             }
@@ -745,13 +754,12 @@ public final class MessageList extends PanelWidget {
 
     /**
      * The day line over the first message (or quiet line) of a local day: "Bugün", "Dün", "3 gün önce", "28 Ekim"
-     * (CHAT-UX); returns where the next row starts. A new one fades in where it lands.
+     * (CHAT-UX, {@link ChatTime#dayLine}); returns where the next row starts. A new one fades in where it lands.
      */
-    private float addDay(long at, long day, float y, boolean gapBefore, Font small, boolean first, long now,
-        Set<String> seenIds, ZoneId zone) {
+    private float addDay(String words, long day, float y, boolean gapBefore, Font small, boolean first, long now,
+        Set<String> seenIds) {
         float top = y + (gapBefore ? GROUP_GAP - ROW_GAP : 0);
         Row row = new Row();
-        String words = ChatTime.dayLine(at, now, zone, Texts::str);
         row.day = Texts.visual(words);
         row.dayW = small.width(words);
         row.arrivalWords = Component.literal(words);

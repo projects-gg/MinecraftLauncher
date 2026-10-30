@@ -351,28 +351,24 @@ export function mockChat(host: ChatHost) {
     // CHAT-UX: `&chatDays=1` gives KorAtesi's conversation a history over every kind of day line
     // (last year, a date, "3 gün önce", "Dün", "Bugün") and one long word.
     if (host.param("chatDays") !== null) {
-      const daysAgo = (days: number, hour: number, minute: number) => {
+      // [from, Turkish, English, days back, hour, minute]
+      const older: ReadonlyArray<readonly [string, string, string, number, number, number]> = [
+        ["302", "Adaya gelebilir miyim?", "Can I come to your island?", 400, 21, 10],
+        [ME, "Tabii, kodu atıyorum", "Sure, sending the code", 400, 21, 12],
+        ["302", "Turnuva kaydı açılmış", "Tournament sign-ups are open", 12, 19, 40],
+        ["302", "Takım olalım mı?", "Want to team up?", 12, 19, 41],
+        [ME, "Olur, ben varım", "Sure, I'm in", 12, 19, 52],
+        ["302", `Kazand${"ı".repeat(40)}k`, `We w${"o".repeat(40)}n`, 3, 16, 5],
+        [ME, "Yarın akşam maç var mı?", "A match tomorrow night?", 1, 22, 30],
+        ["302", "Var, 8'de", "Yes, at 8", 1, 22, 33],
+      ];
+      const earlier = older.map(([from, tr, en, days, hour, minute]) => {
         const date = new Date(t0);
         date.setDate(date.getDate() - days);
         date.setHours(hour, minute, 0, 0);
-        return date.getTime();
-      };
-      const older = [
-        message(kor, "302", pick("Adaya gelebilir miyim?", "Can I come to your island?"), daysAgo(400, 21, 10)),
-        message(kor, ME, pick("Tabii, kodu atıyorum", "Sure, sending the code"), daysAgo(400, 21, 12)),
-        message(kor, "302", pick("Turnuva kaydı açılmış", "Tournament sign-ups are open"), daysAgo(12, 19, 40)),
-        message(kor, "302", pick("Takım olalım mı?", "Want to team up?"), daysAgo(12, 19, 41)),
-        message(kor, ME, pick("Olur, ben varım", "Sure, I'm in"), daysAgo(12, 19, 52)),
-        message(
-          kor,
-          "302",
-          pick("Kazandıııııııııııııııııııııııııııııııııııııııııııııık", "We woooooooooooooooooooooooooooooooooooooooooon"),
-          daysAgo(3, 16, 5),
-        ),
-        message(kor, ME, pick("Yarın akşam maç var mı?", "A match tomorrow night?"), daysAgo(1, 22, 30)),
-        message(kor, "302", pick("Var, 8'de", "Yes, at 8"), daysAgo(1, 22, 33)),
-      ];
-      threads.set(kor, [...older, ...(threads.get(kor) ?? [])]);
+        return message(kor, from, pick(tr, en), date.getTime());
+      });
+      threads.set(kor, [...earlier, ...(threads.get(kor) ?? [])]);
     }
 
     const elif = direct("305");
