@@ -32,9 +32,11 @@ export const enHost = {
     mode: "Game mode",
     commands: "Friends can use commands",
     privacy: "Friends never see your IP address.",
-    open: "Open world",
+    open: "Open the world",
     invite: "Invite",
-    meet: "Meet on Projects",
+    meet: "Play together on Projects",
+    /** After "3/7": what the picker counts. */
+    unit: "friends",
   },
   overlay: {
     body: "World sharing needs the in-game overlay.",
@@ -61,8 +63,10 @@ export const enHost = {
     commandsOff: "Commands off",
     voice: "Voice chat doesn't work for guests yet.",
     retry: "Try again",
-    meet: "Meet on Projects",
+    meet: "Play together on Projects",
     dismiss: "Close",
+    /** After "2/8": what the world counts (its host too). */
+    unit: "players",
     step: {
       backup: "Backing up your world",
       starting: "Starting the game in your world",

@@ -372,6 +372,22 @@ impl CloudClient {
         .map(|_| ())
     }
 
+    /// The player's report of a save refused for its content (README "Saving" → Refusal
+    /// reports): the refused row's text, read again by the service.
+    pub async fn report_refusal(&self, token: &Bearer, id: &str, text: &str) -> Result<()> {
+        self.send(
+            Method::POST,
+            &account_path(id, "/refusal-report")?,
+            Some(token),
+            Some(serde_json::json!({ "text": text })),
+            &[],
+            Repeat::Never,
+        )
+        .await?
+        .into_result()
+        .map(|_| ())
+    }
+
     pub async fn logs(&self, token: &Bearer, id: &str, query: &LogQuery) -> Result<CloudLogPage> {
         let mut path = account_path(id, "/logs")?;
         let params = log_params(query);

@@ -2,17 +2,21 @@
 // through, a one-line warning before an unknown site). A link is bone and underlined (gold is
 // OYNA's), its full address in the tooltip; a trusted site opens at once, any other after one line
 // that names its domain ("Bu bağlantı ornek.com sitesine gidiyor.", "Vazgeç" / "Aç"). The card
-// sits in the bubble under the text: a 10 px container, the site's own launcher icon and name, the
-// title and the description; a wide picture (a video, a stream, a projects.gg page) over the text,
-// a squarer one (a mod's icon, a channel's face) beside it. Its place is held from the start at its
-// likely height; the content fades in (180 ms), a card that does not come turns into the plain one
-// (icon, site, address) at the same size. The computer never fetches anything from a linked site:
-// the hub makes the card, pictures only from the trusted sites' own picture hosts.
+// sits in the bubble under the text: a 10 px container, the site's own launcher icon and its
+// registrable domain alone in bold (never the page's own name for itself, never the address again:
+// the text above shows it; CONSOLE-COLOR's console card's rule), the title and the description (a
+// video's channel instead, on its own quiet line under its title); a wide picture (a video, a
+// stream, a projects.gg page) over the text, a squarer one (a mod's icon, a channel's face) beside
+// it. Its place is held from the start at its likely height; the content
+// fades in (180 ms), a card that does not come turns into the plain one (icon, domain) at the same
+// size. The computer never fetches anything from a linked site: the hub makes the card, pictures
+// only from the trusted sites' own picture hosts.
 import { Cube, Globe, Package, Play } from "@phosphor-icons/react";
 import {
   type Brand,
   BrandMark,
   Button,
+  cn,
   easeOutExpo,
   swallowDismissClick,
   Tooltip,
@@ -269,12 +273,6 @@ export function shapeOf(card: ChatCard): CardShape {
   return card.kind === "video" || card.kind === "stream" ? "banner" : "row";
 }
 
-/** The address as a card shows it without a title: "ornek.com/adalar". */
-function addressOf(link: Pick<FoundLink, "url" | "host">): string {
-  const path = pathOf(link.url).replace(/\/$/, "");
-  return `${link.host.replace(/^www\./, "")}${path}`;
-}
-
 function CardFrame({
   link,
   label,
@@ -291,7 +289,10 @@ function CardFrame({
           type="button"
           aria-label={label}
           onClick={open}
-          className="group/card relative mt-1.5 mb-0.5 block w-full max-w-[280px] cursor-pointer overflow-hidden rounded-[var(--radius-panel)] border border-obsidian-700 bg-obsidian-800 text-left outline-none transition-[border-color,scale] duration-150 hover:border-white/14 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.99]"
+          // The bubble's whole width (CHAT-PROD leftovers: it stopped at 280 px beside longer text);
+          // alone with short words it asks for 280 px (`contain-intrinsic-inline-size`), never its
+          // title's full length, and a narrow bubble narrows it.
+          className="group/card relative mt-1.5 mb-0.5 block w-full [contain-intrinsic-inline-size:280px] [contain:inline-size] cursor-pointer overflow-hidden rounded-[var(--radius-panel)] border border-obsidian-700 bg-obsidian-800 text-left outline-none transition-[border-color,scale] duration-150 hover:border-white/14 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.99]"
         >
           {children}
         </button>
@@ -322,7 +323,9 @@ export function LinkCard({
   if (!card && !waiting) return null;
   const shape = card ? shapeOf(card) : cardShapeFor(link.url, link.host);
   const ready = card?.state === "ready" ? card : undefined;
-  const site = card?.site ?? domainOf(link.host);
+  // Whose site it is, from the address itself (a page cannot name itself "Projects"), once: the
+  // message's text above already shows the whole address.
+  const site = domainOf(link.host);
   const title = ready?.title;
   const label = title
     ? t("chat2.links.card", { site, title })
@@ -332,21 +335,16 @@ export function LinkCard({
     animate: { opacity: 1, transition: { duration: 0.18, ease: easeOutExpo } },
   };
   const siteLine = (
-    <span className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ash-400">
+    <span className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4">
       <SiteIcon icon={card?.icon ?? "globe"} />
-      <span className="shrink-0">{site}</span>
-      {ready?.author ? (
-        <>
-          <span aria-hidden className="text-ash-500">
-            ·
-          </span>
-          <span className="truncate">{ready.author}</span>
-        </>
-      ) : null}
+      <span className="shrink-0 font-semibold whitespace-nowrap text-bone-100">{site}</span>
     </span>
   );
   const picture = ready?.image;
   const playable = ready?.kind === "video" || ready?.kind === "stream";
+  // A video's channel on its own quiet line under the title (never on the domain's line); the title
+  // keeps one line then, so the card stays the height its place was held at.
+  const channel = playable ? ready?.author : undefined;
 
   if (shape === "banner") {
     return (
@@ -373,9 +371,21 @@ export function LinkCard({
           {card ? (
             <motion.span className="block" {...fade}>
               {siteLine}
-              <span className="mt-1 line-clamp-2 text-[13px] leading-[1.25] font-semibold text-bone-50">
-                {title ?? addressOf(link)}
-              </span>
+              {title ? (
+                <span
+                  className={cn(
+                    "mt-1 text-[13px] leading-[1.25] font-semibold text-bone-50",
+                    channel ? "line-clamp-1" : "line-clamp-2",
+                  )}
+                >
+                  {title}
+                </span>
+              ) : null}
+              {channel ? (
+                <span className="mt-0.5 block truncate text-[12px] leading-4 text-ash-400">
+                  {channel}
+                </span>
+              ) : null}
             </motion.span>
           ) : (
             <CardSkeleton />
@@ -391,13 +401,15 @@ export function LinkCard({
           <motion.span className="flex min-w-0 flex-1 items-center gap-2.5" {...fade}>
             <span className="min-w-0 flex-1">
               {siteLine}
-              <span
-                className="mt-1 block truncate text-[13px] leading-[1.3] font-semibold text-bone-50 data-[plain]:font-normal data-[plain]:text-bone-100"
-                data-plain={title ? undefined : true}
-              >
-                {title ?? addressOf(link)}
-              </span>
-              {ready?.desc ? (
+              {title ? (
+                <span className="mt-1 block truncate text-[13px] leading-[1.3] font-semibold text-bone-50">
+                  {title}
+                </span>
+              ) : null}
+              {/* A video without a wide picture keeps its channel too, in the description's place. */}
+              {channel ? (
+                <span className="block truncate text-[12px] leading-4 text-ash-400">{channel}</span>
+              ) : ready?.desc ? (
                 <span className="block truncate text-[12.5px] leading-[1.3] text-ash-300">
                   {ready.desc}
                 </span>

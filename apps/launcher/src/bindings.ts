@@ -439,6 +439,8 @@ export const commands = {
 	cloudAfkEdit: (id: string) => typedError<CloudEditView_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_edit", { id })),
 	cloudAfkSave: (id: string, edit: CloudEdit) => typedError<CloudSaveOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_save", { id, edit })),
 	cloudAfkReveal: (id: string, rowId: string) => typedError<CloudRevealOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_reveal", { id, rowId })),
+	/**  "Yanlışsa bildir" under a row refused for its content: the row's text goes to staff. */
+	cloudAfkReportRefusal: (id: string, text: string) => typedError<CloudReportOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_report_refusal", { id, text })),
 	/**  "Buluta taşı": the desktop account in the cloud's form, and what stays on the desktop. */
 	cloudAfkMovePlan: (desktopId: string) => typedError<CloudMovePlan, CmdError>(__TAURI_INVOKE("cloud_afk_move_plan", { desktopId })),
 	/**
@@ -3719,6 +3721,15 @@ export type CloudReplyTry =
 { kind: "value" } | 
 /**  The pattern can't be used (the editor says why). */
 { kind: "pattern" };
+
+/**  How "Yanlışsa bildir" ended (README "Saving" → Refusal reports). */
+export type CloudReportOutcome = 
+/**  Staff will look at it (also when the same text was reported before). */
+{ kind: "sent" } | 
+/**  The text saves now (or nothing is refused any more): nothing to report. */
+{ kind: "notRefused" } | 
+/**  Three reports today already. */
+{ kind: "limited" };
 
 /**  How "Göster" ended. */
 export type CloudRevealOutcome = 

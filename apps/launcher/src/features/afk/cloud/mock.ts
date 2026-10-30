@@ -8,7 +8,9 @@
 // - `expired`: `accounts` plus one whose time is up;
 // - `paused`: maintenance (Studio's note, the accounts held);
 // - `failed`: signed in, the accounts could not be read.
-// `&reveal=offline|retype|limited` makes "Göster" fail that way. AFK+ adds `&plus=<scenario>`
+// `&reveal=offline|retype|limited` makes "Göster" fail that way; `&mod=refuse` refuses the second
+// command's text for advertising, and `&report=limited|saves` ends its "Yanlışsa bildir" that way
+// (three today already, the text saves now). AFK+ adds `&plus=<scenario>`
 // (plus/mock-data.ts); without it AFK+ is off, as the service is until its release. The cloud
 // features add `&feat=on|view` and their own switches (mock-feat.ts); without them the service is
 // one from before the features. `&link=down`: the machine is not connected (a read cannot ask it, a
@@ -482,8 +484,8 @@ async function overview(): Promise<CloudPageData> {
       maintenance:
         which === "paused"
           ? {
-              tr: "Bulut sunucusu bakımda; 23:00'te döneriz.",
-              en: "The cloud server is under maintenance; back at 23:00.",
+              tr: "Bulut sunucusu bakımda. 23:00'te döneriz.",
+              en: "The cloud server is under maintenance, back at 23:00.",
             }
           : null,
       monthPrice: hidden ? null : "60.00",
@@ -880,6 +882,13 @@ export const mockCloudApi: CloudApi = {
     if (fail === "retype") return { kind: "retype" };
     if (fail === "limited") return { kind: "limited", retry_after: 60 };
     return { kind: "shown", text: "/login EskiSifre42" };
+  },
+  async reportRefusal() {
+    await delay(500);
+    const end = param("report");
+    if (end === "limited") return { kind: "limited" };
+    if (end === "saves") return { kind: "notRefused" };
+    return { kind: "sent" };
   },
   async movePlan(desktopId) {
     await delay(260);

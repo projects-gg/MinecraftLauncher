@@ -10,7 +10,8 @@ use std::sync::{Arc, OnceLock};
 
 use pl_cloud_afk::{
     Bearer, CloudAccount, CloudConfig, CloudEdit, CloudEditView, CloudError, CloudLogPage,
-    CloudMovePlan, CloudOverview, CloudSaveOutcome, CloudServer, CloudService, Copies, LiveSink,
+    CloudMovePlan, CloudOverview, CloudReportOutcome, CloudSaveOutcome, CloudServer, CloudService,
+    Copies, LiveSink,
 };
 use pl_lang::{Lang, pick};
 use serde::{Deserialize, Serialize};
@@ -297,6 +298,21 @@ pub async fn cloud_afk_reveal(
             _ => Err(error.into()),
         },
     }
+}
+
+/// "Yanlışsa bildir" under a row refused for its content: the row's text goes to staff.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_report_refusal(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    text: String,
+) -> CmdResult<CloudReportOutcome> {
+    let token = token(&state)?;
+    Ok(service(&app, &state)
+        .report_refusal(&token, &id, &text)
+        .await?)
 }
 
 /// The launcher's active game account: whose messages "Yalnız ana hesabımdan" rules answer.

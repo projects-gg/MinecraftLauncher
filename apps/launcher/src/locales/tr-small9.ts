@@ -35,5 +35,8 @@ export const trSmall9 = {
     worlds: "Dünyanı arkadaşlarına aç",
     worldsPrivacy:
       "IP adresin arkadaşlarına görünmez. Açık dünyanı yalnız çağırdığın arkadaşların görür.",
+    /** The way to do it, under the two sentences (CHAT-PROD leftovers: the feature's name read as a
+     * button that was not there): Oyna's install's Worlds tab, where "Arkadaşlarınla oyna" is. */
+    worldsGo: "Dünyalarına git",
   },
 };

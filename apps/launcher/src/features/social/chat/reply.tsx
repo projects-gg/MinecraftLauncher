@@ -80,14 +80,19 @@ function QuoteWords({ quoted, lines }: { quoted: Quoted; lines: 1 | 2 }) {
   );
 }
 
-/** The quote over a reply's bubble. */
+/**
+ * A reply's quote: inside its bubble, at the top (`inside`; over the bubble it read as a message of
+ * its own, CHAT-PROD leftovers), or over a sticker or a few big emoji, which have no bubble.
+ */
 export function QuoteBlock({
   quoted,
   mine,
+  inside = false,
   onJump,
 }: {
   quoted: Quoted;
   mine: boolean;
+  inside?: boolean;
   onJump: (key: string) => void;
 }) {
   const { t } = useTranslation();
@@ -108,9 +113,12 @@ export function QuoteBlock({
       </span>
     </>
   );
+  // Inside, a darker well in the bubble's own fill (either side's), spanning the bubble's width.
   const className = cn(
-    "relative mb-1 block max-w-full min-w-[96px] rounded-[8px] bg-obsidian-800/85 py-1.5 pr-2.5 pl-4 text-left ring-1 ring-white/6 ring-inset",
-    mine ? "self-end" : "self-start",
+    "relative block max-w-full min-w-[96px] py-1.5 pr-2.5 pl-4 text-left ring-1 ring-inset",
+    inside
+      ? "mx-1.5 mt-1.5 rounded-[7px] bg-obsidian-950/35 ring-white/5"
+      : cn("mb-1 rounded-[8px] bg-obsidian-800/85 ring-white/6", mine ? "self-end" : "self-start"),
   );
   if (!pressable) {
     return <span className={className}>{body}</span>;
@@ -121,7 +129,8 @@ export function QuoteBlock({
       onClick={() => quoted.key && onJump(quoted.key)}
       className={cn(
         className,
-        "cursor-pointer outline-none transition-[background-color,transform,scale] duration-150 hover:bg-obsidian-700/85 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.985]",
+        "cursor-pointer outline-none transition-[background-color,transform,scale] duration-150 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.985]",
+        inside ? "hover:bg-obsidian-950/50" : "hover:bg-obsidian-700/85",
       )}
     >
       {body}

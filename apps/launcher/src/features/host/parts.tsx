@@ -58,7 +58,10 @@ export function useWorldIcon(
   return worlds.data?.find((w) => w.folder === session.folder)?.iconUrl;
 }
 
-/** "2/8" (Tektur, tabular), read out as a sentence. */
+/**
+ * "2/8 kişi" (Tektur, tabular), read out as a sentence. The word says what is counted (LANDING-L: a
+ * bare "2/8" beside the picker's "3/7" read as a mistake): the world's people, its host too.
+ */
 export function PeopleCount({
   count,
   max,
@@ -71,10 +74,11 @@ export function PeopleCount({
   label: string;
   className?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <span className={cn("font-display tabular-nums", className)}>
       <span aria-hidden>
-        {count}/{max}
+        {count}/{max} {t("host.sheet.unit")}
       </span>
       <span className="sr-only">{label}</span>
     </span>

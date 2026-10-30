@@ -8,12 +8,14 @@
 import { Desktop, SignOut, Trash } from "@phosphor-icons/react";
 import { Button, Dialog, Select, Skeleton, Slider, Switch } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce, useAccounts } from "@/features/accounts/use-accounts";
 import { AvatarPicker } from "@/features/avatars/avatar-picker";
 import { useHostUi } from "@/features/host/store";
+import { usePlayInstance } from "@/features/settings/graphics-section";
 import { api } from "@/lib/api";
 import type { SocialMe, SocialSession } from "@/lib/api/social-types";
 import { formatPercent, formatRelative } from "@/lib/format";
@@ -340,12 +342,37 @@ function ChatSection() {
 function WorldsSection() {
   const { t } = useTranslation();
   const on = useHostUi((s) => s.view.enabled);
+  const navigate = useNavigate();
+  const instances = useQuery({
+    queryKey: ["instances"],
+    queryFn: () => api.instances(),
+    enabled: on,
+  });
+  // Oyna's install, as the command bar's "Dünyanı arkadaşlarına aç" (Ctrl+K) goes to its Worlds tab.
+  const { instance } = usePlayInstance(instances.data ?? []);
   if (!on) return null;
   return (
     <Section title={t("small9.settings.worlds")}>
       <p className="max-w-[60ch] text-[13px] leading-relaxed text-ash-300 [text-wrap:pretty]">
         {t("small9.settings.worldsPrivacy")}
       </p>
+      {instance ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mt-3"
+          onClick={() => {
+            useSocialUi.getState().closePanel();
+            void navigate({
+              to: "/library/$instanceId",
+              params: { instanceId: instance.id },
+              search: { tab: "worlds" },
+            });
+          }}
+        >
+          {t("small9.settings.worldsGo")}
+        </Button>
+      ) : null}
     </Section>
   );
 }
@@ -358,9 +385,12 @@ function NotificationSection() {
   // The crew's own group, while the player is in one (the crew page's bell shows it too); with
   // several crews it mutes all of them at once.
   const crews = useSocialUi((s) => s.view.teams && s.view.crews.length > 0);
+  // Two groups that say whose, so their switches say only when (CHAT-PROD leftovers).
+  const groupTitle = "text-[13.5px] font-semibold text-bone-50";
   return (
     <Section title={t("social.settings.notifications")}>
-      <div className="space-y-3.5">
+      <p className={groupTitle}>{t("social.settings.favorites")}</p>
+      <div className="mt-3.5 space-y-3.5">
         <Switch
           checked={online}
           onCheckedChange={(on) => set("notifyFavoriteOnline", on)}
@@ -374,7 +404,7 @@ function NotificationSection() {
       </div>
       {crews ? (
         <div className="mt-5">
-          <CrewNotifyGroup titleClassName="text-[13.5px] font-semibold text-bone-50" />
+          <CrewNotifyGroup title={t("social.settings.crewGroup")} titleClassName={groupTitle} />
         </div>
       ) : null}
     </Section>

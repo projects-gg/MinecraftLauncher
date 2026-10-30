@@ -22,5 +22,6 @@ export const enSmall9 = {
     worlds: "Open your world to friends",
     worldsPrivacy:
       "Friends never see your IP address. Only the friends you invite see your open world.",
+    worldsGo: "Go to your worlds",
   },
 };
