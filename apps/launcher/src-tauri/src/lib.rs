@@ -2,6 +2,7 @@
 
 mod commands;
 mod error;
+mod fastpack;
 mod host;
 mod identity;
 mod notify;
@@ -262,6 +263,10 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             overlay::overlay_configure,
             overlay::overlay_state,
             overlay::overlay_connect_in_game,
+            // Settings → Genel "Hızlı kaynak paketi yükleme" (FASTPACK; shown only while the signed
+            // config's features.fastPacks is on)
+            fastpack::fast_packs_configure,
+            fastpack::fast_packs_state,
             // world sharing (HOST1; shown only while the signed config and the service offer it)
             commands::host::host_state,
             commands::host::host_place,
@@ -304,6 +309,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::cloud_afk::cloud_afk_stop,
             commands::cloud_afk::cloud_afk_restart,
             commands::cloud_afk::cloud_afk_send,
+            commands::cloud_afk::cloud_afk_dialog,
             commands::cloud_afk::cloud_afk_logs,
             commands::cloud_afk::cloud_afk_watch,
             commands::cloud_afk::cloud_afk_unwatch,

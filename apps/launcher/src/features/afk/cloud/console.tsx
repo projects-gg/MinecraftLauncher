@@ -35,6 +35,10 @@ import {
   ConsoleDirection,
   ConsoleText,
   copiedPreview,
+  type DialogAct,
+  DialogCard,
+  type Dialog as ServerDialog,
+  safeDialog,
 } from "@pl/ui/console";
 import { fill, safeInvItem } from "@pl/ui/inventory";
 import { useQueryClient } from "@tanstack/react-query";
@@ -257,6 +261,7 @@ export function CloudConsole({
   const host = account?.host ?? null;
   const kinds = Boolean(account?.features?.consoleKinds);
   const looks = kinds && Boolean(account?.features?.consoleLooks);
+  const dialogCards = kinds && Boolean(account?.features?.dialogCards);
   const [inventoryGone, setInventoryGone] = useState(false);
   const [movementGone, setMovementGone] = useState(false);
   const inventory =
@@ -281,6 +286,11 @@ export function CloudConsole({
   const [query, setQuery] = useState("");
   const [bars, setBars] = useState<CloudBars | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  // The server's open dialog as its card shows it (DIALOG-CARD), and a press on its way.
+  const [dialog, setDialog] = useState<{ rev: number; dialog: ServerDialog; at: number } | null>(
+    null,
+  );
+  const [pressing, setPressing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const draft = useRef("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -307,6 +317,7 @@ export function CloudConsole({
     setQuery("");
     setBars(null);
     setPending(null);
+    setDialog(null);
     setInventoryGone(false);
     setMovementGone(false);
     atEnd.current = true;
@@ -324,6 +335,7 @@ export function CloudConsole({
           // A new connection watches again: the machine sends the strip anew if it holds any.
           if (event.host === current.host) {
             setBars(null);
+            setDialog(null);
             setHostOnline(event.online);
           }
           break;
@@ -331,9 +343,25 @@ export function CloudConsole({
           if (event.host === current.host) {
             setHostOnline(event.online);
             // What the server kept on screen is not known any more: a return brings it anew.
-            if (!event.online) setBars(null);
+            if (!event.online) {
+              setBars(null);
+              setDialog(null);
+            }
           }
           break;
+        case "dialog": {
+          if (event.acct !== current.id) break;
+          let checked: ServerDialog | null = null;
+          try {
+            checked = event.dialog === null ? null : safeDialog(JSON.parse(event.dialog));
+          } catch {
+            checked = null;
+          }
+          // A new dialog or its close: an error of an earlier press or line no longer applies.
+          setSendError(null);
+          setDialog(checked ? { rev: event.rev, dialog: checked, at: Date.now() / 1000 } : null);
+          break;
+        }
         case "state":
           if (event.acct === current.id)
             storeAccount(queryClient, { ...current, live: event.live });
@@ -518,6 +546,35 @@ export function CloudConsole({
     else if (click.a === "open_url") openWebLink(click.v);
   };
 
+  // A press on the server's dialog card: a command only as the card asked the player (the card
+  // builds it; the service, the machine and the client check it again). The dialog's next frame
+  // shows what came of it.
+  const pressDialog = async (act: DialogAct) => {
+    if (!account || !dialog || pressing) return;
+    setPressing(true);
+    setSendError(null);
+    try {
+      await cloudApi.dialog(account.id, { rev: dialog.rev, ...act });
+    } catch (error) {
+      setSendError(isFriendly(error) ? error.message : t("cloudAfk.console.sendFailed"));
+    } finally {
+      setPressing(false);
+    }
+  };
+  // The card's own clicks: a confirmed link opens, a suggestion fills the command line (shown again
+  // once the dialog closes), a copy copies.
+  const onDialogClick = (click: ConsoleClick) => {
+    if (click.a === "open_url") openWebLink(click.v);
+    else if (click.a === "suggest_command") setText(click.v);
+    else if (click.a === "copy_to_clipboard") {
+      navigator.clipboard.writeText(click.v).then(
+        () => toast(fill(CONSOLE_TEXTS[lang].copiedValue, { value: copiedPreview(click.v) })),
+        () => undefined,
+      );
+    }
+  };
+  const card = dialogCards && dialog && !pending ? dialog : null;
+
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (!account) return;
     const list = histories.get(account.id) ?? [];
@@ -652,8 +709,25 @@ export function CloudConsole({
           />
         </div>
       ) : null}
+      {card ? (
+        <div className="border-t border-white/8 p-4">
+          <DialogCard
+            key={card.rev}
+            dialog={card.dialog}
+            lang={lang}
+            clock={clockOf(card.at)}
+            busy={pressing}
+            error={sendError}
+            onAct={(act) => void pressDialog(act)}
+            onClick={onDialogClick}
+          />
+        </div>
+      ) : null}
       <form
-        className={cn("flex flex-col gap-2 border-t border-white/8 p-4", pending && "hidden")}
+        className={cn(
+          "flex flex-col gap-2 border-t border-white/8 p-4",
+          (pending || card) && "hidden",
+        )}
         onSubmit={(event) => {
           event.preventDefault();
           void send();

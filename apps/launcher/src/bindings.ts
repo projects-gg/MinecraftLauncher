@@ -278,6 +278,12 @@ export const commands = {
 	overlayState: () => __TAURI_INVOKE<OverlayStateView>("overlay_state"),
 	/**  [`connect_in_game`] for the page. */
 	overlayConnectInGame: (target: string, game: number | null) => __TAURI_INVOKE<ConnectOutcome>("overlay_connect_in_game", { target, game }),
+	/**
+	 *  The page's choice: called at its start and on every change. The next sync of an official pack
+	 *  install (its next start, the mod center, background preparation) installs or removes the mods.
+	 */
+	fastPacksConfigure: (enabled: boolean) => __TAURI_INVOKE<void>("fast_packs_configure", { enabled }),
+	fastPacksState: (instanceId: string | null) => typedError<FastPacksView, CmdError>(__TAURI_INVOKE("fast_packs_state", { instanceId })),
 	/**  The view now (the page's start; every change after comes as `host-changed`). */
 	hostState: () => typedError<HostView_Serialize, CmdError>(__TAURI_INVOKE("host_state")),
 	/**
@@ -424,6 +430,11 @@ export const commands = {
 	 *  the server's answer shows in the console.
 	 */
 	cloudAfkSend: (id: string, line: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_send", { id, line })),
+	/**
+	 *  A press on the card of the server's dialog (DIALOG-CARD): the view's JSON (`{rev, i, inputs,
+	 *  cmd?}` or `{rev, cancel: true}`), checked again on the way; a command runs only as confirmed.
+	 */
+	cloudAfkDialog: (id: string, press: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_dialog", { id, press })),
 	/**  The machine's masked log before `before` (Unix seconds; none: the last hour). */
 	cloudAfkLogs: (id: string, before: number | null) => typedError<CloudLogPage_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_logs", { id, before })),
 	/**  The console is on screen: its lines and state stream as `cloud-afk-live`. */
@@ -2389,6 +2400,11 @@ export type CloudAccountFeatures = {
 	 *  switch while the account's machine gives them. Off from a service before it.
 	 */
 	consoleLooks?: boolean,
+	/**
+	 *  A server's dialog as a card the player may press (DIALOG-CARD): Studio's switch while the
+	 *  account's machine reports dialogs. Off from a service before it.
+	 */
+	dialogCards?: boolean,
 	placeholders?: boolean,
 	/**
 	 *  Console kinds are on, but this account's player, private or server rules still match the
@@ -3196,148 +3212,158 @@ export type CloudLiveEvent = CloudLiveEvent_Serialize | CloudLiveEvent_Deseriali
 /**  What the socket tells the launcher. */
 export type CloudLiveEvent_Deserialize = 
 /**  The socket of `host` is open; whether its machine is connected now. */
-({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  A watched account's live state changed (also once right after `watch`). */
-({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  Masked console lines of a watched account. `snapshot`: the recent lines right after
  *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
  */
-({ kind: "lines"; acct: string; lines: CloudConsoleLine_Deserialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "lines"; acct: string; lines: CloudConsoleLine_Deserialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
 /**  The machine connected or went away. */
-({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The service said no to something: `not_found` (not the player's account there),
  *  `rate_limited`, `host_offline`, `bad_request`.
  */
-({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wseq?: never } | 
+({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wseq?: never } | 
 /**  AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`). */
-({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  AFK+: new audit log entries, in batches at least 2 s apart (the backlog is read on
  *  demand, from the last entry kept).
  */
-({ kind: "audit"; acct: string; items: PlusAuditEntry_Deserialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "audit"; acct: string; items: PlusAuditEntry_Deserialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  AFK+: orders whose progress or live state changed (clients derive the status). */
-({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  AFK+: an approval came, was answered, expired or closed. */
-({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again. */
-({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The inventory (watched with `inv`): whether it shows now (`state` `ok`, or `off` with
  *  `reason` `not_running`, `setting`, `restart`, `version` or `service`); `lock: "trade"`
  *  while an AFK+ trade holds it (the view stays live, moves wait).
  */
-({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
+({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
 /**
  *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
  *  non-empty slot; `snap`: the first frame after a watch.
  */
-({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Deserialize | null; items: CloudInvItem_Deserialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Deserialize | null; items: CloudInvItem_Deserialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; dialog?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
  *  names this opening (every move names the one the player sees).
  */
-({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Deserialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
+({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Deserialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
 /**
  *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
  *  sent it on; what the server did shows in the frames that follow.
  */
-({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  A watched account's status strip: the action bar, a title and the boss bars (never in the
  *  log).
  */
-({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  Movement (watched with `move`): whether the account can move now and what it does (also
  *  once right after the watch, then on change).
  */
-({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
+({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
 /**
  *  Where a watched account stands and looks: after the watch, then on change, at most once a
  *  second, only while it can move.
  */
-({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The answer to an operation this launcher sent (`id` its own): `ok` means the account started
  *  it; what happens shows in the frames that follow.
  */
-({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never };
+({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  A watched account's server dialog (DIALOG-CARD): `dialog`, its JSON as the service checked
+ *  it (the view checks it again: `safeDialog`), or none when it closed. `rev` names it.
+ */
+({ kind: "dialog"; acct: string; rev: number; dialog: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never };
 
 /**  What the socket tells the launcher. */
 export type CloudLiveEvent_Serialize = 
 /**  The socket of `host` is open; whether its machine is connected now. */
-({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  A watched account's live state changed (also once right after `watch`). */
-({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  Masked console lines of a watched account. `snapshot`: the recent lines right after
  *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
  */
-({ kind: "lines"; acct: string; lines: CloudConsoleLine_Serialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "lines"; acct: string; lines: CloudConsoleLine_Serialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; snap?: never; state?: never; status?: never; wseq?: never } | 
 /**  The machine connected or went away. */
-({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The service said no to something: `not_found` (not the player's account there),
  *  `rate_limited`, `host_offline`, `bad_request`.
  */
-({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wseq?: never } | 
+({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wseq?: never } | 
 /**  AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`). */
-({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  AFK+: new audit log entries, in batches at least 2 s apart (the backlog is read on
  *  demand, from the last entry kept).
  */
-({ kind: "audit"; acct: string; items: PlusAuditEntry_Serialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "audit"; acct: string; items: PlusAuditEntry_Serialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  AFK+: orders whose progress or live state changed (clients derive the status). */
-({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  AFK+: an approval came, was answered, expired or closed. */
-({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**  AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again. */
-({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The inventory (watched with `inv`): whether it shows now (`state` `ok`, or `off` with
  *  `reason` `not_running`, `setting`, `restart`, `version` or `service`); `lock: "trade"`
  *  while an AFK+ trade holds it (the view stays live, moves wait).
  */
-({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
+({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
 /**
  *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
  *  non-empty slot; `snap`: the first frame after a watch.
  */
-({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Serialize | null; items: CloudInvItem_Serialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Serialize | null; items: CloudInvItem_Serialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; dialog?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
  *  names this opening (every move names the one the player sees).
  */
-({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Serialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
+({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Serialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never } | 
 /**
  *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
  *  sent it on; what the server did shows in the frames that follow.
  */
-({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  A watched account's status strip: the action bar, a title and the boss bars (never in the
  *  log).
  */
-({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  Movement (watched with `move`): whether the account can move now and what it does (also
  *  once right after the watch, then on change).
  */
-({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
+({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wseq?: never } | 
 /**
  *  Where a watched account stands and looks: after the watch, then on change, at most once a
  *  second, only while it can move.
  */
-({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  The answer to an operation this launcher sent (`id` its own): `ok` means the account started
  *  it; what happens shows in the frames that follow.
  */
-({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never };
+({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+/**
+ *  A watched account's server dialog (DIALOG-CARD): `dialog`, its JSON as the service checked
+ *  it (the view checks it again: `safeDialog`), or none when it closed. `rev` names it.
+ */
+({ kind: "dialog"; acct: string; rev: number; dialog: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never };
 
 /**
  *  What the machine says about the account now. `state` is one of `unknown`, `stopped`, `queued`,
@@ -4423,6 +4449,19 @@ export type FailureReason =
  *  whitelist, ...): the session stopped instead of trying again.
  */
 { kind: "refused"; cause: KickCause; message: string | null };
+
+/**  What Settings → Genel "Hızlı kaynak paketi yükleme" shows for the install Play opens. */
+export type FastPacksView = {
+	/**  The signed config's `features.fastPacks`: the switch shows. */
+	shown: boolean,
+	/**  The install follows the official pack (the switch works there only). */
+	official: boolean,
+	/**
+	 *  Its pack lists quick-pack for the install's Minecraft version; true while that cannot be
+	 *  read (offline without a cache), so no line claims what is not known.
+	 */
+	available: boolean,
+};
 
 /**  What one check found. */
 export type Finding = {

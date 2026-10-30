@@ -351,6 +351,27 @@ impl CloudClient {
             .await
     }
 
+    /// A press on the card of the server's dialog (DIALOG-CARD): `{rev, i, inputs, cmd?}` or
+    /// `{rev, cancel: true}`, checked again by the service, the machine and the client.
+    pub async fn press_dialog(
+        &self,
+        token: &Bearer,
+        id: &str,
+        press: serde_json::Value,
+    ) -> Result<()> {
+        self.send(
+            Method::POST,
+            &account_path(id, "/dialog")?,
+            Some(token),
+            Some(press),
+            &[],
+            Repeat::Never,
+        )
+        .await?
+        .into_result()
+        .map(|_| ())
+    }
+
     /// The player's report of a save refused for its content (README "Saving" → Refusal
     /// reports): the refused row's text, read again by the service.
     pub async fn report_refusal(&self, token: &Bearer, id: &str, text: &str) -> Result<()> {
