@@ -68,7 +68,6 @@ import { type Quoted, quotedOf } from "./reply";
 import { READ_AFTER_MS, seenKey } from "./seen";
 import type { ChatPerson } from "./sender-name";
 import { useChatTextSize } from "./text-size";
-import { TimeTip } from "./time-tip";
 import {
   DEFAULT_TEXT_SIZE,
   stepTextSize,
@@ -78,6 +77,7 @@ import {
   zoomKeyOf,
   zoomOf,
 } from "./text-zoom";
+import { TimeTip } from "./time-tip";
 import { onlineIn, useTyping, useTypingFeed, writersOf } from "./typing";
 import { TypingPill } from "./typing-pill";
 import { ZoomHud, type ZoomHudHandle } from "./zoom-hud";
