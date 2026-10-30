@@ -8,19 +8,19 @@ import type { InstanceSummary, OfficialStatus } from "@/lib/api";
  * The lines, in the order they share one grid cell (the cell keeps the tallest one's height, so
  * nothing below moves when they take turns). Each that says it will not work names where or why,
  * and its action (if any) the fix:
- * - `opens`: how it opens (the switch is off, or nothing stands in its way);
+ * - `opens`: how it opens (nothing stands in its way, or only "Kapansın" while the switch is off);
  * - `noHome`: no install can carry it, with "Resmî paketi kur" (the official pack was deleted and
  *   no Fabric install of the player's is on a version the mod ships for);
  * - `closes`: "Oyun açılınca launcher: Kapansın" is chosen, with "Kapanmak yerine küçülsün";
  * - `notFabric`: the install Play opens is not Fabric (the backend's `NotFabric`);
  * - `version`: it is Fabric on a version the mod does not ship for (`NoJar`);
- * - `waits`: one of those two while its game is prepared or open: the command bar's picker is
- *   locked, so the line says where it can switch after the game.
- * `notFabric` and `version` say the same need ("Fabric 26.1.2–26.3", `versionRange`) and switch
- * Play to an install that carries it, named in the action.
- * A later state (OVL-AUTO: "not out for this Minecraft version yet", for a newer version whose
- * tested jar is still to come) is one more name here, one more sentence in `tr/en-overlay.ts` and
- * one more rule in `overlayLine`, before `version`.
+ * - `notYet` (OVL-AUTO): it is Fabric on a release newer than every version the launcher has a
+ *   tested jar for, its own or the signed content's: "not out for Minecraft 26.4 yet". A tested jar
+ *   comes through the content without a launcher update; an untested one never goes in;
+ * - `waits`: one of those while its game is prepared or open: the command bar's picker is locked,
+ *   so the line says where it can switch after the game.
+ * `notFabric` and `version` say the same need ("Fabric 26.1.2–26.3", `versionRange`); they and
+ * `notYet` switch Play to an install that carries it, named in the action.
  */
 export const OVERLAY_LINES = [
   "opens",
@@ -28,6 +28,7 @@ export const OVERLAY_LINES = [
   "closes",
   "notFabric",
   "version",
+  "notYet",
   "waits",
 ] as const;
 export type OverlayLineKind = (typeof OVERLAY_LINES)[number];
@@ -35,20 +36,23 @@ export type OverlayLineKind = (typeof OVERLAY_LINES)[number];
 export interface OverlayLine {
   kind: OverlayLineKind;
   /**
-   * The install the line selects or names (`notFabric`, `version`, `waits`): none while no other
-   * install can carry the overlay.
+   * The install the line selects or names (`notFabric`, `version`, `notYet`, `waits`): none while
+   * no other install can carry the overlay.
    */
   switchTo?: InstanceSummary;
 }
 
 export interface OverlayLineInput {
-  /** The switch. */
+  /** The switch, as the player set it: only "Kapansın" waits for it to be on. */
   on: boolean;
   /** "Oyun açılınca launcher: Kapansın": the launcher is gone when the game would need it. */
   leaves: boolean;
   instances: readonly InstanceSummary[] | undefined;
   official: OfficialStatus | undefined;
-  /** The Minecraft versions this build ships the mod for (`overlay.state().versions`). */
+  /**
+   * The Minecraft versions the launcher has the mod for: its own jars', then the signed content's
+   * (`overlay.state().versions`).
+   */
   versions: readonly string[] | undefined;
   /** The install Play opens: the command bar's rule (`usePlayInstance`). */
   play: InstanceSummary | undefined;
@@ -57,22 +61,95 @@ export interface OverlayLineInput {
 }
 
 /**
- * The line while the switch is on and the overlay cannot work says why, the most basic blocker
- * first: no install at all can carry it, then "Kapansın" (no game gets it), then the install Play
- * opens. With the switch off it says what turning it on gives. While any list is unknown nothing
- * about the install shows, so the line never flickers while the page opens.
+ * The line says why the overlay cannot work, the most basic blocker first: no install at all can
+ * carry it, then "Kapansın" (no game gets it), then the install Play opens. What keeps the mod out
+ * of an install shows whatever the switch says (`HELD_LINES`, the switch is held off there);
+ * "Kapansın" only while the switch is on: both are the player's own choices, and the line says
+ * which one stands in the other's way. Else the line says what turning it on gives. While any
+ * list is unknown nothing about the install shows, so the line never flickers while the page
+ * opens.
  */
 export function overlayLine(input: OverlayLineInput): OverlayLine {
   const { on, leaves, instances, official, versions, play, locked } = input;
-  if (!on) return { kind: "opens" };
   if (overlayHasNoHome(instances, official, versions)) return { kind: "noHome" };
-  if (leaves) return { kind: "closes" };
+  if (on && leaves) return { kind: "closes" };
   if (!instances || !official || !versions || !play) return { kind: "opens" };
   if (carriesOverlay(play, official, versions)) return { kind: "opens" };
   const switchTo = overlayHome(instances, official, versions);
   // The switch waits for the game; with nothing to switch to, the reason stays as it is.
   if (locked && switchTo) return { kind: "waits", switchTo };
-  return { kind: play.loader === "fabric" ? "version" : "notFabric", switchTo };
+  if (play.loader !== "fabric") return { kind: "notFabric", switchTo };
+  return { kind: newerThanAll(play.mcVersion, versions) ? "notYet" : "version", switchTo };
+}
+
+/** The lines that hold a switch off: the mod cannot go into the install Play opens. */
+export const HELD_LINES: readonly OverlayLineKind[] = [
+  "noHome",
+  "notFabric",
+  "version",
+  "notYet",
+  "waits",
+];
+
+/** One switch of the mod as the row draws it. */
+export interface ModRow {
+  /** The line under the title. */
+  line: OverlayLine;
+  /** The switch: the player's choice, held off where the mod cannot go. */
+  checked: boolean;
+  /** Held off and dimmed: it cannot be turned there. */
+  held: boolean;
+}
+
+export interface ModRowsInput extends Omit<OverlayLineInput, "on"> {
+  /** "Oyun içi katman" as the player set it. */
+  overlayOn: boolean;
+  /** "Sohbette emoji seçici" as the player set it. */
+  emojiOn: boolean;
+}
+
+/**
+ * The mod's two switches, the overlay and its emoji picker, by the one rule for a feature that
+ * cannot work in the install Play opens (lead, 29 Oct, TASTE-SWEEP OVL-AUTO r2; FASTPACK's): the
+ * reason takes the line's place, the switch is held off and dimmed, and the player's choice is
+ * kept, so the switch is back on by itself where the mod works (Play opens another install, or a
+ * tested jar for its version comes through the content). "Kapansın" is no install's fault: the
+ * overlay's switch stays the player's while its line says so. The picker needs no launcher
+ * during the game, so "Kapansın" is nothing to it; what keeps the mod out is said once, on the
+ * overlay's line, and the picker's line keeps its sentence then.
+ */
+export function modRows(input: ModRowsInput): { overlay: ModRow; emoji: ModRow } {
+  const { overlayOn, emojiOn, ...rest } = input;
+  const overlay = overlayLine({ ...rest, on: overlayOn });
+  const picker = overlayLine({ ...rest, on: emojiOn, leaves: false });
+  const overlayHeld = HELD_LINES.includes(overlay.kind);
+  const pickerHeld = HELD_LINES.includes(picker.kind);
+  return {
+    overlay: { line: overlay, checked: overlayOn && !overlayHeld, held: overlayHeld },
+    emoji: {
+      line: picker.kind === overlay.kind ? { kind: "opens" } : picker,
+      checked: emojiOn && !pickerHeld,
+      held: pickerHeld,
+    },
+  };
+}
+
+/**
+ * Whether `minecraft` is a release newer than every one of `versions` (OVL-AUTO's "henüz yok":
+ * its tested jar is still to come). Snapshots and an empty list are not.
+ */
+export function newerThanAll(minecraft: string, versions: readonly string[]): boolean {
+  const have = releaseNumbers(minecraft);
+  if (!have || versions.length === 0) return false;
+  return versions.every((shipped) => {
+    const want = releaseNumbers(shipped);
+    if (!want) return true;
+    for (let i = 0; i < Math.max(have.length, want.length); i++) {
+      const d = (have[i] ?? 0) - (want[i] ?? 0);
+      if (d !== 0) return d > 0 && !shipsFor(shipped, minecraft);
+    }
+    return false;
+  });
 }
 
 /**

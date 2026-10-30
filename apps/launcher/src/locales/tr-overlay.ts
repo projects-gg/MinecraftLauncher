@@ -34,6 +34,11 @@ export const trOverlay = {
    * install's line names them ("Fabric 26.1.2–26.3").
    */
   needs: "{{name}} kurulumunda çalışmaz, Fabric {{range}} gerekir.",
+  /**
+   * OVL-AUTO: the install Play opens is Fabric on a Minecraft version newer than every one the
+   * overlay has a tested jar for. Its jar comes without a launcher update once it is tested.
+   */
+  notYet: "Minecraft {{version}} için henüz yok.",
   /** Selects the official pack for Play. */
   toOfficial: "Resmî pakete geç",
   /** Selects the player's own install the overlay works in (the official pack is gone). */
