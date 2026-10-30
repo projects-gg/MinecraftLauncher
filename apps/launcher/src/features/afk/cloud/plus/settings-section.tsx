@@ -81,6 +81,7 @@ import {
   WEEKDAYS,
   windowProblems,
   withCurrency,
+  withOrderMenu,
   withSettings,
 } from "./model";
 import { AuthorityChoice, MoneyFits, moneyNameOf, TalkPreview } from "./setup-parts";
@@ -337,7 +338,9 @@ function SpentMeter({
   const { t } = useTranslation();
   const { layout } = useMotionPrefs();
   const share = Math.min(1, Math.max(0, spent / total));
-  // It fills once, the first time it shows (scaleX, 300 ms); after that it is just there.
+  // It fills once, the first time it shows (scaleX, 300 ms); after that it is just there. Bone as
+  // the rail's kontör bars (gold is the sheet's one action), flare from 90 %: at the limit the bot
+  // buys nothing more (TASTE-2 r1).
   const [grow] = useState(() => layout && !metersShown.has(accountId));
   useEffect(() => {
     metersShown.add(accountId);
@@ -349,7 +352,10 @@ function SpentMeter({
         className="block h-[3px] w-full max-w-[320px] overflow-hidden rounded-full bg-white/10"
       >
         <motion.span
-          className="block h-full w-full origin-left rounded-full bg-gold-500"
+          className={cn(
+            "block h-full w-full origin-left rounded-full",
+            share >= 0.9 ? "bg-flare-400/80" : "bg-bone-100/75",
+          )}
           initial={grow ? { transform: "scaleX(0)" } : false}
           animate={{ transform: `scaleX(${share})` }}
           transition={{ duration: 0.3, ease: easeOutExpo }}
@@ -682,6 +688,23 @@ function ChatEditor({ shown, set, panel, account }: EditorProps & { account: Clo
           }
         />
       </div>
+      {/* The server's order menu (DONUT-ORDER), only while Studio's switch is on: its own block
+          beside the chat's, as the contract places it. */}
+      {panel.settings.rules.features.orderMenu ? (
+        <div className="mt-3">
+          <ToggleRow
+            title={t("afkPlus.settings.orderMenu")}
+            help={t("afkPlus.settings.orderMenuHelp")}
+            checked={d.orderMenu === true}
+            onCheckedChange={(on) =>
+              set((s) => ({
+                ...s,
+                discovery: withOrderMenu(s.discovery, on, panel.settings.config.discovery),
+              }))
+            }
+          />
+        </div>
+      ) : null}
       {/* The ad's text waits here while the server's profile offers more than one (the site's). */}
       <Advanced
         summary={`${t("setup.plus.adv.chat")}${choosable ? t("setup.plus.adv.chatText") : ""}`}
@@ -1870,6 +1893,7 @@ export function SettingsSection({
       saver: features.saver,
       preview: panel.settings.adPreview ?? null,
       notify: notify.data ?? null,
+      orderMenu: panel.settings.rules.features.orderMenu,
     },
     t,
   );

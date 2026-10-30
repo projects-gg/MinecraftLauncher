@@ -198,9 +198,9 @@ const isActive = (order: PlusOrder) => {
 let chatter: number | undefined;
 const CHATTER: Array<[string, string, string]> = [
   ["pm_in", "Pixel_TR", "totem var mı satan"],
-  ["reply", "Pixel_TR", "[AFK+] Ben alıyorum, satmıyorum. Elinde varsa 8.000 olur mu?"],
+  ["reply", "Pixel_TR", "Ben alıyorum, satmıyorum. Elinde varsa 8.000 olur mu?"],
   ["pm_in", "Kirpi_Gamer", "elmas tanesi kaç"],
-  ["reply", "Kirpi_Gamer", "[AFK+] Tanesi 120, 64'lük paket var."],
+  ["reply", "Kirpi_Gamer", "Tanesi 120, 64'lük paket var."],
 ];
 
 export const mockPlusApi: PlusApi = {
@@ -229,11 +229,16 @@ export const mockPlusApi: PlusApi = {
     // emptied one is none.
     const sent = "currency" in next.trade ? next.trade.currency : config.trade.currency;
     const currency = sent?.trim().replace(/\s+/gu, " ") || null;
+    // "Sipariş menüsü" as the service keeps it: only while on (off is none, here null); a write
+    // without it keeps the stored one.
+    const asked = next.discovery.orderMenu as boolean | null | undefined;
+    const menu = asked == null ? config.discovery.orderMenu === true : asked;
     // Orders and custom items have their own routes: the settings' save keeps the stored ones. The
     // first-start mark is the service's: a save that turns the assistant on ends it.
     config = {
       ...next,
       ready: next.enabled ? null : config.ready,
+      discovery: { ...next.discovery, orderMenu: menu ? true : null },
       trade: { ...next.trade, currency },
       orders: config.orders,
       customItems: config.customItems,

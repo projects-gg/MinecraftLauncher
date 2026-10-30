@@ -239,6 +239,7 @@ pub fn check_context(settings: &PlusSettings, now: i64) -> PlusCheckContext {
             item_pay: Some(rules.features.item_pay),
             custom_items: Some(rules.features.custom_items),
             currency: Some(rules.features.currency),
+            order_menu: Some(rules.features.order_menu),
         },
         limits: PlusCheckLimits {
             order_max: rules.order_max,
@@ -289,6 +290,12 @@ pub fn checked_settings(
         Some(None) => sent.trade.currency = Some(None),
         Some(Some(_)) => {}
     }
+    // The check answers with the document as the service would store it (the ads' hour and a
+    // stored order menu filled in); the write carries only what the player left: a key left out
+    // keeps the stored one, `orderMenu: false` switches it off, and an older service that knows
+    // neither key never gets one.
+    sent.discovery.ad_every_min = config.discovery.ad_every_min;
+    sent.discovery.order_menu = config.discovery.order_menu;
     Ok(sent)
 }
 
@@ -1264,6 +1271,38 @@ mod tests {
             checked_settings(&config, &settings, NOW),
             Err(vec![PlusIssue::new("discovery.adEveryMin", "range")])
         );
+    }
+
+    #[test]
+    fn a_save_sends_the_order_menu_only_as_the_player_left_it() {
+        let mut settings = settings();
+        settings.rules.features.order_menu = true;
+        let sent = |config: &PlusConfig, settings: &PlusSettings| {
+            let checked = checked_settings(config, settings, NOW).unwrap();
+            let written = serde_json::to_value(checked).unwrap();
+            written["discovery"].get("orderMenu").cloned()
+        };
+        // Left out (a screen that does not show it): left out of the write, the stored one stays.
+        assert_eq!(sent(&settings.config, &settings), None);
+        let mut config = settings.config.clone();
+        config.discovery.order_menu = Some(true);
+        assert_eq!(sent(&config, &settings), Some(json!(true)));
+        // Off goes as false, for the service to leave it out of the document.
+        config.discovery.order_menu = Some(false);
+        assert_eq!(sent(&config, &settings), Some(json!(false)));
+        // Studio's switch off (an older service reads so too): it cannot be switched on, while a
+        // stored one sent back and off pass.
+        let mut off = settings.clone();
+        off.rules.features.order_menu = false;
+        config.discovery.order_menu = Some(true);
+        assert_eq!(
+            checked_settings(&config, &off, NOW),
+            Err(vec![PlusIssue::new("discovery.orderMenu", "feature")])
+        );
+        off.config.discovery.order_menu = Some(true);
+        assert_eq!(sent(&config, &off), Some(json!(true)));
+        config.discovery.order_menu = Some(false);
+        assert_eq!(sent(&config, &off), Some(json!(false)));
     }
 
     #[test]

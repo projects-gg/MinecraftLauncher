@@ -188,6 +188,8 @@ export interface PlusAnswerContext {
   saver: boolean;
   /** The service's ad plan (trade-any-4); null from an older service. */
   preview: PlusAdPreview | null;
+  /** Studio's "Sipariş menüsü" switch (DONUT-ORDER): only then is the order menu said. */
+  orderMenu?: boolean;
   /** The notification switches (every cloud account's); null while they load. */
   notify: CloudNotifyPrefs | null;
 }
@@ -285,7 +287,9 @@ export function plusAnswers(
         : cap(a("ads", { every: everyWords(preview.everyMin, t) }), ctx.lang);
   // Scanning and writing to a seller once are on by default: said, never hidden.
   const { scanChat, proactivePm } = config.discovery;
-  const chat = `${adsPart}${scanChat && proactivePm ? a("writes") : scanChat ? a("scans") : a("noScan")}`;
+  // The order menu is stored only while on; said only while Studio's switch shows it.
+  const menu = ctx.orderMenu && config.discovery.orderMenu === true ? a("menu") : "";
+  const chat = `${adsPart}${scanChat && proactivePm ? a("writes") : scanChat ? a("scans") : a("noScan")}${menu}`;
 
   const preset = t(`afkPlus.settings.presets.${presetKey(config.persona.preset)}`);
   const talk = config.persona.playerTalk ? a("tone", { preset }) : preset;

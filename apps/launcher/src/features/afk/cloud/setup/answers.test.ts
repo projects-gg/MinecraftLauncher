@@ -225,6 +225,23 @@ describe("AFK+ answers", () => {
     );
   });
 
+  it("say the order menu only while Studio's switch shows it (DONUT-ORDER)", () => {
+    const menu = { ...config().discovery, orderMenu: true };
+    expect(plusAnswers(config({ discovery: menu }), ctx("tr", { orderMenu: true }), tr).chat).toBe(
+      "İlan vermez, aradığın eşya satılığa çıkınca satıcıya bir kez yazar. Sipariş menüsünü de kontrol eder.",
+    );
+    expect(plusAnswers(config({ discovery: menu }), ctx("en", { orderMenu: true }), en).chat).toBe(
+      "Posts no ads, messages sellers once. Checks the order menu too.",
+    );
+    // Studio's switch off: the stored one is not said; off is not said either.
+    expect(plusAnswers(config({ discovery: menu }), ctx("tr"), tr).chat).toBe(
+      "İlan vermez, aradığın eşya satılığa çıkınca satıcıya bir kez yazar.",
+    );
+    expect(plusAnswers(config(), ctx("tr", { orderMenu: true }), tr).chat).toBe(
+      "İlan vermez, aradığın eşya satılığa çıkınca satıcıya bir kez yazar.",
+    );
+  });
+
   it("make the tone preview's deal from the first buy, never past one deal's limit", () => {
     const orders = [order({ item: "minecraft:totem_of_undying", limit: 12_000 })];
     expect(talkSample(orders, null)).toEqual({ item: "minecraft:totem_of_undying", offer: 9_600 });

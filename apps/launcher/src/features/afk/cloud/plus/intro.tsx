@@ -1,8 +1,10 @@
 // "AFK+" for a player without an AFK+ account: a quiet card beside 7/24 Bulut's on the AFK page
 // and, behind it, a short panel that shows the product instead of describing it: the conversation
-// the assistant has for the player (a real haggle, the bot's lines with their [AFK+] mark), what it
-// never does in one sentence, the price from the offer and "afk.projects.gg'de başla". Purchase
-// happens on the site. The conversation's lines come in once, one after another; nothing moves after.
+// the assistant has for the player (a real haggle, each line with who says it: the other player's
+// name, "ProBot AI"; never the [AFK+] tag, which is off by default), what it never does in one
+// sentence, the price from the offer and "afk.projects.gg'de başla". Purchase happens on the site.
+// The conversation's lines come in once, one after another; nothing moves after. Prices are bone:
+// the one gold is the start button (design.md §2).
 import { ArrowSquareOut, CaretRight } from "@phosphor-icons/react";
 import { Button, ContentIcon, cn, Dialog, easeOutExpo, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
@@ -65,7 +67,7 @@ export function PlusIntroCard({
         <span
           className={cn(
             "shrink-0 text-[12.5px] whitespace-nowrap tabular-nums",
-            offer.open ? "font-display text-[13px] font-semibold text-gold-200" : "text-ash-300",
+            offer.open ? "font-display text-[13px] font-semibold text-bone-50" : "text-ash-300",
           )}
         >
           {offer.text}
@@ -81,7 +83,7 @@ export function PlusIntroCard({
   );
 }
 
-/** The haggle the panel shows: who says what, the bot's lines first marked [AFK+]. */
+/** The haggle the panel shows: who says what, each line after its speaker's name. */
 const CHAT: Array<{ from: "them" | "bot"; key: string }> = [
   { from: "them", key: "c1" },
   { from: "bot", key: "c2" },
@@ -123,7 +125,7 @@ export function PlusIntroDialog({
             <span
               className={cn(
                 "mr-auto text-[13px] tabular-nums",
-                offer.open ? "font-display font-semibold text-gold-200" : "text-ash-300",
+                offer.open ? "font-display font-semibold text-bone-50" : "text-ash-300",
               )}
             >
               {offer.text}
@@ -159,7 +161,11 @@ export function PlusIntroDialog({
             >
               {line.from === "bot" ? (
                 <>
-                  <span className="font-semibold text-gold-200">[AFK+]</span>{" "}
+                  {/* A quiet speaker's name, as the other player's: the [AFK+] tag is the
+                      player's choice and off by default, so other players would not see one. */}
+                  <span className="font-semibold text-bone-100">
+                    {t("afkPlus.messages.assistant")}:
+                  </span>{" "}
                   <span className="text-bone-50">{t(`afkPlus.intro.chat.${line.key}`)}</span>
                 </>
               ) : (
@@ -187,7 +193,7 @@ export function PlusIntroDialog({
             <button
               type="button"
               onClick={signIn}
-              className="cursor-pointer rounded-sm font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+              className="cursor-pointer rounded-sm font-medium text-bone-100 underline decoration-white/30 underline-offset-[3px] outline-none transition-[color,text-decoration-color] duration-150 hover:text-bone-50 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300"
             >
               {t("cloudAfk.intro.signInAction")}
             </button>

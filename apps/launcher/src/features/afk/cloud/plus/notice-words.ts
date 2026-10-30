@@ -132,12 +132,13 @@ export function noticeWords(notice: AfkNotice, t: TFunction, lang: Lang): Notice
       return null;
     }
     case "incident":
-      return at(t("afkPlus.notices.incident"), { panel: "messages" });
+      // The conversations live in "Etkinlik" (PLUS-ACTIVITY): a message's notice opens it.
+      return at(t("afkPlus.notices.incident"), { panel: "feed" });
     case "message": {
       const count = whole(data.count) ?? 1;
       return at(
         count > 1 ? t("afkPlus.notices.messages", { count }) : t("afkPlus.notices.message"),
-        { panel: "messages" },
+        { panel: "feed" },
       );
     }
     case "paused":
@@ -150,7 +151,8 @@ export function noticeWords(notice: AfkNotice, t: TFunction, lang: Lang): Notice
           pms: t("afkPlus.notices.summaryPms", { count: pms }),
           deals: t("afkPlus.notices.summaryDeals", { count: deals }),
         }),
-        { panel: "feed" },
+        // "Günlük özet" opens "Özet" (PLUS-ACTIVITY, the site's and the phone's same target).
+        { panel: "report" },
       );
     }
     case "weekly":

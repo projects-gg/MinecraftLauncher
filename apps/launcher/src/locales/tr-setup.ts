@@ -119,6 +119,8 @@ export const trSetup = {
       writes: ", aradığın eşya satılığa çıkınca satıcıya bir kez yazar.",
       scans: ", satış ilanlarını tarar.",
       noScan: ".",
+      // After the chat's sentence while "Sipariş menüsünü kontrol etsin" is on (DONUT-ORDER).
+      menu: " Sipariş menüsünü de kontrol eder.",
       tone: "{{preset}}, oyuncu gibi",
       whoAll: "Herkesin her özel mesajına cevap verir",
       whoAllFriends: "Arkadaşlarının her özel mesajına cevap verir",
@@ -147,7 +149,7 @@ export const trSetup = {
       // The setup's third step folds the two rare ones (TASTE-SWEEP SETUP-UX-L r1).
       actSetup: "Takastan sonra",
       actSetupDeal: "İlk anlaşmada onay sınırı, takastan sonra",
-      chat: "Satış ilanlarını taramak",
+      chat: "Satış ilanlarını tarama",
       // After `chat` while the ad's text can be chosen (ads on, more than one in the profile).
       chatText: ", ilan metni",
       talk: "Tanıtım yazısı, mesaj etiketi, dil, konu sınırı",
