@@ -81,10 +81,10 @@ import {
 import { canJoinInvite, joinInvite } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { groupFriends } from "./model";
-import { PresenceText } from "./presence-text";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
 import { NameWithMark } from "./person-mark";
 import { PersonContextMenu, PersonMoreButton, usePeopleItems } from "./person-menu";
+import { PresenceText } from "./presence-text";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { TeamMemberRow } from "./team-member";
