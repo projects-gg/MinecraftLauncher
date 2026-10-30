@@ -3,6 +3,7 @@
 // the box asks with the player's words, shows the sentence and examples, "Kullan" puts the trigger
 // in the rule and the field then reads as that sentence; "Kalıbı kendim yazacağım" waits in the box;
 // a refusal shows the command's own words.
+import { TooltipProvider } from "@pl/ui";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,21 +44,24 @@ function Rule({
     suggest,
     onChange: (pattern, regex) => setRule({ pattern, regex }),
   });
+  // The box's close button has a tooltip: the app gives every screen its provider (main.tsx).
   return (
-    <div>
-      <TriggerField
-        id="rule-match"
-        value={rule.pattern}
-        regex={rule.regex}
-        onChange={(pattern, regex) => setRule({ pattern, regex })}
-        placeholder="selam"
-        error={null}
-        maxLength={256}
-        assist={assist}
-      />
-      {box}
-      <output data-testid="rule">{`${rule.regex ? "regex" : "plain"}:${rule.pattern}`}</output>
-    </div>
+    <TooltipProvider>
+      <div>
+        <TriggerField
+          id="rule-match"
+          value={rule.pattern}
+          regex={rule.regex}
+          onChange={(pattern, regex) => setRule({ pattern, regex })}
+          placeholder="selam"
+          error={null}
+          maxLength={256}
+          assist={assist}
+        />
+        {box}
+        <output data-testid="rule">{`${rule.regex ? "regex" : "plain"}:${rule.pattern}`}</output>
+      </div>
+    </TooltipProvider>
   );
 }
 
