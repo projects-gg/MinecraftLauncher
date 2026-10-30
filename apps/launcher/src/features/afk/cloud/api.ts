@@ -20,6 +20,7 @@ import {
   type CloudMoveResult_Serialize,
   type CloudPageView_Serialize,
   type CloudReplyTry,
+  type CloudReportOutcome,
   type CloudRevealOutcome,
   type CloudSaveOutcome_Serialize,
   type CmdError,
@@ -50,6 +51,7 @@ export type {
   CloudMovementError,
   CloudMovePlan,
   CloudReplyTry,
+  CloudReportOutcome,
   CloudRevealOutcome,
   SitePage,
 };
@@ -82,6 +84,8 @@ export interface CloudApi {
   save(id: string, edit: CloudEdit): Promise<CloudSaveResult>;
   /** "Göster": one stored secret row's words, from the machine; never kept. */
   reveal(id: string, rowId: string): Promise<CloudRevealOutcome>;
+  /** "Yanlışsa bildir": a row's text a save refused for its content, to staff (3 a day). */
+  reportRefusal(id: string, text: string): Promise<CloudReportOutcome>;
   /** "Buluta taşı": the desktop account in the cloud's form. */
   movePlan(desktopId: string): Promise<CloudMovePlan>;
   move(desktopId: string, cloudId: string, rev: number, run: boolean): Promise<CloudMoveData>;
@@ -147,6 +151,7 @@ const tauriCloudApi: CloudApi = {
   edit: (id) => ok(commands.cloudAfkEdit(id)),
   save: (id, edit) => ok(commands.cloudAfkSave(id, edit)),
   reveal: (id, rowId) => ok(commands.cloudAfkReveal(id, rowId)),
+  reportRefusal: (id, text) => ok(commands.cloudAfkReportRefusal(id, text)),
   movePlan: (desktopId) => ok(commands.cloudAfkMovePlan(desktopId)),
   move: (desktopId, cloudId, rev, run) => ok(commands.cloudAfkMove(desktopId, cloudId, rev, run)),
   connectHere: () => commands.cloudAfkConnectHere(),
