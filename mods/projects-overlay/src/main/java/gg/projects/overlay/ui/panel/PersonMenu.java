@@ -1,5 +1,6 @@
 package gg.projects.overlay.ui.panel;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.people.FriendMenu;
@@ -47,7 +48,19 @@ public final class PersonMenu {
         /** A choice of a row's list (OVL-UX2): a category ({@code ""} for "Arkadaşlar") or a crew, by id. */
         default void chose(String friendId, FriendMenu.Action action, String choice) {
         }
+
+        /** "Yeni kategori…" (OVL-UX3): a new category's name, its spaces folded, for the friend to move into. */
+        default void named(String friendId, String name) {
+        }
     }
+
+    /**
+     * The id of "Yeni kategori…" in "Kategoriye taşı"'s list (OVL-UX3): no category's (those are lower case letters
+     * and digits, "" for "Arkadaşlar"). Picking it turns the list into a one-line name field in place.
+     */
+    public static final String NEW_CHOICE = "+new";
+    /** The most a category's name keeps (the launcher's {@code GROUP_NAME_MAX}). */
+    private static final int NAME_MAX = FriendMenu.CATEGORY_NAME_MAX;
 
     /** A choice in a row's list (OVL-UX2): {@code checked} where the launcher's menu has its check. */
     public record Choice(String id, String label, boolean disabled, boolean checked) {
@@ -109,11 +122,18 @@ public final class PersonMenu {
     private Function<FriendMenu.Action, List<Choice>> choices = action -> List.of();
     /** The row whose list shows now, or null. */
     private FriendMenu.Action listOf;
+    /** OVL-UX3: the name typed into "Yeni kategori…"'s field while it shows, else null. */
+    private StringBuilder naming;
     /** The lit row (pointer or keys), -1 for none. */
     private int focus = -1;
     private boolean keys;
     // The question, when a row asks first.
     private FriendMenu.Action asking;
+    /**
+     * OVL-UX3: "Liderliği devret" leaves the player a moderator (the crew has roles and fewer than 4 others moderate;
+     * the launcher's {@code afterHandingOn}), else a member: its question says which.
+     */
+    private boolean leadKeepsModerator;
     private final List<FormattedCharSequence> question = new ArrayList<>(2);
     private final List<FormattedCharSequence> body = new ArrayList<>(3);
     private String cancelLabel = "";
@@ -147,6 +167,11 @@ public final class PersonMenu {
 
     public void setReducedMotion(boolean value) {
         reducedMotion = value;
+    }
+
+    /** OVL-UX3: what "Liderliği devret"'s question says the player becomes (set before the menu opens). */
+    public void setLeadKeepsModerator(boolean value) {
+        leadKeepsModerator = value;
     }
 
     /** Whether it is open (not fading out). */
@@ -214,6 +239,7 @@ public final class PersonMenu {
     /** The menu's own rows again (from a list: {@code from} is lit when the keys came back). */
     private void showRows(int from, int screenW, int screenH) {
         listOf = null;
+        naming = null;
         Font ui = Fonts.ui();
         lines.clear();
         float widest = 0f;
@@ -254,13 +280,20 @@ public final class PersonMenu {
         lines.add(new Line(parent, true, null, Texts.visual(backWords), widest, Icon.BACK, false));
         lines.add(null);
         int lit = -1;
+        naming = null;
         for (Choice choice : list) {
             float w = ui.width(choice.label());
             widest = Math.max(widest, w);
             if (lit < 0 && choice.checked() && !choice.disabled()) {
                 lit = lines.size();
             }
-            lines.add(new Line(null, false, choice, Texts.visual(choice.label()), w, null, choice.checked()));
+            // "Yeni kategori…" after a hairline, with the launcher's sign (OVL-UX3).
+            boolean fresh = NEW_CHOICE.equals(choice.id());
+            if (fresh) {
+                lines.add(null);
+            }
+            lines.add(new Line(null, false, choice, Texts.visual(choice.label()), w, fresh ? Icon.FOLDER_PLUS : null,
+                choice.checked()));
         }
         size(widest, true, screenW, screenH);
         boolean byKeys = keys || PanelInput.keyboardMode();
@@ -296,6 +329,7 @@ public final class PersonMenu {
         friendId = null;
         asking = null;
         listOf = null;
+        naming = null;
     }
 
     /** Where the panel starts (GUI pixels): a menu under a box keeps to its side of it. */
@@ -355,6 +389,10 @@ public final class PersonMenu {
             case ALERT -> "people.alert";
             case MOVE -> "people.move";
             case CREW_INVITE -> row.done() ? "people.crew_invited" : "people.crew_invite";
+            case MAKE_MODERATOR -> "people.make_moderator";
+            case UNMAKE_MODERATOR -> "people.unmake_moderator";
+            case MAKE_FOUNDER -> "people.make_founder";
+            case REMOVE_MEMBER -> "people.remove_member";
             case REMOVE_FROM_WORLD -> "people.remove_from_world";
             case UNFRIEND -> "people.unfriend";
             case BLOCK -> "people.block";
@@ -374,6 +412,9 @@ public final class PersonMenu {
             case ALERT -> row.on() ? Icon.BELL_FILL : Icon.BELL;
             case MOVE -> Icon.FOLDER;
             case CREW_INVITE -> Icon.CREW;
+            case MAKE_MODERATOR, UNMAKE_MODERATOR -> Icon.SHIELD_STAR;
+            case MAKE_FOUNDER -> Icon.CROWN;
+            case REMOVE_MEMBER -> Icon.USER_MINUS;
             case REMOVE_FROM_WORLD -> Icon.SEND_OFF;
             case UNFRIEND -> Icon.UNFRIEND;
             case BLOCK -> Icon.BLOCK;
@@ -426,10 +467,13 @@ public final class PersonMenu {
         Font small = Fonts.small();
         Font ui = Fonts.ui();
         cancelLabel = Texts.str("people.cancel");
-        // "Dünyadan çıkar" asks in world sharing's own words (its page asks the same).
+        // "Dünyadan çıkar" asks in world sharing's own words (its page asks the same), the crew rows in the launcher's
+        // (OVL-UX3: who leads after the hand-over and what the player becomes, who leaves and that the code changes).
         String titleKey = switch (action) {
             case BLOCK -> "people.block.ask";
             case REMOVE_FROM_WORLD -> "host.remove.ask";
+            case MAKE_FOUNDER -> leadKeepsModerator ? "people.make_founder.ask_moderator" : "people.make_founder.ask";
+            case REMOVE_MEMBER -> "people.remove_member.ask";
             default -> "people.unfriend.ask";
         };
         String bodyKey = switch (action) {
@@ -440,6 +484,8 @@ public final class PersonMenu {
         confirmLabel = Texts.str(switch (action) {
             case BLOCK -> "people.block";
             case REMOVE_FROM_WORLD -> "people.remove_from_world";
+            case MAKE_FOUNDER -> "people.make_founder";
+            case REMOVE_MEMBER -> "people.remove_member";
             default -> "people.unfriend";
         });
         cancelW = ui.width(cancelLabel) + BUTTON_PAD * 2;
@@ -553,7 +599,20 @@ public final class PersonMenu {
     private void pick(int index, int screenW, int screenH, long now) {
         Line line = lines.get(index);
         if (line.back()) {
-            back(screenW, screenH, now);
+            if (naming != null && listOf != null) {
+                // From the name field back to the list it came from.
+                showList(listOf, screenW, screenH, now);
+            } else {
+                back(screenW, screenH, now);
+            }
+            return;
+        }
+        if (line.choice() != null && NEW_CHOICE.equals(line.choice().id())) {
+            if (naming == null) {
+                startNaming(line, screenW, screenH, now);
+            } else {
+                submitName(now);
+            }
             return;
         }
         if (line.choice() != null) {
@@ -579,8 +638,72 @@ public final class PersonMenu {
         actions.picked(friend, action);
     }
 
+    /**
+     * "Yeni kategori…" picked (OVL-UX3): the list turns into its way back and a one-line name field in place, which
+     * the keys type into at once (Enter makes the category and moves the friend, Esc goes back to the list).
+     */
+    private void startNaming(Line fresh, int screenW, int screenH, long now) {
+        naming = new StringBuilder();
+        Line back = lines.isEmpty() ? null : lines.get(0);
+        lines.clear();
+        float widest = Fonts.ui().width(Texts.str("people.move.name"));
+        if (back != null) {
+            lines.add(back);
+            lines.add(null);
+            widest = Math.max(widest, back.width());
+        }
+        lines.add(new Line(null, false, fresh.choice(), Texts.visual(""), widest, null, false));
+        size(widest, true, screenW, screenH);
+        focus = lines.size() - 1;
+        lastMouseX = REST;
+        appear(now);
+        Minecraft.getInstance().getNarrator().saySystemQueued(Texts.tr("people.move.name"));
+    }
+
+    /** Enter in the name field: the category goes with the friend in it; nothing while the name is empty. */
+    private void submitName(long now) {
+        String name = naming == null ? "" : FriendMenu.cleanCategoryName(naming.toString());
+        if (name.isEmpty()) {
+            return;
+        }
+        String friend = friendId;
+        close(now);
+        actions.named(friend, name);
+    }
+
+    /** A typed character for the name field (OVL-UX3); whether the menu took it (it takes every one while open). */
+    public boolean charTyped(int codepoint) {
+        if (!isOpen() || naming == null || asking != null) {
+            return isOpen();
+        }
+        PanelInput.usedKeyboard();
+        if (Character.isISOControl(codepoint) || codepoint == 0xA7) {
+            // No control characters and no legacy formatting sign in a name.
+            return true;
+        }
+        if (naming.codePointCount(0, naming.length()) < NAME_MAX) {
+            naming.appendCodePoint(codepoint);
+        }
+        return true;
+    }
+
+    /** Types {@code name} into the open name field as the keys would (the scenario driver); false without one. */
+    public boolean typeForDriver(String name) {
+        if (naming == null || !isOpen()) {
+            return false;
+        }
+        name.codePoints().forEach(this::charTyped);
+        return true;
+    }
+
+    /** Whether "Yeni kategori…"'s name field shows (the scenario driver checks it). */
+    public boolean naming() {
+        return naming != null && isOpen();
+    }
+
     /** From a list back to the menu, its row lit for the keys. */
     private void back(int screenW, int screenH, long now) {
+        naming = null;
         FriendMenu.Action was = listOf;
         showRows(-1, screenW, screenH);
         boolean byKeys = keys || PanelInput.keyboardMode();
@@ -663,10 +786,43 @@ public final class PersonMenu {
             return false;
         }
         if (event.isEscape()) {
-            close(now);
+            if (naming != null && listOf != null && asking == null) {
+                // Esc in "Yeni kategori…"'s field goes back to the list, as the launcher's field does.
+                showList(listOf, screenW, screenH, now);
+            } else {
+                close(now);
+            }
             return true;
         }
         PanelInput.usedKeyboard();
+        if (naming != null && asking == null) {
+            if (event.key() == InputConstants.KEY_BACKSPACE) {
+                if (!naming.isEmpty()) {
+                    naming.setLength(naming.offsetByCodePoints(naming.length(), -1));
+                }
+                return true;
+            }
+            if (event.isUp() || event.isDown()) {
+                focus = next(focus, event.isUp() ? -1 : 1);
+                sayFocus();
+                return true;
+            }
+            if (event.isSelection() || event.isConfirmation()) {
+                // Enter on the field makes the category; on the way back, the list again. (Space types.)
+                if (focus >= 0 && lines.get(focus) != null && lines.get(focus).back()) {
+                    pick(focus, screenW, screenH, now);
+                } else if (event.key() != InputConstants.KEY_SPACE) {
+                    submitName(now);
+                }
+                return true;
+            }
+            if (event.isCycleFocus()) {
+                close(now);
+                return false;
+            }
+            // Letters come as typed characters; nothing else reaches the panel under the field.
+            return true;
+        }
         if (asking != null) {
             if (event.isLeft() || event.isRight() || event.isCycleFocus()) {
                 button = 1 - button;
@@ -734,6 +890,7 @@ public final class PersonMenu {
                 friendId = null;
                 asking = null;
                 listOf = null;
+                naming = null;
             }
             return;
         }
@@ -781,6 +938,11 @@ public final class PersonMenu {
                 ry += SEP_H;
                 continue;
             }
+            if (naming != null && line.choice() != null && NEW_CHOICE.equals(line.choice().id())) {
+                drawNameField(g, ui, ry, i == focus);
+                ry += ROW_H;
+                continue;
+            }
             boolean soft = line.disabled();
             boolean lit = i == focus && !soft;
             if (lit) {
@@ -798,7 +960,8 @@ public final class PersonMenu {
             Draw.text(g, ui, line.label(), x + TEXT_X, Fonts.centeredY(Fonts.Face.UI, ry + ROW_H / 2f), ink);
             float markX = x + width - PAD - 4 - 8;
             if (line.checked()) {
-                Draw.icon(g, Icon.CHECK, 8, markX, ry + (ROW_H - 8) / 2f, Theme.GOLD_400);
+                // Bone, as checks are on every surface (design.md §2: a screen's one gold is its main action).
+                Draw.icon(g, Icon.CHECK, 8, markX, ry + (ROW_H - 8) / 2f, Theme.BONE_100);
             } else if (line.row() != null && !line.back() && line.row().sub()) {
                 Draw.icon(g, Icon.NEXT, 8, markX, ry + (ROW_H - 8) / 2f, Theme.ASH_400);
             }
@@ -806,6 +969,37 @@ public final class PersonMenu {
                 Draw.popAlpha();
             }
             ry += ROW_H;
+        }
+    }
+
+    /**
+     * "Yeni kategori…"'s field (OVL-UX3): the typed name (its end kept in view) with a steady caret, or the quiet
+     * "Kategori adı" while it is empty; the gold ring while the keys are on it.
+     */
+    private void drawNameField(GuiGraphicsExtractor g, Font ui, float ry, boolean lit) {
+        float fx = x + PAD + 1;
+        float fw = width - PAD * 2 - 2;
+        Draw.frame(g, lit ? Frames.FIELD_FOCUS : Frames.FIELD, fx, ry, fw, ROW_H);
+        float tx = fx + 5;
+        float room = fw - 12;
+        float mid = Fonts.centeredY(Fonts.Face.UI, ry + ROW_H / 2f);
+        String typed = naming == null ? "" : naming.toString();
+        if (typed.isEmpty()) {
+            Draw.text(g, ui, Texts.visual(Texts.str("people.move.name")), tx, mid, Theme.ASH_500);
+            if (lit) {
+                Draw.fill(g, tx, ry + 3, tx + 1, ry + ROW_H - 3, Theme.BONE_100);
+            }
+            return;
+        }
+        // The end of a long name stays in view: its start goes first.
+        String shown = typed;
+        while (ui.width(shown) > room && shown.length() > 1) {
+            shown = shown.substring(shown.offsetByCodePoints(0, 1));
+        }
+        Draw.text(g, ui, Texts.visual(shown), tx, mid, Theme.BONE_50);
+        if (lit) {
+            float cx = tx + ui.width(shown) + 1;
+            Draw.fill(g, cx, ry + 3, cx + 1, ry + ROW_H - 3, Theme.BONE_100);
         }
     }
 
@@ -837,9 +1031,15 @@ public final class PersonMenu {
         float by = buttonsY();
         drawButton(g, cancelX(), by, cancelW, cancelLabel, Frames.BUTTON_SECONDARY, Frames.BUTTON_SECONDARY_HOVER,
             cancelHover.value(now), Theme.BONE_100, button == 0 && PanelInput.keyboardMode());
-        drawButton(g, confirmX(), by, confirmW, confirmLabel, Frames.BUTTON_DANGER, Frames.BUTTON_DANGER_HOVER,
-            confirmHover.value(now), Theme.mix(Theme.FLARE_300, Theme.BONE_50, confirmHover.value(now) * 0.35f),
-            button == 1 && PanelInput.keyboardMode());
+        if (asking == FriendMenu.Action.MAKE_FOUNDER) {
+            // Handing the lead on loses nothing (the launcher's primary button there).
+            drawButton(g, confirmX(), by, confirmW, confirmLabel, Frames.BUTTON_PRIMARY, Frames.BUTTON_PRIMARY_HOVER,
+                confirmHover.value(now), Theme.GOLD_INK, button == 1 && PanelInput.keyboardMode());
+        } else {
+            drawButton(g, confirmX(), by, confirmW, confirmLabel, Frames.BUTTON_DANGER, Frames.BUTTON_DANGER_HOVER,
+                confirmHover.value(now), Theme.mix(Theme.FLARE_300, Theme.BONE_50, confirmHover.value(now) * 0.35f),
+                button == 1 && PanelInput.keyboardMode());
+        }
     }
 
     private static void drawButton(GuiGraphicsExtractor g, float bx, float by, float bw, String label, Frames face,

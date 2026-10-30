@@ -113,10 +113,20 @@ public final class OverlayScreen extends Screen {
         public void chose(String friendId, FriendMenu.Action action, String choice) {
             onMenuChoice(friendId, action, choice);
         }
+
+        @Override
+        public void named(String friendId, String name) {
+            // "Yeni kategori…" (OVL-UX3): the launcher makes the category and moves them into it.
+            friends.setMenuFor(null);
+            clearChipMenu();
+            overlay.moveToNewCategory(friendId, name);
+        }
     });
     /** Whom the open menu is about, as the place that opened it named them (OVL-UX2: a crewmate is no friend). */
     private String menuName = "";
     private OverlayState.Badge menuBadge;
+    /** OVL-UX3: the player's rights in the crew chat the open menu came from, while it carries crew rows. */
+    private OverlayState.CrewRights menuCrew;
     /** The chip whose menu is open (OVL-UX2), or null. */
     private String menuChip;
     private final BadgeBubble identityBubble = new BadgeBubble();
@@ -577,7 +587,7 @@ public final class OverlayScreen extends Screen {
         if (f == null || anchor == null) {
             return;
         }
-        if (openPersonMenu(f.id(), f.name(), state.badge(f.badge()), anchor, keys, null)) {
+        if (openPersonMenu(f.id(), f.name(), state.badge(f.badge()), anchor, keys, null, null)) {
             friends.setMenuFor(f.id(), !anchor.pointer());
         }
     }
@@ -592,7 +602,7 @@ public final class OverlayScreen extends Screen {
         if (f == null || anchor == null) {
             return;
         }
-        if (openPersonMenu(f.id(), f.name(), state.badge(f.badge()), anchor, keys, conv)) {
+        if (openPersonMenu(f.id(), f.name(), state.badge(f.badge()), anchor, keys, conv, null)) {
             menuChip = conv;
             chips.setMenuFor(conv);
         }
@@ -609,23 +619,27 @@ public final class OverlayScreen extends Screen {
         }
         OverlayState.Friend f = state.friend(who);
         String shown = f != null ? f.name() : name;
+        // OVL-UX3: a sender in crew chat gets the crew rows the player's rights there allow.
         openPersonMenu(who, shown, state.badge(f != null ? f.badge() : badge), anchor, keys,
-            id == null ? conversation : null);
+            id == null ? conversation : null, id != null ? state.crewRightsIn(conversation) : null);
     }
 
     /**
      * Someone's menu (the launcher's person menu, FIX2-D): a friend's whole menu, or a crewmate's from crew chat
-     * ({@code conv}: the conversation it opened from, whose "Mesaj gönder" means nothing there). False when nothing
-     * could be offered.
+     * ({@code conv}: the conversation it opened from, whose "Mesaj gönder" means nothing there; {@code crew}: the
+     * player's rights in the crew chat it opened from, OVL-UX3). False when nothing could be offered.
      */
     private boolean openPersonMenu(String id, String name, OverlayState.Badge badge, PersonMenu.Anchor anchor,
-        boolean keys, String conv) {
+        boolean keys, String conv, OverlayState.CrewRights crew) {
         OverlayState.Friend f = state.friend(id);
-        FriendMenu.Input input = f != null ? menuInput(f, conv) : crewmateInput(id);
+        FriendMenu.Crew rows3 = crewRows(id, crew);
+        FriendMenu.Input input = f != null ? menuInput(f, conv, rows3) : crewmateInput(id, rows3);
         List<FriendMenu.Row> rows = FriendMenu.plan(input);
         if (rows.isEmpty()) {
             return false;
         }
+        menuCrew = rows3 == null ? null : crew;
+        menu.setLeadKeepsModerator(leadKeepsModerator(crew, id));
         long now = now();
         friends.dismissBubble();
         messages.dismissBubble();
@@ -641,7 +655,34 @@ public final class OverlayScreen extends Screen {
         return true;
     }
 
-    private FriendMenu.Input menuInput(OverlayState.Friend f, String conv) {
+    /**
+     * OVL-UX3: the crew rows for {@code id} in the crew whose chat the menu opened from ({@code rights}), the
+     * launcher's {@code PersonCrew}; null without rights there or when no row may be about them (the leader, the
+     * player, someone who left).
+     */
+    private static FriendMenu.Crew crewRows(String id, OverlayState.CrewRights rights) {
+        OverlayState.MateRights mate = rights == null ? null : rights.mates().get(id);
+        if (mate == null) {
+            return null;
+        }
+        return new FriendMenu.Crew(rights.roles(), rights.lead(), mate.moderator(), rights.modsFull(), mate.kick());
+    }
+
+    /**
+     * OVL-UX3: whether handing the lead on to {@code to} leaves the player a moderator (the launcher's
+     * {@code afterHandingOn}: the crew has roles and fewer than 4 others moderate), else a member.
+     */
+    private static boolean leadKeepsModerator(OverlayState.CrewRights rights, String to) {
+        if (rights == null || !rights.roles()) {
+            return false;
+        }
+        long others = rights.mates().entrySet().stream()
+            .filter(e -> e.getValue().moderator() && !e.getKey().equals(to))
+            .count();
+        return others < 4;
+    }
+
+    private FriendMenu.Input menuInput(OverlayState.Friend f, String conv, FriendMenu.Crew crew) {
         HostController host = overlay.host();
         OverlayState.HostView session = state.host();
         WorldInvites.Offer world = WorldInvites.offer(host.invitesToWorld(), session, host.requesting(),
@@ -650,26 +691,26 @@ public final class OverlayScreen extends Screen {
         boolean message = state.has("chat") && state.dm(f.id()) != null
             && !(conv != null && page == Page.CHATS && conv.equals(conversation));
         List<FriendMenu.Team> places = new ArrayList<>();
-        for (OverlayState.CrewTarget crew : state.inviteCrews()) {
-            places.add(teamPlace(f, crew));
+        for (OverlayState.CrewTarget target : state.inviteCrews()) {
+            places.add(teamPlace(f, target));
         }
         return new FriendMenu.Input(true, canJoin(f), state.has("people"), state.online(), state.has("invite"),
             state.inviteWaiting(f.id(), System.currentTimeMillis()), world, WorldInvites.guest(session, f.id()) != null,
             message, state.discord(f.id()), state.has("people2"), f.fav(), f.alert(), !state.groups().isEmpty(),
-            FriendMenu.best(places), places.size(), FriendMenu.AddFriend.HIDDEN);
+            FriendMenu.best(places), places.size(), FriendMenu.AddFriend.HIDDEN, crew);
     }
 
     /**
      * A crewmate who is not a friend, from crew chat (OVL-UX2): "Katıl" while they play on Projects (the launcher's
      * crewmate presence), "Discord'dan mesaj at", a friend request, a block, a report.
      */
-    private FriendMenu.Input crewmateInput(String id) {
+    private FriendMenu.Input crewmateInput(String id, FriendMenu.Crew crew) {
         FriendMenu.AddFriend add = !state.crewmatesAsk() ? FriendMenu.AddFriend.HIDDEN
             : state.askedBy(id) ? FriendMenu.AddFriend.RECEIVED
             : state.asking(id) ? FriendMenu.AddFriend.SENT : FriendMenu.AddFriend.READY;
         return new FriendMenu.Input(false, canJoinMate(id), state.has("people"), state.online(), false, false,
             WorldInvites.Offer.NONE, false, false, state.mateDiscord(id), state.has("people2"), false, false, false,
-            FriendMenu.Team.NONE, 0, add);
+            FriendMenu.Team.NONE, 0, add, crew);
     }
 
     /** A crewmate on Projects can be joined from a game that is not there yet (Q15). */
@@ -702,6 +743,11 @@ public final class OverlayScreen extends Screen {
                 out.add(new PersonMenu.Choice(group.id(), group.name(), false, group.id().equals(f.group())));
             }
             out.add(new PersonMenu.Choice("", Texts.str("people.move.rest"), false, f.group() == null));
+            if (state.has("people3")) {
+                // "Yeni kategori…" last, after a hairline; soft at the service's 20 categories (OVL-UX3).
+                out.add(new PersonMenu.Choice(PersonMenu.NEW_CHOICE, Texts.str("people.move.new"),
+                    state.groups().size() >= 20, false));
+            }
         } else if (action == FriendMenu.Action.CREW_INVITE) {
             for (OverlayState.CrewTarget crew : state.inviteCrews()) {
                 FriendMenu.Team place = teamPlace(f, crew);
@@ -757,6 +803,23 @@ public final class OverlayScreen extends Screen {
             }
             case MOVE -> {
                 // Only from its list (onMenuChoice).
+            }
+            // OVL-UX3: the crew rows of the crew chat the menu opened from (the questions were asked already).
+            case MAKE_MODERATOR, UNMAKE_MODERATOR -> {
+                if (menuCrew != null) {
+                    overlay.crewModerator(menuCrew.crew(), friendId, menuName,
+                        action == FriendMenu.Action.MAKE_MODERATOR);
+                }
+            }
+            case MAKE_FOUNDER -> {
+                if (menuCrew != null) {
+                    overlay.crewLead(menuCrew.crew(), friendId, menuName);
+                }
+            }
+            case REMOVE_MEMBER -> {
+                if (menuCrew != null) {
+                    overlay.crewRemove(menuCrew.crew(), friendId, menuName);
+                }
             }
             case REMOVE_FROM_WORLD -> removeFromWorld(friendId);
             case UNFRIEND -> overlay.unfriend(friendId);
@@ -1000,6 +1063,16 @@ public final class OverlayScreen extends Screen {
         boolean chosen = menu.choose(choice, width, height, now());
         syncMenu();
         return chosen;
+    }
+
+    /** Types into the open menu's "Yeni kategori…" field as the keys would (OVL-UX3; the scenario driver). */
+    public boolean typeMenu(String name) {
+        return menu.typeForDriver(name);
+    }
+
+    /** Whether the open menu shows "Yeni kategori…"'s field (OVL-UX3; the scenario driver checks it). */
+    public boolean menuNaming() {
+        return menu.naming();
     }
 
     /** A friend's chip menu as a right click on it (or, {@code keys}, Shift+F10) would open it (the scenario driver). */
@@ -1642,7 +1715,8 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        boolean typing = field.isFocused() && field.visible;
+        // A name typed into the menu's "Yeni kategori…" field types too (OVL-UX3).
+        boolean typing = field.isFocused() && field.visible || menu.naming();
         if (overlay.key().closes(event, typing)) {
             close();
             return true;
@@ -1705,7 +1779,8 @@ public final class OverlayScreen extends Screen {
     @Override
     public boolean charTyped(CharacterEvent event) {
         if (menu.isOpen()) {
-            // Nothing types under an open menu.
+            // Nothing types under an open menu; "Yeni kategori…"'s field in it does (OVL-UX3).
+            menu.charTyped(event.codepoint());
             return true;
         }
         boolean handled = super.charTyped(event);

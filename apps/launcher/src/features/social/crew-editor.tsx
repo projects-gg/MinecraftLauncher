@@ -4,7 +4,8 @@
 // groups (arrows, Home/End; Tab leaves); the chosen tile wears a bone ring that fades in, a press
 // squeezes to 94 %. The preview's mark cross-fades in place when the look changes (one fade for
 // "Rastgele"). A service without looks gets today's editor: name, tag and the first 20 emblems.
-// The crew colour only fills the mark and tints the tag; gold stays the interface's accent.
+// The crew colour shows on the preview alone: the frame and emblem tiles are shapes in bone (chosen)
+// and ash, so an amber crew never reads as a second gold beside "Ekip kur" (TASTE-SWEEP SMALLS-L r2).
 import { DiceFive } from "@phosphor-icons/react";
 import { Button, cn, Tooltip } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -26,7 +27,9 @@ import {
   crewColor,
   crewFrame,
   type Emblem,
+  edgeWidth,
   emblemsFor,
+  FRAME_SHAPES,
   FRAMES,
   isEmblem,
   shuffleLook,
@@ -141,15 +144,33 @@ function ColorPicker({ value, onChange }: { value: CrewColor; onChange: (c: Crew
   );
 }
 
-function FramePicker({
-  value,
-  look,
-  onChange,
-}: {
-  value: CrewFrame;
-  look: Pick<CrewLook, "emblem" | "color">;
-  onChange: (f: CrewFrame) => void;
-}) {
+/** A frame's shape alone, in its tile's text colour (bone when chosen, ash otherwise). */
+function FrameShape({ frame, chosen }: { frame: CrewFrame; chosen: boolean }) {
+  const size = 30;
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 40 40"
+      width={size}
+      height={size}
+      className={cn(
+        "shrink-0 transition-colors duration-150",
+        chosen ? "text-bone-50" : "text-ash-300",
+      )}
+    >
+      <path
+        d={FRAME_SHAPES[frame].path}
+        fill="currentColor"
+        fillOpacity={0.1}
+        stroke="currentColor"
+        strokeWidth={edgeWidth(size)}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FramePicker({ value, onChange }: { value: CrewFrame; onChange: (f: CrewFrame) => void }) {
   const { t } = useTranslation();
   const group = useRef<HTMLDivElement>(null);
   const onKey = useRadioKeys(FRAMES, FRAMES.length, onChange, group);
@@ -180,7 +201,7 @@ function FramePicker({
             )}
           >
             <ChosenRing on={chosen} className="rounded-[9px]" />
-            <CrewMark look={{ ...look, frame }} size={30} />
+            <FrameShape frame={frame} chosen={chosen} />
             <span
               className={cn(
                 "text-[12px] transition-colors duration-150",
@@ -196,23 +217,20 @@ function FramePicker({
   );
 }
 
+/** The emblems as shapes: the chosen one bone on the quiet plate, the others ash on obsidian. */
 function EmblemPicker({
   value,
   emblems,
-  color,
   onChange,
 }: {
   value: Emblem;
   emblems: readonly Emblem[];
-  /** The crew colour: the chosen emblem wears it, the others stay quiet ash on obsidian. */
-  color: CrewColor;
   onChange: (emblem: Emblem) => void;
 }) {
   const { t } = useTranslation();
   const group = useRef<HTMLDivElement>(null);
   const columns = 9;
   const onKey = useRadioKeys(emblems, columns, onChange, group);
-  const tone = CREW_COLORS[color];
   return (
     <div
       ref={group}
@@ -238,18 +256,19 @@ function EmblemPicker({
             className={cn(
               tileClass,
               "aspect-square rounded-md",
-              !chosen && "bg-obsidian-950/70 ring-1 ring-white/7 hover:bg-obsidian-800",
+              chosen
+                ? "bg-white/[0.06]"
+                : "bg-obsidian-950/70 ring-1 ring-white/7 hover:bg-obsidian-800",
             )}
-            style={
-              chosen ? { background: tone.fill, boxShadow: `inset 0 0 0 1.5px ${tone.edge}` } : {}
-            }
           >
             <ChosenRing on={chosen} className="rounded-[9px]" />
             <Glyph
               size={19}
               weight="fill"
-              color={chosen ? tone.glyph : "var(--color-ash-300)"}
-              className="transition-colors duration-150"
+              className={cn(
+                "transition-colors duration-150",
+                chosen ? "text-bone-50" : "text-ash-300",
+              )}
             />
           </button>
         );
@@ -533,14 +552,13 @@ export function CrewEditor({
           </div>
           <div>
             <Label>{t("teams.look.frame")}</Label>
-            <FramePicker value={draft.frame} look={draft} onChange={(frame) => set({ frame })} />
+            <FramePicker value={draft.frame} onChange={(frame) => set({ frame })} />
           </div>
           <div>
             <Label>{t("teams.create.emblem")}</Label>
             <EmblemPicker
               value={draft.emblem}
               emblems={emblems}
-              color={draft.color}
               onChange={(emblem) => set({ emblem })}
             />
           </div>
@@ -551,7 +569,6 @@ export function CrewEditor({
           <EmblemPicker
             value={emblems.includes(draft.emblem) ? draft.emblem : "shield"}
             emblems={emblems}
-            color="gold"
             onChange={(emblem) => set({ emblem })}
           />
         </div>
