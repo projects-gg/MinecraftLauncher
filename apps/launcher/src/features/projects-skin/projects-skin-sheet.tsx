@@ -647,13 +647,11 @@ function ProjectsSkinSheetPanel({
                       <Dialog.Title className="truncate font-display text-[18px] font-semibold text-bone-50">
                         {t("skins.title")}
                       </Dialog.Title>
-                      <p className="truncate text-[12.5px] text-ash-400">
-                        <span className="text-ash-300" data-selectable>
-                          {account.username}
-                        </span>
-                        <span aria-hidden className="px-1.5 text-ash-500">
-                          ·
-                        </span>
+                      {/* Two lines, not a middot chain (design.md; TASTE-SWEEP SMALLS-L). */}
+                      <p className="truncate text-[12.5px] text-ash-300" data-selectable>
+                        {account.username}
+                      </p>
+                      <p className="truncate text-[12px] text-ash-400">
                         {t("projectsSkin.subtitle")}
                       </p>
                     </div>

@@ -12,8 +12,24 @@ def targets = [
 ]
 def mc = providers.gradleProperty('mc').getOrElse(project.default_mc)
 def target = targets[mc]
+// CI's try of a Minecraft version without a row here (OVL-AUTO, .github/workflows/overlay-auto.yml): an existing
+// compatibility source set and the Fabric API to build against, -Pmc=26.4 -Povl.compat=mc26_3
+// -Povl.fabricApi=0.170.0+26.4 (the range defaults to ~<version>, else -Povl.range=).
+if (target == null && providers.gradleProperty('ovl.compat').isPresent()) {
+    def fabricApi = providers.gradleProperty('ovl.fabricApi').getOrNull()
+    if (fabricApi == null) {
+        throw new GradleException("A try of Minecraft '${mc}' needs -Povl.fabricApi= beside -Povl.compat=")
+    }
+    target = [
+        minecraft: mc,
+        fabricApi: fabricApi,
+        range    : providers.gradleProperty('ovl.range').getOrElse('~' + mc),
+        compat   : providers.gradleProperty('ovl.compat').get(),
+    ]
+}
 if (target == null) {
-    throw new GradleException("Unknown Minecraft version '${mc}' (-Pmc=): one of ${targets.keySet()}")
+    throw new GradleException(
+        "Unknown Minecraft version '${mc}' (-Pmc=): one of ${targets.keySet()}, or a try with -Povl.compat= and -Povl.fabricApi=")
 }
 
 version = "${project.mod_version}+${target.minecraft}"
@@ -53,10 +69,42 @@ dependencies {
     minecraft "com.mojang:minecraft:${target.minecraft}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${target.fabricApi}"
+    // The client game test's game (OVL-AUTO): Fabric API beside the built jar, as players have it.
+    productionRuntimeMods "net.fabricmc.fabric-api:fabric-api:${target.fabricApi}"
 
     testImplementation platform("org.junit:junit-bom:${project.junit_version}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// The client game test (OVL-AUTO): one smoke test (src/gametest) that Fabric's client game test API runs in a real
+// game: the mod loads, the pause menu, its panel key and the chat's emoji picker work. Its own small mod, never in the
+// jar players get. CI runs it against that jar (runProductionClientGameTest below) before Studio may publish the jar.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = 'projects_overlay_gametest'
+        enableGameTests = false
+        enableClientGameTests = true
+    }
+}
+
+def gametestJar = tasks.register('gametestJar', Jar) {
+    archiveClassifier = 'gametest'
+    from sourceSets.gametest.output
+}
+
+// The game test against the built jar, as players get it: Fabric's production launcher with the mod's jar, the test's
+// and Fabric API (under xvfb on CI). The launcher's bridge properties start the overlay as the launcher does; nothing
+// listens on the port, so it runs as it does while the launcher is away. Screenshots land in its run folder.
+tasks.register('runProductionClientGameTest', net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+    mods.from(gametestJar)
+    jvmArgs.add('-Dfabric.client.gametest')
+    // Fabric's advice for game tests on GitHub's runners (an error in the network synchronizer).
+    jvmArgs.add('-Dfabric.client.gametest.disableNetworkSynchronizer=true')
+    jvmArgs.add('-Dprojects.overlay.port=47652')
+    jvmArgs.add('-Dprojects.overlay.token=gametest-gametest-gametest-gametest')
+    runDir = layout.buildDirectory.dir('run/productionClientGameTest').get().asFile
 }
 
 loom {

@@ -23,7 +23,7 @@ v1/itemart/items.<sha256>.json     ItemArt (the Projects server's own item looks
 v1/itemart/atlas-<size>.<sha256>.png   item art icon atlases
 v1/itemart/glyph.<sha256>.png      item art menu glyph pictures
 v1/emojis/chat.<sha256>.json       ChatEmojis (the Projects server's chat emojis, optional)
-v1/files/<sha1>                    files we host for packs (own mods, configs)
+v1/files/<sha1>                    files we host for packs (own mods, configs) and the in-game overlay's jars
 v1/afk/<version>/<platform>.zip    AFK client builds
 v1/releases/<channel>.json         launcher update channel (stable, beta)
 v1/releases/<version>/…            installers / updater bundles and their .sig files
@@ -160,6 +160,10 @@ the launcher config: see [News feed (Discord bot)](#news-feed-discord-bot).
 - `modSets` (optional `DocRef`): the ready-made mod sets, see [Mod sets](#mod-sets). Absent
   when the team publishes none. Clients download it when they first need it (the "Hazır set"
   choices), not with every refresh, and keep it in the document cache.
+- `overlay` (optional): the in-game overlay's jars for Minecraft versions launchers do not ship,
+  see [In-game overlay jars](#in-game-overlay-jars). Read only while `features.overlayJars` is on;
+  a jar that breaks a rule is left out on its own and never refuses the index. Absent while the
+  team publishes none.
 
 <!-- example: SignatureFile -->
 ```json
@@ -377,7 +381,7 @@ cache file extension.
 
 Every field is optional (`{}` is a valid config). Defaults: no maintenance, no banners, bundled
 hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`,
-`teams`, `chat`, `skins`, `worlds` and `subServers` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
+`teams`, `chat`, `skins`, `worlds`, `subServers` and `overlayJars` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
 news feed, the launcher's built-in recommended Minecraft version.
 
 - `banners[].level`: `info | warning | event | critical`; a banner is shown while
@@ -489,6 +493,12 @@ news feed, the launcher's built-in recommended Minecraft version.
   sync installed. Turn it on only after the FASTPACK measurement passed and the pack's family
   members list the item. Writers omit it while it is `false`; launchers that do not know the field
   ignore it. Publishing it needs a Studio of `aa95309` or later (STUDIO3).
+- `features.overlayJars`: the in-game overlay's jars from the index (OVL-AUTO,
+  [In-game overlay jars](#in-game-overlay-jars)) for the Minecraft versions a launcher's own jars
+  leave out. Off by default; while it is `false` (or missing) launchers never read `overlay` and
+  fetch no jar. Studio may publish jars first and turn this on after. Writers omit it while it is
+  `false`; launchers that do not know the field or `overlay` ignore them. Publishing either needs a
+  Studio of `aa95309` or later (STUDIO3).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte
@@ -1868,6 +1878,128 @@ has no word from the launcher.
 - Studios older than STUDIO3 (`aa95309`) drop the index's `chatEmojis` when they publish: every
   Studio that publishes must be at that version or later before the list goes out.
 
+## In-game overlay jars
+
+Every launcher release ships the in-game overlay's mod (`mods/projects-overlay`, GPL-3.0-only),
+one jar per Minecraft version it was built for. For a version those jars do not cover, the open
+repository's CI (`.github/workflows/overlay-auto.yml`) builds the mod with its last compatibility
+class and runs its JUnit tests and a client game test against the built jar; a green run leaves the
+jar and an [`overlay-release.json`](#overlay-releasejson) as workflow artifacts. Studio imports
+them, checks the jar itself and publishes it here (OVL-AUTO, 29 Oct 2026). CI holds no keys and
+publishes nothing: the signed index is the only thing that makes a jar trusted.
+
+The index lists them as `overlay`:
+
+<!-- example: OverlayRelease -->
+```json
+{
+  "jars": [
+    {
+      "minecraft": "26.4",
+      "range": "~26.4",
+      "version": "0.1.0+26.4",
+      "proto": 1,
+      "file": {
+        "path": "files/93f9426998f56140c284961bb1bc7781cb4db225",
+        "sha256": "b61b8bf1526ca4fe0c67f80d3e7e10bac81e0f97d87e84e5c4d2980b620ae2b8",
+        "sha1": "93f9426998f56140c284961bb1bc7781cb4db225",
+        "size": 953397
+      },
+      "fabricApi": "0.170.0+26.4",
+      "commit": "6b892a6a228d36d16b41e7c61b69fe8c0aa6749b",
+      "run": "https://github.com/projects-gg/MinecraftLauncher/actions/runs/18877003214",
+      "testedAt": "2026-11-02T10:00:00Z"
+    }
+  ]
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `minecraft` | The Minecraft version CI built and tested the jar for: a Mojang version id (1–32 bytes without whitespace or control characters). |
+| `range` | The versions the jar accepts in Fabric's syntax, as its own `fabric.mod.json` says (`depends.minecraft`): 1–64 bytes, no spaces around it, no control characters. It must accept `minecraft`. Patch versions follow it as for the launcher's own jars (`~26.4` takes 26.4.1). |
+| `version` | The mod's version: 1–64 bytes of `[A-Za-z0-9.+_-]`, not starting with `.`. The jar goes into `mods/` as `projects-overlay-<version>.jar`. |
+| `proto` | The bridge protocol the jar speaks, an integer from 1: its `fabric.mod.json`'s `custom."projects:bridge".proto` (1 today). |
+| `file` | A `FileRef` with `sha256`, `sha1` (required here) and `size` (1 byte to 32 MiB); Studio uploads the jar to `files/<sha1>`. |
+| `fabricApi`, `commit`, `run`, `testedAt` | Optional, for Studio and the record: the Fabric API version the jar was built and tested with, the open repository's commit it was built from (its GPL source), the CI run Studio took it from, when CI's tests passed. Launchers do not read them. |
+
+Rules:
+
+1. Launchers read `overlay` only while `features.overlayJars` is on. While it is off (the default)
+   they fetch no jar from it, so Studio can publish a jar first and turn the flag on after.
+2. At most 32 jars; launchers read the first 32. A jar that breaks a rule of the table, or whose
+   `minecraft` and `proto` an earlier jar has, is left out on its own: it never refuses the index
+   or the other jars. Studio refuses to publish such a list.
+3. A launcher uses only jars whose `proto` is its own bridge protocol, and only for the Minecraft
+   versions its own jars leave out: the jar it ships wins for every version it covers, so a bad
+   publish can only touch versions without one. Among the published jars whose `range` accepts an
+   instance's version and whose `range` the launcher can read, the one with the highest `minecraft`
+   not above that version is used.
+4. A jar is fetched only when a game start needs it (a Fabric instance on a version only it covers,
+   with the overlay or the chat's emoji picker on), from the mirrors in order, and kept in the
+   content cache. Before every use the launcher checks the whole file against the entry, its size,
+   SHA-256 and SHA-1: a copy that does not match is fetched again, and an entry whose hashes do not
+   all match the file is never used. Nothing but the signed index vouches for a jar (not the CI
+   report, not a mirror).
+5. When a jar cannot be fetched or checked, the game starts without the overlay and the next start
+   tries again. Taking a jar out of the list makes launchers remove the copies they put in game
+   folders at the next start, as they do with their own jars.
+6. Studios older than STUDIO3 (`aa95309`) drop `overlay` and `features.overlayJars` when they
+   publish: every Studio that publishes must be at that version or later (on 29 Oct 2026 the only
+   publishing Studio is beta.1.12 or later, which is).
+
+### overlay-release.json
+
+What CI writes beside the jars of a green run (`scripts/release/overlay-auto.mjs report`) and
+Studio imports; it is never published as it is:
+
+<!-- example: OverlayCiRelease -->
+```json
+{
+  "schema": 1,
+  "modId": "projects_overlay",
+  "commit": "6b892a6a228d36d16b41e7c61b69fe8c0aa6749b",
+  "run": "https://github.com/projects-gg/MinecraftLauncher/actions/runs/18877003214",
+  "testedAt": "2026-11-02T10:00:00Z",
+  "jars": [
+    {
+      "minecraft": "26.4",
+      "range": "~26.4",
+      "version": "0.1.0+26.4",
+      "proto": 1,
+      "file": "projects-overlay-0.1.0+26.4.jar",
+      "sha1": "93f9426998f56140c284961bb1bc7781cb4db225",
+      "sha256": "b61b8bf1526ca4fe0c67f80d3e7e10bac81e0f97d87e84e5c4d2980b620ae2b8",
+      "size": 953397,
+      "fabricApi": "0.170.0+26.4",
+      "loader": "0.19.5",
+      "compat": "mc26_3",
+      "tests": {
+        "junit": { "passed": 412, "failed": 0, "skipped": 0 },
+        "gametest": { "passed": 1, "failed": 0, "skipped": 0 }
+      }
+    }
+  ]
+}
+```
+
+Where a jar comes from matters as much as what it is: Studio never takes a file the owner picks.
+It fetches the artifact itself, with the owner's GitHub connection, from a run of
+`.github/workflows/overlay-auto.yml` in `projects-gg/MinecraftLauncher` (not a fork) that finished
+with `conclusion: success` on `head_branch` `v2`, started by `push`, `schedule` or
+`workflow_dispatch`; the artifact must belong to that run and the report's `commit` must be the
+run's `head_sha`. CI uploads artifacts only when it runs on `refs/heads/v2`; anywhere else it is a
+dry run.
+
+Studio imports a jar only when, besides, the report has `schema` 1 and `modId` `projects_overlay`,
+both test suites ran something and nothing failed, and the jar itself agrees: the file named `file`
+lies beside the report in the artifact with that size, SHA-1 and SHA-256; its own `fabric.mod.json`
+has the id `projects_overlay`, this `version`, `depends.minecraft` equal to `range` (which accepts
+`minecraft`) and `custom."projects:bridge".proto` equal to `proto`; it carries the GPL text
+(`LICENSE_projects-overlay`) and no test code (`gg/projects/overlay/dev/`,
+`gg/projects/overlay/gametest/`). The report's word is never enough on its own: Studio reads the
+protocol and the range from the jar. The index entry records the run (`run`).
+
 ## Launcher release channels
 
 `releases/<channel>.json` is Tauri's static updater JSON plus fields Tauri ignores:
@@ -1930,8 +2062,8 @@ primary is down.
 
 ## Publish order
 
-1. Upload new immutable files: media, item art pictures (`itemart/*.png`), `files/<sha1>`, AFK
-   builds, release bundles.
+1. Upload new immutable files: media, item art pictures (`itemart/*.png`), `files/<sha1>` (the
+   overlay's jars too), AFK builds, release bundles.
 2. Upload the documents: `config/…`, `news/…`, `packs/<id>/<version>.json`, `modsets/…`,
    `itemart/items.…`, `emojis/chat.…`.
 3. Check that every new object is readable with the expected size and hash.
@@ -1950,12 +2082,13 @@ The launcher keeps the last verified snapshot in `<data>/cache/content/`:
 current.json            exact index.json text + signature, ETags per mirror, fetch time
 docs/<sha256>.json      config, news, pack manifests (verified on every read)
 media/<sha256>.<ext>    media (verified on download, then trusted by size)
+overlay/<sha256>.jar    the in-game overlay's jars (fetched when a start needs one, verified in full on every use)
 ```
 
 Start-up shows the cached snapshot immediately, then refreshes (short timeout). If every mirror
 fails, the cached snapshot stays in use with an offline flag; content is never shown unless its
-signature verifies against a trusted key. After a refresh that brings a new index, documents and
-media referenced by neither the current nor the previous snapshot are deleted.
+signature verifies against a trusted key. After a refresh that brings a new index, documents,
+media and overlay jars referenced by neither the current nor the previous snapshot are deleted.
 
 The news feed has its own cache in `<data>/cache/feed/`, refreshed right after the content index
 (no polling of its own) and deleted when the config disables the feed:

@@ -482,7 +482,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 }
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
-/// `skins`, `worlds`, `fastPacks` and `subServers`, which stay off until Studio turns them on.
+/// `skins`, `worlds`, `fastPacks`, `subServers` and `overlayJars`, which stay off until Studio turns
+/// them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -525,6 +526,11 @@ pub struct Features {
     /// live; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub sub_servers: bool,
+    /// The in-game overlay's jars from the signed content (OVL-AUTO, `RootIndex.overlay`) for the
+    /// Minecraft versions the launcher's own jars leave out. Off by default: launchers do not read
+    /// `overlay` until it is on; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub overlay_jars: bool,
 }
 
 impl Default for Features {
@@ -541,6 +547,7 @@ impl Default for Features {
             worlds: false,
             fast_packs: false,
             sub_servers: false,
+            overlay_jars: false,
         }
     }
 }

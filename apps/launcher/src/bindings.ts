@@ -6548,8 +6548,9 @@ export type OverlayStateView = {
 	/**  The mod in the running game is connected now. */
 	connected: boolean,
 	/**
-	 *  The Minecraft versions this build ships the mod for (`26.1.2`, `26.2`, …): a Fabric
-	 *  instance on one of them gets it. Empty in a build without the jars.
+	 *  The Minecraft versions the launcher has the mod for (`26.1.2`, `26.2`, …): the ones this
+	 *  build ships, then those the signed content adds (OVL-AUTO). A Fabric instance on one of
+	 *  them gets it. Empty in a build without the jars and without the content's.
 	 */
 	versions: string[],
 };

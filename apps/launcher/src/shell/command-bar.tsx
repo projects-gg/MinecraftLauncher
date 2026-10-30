@@ -28,7 +28,7 @@ import { RoutePicker } from "@/features/autojoin/route-picker";
 import { useRoute } from "@/features/autojoin/use-route";
 import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
 import { useFastPackSync } from "@/features/fastpack/use-fast-pack-sync";
-import { helpsWithLaunchError } from "@/features/help/launch";
+import { helpsWithLaunchError, helpToastLine } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { useOfficialOffer } from "@/features/library/official";
@@ -750,7 +750,8 @@ export function CommandBar() {
         message: phase.message,
         details: phase.details,
       });
-      toast.error(phase.message, {
+      // The line without its "Tekrar dene.": the toast's button is "Sorunu bul".
+      toast.error(helpToastLine(phase.message), {
         id: "launch-help",
         duration: 10_000,
         action: { label: t("help.find"), onClick: openHelp },

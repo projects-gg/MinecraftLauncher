@@ -217,6 +217,20 @@ mod doc_examples {
                     let emojis: ChatEmojis = serde_json::from_str(json).unwrap();
                     emojis.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
                 }
+                "OverlayRelease" => {
+                    check::<OverlayRelease>(name, json);
+                    let overlay: OverlayRelease = serde_json::from_str(json).unwrap();
+                    assert!(
+                        overlay.problems().is_empty(),
+                        "{name}: {:?}",
+                        overlay.problems()
+                    );
+                }
+                "OverlayCiRelease" => {
+                    check::<OverlayCiRelease>(name, json);
+                    let report: OverlayCiRelease = serde_json::from_str(json).unwrap();
+                    assert!(report.jars.iter().all(|jar| jar.tests.passed()), "{name}");
+                }
                 "ModSetStates" => check::<ModSetStates>(name, json),
                 "PackState" => check::<PackState>(name, json),
                 "MediaRef" => check::<MediaRef>(name, json),

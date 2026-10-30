@@ -10,12 +10,13 @@ import { Button, IconButton, toast } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import { pressJoin } from "@/features/host/actions";
 import type { WorldInvite } from "@/lib/api/host-types";
-import type { SocialInvite } from "@/lib/api/social-types";
+import type { SocialInvite, TeamInvite } from "@/lib/api/social-types";
 import { canJoinInvite, joinInvite } from "./join-dialog";
 import { isJoinable } from "./model";
 import { MarkedSentence } from "./person-mark";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
+import { CrewMark } from "./team-emblem";
 
 function InviteToast({ toastId, invite }: { toastId: string | number; invite: SocialInvite }) {
   const { t } = useTranslation();
@@ -122,6 +123,63 @@ function WorldInviteToast({ toastId, invite }: { toastId: string | number; invit
 export function showWorldInviteToast(invite: WorldInvite) {
   toast.custom((id) => <WorldInviteToast toastId={id} invite={invite} />, {
     id: `world:${invite.session}`,
+    duration: 12_000,
+    classNames: { content: "min-w-0 flex-1", title: "w-full" },
+  });
+}
+
+/**
+ * A crew invite, live: who invites, with the crew's mark on the face's corner as on a call's toast,
+ * and "Daveti gör", which opens the list where the invite waits (its answers are there). Quiet, not
+ * gold: the toast sits right above OYNA.
+ */
+function TeamInviteToast({ toastId, invite }: { toastId: string | number; invite: TeamInvite }) {
+  const { t } = useTranslation();
+  const from = invite.from;
+  // The button under the sentence: beside it, a crew's name squeezed the sentence to three lines.
+  return (
+    <div className="flex w-full items-start gap-3 font-normal">
+      <span className="relative flex shrink-0">
+        <SocialAvatar source={from} size={40} />
+        <span className="absolute -right-1.5 -bottom-1.5">
+          <CrewMark look={invite} size={22} />
+        </span>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13.5px] leading-snug font-semibold text-bone-50">
+          <MarkedSentence
+            text={(who) => t("teams.notices.invite", { name: who, team: invite.name })}
+            name={from.name}
+            mark={from.mark}
+          />
+        </p>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mt-2"
+          onClick={() => {
+            toast.dismiss(toastId);
+            useSocialUi.getState().openPanel({ page: "list" });
+          }}
+        >
+          {t("teams.notices.seeInvite")}
+        </Button>
+      </div>
+      <IconButton
+        label={t("social.actions.dismiss")}
+        icon={<X size={15} />}
+        size="sm"
+        className="-mr-1"
+        onClick={() => toast.dismiss(toastId)}
+      />
+    </div>
+  );
+}
+
+/** A crew invite, live (the list shows it in place when it is open). */
+export function showTeamInviteToast(invite: TeamInvite) {
+  toast.custom((id) => <TeamInviteToast toastId={id} invite={invite} />, {
+    id: `team-invite:${invite.teamId}`,
     duration: 12_000,
     classNames: { content: "min-w-0 flex-1", title: "w-full" },
   });

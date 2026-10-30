@@ -1,6 +1,7 @@
 //! The in-game overlay (OVL2, OVL-B): the player's choices, kept in the data folder so the starts
-//! before the page asks follow them too; the mod's jars, shipped with the launcher; one bridge per
-//! game start; what the page hears.
+//! before the page asks follow them too; the mod's jars, shipped with the launcher, and for the
+//! Minecraft versions those leave out the signed content's (OVL-AUTO, fetched when a start needs
+//! one); one bridge per game start; what the page hears.
 //!
 //! The logic lives in `pl_overlay` (tested there): this module wires it to the app. Right before a
 //! game starts, the instance gets the jar for its Minecraft version while "Oyun içi katman" or
@@ -14,15 +15,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use pl_content::{LauncherItems, RootIndex};
+use pl_content::{ContentSnapshot, LauncherItems, RootIndex};
 use pl_mc::addons::{AddonInstallOptions, Addons};
 use pl_mc::gamefiles::ImportKind;
 use pl_mc::instance::Instance;
 use pl_mc::loaders::LoaderKind;
 use pl_mc::modrinth::ModrinthResolveTarget;
 use pl_net::CancellationToken;
-use pl_overlay::install::{BUNDLE_DIR, Bundle, Outcome, Request};
-use pl_overlay::protocol::ByeReason;
+use pl_overlay::install::{BUNDLE_DIR, Bundle, ContentJar, Jars, Outcome, Pick, Request};
+use pl_overlay::protocol::{ByeReason, PROTO};
 use pl_overlay::{ConnectOutcome, Endpoint, Overlay, OverlayConfig};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -48,6 +49,9 @@ const FABRIC_API_WAIT: Duration = Duration::from_secs(30);
 /// How long a start waits for the chat emoji list of a newer content index (CHAT-EMOJI): past it,
 /// the game starts with the list the launcher has, and the newer one follows into the game.
 const EMOJI_WAIT: Duration = Duration::from_secs(3);
+/// How long a start waits for the signed content's overlay jar (OVL-AUTO, ~1 MB): past it, the
+/// game starts without the overlay this time.
+const JAR_WAIT: Duration = Duration::from_secs(20);
 
 /// Whether the mod is wanted ("Oyun içi katman" or "Sohbette emoji seçici"), for the code that
 /// plans pack syncs far from the app state (the mod center, repairs, version switches, background
@@ -61,8 +65,19 @@ static EMOJI_INDEX: Mutex<Option<RootIndex>> = Mutex::new(None);
 /// The jars this build ships, read once at the start ([`load_bundle`]).
 static BUNDLE: OnceLock<Option<Bundle>> = OnceLock::new();
 
+/// OVL-AUTO: the signed content's jars this launcher may use, from the newest applied index while
+/// its `features.overlayJars` is on (else none): they cover the versions the shipped ones leave out.
+static CONTENT_JARS: Mutex<Vec<ContentJar>> = Mutex::new(Vec::new());
+
 fn bundle() -> Option<&'static Bundle> {
     BUNDLE.get().and_then(Option::as_ref)
+}
+
+fn content_jars() -> Vec<ContentJar> {
+    CONTENT_JARS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }
 
 /// The overlay with the choices saved in `root` (or the defaults). Status changes reach the page.
@@ -171,12 +186,18 @@ fn debug_jars_dir() -> Option<PathBuf> {
 }
 
 /// The overlay's part of the launcher settings that own pack items (every pack sync takes them
-/// through `crate::fastpack::pack_items`): with jars of its own the launcher never installs the
-/// pack's overlay item and keeps the pack's Fabric API for its jar.
+/// through `crate::fastpack::pack_items`): with jars of its own (shipped or from the signed
+/// content) the launcher never installs the pack's overlay item and keeps the pack's Fabric API
+/// for its jar.
 pub fn pack_items() -> LauncherItems {
+    let content = content_jars();
     LauncherItems {
         overlay: ENABLED.load(Ordering::Relaxed),
-        overlay_bundled: bundle().is_some(),
+        overlay_bundled: Jars {
+            bundle: bundle(),
+            content: &content,
+        }
+        .any(),
         ..LauncherItems::default()
     }
 }
@@ -226,10 +247,25 @@ pub fn set_emoji(app: &AppHandle, emoji: bool) {
     apply(&state, config);
 }
 
-/// CHAT-EMOJI: a content index was applied (a refresh, the cache at the start): its chat emojis go
-/// to the overlay with the next [`sync_emojis`].
-pub fn content_applied(index: &RootIndex) {
-    *EMOJI_INDEX.lock().unwrap_or_else(|e| e.into_inner()) = Some(index.clone());
+/// A content snapshot was applied (a refresh, the cache at the start): its chat emojis go to the
+/// overlay with the next [`sync_emojis`] (CHAT-EMOJI), and its overlay jars count from the next
+/// start on while `features.overlayJars` is on (OVL-AUTO).
+pub fn content_applied(snapshot: &ContentSnapshot) {
+    *EMOJI_INDEX.lock().unwrap_or_else(|e| e.into_inner()) = Some(snapshot.index.clone());
+    let jars = match &snapshot.index.overlay {
+        Some(release) if snapshot.config.features.overlay_jars => {
+            ContentJar::usable(release, PROTO)
+        }
+        _ => Vec::new(),
+    };
+    let mut current = CONTENT_JARS.lock().unwrap_or_else(|e| e.into_inner());
+    if *current != jars {
+        tracing::info!(
+            versions = ?jars.iter().map(|jar| jar.minecraft.as_str()).collect::<Vec<_>>(),
+            "in-game overlay jars from the content"
+        );
+        *current = jars;
+    }
 }
 
 /// The chat emojis of the newest applied index into the overlay (Studio's list, else the built-in
@@ -304,7 +340,10 @@ pub struct PreparedMod {
     /// gets a bridge.
     pub present: bool,
     /// It is this launcher's own jar, so it knows everything this launcher passes (OVL-FIX: the
-    /// "Devam et" world it opens itself, `pl_overlay::world_jvm_arg`).
+    /// "Devam et" world it opens itself, `pl_overlay::world_jvm_arg`). A jar from the signed content
+    /// (OVL-AUTO) counts too: CI builds those from a source that knows every launch property of
+    /// bridge protocol 1 up to AUTOJOIN's route; a property added later needs the jar to declare it
+    /// before a launcher relies on it.
     pub ours: bool,
 }
 
@@ -322,10 +361,36 @@ pub async fn prepare_mod(
     let env = crate::commands::modhealth::environment(instance, Some(java_major));
     // The jar is there for the panel, the chat's emoji picker or both (CHAT-EMOJI).
     let enabled = state.overlay.wants_mod();
+    let content = content_jars();
+    let jars = Jars {
+        bundle: bundle(),
+        content: &content,
+    };
+    // OVL-AUTO: the signed content's jar for this version, fetched (or found in the cache) and
+    // checked against its entry now; the folder's own copy serves while that fails.
+    let fetched = match jars.jar_for(&instance.mc_version) {
+        Some(Pick::Content(jar))
+            if enabled && instance.loader.kind == LoaderKind::Fabric && !cancel.is_cancelled() =>
+        {
+            match tokio::time::timeout(JAR_WAIT, state.content.overlay_jar(&jar.entry)).await {
+                Ok(Ok(path)) => Some(path),
+                Ok(Err(error)) => {
+                    tracing::info!(%error, minecraft = %jar.minecraft, "the overlay's jar could not be fetched now");
+                    None
+                }
+                Err(_) => {
+                    tracing::info!(minecraft = %jar.minecraft, "the overlay's jar took too long");
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
     let ask = |ask_fabric_api: bool| {
         pl_overlay::install::reconcile(Request {
             game_dir,
-            bundle: bundle(),
+            jars,
+            fetched: fetched.as_deref(),
             env: &env,
             enabled,
             ask_fabric_api,
@@ -355,9 +420,15 @@ pub async fn prepare_mod(
 /// version, the overlay or the chat's emoji picker on): only then is a sub-server offered beside
 /// "Doğrudan sunucuya bağlan". The start itself decides again ([`PreparedMod::ours`]).
 pub fn fits(state: &AppState, instance: &Instance) -> bool {
+    let content = content_jars();
     state.overlay.wants_mod()
         && instance.loader.kind == LoaderKind::Fabric
-        && bundle().is_some_and(|bundle| bundle.jar_for(&instance.mc_version).is_some())
+        && Jars {
+            bundle: bundle(),
+            content: &content,
+        }
+        .jar_for(&instance.mc_version)
+        .is_some()
 }
 
 /// [`prepare_mod`] for a game started beside another game of the same folder (PLAY-AGAIN): the
@@ -572,17 +643,23 @@ pub struct OverlayStateView {
     pub config: OverlayConfig,
     /// The mod in the running game is connected now.
     pub connected: bool,
-    /// The Minecraft versions this build ships the mod for (`26.1.2`, `26.2`, …): a Fabric
-    /// instance on one of them gets it. Empty in a build without the jars.
+    /// The Minecraft versions the launcher has the mod for (`26.1.2`, `26.2`, …): the ones this
+    /// build ships, then those the signed content adds (OVL-AUTO). A Fabric instance on one of
+    /// them gets it. Empty in a build without the jars and without the content's.
     pub versions: Vec<String>,
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn overlay_state(state: State<'_, AppState>) -> OverlayStateView {
+    let content = content_jars();
     OverlayStateView {
         config: state.overlay.config(),
         connected: state.overlay.connected(),
-        versions: bundle().map(Bundle::versions).unwrap_or_default(),
+        versions: Jars {
+            bundle: bundle(),
+            content: &content,
+        }
+        .versions(),
     }
 }
