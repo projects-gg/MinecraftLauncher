@@ -228,7 +228,7 @@
     ]
   },
   "counts": {
-    "rules": 190,
+    "rules": 194,
     "readers": 68,
     "drafts": 61,
     "answers": 21
@@ -258,6 +258,13 @@
     {
       "name": "a totem",
       "text": "Totem alırım 15k",
+      "ctx": {},
+      "result": "ok",
+      "notes": []
+    },
+    {
+      "name": "the payment in the trade window",
+      "text": "Elytra alırım, ödeme takas penceresinde",
       "ctx": {},
       "result": "ok",
       "notes": []
@@ -919,6 +926,27 @@
     {
       "name": "upfront",
       "text": "buy elytra pay upfront",
+      "ctx": {},
+      "result": "reject:loosen:prepay",
+      "notes": []
+    },
+    {
+      "name": "advance payment",
+      "text": "önden ödeme yaparak elytra al",
+      "ctx": {},
+      "result": "reject:loosen:prepay",
+      "notes": []
+    },
+    {
+      "name": "prepayment",
+      "text": "ön ödemeyle elytra alırım",
+      "ctx": {},
+      "result": "reject:loosen:prepay",
+      "notes": []
+    },
+    {
+      "name": "payment first",
+      "text": "önce ödeme yapıp elytra al",
       "ctx": {},
       "result": "reject:loosen:prepay",
       "notes": []
