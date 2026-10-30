@@ -10,6 +10,7 @@ import type {
   SocialSnapshot,
   SocialTeam,
 } from "@/lib/api/social-types";
+import { sameLocalDay } from "./chat-time";
 
 /** A crew's chat. */
 export function crewConversation(team: string): string {
@@ -94,25 +95,25 @@ export function sortMessages(messages: ChatMessage[]): ChatMessage[] {
   );
 }
 
-/** Messages a few minutes apart from one sender read as one group (one name, one picture). */
-export const GROUP_GAP_MS = 4 * 60_000;
+/**
+ * One sender's messages on one local day, each at most this long after the one before, read as one
+ * group (one name, one picture, one time). The overlay and the phone group the same way (CHAT-UX).
+ */
+export const GROUP_GAP_MS = 5 * 60_000;
 
 /** Whether `next` continues `previous`'s group. */
 export function sameGroup(previous: ChatMessage | undefined, next: ChatMessage): boolean {
   return (
     previous !== undefined &&
     previous.from === next.from &&
-    next.at - previous.at < GROUP_GAP_MS &&
-    new Date(previous.at).toDateString() === new Date(next.at).toDateString()
+    Math.abs(next.at - previous.at) <= GROUP_GAP_MS &&
+    sameLocalDay(previous.at, next.at)
   );
 }
 
-/** A day line goes before the first message of each day. */
+/** A day line goes before the first message of each local day. */
 export function newDay(previous: ChatMessage | undefined, next: ChatMessage): boolean {
-  return (
-    previous === undefined ||
-    new Date(previous.at).toDateString() !== new Date(next.at).toDateString()
-  );
+  return previous === undefined || !sameLocalDay(previous.at, next.at);
 }
 
 // --- tombstones (FIX2) ---------------------------------------------------------------------------

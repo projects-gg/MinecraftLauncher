@@ -25,6 +25,13 @@
 // that arrive while it is open, not the older pages that load above. A row draws again only when
 // what it shows changed (a long history stayed smooth: before, every new message, presence change
 // and minute drew all of them again).
+//
+// CHAT-UX (the owner, 31 Oct 2026: day lines as in Discord): a day line says "Bugün", "Dün", "3 gün
+// önce", then the date (chat-time.ts); a group is one sender's messages up to five minutes apart on
+// one day, broken by a day line, "Yeni mesajlar" or a local line, its time under its last message;
+// the pointer resting on a message shows its full time (time-tip.tsx). The clock the rows read
+// moves when the list changes, when the conversation or the window comes back on screen and when
+// a row's window closes: nothing wakes up for the day lines.
 import { ArrowDown, CalendarBlank, HandWaving } from "@phosphor-icons/react";
 import { cn, scrollBehavior, toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
@@ -43,12 +50,14 @@ import { announce, friendlyError } from "@/features/accounts/use-accounts";
 import { useEmojiPrefs } from "@/features/emoji";
 import { api } from "@/lib/api";
 import type { ChatMessage, ChatReaction, SocialTeam } from "@/lib/api/social-types";
-import { dateTimeFormat, formatPercent } from "@/lib/format";
+import { formatPercent } from "@/lib/format";
 import { detectOs } from "@/lib/platform";
+import { useWindowAway } from "@/lib/window-away";
 import { enter, glide, leave, useSocialMotion } from "../motion";
 import type { PersonPlace } from "../person-menu";
 import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
+import { dayLineText, sameLocalDay } from "./chat-time";
 import { Composer, type ComposerState } from "./composer";
 import { crewOf, deletionOf, peerOf, readable, sameGroup, tombstoneKind } from "./conversations";
 import { useChatExtras, useLinkRules } from "./extras";
@@ -59,6 +68,7 @@ import { type Quoted, quotedOf } from "./reply";
 import { READ_AFTER_MS, seenKey } from "./seen";
 import type { ChatPerson } from "./sender-name";
 import { useChatTextSize } from "./text-size";
+import { TimeTip } from "./time-tip";
 import {
   DEFAULT_TEXT_SIZE,
   stepTextSize,
@@ -88,19 +98,6 @@ const PAGE_SHARE = 0.85;
 const DIVIDER_GAP = 8;
 /** More messages than this arriving at once are told as a count, not one by one. */
 const TOLD_ONE_BY_ONE = 3;
-
-function dayLabel(t: (key: string) => string, at: number, nowMs: number): string {
-  const day = (ms: number) => new Date(new Date(ms).toDateString()).getTime();
-  const diff = Math.round((day(nowMs) - day(at)) / 86_400_000);
-  if (diff === 0) return t("chat.day.today");
-  if (diff === 1) return t("chat.day.yesterday");
-  const sameYear = new Date(at).getFullYear() === new Date(nowMs).getFullYear();
-  return dateTimeFormat(
-    sameYear
-      ? { weekday: "long", day: "numeric", month: "long" }
-      : { day: "numeric", month: "long", year: "numeric" },
-  ).format(new Date(at));
-}
 
 /** The row across the middle of the list, and where its top is (a share of the list's height). */
 function middleRow(list: HTMLElement): { row: HTMLElement; at: number } | null {
@@ -142,11 +139,9 @@ function crewKey(crew: SocialTeam | undefined): string {
   return `${crew.id}|${crew.role}|${members.join(",")}`;
 }
 
-/** The next moment a row's time changes what it may do or what its day line says (ms). */
+/** The next moment a row's time changes what it may do (ms), or Infinity when none will. */
 function nextChange(messages: readonly ChatMessage[], nowMs: number): number {
-  const tomorrow = new Date(nowMs);
-  tomorrow.setHours(24, 0, 0, 0);
-  let next = tomorrow.getTime();
+  let next = Number.POSITIVE_INFINITY;
   for (const m of messages) {
     for (const at of [m.editUntil, m.deleteUntil, m.at + REACTION_WINDOW_MS]) {
       if (at !== undefined && at > nowMs && at < next) next = at;
@@ -171,7 +166,6 @@ export interface ChatLine {
 type Item = { kind: "message"; message: ChatMessage } | { kind: "line"; line: ChatLine };
 
 const itemAt = (item: Item) => (item.kind === "message" ? item.message.at : item.line.at);
-const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
 
 export interface ConversationProps {
   conv: string;
@@ -472,7 +466,9 @@ export function Conversation({
   const [newer, setNewer] = useState(false);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   const [focusRequest, setFocusRequest] = useState(0);
-  const [now, setNow] = useState(() => Date.now());
+  // A row's window closed (below): the clock is read again.
+  const [tick, setTick] = useState(0);
+  const windowAway = useWindowAway();
   const open = useSocialUi((s) => s.open);
   const me = useSocialUi((s) => s.view.me?.id);
   const shareRead = useSocialUi((s) => s.view.me?.privacy.shareRead !== false);
@@ -608,14 +604,19 @@ export function Conversation({
 
   const messages = useMemo(() => thread?.messages ?? [], [thread?.messages]);
 
-  // What a row may do (edit for 15 minutes, delete and react for a week) and "Bugün" / "Dün"
-  // change at known moments: the clock moves then, not every minute (a long list drew all its rows
-  // again each minute).
+  // The clock the rows read: what a row may do (edit for 15 minutes, delete and react for a week)
+  // and the day lines ("Bugün", "Dün", "3 gün önce"). It is read again when the list changes, when
+  // the conversation or the window comes back on screen, and at the next moment a row's window
+  // closes; never every minute (a long list drew all its rows again each minute), and never for
+  // the day lines alone (a list left open past midnight says "Dün" from its next change).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these say when to read the clock again
+  const now = useMemo(() => Date.now(), [messages, onScreen, windowAway, tick]);
   useEffect(() => {
-    const wait = nextChange(messages, now) - Date.now();
+    const next = nextChange(messages, now);
+    if (next === Number.POSITIVE_INFINITY) return;
     const timer = window.setTimeout(
-      () => setNow(Date.now()),
-      Math.min(Math.max(wait + 50, 1_000), 2_000_000_000),
+      () => setTick((n) => n + 1),
+      Math.min(Math.max(next - Date.now() + 50, 1_000), 2_000_000_000),
     );
     return () => window.clearTimeout(timer);
   }, [messages, now]);
@@ -1001,6 +1002,10 @@ export function Conversation({
   };
 
   const dividerWords = t("chat.divider");
+  const dayWords = useMemo(
+    () => ({ today: t("chat.day.today"), yesterday: t("chat.day.yesterday") }),
+    [t],
+  );
 
   // The list draws again only when what its rows show changed: typing, a scroll, a presence or an
   // unread count elsewhere leave it alone (its AnimatePresence went through every row each time).
@@ -1021,8 +1026,8 @@ export function Conversation({
             {items.map((item, index) => {
               const previousItem = items[index - 1];
               const nextItem = items[index + 1];
-              const day = !previousItem || !sameDay(itemAt(previousItem), itemAt(item));
-              const dayText = day ? dayLabel(t, itemAt(item), now) : null;
+              const day = !previousItem || !sameLocalDay(itemAt(previousItem), itemAt(item));
+              const dayText = day ? dayLineText(itemAt(item), now, dayWords) : null;
               if (item.kind === "line") {
                 return (
                   <LineItem
@@ -1035,9 +1040,10 @@ export function Conversation({
                 );
               }
               const { message } = item;
-              // A line between two messages starts a new group.
+              // A line between two messages starts a new group, as "Yeni mesajlar" does.
               const previous = previousItem?.kind === "message" ? previousItem.message : undefined;
               const next = nextItem?.kind === "message" ? nextItem.message : undefined;
+              const divided = message.key === dividerKey;
               const deletion = deletionOf(message, deleting, me);
               const windows = rowWindows(message, now);
               return (
@@ -1053,10 +1059,10 @@ export function Conversation({
                   sender={people(message.from)}
                   personPlace={personPlace}
                   crew={crew}
-                  first={day || !sameGroup(previous, message)}
-                  last={!next || !sameGroup(message, next)}
+                  first={day || divided || !sameGroup(previous, message)}
+                  last={!next || next.key === dividerKey || !sameGroup(message, next)}
                   dayText={dayText}
-                  divider={message.key === dividerKey ? dividerWords : null}
+                  divider={divided ? dividerWords : null}
                   actions={actions}
                   shared={shared}
                   quoted={quotes.get(message.key) ?? null}
@@ -1085,6 +1091,7 @@ export function Conversation({
       now,
       dividerKey,
       dividerWords,
+      dayWords,
       quotes,
       seen,
       flash,
@@ -1124,6 +1131,7 @@ export function Conversation({
           </div>
         </motion.div>
       </MotionConfig>
+      <TimeTip list={scroller} cue={items} />
       <div className="relative">
         <AnimatePresence initial={false}>
           {away && (newer || far) ? (
