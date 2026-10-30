@@ -70,7 +70,7 @@ export const trTeams = {
     unmakeModerator: "Moderatörlükten al",
     unmadeModerator: "{{name}} artık üye",
     remove: "Ekipten çıkar",
-    removeAsk: "{{name}} ekipten çıkar ve ekip kodu yenilenir.",
+    removeAsk: "{{name}} ekipten çıkarılır ve ekip kodu yenilenir.",
     removed: "{{name}} ekipten çıkarıldı",
     blocked: "Engelledin",
     since_one: "{{count}} gündür ekipte",

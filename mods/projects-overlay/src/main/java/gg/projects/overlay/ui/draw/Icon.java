@@ -75,7 +75,14 @@ public enum Icon {
     /** "Kategoriye taşı". */
     FOLDER("FolderSimple"),
     /** "İsteği kabul et" on a crewmate who asked first. */
-    USER_CHECK("UserCheck");
+    USER_CHECK("UserCheck"),
+    // A crewmate's crew rows and "Yeni kategori…" (OVL-UX3), with the launcher's signs.
+    /** "Moderatör yap" and "Moderatörlükten al". */
+    SHIELD_STAR("ShieldStar"),
+    /** "Liderliği devret". */
+    CROWN("Crown"),
+    /** "Yeni kategori…" at the end of "Kategoriye taşı"'s list. */
+    FOLDER_PLUS("FolderSimplePlus");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};

@@ -30,6 +30,7 @@ import {
   planQuickMove,
 } from "../../../../packages/ui/src/components/inventory/plan";
 import * as rules from "../../../../packages/ui/src/components/inventory/rules";
+import { safeInvItem } from "../../../../packages/ui/src/components/inventory/safe-item";
 import {
   cleanText,
   durabilityColor,
@@ -48,6 +49,7 @@ import type {
   InvResult,
   TitleGlyph,
 } from "../../../../packages/ui/src/components/inventory/types";
+import { toInvItem } from "../features/afk/cloud/inventory/model";
 
 const tr = INVENTORY_TEXTS.tr;
 
@@ -246,6 +248,40 @@ describe("anyone's text", () => {
     };
     expect(tooltipLines(full, "tr", tr).at(-1)?.text).toBe("ve daha fazlası...");
     expect(tooltipLines(full, "en", INVENTORY_TEXTS.en).at(-1)?.text).toBe("and more...");
+    // A newer machine counts the stacks: the exact number, as the game says it.
+    const counted = { ...full, inside: { ...full.inside, stacks: 16 } };
+    expect(tooltipLines(counted, "tr", tr).at(-1)).toEqual({
+      text: "ve 11 tane daha...",
+      color: TEXT_COLOR.white,
+      italic: true,
+    });
+    expect(tooltipLines(counted, "en", INVENTORY_TEXTS.en).at(-1)?.text).toBe("and 11 more...");
+    // Five stacks or fewer: nothing more to say.
+    const five = {
+      ...shulker,
+      inside: { count: 320, top: full.inside.top.slice(0, 5), stacks: 5 },
+    };
+    expect(tooltipLines(five, "tr", tr).at(-1)?.text).toBe("Toprak x 64");
+    // A count below the stacks listed, or not a whole number, is not trusted: as before.
+    for (const stacks of [3, 12.5, Number.NaN]) {
+      const odd = { ...full, inside: { ...full.inside, stacks } };
+      expect(tooltipLines(odd, "tr", tr).at(-1)?.text).toBe("ve daha fazlası...");
+    }
+    // The checked item (the site's live inventory, a console hover) keeps the count when it is a
+    // whole number from the stacks listed up to 256, and drops that field alone otherwise.
+    expect(safeInvItem(counted)?.inside).toEqual({ count: 1000, top: full.inside.top, stacks: 16 });
+    for (const stacks of [3, 12.5, 257, "16", null]) {
+      const odd = safeInvItem({ ...full, inside: { ...full.inside, stacks } });
+      expect(odd?.inside).toEqual({ count: 1000, top: full.inside.top });
+    }
+    // The launcher's own frames (pl_cloud_afk reads the count up to 256): toInvItem keeps it when
+    // it is at least the stacks listed, so the desktop says the same.
+    const cloud = { ...full, inside: { ...full.inside, stacks: 16 } };
+    expect(tooltipLines(toInvItem(cloud), "tr", tr).at(-1)?.text).toBe("ve 11 tane daha...");
+    for (const stacks of [3, null, undefined]) {
+      const odd = toInvItem({ ...cloud, inside: { ...cloud.inside, stacks } });
+      expect(odd.inside).toEqual({ count: 1000, top: full.inside.top });
+    }
     const custom = SAMPLE_INVENTORY.items.find((i) => i.slot === 24) as InvItem;
     expect(tooltipLines(custom, "en", INVENTORY_TEXTS.en)[0]?.text).toBe("Ejderha Kılıcı");
   });
