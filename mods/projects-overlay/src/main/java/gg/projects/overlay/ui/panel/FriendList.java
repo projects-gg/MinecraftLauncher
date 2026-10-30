@@ -190,7 +190,9 @@ public final class FriendList extends PanelWidget {
         Font small = Fonts.small();
         joinLabel = Texts.str("friend.join");
         joinLine = Texts.visual(joinLabel);
-        emptyText = Texts.str(state.signedIn() ? "friends.empty" : "friends.signed_out");
+        // Not signed in (or the launcher not there yet), the panel's card above says why: the list says nothing more
+        // (BETA-13's smoke: "Arkadaşlar için launcher'da giriş yap." centred under the card's own sentence).
+        emptyText = state.signedIn() ? Texts.str("friends.empty") : "";
         emptyLine = Texts.visual(emptyText);
         emptyWidth = small.width(emptyText);
         float joinWidth = small.width(joinLabel) + 14;
@@ -533,8 +535,10 @@ public final class FriendList extends PanelWidget {
         Font strong = Fonts.strong();
         Font small = Fonts.small();
         if (rows.isEmpty()) {
-            Draw.text(g, small, emptyLine, x0 + (w - emptyWidth) / 2f, Fonts.centeredY(Fonts.Face.SMALL, y0 + h / 2f),
-                Theme.ASH_400);
+            if (!emptyText.isEmpty()) {
+                Draw.text(g, small, emptyLine, x0 + (w - emptyWidth) / 2f,
+                    Fonts.centeredY(Fonts.Face.SMALL, y0 + h / 2f), Theme.ASH_400);
+            }
             bubble.track(null, false, now);
             drawNote(g, now);
             return;

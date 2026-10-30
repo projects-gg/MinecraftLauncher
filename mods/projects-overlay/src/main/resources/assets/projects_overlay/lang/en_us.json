@@ -32,7 +32,6 @@
   "projects_overlay.friends.online": "Online (%s)",
   "projects_overlay.friends.offline": "Offline (%s)",
   "projects_overlay.friends.empty": "No friends yet",
-  "projects_overlay.friends.signed_out": "Sign in to Friends in the launcher.",
   "projects_overlay.friend.join": "Join",
   "projects_overlay.friend.where.projects": "On Projects",
   "projects_overlay.friend.where.launcher": "In the launcher",

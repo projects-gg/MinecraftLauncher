@@ -32,7 +32,6 @@
   "projects_overlay.friends.online": "Çevrimiçi (%s)",
   "projects_overlay.friends.offline": "Çevrimdışı (%s)",
   "projects_overlay.friends.empty": "Henüz arkadaşın yok",
-  "projects_overlay.friends.signed_out": "Arkadaşlar için launcher'da giriş yap.",
   "projects_overlay.friend.join": "Katıl",
   "projects_overlay.friend.where.projects": "Projects'te",
   "projects_overlay.friend.where.launcher": "Launcher'da",
