@@ -126,6 +126,33 @@ describe("the panel's edge and button", () => {
     expect(useAfkPanelSize.getState().full).toBe(false);
   });
 
+  it("leaves the title bar free: a press there keeps the panel, one elsewhere closes it", async () => {
+    const closed = vi.fn();
+    render(
+      <>
+        <header data-titlebar="">
+          <button type="button">Küçült</button>
+        </header>
+        <p data-testid="page">Sayfa</p>
+        <Panel onClose={closed} />
+      </>,
+    );
+    await screen.findByRole("separator");
+    expect(document.body.dataset.titlebarFree).toBe("");
+    // Radix listens for presses outside after the opening one.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    act(() => {
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Küçült", hidden: true }));
+    });
+    expect(closed).not.toHaveBeenCalled();
+    act(() => {
+      fireEvent.pointerDown(screen.getByTestId("page"));
+    });
+    expect(closed).toHaveBeenCalled();
+  });
+
   it("opens at the size the player left it", async () => {
     useAfkPanelSize.setState({ full: true });
     render(<Panel />);

@@ -17,9 +17,10 @@ import {
   EntranceGate,
   GatedMotion,
   IconButton,
+  keepOpenOnToast,
+  type OutsideEvent,
   scrimMotion,
   sheetMotion,
-  sheetOutside,
   useInteractionMotion,
   useMotionPrefs,
 } from "@pl/ui";
@@ -109,6 +110,16 @@ const PanelContext = createContext<PanelControls>({
 /** The surrounding AFK panel's size, for its layouts and its header button. */
 export function useAfkPanel(): PanelControls {
   return useContext(PanelContext);
+}
+
+/**
+ * A press or focus outside closes the panel as Esc does, except on a toast and on the title bar:
+ * the panel starts under it at every width, so the window still moves and its buttons work.
+ */
+function keepOpenOnBar(event: OutsideEvent) {
+  keepOpenOnToast(event);
+  const target = event.target as Element | null;
+  if (target?.closest?.("[data-titlebar]")) event.preventDefault();
 }
 
 /** Today's width in this window. */
@@ -229,6 +240,15 @@ export function AfkSidePanel({
     setDragging(false);
   }, [open]);
 
+  // While open the page's shield (styles.css `#layer-shield`) leaves the title bar free too.
+  useEffect(() => {
+    if (!open) return;
+    document.body.dataset.titlebarFree = "";
+    return () => {
+      delete document.body.dataset.titlebarFree;
+    };
+  }, [open]);
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     // One pointer at a time: a second finger never moves the edge.
     if (event.button !== 0 || drag.current) return;
@@ -322,7 +342,7 @@ export function AfkSidePanel({
             <Dialog.Portal forceMount>
               <Dialog.Overlay asChild forceMount>
                 <GatedMotion.div
-                  className="fixed inset-0 z-40 bg-obsidian-950/50"
+                  className="fixed inset-x-0 top-titlebar bottom-0 z-40 bg-obsidian-950/50"
                   {...scrimMotion(!animate)}
                 />
               </Dialog.Overlay>
@@ -330,15 +350,15 @@ export function AfkSidePanel({
                 asChild
                 forceMount
                 aria-describedby={undefined}
-                // A press outside closes the panel, but never a toast's button.
-                {...sheetOutside}
+                onPointerDownOutside={keepOpenOnBar}
+                onFocusOutside={keepOpenOnBar}
                 onOpenAutoFocus={onOpenAutoFocus}
               >
                 <GatedMotion.aside
                   ref={asideRef}
                   id={panelId}
                   tabIndex={-1}
-                  className="fixed top-0 right-0 bottom-0 z-50 flex outline-none"
+                  className="fixed top-titlebar right-0 bottom-0 z-50 flex outline-none"
                   style={{ width: full ? "100vw" : NARROW_CSS }}
                   {...sheetMotion(!animate)}
                 >

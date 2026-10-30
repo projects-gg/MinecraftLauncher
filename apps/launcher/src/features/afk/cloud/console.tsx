@@ -221,7 +221,8 @@ function LineText({
         <button
           type="button"
           onClick={onInventory}
-          className="ml-2 cursor-pointer font-sans text-[12px] font-medium text-gold-300 underline-offset-2 outline-none select-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+          // The launcher's inline action: underlined bone words, never gold (design.md §2).
+          className="ml-2 cursor-pointer rounded-sm font-sans text-[12px] font-medium text-bone-100 underline decoration-white/35 underline-offset-[3px] outline-none transition-[text-decoration-color,scale] duration-150 select-none hover:decoration-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]"
         >
           {t("cloudAfkFeat.console.showInInventory")}
         </button>
