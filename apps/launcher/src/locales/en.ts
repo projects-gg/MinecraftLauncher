@@ -46,6 +46,7 @@ import { enPlayTogether } from "./en-play-together";
 import { enPrepare } from "./en-prepare";
 import { enProjectsSkin } from "./en-projects-skin";
 import { enQaFix } from "./en-qa-fix";
+import { enQol } from "./en-qol";
 import { enReminders } from "./en-reminders";
 import { enReports } from "./en-reports";
 import { enSafety } from "./en-safety";
@@ -306,6 +307,7 @@ export const en: DeepPartial<Strings> = {
   small7: enSmall7,
   small9: enSmall9,
   small10: enSmall10,
+  qol: enQol,
   qaFix: enQaFix,
   crews: enCrews,
   chat: enChat,
