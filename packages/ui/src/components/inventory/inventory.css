@@ -117,10 +117,15 @@
 }
 /* `fit="contain"`: the host gives the component its height (a panel, a dialog); the scale is the
    largest whole number of device pixels that both its width and its height hold, the art and the
-   line under the window (`--pl-inv-under`, CSS pixels) counted, and the art sits in the middle. */
+   line under the window (`--pl-inv-under`, CSS pixels) counted, and the art sits in the middle.
+   Down as across, a server's art never takes the window below `--pl-inv-read` while the window
+   and its line fit (`--pl-inv-wh`: the window's own height): a Projects menu's picture is a
+   256 px texture, mostly empty, and fitting all of it drew the window at one pixel in a large
+   empty panel (INV-SCALE, the owner's report of 1 Nov 2026). What then does not fit is cut. */
 .pl-inv[data-fit="contain"] {
   container-type: size;
   height: 100%;
+  overflow: clip;
 }
 .pl-inv[data-fit="contain"] .pl-inv-stage {
   --pl-inv-n: clamp(
@@ -133,10 +138,24 @@
           round(down, calc(var(--pl-inv-read) * var(--pl-inv-dpr) * 1px), 1px)
         )
       ),
-      round(
-        down,
-        calc((100cqb - var(--pl-inv-under, 0px)) * var(--pl-inv-dpr) / var(--pl-inv-h)),
-        1px
+      max(
+        round(
+          down,
+          calc((100cqb - var(--pl-inv-under, 0px)) * var(--pl-inv-dpr) / var(--pl-inv-h)),
+          1px
+        ),
+        min(
+          round(
+            down,
+            calc(
+              (100cqb - var(--pl-inv-under, 0px)) *
+              var(--pl-inv-dpr) /
+              var(--pl-inv-wh, var(--pl-inv-h))
+            ),
+            1px
+          ),
+          round(down, calc(var(--pl-inv-read) * var(--pl-inv-dpr) * 1px), 1px)
+        )
       )
     ),
     max(1px, round(down, calc(var(--pl-inv-max) * var(--pl-inv-dpr) * 1px), 1px))
@@ -169,6 +188,33 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+/* `fit="contain"`, the art taller than the room at its scale: the art under the window goes
+   first, as far as needed (`--pl-inv-wb`: the window's bottom from the art's top, GUI pixels), so
+   the line stays under the window and in sight; still too tall, the column sits on the room's
+   floor and the art's top is cut. Both do nothing while the whole art fits. */
+.pl-inv[data-fit="contain"] .pl-inv-panel {
+  height: clamp(
+    calc(var(--pl-inv-wb, var(--pl-inv-gh)) * var(--pl-inv-px)),
+    calc(100cqb - var(--pl-inv-under, 0px)),
+    calc(var(--pl-inv-gh) * var(--pl-inv-px))
+  );
+  overflow-y: clip;
+}
+.pl-inv[data-fit="contain"] .pl-inv-column {
+  /* How far the art down to the window's bottom and the line under it pass the room: the column,
+     centred (or at the top), goes up by what passes its floor. */
+  --pl-inv-over: calc(
+    var(--pl-inv-wb, var(--pl-inv-gh)) *
+    var(--pl-inv-px) +
+    var(--pl-inv-under, 0px) -
+    100cqb
+  );
+  transform: translateY(min(0px, calc(var(--pl-inv-over) / -2)));
+}
+.pl-inv[data-fit="contain"][data-align="start"] .pl-inv-column {
+  transform: translateY(min(0px, calc(-1 * var(--pl-inv-over))));
 }
 
 .pl-inv-bar {
