@@ -1101,7 +1101,7 @@ mod tests {
         let last = Arc::new(parking_lot::Mutex::new(DownloadProgress::default()));
         let sink = Arc::clone(&last);
         let options = DownloadOptions {
-            progress: Some(Arc::new(move |p| *sink.lock() = p)),
+            progress: Some(Arc::new(move |p: DownloadProgress| *sink.lock() = p)),
             ..DownloadOptions::default()
         };
         (options, last)
