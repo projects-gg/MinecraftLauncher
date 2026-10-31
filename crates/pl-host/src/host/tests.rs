@@ -596,6 +596,62 @@ async fn turn_move_takes_the_game_to_e4mc_and_turn_closes() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_guest_in_the_world_stays_in_while_its_paths_move() {
+    // HOST1-E2 (31 Oct): after a move the host's list said "Bağlanıyor" for a guest who never
+    // left the world. Its control stream came back on the other path and was reported as a new
+    // connection; the game never says "in" again, so nothing put the guest back.
+    let mut world = open_world(&[PathKind::Turn, PathKind::E4mc], 7).await;
+    let mut guest = join_world(&world, FRIEND_A, "Notch", &[PathKind::Turn, PathKind::E4mc]).await;
+    let (mut game, bytes) = connect_game(&guest, 9999).await;
+    let (mut conn, _) = world_accepts(&mut world).await;
+    let mut kept = vec![0u8; bytes.len()];
+    conn.read_exact(&mut kept).await.unwrap();
+    exchange(&mut game, &mut conn, 50_000, 1).await;
+    next_host_event(
+        &mut world,
+        |e| matches!(e, HostEvent::Guest(g) if g.status == GuestStatus::InWorld),
+    )
+    .await;
+
+    // Off TURN while playing: the game and the control stream go over to e4mc, TURN closes.
+    world.side.turn_ok.store(false, Ordering::SeqCst);
+    world.session.turn_move("budget").await;
+    exchange(&mut game, &mut conn, 150_000, 5).await;
+    next_guest_event(&mut guest, |e| {
+        matches!(e, GuestEvent::Report(Event::Move { ok: true, .. }))
+    })
+    .await;
+    tokio::time::sleep(Duration::from_secs(31)).await;
+    exchange(&mut game, &mut conn, 10_000, 6).await;
+    assert!(!world.session.paths().has(PathKind::Turn));
+
+    // Every guest update since the move says the guest is in the world.
+    let mut updates = Vec::new();
+    while let Ok(event) = world.events.try_recv() {
+        if let HostEvent::Guest(update) = event {
+            updates.push(update.status);
+        }
+    }
+    assert!(
+        !updates.is_empty(),
+        "the guest's control stream came back on e4mc"
+    );
+    assert!(
+        updates
+            .iter()
+            .all(|status| matches!(status, GuestStatus::InWorld)),
+        "the moving guest was reported as anything but in the world: {updates:?}"
+    );
+    assert!(
+        world
+            .session
+            .guests()
+            .iter()
+            .all(|g| g.status == GuestStatus::InWorld)
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn refusals() {
     // One guest at most.
     let mut world = open_world(&[PathKind::E4mc], 1).await;
