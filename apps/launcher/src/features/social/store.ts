@@ -69,6 +69,8 @@ interface SocialUi {
     code?: string;
     link?: string;
     from?: HTMLElement | null;
+    /** The list page's tab to show (a request's or an invite's "Göster": "Arkadaşlar"). */
+    tab?: ListTab;
   }) => void;
   closePanel: () => void;
   goTo: (page: SocialPage) => void;
@@ -161,6 +163,20 @@ interface SocialUi {
   closeReport: () => void;
 }
 
+/**
+ * The friend list itself is on screen: the panel open on its list page and, with chat on, on the
+ * "Arkadaşlar" tab. Requests, invites and calls show there in place; the "Mesajlar" tab shows only
+ * conversations, so their toasts still come then.
+ */
+export function friendListShown(ui: {
+  open: boolean;
+  page: SocialPage;
+  listTab: ListTab;
+  view: { chat?: unknown };
+}): boolean {
+  return ui.open && ui.page === "list" && (!ui.view.chat || ui.listTab === "friends");
+}
+
 export const useSocialUi = create<SocialUi>()((set, get) => ({
   view: HIDDEN_SNAPSHOT,
   setView: (view) => {
@@ -185,6 +201,7 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
       page,
       direction: DEPTH[page] >= DEPTH[s.page] ? 1 : -1,
       prefillCode: options?.code ?? s.prefillCode,
+      ...(options?.tab ? { listTab: options.tab } : {}),
       // An invite link opens "Ekip kur ya da katıl", where it is looked up.
       ...(options?.link
         ? { prefillLink: options.link, crewTab: "new", crewPane: "crew" as const }

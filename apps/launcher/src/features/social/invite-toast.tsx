@@ -159,7 +159,7 @@ function TeamInviteToast({ toastId, invite }: { toastId: string | number; invite
           className="mt-2"
           onClick={() => {
             toast.dismiss(toastId);
-            useSocialUi.getState().openPanel({ page: "list" });
+            useSocialUi.getState().openPanel({ page: "list", tab: "friends" });
           }}
         >
           {t("teams.notices.seeInvite")}
