@@ -11,6 +11,14 @@
 //! stays text and cannot fake a join or a disconnect.
 //! Stop: `/quit`, then kill after the grace period. When the client exits on its own the
 //! [`restart`](crate::restart) policy decides between a backed-off restart and an error state.
+//!
+//! Console looks and dialog cards (AFK-UX): while Studio's switches say so ([`ConsoleFeatures`])
+//! a client 4.2.4 or later with a nonce also gets `MCC_CONSOLE_KINDS=1`. Every console write is
+//! then a `line` event: its text goes the way a plain line goes (classified, masked, cut), with its
+//! look when the account's rules leave the line as it came ([`crate::looks`]); what the server
+//! keeps on screen (the action bar, titles, boss bars) is no console line, as before. The server's
+//! open dialog is kept for the console's card ([`crate::dialog`]), and a press of the card goes to
+//! the client as `/dialog act`, answered by its `dialogres`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -20,12 +28,14 @@ use jiff::Timestamp;
 use parking_lot::{Mutex, RwLock};
 use pl_net::CancellationToken;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::Instant;
 
 use crate::bridge::{
-    BridgeEvent, ClientLine, DisconnectReason, client_takes_nonce, new_nonce, parse_line_with_nonce,
+    BridgeEvent, ClientLine, DisconnectReason, client_gives_looks, client_takes_nonce, new_nonce,
+    parse_line_with_nonce,
 };
 use crate::client::ClientStep;
 use crate::config::{
@@ -34,9 +44,12 @@ use crate::config::{
 };
 use crate::console::{
     ConsoleBuffer, ConsoleLine, ConsoleLineKind, ConsoleOrigin, LineFilter, STDERR_PREFIX,
+    cap_line, cut_units,
 };
+use crate::dialog::{self, ShownDialog};
 use crate::error::{AfkError, Result};
 use crate::housekeeping::{ConsoleLog, rotate_account_logs};
+use crate::looks::{self, LineLooks};
 use crate::model::{AfkAccount, AutoRelogOptions};
 use crate::pacing::{ConnectPacer, connect_destination};
 use crate::paths::CONSOLE_LOG_FILE_NAME;
@@ -51,6 +64,47 @@ use crate::util::{eq_ignore_case, remove_file_if_exists};
 
 /// Longest stdout/stderr line read (bytes); the rest of the line is dropped.
 const MAX_LINE_BYTES: usize = 64 * 1024;
+/// How long a press of the dialog card waits for the client's answer.
+pub(crate) const PRESS_ANSWER: Duration = Duration::from_secs(4);
+
+/// Studio's console switches (7/24 Bulut's offer says them): a client that gives them runs with
+/// the console kinds while either is on; both apply from its next launch.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ConsoleFeatures {
+    /// Lines in the game's colours, with their hovers and clicks (CONSOLE-COLOR).
+    pub looks: bool,
+    /// A server's dialog as a card the player may press (DIALOG-CARD).
+    pub dialogs: bool,
+}
+
+/// The server's dialog as the console's card shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DialogView {
+    /// The client's revision of it: a press names it.
+    pub rev: u32,
+    /// Its JSON as checked here (the view checks it again).
+    pub json: String,
+    /// When it opened.
+    pub at: Timestamp,
+}
+
+/// The client's answer to a press of the card.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DialogOutcome {
+    pub ok: bool,
+    /// Why not, in the client's word (`stale`: another dialog now; anything else: it did not
+    /// work); the view says it without detail.
+    pub why: Option<String>,
+}
+
+impl DialogOutcome {
+    pub(crate) fn refused(why: &str) -> Self {
+        Self {
+            ok: false,
+            why: Some(why.to_owned()),
+        }
+    }
+}
 /// How long to wait for the output pipes to drain after the process has exited (the default of
 /// `ManagerConfig::reader_drain`).
 pub(crate) const READER_DRAIN: Duration = Duration::from_secs(2);
@@ -165,6 +219,9 @@ pub enum AfkEventKind {
     /// The account waits for the AFK client (download progress included), or its connect could
     /// not get it; `None` once that is over (see [`crate::client`]).
     Client(Option<ClientStep>),
+    /// The server's dialog of the account opened, changed or closed (the console's card reads it
+    /// again).
+    Dialog,
 }
 
 /// Receives every event. Called from runtime threads; must not block.
@@ -186,6 +243,8 @@ pub(crate) struct SessionEnv {
     pub(crate) connect_spacing: Duration,
     /// See `ManagerConfig::reader_drain`.
     pub(crate) reader_drain: Duration,
+    /// Studio's console switches as last known (each launch reads them).
+    pub(crate) console_features: RwLock<ConsoleFeatures>,
 }
 
 impl SessionEnv {
@@ -214,12 +273,16 @@ struct Shared {
     start_pending: bool,
     /// Store revision of the settings the running client was launched with.
     launched_revision: Option<u64>,
+    /// The server's open dialog as the card shows it, and when it opened.
+    dialog: Option<(ShownDialog, Timestamp)>,
 }
 
 enum Command {
     Start,
     Stop,
     Send(String),
+    /// A press of the dialog card (its JSON as the view built it) and where the answer goes.
+    DialogPress(String, oneshot::Sender<DialogOutcome>),
     Shutdown,
 }
 
@@ -261,6 +324,7 @@ impl Session {
             client_version: None,
             start_pending: false,
             launched_revision: None,
+            dialog: None,
         }));
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (io_tx, io_rx) = mpsc::unbounded_channel();
@@ -290,6 +354,9 @@ impl Session {
             account_dir: None,
             account: None,
             log: None,
+            features: ConsoleFeatures::default(),
+            dialog_cap: false,
+            press: None,
         };
         let task = tokio::spawn(actor.run(command_rx, io_rx));
         Arc::new(Self {
@@ -358,6 +425,32 @@ impl Session {
 
     pub(crate) fn console(&self) -> Vec<ConsoleLine> {
         self.shared.lock().console.snapshot()
+    }
+
+    /// The server's open dialog as the console's card shows it.
+    pub(crate) fn dialog(&self) -> Option<DialogView> {
+        self.shared
+            .lock()
+            .dialog
+            .as_ref()
+            .map(|(dialog, at)| DialogView {
+                rev: dialog.rev,
+                json: dialog.json.clone(),
+                at: *at,
+            })
+    }
+
+    /// Presses the dialog card; the client's answer comes on the returned channel (dropped
+    /// unanswered when the client ends first).
+    pub(crate) fn press_dialog(&self, press: String) -> Result<oneshot::Receiver<DialogOutcome>> {
+        if !self.is_running() {
+            return Err(AfkError::NotRunning);
+        }
+        let (tx, rx) = oneshot::channel();
+        self.commands
+            .send(Command::DialogPress(press, tx))
+            .map_err(|_| AfkError::NotRunning)?;
+        Ok(rx)
     }
 
     /// Waits until no process runs and no restart is pending. False on timeout.
@@ -432,6 +525,12 @@ struct Actor {
     /// Settings of the running launch.
     account: Option<AfkAccount>,
     log: Option<ConsoleLog>,
+    /// What the running client was launched with: none of it without the console kinds.
+    features: ConsoleFeatures,
+    /// The running client reports dialog cards (`caps` of its `connecting`).
+    dialog_cap: bool,
+    /// A press of the dialog card waiting for the client's `dialogres`.
+    press: Option<oneshot::Sender<DialogOutcome>>,
 }
 
 async fn sleep_until(at: Option<Instant>) {
@@ -455,6 +554,7 @@ impl Actor {
                     Some(Command::Start) => self.on_start().await,
                     Some(Command::Stop) => self.on_stop(),
                     Some(Command::Send(line)) => self.on_send(line),
+                    Some(Command::DialogPress(press, reply)) => self.on_dialog_press(&press, reply),
                     Some(Command::Shutdown) | None => {
                         self.on_shutdown();
                         break;
@@ -718,11 +818,18 @@ impl Actor {
         // client ignores the variable and its bare event lines are the only ones it prints. A
         // development build has no version to go by and keeps the bare lines.
         let nonce = (!client.dev && client_takes_nonce(&client.version)).then(new_nonce);
+        // The console kinds: only with a nonce (events tell from text by it alone) and a client
+        // that gives looks and dialogs, while one of Studio's switches is on.
+        let wanted = *self.env.console_features.read();
+        let kinds = nonce.is_some()
+            && client_gives_looks(&client.version)
+            && (wanted.looks || wanted.dialogs);
         let spec = LaunchSpec {
             exe: client.path.clone(),
             ini: dir.join(INI_FILE_NAME),
             cwd: dir.clone(),
             nonce: nonce.clone(),
+            console_kinds: kinds,
         };
 
         let process = match self.env.spawner.spawn(&spec) {
@@ -741,6 +848,12 @@ impl Actor {
 
         self.generation += 1;
         let generation = self.generation;
+        self.features = if kinds {
+            wanted
+        } else {
+            ConsoleFeatures::default()
+        };
+        self.dialog_cap = false;
         self.filter = LineFilter::new(&commands);
         self.login_script =
             has_login_commands(&account.login_commands, &commands).then_some(files.login_script);
@@ -882,7 +995,8 @@ impl Actor {
 
     fn on_bridge(&mut self, event: BridgeEvent) {
         match event {
-            BridgeEvent::Connecting { .. } => {
+            BridgeEvent::Connecting { caps, .. } => {
+                self.dialog_cap = caps.iter().any(|cap| cap == "dialog");
                 let connecting = matches!(
                     self.shared.lock().state,
                     SessionState::Starting
@@ -940,7 +1054,113 @@ impl Actor {
                 message,
                 version_error,
             } => self.on_disruption(reason, message.as_deref(), version_error),
+            BridgeEvent::Line {
+                src,
+                text,
+                who,
+                guess,
+                st,
+                ev,
+            } => self.on_line(&src, &text, who, guess.as_deref(), st.as_ref(), ev.as_ref()),
+            BridgeEvent::Dialog { rev, dialog } => self.on_dialog(rev, dialog.as_ref()),
+            BridgeEvent::DialogResult { ok, why, .. } => {
+                if let Some(reply) = self.press.take() {
+                    let _ = reply.send(if ok {
+                        DialogOutcome { ok, why: None }
+                    } else {
+                        DialogOutcome::refused(why.as_deref().unwrap_or("failed"))
+                    });
+                }
+            }
             BridgeEvent::Unknown(_) => {}
+        }
+    }
+
+    /// A console write of a client with the console kinds. The console shows what it showed
+    /// before them (the client's own lines, the server's chat and messages); what the server
+    /// keeps on screen (the action bar, titles) never was a console line, nor is it in 7/24 Bulut.
+    fn on_line(
+        &mut self,
+        src: &str,
+        text: &str,
+        who: Option<String>,
+        guess: Option<&str>,
+        st: Option<&Value>,
+        ev: Option<&Value>,
+    ) {
+        if matches!(src, "overlay" | "title" | "subtitle") {
+            return;
+        }
+        let look = if self.features.looks {
+            looks::read(st, ev, text)
+        } else {
+            None
+        };
+        // Whose chat line it is, for the card of a command clicked in it ("… adlı oyuncunun
+        // mesajından"): a player's line, or the client's own reading of a server's chat line.
+        let chat = src == "player" || (src == "system" && matches!(guess, Some("chat" | "pm")));
+        let who = who.filter(|name| {
+            chat && crate::model::is_valid_nickname(name) && self.filter.mask(name) == *name
+        });
+        self.append_line(text, ConsoleOrigin::Client, None, look, who);
+    }
+
+    /// The server's dialog (or its close) from a client that reports dialog cards: kept for the
+    /// card while Studio's switch was on at the launch and the account's rules leave it as it came.
+    fn on_dialog(&mut self, rev: i64, raw: Option<&Value>) {
+        if !self.features.dialogs || !self.dialog_cap {
+            return;
+        }
+        let shown = raw.and_then(|raw| dialog::check(rev, raw, &|text| self.filter.mask(text)));
+        let changed = {
+            let mut shared = self.shared.lock();
+            let same = shared.dialog.as_ref().map(|(open, _)| open) == shown.as_ref();
+            if !same {
+                shared.dialog = shown.map(|open| (open, Timestamp::now()));
+            }
+            !same
+        };
+        if changed {
+            self.env.emit(&self.id, AfkEventKind::Dialog);
+        }
+    }
+
+    /// A press of the dialog card, checked against the dialog it was made on and sent to the
+    /// client; its `dialogres` answers it. A command the press may run is masked in the console
+    /// from now on when it carries a password, as a typed one is.
+    fn on_dialog_press(&mut self, press: &str, reply: oneshot::Sender<DialogOutcome>) {
+        let refuse = |reply: oneshot::Sender<DialogOutcome>, why: &str| {
+            let _ = reply.send(DialogOutcome::refused(why));
+        };
+        let Some(stdin) = self.process.as_ref().map(|p| p.stdin.clone()) else {
+            return refuse(reply, "failed");
+        };
+        // One press at a time: the card waits for its answer.
+        if self
+            .press
+            .as_ref()
+            .is_some_and(|earlier| !earlier.is_closed())
+        {
+            return refuse(reply, "failed");
+        }
+        let shown = self
+            .shared
+            .lock()
+            .dialog
+            .as_ref()
+            .map(|(open, _)| open.clone());
+        let Some(shown) = shown.filter(|_| self.features.dialogs) else {
+            return refuse(reply, "stale");
+        };
+        match dialog::press_line(press, &shown) {
+            Err(why) => refuse(reply, why),
+            Ok(line) => {
+                if let Some(command) = &line.command {
+                    self.filter.add_user_command(command);
+                }
+                self.press = Some(reply);
+                let _ = stdin.send(line.line);
+            }
         }
     }
 
@@ -994,10 +1214,17 @@ impl Actor {
         self.kill_at = None;
         self.remove_login_script();
         self.login_script = None;
-        {
+        // A press still waiting ends unanswered; the dialog went with the client.
+        self.press = None;
+        self.dialog_cap = false;
+        let had_dialog = {
             let mut shared = self.shared.lock();
             shared.running = false;
             shared.stats = SessionStats::default();
+            shared.dialog.take().is_some()
+        };
+        if had_dialog {
+            self.env.emit(&self.id, AfkEventKind::Dialog);
         }
         self.env
             .emit(&self.id, AfkEventKind::Stats(SessionStats::default()));
@@ -1118,17 +1345,47 @@ impl Actor {
         origin: ConsoleOrigin,
         kind_override: Option<ConsoleLineKind>,
     ) {
-        let (text, kind) = self.filter.process(raw);
+        self.append_line(raw, origin, kind_override, None, None);
+    }
+
+    /// One console line: classified, masked and cut as always; its look and sender only when the
+    /// account's rules leave the line as it came (a normal line, nothing masked).
+    fn append_line(
+        &mut self,
+        raw: &str,
+        origin: ConsoleOrigin,
+        kind_override: Option<ConsoleLineKind>,
+        look: Option<LineLooks>,
+        who: Option<String>,
+    ) {
+        let kind = kind_override.unwrap_or_else(|| self.filter.classify(raw));
+        let masked = self.filter.mask(raw);
+        let as_it_came = kind == ConsoleLineKind::Normal && masked == raw;
+        let look = look.filter(|_| as_it_came).and_then(|look| {
+            let look = looks::unmask(look, &|text| self.filter.mask(text));
+            looks::fit(match cut_units(raw) {
+                Some(kept) => looks::cut(look, kept),
+                None => look,
+            })
+        });
         let line = ConsoleLine {
             at: Timestamp::now(),
-            text,
-            kind: kind_override.unwrap_or(kind),
+            text: cap_line(&masked),
+            kind,
             origin,
+            looks: None,
+            who: None,
         };
+        // The log and the event carry the text alone: the view reads the look from the console.
         if let Some(log) = &self.log {
             log.write(&line);
         }
-        self.shared.lock().console.push(line.clone());
+        let kept = ConsoleLine {
+            looks: look,
+            who: who.filter(|_| as_it_came),
+            ..line.clone()
+        };
+        self.shared.lock().console.push(kept);
         self.env.emit(&self.id, AfkEventKind::Line(line));
     }
 

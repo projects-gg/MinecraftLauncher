@@ -1,3 +1,4 @@
+import type { DialogPress } from "@pl/ui/console";
 import type {
   Lang,
   LegacyImportReport,
@@ -32,6 +33,8 @@ import { tauriApi } from "./tauri";
 import type {
   AccountSummary,
   AfkAccount,
+  AfkDialog,
+  AfkDialogOutcome,
   AfkLogLine,
   AppInfo,
   ContentStatus,
@@ -113,6 +116,12 @@ export interface LauncherApi {
   afkStopAll(): Promise<void>;
   afkSend(id: string, line: string): Promise<void>;
   afkLog(id: string): Promise<AfkLogLine[]>;
+  /** The server's dialog open for the account, as its console card shows it (null: none). */
+  afkDialog(id: string): Promise<AfkDialog | null>;
+  /** A press of that card (`dialogPress`'s shape); pl-afk and the client check it and answer. */
+  afkDialogPress(id: string, press: DialogPress): Promise<AfkDialogOutcome>;
+  /** A desktop account's dialog opened, changed or closed. Returns an unsubscribe function. */
+  onAfkDialog(listener: (accountId: string) => void): () => void;
   /** One account's settings sheet; passwords in login commands stay in the OS keychain. */
   afkSettings(id: string): Promise<AfkSettingsView>;
   /** Validated again by the backend: incomplete settings come back as `invalid`. */

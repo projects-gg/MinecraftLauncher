@@ -383,7 +383,20 @@ export const commands = {
 	afkConnectAll: () => __TAURI_INVOKE<void>("afk_connect_all"),
 	afkStopAll: () => typedError<null, CmdError>(__TAURI_INVOKE("afk_stop_all")),
 	afkSend: (id: string, line: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_send", { id, line })),
-	afkConsole: (id: string) => __TAURI_INVOKE<ConsoleLineView[]>("afk_console", { id }),
+	afkConsole: (id: string) => __TAURI_INVOKE<ConsoleLineView_Serialize[]>("afk_console", { id }),
+	/**  The server's dialog of the account, as its console card shows it (none while it has none). */
+	afkDialog: (id: string) => __TAURI_INVOKE<{
+	/**  The client's revision of it: a press names it. */
+	rev: number,
+	dialog: string,
+	/**  When it opened (RFC 3339). */
+	at: string,
+} | null>("afk_dialog", { id }),
+	/**
+	 *  A press of the account's dialog card (`press`: its JSON as `@pl/ui` `dialogPress` built it):
+	 *  checked by pl-afk and by the client, which answers.
+	 */
+	afkDialogPress: (id: string, press: string) => typedError<AfkDialogOutcome, CmdError>(__TAURI_INVOKE("afk_dialog_press", { id, press })),
 	afkAnyActive: () => __TAURI_INVOKE<boolean>("afk_any_active"),
 	/**  Stops the account's client (if any) and connects it again, so saved settings apply. */
 	afkReconnect: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_reconnect", { id })),
@@ -1635,6 +1648,27 @@ export type AfkAccountView = {
 	client: ClientStep | null,
 };
 
+/**
+ *  The client's answer to a press of the card: done, or why not (`stale`: another dialog now;
+ *  anything else: it did not work).
+ */
+export type AfkDialogOutcome = {
+	ok: boolean,
+	why: string | null,
+};
+
+/**
+ *  The server's dialog of a desktop account as its console card shows it (DIALOG-CARD on this
+ *  computer): its JSON as pl-afk checked it (the view checks it again: `safeDialog`).
+ */
+export type AfkDialogView = {
+	/**  The client's revision of it: a press names it. */
+	rev: number,
+	dialog: string,
+	/**  When it opened (RFC 3339). */
+	at: string,
+};
+
 export type AfkEvent = {
 	accountId: string,
 	kind: AfkEventKind,
@@ -1656,7 +1690,12 @@ export type AfkEventKind = { type: "state"; data: SessionState } |
  *  The account waits for the AFK client (download progress included), or its connect could
  *  not get it; `None` once that is over (see [`crate::client`]).
  */
-{ type: "client"; data: ClientStep | null };
+{ type: "client"; data: ClientStep | null } | 
+/**
+ *  The server's dialog of the account opened, changed or closed (the console's card reads it
+ *  again).
+ */
+{ type: "dialog" };
 
 /**  An item's name in Turkish and English (from the AFK+ catalog). */
 export type AfkItemName = {
@@ -3979,11 +4018,42 @@ export type ConsoleLineKind =
 /**  Output of a login/register/password command: never visible (already masked anyway). */
 "sensitive";
 
-export type ConsoleLineView = {
+export type ConsoleLineView = ConsoleLineView_Serialize | ConsoleLineView_Deserialize;
+
+export type ConsoleLineView_Deserialize = {
 	time: string,
 	text: string,
 	/**  "normal" | "script" (sensitive lines never reach the UI) */
 	kind: string,
+	/**
+	 *  The player whose chat line it is (a client with the console kinds), for the card of a
+	 *  command clicked in it.
+	 */
+	who: string | null,
+	/**
+	 *  The line in the game's colours (console looks, AFK-UX): its parts and what they do, in
+	 *  7/24 Bulut's form; the view checks them again (`@pl/ui/console`).
+	 */
+	st: CloudSpan[] | null,
+	ev: CloudLineEvent_Deserialize[] | null,
+};
+
+export type ConsoleLineView_Serialize = {
+	time: string,
+	text: string,
+	/**  "normal" | "script" (sensitive lines never reach the UI) */
+	kind: string,
+	/**
+	 *  The player whose chat line it is (a client with the console kinds), for the card of a
+	 *  command clicked in it.
+	 */
+	who: string | null,
+	/**
+	 *  The line in the game's colours (console looks, AFK-UX): its parts and what they do, in
+	 *  7/24 Bulut's form; the view checks them again (`@pl/ui/console`).
+	 */
+	st: CloudSpan[] | null,
+	ev: CloudLineEvent_Serialize[] | null,
 };
 
 /**  Where a console line came from. */

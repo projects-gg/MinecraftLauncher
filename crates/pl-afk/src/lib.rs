@@ -30,10 +30,12 @@ pub mod bridge;
 pub mod client;
 mod config;
 mod console;
+mod dialog;
 mod error;
 mod form;
 mod housekeeping;
 pub mod legacy;
+pub mod looks;
 mod manager;
 mod model;
 mod orphans;
@@ -94,7 +96,8 @@ pub use runtime::{AfkClientBuild, AfkClientRelease, AfkRuntime, CLIENT_EXE_NAME,
 pub use secrets::KeyringSecretStore;
 pub use secrets::{KEYRING_SERVICE, MemorySecretStore, SecretStore, login_commands_key};
 pub use session::{
-    AfkActivity, AfkEvent, AfkEventKind, EventSink, SessionSnapshot, SessionState, SessionStats,
+    AfkActivity, AfkEvent, AfkEventKind, ConsoleFeatures, DialogOutcome, DialogView, EventSink,
+    SessionSnapshot, SessionState, SessionStats,
 };
 pub use store::{AccountStore, LoadReport};
 pub use versions::{MAX_LISTED_VERSIONS, ResolvedVersion, VersionCatalog, VersionEntry};
