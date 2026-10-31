@@ -30,7 +30,7 @@ use crate::model::{
     MRPACK_FORMAT_VERSION, ModSet, ModSetItemKind, ModSetPurpose, ModSetVariant, PackDependencies,
     PackManifest, ProjectsExtension,
 };
-use crate::path::LAUNCHER_DIR;
+use crate::path::{LAUNCHER_DIR, join_relative};
 use crate::sync::{
     DownloadAction, FileCategory, PackState, SyncPlan, SyncPolicy, SyncProgressFn, SyncReport,
     apply_sync_into, plan_sync,
@@ -448,6 +448,12 @@ pub struct SetApplyReport {
 /// Applies a plan from [`plan_set`] or [`plan_set_removal`] and records the result in
 /// `.projects/mod-sets.json` (at the point where a pack sync writes its state, so a crash never
 /// leaves a state that misreads the set's own changes as the player's).
+///
+/// An install the player stops (`options.cancel`, [`Error::Cancelled`]) takes back the files it
+/// put in place: every download whose file did not exist when it began goes again, so nothing
+/// unrecorded stays to read as the player's own (SMALLS-L3). A file that was there before, one an
+/// update replaced included, is never touched. Other failures keep what was fetched, so the next
+/// try goes on from there.
 pub async fn apply_set(
     plan: &SyncPlan,
     set_id: &str,
@@ -465,6 +471,11 @@ pub async fn apply_set(
         .map(|set| set.resource_packs.keys().cloned().collect())
         .unwrap_or_default();
     let installing = matches!(change, SetChange::Install { .. });
+    let fresh = if installing {
+        fresh_files(plan).await
+    } else {
+        Vec::new()
+    };
     let new_mods = match &change {
         SetChange::Install { variant, .. } => plan.placed_mods(&variant.items),
         SetChange::Remove => Vec::new(),
@@ -547,7 +558,14 @@ pub async fn apply_set(
             states.save(&game_dir).await
         },
     )
-    .await?;
+    .await;
+    let sync = match sync {
+        Err(Error::Cancelled) => {
+            take_back(&fresh).await;
+            return Err(Error::Cancelled);
+        }
+        other => other?,
+    };
     let removed_resource_packs = removed.lock().map(|r| r.clone()).unwrap_or_default();
     Ok(SetApplyReport {
         sync,
@@ -559,6 +577,36 @@ pub async fn apply_set(
         },
         new_mods,
     })
+}
+
+/// The files `plan` would download that do not exist yet: what an install puts in place.
+async fn fresh_files(plan: &SyncPlan) -> Vec<PathBuf> {
+    let mut fresh = Vec::new();
+    for download in &plan.downloads {
+        let Ok(path) = join_relative(&plan.game_dir, &download.path) else {
+            continue;
+        };
+        if let Err(e) = tokio::fs::symlink_metadata(&path).await
+            && e.kind() == std::io::ErrorKind::NotFound
+        {
+            fresh.push(path);
+        }
+    }
+    fresh
+}
+
+/// A stopped install's own files go again. One that cannot go stays (it is logged): the next
+/// try finds it in place.
+async fn take_back(fresh: &[PathBuf]) {
+    for path in fresh {
+        match tokio::fs::remove_file(path).await {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(path = %path.display(), %error, "a stopped set install left a file");
+            }
+        }
+    }
 }
 
 /// The file name of a set path (`resourcepacks/LowFire.zip` → `LowFire.zip`).
@@ -1132,5 +1180,155 @@ mod tests {
         );
         ModSetStates::default().save(game).await.unwrap();
         assert!(!ModSetStates::path(game).exists());
+    }
+
+    /// Installs `variant` until every file of `in_place` is there, then stops it (the player's
+    /// stop in "Set ekle").
+    async fn stopped_install(
+        plan: &SyncPlan,
+        set: &ModSet,
+        variant: &ModSetVariant,
+        in_place: Vec<PathBuf>,
+    ) -> Result<SetApplyReport> {
+        let options = DownloadOptions::default();
+        let cancel = options.cancel.clone();
+        let stop = tokio::spawn(async move {
+            while !in_place.iter().all(|path| path.exists()) {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            cancel.cancel();
+        });
+        let change = SetChange::Install {
+            name: set.name.clone(),
+            purpose: set.purpose,
+            variant: variant.clone(),
+        };
+        let downloader = Downloader::new(test_http());
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            apply_set(plan, &set.id, change, &downloader, &options, None),
+        )
+        .await
+        .expect("the stop ends the install");
+        stop.abort();
+        result
+    }
+
+    /// The names in a folder of the game directory, sorted (none while it is missing).
+    fn names_in(game: &Path, dir: &str) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(game.join(dir))
+            .map(|entries| {
+                entries
+                    .filter_map(|entry| entry.ok())
+                    .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        names.sort();
+        names
+    }
+
+    #[tokio::test]
+    async fn a_stopped_install_takes_back_what_it_put_in_place() {
+        let server = TestServer::start().await;
+        let game = tempfile::tempdir().unwrap();
+        let game = game.path();
+        write(game, "mods/own.jar", b"mine");
+        let variant = sample_variant(
+            Some(&server),
+            "26.3",
+            &[
+                ("mods/zoom.jar", b"zoom 1"),
+                ("mods/hud.jar", b"hud 1"),
+                ("resourcepacks/LowFire.zip", b"the set's fire pack"),
+            ],
+        );
+        // The pack never comes whole: the player stops the install once both mods are in place.
+        server.hold(&variant.files[2].downloads[0]);
+        let catalog = sample_mod_sets(variant.clone());
+        let set = &catalog.sets[0];
+        let plan = plan_set(game, set, &variant, None, None, &BTreeSet::new())
+            .await
+            .unwrap();
+        assert_eq!(plan.downloads.len(), 3);
+        let in_place = vec![game.join("mods/zoom.jar"), game.join("mods/hud.jar")];
+        let stopped = stopped_install(&plan, set, &variant, in_place).await;
+        assert!(matches!(stopped, Err(Error::Cancelled)), "{stopped:?}");
+
+        // Nothing of the set stays (no half file either); the player's own mod does.
+        assert_eq!(names_in(game, "mods"), ["own.jar"]);
+        assert_eq!(std::fs::read(game.join("mods/own.jar")).unwrap(), b"mine");
+        assert!(names_in(game, "resourcepacks").is_empty());
+        assert!(!ModSetStates::path(game).exists(), "no set recorded");
+
+        // Added again, the set installs in full.
+        server.release(&variant.files[2].downloads[0]);
+        let plan = plan_set(game, set, &variant, None, None, &BTreeSet::new())
+            .await
+            .unwrap();
+        assert_eq!(plan.downloads.len(), 3);
+        let report = apply(&plan, set, &variant).await;
+        assert_eq!(report.sync.downloaded, 3);
+        assert_eq!(names_in(game, "mods"), ["hud.jar", "own.jar", "zoom.jar"]);
+        let states = ModSetStates::load(game).await.unwrap();
+        assert!(states.sets["pvp"].installed());
+    }
+
+    #[tokio::test]
+    async fn a_stopped_install_never_touches_what_was_there_before() {
+        let server = TestServer::start().await;
+        let game = tempfile::tempdir().unwrap();
+        let game = game.path();
+        // The player's own mod, the set's zoom mod they already had, and their own pack under the
+        // set's pack's name (the plan keeps it).
+        write(game, "mods/own.jar", b"mine");
+        write(game, "mods/zoom.jar", b"zoom 1");
+        write(game, "resourcepacks/LowFire.zip", b"my own fire pack");
+        let variant = sample_variant(
+            Some(&server),
+            "26.3",
+            &[
+                ("mods/zoom.jar", b"zoom 1"),
+                ("mods/hud.jar", b"hud 1"),
+                ("resourcepacks/LowFire.zip", b"the set's fire pack"),
+                ("resourcepacks/Shield.zip", b"the set's shield pack"),
+            ],
+        );
+        // The new pack never comes whole: the player stops the install once the HUD mod is in.
+        server.hold(&variant.files[3].downloads[0]);
+        let catalog = sample_mod_sets(variant.clone());
+        let set = &catalog.sets[0];
+        let plan = plan_set(game, set, &variant, None, None, &BTreeSet::new())
+            .await
+            .unwrap();
+        let mut actions: Vec<(&str, DownloadAction)> = plan
+            .downloads
+            .iter()
+            .map(|download| (download.path.as_str(), download.action))
+            .collect();
+        actions.sort_by_key(|(path, _)| *path);
+        assert_eq!(
+            actions,
+            [
+                ("mods/hud.jar", DownloadAction::Add),
+                ("resourcepacks/Shield.zip", DownloadAction::Add)
+            ]
+        );
+        let stopped = stopped_install(&plan, set, &variant, vec![game.join("mods/hud.jar")]).await;
+        assert!(matches!(stopped, Err(Error::Cancelled)), "{stopped:?}");
+
+        // Only the mod this install put in place went; every file that was there stays as it was.
+        assert_eq!(names_in(game, "mods"), ["own.jar", "zoom.jar"]);
+        assert_eq!(std::fs::read(game.join("mods/own.jar")).unwrap(), b"mine");
+        assert_eq!(
+            std::fs::read(game.join("mods/zoom.jar")).unwrap(),
+            b"zoom 1"
+        );
+        assert_eq!(names_in(game, "resourcepacks"), ["LowFire.zip"]);
+        assert_eq!(
+            std::fs::read(game.join("resourcepacks/LowFire.zip")).unwrap(),
+            b"my own fire pack"
+        );
+        assert!(!ModSetStates::path(game).exists(), "no set recorded");
     }
 }
