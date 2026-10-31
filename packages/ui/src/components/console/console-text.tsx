@@ -26,6 +26,7 @@ import { TooltipLines } from "../inventory/tooltip";
 import type { InvItem } from "../inventory/types";
 import "../inventory/inventory.css";
 import "./console.css";
+import type { ConsoleGround } from "./ground";
 import {
   type ConsoleClick,
   type ConsoleEvent,
@@ -55,6 +56,8 @@ export interface ConsoleTextProps {
   itemOf?: (raw: unknown) => InvItem | null;
   /** The line without looks (today's words, a private line's name standing out). */
   children?: ReactNode;
+  /** What it is drawn on: the console (default) or a plate on it (a chosen row, a button). */
+  ground?: ConsoleGround;
 }
 
 /** The game's GUI pixel in CSS pixels for the console's tooltips. */
@@ -422,9 +425,10 @@ export const ConsoleText = memo(function ConsoleText({
   onClick,
   itemOf,
   children,
+  ground = "console",
 }: ConsoleTextProps) {
   const events = useMemo(() => safeEvents(ev), [ev]);
-  const runs = useMemo(() => lineRuns(text, st, events), [text, st, events]);
+  const runs = useMemo(() => lineRuns(text, st, events, ground), [text, st, events, ground]);
   if (!runs) return <>{children ?? text}</>;
   return (
     <>
