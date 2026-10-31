@@ -19,6 +19,11 @@
 //! keeps on screen (the action bar, titles, boss bars) is no console line, as before. The server's
 //! open dialog is kept for the console's card ([`crate::dialog`]), and a press of the card goes to
 //! the client as `/dialog act`, answered by its `dialogres`.
+//!
+//! A client 4.2.5 or later runs instead with its side events (CONSOLE-ANY, `MCC_CONSOLE_SIDE`): the
+//! console stays exactly the classic one, a chat line's looks come as a hidden event right before
+//! it and ride on that very next line only when it is exactly their text, and the dialogs, the
+//! game's waiting screen and the menus of its pause screen and quick actions key come as events.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -34,8 +39,8 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::Instant;
 
 use crate::bridge::{
-    BridgeEvent, ClientLine, DisconnectReason, client_gives_looks, client_takes_nonce, new_nonce,
-    parse_line_with_nonce,
+    BridgeEvent, ClientLine, DisconnectReason, client_gives_looks, client_gives_side,
+    client_takes_nonce, new_nonce, parse_line_with_nonce,
 };
 use crate::client::ClientStep;
 use crate::config::{
@@ -82,8 +87,11 @@ pub struct ConsoleFeatures {
 pub struct DialogView {
     /// The client's revision of it: a press names it.
     pub rev: u32,
-    /// Its JSON as checked here (the view checks it again).
+    /// Its JSON as checked here (the view checks it again; empty while `wait`).
     pub json: String,
+    /// The game's "waiting for response" screen in a dialog's place (client 4.2.5): a close of
+    /// `rev` leaves it.
+    pub wait: bool,
     /// When it opened.
     pub at: Timestamp,
 }
@@ -275,6 +283,8 @@ struct Shared {
     launched_revision: Option<u64>,
     /// The server's open dialog as the card shows it, and when it opened.
     dialog: Option<(ShownDialog, Timestamp)>,
+    /// What the game's pause screen and quick actions key open (client 4.2.5), as checked.
+    menus: Option<String>,
 }
 
 enum Command {
@@ -325,6 +335,7 @@ impl Session {
             start_pending: false,
             launched_revision: None,
             dialog: None,
+            menus: None,
         }));
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (io_tx, io_rx) = mpsc::unbounded_channel();
@@ -355,6 +366,8 @@ impl Session {
             account: None,
             log: None,
             features: ConsoleFeatures::default(),
+            side: false,
+            side_looks: None,
             dialog_cap: false,
             press: None,
         };
@@ -436,8 +449,14 @@ impl Session {
             .map(|(dialog, at)| DialogView {
                 rev: dialog.rev,
                 json: dialog.json.clone(),
+                wait: dialog.wait,
                 at: *at,
             })
+    }
+
+    /// What the game's pause screen and quick actions key open (client 4.2.5), as JSON.
+    pub(crate) fn dialog_menus(&self) -> Option<String> {
+        self.shared.lock().menus.clone()
     }
 
     /// Presses the dialog card; the client's answer comes on the returned channel (dropped
@@ -525,8 +544,13 @@ struct Actor {
     /// Settings of the running launch.
     account: Option<AfkAccount>,
     log: Option<ConsoleLog>,
-    /// What the running client was launched with: none of it without the console kinds.
+    /// What the running client was launched with: none of it without the console kinds or the
+    /// side events.
     features: ConsoleFeatures,
+    /// The running client gives side events (client 4.2.5): its console is the classic one.
+    side: bool,
+    /// A side event's looks waiting for the very next console line (exactly its text).
+    side_looks: Option<(String, LineLooks)>,
     /// The running client reports dialog cards (`caps` of its `connecting`).
     dialog_cap: bool,
     /// A press of the dialog card waiting for the client's `dialogres`.
@@ -818,18 +842,27 @@ impl Actor {
         // client ignores the variable and its bare event lines are the only ones it prints. A
         // development build has no version to go by and keeps the bare lines.
         let nonce = (!client.dev && client_takes_nonce(&client.version)).then(new_nonce);
-        // The console kinds: only with a nonce (events tell from text by it alone) and a client
-        // that gives looks and dialogs, while one of Studio's switches is on.
+        // Looks and dialogs only with a nonce (events tell from text by it alone), while one of
+        // Studio's switches is on: from a client 4.2.5 as side events beside its classic console,
+        // from a 4.2.4 with the console kinds.
         let wanted = *self.env.console_features.read();
-        let kinds = nonce.is_some()
-            && client_gives_looks(&client.version)
-            && (wanted.looks || wanted.dialogs);
+        let wanted_any = nonce.is_some() && (wanted.looks || wanted.dialogs);
+        let side = wanted_any && client_gives_side(&client.version);
+        let kinds = wanted_any && !side && client_gives_looks(&client.version);
+        let console_side = side.then(|| {
+            [("looks", wanted.looks), ("dialogs", wanted.dialogs)]
+                .into_iter()
+                .filter_map(|(part, on)| on.then_some(part))
+                .collect::<Vec<_>>()
+                .join(",")
+        });
         let spec = LaunchSpec {
             exe: client.path.clone(),
             ini: dir.join(INI_FILE_NAME),
             cwd: dir.clone(),
             nonce: nonce.clone(),
             console_kinds: kinds,
+            console_side,
         };
 
         let process = match self.env.spawner.spawn(&spec) {
@@ -848,11 +881,13 @@ impl Actor {
 
         self.generation += 1;
         let generation = self.generation;
-        self.features = if kinds {
+        self.features = if kinds || side {
             wanted
         } else {
             ConsoleFeatures::default()
         };
+        self.side = side;
+        self.side_looks = None;
         self.dialog_cap = false;
         self.filter = LineFilter::new(&commands);
         self.login_script =
@@ -984,7 +1019,14 @@ impl Actor {
                     ClientLine::Event(event) => self.on_bridge(event),
                     ClientLine::Malformed => {}
                     ClientLine::Text(text) => {
-                        self.append_console(text, ConsoleOrigin::Client, None);
+                        // Side events: a chat line's looks ride only on the very next console
+                        // line, only when it is exactly their text.
+                        let look = self
+                            .side_looks
+                            .take()
+                            .filter(|(said, _)| said == text)
+                            .map(|(_, look)| look);
+                        self.append_line(text, ConsoleOrigin::Client, None, look, None);
                     }
                 }
             }
@@ -1074,7 +1116,23 @@ impl Actor {
                 st,
                 ev,
             } => self.on_line(&src, &text, who, guess.as_deref(), st.as_ref(), ev.as_ref()),
-            BridgeEvent::Dialog { rev, dialog } => self.on_dialog(rev, dialog.as_ref()),
+            BridgeEvent::Looks { text, st, ev } => {
+                self.side_looks = (self.side && self.features.looks)
+                    .then(|| looks::read(st.as_ref(), ev.as_ref(), &text))
+                    .flatten()
+                    .map(|look| (text, look));
+            }
+            BridgeEvent::Dialog { rev, dialog, wait } => self.on_dialog(rev, dialog.as_ref(), wait),
+            BridgeEvent::Menus { menus } => self.on_menus(&menus),
+            BridgeEvent::MenuResult { ok, why, .. } => {
+                if let Some(reply) = self.press.take() {
+                    let _ = reply.send(if ok {
+                        DialogOutcome { ok, why: None }
+                    } else {
+                        DialogOutcome::refused(why.as_deref().unwrap_or("failed"))
+                    });
+                }
+            }
             BridgeEvent::DialogResult { ok, why, .. } => {
                 if let Some(reply) = self.press.take() {
                     let _ = reply.send(if ok {
@@ -1117,13 +1175,18 @@ impl Actor {
         self.append_line(text, ConsoleOrigin::Client, None, look, who);
     }
 
-    /// The server's dialog (or its close) from a client that reports dialog cards: kept for the
-    /// card while Studio's switch was on at the launch and the account's rules leave it as it came.
-    fn on_dialog(&mut self, rev: i64, raw: Option<&Value>) {
+    /// The server's dialog (or its close, or the game's waiting screen in its place) from a
+    /// client that reports dialog cards: kept for the card while Studio's switch was on at the
+    /// launch and the account's rules leave it as it came.
+    fn on_dialog(&mut self, rev: i64, raw: Option<&Value>, wait: bool) {
         if !self.features.dialogs || !self.dialog_cap {
             return;
         }
-        let shown = raw.and_then(|raw| dialog::check(rev, raw, &|text| self.filter.mask(text)));
+        let shown = if wait {
+            ShownDialog::waiting(rev)
+        } else {
+            raw.and_then(|raw| dialog::check(rev, raw, &|text| self.filter.mask(text)))
+        };
         let changed = {
             let mut shared = self.shared.lock();
             let same = shared.dialog.as_ref().map(|(open, _)| open) == shown.as_ref();
@@ -1137,9 +1200,28 @@ impl Actor {
         }
     }
 
+    /// What the game's pause screen and quick actions key open (client 4.2.5): kept for the console
+    /// as the account's rules leave their labels.
+    fn on_menus(&mut self, menus: &serde_json::Map<String, Value>) {
+        if !self.features.dialogs || !self.dialog_cap {
+            return;
+        }
+        let menus = dialog::check_menus(menus, &|text| self.filter.mask(text));
+        let changed = {
+            let mut shared = self.shared.lock();
+            let changed = shared.menus != menus;
+            shared.menus = menus;
+            changed
+        };
+        if changed {
+            self.env.emit(&self.id, AfkEventKind::Dialog);
+        }
+    }
+
     /// A press of the dialog card, checked against the dialog it was made on and sent to the
-    /// client; its `dialogres` answers it. A command the press may run is masked in the console
-    /// from now on when it carries a password, as a typed one is.
+    /// client; its `dialogres` answers it (a menu's opening, client 4.2.5: its `menures`). A
+    /// command the press may run is masked in the console from now on when it carries a password,
+    /// as a typed one is.
     fn on_dialog_press(&mut self, press: &str, reply: oneshot::Sender<DialogOutcome>) {
         let refuse = |reply: oneshot::Sender<DialogOutcome>, why: &str| {
             let _ = reply.send(DialogOutcome::refused(why));
@@ -1155,16 +1237,17 @@ impl Actor {
         {
             return refuse(reply, "failed");
         }
-        let shown = self
-            .shared
-            .lock()
-            .dialog
-            .as_ref()
-            .map(|(open, _)| open.clone());
-        let Some(shown) = shown.filter(|_| self.features.dialogs) else {
+        if !self.features.dialogs {
             return refuse(reply, "stale");
+        }
+        let (shown, menus) = {
+            let shared = self.shared.lock();
+            (
+                shared.dialog.as_ref().map(|(open, _)| open.clone()),
+                shared.menus.clone(),
+            )
         };
-        match dialog::press_line(press, &shown) {
+        match dialog::press_line(press, shown.as_ref(), menus.as_deref()) {
             Err(why) => refuse(reply, why),
             Ok(line) => {
                 if let Some(command) = &line.command {
@@ -1229,11 +1312,13 @@ impl Actor {
         // A press still waiting ends unanswered; the dialog went with the client.
         self.press = None;
         self.dialog_cap = false;
+        self.side_looks = None;
         let had_dialog = {
             let mut shared = self.shared.lock();
             shared.running = false;
             shared.stats = SessionStats::default();
-            shared.dialog.take().is_some()
+            let menus = shared.menus.take().is_some();
+            shared.dialog.take().is_some() || menus
         };
         if had_dialog {
             self.env.emit(&self.id, AfkEventKind::Dialog);

@@ -591,44 +591,131 @@ function seedConsole() {
 seedConsole();
 
 /**
+ * A client 4.2.5's dialog as a real form (CONSOLE-ANY): an item part, a checkbox, radio buttons, a
+ * slider in the game's steps and words, a multiline field, tooltips and widths.
+ */
+const FORM_DIALOG = {
+  title: "Klan kur",
+  titleSt: [[8, "6l"]],
+  body: [
+    { text: "Klanını kur, ilk sezon ödülünü al." },
+    {
+      text: "Sezon ödülü",
+      item: { id: "minecraft:diamond", count: 3, label: { tr: "Elmas", en: "Diamond" } },
+    },
+  ],
+  inputs: [
+    { key: "name", kind: "text", label: "Klan adı", max: 16, initial: "" },
+    {
+      key: "color",
+      kind: "option",
+      label: "Renk",
+      options: [
+        { id: "red", label: "Kırmızı", labelSt: [[7, "c"]] },
+        { id: "blue", label: "Mavi", labelSt: [[4, "9"]] },
+        { id: "green", label: "Yeşil", labelSt: [[5, "a"]] },
+      ],
+      initial: "blue",
+    },
+    {
+      key: "size",
+      kind: "range",
+      label: "Üye sınırı",
+      start: 2,
+      end: 20,
+      step: 2,
+      initial: 8,
+      fmt: "%s: %s",
+    },
+    {
+      key: "open",
+      kind: "bool",
+      label: "Herkes katılabilsin",
+      initial: true,
+      onTrue: "acik",
+      onFalse: "kapali",
+    },
+    {
+      key: "motto",
+      kind: "text",
+      label: "Klan sözü",
+      max: 120,
+      multiline: true,
+      lines: 3,
+      initial: "",
+    },
+  ],
+  buttons: [
+    {
+      i: 1,
+      label: "Kur",
+      labelSt: [[3, "a"]],
+      a: "run_command",
+      v: "/klan kur $(name) $(color) $(size) $(open)",
+      tpl: true,
+      tip: "Klanı bu ayarlarla kurar",
+    },
+    { i: 2, label: "Klan kuralları", a: "open_url", v: "https://forum.projects.gg/klan", w: 120 },
+  ],
+  cancel: true,
+  play: true,
+  cols: 2,
+  after: "wait",
+  exit: { label: "Vazgeç" },
+};
+
+/**
  * Preview switch `?dialog=1`: KasaBekcisi's server shows its rules as a dialog (a client 4.2.4
  * while Studio's dialog cards switch is on). Any press closes it, as the preview's server does.
+ * `?dialog=form`: a client 4.2.5's form (CONSOLE-ANY); `?dialog=wait`: the game's waiting screen;
+ * `?menus=1`: what its pause screen and quick actions key open.
  */
-let mockDialog: { rev: number; dialog: string; at: string } | null =
-  param("dialog") === "1"
-    ? {
-        rev: 1,
-        at: now(),
-        dialog: JSON.stringify({
-          title: "Sunucu Kuralları",
-          titleSt: [[16, "6l"]],
-          body: [{ text: "1. Saygılı ol, küfür etme.\n2. Hile ve makro yok.\n3. Reklam yapma." }],
-          inputs: [
-            {
-              key: "ok",
-              kind: "bool",
-              label: "Kuralları okudum",
-              initial: false,
-              onTrue: "evet",
-              onFalse: "hayir",
-            },
-          ],
-          buttons: [
-            {
-              i: 0,
-              label: "Kabul et",
-              labelSt: [[8, "a"]],
-              a: "run_command",
-              v: "/kurallar kabul $(ok)",
-            },
-            { i: 1, label: "Forumda oku", a: "open_url", v: "https://forum.projects.gg/kurallar" },
-          ],
-          cancel: true,
-          play: true,
-          cols: 2,
-        }),
-      }
-    : null;
+let mockDialog: { rev: number; dialog: string; at: string; wait?: boolean } | null =
+  param("dialog") === "form"
+    ? { rev: 2, at: now(), dialog: JSON.stringify(FORM_DIALOG) }
+    : param("dialog") === "wait"
+      ? { rev: 3, at: now(), dialog: "", wait: true }
+      : param("dialog") === "1"
+        ? {
+            rev: 1,
+            at: now(),
+            dialog: JSON.stringify({
+              title: "Sunucu Kuralları",
+              titleSt: [[16, "6l"]],
+              body: [
+                { text: "1. Saygılı ol, küfür etme.\n2. Hile ve makro yok.\n3. Reklam yapma." },
+              ],
+              inputs: [
+                {
+                  key: "ok",
+                  kind: "bool",
+                  label: "Kuralları okudum",
+                  initial: false,
+                  onTrue: "evet",
+                  onFalse: "hayir",
+                },
+              ],
+              buttons: [
+                {
+                  i: 0,
+                  label: "Kabul et",
+                  labelSt: [[8, "a"]],
+                  a: "run_command",
+                  v: "/kurallar kabul $(ok)",
+                },
+                {
+                  i: 1,
+                  label: "Forumda oku",
+                  a: "open_url",
+                  v: "https://forum.projects.gg/kurallar",
+                },
+              ],
+              cancel: true,
+              play: true,
+              cols: 2,
+            }),
+          }
+        : null;
 const dialogListeners = new Set<(accountId: string) => void>();
 
 function setState(account: AfkAccount, state: AfkAccount["state"]) {
@@ -854,8 +941,18 @@ export const mockAfk = {
     const account = accounts.find((a) => a.id === id);
     return id === "afk1" && account && isRunning(account) ? mockDialog : null;
   },
-  async afkDialogPress(id: string, press: { rev: number }) {
+  async afkDialogMenus(id: string) {
+    const account = accounts.find((a) => a.id === id);
+    return id === "afk1" && account && isRunning(account) && param("menus") === "1"
+      ? JSON.stringify({
+          pause: { label: "Sunucu kuralları", labelSt: [[16, "6"]] },
+          quick: { label: "Hızlı Eylemler..." },
+        })
+      : null;
+  },
+  async afkDialogPress(id: string, press: { rev: number } | { open: string }) {
     await delay(200);
+    if ("open" in press) return { ok: false, why: "menu" };
     if (!mockDialog || id !== "afk1") return { ok: false, why: "stale" };
     if (press.rev !== mockDialog.rev) return { ok: false, why: "stale" };
     // The preview's server closes its dialog after any press.

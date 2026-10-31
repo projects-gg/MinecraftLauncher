@@ -179,15 +179,24 @@ pub enum CloudLiveEvent {
     },
     /// A watched account's server dialog (DIALOG-CARD): `dialog`, its JSON as the service checked
     /// it (the view checks it again: `safeDialog`), or none when it closed. `rev` names it.
+    /// `wait` (client 4.2.5): none shows because the game shows its "waiting for response" screen
+    /// in its place, which a close of `rev` leaves.
     Dialog {
         acct: String,
         rev: u32,
         dialog: Option<String>,
+        wait: bool,
     },
+    /// A watched account's menus (client 4.2.5): what the game's pause screen and quick actions
+    /// key open, `{pause?, quick?}` (each `{label, labelSt?}`) as JSON; the view checks it again
+    /// (`safeMenus`).
+    Menus { acct: String, menus: String },
 }
 
-/// Most bytes of a dialog the launcher passes on (the service's cap).
-const MAX_DIALOG_BYTES: usize = 8 * 1024;
+/// Most bytes of a dialog the launcher passes on (the service's cap; client 4.2.5's).
+const MAX_DIALOG_BYTES: usize = 16 * 1024;
+/// Most bytes of the menus the launcher passes on (two labels with their looks).
+const MAX_MENUS_BYTES: usize = 2 * 1024;
 
 /// An order's progress and live state as `aiord` brings them (`OrderView` without its status).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -728,6 +737,15 @@ enum Incoming {
         dialog: Option<serde_json::Value>,
         #[serde(default)]
         clear: bool,
+        #[serde(default)]
+        wait: bool,
+    },
+    Menus {
+        acct: String,
+        #[serde(default)]
+        pause: Option<serde_json::Value>,
+        #[serde(default)]
+        quick: Option<serde_json::Value>,
     },
     Bye,
     Pong,
@@ -848,14 +866,37 @@ impl Incoming {
                 rev,
                 dialog,
                 clear,
-            } => CloudLiveEvent::Dialog {
-                acct,
-                rev,
-                dialog: dialog
+                wait,
+            } => {
+                let dialog = dialog
                     .filter(|d| !clear && d.is_object())
                     .map(|d| d.to_string())
-                    .filter(|d| d.len() <= MAX_DIALOG_BYTES),
-            },
+                    .filter(|d| d.len() <= MAX_DIALOG_BYTES);
+                CloudLiveEvent::Dialog {
+                    acct,
+                    rev,
+                    wait: wait && !clear && dialog.is_none(),
+                    dialog,
+                }
+            }
+            // Menus out of shape or too large show as none (the view checks the labels).
+            Self::Menus { acct, pause, quick } => {
+                let mut menus = serde_json::Map::new();
+                for (name, menu) in [("pause", pause), ("quick", quick)] {
+                    if let Some(menu) = menu.filter(serde_json::Value::is_object) {
+                        menus.insert(name.to_owned(), menu);
+                    }
+                }
+                let menus = serde_json::Value::Object(menus).to_string();
+                CloudLiveEvent::Menus {
+                    acct,
+                    menus: if menus.len() <= MAX_MENUS_BYTES {
+                        menus
+                    } else {
+                        "{}".to_owned()
+                    },
+                }
+            }
             _ => return None,
         })
     }
@@ -1423,10 +1464,13 @@ mod tests {
                 .feature_event()
                 .unwrap()
         };
-        let CloudLiveEvent::Dialog { acct, rev, dialog } = event(
+        let CloudLiveEvent::Dialog {
+            acct, rev, dialog, ..
+        } = event(
             r#"{"t":"dlg","acct":"a_1","rev":3,"dialog":{"title":"Kurallar","body":[],"inputs":[],
                 "buttons":[{"i":1,"label":"Kapat","a":"close"}],"cancel":true,"play":true,"cols":1}}"#,
-        ) else {
+        )
+        else {
             panic!("no dialog");
         };
         assert_eq!((acct.as_str(), rev), ("a_1", 3));
@@ -1438,14 +1482,63 @@ mod tests {
             r#"{"t":"dlg","acct":"a_1","rev":4,"dialog":"Kurallar"}"#.to_owned(),
             format!(
                 r#"{{"t":"dlg","acct":"a_1","rev":5,"dialog":{{"title":"{}"}}}}"#,
-                "x".repeat(9_000)
+                "x".repeat(17_000)
             ),
         ] {
             assert!(
-                matches!(event(&closed), CloudLiveEvent::Dialog { dialog: None, .. }),
+                matches!(
+                    event(&closed),
+                    CloudLiveEvent::Dialog {
+                        dialog: None,
+                        wait: false,
+                        ..
+                    }
+                ),
                 "{closed}"
             );
         }
+        // Client 4.2.5: the game's waiting screen in the dialog's place.
+        assert_eq!(
+            event(r#"{"t":"dlg","acct":"a_1","rev":6,"wait":true}"#),
+            CloudLiveEvent::Dialog {
+                acct: "a_1".into(),
+                rev: 6,
+                dialog: None,
+                wait: true
+            }
+        );
+    }
+
+    #[test]
+    fn reads_the_menus_as_their_json() {
+        let event = |text: &str| {
+            serde_json::from_str::<Incoming>(text)
+                .unwrap()
+                .feature_event()
+                .unwrap()
+        };
+        let CloudLiveEvent::Menus { acct, menus } = event(
+            r#"{"t":"menus","acct":"a_1","pause":{"label":"Kurallar","labelSt":[[8,"6"]]},"quick":7}"#,
+        ) else {
+            panic!("no menus");
+        };
+        assert_eq!(acct, "a_1");
+        let menus: serde_json::Value = serde_json::from_str(&menus).unwrap();
+        assert_eq!(
+            menus,
+            serde_json::json!({"pause": {"label": "Kurallar", "labelSt": [[8, "6"]]}})
+        );
+        let big = format!(
+            r#"{{"t":"menus","acct":"a_1","pause":{{"label":"{}"}}}}"#,
+            "x".repeat(3_000)
+        );
+        assert_eq!(
+            event(&big),
+            CloudLiveEvent::Menus {
+                acct: "a_1".into(),
+                menus: "{}".into()
+            }
+        );
     }
 
     #[test]

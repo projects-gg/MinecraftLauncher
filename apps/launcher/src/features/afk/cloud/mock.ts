@@ -718,8 +718,10 @@ export const mockCloudApi: CloudApi = {
   async dialog(id, press) {
     await delay(200);
     if (find(id).live.state !== "running") throw refused("Hesap şu an oyunda değil.");
-    // The preview's server closes its dialog after any press.
-    setTimeout(() => emit({ kind: "dialog", acct: id, rev: press.rev, dialog: null }), 300);
+    // The preview's server closes its dialog after any press; it reports no menus to open.
+    if (!("rev" in press)) return;
+    const { rev } = press;
+    setTimeout(() => emit({ kind: "dialog", acct: id, rev, dialog: null, wait: false }), 300);
   },
   async send(id, line) {
     await delay(200);

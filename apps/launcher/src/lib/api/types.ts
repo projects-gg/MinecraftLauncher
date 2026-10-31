@@ -660,8 +660,10 @@ export interface AfkLogLine {
 export interface AfkDialog {
   /** The client's revision of it: a press names it. */
   rev: number;
-  /** Its JSON as pl-afk checked it (the card checks it again: `safeDialog`). */
+  /** Its JSON as pl-afk checked it (the card checks it again: `safeDialog`; empty while `wait`). */
   dialog: string;
+  /** The game's "waiting for response" screen in a dialog's place (client 4.2.5). */
+  wait?: boolean;
   /** When it opened (RFC 3339). */
   at: string;
 }

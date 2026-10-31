@@ -1123,6 +1123,12 @@ impl AfkManager {
         self.existing(account_id).and_then(|s| s.dialog())
     }
 
+    /// What the game's pause screen and quick actions key open for the account (client 4.2.5):
+    /// `{pause?, quick?}`, each `{label, labelSt?}`, as JSON (the view checks it again).
+    pub fn dialog_menus(&self, account_id: &str) -> Option<String> {
+        self.existing(account_id).and_then(|s| s.dialog_menus())
+    }
+
     /// Presses the account's dialog card (`press`: its JSON as the view built it) and waits a
     /// moment for the client's answer; no answer counts as a press that did not work.
     pub async fn press_dialog(&self, account_id: &str, press: &str) -> Result<DialogOutcome> {
