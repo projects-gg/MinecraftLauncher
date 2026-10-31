@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { openModCenter } from "@/features/modcenter/notices";
-import { api, type ModCheck, type RepairScope } from "@/lib/api";
+import { api, type LaunchOptions, type ModCheck, type RepairScope } from "@/lib/api";
 import i18n from "@/lib/i18n";
 
 /** Where the flow started: it decides whether the end offers "Oyna". */
@@ -28,7 +28,17 @@ interface ModFlowState {
   history: FlowStep[];
   /** Counts the flows opened: a new one starts its jobs afresh, going back does not. */
   session: number;
-  open: (instanceId: string, origin: FlowOrigin, step: FlowStep) => void;
+  /**
+   * The options of the launch the flow stopped (its world, its server, its account): "Oyna" and
+   * "Yine de başlat" start that launch again, not a plain OYNA.
+   */
+  options: LaunchOptions | null;
+  open: (
+    instanceId: string,
+    origin: FlowOrigin,
+    step: FlowStep,
+    options?: LaunchOptions | null,
+  ) => void;
   go: (step: FlowStep) => void;
   back: () => boolean;
   close: () => void;
@@ -40,8 +50,9 @@ export const useModFlow = create<ModFlowState>()((set, get) => ({
   step: null,
   history: [],
   session: 0,
-  open: (instanceId, origin, step) =>
-    set((s) => ({ instanceId, origin, step, history: [], session: s.session + 1 })),
+  options: null,
+  open: (instanceId, origin, step, options = null) =>
+    set((s) => ({ instanceId, origin, step, history: [], session: s.session + 1, options })),
   go: (step) => {
     const { step: current, history } = get();
     set({ step, history: current ? [...history, current] : history });
@@ -55,6 +66,18 @@ export const useModFlow = create<ModFlowState>()((set, get) => ({
   },
   close: () => set({ step: null, history: [] }),
 }));
+
+/**
+ * The options "Oyna" in the flow starts with: those of the launch it stopped (null after a crash
+ * or from the mod center), past the mod check when the player said so ("Yine de başlat").
+ */
+export function retryOptions(
+  options: LaunchOptions | null,
+  ignoreModIssues: boolean,
+): LaunchOptions | undefined {
+  if (!ignoreModIssues) return options ?? undefined;
+  return { ...options, ignoreModIssues: true };
+}
 
 /** Query key of an instance's mod check. */
 export const modCheckKey = (instanceId: string) => ["mod-check", instanceId] as const;

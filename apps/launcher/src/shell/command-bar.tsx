@@ -743,8 +743,10 @@ export function CommandBar() {
       toast(phase.message, { id: "launch-world-open" });
     } else if (action === "signIn") {
       // The session expired or its secrets are gone: only a new sign-in of that account helps
-      // (the troubleshooter checks no account). The message already says so.
-      const account = useLaunch.getState().account?.id ?? null;
+      // (the troubleshooter checks no account). The message already says so. A launch names its
+      // account only when asked to; else it played with the selected one.
+      const launch = useLaunch.getState();
+      const account = launch.account?.id ?? launch.selected ?? null;
       toast.error(phase.message, {
         id: "launch-sign-in",
         duration: 10_000,

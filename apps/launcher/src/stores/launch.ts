@@ -579,9 +579,11 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           follow(newestGame());
           playSound("error");
           tellIfAway(i18n.t("attention.blocked.title"), i18n.t("attention.blocked.body"));
+          // Its "Yine de başlat" and "Onar" → "Oyna" go where this launch went (its world, its
+          // server), as the Java question's answers do.
           useModFlow
             .getState()
-            .open(instanceId, "blocked", { kind: "blocked", check: event.check });
+            .open(instanceId, "blocked", { kind: "blocked", check: event.check }, options);
           break;
         case "modsWarning":
           announceModWarnings(instanceId);
@@ -594,7 +596,9 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           set({ progress: 0 });
           follow(newestGame());
           void restoreWindow();
-          useModFlow.getState().open(instanceId, "blocked", { kind: "keys", check: event.check });
+          useModFlow
+            .getState()
+            .open(instanceId, "blocked", { kind: "keys", check: event.check }, options);
           break;
         case "javaMismatch": {
           if (!current) break;
