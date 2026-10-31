@@ -20,7 +20,7 @@ import {
 } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AddPage } from "./add-page";
 import { ChatHeader, ChatPage } from "./chat/chat-page";
