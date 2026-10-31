@@ -1,4 +1,9 @@
-import { ArrowCounterClockwise, ArrowSquareOut, ArrowsClockwise } from "@phosphor-icons/react";
+import {
+  ArrowCounterClockwise,
+  ArrowSquareOut,
+  ArrowsClockwise,
+  LockSimple,
+} from "@phosphor-icons/react";
 import {
   Button,
   Chip,
@@ -20,6 +25,8 @@ import { newJobId, showError } from "@/features/content/jobs";
 import { ProjectIcon } from "@/features/content/parts";
 import { useDebounced } from "@/features/content/use-content";
 import { ChangeBar } from "@/features/library/change-bar";
+import { InlineNotice } from "@/features/library/parts";
+import { useGameRunning } from "@/features/library/use-game-running";
 import {
   api,
   type JobProgress,
@@ -441,7 +448,9 @@ export function RecommendedTab({
     retry: false,
     placeholderData: keepPreviousData,
   });
-  const locked = view.gameRunning || applying !== null;
+  // Live (the view's own flag is read when it loads): the rows open again once the game closes.
+  const gameRunning = useGameRunning(instanceId);
+  const locked = gameRunning || applying !== null;
   const position = prefs.layout ? ("position" as const) : false;
 
   const apply = async (chosen: ModSelection) => {
@@ -515,10 +524,17 @@ export function RecommendedTab({
   const stale = preview.isPlaceholderData || preview.isFetching || settled !== selection;
 
   const showUpdates = updates > 0 && !selection;
-  const barMode = applying ? "applying" : view.gameRunning ? "running" : "summary";
+  const barMode = applying ? "applying" : gameRunning ? "running" : "summary";
 
   return (
     <div className="relative flex min-h-full flex-col">
+      {/* Why every switch is off, as in Dünyalar and Sunucular (the change bar said it only
+          with a change waiting). */}
+      {gameRunning ? (
+        <InlineNotice tone="warn" icon={<LockSimple size={16} weight="bold" />} className="mb-3">
+          {t("qol.mods.locked")}
+        </InlineNotice>
+      ) : null}
       {/* New recommendations need no notice of their own: the section says "(N yeni)" and the
           rows carry "Yeni" (seen on leaving, see useMarkSeenOnLeave). */}
       <AnimatePresence initial={false} mode="popLayout">

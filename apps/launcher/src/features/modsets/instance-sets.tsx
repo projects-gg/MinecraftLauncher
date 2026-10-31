@@ -1,4 +1,4 @@
-import { ArrowsClockwise, DotsThree, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowsClockwise, DotsThree, LockSimple, Plus, Trash } from "@phosphor-icons/react";
 import {
   Button,
   Chip,
@@ -18,6 +18,8 @@ import { create } from "zustand";
 import { newJobId, showError } from "@/features/content/jobs";
 import { useDebounced } from "@/features/content/use-content";
 import { ChangeBar } from "@/features/library/change-bar";
+import { InlineNotice } from "@/features/library/parts";
+import { useGameRunning } from "@/features/library/use-game-running";
 import { fade, glide, swap, useMotionPrefs } from "@/features/modcenter/motion";
 import { JobLine } from "@/features/modcenter/parts";
 import { ItemRow, refreshMods } from "@/features/modcenter/recommended-tab";
@@ -354,7 +356,9 @@ export function InstanceSets({ instance, onAdd }: { instance: InstanceDetail; on
   const drafts = useSetDrafts((s) => s.choices);
   const setDraft = useSetDrafts((s) => s.set);
   const sets = view.data?.sets ?? [];
-  const locked = Boolean(view.data?.gameRunning) || job !== null;
+  // Live (the view's own flag is read when it loads): the sets open again once the game closes.
+  const gameRunning = useGameRunning(instance.id);
+  const locked = gameRunning || job !== null;
 
   // Pending choices per set, against what each set has now.
   const pending = useMemo(
@@ -467,9 +471,14 @@ export function InstanceSets({ instance, onAdd }: { instance: InstanceDetail; on
     );
   }
   const barMode =
-    job && pending.length > 0 ? "applying" : view.data.gameRunning ? "running" : "summary";
+    job && pending.length > 0 ? "applying" : gameRunning ? "running" : "summary";
   return (
     <div className="relative flex min-h-full flex-col gap-3 pb-8">
+      {gameRunning ? (
+        <InlineNotice tone="warn" icon={<LockSimple size={16} weight="bold" />}>
+          {t("qol.mods.setsLocked")}
+        </InlineNotice>
+      ) : null}
       {view.data.unavailable ? (
         <p className="px-1 text-[12.5px] text-ash-400">{t("modSets.center.unavailable")}</p>
       ) : null}

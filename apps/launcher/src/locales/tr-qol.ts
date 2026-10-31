@@ -9,4 +9,10 @@ export const trQol = {
     /** The same menu while the game opens or runs. */
     lockedPlaying: "Oyun kapanınca başka kurulum seçebilirsin.",
   },
+  mods: {
+    /** Modlar → Önerilenler while a game of the instance prepares or runs: every switch is off. */
+    locked: "Oyun açıkken modlar değiştirilemez.",
+    /** Modlar → Setler, the same. */
+    setsLocked: "Oyun açıkken setler değiştirilemez.",
+  },
 };
