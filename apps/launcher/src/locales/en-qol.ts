@@ -12,4 +12,9 @@ export const enQol = {
     noLoaderBuild: "{{loader}} doesn't support this version. Pick another version or loader.",
     loaderFailed: "Couldn't get the loader versions. Check your connection.",
   },
+  install: {
+    stopTitle: "Stop the install?",
+    stopBody: "The unfinished instance will be deleted.",
+    stop: "Stop",
+  },
 };

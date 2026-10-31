@@ -38,13 +38,19 @@ export function useSetSource({
   onCancel,
   onDone,
   instances,
+  onStop,
 }: {
   active: boolean;
   onCancel: () => void;
   onDone: (created: InstanceSummary) => void;
   /** Names already taken (a new name is numbered like the dialog's default name). */
   instances: string[];
-}): { body: ReactNode; footer: ReactNode; cancelJob: () => void } {
+  /**
+   * The footer's × while the job runs: the dialog asks first (a stopped install deletes the
+   * half-made instance). Without it the × stops at once.
+   */
+  onStop?: () => void;
+}): { body: ReactNode; footer: ReactNode; cancelJob: () => void; running: boolean } {
   const { t } = useTranslation();
   const words = useWords();
   const prefs = useMotionPrefs();
@@ -243,7 +249,7 @@ export function useSetSource({
 
   const size = variant ? bytesOf(variant.items, enabled) : 0;
   const footer = job ? (
-    <JobStatus job={job} onCancel={cancelJob} className="w-full" detailed />
+    <JobStatus job={job} onCancel={onStop ?? cancelJob} className="w-full" detailed />
   ) : (
     <>
       <p className="mr-auto text-[12.5px] text-ash-400 tabular-nums">
@@ -274,5 +280,5 @@ export function useSetSource({
     </>
   );
 
-  return { body, footer, cancelJob };
+  return { body, footer, cancelJob, running: job !== null };
 }

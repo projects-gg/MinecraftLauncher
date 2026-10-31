@@ -24,4 +24,13 @@ export const trQol = {
     /** The loader's versions could not be fetched (no connection). */
     loaderFailed: "Yükleyici sürümleri alınamadı. Bağlantını kontrol et.",
   },
+  install: {
+    /**
+     * "Yeni kurulum": the footer's stop while a modpack or a set installs (Esc no longer stops
+     * it). Stopping deletes the half-made instance: one sentence says so.
+     */
+    stopTitle: "Kurulum durdurulsun mu?",
+    stopBody: "Yarım kalan kurulum silinir.",
+    stop: "Durdur",
+  },
 };

@@ -86,11 +86,17 @@ export function useModpackBrowser({
   active,
   onCancel,
   onDone,
+  onStop,
 }: {
   active: boolean;
   onCancel: () => void;
   onDone: (result: ModpackImportResult) => void;
-}): { body: ReactNode; footer: ReactNode; cancelJob: () => void } {
+  /**
+   * The footer's × while the job runs: the dialog asks first (a stopped install deletes the
+   * half-made instance). Without it the × stops at once.
+   */
+  onStop?: () => void;
+}): { body: ReactNode; footer: ReactNode; cancelJob: () => void; running: boolean } {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const debounced = useDebounced(query.trim(), 350);
@@ -343,7 +349,7 @@ export function useModpackBrowser({
   );
 
   const footer = job ? (
-    <JobStatus job={job} onCancel={cancelJob} className="w-full" detailed />
+    <JobStatus job={job} onCancel={onStop ?? cancelJob} className="w-full" detailed />
   ) : (
     <>
       {!selected ? (
@@ -368,5 +374,5 @@ export function useModpackBrowser({
     </>
   );
 
-  return { body, footer, cancelJob };
+  return { body, footer, cancelJob, running: job !== null };
 }
