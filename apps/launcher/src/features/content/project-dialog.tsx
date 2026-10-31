@@ -28,7 +28,7 @@ import {
 import { formatBytes, formatRelative } from "@/lib/format";
 import { isWebLink, openWebLink } from "@/lib/links";
 import { ProjectDescription } from "./description";
-import { projectJobKey, useContentActions, useContentJobs } from "./jobs";
+import { projectJobKey, useContentActions, useContentJobs, useUndoableRemoval } from "./jobs";
 import { categoryLabel, formatCompact, InstallControl, installState, ProjectIcon } from "./parts";
 import { useContentScan } from "./use-content";
 
@@ -285,8 +285,12 @@ export function ProjectDialog({
     target?.kind ?? "mod",
     Boolean(target) && Boolean(projectId),
   );
-  const installed = scan.data?.entries.find((e) => e.projectId === projectId);
+  const found = scan.data?.entries.find((e) => e.projectId === projectId);
   const actions = useContentActions(target?.instanceId ?? "", target?.kind ?? "mod");
+  const removal = useUndoableRemoval(target?.instanceId ?? "", target?.kind ?? "mod");
+  // A removal that still offers "Geri al" reads as removed; "Yükle" brings it back.
+  const leaving = found && removal.isHidden(found.fileName) ? found : undefined;
+  const installed = leaving ? undefined : found;
   const jobKey = projectJobKey(target?.instanceId ?? "", projectId ?? "");
   const job = useContentJobs((s) => s.jobs[jobKey]);
 
@@ -299,10 +303,12 @@ export function ProjectDialog({
       <InstallControl
         state={installState(installed)}
         job={job}
-        onInstall={() => void actions.install(projectId, title)}
+        onInstall={() =>
+          leaving ? removal.restore(leaving.fileName) : void actions.install(projectId, title)
+        }
         onUpdate={() => installed && void actions.update([installed])}
         onRemove={() => {
-          if (installed) void actions.remove(installed.fileName, title);
+          if (installed) removal.remove(installed.fileName, title);
         }}
         onCancel={() => actions.cancel(jobKey)}
       />

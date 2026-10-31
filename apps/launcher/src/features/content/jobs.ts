@@ -59,9 +59,13 @@ const usePendingRemovals = create<{
 /** How long "Geri al" is offered before a removed add-on really goes. */
 const UNDO_MS = 6000;
 
+/** The removals still offering "Geri al", by key: bringing one back from elsewhere (Keşfet's "Yükle"). */
+const undoers = new Map<string, () => void>();
+
 /**
  * Removing an add-on with "Geri al": the row hides at once and the file goes (to the system's
- * trash) only when the toast ends, so a misclick costs nothing.
+ * trash) only when the toast ends, so a misclick costs nothing. The same everywhere a remove
+ * button is (the lists, Keşfet, a mod's details).
  */
 export function useUndoableRemoval(instanceId: string, kind: ContentKind) {
   const { t } = useTranslation();
@@ -79,6 +83,7 @@ export function useUndoableRemoval(instanceId: string, kind: ContentKind) {
     const commit = async () => {
       if (settled) return;
       settled = true;
+      undoers.delete(key);
       try {
         await api.content.remove(instanceId, kind, fileName);
         await queryClient.invalidateQueries({ queryKey: ["instance", instanceId] });
@@ -88,21 +93,31 @@ export function useUndoableRemoval(instanceId: string, kind: ContentKind) {
         usePendingRemovals.getState().set(key, false);
       }
     };
-    toast(t("content.toasts.removed", { name }), {
+    const undo = () => {
+      if (settled) return;
+      settled = true;
+      undoers.delete(key);
+      usePendingRemovals.getState().set(key, false);
+    };
+    const id = toast(t("content.toasts.removed", { name }), {
       duration: UNDO_MS,
-      action: {
-        label: t("instance.trash.undo"),
-        onClick: () => {
-          settled = true;
-          usePendingRemovals.getState().set(key, false);
-        },
-      },
+      action: { label: t("instance.trash.undo"), onClick: undo },
       onAutoClose: () => void commit(),
       onDismiss: () => void commit(),
     });
+    undoers.set(key, () => {
+      undo();
+      toast.dismiss(id);
+    });
   };
 
-  return { isHidden, remove };
+  /**
+   * Brings back a file whose removal still waits (its toast's "Geri al"): installing it again
+   * meanwhile would race the removal for the same file.
+   */
+  const restore = (fileName: string) => undoers.get(prefix + fileName)?.();
+
+  return { isHidden, remove, restore };
 }
 
 /** How long a finished job waits for the refreshed list before it lets go anyway. */
@@ -309,16 +324,6 @@ export function useContentActions(instanceId: string, kind: ContentKind) {
     );
   };
 
-  const remove = async (fileName: string, name: string) => {
-    try {
-      await api.content.remove(instanceId, kind, fileName);
-      void refresh();
-      toast(t("content.toasts.removed", { name }));
-    } catch (error) {
-      showError(error);
-    }
-  };
-
   const addFiles = async (paths?: string[]) => {
     try {
       const chosen = paths ?? (await api.content.pickFiles(kind, true));
@@ -341,5 +346,6 @@ export function useContentActions(instanceId: string, kind: ContentKind) {
     if (job) void api.content.cancel(job.jobId);
   };
 
-  return { install, update, remove, addFiles, cancel };
+  // Removing goes through `useUndoableRemoval`, with "Geri al", wherever it is offered.
+  return { install, update, addFiles, cancel };
 }

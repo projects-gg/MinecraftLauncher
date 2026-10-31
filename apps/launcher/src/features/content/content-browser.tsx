@@ -28,6 +28,7 @@ import {
   showError,
   useContentActions,
   useContentJobs,
+  useUndoableRemoval,
 } from "./jobs";
 import {
   categoryLabel,
@@ -196,6 +197,7 @@ export function ContentBrowser({
     [scan.data],
   );
   const actions = useContentActions(instance.id, kind);
+  const removal = useUndoableRemoval(instance.id, kind);
   const jobs = useContentJobs((s) => s.jobs);
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = search;
@@ -332,7 +334,10 @@ export function ContentBrowser({
             </p>
             <ul className="space-y-0.5">
               {hits.map((hit) => {
-                const entry = installed.get(hit.projectId);
+                const found = installed.get(hit.projectId);
+                // A removal that still offers "Geri al" reads as removed; "Yükle" brings it back.
+                const leaving = found && removal.isHidden(found.fileName) ? found : undefined;
+                const entry = leaving ? undefined : found;
                 const key = projectJobKey(instance.id, hit.projectId);
                 return (
                   <HitRow
@@ -341,9 +346,13 @@ export function ContentBrowser({
                     entry={entry}
                     job={jobs[key]}
                     onOpen={() => setSelected(hit)}
-                    onInstall={() => void actions.install(hit.projectId, hit.title)}
+                    onInstall={() =>
+                      leaving
+                        ? removal.restore(leaving.fileName)
+                        : void actions.install(hit.projectId, hit.title)
+                    }
                     onUpdate={() => entry && void actions.update([entry])}
-                    onRemove={() => entry && void actions.remove(entry.fileName, hit.title)}
+                    onRemove={() => entry && removal.remove(entry.fileName, hit.title)}
                     onCancel={() => actions.cancel(key)}
                   />
                 );
