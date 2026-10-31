@@ -381,7 +381,8 @@ async fn a_lobby_that_kicks_at_its_login_window_stops_on_the_fifth_kick() {
 }
 
 /// A login command saved while the session waits to reconnect: the next launch runs it, and the
-/// kicks before no longer count (five more tries for the new command).
+/// kicks before no longer count (five more tries for the new command). The restarts still do: the
+/// back-off goes on growing.
 #[tokio::test(start_paused = true)]
 async fn a_new_login_command_starts_the_count_over() {
     let env = TestEnv::new(None);
@@ -416,7 +417,7 @@ async fn a_new_login_command_starts_the_count_over() {
     );
     assert_gaps_near(
         &gaps(&s, Duration::from_secs(125)),
-        &[5, 10, 20, 5, 10, 20, 40],
+        &[5, 10, 20, 40, 60, 90, 120],
     );
     assert!(matches!(
         env.last_state(&id),

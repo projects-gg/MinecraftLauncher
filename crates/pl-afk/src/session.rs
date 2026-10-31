@@ -805,10 +805,12 @@ impl Actor {
             shared.launched_revision = Some(revision);
             saved_since
         };
-        // Settings saved since the launch before (a new login command): the failures in a row
-        // were the old settings' and no longer count.
+        // Settings saved since the launch before (a new login command): the kicks in a row were
+        // the old settings' and no longer count. The restarts still do (the back-off goes on and
+        // the retry limit keeps counting).
         if saved_since {
-            self.forget_failures();
+            self.last_cause = None;
+            self.cause_repeats = 0;
         }
         tracing::info!(account = %self.id, is_restart, "AFK client started");
         self.set_state(SessionState::Connecting);
@@ -1047,15 +1049,10 @@ impl Actor {
             .joined_at
             .is_some_and(|at| self.env.schedule.lasting(at.elapsed(), cause))
         {
-            self.forget_failures();
+            self.restart_attempts = 0;
+            self.last_cause = None;
+            self.cause_repeats = 0;
         }
-    }
-
-    /// The restarts and the kick cause's streak start over.
-    fn forget_failures(&mut self) {
-        self.restart_attempts = 0;
-        self.last_cause = None;
-        self.cause_repeats = 0;
     }
 
     /// How many failures right before `failure` had its kick cause.
