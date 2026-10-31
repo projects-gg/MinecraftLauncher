@@ -1099,7 +1099,7 @@ export const tr = {
       current: "Sürüm {{version}}",
       upToDate: "Launcher güncel.",
       ready: "Yeni sürüm hazır. Yeniden başlatınca kurulur.",
-      restart: "Yeniden başlat ve güncelle",
+      restart: "Yeniden başlat",
       unavailable: "Güncelleme sunucusuna ulaşılamadı. Biraz sonra tekrar dene.",
     },
     discord: {

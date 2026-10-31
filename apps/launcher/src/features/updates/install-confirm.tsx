@@ -68,7 +68,7 @@ export function InstallConfirm({ from, children }: { from: AskFrom; children: Re
               {t("updates.later")}
             </Button>
             <Button size="sm" variant="primary" onClick={confirmInstall}>
-              {t("updates.install")}
+              {t("updates.restart")}
             </Button>
           </div>
         </Popover.Content>

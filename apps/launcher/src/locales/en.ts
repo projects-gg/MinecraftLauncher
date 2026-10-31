@@ -1340,7 +1340,7 @@ export const en: DeepPartial<Strings> = {
       current: "Version {{version}}",
       upToDate: "The launcher is up to date.",
       ready: "A new version is ready. It installs when you restart.",
-      restart: "Restart and update",
+      restart: "Restart",
       unavailable: "Can't reach the update server. Try again in a bit.",
     },
     discord: {
