@@ -1448,11 +1448,14 @@ async fn serve_control(
                 inner.manifest.clone(),
             ))));
             let _ = channel.tx.try_send(Out::Control(Control::State(state)));
-            Ok(id)
+            // A guest whose game is still in the world opened this stream to move paths (or after
+            // a broken one): it stays in the world, as the host's lists say (HOST1-E2: a moved
+            // guest showed "Bağlanıyor", the game never says "in" again).
+            Ok((id, entry.in_world()))
         }
     };
-    let control_id = match registered {
-        Ok(id) => id,
+    let (control_id, in_world) = match registered {
+        Ok(registered) => registered,
         Err(reason) => {
             refuse(channel, reason).await;
             return;
@@ -1462,7 +1465,11 @@ async fn serve_control(
         friend: friend.clone(),
         guest,
         name: Some(name),
-        status: GuestStatus::Connected(verdict),
+        status: if in_world {
+            GuestStatus::InWorld
+        } else {
+            GuestStatus::Connected(verdict)
+        },
     }));
     inner.wake.notify_one();
     let mut left = false;
