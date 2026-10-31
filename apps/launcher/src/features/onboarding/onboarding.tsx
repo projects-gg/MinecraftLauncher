@@ -293,7 +293,12 @@ export function Onboarding() {
                 />
               ) : null}
               {step === "projects" ? (
-                <ProjectsStep headingRef={headingRef} onBack={() => go(-1)} onFinish={finish} />
+                <ProjectsStep
+                  headingRef={headingRef}
+                  onBack={() => go(-1)}
+                  onFinish={finish}
+                  onSkip={skip}
+                />
               ) : null}
             </motion.div>
           </AnimatePresence>
@@ -642,10 +647,13 @@ function ProjectsStep({
   headingRef,
   onBack,
   onFinish,
+  onSkip,
 }: {
   headingRef: RefObject<HTMLHeadingElement | null>;
   onBack: () => void;
   onFinish: (instance?: InstanceSummary) => void;
+  /** Finishes without the instance, which is made again in the background ("Şimdilik geç"). */
+  onSkip: () => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -799,11 +807,13 @@ function ProjectsStep({
       </div>
 
       <div className="mt-9 flex flex-wrap items-center gap-3">
+        {/* A preparation that failed is no dead end: "Hazırım" goes on without the instance (made
+            again in the background, as "Şimdilik geç" does), beside "Tekrar dene". */}
         <Button
           variant="primary"
           size="lg"
-          disabled={!instance && !offered}
-          onClick={() => onFinish(instance)}
+          disabled={!instance && !offered && !failed}
+          onClick={() => (!instance && !offered ? onSkip() : onFinish(instance))}
         >
           {t("onboarding.projects.finish")}
         </Button>
