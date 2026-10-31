@@ -757,8 +757,9 @@ export function CommandBar() {
         },
       });
     } else if (action === "addAccount") {
-      // The backend's line points to Ayarlar > Hesaplar; the button opens it.
-      toast.error(t("qol.launch.noAccount"), {
+      // The backend's line points to Ayarlar > Hesaplar; the button opens it. Nothing failed, a
+      // step is missing: the neutral info mark, not an error's red one.
+      toast.info(t("qol.launch.noAccount"), {
         id: "launch-no-account",
         duration: 10_000,
         action: {
