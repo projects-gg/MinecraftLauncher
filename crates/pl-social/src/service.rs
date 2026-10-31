@@ -8,8 +8,10 @@
 //!
 //! Free-plan rules (docs/social.md §2): the friend list is fetched at start and after a
 //! reconnect, never on a timer; after a reconnect only when the service's relations version
-//! differs from the one the list came with (SCALE-SOC); presence arrives as events; nothing
-//! retries in a loop (the presence task backs off by itself, a manual "try again" is throttled).
+//! differs from the one the list came with (SCALE-SOC), and at a start likewise when an earlier
+//! start the same day kept the list on this computer (SOC-DISK, `crate::kept`); presence arrives
+//! as events; nothing retries in a loop (the presence task backs off by itself, a manual "try
+//! again" is throttled).
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -36,6 +38,7 @@ use crate::codes::{crew_code, normalize_crew_link, normalize_friend_code, normal
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
 use crate::history::{Change, Conversation, Entry, History, crew_conversation};
+use crate::kept::{KeptCopy, KeptLists};
 use crate::links::{find_links, first_link};
 use crate::minecraft::{McSignal, McSink};
 use crate::model::{
@@ -175,6 +178,10 @@ struct Core {
     /// Bumped by every event that changes the lists or the profile here: a read that started
     /// before one may not set the version (its answer may miss the change).
     rel_epoch: u64,
+    /// SOC-DISK: where the signed-in account's profile and lists outlive a restart with their
+    /// relations version (None: for this run only). The place survives sign-outs; what is kept
+    /// there does not.
+    kept: Option<KeptLists>,
     fetching: bool,
     last_manual: Option<Instant>,
     /// "Verilerimi sil" is running here: the socket closing because the account is gone is this
@@ -251,10 +258,14 @@ struct PendingProfile {
 impl Core {
     /// SCALE-SOC: the profile or the lists changed here (an event, or the player's own change):
     /// the copy is no longer the one its relations version describes, so the next connect names
-    /// none and a read already on its way may not set one.
+    /// none and a read already on its way may not set one. SOC-DISK: nor is the copy kept on this
+    /// computer, which goes.
     fn forget_rel(&mut self) {
         self.rel_epoch += 1;
         self.rel.set(None);
+        if let Some(kept) = &self.kept {
+            kept.clear();
+        }
     }
 
     /// SCALE-SOC: keeps the relations version a read brought, unless the copy changed since the
@@ -380,6 +391,13 @@ impl SocialService {
         self.lock().together = TogetherLog::new(Some(path.into()));
     }
 
+    /// SOC-DISK: keeps the signed-in account's profile and lists in this file with their
+    /// relations version, so a start later the same day shows them and reads them again only
+    /// when the service names another version (without it, every start reads them).
+    pub fn keep_lists_in(&self, path: impl Into<PathBuf>) {
+        self.lock().kept = Some(KeptLists::new(path));
+    }
+
     /// "Birlikte oynanan süre" on or off on this computer. Off deletes what was kept.
     pub fn set_together(&self, on: bool) {
         {
@@ -440,6 +458,11 @@ impl SocialService {
                 let generation = core.generation;
                 let service = self.clone();
                 self.spawn(async move { service.restore(generation, session).await });
+            } else if core.client.is_some()
+                && let Some(kept) = &core.kept
+            {
+                // SOC-DISK: nobody is signed in here, so nothing of an account stays kept.
+                kept.clear();
             }
         }
         self.emit_view();
@@ -448,20 +471,33 @@ impl SocialService {
     async fn restore(&self, generation: u64, session: Session) {
         match session.me().await {
             Ok(me) => {
-                {
+                let shown = {
                     let mut core = self.lock();
                     if core.generation != generation {
                         return;
                     }
                     core.settings_version = me.settings.as_ref().map(|s| s.version);
+                    // SOC-DISK: the lists an earlier start kept today, when they can still be
+                    // current. The connect names their version and its hello says whether they
+                    // are (`on_presence` reads them again when not).
+                    let kept = kept_for(&core, &me, unix_now());
                     core.state.set_me(me);
                     remember_closed_invites(&mut core);
                     open_history(&mut core);
                     core.auth = AuthPhase::SignedIn;
+                    let shown = kept.is_some();
+                    if let Some(kept) = kept {
+                        core.state.set_overview(kept.lists);
+                        core.rel.set(Some(kept.rel));
+                        observe_together(&mut core);
+                    }
                     self.start_presence(&mut core);
-                }
+                    shown
+                };
                 self.emit_view();
-                self.fetch_friends(generation).await;
+                if !shown {
+                    self.fetch_friends(generation).await;
+                }
             }
             // Expired or revoked while the launcher was closed: back to the sign-in screen.
             Err(SocialError::Unauthorized) => self.end_session(generation, true),
@@ -493,7 +529,7 @@ impl SocialService {
             if core.generation != generation {
                 return;
             }
-            reset(&mut core);
+            sign_off(&mut core);
             core.restriction = Some(RestrictionView { until });
         }
         self.inner.tokens.clear();
@@ -508,7 +544,7 @@ impl SocialService {
             if core.generation != generation {
                 return;
             }
-            reset(&mut core);
+            sign_off(&mut core);
         }
         self.inner.tokens.clear();
         self.emit_view();
@@ -707,22 +743,23 @@ impl SocialService {
             return;
         };
         let epoch = self.lock().rel_epoch;
-        match session.friends().await {
-            Ok(mut overview) => {
+        match session.friends_answer().await {
+            Ok((mut overview, answer)) => {
                 {
                     let mut core = self.lock();
                     if core.generation != generation {
                         return;
                     }
+                    let rel = overview.rel.take();
+                    core.keep_rel(rel, epoch);
+                    keep_answer(&core, overview.me.as_ref(), &answer);
                     // SCALE-SOC: the profile read with the lists (a service with `rel=1`).
                     if let Some(me) = overview.me.take() {
                         core.settings_version = me.settings.as_ref().map(|s| s.version);
                         core.state.set_me(me);
                     }
-                    let rel = overview.rel.take();
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
-                    core.keep_rel(rel, epoch);
                     observe_together(&mut core);
                 }
                 self.emit_view();
@@ -749,10 +786,10 @@ impl SocialService {
         // SCALE-SOC: the lists first, with the profile and the relations version (`rel=1`): one
         // request. An older service brings no profile with them: then `GET /v1/me` as before;
         // and when the lists fail, the profile still says whether the session holds.
-        let (me, overview) = match session.friends().await {
-            Ok(mut list) => match list.me.take() {
-                Some(me) => (Ok(me), Some(Ok(list))),
-                None => (session.me().await, Some(Ok(list))),
+        let (me, mut overview) = match session.friends_answer().await {
+            Ok((mut list, answer)) => match list.me.take() {
+                Some(me) => (Ok(me), Some(Ok((list, answer)))),
+                None => (session.me().await, Some(Ok((list, answer)))),
             },
             Err(error) => match session.me().await {
                 Ok(me) => (Ok(me), Some(Err(error))),
@@ -767,6 +804,13 @@ impl SocialService {
                 return;
             }
             core.fetching = false;
+            // The version this read brought, and its answer kept on this computer while that
+            // version holds (SOC-DISK).
+            if let Some(Ok((list, answer))) = &mut overview {
+                let rel = list.rel.take();
+                core.keep_rel(rel, epoch);
+                keep_answer(&core, me.as_ref().ok(), answer);
+            }
             match me {
                 Ok(me) => {
                     core.settings_version = me.settings.as_ref().map(|s| s.version);
@@ -785,11 +829,9 @@ impl SocialService {
                 }
             }
             match overview {
-                Some(Ok(mut overview)) => {
-                    let rel = overview.rel.take();
+                Some(Ok((overview, _))) => {
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
-                    core.keep_rel(rel, epoch);
                     observe_together(&mut core);
                 }
                 Some(Err(SocialError::Unauthorized)) => ended = true,
@@ -979,7 +1021,7 @@ impl SocialService {
         let session = {
             let mut core = self.lock();
             let session = core.session.take();
-            reset(&mut core);
+            sign_off(&mut core);
             session
         };
         self.inner.tokens.clear();
@@ -2281,7 +2323,11 @@ impl SocialService {
     /// "Verilerimi sil": the account and everything about it, for good. Signed out after.
     pub async fn delete_account(&self) -> Result<()> {
         // The service closes the presence socket (4002) before it answers.
-        self.lock().deleting = true;
+        let account = {
+            let mut core = self.lock();
+            core.deleting = true;
+            core.state.me().map(|me| me.profile.id.clone())
+        };
         let result = self
             .call(|session| async move { session.delete_account().await })
             .await;
@@ -2294,11 +2340,15 @@ impl SocialService {
         };
         {
             let mut core = self.lock();
+            // What this computer kept of the account goes with it, also when that close signed
+            // it out here first (the usual order): its chat history and its lists (SOC-DISK).
+            if let Some(account) = &account {
+                History::open(core.chat_root.as_deref(), account).erase();
+            }
             if core.generation == generation {
-                if let Some(history) = core.history.as_mut() {
-                    history.erase();
-                }
-                reset(&mut core);
+                sign_off(&mut core);
+            } else if let Some(kept) = &core.kept {
+                kept.clear();
             }
         }
         self.inner.tokens.clear();
@@ -3602,6 +3652,11 @@ const GREETING_STICKER: &str = "pl1/hi";
 /// Turkey's offset from UTC: the service's days (its daily limits) are Turkey days.
 const TURKEY_OFFSET_SECS: i64 = 3 * 3_600;
 
+/// The Turkey day `now` (Unix seconds) is in, counted like the service's days.
+fn turkey_day(now: i64) -> i64 {
+    (now + TURKEY_OFFSET_SECS).div_euclid(86_400)
+}
+
 /// The end of the Turkey day `now` is in (Unix seconds).
 fn turkey_day_end(now: i64) -> i64 {
     (now + TURKEY_OFFSET_SECS).div_euclid(86_400) * 86_400 + 86_400 - TURKEY_OFFSET_SECS
@@ -3630,6 +3685,42 @@ fn badge_refusal(error: &SocialError, now: i64) -> Option<BadgeRefusal> {
     })
 }
 
+/// Back to signed out for good (a sign-out here or elsewhere, a suspension, "Verilerimi sil"):
+/// the lists kept on this computer go too (SOC-DISK). The caller forgets the token.
+fn sign_off(core: &mut Core) {
+    if let Some(kept) = &core.kept {
+        kept.clear();
+    }
+    reset(core);
+}
+
+/// SOC-DISK: the lists kept on this computer, when they can still be current for the profile a
+/// start just read: kept for this account, on the service's day it is now (the relations version
+/// changes with the day) and with this very profile (the version holds it too). Otherwise the
+/// start reads them as before.
+fn kept_for(core: &Core, me: &Me, now: i64) -> Option<KeptCopy> {
+    let kept = core.kept.as_ref()?.load(&me.profile.id)?;
+    (turkey_day(kept.at) == turkey_day(now) && kept.me == *me).then_some(kept)
+}
+
+/// SOC-DISK: a read whose relations version is kept stays on this computer as the service sent
+/// it, for the next start; a read without one (an older service, or the copy changed while it
+/// was read) leaves nothing kept.
+fn keep_answer(core: &Core, me: Option<&Me>, answer: &[u8]) {
+    let Some(kept) = &core.kept else {
+        return;
+    };
+    match (core.rel.get(), me) {
+        (Some(_), Some(me)) => {
+            if let Err(error) = kept.save(&me.profile.id, unix_now(), answer) {
+                tracing::info!(%error, "the friend list is kept for this run only");
+                kept.clear();
+            }
+        }
+        _ => kept.clear(),
+    }
+}
+
 /// Back to signed out, keeping the configuration and the saved token.
 fn reset(core: &mut Core) {
     // The time played together so far is kept before the account goes.
@@ -3645,7 +3736,10 @@ fn reset(core: &mut Core) {
     core.state = SocialState::default();
     core.settings_version = None;
     core.fetched_at = None;
-    core.forget_rel();
+    // The version goes with the copy in memory. The copy kept on this computer stays for the
+    // account until it signs off ([`sign_off`]): a start that turns the feature on keeps it.
+    core.rel_epoch += 1;
+    core.rel.set(None);
     core.fetching = false;
     core.deleting = false;
     core.qr = None;
@@ -4385,7 +4479,7 @@ mod tests {
     use crate::auth::SessionToken;
     use crate::model::MAX_MUTE_SECS;
     use crate::store::MemoryTokenStore;
-    use crate::testutil::{MockReply, MockServer};
+    use crate::testutil::{MockReply, MockServer, Recorded};
 
     const ME: &str = r#"{"id":"123456789012345678","username":"ayse","displayName":"Ayşe","avatar":"discord",
         "avatarHash":null,"discordAvatarHash":null,"friendCode":"PRJ-ABCD-EFGH","status":"online",
@@ -4737,6 +4831,315 @@ mod tests {
             (lists + 3, profiles + 1)
         );
         assert_eq!(held(), None);
+    }
+
+    const ACCOUNT: &str = "123456789012345678";
+    const REL_1: &str = "0123456789abcdef";
+    const REL_2: &str = "fedcba9876543210";
+
+    /// The lists as a service with relations versions answers them: `me` and `rel` come along.
+    fn friends_rel(rel: &str, me: &str) -> String {
+        let mut list: serde_json::Value = serde_json::from_str(FRIENDS).unwrap();
+        list["rel"] = rel.into();
+        list["me"] = serde_json::from_str(me).unwrap();
+        list.to_string()
+    }
+
+    /// SOC-DISK: a service with relations versions (the one `version` holds now); the presence
+    /// socket is refused, so a test plays its hello. Deleting the account closes the socket first,
+    /// as the service does, for the service in `deleting`.
+    async fn rel_server(
+        version: Arc<Mutex<String>>,
+        deleting: Arc<Mutex<Option<SocialService>>>,
+    ) -> MockServer {
+        MockServer::start(move |req| {
+            presence_refused(&req.path).unwrap_or_else(|| {
+                match (req.method.as_str(), req.path.as_str()) {
+                    ("GET", "/v1/me") => MockReply::json(200, ME),
+                    ("GET", "/v1/friends") => {
+                        MockReply::json(200, &friends_rel(&version.lock().unwrap(), ME))
+                    }
+                    ("POST", "/v1/auth/logout") => MockReply::empty(204),
+                    ("DELETE", "/v1/me") => {
+                        if let Some(service) = deleting.lock().unwrap().clone() {
+                            let (generation, epoch) = {
+                                let core = service.lock();
+                                (core.generation, core.epoch)
+                            };
+                            service.on_presence(
+                                generation,
+                                epoch,
+                                PresenceEvent::Stopped(StopReason::AccountDeleted),
+                            );
+                        }
+                        MockReply::empty(204)
+                    }
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                }
+            })
+        })
+        .await
+    }
+
+    /// SOC-DISK: one launcher start that keeps its lists in `file`, until it shows them and its
+    /// presence connect went out; the service and the requests this start made.
+    async fn start_keeping(
+        server: &MockServer,
+        tokens: &Arc<MemoryTokenStore>,
+        file: &std::path::Path,
+    ) -> (Harness, Vec<Recorded>) {
+        let before = server.requests().len();
+        let harness = Harness::new(tokens.clone());
+        harness.service.keep_lists_in(file);
+        harness.service.configure(url(server));
+        harness
+            .until("the lists", |view| {
+                view.loaded && view.auth == AuthPhase::SignedIn
+            })
+            .await;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !server.requests()[before..]
+            .iter()
+            .any(|r| r.path == "/v1/presence")
+        {
+            assert!(Instant::now() < deadline, "no presence connect");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        // Whatever else the start would ask has gone out by now.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let asked = server.requests()[before..].to_vec();
+        (harness, asked)
+    }
+
+    /// The paths asked, sorted (the connect and the lists go out side by side).
+    fn paths(asked: &[Recorded]) -> Vec<&str> {
+        let mut paths: Vec<_> = asked.iter().map(|r| r.path.as_str()).collect();
+        paths.sort_unstable();
+        paths
+    }
+
+    /// The relations version the presence connect named, if any.
+    fn named_rel(asked: &[Recorded]) -> Option<String> {
+        let connect = asked.iter().find(|r| r.path == "/v1/presence")?;
+        let url = Url::parse(&format!("http://localhost{}", connect.target)).ok()?;
+        url.query_pairs()
+            .find(|(key, _)| key == "rel")
+            .map(|(_, value)| value.into_owned())
+    }
+
+    /// The service's hello on the current connection, naming `rel`.
+    fn hello(harness: &Harness, rel: Option<&str>) {
+        let (generation, epoch) = {
+            let core = harness.service.lock();
+            (core.generation, core.epoch)
+        };
+        harness.service.on_presence(
+            generation,
+            epoch,
+            PresenceEvent::Connected {
+                status: crate::model::StatusMode::Online,
+                friends: vec![],
+                invites: vec![],
+                calls: vec![],
+                clock: None,
+                rel: rel.map(str::to_owned),
+                chat: None,
+                plans: None,
+            },
+        );
+    }
+
+    /// Waits until `done`, then a moment longer for a request that should not go.
+    async fn settle_until(what: &str, done: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+
+    /// SOC-DISK: a start finds the lists an earlier start kept today. With the same relations
+    /// version they show without being read (2 requests instead of 3: the profile and the connect,
+    /// which names the version); with another, the hello has them read once and kept anew.
+    #[tokio::test]
+    async fn a_start_shows_the_lists_kept_today_and_reads_them_only_when_they_changed() {
+        let version = Arc::new(Mutex::new(REL_1.to_owned()));
+        let server = rel_server(version.clone(), Arc::default()).await;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("social").join("lists.json");
+        let kept = || KeptLists::new(&file).load(ACCOUNT);
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+
+        // A first start: the profile, the connect (no version yet) and the lists, kept with
+        // their version.
+        let (first, asked) = start_keeping(&server, &tokens, &file).await;
+        assert_eq!(paths(&asked), ["/v1/friends", "/v1/me", "/v1/presence"]);
+        assert!(asked.iter().any(|r| r.target == "/v1/friends?rel=1"));
+        assert_eq!(named_rel(&asked), None);
+        assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_1));
+        assert_eq!(first.service.view().friends[0].name, "Bora");
+        // Closing the launcher (the feature off) keeps them.
+        first.service.configure(None);
+        assert!(kept().is_some());
+
+        // Later that day, nothing changed: the lists show without being read; the connect names
+        // their version and the hello says the same.
+        let (second, asked) = start_keeping(&server, &tokens, &file).await;
+        assert_eq!(paths(&asked), ["/v1/me", "/v1/presence"]);
+        assert_eq!(named_rel(&asked).as_deref(), Some(REL_1));
+        assert_eq!(second.service.view().friends[0].name, "Bora");
+        assert_eq!(second.service.lock().rel.get().as_deref(), Some(REL_1));
+        let before = server.requests().len();
+        hello(&second, Some(REL_1));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(server.requests().len(), before, "nothing read again");
+        assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_1));
+        second.service.configure(None);
+
+        // Something changed meanwhile: the kept lists show, the hello names another version, and
+        // they are read once (the profile with them) and kept with the new one.
+        *version.lock().unwrap() = REL_2.to_owned();
+        let (third, asked) = start_keeping(&server, &tokens, &file).await;
+        assert_eq!(paths(&asked), ["/v1/me", "/v1/presence"]);
+        assert_eq!(named_rel(&asked).as_deref(), Some(REL_1));
+        let before = server.requests().len();
+        hello(&third, Some(REL_2));
+        settle_until("the new version", || {
+            third.service.lock().rel.get().as_deref() == Some(REL_2)
+        })
+        .await;
+        assert_eq!(paths(&server.requests()[before..]), ["/v1/friends"]);
+        assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_2));
+    }
+
+    /// SOC-DISK: the kept lists go as soon as the copy no longer matches its version, at a
+    /// sign-out, at a start nobody is signed in to, and with "Verilerimi sil" (whose socket closes
+    /// before the answer), the chat history kept here with them.
+    #[tokio::test]
+    async fn the_kept_lists_go_with_a_change_a_sign_out_and_the_account() {
+        let deleting = Arc::new(Mutex::new(None));
+        let server = rel_server(Arc::new(Mutex::new(REL_1.to_owned())), deleting.clone()).await;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("social").join("lists.json");
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+
+        // A change the socket brings: the copy is no longer the version's, nor is the file.
+        let (first, _) = start_keeping(&server, &tokens, &file).await;
+        assert!(file.exists());
+        let (generation, epoch) = {
+            let core = first.service.lock();
+            (core.generation, core.epoch)
+        };
+        first.service.on_presence(
+            generation,
+            epoch,
+            PresenceEvent::FriendRemoved {
+                id: "223456789012345678".into(),
+            },
+        );
+        assert!(!file.exists());
+        // The next reconnect reads them again and keeps them.
+        first.service.lock().fetched_at = Some(Instant::now() - Duration::from_secs(600));
+        hello(&first, None);
+        settle_until("the lists kept again", || file.exists()).await;
+
+        // A sign-out takes them along.
+        first.service.sign_out().await;
+        assert!(!file.exists());
+        assert!(tokens.load().is_none());
+        // A start nobody is signed in to keeps none (a copy left by a session that ended unseen).
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        KeptLists::new(&file)
+            .save(ACCOUNT, unix_now(), friends_rel(REL_1, ME).as_bytes())
+            .unwrap();
+        let nobody = Harness::new(tokens.clone());
+        nobody.service.keep_lists_in(&file);
+        nobody.service.configure(url(&server));
+        assert!(!file.exists());
+
+        // "Verilerimi sil": the service closes the socket (4002) before it answers, which signs
+        // the account out here first; its lists and its chat history go all the same.
+        tokens.save(&token()).unwrap();
+        let chat = dir.path().join("social").join("chat");
+        let history = chat.join(ACCOUNT);
+        std::fs::create_dir_all(&history).unwrap();
+        std::fs::write(history.join("index.json"), b"{}").unwrap();
+        let second = Harness::new(tokens.clone());
+        second.service.keep_lists_in(&file);
+        second.service.keep_chat_in(&chat);
+        second.service.configure(url(&server));
+        second
+            .until("the lists", |view| {
+                view.loaded && view.auth == AuthPhase::SignedIn
+            })
+            .await;
+        assert!(file.exists());
+        *deleting.lock().unwrap() = Some(second.service.clone());
+        second.service.delete_account().await.unwrap();
+        assert_eq!(second.service.view().auth, AuthPhase::SignedOut);
+        assert!(!file.exists());
+        assert!(!history.exists());
+    }
+
+    /// SOC-DISK: a kept copy that cannot be current is not shown, and the start reads the lists
+    /// as before (the connect naming no version) and keeps a good copy: a broken file, one of an
+    /// earlier day (the version changes with the day), another account's, one read with another
+    /// profile (the version holds the profile).
+    #[tokio::test]
+    async fn a_kept_copy_that_cannot_be_current_is_read_again_at_start() {
+        let server = rel_server(Arc::new(Mutex::new(REL_1.to_owned())), Arc::default()).await;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("social").join("lists.json");
+        let kept = KeptLists::new(&file);
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let me: Me = serde_json::from_str(ME).unwrap();
+        let other_me = ME.replace("\"status\":\"online\"", "\"status\":\"dnd\"");
+        let bora_me = ME
+            .replace(ACCOUNT, "223456789012345678")
+            .replace("ayse", "bora");
+        // What each start finds: a copy kept for an account, read at a time with a profile, or
+        // (None) a broken file.
+        let cases = [
+            ("a broken file", None),
+            (
+                "a copy of an earlier day",
+                Some((ACCOUNT, unix_now() - 2 * 86_400, ME.to_owned())),
+            ),
+            (
+                "another account's copy",
+                Some(("223456789012345678", unix_now(), bora_me)),
+            ),
+            (
+                "a copy read with another profile",
+                Some((ACCOUNT, unix_now(), other_me)),
+            ),
+        ];
+        for (what, found) in cases {
+            match found {
+                Some((account, at, profile)) => kept
+                    .save(account, at, friends_rel(REL_1, &profile).as_bytes())
+                    .unwrap(),
+                None => {
+                    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+                    std::fs::write(&file, b"{\"v\":1,\"account\":").unwrap();
+                }
+            }
+            let (harness, asked) = start_keeping(&server, &tokens, &file).await;
+            assert_eq!(
+                paths(&asked),
+                ["/v1/friends", "/v1/me", "/v1/presence"],
+                "{what}"
+            );
+            assert_eq!(named_rel(&asked), None, "{what}");
+            let copy = kept.load(ACCOUNT).expect(what);
+            assert_eq!(copy.rel, REL_1, "{what}");
+            assert_eq!(copy.me, me, "{what}");
+            harness.service.configure(None);
+        }
     }
 
     #[tokio::test]

@@ -110,7 +110,7 @@ impl RelVersion {
 }
 
 /// Whether `version` looks like one the service gives (16 lowercase hex digits).
-fn is_rel_version(version: &str) -> bool {
+pub(crate) fn is_rel_version(version: &str) -> bool {
     version.len() == 16
         && version
             .bytes()
