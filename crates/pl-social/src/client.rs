@@ -36,8 +36,12 @@ use crate::protocol::presence_caps;
 /// The production service.
 pub const PRODUCTION_URL: &str = "https://social.projects.gg/";
 
-const MAX_RESPONSE_BYTES: usize = 1 << 20;
+pub(crate) const MAX_RESPONSE_BYTES: usize = 1 << 20;
 const MAX_SETTINGS_BYTES: usize = 64 * 1024;
+
+/// The friend list read (SCALE-SOC: with `me` and the relations version). A copy kept on this
+/// computer (SOC-DISK) names it, so a launcher that reads another way never takes one for its own.
+pub(crate) const FRIENDS_TARGET: &str = "v1/friends?rel=1";
 
 #[derive(Debug, Clone)]
 pub struct SocialConfig {
@@ -562,7 +566,15 @@ impl Session {
     /// service that knows it also brings `me` and the relations version (an older one ignores
     /// the query and brings neither).
     pub async fn friends(&self) -> Result<FriendsOverview> {
-        self.get("v1/friends?rel=1").await
+        self.friends_answer().await.map(|(overview, _)| overview)
+    }
+
+    /// The same read with its answer as the service sent it (SOC-DISK keeps that on this
+    /// computer).
+    pub(crate) async fn friends_answer(&self) -> Result<(FriendsOverview, Vec<u8>)> {
+        let reply = self.call(Method::GET, FRIENDS_TARGET, None).await?;
+        let overview = reply.json()?;
+        Ok((overview, reply.body))
     }
 
     /// Who owns a code (counts against a daily lookup quota). Malformed codes fail locally.

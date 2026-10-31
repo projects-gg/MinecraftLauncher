@@ -24,8 +24,9 @@ use crate::error::CmdResult;
 use crate::state::AppState;
 
 /// Builds the service; it stays off until [`apply_flag`] (or the debug override) turns it on.
-/// `data_root` keeps the invites the player closed over a restart. Every update also reaches the
-/// in-game overlay (`overlay`), which drops it at once while no game runs.
+/// `data_root` keeps the invites the player closed over a restart, and the friend list with its
+/// relations version (SOC-DISK). Every update also reaches the in-game overlay (`overlay`), which
+/// drops it at once while no game runs.
 pub fn create(
     app: &AppHandle,
     http: &pl_net::Http,
@@ -78,6 +79,7 @@ pub fn create(
     service.keep_closed_invites_in(data_root.join("social").join("closed-invites.json"));
     service.keep_chat_in(data_root.join("social").join("chat"));
     service.keep_together_in(data_root.join("social").join("together.json"));
+    service.keep_lists_in(data_root.join("social").join("lists.json"));
     service.set_teams_enabled(debug_teams());
     service.set_chat_enabled(debug_chat());
     service.configure(pl_social::service_url(false, debug_override().as_deref()));

@@ -56,6 +56,7 @@ mod game;
 mod game_lead;
 mod gate;
 mod history;
+mod kept;
 mod links;
 mod minecraft;
 mod model;
