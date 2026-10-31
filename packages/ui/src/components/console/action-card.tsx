@@ -63,14 +63,14 @@ export function ConsoleActionCard({
         {run ? t.runTitle : t.openTitle}
       </p>
       {run || !link ? (
-        <p className="mt-2 rounded-md bg-obsidian-900 px-3 py-2 font-mono text-[13px] break-all text-bone-100 select-text">
+        <p className="mt-2 rounded-md bg-white/[0.06] px-3 py-2 font-mono text-[13px] break-all text-bone-100 select-text">
           {click.v}
         </p>
       ) : (
         // The registrable domain alone and first, unbroken and in bold: it is what a player reads to
         // know where a link goes (a host that starts with another site's name shows the real one).
         // The whole address follows, muted, nothing of it hidden.
-        <div className="mt-2 rounded-md bg-obsidian-900 px-3 py-2 font-mono select-text">
+        <div className="mt-2 rounded-md bg-white/[0.06] px-3 py-2 font-mono select-text">
           <p className="overflow-x-auto text-[14px] font-semibold whitespace-nowrap text-bone-50">
             {domainParts(link.host).domain}
           </p>

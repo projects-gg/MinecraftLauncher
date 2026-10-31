@@ -754,7 +754,7 @@ export function CloudConsole({
         </AnimatePresence>
       </div>
       {pending ? (
-        <div className="border-t border-white/8 p-4">
+        <div className="border-t border-white/8 px-5 py-4">
           <ConsoleActionCard
             click={pending.click}
             lang={lang}
@@ -767,7 +767,7 @@ export function CloudConsole({
         </div>
       ) : null}
       {card ? (
-        <div className="border-t border-white/8 p-4">
+        <div className="border-t border-white/8 px-5 py-4">
           <DialogCard
             key={card.rev}
             dialog={card.dialog}
@@ -781,7 +781,7 @@ export function CloudConsole({
         </div>
       ) : null}
       {waiting ? (
-        <div className="border-t border-white/8 p-4">
+        <div className="border-t border-white/8 px-5 py-4">
           <DialogWaiting
             key={waiting.rev}
             lang={lang}
@@ -793,7 +793,7 @@ export function CloudConsole({
       ) : null}
       <form
         className={cn(
-          "flex flex-col gap-2 border-t border-white/8 p-4",
+          "flex flex-col gap-2 border-t border-white/8 px-5 py-4",
           (pending || card || waiting) && "hidden",
         )}
         onSubmit={(event) => {

@@ -26,10 +26,10 @@ describe("a line's parts", () => {
     // The game's blue reads too dark on the console: lifted in its own hue, lightness only.
     expect(runs?.[0]).toMatchObject({
       text: "[Parti]  ",
-      color: "#6868ff",
+      color: "#7474ff",
       bold: true,
     });
-    expect(groundColor("#5555ff")).toBe("#6868ff");
+    expect(groundColor("#5555ff")).toBe("#7474ff");
     expect(runs?.[1]).toMatchObject({ text: "FrostyOtter88", color: "#55ffff" });
     // No colour of its own: the line's (its kind's tone).
     expect(runs?.[2]).toEqual({ text: ": lobiye   geliyorum" });
