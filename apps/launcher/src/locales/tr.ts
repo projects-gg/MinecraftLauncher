@@ -797,7 +797,8 @@ export const tr = {
       starting: "Başlatılıyor",
       connecting: "Bağlanıyor",
       connected: "Oyunda, {{uptime}}",
-      reconnecting: "{{secs}} sn sonra yeniden bağlanacak",
+      /** `time` in words ("45 saniye", "4 dakika"). */
+      reconnecting: "{{time}} sonra yeniden bağlanacak",
       stopping: "Durduruluyor",
       error: "Bağlantı kesildi",
     },

@@ -1035,7 +1035,7 @@ export const en: DeepPartial<Strings> = {
       starting: "Starting",
       connecting: "Connecting",
       connected: "In game, {{uptime}}",
-      reconnecting: "Reconnecting in {{secs}} s",
+      reconnecting: "Reconnecting in {{time}}",
       stopping: "Stopping",
       error: "Disconnected",
     },

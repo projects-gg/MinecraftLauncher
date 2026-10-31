@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AfkState } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
+import { waitWords, waitWordsChangeIn } from "./spans";
 import { shortReason } from "./watch";
 
 /**
@@ -56,9 +57,9 @@ export function reconnectSecs(nextAttemptAt: string, now: number): number {
 /**
  * How long until the line's words change by themselves, in ms; null when they do not. The uptime
  * says seconds in its first minute and minutes after it (`formatDuration` rounds to the second),
- * the reconnect countdown changes on each whole second left. The line renders again just then and
- * not every second: an hour-long connection used to render every card's line 3600 times for 60
- * changes.
+ * the reconnect countdown on each whole second in its last minute and where its rounded minutes
+ * change before (`waitWords`). The line renders again just then and not every second: an
+ * hour-long connection used to render every card's line 3600 times for 60 changes.
  */
 export function nextChangeMs(state: AfkState, now: number): number | null {
   if (state.kind === "connected") {
@@ -74,7 +75,9 @@ export function nextChangeMs(state: AfkState, now: number): number | null {
   if (state.kind === "reconnecting" && state.nextAttemptAt) {
     const left = Date.parse(state.nextAttemptAt) - now;
     if (left <= 1000) return null;
-    return left % 1000 || 1000;
+    // The whole seconds shown now (`reconnectSecs`) and the count at which the words change.
+    const secs = Math.ceil(left / 1000);
+    return Math.max(1, left - (secs - waitWordsChangeIn(secs)) * 1000);
   }
   return null;
 }
@@ -95,8 +98,11 @@ export function stateText(state: AfkState, now: number, t: TFunction, autoStart 
     case "reconnecting":
       // Until the backend knows when (the client is still closing, or the attempt is starting)
       // the line says so without a number: a guessed one flashed "15 sn" between two reconnects.
+      // In words ("4 dakika sonra"), as spans of time in a sentence are (design.md §7).
       return state.nextAttemptAt
-        ? t("afk.states.reconnecting", { secs: reconnectSecs(state.nextAttemptAt, now) })
+        ? t("afk.states.reconnecting", {
+            time: waitWords(reconnectSecs(state.nextAttemptAt, now), t),
+          })
         : t("afkReconnect.pending");
     case "queued":
       return t("afk.states.queued", { secs: state.inSecs });
