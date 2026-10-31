@@ -7,6 +7,10 @@
 //     --base-url https://github.com/projects-gg/MinecraftLauncher/releases/download/v2.1.0/ \
 //     [--notes-file notes.md] [--channel beta --rollout 100 --mandatory --min-version 2.0.3] \
 //     [--require windows-x86_64,darwin-aarch64] [--out latest.json]
+//
+// --notes-file: the release notes as the tag message gives them, Turkish, then optionally a
+// `--- en ---` line and the English notes; the manifest carries them as `notes` and
+// `localizedNotes` (lib.mjs `notesFields`, docs/release.md).
 
 import { writeFileSync } from "node:fs";
 
