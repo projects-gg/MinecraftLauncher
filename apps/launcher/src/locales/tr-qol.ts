@@ -33,4 +33,8 @@ export const trQol = {
     stopBody: "Yarım kalan kurulum silinir.",
     stop: "Durdur",
   },
+  copy: {
+    /** Kütüphane → "Kopyasını oluştur" while the copy is made (big worlds take a while). */
+    copying: "{{name}} kopyalanıyor",
+  },
 };

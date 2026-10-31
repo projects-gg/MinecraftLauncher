@@ -17,4 +17,7 @@ export const enQol = {
     stopBody: "The unfinished instance will be deleted.",
     stop: "Stop",
   },
+  copy: {
+    copying: "Duplicating {{name}}",
+  },
 };
