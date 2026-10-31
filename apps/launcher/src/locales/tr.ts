@@ -1018,7 +1018,8 @@ export const tr = {
     errors: {
       hostInvalid:
         "Adres yalnızca harf, rakam, nokta, tire ve alt çizgi içerebilir. Örnek: play.projects.gg",
-      hostPort: "Portu adrese yazma. Port alanına yaz.",
+      /** One address field holds the port: it goes after one colon at the end. */
+      hostPort: "Port, adresin sonunda iki noktadan sonra gelir. Örnek: mc.sunucu.net:25570",
       number: "Bir sayı gir.",
       integer: "Tam sayı gir.",
       range: "{{min}} ile {{max}} arasında bir değer gir.",

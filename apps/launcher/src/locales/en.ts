@@ -1258,7 +1258,7 @@ export const en: DeepPartial<Strings> = {
     errors: {
       hostInvalid:
         "Use only letters, numbers, dots, hyphens and underscores. Example: play.projects.gg",
-      hostPort: "Don't put the port in the address. Use the Port field.",
+      hostPort: "The port goes at the end, after one colon. Example: mc.server.net:25570",
       number: "Enter a number.",
       integer: "Enter a whole number.",
       range: "Enter a value between {{min}} and {{max}}.",
