@@ -495,6 +495,142 @@ function push(id: string, text: string, kind: AfkLogLine["kind"]) {
   logs.set(id, list);
 }
 
+/** A preview switch of the page's address. */
+function param(name: string): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get(name);
+  } catch {
+    return null;
+  }
+}
+
+/** A line's words and their looks (AFK-UX: console looks on this computer, as pl-afk gives them). */
+function parts(...list: [text: string, code: string, event?: number][]) {
+  return {
+    text: list.map(([text]) => text).join(""),
+    st: list.map(([text, code, event]) =>
+      event === undefined ? [text.length, code] : [text.length, code, event],
+    ),
+  };
+}
+
+/**
+ * Preview switches of KasaBekcisi's console: `?looks=1` the evening's lines in the game's colours
+ * (a client 4.2.4 while Studio's switch is on), `?lines=<n>` that many chat lines before them (the
+ * panel's drag measured over a full console).
+ */
+function seedConsole() {
+  const list = logs.get("afk1");
+  if (!list) return;
+  const extra = Math.min(500, Number(param("lines")) || 0);
+  for (let i = 0; i < extra; i++) {
+    const name = ["AlevKanat", "Demirci", "GeceKurdu_", "Lavci_42"][i % 4] ?? "Demirci";
+    list.push({
+      id: ++lineId,
+      time: now(),
+      text: `<${name}> pazarda elmas kazma ${i + 1} kaldı, isteyen var mı`,
+      kind: "chat",
+    });
+  }
+  if (param("looks") !== "1") return;
+  const line = (look: { text: string; st: unknown }, ev?: unknown, who?: string): AfkLogLine => ({
+    id: ++lineId,
+    time: now(),
+    kind: "chat",
+    ...look,
+    ...(ev ? { ev } : {}),
+    who: who ?? null,
+  });
+  list.push(
+    line(parts(["[Duyuru] ", "6l", 0], ["Boss etkinliği 21:00'de başlıyor.", "e"]), [
+      {
+        hover: {
+          text: "Sunucu duyurusu\nKatılmak için: /etkinlik",
+          st: [
+            [16, "e"],
+            [24, "7"],
+          ],
+        },
+      },
+    ]),
+    line(
+      parts(["[Parti] ", "9"], ["GeceKurdu_", "b", 0], [": lobiye geliyorum", "f"]),
+      [
+        {
+          click: { a: "suggest_command", v: "/msg GeceKurdu_ " },
+          hover: { entity: { name: "GeceKurdu_", st: [[10, "b"]] } },
+        },
+      ],
+      "GeceKurdu_",
+    ),
+    line(
+      parts(["[Yetkili] ", "cl"], ["Mod_Kirpi", "c"], [": herkes spawn'a", "7"]),
+      undefined,
+      "Mod_Kirpi",
+    ),
+    line(parts(["SessizOkcu sana fısıldıyor: pazar açık mı?", "7o"]), undefined, "SessizOkcu"),
+    line(
+      parts(
+        ["[Parti] ", "9"],
+        ["GeceKurdu_ seni partiye çağırıyor ", "7"],
+        ["[Kabul et]", "al", 0],
+      ),
+      [
+        {
+          click: { a: "run_command", v: "/party accept GeceKurdu_" },
+          hover: { text: "Partiye katılmak için tıkla", st: [[27, "a"]] },
+        },
+      ],
+    ),
+    line(parts(["Kurallar: ", "7"], ["forum.projects.gg/kurallar", "bn", 0]), [
+      { click: { a: "open_url", v: "https://forum.projects.gg/kurallar" } },
+    ]),
+    line(parts(["Eski fiyat ", "7"], ["900", "7m"], [" yeni fiyat ", "7"], ["600 ripple", "an"])),
+  );
+}
+seedConsole();
+
+/**
+ * Preview switch `?dialog=1`: KasaBekcisi's server shows its rules as a dialog (a client 4.2.4
+ * while Studio's dialog cards switch is on). Any press closes it, as the preview's server does.
+ */
+let mockDialog: { rev: number; dialog: string; at: string } | null =
+  param("dialog") === "1"
+    ? {
+        rev: 1,
+        at: now(),
+        dialog: JSON.stringify({
+          title: "Sunucu Kuralları",
+          titleSt: [[16, "6l"]],
+          body: [{ text: "1. Saygılı ol, küfür etme.\n2. Hile ve makro yok.\n3. Reklam yapma." }],
+          inputs: [
+            {
+              key: "ok",
+              kind: "bool",
+              label: "Kuralları okudum",
+              initial: false,
+              onTrue: "evet",
+              onFalse: "hayir",
+            },
+          ],
+          buttons: [
+            {
+              i: 0,
+              label: "Kabul et",
+              labelSt: [[8, "a"]],
+              a: "run_command",
+              v: "/kurallar kabul $(ok)",
+            },
+            { i: 1, label: "Forumda oku", a: "open_url", v: "https://forum.projects.gg/kurallar" },
+          ],
+          cancel: true,
+          play: true,
+          cols: 2,
+        }),
+      }
+    : null;
+const dialogListeners = new Set<(accountId: string) => void>();
+
 function setState(account: AfkAccount, state: AfkAccount["state"]) {
   account.state = state;
   notify();
@@ -713,6 +849,25 @@ export const mockAfk = {
   },
   async afkLog(id: string) {
     return [...(logs.get(id) ?? [])];
+  },
+  async afkDialog(id: string) {
+    const account = accounts.find((a) => a.id === id);
+    return id === "afk1" && account && isRunning(account) ? mockDialog : null;
+  },
+  async afkDialogPress(id: string, press: { rev: number }) {
+    await delay(200);
+    if (!mockDialog || id !== "afk1") return { ok: false, why: "stale" };
+    if (press.rev !== mockDialog.rev) return { ok: false, why: "stale" };
+    // The preview's server closes its dialog after any press.
+    mockDialog = null;
+    for (const listener of dialogListeners) listener(id);
+    return { ok: true, why: null };
+  },
+  onAfkDialog(listener: (accountId: string) => void) {
+    dialogListeners.add(listener);
+    return () => {
+      dialogListeners.delete(listener);
+    };
   },
   async afkSettings(id: string): Promise<AfkSettingsView> {
     await delay(250);

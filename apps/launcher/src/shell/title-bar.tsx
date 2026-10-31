@@ -211,6 +211,8 @@ export function TitleBar({ search = true }: { search?: boolean }) {
   return (
     <header
       data-tauri-drag-region
+      // Layers that leave the window's controls free (the AFK panel) know the bar by this.
+      data-titlebar=""
       className="relative z-30 flex h-titlebar shrink-0 items-center justify-between pl-3"
     >
       <div data-tauri-drag-region inert={updateLocked} className={cn(aside, "gap-3")}>
