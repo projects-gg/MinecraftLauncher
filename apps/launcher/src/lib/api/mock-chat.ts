@@ -20,7 +20,8 @@
 //   sticker, links with their cards, "Görüldü" under the player's message to KorAtesi;
 //   `chat2Live`: GeceKurdu_ writes ("yazıyor…") and sends a sticker, then reacts, a crewmate writes too.
 // Long histories (CHAT-PROD): `&crewHistory=<n>` puts n older lines in the crew's chat (84 by
-// default), `&crewUnread=<n>` leaves the last n of it unread (3 by default).
+// default), `&crewUnread=<n>` leaves the last n of it unread (3 by default). `&chatDays=1`
+// (CHAT-UX): KorAtesi's conversation reaches back over every kind of day line.
 // A message with "hata" or "fail" in it does not go (`&sendFails=<reason>` fails every one with
 // that reason); a friend online answers a direct message (`&noReply=1` keeps them quiet): with
 // CHAT2 they see it first ("Görüldü") and write ("yazıyor…"). A message deleted for everyone stays
@@ -347,6 +348,28 @@ export function mockChat(host: ChatHost) {
       message(kor, "302", pick("Yılların tecrübesi :)", "Years of practice :)"), t0 - 2 * HOUR),
       message(kor, ME, pick("Tamam, yarın bakarız", "Alright, let's see tomorrow"), t0 - 2 * HOUR),
     ]);
+    // CHAT-UX: `&chatDays=1` gives KorAtesi's conversation a history over every kind of day line
+    // (last year, a date, "3 gün önce", "Dün", "Bugün") and one long word.
+    if (host.param("chatDays") !== null) {
+      // [from, Turkish, English, days back, hour, minute]
+      const older: ReadonlyArray<readonly [string, string, string, number, number, number]> = [
+        ["302", "Adaya gelebilir miyim?", "Can I come to your island?", 400, 21, 10],
+        [ME, "Tabii, kodu atıyorum", "Sure, sending the code", 400, 21, 12],
+        ["302", "Turnuva kaydı açılmış", "Tournament sign-ups are open", 12, 19, 40],
+        ["302", "Takım olalım mı?", "Want to team up?", 12, 19, 41],
+        [ME, "Olur, ben varım", "Sure, I'm in", 12, 19, 52],
+        ["302", `Kazand${"ı".repeat(40)}k`, `We w${"o".repeat(40)}n`, 3, 16, 5],
+        [ME, "Yarın akşam maç var mı?", "A match tomorrow night?", 1, 22, 30],
+        ["302", "Var, 8'de", "Yes, at 8", 1, 22, 33],
+      ];
+      const earlier = older.map(([from, tr, en, days, hour, minute]) => {
+        const date = new Date(t0);
+        date.setDate(date.getDate() - days);
+        date.setHours(hour, minute, 0, 0);
+        return message(kor, from, pick(tr, en), date.getTime());
+      });
+      threads.set(kor, [...earlier, ...(threads.get(kor) ?? [])]);
+    }
 
     const elif = direct("305");
     threads.set(elif, [

@@ -20,6 +20,9 @@
 //
 // CHAT-PROD: "Kopyala" copies the words the player selected in the message, else all of it; the
 // sender's name read to screen readers never ends up in a copied selection.
+//
+// CHAT-UX: the bubble carries its time (`data-at`) for the conversation's one tip, which shows the
+// full time while the pointer rests on it (time-tip.tsx); the group's clock time is chat-time.ts's.
 import {
   ArrowBendUpLeft,
   ArrowClockwise,
@@ -48,12 +51,12 @@ import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "reac
 import { useTranslation } from "react-i18next";
 import { bigEmojiCount, Sticker, UnknownSticker } from "@/features/emoji";
 import type { ChatExtras, ChatLinkRules, ChatMessage, ChatReaction } from "@/lib/api/social-types";
-import { dateTimeFormat } from "@/lib/format";
 import { copyText } from "../actions";
 import { type MessageAction, messageMenu } from "../menus";
 import { enter, leave, rise, swap, useSocialMotion } from "../motion";
 import { PersonContextMenu, type PersonPlace } from "../person-menu";
 import { SocialFace } from "../social-face";
+import { clockTime } from "./chat-time";
 import { LinkCard, MessageText, plainCardOf, ruleWords } from "./link-ui";
 import { MessageToolbar } from "./message-toolbar";
 import { ReactionChips } from "./reaction-ui";
@@ -103,8 +106,6 @@ export interface RowShared {
   quick: readonly string[];
   people: (id: string) => ChatPerson;
 }
-
-const timeFormat = () => dateTimeFormat({ hour: "2-digit", minute: "2-digit" });
 
 /** Failures the same text would meet again: the player writes it another way. */
 const REWRITE = new Set(["link", "phone", "words", "invalid"]);
@@ -322,7 +323,7 @@ function MessageRowView({
   const editable = !gone && sent && !sticker && editOpen;
   const deletable = !gone && sent && deleteOpen;
   const failed = message.state === "failed";
-  const time = timeFormat().format(new Date(message.at));
+  const time = clockTime(message.at);
   const { extras } = shared;
   const found = useMemo(
     () =>
@@ -599,7 +600,11 @@ function MessageRowView({
           ) : null}
           {bubbled ? null : quote}
           {/* The bubble and, beside it in the row's free side, its toolbar. */}
-          <div className="relative max-w-full">
+          <div
+            className="relative max-w-full"
+            data-at={message.at}
+            data-mine={mine ? "" : undefined}
+          >
             {body}
             {sent && !gone ? (
               <MessageToolbar
