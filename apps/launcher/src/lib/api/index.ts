@@ -118,6 +118,11 @@ export interface LauncherApi {
   afkLog(id: string): Promise<AfkLogLine[]>;
   /** The server's dialog open for the account, as its console card shows it (null: none). */
   afkDialog(id: string): Promise<AfkDialog | null>;
+  /**
+   * What the server's pause screen and quick actions key open (client 4.2.5): `{pause?, quick?}`
+   * as JSON (the console checks it again: `safeMenus`), null when none.
+   */
+  afkDialogMenus(id: string): Promise<string | null>;
   /** A press of that card (`dialogPress`'s shape); pl-afk and the client check it and answer. */
   afkDialogPress(id: string, press: DialogPress): Promise<AfkDialogOutcome>;
   /** A desktop account's dialog opened, changed or closed. Returns an unsubscribe function. */

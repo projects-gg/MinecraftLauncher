@@ -33,8 +33,13 @@ import {
   copiedPreview,
   type DialogAct,
   DialogCard,
+  type DialogMenu,
+  type DialogMenuLabels,
+  DialogMenus,
+  DialogWaiting,
   type Dialog as ServerDialog,
   safeDialog,
+  safeMenus,
 } from "@pl/ui/console";
 import { fill, safeInvItem } from "@pl/ui/inventory";
 import { useQueryClient } from "@tanstack/react-query";
@@ -284,10 +289,16 @@ export function CloudConsole({
   const [query, setQuery] = useState("");
   const [bars, setBars] = useState<CloudBars | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
-  // The server's open dialog as its card shows it (DIALOG-CARD), and a press on its way.
-  const [dialog, setDialog] = useState<{ rev: number; dialog: ServerDialog; at: number } | null>(
-    null,
-  );
+  // The server's open dialog as its card shows it (DIALOG-CARD; none: the game's waiting screen in
+  // its place, client 4.2.5), and a press on its way.
+  const [dialog, setDialog] = useState<{
+    rev: number;
+    dialog: ServerDialog | null;
+    at: number;
+  } | null>(null);
+  // What the server's pause screen and quick actions key open (client 4.2.5).
+  const [menus, setMenus] = useState<DialogMenuLabels>({});
+  const [menuError, setMenuError] = useState<string | null>(null);
   const [pressing, setPressing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const draft = useRef("");
@@ -316,6 +327,8 @@ export function CloudConsole({
     setBars(null);
     setPending(null);
     setDialog(null);
+    setMenus({});
+    setMenuError(null);
     setInventoryGone(false);
     setMovementGone(false);
     atEnd.current = true;
@@ -334,6 +347,7 @@ export function CloudConsole({
           if (event.host === current.host) {
             setBars(null);
             setDialog(null);
+            setMenus({});
             setHostOnline(event.online);
           }
           break;
@@ -344,6 +358,7 @@ export function CloudConsole({
             if (!event.online) {
               setBars(null);
               setDialog(null);
+              setMenus({});
             }
           }
           break;
@@ -357,7 +372,21 @@ export function CloudConsole({
           }
           // A new dialog or its close: an error of an earlier press or line no longer applies.
           setSendError(null);
-          setDialog(checked ? { rev: event.rev, dialog: checked, at: Date.now() / 1000 } : null);
+          setMenuError(null);
+          setDialog(
+            checked || event.wait
+              ? { rev: event.rev, dialog: checked, at: Date.now() / 1000 }
+              : null,
+          );
+          break;
+        }
+        case "menus": {
+          if (event.acct !== current.id) break;
+          try {
+            setMenus(safeMenus(JSON.parse(event.menus)));
+          } catch {
+            setMenus({});
+          }
           break;
         }
         case "state":
@@ -585,7 +614,23 @@ export function CloudConsole({
       );
     }
   };
-  const card = dialogCards && dialog && !pending ? dialog : null;
+  // A menu of the server's pause screen or quick actions key: opens as the game opens it (its
+  // dialog comes as a card).
+  const openMenu = async (menu: DialogMenu) => {
+    if (!account || pressing) return;
+    setPressing(true);
+    setMenuError(null);
+    try {
+      await cloudApi.dialog(account.id, { open: menu });
+    } catch (error) {
+      setMenuError(isFriendly(error) ? error.message : t("cloudAfk.console.sendFailed"));
+    } finally {
+      setPressing(false);
+    }
+  };
+  const card =
+    dialogCards && dialog?.dialog && !pending ? { ...dialog, dialog: dialog.dialog } : null;
+  const waiting = dialogCards && dialog && !dialog.dialog && !pending ? dialog : null;
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (!account) return;
@@ -735,16 +780,41 @@ export function CloudConsole({
           />
         </div>
       ) : null}
+      {waiting ? (
+        <div className="border-t border-white/8 p-4">
+          <DialogWaiting
+            key={waiting.rev}
+            lang={lang}
+            busy={pressing}
+            error={sendError}
+            onBack={() => void pressDialog({ cancel: true })}
+          />
+        </div>
+      ) : null}
       <form
         className={cn(
           "flex flex-col gap-2 border-t border-white/8 p-4",
-          (pending || card) && "hidden",
+          (pending || card || waiting) && "hidden",
         )}
         onSubmit={(event) => {
           event.preventDefault();
           void send();
         }}
       >
+        {/* What the server's pause screen and quick actions key open (client 4.2.5). */}
+        {dialogCards && canType ? (
+          <DialogMenus
+            menus={menus}
+            lang={lang}
+            busy={pressing}
+            onOpen={(menu) => void openMenu(menu)}
+          />
+        ) : null}
+        {dialogCards && menuError ? (
+          <p role="alert" className="text-[12.5px] text-flare-400">
+            {menuError}
+          </p>
+        ) : null}
         <div className="flex gap-2">
           {/* A password command turns secret as it is typed (secret.tsx: the AFK surfaces' one
               look for secret lines). */}

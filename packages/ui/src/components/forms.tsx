@@ -48,7 +48,8 @@ export function Field({
   htmlFor,
   className,
 }: {
-  label: string;
+  /** Its words (a dialog's label may carry the server's looks). */
+  label: ReactNode;
   help?: ReactNode;
   error?: string | null;
   children: ReactNode;

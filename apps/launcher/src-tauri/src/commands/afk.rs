@@ -225,7 +225,11 @@ pub struct ConsoleLineView {
 pub struct AfkDialogView {
     /// The client's revision of it: a press names it.
     pub rev: u32,
+    /// Its JSON (empty while `wait`).
     pub dialog: String,
+    /// The game's "waiting for response" screen in a dialog's place (client 4.2.5): a close of
+    /// `rev` leaves it.
+    pub wait: bool,
     /// When it opened (RFC 3339).
     pub at: String,
 }
@@ -461,8 +465,18 @@ pub fn afk_dialog(state: State<'_, AppState>, id: String) -> Option<AfkDialogVie
     state.afk.dialog(&id).map(|dialog| AfkDialogView {
         rev: dialog.rev,
         dialog: dialog.json,
+        wait: dialog.wait,
         at: dialog.at.to_string(),
     })
+}
+
+/// What the game's pause screen and quick actions key open for the account (client 4.2.5):
+/// `{pause?, quick?}`, each `{label, labelSt?}`, as JSON (the view checks it again: `safeMenus`).
+/// A press `{open: "pause" | "quick"}` opens one.
+#[tauri::command]
+#[specta::specta]
+pub fn afk_dialog_menus(state: State<'_, AppState>, id: String) -> Option<String> {
+    state.afk.dialog_menus(&id)
 }
 
 /// A press of the account's dialog card (`press`: its JSON as `@pl/ui` `dialogPress` built it):

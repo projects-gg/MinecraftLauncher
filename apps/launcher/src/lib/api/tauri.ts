@@ -472,6 +472,9 @@ export const tauriApi: LauncherApi = {
   async afkDialog(id) {
     return commands.afkDialog(id);
   },
+  async afkDialogMenus(id) {
+    return commands.afkDialogMenus(id);
+  },
   async afkDialogPress(id, press) {
     return ok(commands.afkDialogPress(id, JSON.stringify(press)));
   },

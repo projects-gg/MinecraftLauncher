@@ -9,7 +9,7 @@ use std::process::Stdio;
 use pl_net::CancellationToken;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::bridge::{BRIDGE_ENV_VAR, CONSOLE_KINDS_ENV_VAR, NONCE_ENV_VAR};
+use crate::bridge::{BRIDGE_ENV_VAR, CONSOLE_KINDS_ENV_VAR, CONSOLE_SIDE_ENV_VAR, NONCE_ENV_VAR};
 
 /// Last argument that puts MCC in line-based, color-free console mode.
 pub const CONSOLE_MODE_ARG: &str = "BasicIO-NoColor";
@@ -17,8 +17,9 @@ pub const CONSOLE_MODE_ARG: &str = "BasicIO-NoColor";
 /// The fork's other environment variables that steer a client: its agent channel, console kinds,
 /// auto-reply variables, MCP token and file input. The launcher sets none of them, so a value in
 /// its own environment never reaches the client.
-const CONTROL_ENV_VARS: [&str; 8] = [
+const CONTROL_ENV_VARS: [&str; 9] = [
     "MCC_CONSOLE_KINDS",
+    "MCC_CONSOLE_SIDE",
     "MCC_AGENT_EVENTS",
     "MCC_AGENT_FD_IN",
     "MCC_AGENT_FD_OUT",
@@ -40,6 +41,9 @@ pub struct LaunchSpec {
     /// Console writes as `line` events, with their looks and the server's dialogs
     /// ([`CONSOLE_KINDS_ENV_VAR`]; with a nonce only, clients 4.2.4 and later).
     pub console_kinds: bool,
+    /// Client 4.2.5's side events beside the classic console (`looks`, `dialogs` or both,
+    /// [`CONSOLE_SIDE_ENV_VAR`]; with a nonce only, never with the console kinds).
+    pub console_side: Option<String>,
 }
 
 /// The nonce stays out of every log line and panic message.
@@ -51,6 +55,7 @@ impl std::fmt::Debug for LaunchSpec {
             .field("cwd", &self.cwd)
             .field("nonce", &self.nonce.as_ref().map(|_| "<redacted>"))
             .field("console_kinds", &self.console_kinds)
+            .field("console_side", &self.console_side)
             .finish()
     }
 }
@@ -112,6 +117,8 @@ fn client_command(spec: &LaunchSpec) -> tokio::process::Command {
     // The client tells its events from text by the nonce alone: never the kinds without it.
     if spec.console_kinds && spec.nonce.is_some() {
         command.env(CONSOLE_KINDS_ENV_VAR, "1");
+    } else if let (Some(side), Some(_)) = (&spec.console_side, &spec.nonce) {
+        command.env(CONSOLE_SIDE_ENV_VAR, side);
     }
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
@@ -180,6 +187,7 @@ mod tests {
             cwd: PathBuf::from("account"),
             nonce: nonce.map(str::to_owned),
             console_kinds: false,
+            console_side: None,
         }
     }
 
@@ -225,6 +233,24 @@ mod tests {
             ..spec(None)
         });
         assert_eq!(no_nonce.get(CONSOLE_KINDS_ENV_VAR), Some(&None));
+
+        // Client 4.2.5's side events: ours with a nonce only, never with the kinds.
+        let side = |kinds: bool, nonce: Option<&str>| {
+            envs(&LaunchSpec {
+                console_kinds: kinds,
+                console_side: Some("looks,dialogs".to_owned()),
+                ..spec(nonce)
+            })
+        };
+        assert_eq!(
+            side(false, Some(NONCE)).get(CONSOLE_SIDE_ENV_VAR),
+            Some(&Some("looks,dialogs".to_owned()))
+        );
+        assert_eq!(side(false, None).get(CONSOLE_SIDE_ENV_VAR), Some(&None));
+        assert_eq!(
+            side(true, Some(NONCE)).get(CONSOLE_SIDE_ENV_VAR),
+            Some(&None)
+        );
     }
 
     #[test]

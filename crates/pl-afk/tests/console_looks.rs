@@ -1,6 +1,7 @@
 //! Console looks and dialog cards on this computer (AFK-UX): the console kinds only with Studio's
-//! switch and a client of 4.2.4 or later, a line's look kept only as the account's rules allow,
-//! and a press of the dialog card checked and answered.
+//! switch and a client of 4.2.4 (from 4.2.5 its side events beside the classic console,
+//! CONSOLE-ANY), a line's look kept only as the account's rules allow, and a press of the dialog
+//! card checked and answered.
 
 mod common;
 
@@ -28,18 +29,21 @@ fn rules_dialog(rev: u32) -> String {
 }
 
 #[tokio::test(start_paused = true)]
-async fn the_kinds_wait_for_the_switch_and_a_client_of_4_2_4() {
-    for (version, features, kinds) in [
-        ("4.2.4", ConsoleFeatures::default(), false),
-        ("4.2.3", ON, false),
-        ("4.2.4", ON, true),
+async fn the_kinds_or_the_side_events_wait_for_the_switch_and_the_client() {
+    for (version, features, kinds, side) in [
+        ("4.2.4", ConsoleFeatures::default(), false, None),
+        ("4.2.3", ON, false, None),
+        ("4.2.4", ON, true, None),
+        ("4.2.5", ConsoleFeatures::default(), false, None),
+        ("4.2.5", ON, false, Some("looks,dialogs")),
         (
             "4.3.0",
             ConsoleFeatures {
                 looks: false,
                 dialogs: true,
             },
-            true,
+            false,
+            Some("dialogs"),
         ),
     ] {
         let env = TestEnv::with_client_version(version);
@@ -56,6 +60,11 @@ async fn the_kinds_wait_for_the_switch_and_a_client_of_4_2_4() {
         assert_eq!(
             s.launch(0).spec.console_kinds,
             kinds,
+            "{version} {features:?}"
+        );
+        assert_eq!(
+            s.launch(0).spec.console_side.as_deref(),
+            side,
             "{version} {features:?}"
         );
         manager.shutdown().await;
@@ -280,4 +289,88 @@ async fn the_switches_are_remembered() {
     let again = env.manager(None, ManagerConfig::default());
     assert_eq!(again.console_features(), ON);
     again.shutdown().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_client_of_4_2_5_keeps_its_classic_console_beside_its_side_events() {
+    let env = TestEnv::with_client_version("4.2.5");
+    let id = env.add("SideBot").id;
+    let s = ScriptedSpawner::new(|_, mut proc| async move {
+        proc.event(r#"{"e":"connecting","host":"h","port":25565,"caps":["dialog"]}"#)
+            .await;
+        proc.event(r#"{"e":"joined","user":"SideBot","host":"h","port":25565,"protocol":777}"#)
+            .await;
+        // A chat line's looks right before it, exactly its text; then looks whose line differs.
+        proc.event(r#"{"e":"looks","text":"[Duyuru] Etkinlik","st":[[8,"6l"],[9,"f"]]}"#)
+            .await;
+        proc.out("[Duyuru] Etkinlik").await;
+        proc.event(r#"{"e":"looks","text":"[Duyuru] Yarın","st":[[8,"6l"],[6,"f"]]}"#)
+            .await;
+        proc.out("[12:00] [Duyuru] Yarın").await;
+        proc.out("Düz satır").await;
+        proc.event(r#"{"e":"menus","pause":{"label":"Kurallar"}}"#)
+            .await;
+        proc.event(r#"{"e":"dialog","rev":4,"wait":true}"#).await;
+        loop {
+            let line = proc.read().await?;
+            if line == "/quit" {
+                return Some(0);
+            }
+            if line.starts_with("/dialog act ") && line.contains("\"open\"") {
+                proc.event(&rules_dialog(5)).await;
+                proc.event(r#"{"e":"menures","menu":"pause","ok":true}"#)
+                    .await;
+            } else if line.starts_with("/dialog act ") {
+                proc.event(r#"{"e":"dialogres","rev":4,"ok":true}"#).await;
+                proc.event(r#"{"e":"dialog","rev":4,"clear":true}"#).await;
+            }
+        }
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.set_console_features(ON);
+    manager.connect(&id).await.unwrap();
+    until("the waiting screen", LONG, || {
+        manager.dialog(&id).is_some_and(|dialog| dialog.wait)
+    })
+    .await;
+    let spec = s.launch(0).spec;
+    assert!(!spec.console_kinds);
+    assert_eq!(spec.console_side.as_deref(), Some("looks,dialogs"));
+
+    // The console is the classic one; looks only on the very line that is exactly their text.
+    let console = manager.console(&id);
+    let line = |text: &str| console.iter().find(|l| l.text == text).unwrap().clone();
+    assert!(line("[Duyuru] Etkinlik").looks.is_some());
+    assert!(line("[12:00] [Duyuru] Yarın").looks.is_none());
+    assert!(line("Düz satır").looks.is_none());
+    assert!(!console.iter().any(|l| l.text.contains("\"e\"")));
+    assert!(manager.dialog_menus(&id).unwrap().contains("Kurallar"));
+
+    // The waiting screen's back; a menu the client offered opens, another does not.
+    let back = manager
+        .press_dialog(&id, r#"{"rev":4,"cancel":true}"#)
+        .await
+        .unwrap();
+    assert!(back.ok, "{back:?}");
+    until("the waiting screen goes", LONG, || {
+        manager.dialog(&id).is_none()
+    })
+    .await;
+    let quick = manager
+        .press_dialog(&id, r#"{"open":"quick"}"#)
+        .await
+        .unwrap();
+    assert_eq!(quick.why.as_deref(), Some("menu"));
+    let open = manager
+        .press_dialog(&id, r#"{"open":"pause"}"#)
+        .await
+        .unwrap();
+    assert!(open.ok, "{open:?}");
+    until("the menu's dialog", LONG, || {
+        manager
+            .dialog(&id)
+            .is_some_and(|dialog| dialog.rev == 5 && !dialog.wait)
+    })
+    .await;
+    manager.shutdown().await;
 }
