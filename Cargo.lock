@@ -4251,6 +4251,7 @@ dependencies = [
  "ed25519-dalek",
  "futures",
  "jiff",
+ "pl-lang",
  "pl-net",
  "rand 0.10.3",
  "reqwest",
