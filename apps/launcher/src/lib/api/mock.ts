@@ -1139,10 +1139,12 @@ export const mockApi: LauncherApi = {
     const parts: Array<[LaunchStage[], number, number]> = [];
     if (options?.java === "install") parts.push([["java"], 10, 0]);
     if (heavy && modded) parts.push([["loader"], 12, 0]);
+    // An installed game only checks its files: "Dosyalar denetleniyor", no speed (the backend's
+    // download stages that fetched nothing).
     parts.push([
-      heavy ? ["metadata", "libraries", "assets", "natives"] : ["metadata"],
+      heavy ? ["metadata", "libraries", "assets", "natives"] : ["metadata", "checking"],
       70,
-      heavy ? 3204 : 0,
+      3204,
     ]);
     parts.push([["pack"], 18, 48]);
     const sum = parts.reduce((total, [, share]) => total + share, 0);
@@ -1163,8 +1165,12 @@ export const mockApi: LauncherApi = {
           doneFiles: Math.round(fraction * totalFiles),
           totalFiles,
           bytesPerSec:
-            stage === "loader" && fraction > 0.4 ? 0 : 9_400_000 + Math.random() * 6_000_000,
-          etaSecs: heavy ? Math.round((1 - fraction) * steps * 0.11 + (100 - from - span) / 14) : 1,
+            (stage === "loader" && fraction > 0.4) || !heavy
+              ? 0
+              : 9_400_000 + Math.random() * 6_000_000,
+          etaSecs: heavy
+            ? Math.round((1 - fraction) * steps * 0.11 + (100 - from - span) / 14)
+            : undefined,
         });
       }
       from += span;

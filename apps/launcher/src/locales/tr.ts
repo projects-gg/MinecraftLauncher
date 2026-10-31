@@ -213,6 +213,8 @@ export const tr = {
       natives: "Sistem dosyaları hazırlanıyor",
       loader: "Mod yükleyici kuruluyor",
       pack: "Mod paketi eşitleniyor",
+      /** Files already on disk are only checked (a launch of an installed game): nothing downloads. */
+      checking: "Dosyalar denetleniyor",
     },
     files: "{{done}} / {{total}} dosya",
     eta: "{{time}} kaldı",

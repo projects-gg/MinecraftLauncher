@@ -419,6 +419,7 @@ export const en: DeepPartial<Strings> = {
       natives: "Preparing system files",
       loader: "Installing mod loader",
       pack: "Syncing the modpack",
+      checking: "Checking files",
     },
     files: "{{done}} / {{total}} files",
     eta: "{{time}} left",

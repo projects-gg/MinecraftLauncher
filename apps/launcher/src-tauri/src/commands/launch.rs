@@ -34,7 +34,7 @@ use crate::state::{AppState, RunningGame};
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProgressView {
-    /// metadata | java | libraries | assets | client | natives | loader | pack
+    /// metadata | java | libraries | assets | client | natives | loader | pack | checking
     pub stage: String,
     /// The whole launch, 0–100, never going back (the stage's own figures are the fields below).
     pub percent: f64,
@@ -232,6 +232,21 @@ fn stage_key(stage: InstallStage) -> &'static str {
     }
 }
 
+/// The stage the command bar names: a download stage that fetched nothing (yet) only checks the
+/// files already on disk (every launch of an installed game) and says "Dosyalar denetleniyor"
+/// instead of "… indiriliyor".
+fn stage_label(p: &InstallProgress) -> &'static str {
+    let downloads = matches!(
+        p.stage,
+        InstallStage::Libraries | InstallStage::Assets | InstallStage::Client
+    );
+    if downloads && p.download.fetched_bytes == 0 {
+        "checking"
+    } else {
+        stage_key(p.stage)
+    }
+}
+
 /// A progress report for the command bar: the stage, its files, speed and time left, and the
 /// launch's one overall percentage (`LaunchBar`: every part of the preparation fills its share
 /// and the bar never moves back).
@@ -252,7 +267,7 @@ fn progress_view(p: &InstallProgress, bar: &LaunchBar) -> ProgressView {
         (d.done_files as u64, d.total_files as u64)
     };
     ProgressView {
-        stage: stage_key(p.stage).to_owned(),
+        stage: stage_label(p).to_owned(),
         percent: bar.stage_percent(p.stage, fraction),
         done_files: files.0,
         total_files: files.1,

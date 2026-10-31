@@ -67,6 +67,7 @@ mod ts {
         pub done_files: usize,
         pub total_bytes: u64,
         pub done_bytes: u64,
+        pub fetched_bytes: u64,
         pub bytes_per_sec: u64,
     }
 }

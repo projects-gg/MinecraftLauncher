@@ -280,7 +280,9 @@ export type LaunchStage =
   | "client"
   | "natives"
   | "loader"
-  | "pack";
+  | "pack"
+  /** A download stage that fetched nothing: it only checks the files already on disk. */
+  | "checking";
 
 export type LaunchEvent =
   | {

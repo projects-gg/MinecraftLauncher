@@ -8525,7 +8525,7 @@ export type ProfileView = {
 };
 
 export type ProgressView = {
-	/**  metadata | java | libraries | assets | client | natives | loader | pack */
+	/**  metadata | java | libraries | assets | client | natives | loader | pack | checking */
 	stage: string,
 	/**  The whole launch, 0–100, never going back (the stage's own figures are the fields below). */
 	percent: number | null,

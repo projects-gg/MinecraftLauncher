@@ -89,6 +89,10 @@ pub struct DownloadProgress {
     pub done_files: usize,
     pub total_bytes: u64,
     pub done_bytes: u64,
+    /// The bytes that came over the network in this batch. A file found whole on disk, or the part
+    /// an earlier attempt left, is only checked: it counts in `done_bytes`, never here. The speed
+    /// is measured from these, and a batch that fetched nothing yet is only checking its files.
+    pub fetched_bytes: u64,
     pub bytes_per_sec: u64,
 }
 
@@ -166,6 +170,8 @@ struct Counters {
     done_files: AtomicUsize,
     total_bytes: AtomicU64,
     done_bytes: AtomicU64,
+    /// Only what came over the network (a failed attempt's bytes too: they were fetched).
+    fetched_bytes: AtomicU64,
 }
 
 impl Counters {
@@ -175,6 +181,7 @@ impl Counters {
             done_files: self.done_files.load(Ordering::Relaxed),
             total_bytes: self.total_bytes.load(Ordering::Relaxed),
             done_bytes: self.done_bytes.load(Ordering::Relaxed),
+            fetched_bytes: self.fetched_bytes.load(Ordering::Relaxed),
             bytes_per_sec,
         }
     }
@@ -237,6 +244,7 @@ impl Downloader {
             done_files: AtomicUsize::new(0),
             total_bytes: AtomicU64::new(items.iter().filter_map(|i| i.size).sum()),
             done_bytes: AtomicU64::new(0),
+            fetched_bytes: AtomicU64::new(0),
         });
 
         // Stops with the batch, and at once when the batch is cancelled (no progress after that).
@@ -528,6 +536,9 @@ impl Downloader {
                 counters
                     .done_bytes
                     .fetch_add(chunk.len() as u64, Ordering::Relaxed);
+                counters
+                    .fetched_bytes
+                    .fetch_add(chunk.len() as u64, Ordering::Relaxed);
             }
             file.flush().await.map_err(|e| NetError::io(&tmp, e))?;
             drop(file);
@@ -679,36 +690,57 @@ async fn set_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A batch's speed: the bytes that came over the network, over time. Files found whole on disk
+/// are done but not fetched, so a launch that only checks its files shows no speed (it used to
+/// read as gigabytes per second).
+struct Speed {
+    last_bytes: u64,
+    last_at: Instant,
+    value: f64,
+}
+
+impl Speed {
+    fn new(now: Instant) -> Self {
+        Self {
+            last_bytes: 0,
+            last_at: now,
+            value: 0.0,
+        }
+    }
+
+    /// The speed in bytes per second once `fetched` bytes in all came by `now`.
+    fn update(&mut self, fetched: u64, now: Instant) -> u64 {
+        let elapsed = now.duration_since(self.last_at).as_secs_f64();
+        if elapsed > 0.0 {
+            let instant = fetched.saturating_sub(self.last_bytes) as f64 / elapsed;
+            // Exponential moving average keeps the speed readout calm.
+            self.value = if self.value == 0.0 {
+                instant
+            } else {
+                self.value * 0.75 + instant * 0.25
+            };
+        }
+        self.last_bytes = fetched;
+        self.last_at = now;
+        self.value as u64
+    }
+}
+
 async fn run_ticker(
     counters: Arc<Counters>,
     progress: ProgressFn,
     interval: Duration,
     stop: CancellationToken,
 ) {
-    let mut last_bytes = 0u64;
-    let mut last_at = Instant::now();
-    let mut speed = 0f64;
+    let mut speed = Speed::new(Instant::now());
     let mut last_emitted = None;
     loop {
         tokio::select! {
             _ = stop.cancelled() => break,
             _ = tokio::time::sleep(interval) => {}
         }
-        let now = Instant::now();
-        let bytes = counters.done_bytes.load(Ordering::Relaxed);
-        let elapsed = now.duration_since(last_at).as_secs_f64();
-        if elapsed > 0.0 {
-            let instant = bytes.saturating_sub(last_bytes) as f64 / elapsed;
-            // Exponential moving average keeps the speed readout calm.
-            speed = if speed == 0.0 {
-                instant
-            } else {
-                speed * 0.75 + instant * 0.25
-            };
-        }
-        last_bytes = bytes;
-        last_at = now;
-        let snapshot = counters.snapshot(speed as u64);
+        let fetched = counters.fetched_bytes.load(Ordering::Relaxed);
+        let snapshot = counters.snapshot(speed.update(fetched, Instant::now()));
         if last_emitted != Some(snapshot) {
             progress(snapshot);
             last_emitted = Some(snapshot);
@@ -1062,6 +1094,96 @@ mod tests {
         assert_eq!(*asked.lock(), [Some(20_000)]);
         assert_eq!(std::fs::read(&dest).unwrap(), content);
         assert_eq!(leftovers(dir.path()), ["file"]);
+    }
+
+    /// The last progress a batch reported.
+    fn last_progress() -> (DownloadOptions, Arc<parking_lot::Mutex<DownloadProgress>>) {
+        let last = Arc::new(parking_lot::Mutex::new(DownloadProgress::default()));
+        let sink = Arc::clone(&last);
+        let options = DownloadOptions {
+            progress: Some(Arc::new(move |p| *sink.lock() = p)),
+            ..DownloadOptions::default()
+        };
+        (options, last)
+    }
+
+    /// A file found whole on disk is done but not fetched; only the server's bytes are.
+    #[tokio::test]
+    async fn checked_files_are_done_but_not_fetched() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = sample(32 * 1024);
+        let (base, _asked) = range_server(content.clone(), true, false).await;
+        let present = dir.path().join("present");
+        std::fs::write(&present, b"abc").unwrap();
+        let on_disk = DownloadItem::new("http://127.0.0.1:9/never", &present)
+            .sha1("a9993e364706816aba3e25717850c26c9cd0d89d")
+            .size(Some(3));
+        let (options, last) = last_progress();
+        downloader()
+            .download_all(
+                vec![
+                    on_disk,
+                    checked_item(&base, &content, &dir.path().join("file")),
+                ],
+                &options,
+            )
+            .await
+            .unwrap();
+        let last = *last.lock();
+        assert_eq!(last.done_bytes, 3 + content.len() as u64);
+        assert_eq!(last.fetched_bytes, content.len() as u64);
+    }
+
+    /// A launch of an installed game only checks its files: nothing fetched, no speed.
+    #[tokio::test]
+    async fn a_batch_found_on_disk_fetches_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("abc.txt");
+        std::fs::write(&dest, b"abc").unwrap();
+        let item = DownloadItem::new("http://127.0.0.1:9/never", &dest)
+            .sha1("a9993e364706816aba3e25717850c26c9cd0d89d")
+            .size(Some(3));
+        let (options, last) = last_progress();
+        downloader()
+            .download_all(vec![item], &options)
+            .await
+            .unwrap();
+        let last = *last.lock();
+        assert_eq!((last.done_files, last.done_bytes), (1, 3));
+        assert_eq!((last.fetched_bytes, last.bytes_per_sec), (0, 0));
+    }
+
+    /// A part an interrupted download left is checked, not fetched again: only the rest counts.
+    #[tokio::test]
+    async fn a_resumed_part_fetches_only_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = sample(64 * 1024);
+        let (base, _asked) = range_server(content.clone(), true, false).await;
+        std::fs::write(dir.path().join("file.part"), &content[..20_000]).unwrap();
+        let (options, last) = last_progress();
+        downloader()
+            .download_all(
+                vec![checked_item(&base, &content, &dir.path().join("file"))],
+                &options,
+            )
+            .await
+            .unwrap();
+        let last = *last.lock();
+        assert_eq!(last.done_bytes, content.len() as u64);
+        assert_eq!(last.fetched_bytes, content.len() as u64 - 20_000);
+    }
+
+    #[test]
+    fn the_speed_counts_only_fetched_bytes() {
+        let start = Instant::now();
+        let at = |ms| start + Duration::from_millis(ms);
+        let mut speed = Speed::new(start);
+        // Files checked on disk fetch nothing: no speed, however fast the check runs.
+        assert_eq!(speed.update(0, at(120)), 0);
+        // 1 MB over the next second.
+        assert_eq!(speed.update(1_000_000, at(1_120)), 1_000_000);
+        // Nothing more for a second: the readout calms down instead of dropping at once.
+        assert_eq!(speed.update(1_000_000, at(2_120)), 750_000);
     }
 
     /// A server without ranges sends the whole file, which replaces the part.
