@@ -456,6 +456,9 @@ function AccountStep({
   const [name, setName] = useState(suggestedName ?? "");
   const [final, setFinal] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
+  // The Microsoft account has no Minecraft: its dialog's "Oyuncu adıyla oyna" leads to the name
+  // field below, which takes the focus once the dialog has gone (as in the account center).
+  const toName = useRef(false);
 
   const hasAccount = Boolean(accounts?.length);
   // The name rules show as the player types (Turkish letters, spaces, a name already used);
@@ -619,6 +622,16 @@ function AccountStep({
         onOpenChange={(open) => {
           setLoginOpen(open);
           if (!open) setAdding(false);
+        }}
+        onUseOffline={() => {
+          toName.current = true;
+          setAdding(true);
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!toName.current) return;
+          toName.current = false;
+          event.preventDefault();
+          nameInput.current?.focus();
         }}
       />
     </StepFrame>

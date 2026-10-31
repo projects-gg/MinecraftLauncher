@@ -190,12 +190,15 @@ export function MicrosoftLoginDialog({
   onOpenChange,
   relogin = null,
   onUseOffline,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   relogin?: AccountSummary | null;
   /** Offered when the account has no Minecraft: switch to adding an offline account. */
   onUseOffline?: () => void;
+  /** Once it has closed (where the focus goes then: see `AccountDialog`). */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const { t } = useTranslation();
   const calm = useCalm();
@@ -314,6 +317,7 @@ export function MicrosoftLoginDialog({
       open={open}
       onOpenChange={close}
       initialFocus={action}
+      onCloseAutoFocus={onCloseAutoFocus}
       title={relogin ? t("accounts.login.reloginTitle") : t("accounts.login.title")}
       // Only a renewal needs a word: it must be the same Microsoft account.
       description={
