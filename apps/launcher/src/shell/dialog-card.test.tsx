@@ -445,7 +445,7 @@ describe("the game's waiting screen and menus", () => {
     vi.useFakeTimers();
     const onBack = vi.fn();
     show(<DialogWaiting lang="tr" onBack={onBack} />);
-    expect(screen.getByRole("status").textContent).toBe("Sunucudan cevap bekleniyor");
+    expect(screen.getByRole("status").textContent).toBe("Sunucu bekleniyor");
     const back = () => screen.getByRole("button") as HTMLButtonElement;
     expect(back().textContent).toBe("Geri (5)");
     expect(back().disabled).toBe(true);
