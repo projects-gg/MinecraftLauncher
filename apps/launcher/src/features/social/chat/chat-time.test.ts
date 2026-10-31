@@ -1,6 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import i18n, { loadEnglish } from "@/lib/i18n";
-import { clockTime, dayLineText, daysAgo, fullTime, localDay, sameLocalDay } from "./chat-time";
+import {
+  clockTime,
+  dayLineText,
+  daysAgo,
+  fullTime,
+  listStamp,
+  localDay,
+  sameLocalDay,
+} from "./chat-time";
 
 const TR = { today: "Bugün", yesterday: "Dün" };
 const EN = { today: "Today", yesterday: "Yesterday" };
@@ -77,6 +85,29 @@ describe("chat times in Istanbul", () => {
     expect(fullTime(local(2026, 10, 28, 14, 5))).toBe("28 Ekim 2026 Çarşamba 14:05");
     expect(fullTime(local(2025, 12, 31, 23, 59))).toBe("31 Aralık 2025 Çarşamba 23:59");
   });
+
+  it("stamps the list: the time today, Dün, a weekday within the week, then the date", () => {
+    const now = local(2026, 10, 31, 12); // Saturday
+    expect(listStamp(local(2026, 10, 31, 0, 5), now, "Dün")).toBe("00:05");
+    expect(listStamp(local(2026, 10, 30, 23, 59), now, "Dün")).toBe("Dün");
+    expect(listStamp(local(2026, 10, 29, 12), now, "Dün")).toBe("Per");
+    expect(listStamp(local(2026, 10, 26, 9), now, "Dün")).toBe("Pzt");
+    expect(listStamp(local(2026, 10, 25, 23, 59), now, "Dün")).toBe("Paz");
+    // A week back is today's weekday again: the date.
+    expect(listStamp(local(2026, 10, 24, 23, 59), now, "Dün")).toBe("24 Eki");
+    expect(listStamp(local(2026, 1, 3, 8), now, "Dün")).toBe("3 Oca");
+    expect(listStamp(local(2025, 12, 31, 22), now, "Dün")).toBe("31 Ara 2025");
+    // Midnight and New Year, as the day lines.
+    const midnight = local(2026, 10, 31, 0, 0);
+    expect(listStamp(midnight - 1, midnight, "Dün")).toBe("Dün");
+    expect(listStamp(midnight, midnight, "Dün")).toBe("00:00");
+    const newYear = local(2027, 1, 1, 0, 30);
+    expect(listStamp(local(2026, 12, 31, 23, 50), newYear, "Dün")).toBe("Dün");
+    expect(listStamp(local(2026, 12, 26, 12), newYear, "Dün")).toBe("Cmt");
+    expect(listStamp(local(2026, 12, 25, 12), newYear, "Dün")).toBe("25 Ara 2026");
+    // Ahead of the clock: today's time.
+    expect(listStamp(now + 2 * MINUTE, now, "Dün")).toBe("12:02");
+  });
 });
 
 describe("chat times in English", () => {
@@ -98,6 +129,11 @@ describe("chat times in English", () => {
     expect(dayLineText(local(2025, 12, 31, 9), now, EN)).toBe("31 December 2025");
     expect(clockTime(local(2026, 10, 28, 14, 5))).toBe("14:05");
     expect(fullTime(local(2026, 10, 28, 14, 5))).toBe("Wednesday, 28 October 2026 at 14:05");
+    expect(listStamp(local(2026, 10, 31, 9, 5), now, "Yesterday")).toBe("09:05");
+    expect(listStamp(local(2026, 10, 30, 9), now, "Yesterday")).toBe("Yesterday");
+    expect(listStamp(local(2026, 10, 26, 9), now, "Yesterday")).toBe("Mon");
+    expect(listStamp(local(2026, 10, 24, 9), now, "Yesterday")).toBe("24 Oct");
+    expect(listStamp(local(2025, 12, 31, 9), now, "Yesterday")).toBe("31 Dec 2025");
   });
 });
 
@@ -149,5 +185,17 @@ describe("chat times in the reader's own zone", () => {
     process.env.TZ = "Pacific/Auckland";
     // 15:30 on 31 October there, read at 01:00 on 1 November.
     expect([dayLineText(moment, later, TR), clockTime(moment)]).toEqual(["Dün", "15:30"]);
+  });
+
+  it("stamps the list on each reader's own day", () => {
+    const moment = Date.UTC(2026, 9, 31, 2, 30);
+    const later = Date.UTC(2026, 9, 31, 12, 0);
+    process.env.TZ = "Europe/Istanbul";
+    expect(listStamp(moment, later, "Dün")).toBe("05:30");
+    process.env.TZ = "America/New_York";
+    expect(listStamp(moment, later, "Dün")).toBe("Dün");
+    process.env.TZ = "Europe/Berlin";
+    // Six days back over the 25-hour 25 October: still a weekday ("Paz", 25 October; read 31 October).
+    expect(listStamp(Date.UTC(2026, 9, 25, 1, 30), Date.UTC(2026, 9, 31, 12, 0), "Dün")).toBe("Paz");
   });
 });

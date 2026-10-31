@@ -6,13 +6,16 @@
 // "Ekibi aç" (FIX2). CHAT2: a sticker reads "Çıkartma: GG"; while someone writes there, the
 // last line is a quiet "yazıyor…" (screen readers are not told). A friend's row carries the crew
 // tag they wear before the name (TEAM6).
+//
+// CHAT-UX2: "when" is chat-time.ts's list stamp ("14:05", "Dün", "Pzt", "28 Eki", "28 Eki 2025"),
+// in calendar days of this computer's zone; an unread row's stamp is bone with its line, the count
+// beside it stays the row's one gold (design.md §2: words are never gold).
 import { BellSlash, ChatsCircle, Prohibit, UsersThree, WarningCircle } from "@phosphor-icons/react";
 import { ContentIcon, ContextMenu, cn, EmptyState, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import type { Conversation, SocialTeam } from "@/lib/api/social-types";
-import { dateTimeFormat } from "@/lib/format";
 import { BadgedName, badgeRowLabel, useShownBadge } from "../crew-badge";
 import { openMenuFromKey } from "../menu-key";
 import { enter, glide, leave, useSocialMotion } from "../motion";
@@ -20,20 +23,11 @@ import { PersonContextMenu, type PersonRef } from "../person-menu";
 import { SocialAvatar } from "../social-face";
 import { useSocialPrefs, useSocialUi } from "../store";
 import { CrewMark } from "../team-emblem";
+import { listStamp } from "./chat-time";
 import { chatMutedNow, conversationFace, peerOf, tombstoneKind } from "./conversations";
 import { useChatExtras } from "./extras";
 import { stickerName } from "./preview";
 import { onlineIn, useTyping, useTypingFeed, writersOf } from "./typing";
-
-/** "14:05" today, "Dün", a weekday this week, else the date. */
-function whenLabel(t: (key: string) => string, at: number, nowMs: number): string {
-  const day = (ms: number) => new Date(new Date(ms).toDateString()).getTime();
-  const diff = Math.round((day(nowMs) - day(at)) / 86_400_000);
-  if (diff <= 0) return dateTimeFormat({ hour: "2-digit", minute: "2-digit" }).format(new Date(at));
-  if (diff === 1) return t("chat.day.yesterday");
-  if (diff < 7) return dateTimeFormat({ weekday: "short" }).format(new Date(at));
-  return dateTimeFormat({ day: "numeric", month: "short" }).format(new Date(at));
-}
 
 /** A crew conversation's right click: its chat (the row's press) and its crew page. */
 function CrewRowMenu({
@@ -217,10 +211,10 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
             <span
               className={cn(
                 "text-[11.5px] tabular-nums",
-                unread ? "text-gold-300" : "text-ash-400",
+                unread ? "text-bone-100" : "text-ash-400",
               )}
             >
-              {whenLabel(t, last.at, nowMs)}
+              {listStamp(last.at, nowMs, t("chat.day.yesterday"))}
             </span>
           ) : null}
           <AnimatePresence initial={false}>

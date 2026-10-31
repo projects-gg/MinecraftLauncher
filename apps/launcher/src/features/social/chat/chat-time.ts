@@ -1,9 +1,9 @@
 // Chat times (CHAT-UX; the overlay's ChatTime.java and the phone keep the same rules): the day line
 // over the first message of each local day, a group's clock time, and the full time a pointer
-// resting on a message shows. Days are calendar days in this computer's zone, never 24-hour spans,
-// so summer time and a message just before midnight read right; a time a little ahead of this
-// computer's clock reads as today. Pure (chat-time.test.ts): the words are worked out when the list
-// draws, nothing wakes up for them.
+// resting on a message shows; the conversation list's stamp (CHAT-UX2). Days are calendar days in
+// this computer's zone, never 24-hour spans, so summer time and a message just before midnight read
+// right; a time a little ahead of this computer's clock reads as today. Pure (chat-time.test.ts):
+// the words are worked out when the list draws, nothing wakes up for them.
 //
 // Dates are written from the local wall time read as UTC, so the `Intl` formatters (built once per
 // language and options, `lib/format`) carry no zone of their own: they write this computer's wall
@@ -24,6 +24,9 @@ const CLOCK: Intl.DateTimeFormatOptions = {
   timeZone: "UTC",
 };
 const FULL: Intl.DateTimeFormatOptions = { ...DAY_MONTH_YEAR, ...CLOCK, weekday: "long" };
+const WEEKDAY_SHORT: Intl.DateTimeFormatOptions = { weekday: "short", timeZone: "UTC" };
+const DAY_MON: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", timeZone: "UTC" };
+const DAY_MON_YEAR: Intl.DateTimeFormatOptions = { ...DAY_MON, year: "numeric" };
 
 /** `ms`'s wall time on this computer's clock (to the minute), as the UTC instant that reads so. */
 function wallTime(ms: number): number {
@@ -81,4 +84,18 @@ export function clockTime(at: number): string {
  */
 export function fullTime(at: number): string {
   return dateTimeFormat(FULL).format(wallTime(at));
+}
+
+/**
+ * The conversation list's stamp of its newest message (CHAT-UX2), short for a narrow row: the time
+ * today ("14:05"), `yesterday` ("Dün"), the weekday within the last week ("Pzt" / "Mon"), then the
+ * date ("28 Eki", "28 Eki 2025" in another year / "28 Oct", "28 Oct 2025").
+ */
+export function listStamp(at: number, now: number, yesterday: string): string {
+  const days = daysAgo(at, now);
+  if (days <= 0) return clockTime(at);
+  if (days === 1) return yesterday;
+  if (days <= DAYS_IN_WORDS) return dateTimeFormat(WEEKDAY_SHORT).format(wallTime(at));
+  const sameYear = new Date(at).getFullYear() === new Date(now).getFullYear();
+  return dateTimeFormat(sameYear ? DAY_MON : DAY_MON_YEAR).format(wallTime(at));
 }

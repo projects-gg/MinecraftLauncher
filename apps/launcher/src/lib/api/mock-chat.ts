@@ -349,7 +349,8 @@ export function mockChat(host: ChatHost) {
       message(kor, ME, pick("Tamam, yarın bakarız", "Alright, let's see tomorrow"), t0 - 2 * HOUR),
     ]);
     // CHAT-UX: `&chatDays=1` gives KorAtesi's conversation a history over every kind of day line
-    // (last year, a date, "3 gün önce", "Dün", "Bugün") and one long word.
+    // (last year, a date, "3 gün önce", "Dün", "Bugün") and one long word; CHAT-UX2: and the list
+    // three older conversations, one stamp each.
     if (host.param("chatDays") !== null) {
       // [from, Turkish, English, days back, hour, minute]
       const older: ReadonlyArray<readonly [string, string, string, number, number, number]> = [
@@ -362,13 +363,26 @@ export function mockChat(host: ChatHost) {
         [ME, "Yarın akşam maç var mı?", "A match tomorrow night?", 1, 22, 30],
         ["302", "Var, 8'de", "Yes, at 8", 1, 22, 33],
       ];
-      const earlier = older.map(([from, tr, en, days, hour, minute]) => {
+      const back = (days: number, hour: number, minute: number) => {
         const date = new Date(t0);
         date.setDate(date.getDate() - days);
         date.setHours(hour, minute, 0, 0);
-        return message(kor, from, pick(tr, en), date.getTime());
-      });
+        return date.getTime();
+      };
+      const earlier = older.map(([from, tr, en, days, hour, minute]) =>
+        message(kor, from, pick(tr, en), back(days, hour, minute)),
+      );
       threads.set(kor, [...earlier, ...(threads.get(kor) ?? [])]);
+      // CHAT-UX2: one-message conversations for the list's stamps (yesterday, a date, last year).
+      const lone: ReadonlyArray<readonly [string, string, string, number, number, number]> = [
+        ["303", "Yarın elmas madenine inelim mi?", "Mining for diamonds tomorrow?", 1, 21, 40],
+        ["306", "Kalenin planını attım", "I sent the castle plan", 12, 18, 15],
+        ["307", "İyi oyunlar!", "Good game!", 400, 20, 5],
+      ];
+      for (const [from, tr, en, days, hour, minute] of lone) {
+        const conv = direct(from);
+        threads.set(conv, [message(conv, from, pick(tr, en), back(days, hour, minute))]);
+      }
     }
 
     const elif = direct("305");
