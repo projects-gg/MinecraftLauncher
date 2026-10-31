@@ -75,8 +75,8 @@ pub use pack::{
     PackItem, PackLoader, PackManifest, PackServer, PolicyRule, ProjectsExtension,
 };
 pub use release::{
-    ReleaseChannel, ReleasePlatform, UpdateDecision, release_bundle_allowed, release_channel_urls,
-    rollout_bucket,
+    LocalizedNotes, ReleaseChannel, ReleasePlatform, UpdateDecision, release_bundle_allowed,
+    release_channel_urls, release_notes, release_notes_in, rollout_bucket,
 };
 pub use subserver::{
     MAX_SUB_SERVER_COMMAND_CHARS, MAX_SUB_SERVER_ID_CHARS, MAX_SUB_SERVER_NAME_CHARS,

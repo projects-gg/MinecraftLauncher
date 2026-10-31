@@ -9,6 +9,8 @@ publish = false
 
 [dependencies]
 pl-net = { workspace = true }
+# Release notes in the player's language (`ReleaseChannel::notes_for`).
+pl-lang = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }

@@ -4,14 +4,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  buildManifest,
   buildPlatforms,
   canonicalJson,
   classifyBundle,
   compareVersions,
   ghAssetName,
   macBundleVersion,
+  notesFields,
+  parseNotes,
   parseVersion,
   plistString,
+  releaseBody,
   setMacBundleVersion,
   sha256Hex,
   signRequest,
@@ -254,6 +258,98 @@ test("the macOS bundle version is stamped into a Tauri config in place", () => {
   const twice = config.replace('"targets"', '"iOS": { "bundleVersion": "1" },\n    "targets"');
   assert.throws(() => setMacBundleVersion(twice, "2.1.201"), /found 2/);
   assert.throws(() => setMacBundleVersion(config, "2.1.0-beta.1"), /not a macOS bundle version/);
+});
+
+// A tag message as `git tag -l --format='%(contents:subject)%0a%0a%(contents:body)'` prints it.
+const TAG_MESSAGE = `Yeni ana ekran
+
+- Daha hızlı indirmeler
+- Forge 1.20 desteği
+
+--- en ---
+
+A new home screen
+
+- Faster downloads
+- Forge 1.20 support
+`;
+
+test("release notes split into Turkish and English at a --- en --- line", () => {
+  assert.deepEqual(parseNotes(TAG_MESSAGE), {
+    tr: "Yeni ana ekran\n\n- Daha hızlı indirmeler\n- Forge 1.20 desteği",
+    en: "A new home screen\n\n- Faster downloads\n- Forge 1.20 support",
+  });
+  // Notes without a marker are Turkish, as every tag message before per-language notes.
+  assert.deepEqual(parseNotes("  Yeni ana ekran.\r\n\r\n- Hızlı\r\n"), {
+    tr: "Yeni ana ekran.\n\n- Hızlı",
+    en: "",
+  });
+  assert.deepEqual(parseNotes(""), { tr: "", en: "" });
+  assert.deepEqual(parseNotes(undefined), { tr: "", en: "" });
+  // Markers: any case, three or more dashes, spaces optional; a leading --- tr --- is allowed.
+  assert.deepEqual(parseNotes("---tr---\nYeni\n  ----- EN -----  \nNew"), {
+    tr: "Yeni",
+    en: "New",
+  });
+  assert.deepEqual(parseNotes("--- en ---\nNew\n--- tr ---\nYeni"), { tr: "Yeni", en: "New" });
+  assert.deepEqual(parseNotes("--- en ---\nNew only"), { tr: "", en: "New only" });
+  // Only whole `--- word ---` lines are markers: rules, tables and dashes in a line stay text.
+  const text = "Yeni\n---\n-------\n- en --- iyi\n---|---\n--- 2.0.1 ---\nen --- en";
+  assert.deepEqual(parseNotes(text), { tr: text, en: "" });
+});
+
+test("malformed release notes stop the release", () => {
+  assert.throws(() => parseNotes("Yeni\n--- tr ---\nYine yeni"), /tr notes are given twice/);
+  assert.throws(() => parseNotes("Yeni\n--- en ---\nNew\n--- en ---\nNew again"), /en notes/);
+  assert.throws(() => parseNotes("Yeni\n\n--- en ---\n\n"), /nothing under "--- en ---"/);
+  assert.throws(() => parseNotes("--- tr ---\n--- en ---\nNew"), /nothing under "--- tr ---"/);
+  // A mistyped marker would put the English notes in the Turkish ones.
+  for (const line of ["--- English ---", "--- İngilizce ---", "--- Düzeltmeler ---", "---de---"]) {
+    assert.throws(
+      () => parseNotes(`Yeni\n${line}\nNew`),
+      /is not a language line; the English notes start at "--- en ---"/,
+      line,
+    );
+  }
+});
+
+test("the manifest keeps one notes text for older launchers and adds both languages", () => {
+  const fields = (notes) => notesFields(notes);
+  // Turkish only: exactly what was written before per-language notes.
+  assert.deepEqual(fields({ tr: "Yeni", en: "" }), { notes: "Yeni" });
+  assert.deepEqual(fields("Yeni ana ekran"), { notes: "Yeni ana ekran" });
+  assert.deepEqual(fields(undefined), { notes: "" });
+  assert.deepEqual(fields({ tr: "", en: "" }), { notes: "" });
+  // Both: Turkish stays the one text; each language is there by itself too.
+  assert.deepEqual(fields({ tr: "Yeni", en: "New" }), {
+    notes: "Yeni",
+    localizedNotes: { tr: "Yeni", en: "New" },
+  });
+  // English only: the one text is English.
+  assert.deepEqual(fields({ tr: "", en: "New" }), { notes: "New", localizedNotes: { en: "New" } });
+
+  const manifest = buildManifest({
+    version: "2.1.0",
+    notes: parseNotes(TAG_MESSAGE),
+    pubDate: "2026-10-15T12:00:00Z",
+    bundles: [{ name: "Projects.Launcher_2.1.0_x64-setup.exe", signature: "W" }],
+    baseUrl: "https://cdn.projects.gg/v1/releases/2.1.0",
+    channel: "beta",
+  });
+  assert.equal(manifest.notes, "Yeni ana ekran\n\n- Daha hızlı indirmeler\n- Forge 1.20 desteği");
+  assert.equal(
+    manifest.localizedNotes.en,
+    "A new home screen\n\n- Faster downloads\n- Forge 1.20 support",
+  );
+  assert.equal(manifest.localizedNotes.tr, manifest.notes);
+  assert.equal(manifest.channel, "beta");
+});
+
+test("the GitHub release text has the Turkish notes, then the English", () => {
+  assert.equal(releaseBody(parseNotes("Yeni\n--- en ---\nNew")), "Yeni\n\n---\n\nNew\n");
+  assert.equal(releaseBody(parseNotes("Yeni")), "Yeni\n");
+  assert.equal(releaseBody(parseNotes("--- en ---\nNew")), "New\n");
+  assert.equal(releaseBody(parseNotes("")), "");
 });
 
 test("Info.plist strings are read by key", () => {

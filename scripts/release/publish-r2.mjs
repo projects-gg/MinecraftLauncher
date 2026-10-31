@@ -7,8 +7,11 @@
 //            then write v1/releases/<channel>.json last (the commit point).
 //   promote  Copy the release announced in <from>.json (it must be --version) to <to>.json with
 //            the rollout / mandatory / minVersion you choose. beta -> stable, or stable -> stable
-//            to widen a staged rollout.
+//            to widen a staged rollout. Its notes go along unchanged (`localizedNotes` too).
 //   show     Print a channel file.
+//
+// --notes-file: the release notes as the tag message gives them, Turkish, then optionally a
+// `--- en ---` line and the English notes (lib.mjs `parseNotes`, docs/release.md).
 //
 //   node scripts/release/publish-r2.mjs publish --dir release-files --version 2.1.0 \
 //     [--channel beta|stable|none] [--notes-file notes.md] [--rollout 100] [--mandatory] \
@@ -204,6 +207,7 @@ async function promote(flags, r2) {
   const doc = {
     version: source.version,
     notes: source.notes ?? "",
+    localizedNotes: source.localizedNotes,
     pub_date: same ? source.pub_date : rfc3339(),
     platforms: source.platforms,
     channel: to,
