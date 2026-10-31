@@ -30,7 +30,7 @@ use crate::model::{
     SettingsMeta, SettingsPrecondition, TeamAnswer, TeamEdit, TeamLook, TeamLookup,
     TeamNotifications, TeamNotificationsEdit, TeamRequest, TeamsOverview,
 };
-use crate::presence::{ChatSetup, PresenceHandle, PresenceOptions};
+use crate::presence::{ChatSetup, PresenceHandle, PresenceOptions, RelVersion};
 use crate::protocol::presence_caps;
 
 /// The production service.
@@ -558,9 +558,11 @@ impl Session {
         Ok(revoked.revoked)
     }
 
-    /// Friends, incoming and outgoing requests and blocked users.
+    /// Friends, incoming and outgoing requests and blocked users. SCALE-SOC: with `rel=1` a
+    /// service that knows it also brings `me` and the relations version (an older one ignores
+    /// the query and brings neither).
     pub async fn friends(&self) -> Result<FriendsOverview> {
-        self.get("v1/friends").await
+        self.get("v1/friends?rel=1").await
     }
 
     /// Who owns a code (counts against a daily lookup quota). Malformed codes fail locally.
@@ -1010,6 +1012,7 @@ impl Session {
             self.client.user_agent().to_owned(),
             options,
             None,
+            None,
         )
     }
 
@@ -1026,16 +1029,19 @@ impl Session {
             self.client.user_agent().to_owned(),
             options,
             Some(chat),
+            None,
         )
     }
 
     /// The presence connection with chat when `chat` is given (CHAT1) and world sessions when
     /// `worlds` (HOST1: `worlds2` in the capabilities; its frames flow once the service took it).
+    /// `rel` (SCALE-SOC): every connect names the relations version it holds.
     pub fn connect_presence_with(
         &self,
         options: PresenceOptions,
         chat: Option<ChatSetup>,
         worlds: bool,
+        rel: Option<RelVersion>,
     ) -> PresenceHandle {
         let mut url = self.client.presence_url_with(chat.is_some());
         if worlds {
@@ -1047,6 +1053,7 @@ impl Session {
             self.client.user_agent().to_owned(),
             options,
             chat,
+            rel,
         )
     }
 
@@ -1160,8 +1167,8 @@ mod tests {
             Some("ProjectsLauncher/test")
         );
         // Verifier and code only travel in the claim body, never in a URL.
-        assert!(!recorded[0].path.contains(attempt.verifier()));
-        assert!(!recorded[0].path.contains(&code));
+        assert!(!recorded[0].target.contains(attempt.verifier()));
+        assert!(!recorded[0].target.contains(&code));
     }
 
     #[tokio::test]
