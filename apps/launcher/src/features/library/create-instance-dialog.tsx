@@ -389,7 +389,8 @@ export function CreateInstanceDialog({
                     label={t("create.loader")}
                     options={loaderOptions.map((l) => ({ value: l, label: t(`loaders.${l}`) }))}
                   />
-                  {loader !== "vanilla" ? (
+                  {/* With no build for this version the line under the box says so: no empty box. */}
+                  {loader !== "vanilla" && !loaderProblem ? (
                     <Select
                       value={loaderVersion}
                       onValueChange={setLoaderVersion}

@@ -747,7 +747,8 @@ export function CommandBar() {
       // account only when asked to; else it played with the selected one.
       const launch = useLaunch.getState();
       const account = launch.account?.id ?? launch.selected ?? null;
-      toast.error(phase.message, {
+      // Its own line: the backend's ends with what the button says ("... yeniden giriş yap.").
+      toast.error(t("qol.launch.signedOut"), {
         id: "launch-sign-in",
         duration: 10_000,
         action: {
@@ -756,7 +757,8 @@ export function CommandBar() {
         },
       });
     } else if (action === "addAccount") {
-      toast.error(phase.message, {
+      // The backend's line points to Ayarlar > Hesaplar; the button opens it.
+      toast.error(t("qol.launch.noAccount"), {
         id: "launch-no-account",
         duration: 10_000,
         action: {

@@ -704,7 +704,9 @@ function ProjectsStep({
           ? t("onboarding.projects.title")
           : offered
             ? t("lib1.empty.question")
-            : t("onboarding.projects.preparing")
+            : failed
+              ? t("qol.welcome.later")
+              : t("onboarding.projects.preparing")
       }
       body={t("onboarding.projects.body")}
     >

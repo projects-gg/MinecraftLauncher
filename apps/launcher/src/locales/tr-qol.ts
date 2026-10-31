@@ -1,5 +1,21 @@
 // QOL-L: the launcher's quality-of-life pass (docs/tasks/qol-l.md). Short, sentence case, no codes.
 export const trQol = {
+  launch: {
+    /**
+     * OYNA stopped on an expired Microsoft session or its lost secrets: the toast's line, its
+     * button "Yeniden giriş yap" (the backend's words end with that same advice).
+     */
+    signedOut: "Hesabının oturumu kapandı.",
+    /** OYNA without any account: the toast's line, its button "Hesap ekle". */
+    noAccount: "Oynamak için bir hesap gerekiyor.",
+  },
+  welcome: {
+    /**
+     * The welcome's last step when the Projects instance could not be prepared: "Hazırım" goes on
+     * and it is made again in the background (the line under says why, beside "Tekrar dene").
+     */
+    later: "Kurulum sonra hazırlanacak",
+  },
   picker: {
     /**
      * The command bar's installation menu while a launch prepares its files: the other rows are
