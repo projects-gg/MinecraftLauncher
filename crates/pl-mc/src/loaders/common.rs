@@ -262,6 +262,7 @@ mod tests {
             done_files: 2,
             total_bytes: 500,
             done_bytes: 300,
+            fetched_bytes: 300,
             bytes_per_sec: 77,
         });
         download(DownloadProgress {
