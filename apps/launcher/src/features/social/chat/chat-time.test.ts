@@ -196,6 +196,8 @@ describe("chat times in the reader's own zone", () => {
     expect(listStamp(moment, later, "Dün")).toBe("Dün");
     process.env.TZ = "Europe/Berlin";
     // Six days back over the 25-hour 25 October: still a weekday ("Paz", 25 October; read 31 October).
-    expect(listStamp(Date.UTC(2026, 9, 25, 1, 30), Date.UTC(2026, 9, 31, 12, 0), "Dün")).toBe("Paz");
+    expect(listStamp(Date.UTC(2026, 9, 25, 1, 30), Date.UTC(2026, 9, 31, 12, 0), "Dün")).toBe(
+      "Paz",
+    );
   });
 });
