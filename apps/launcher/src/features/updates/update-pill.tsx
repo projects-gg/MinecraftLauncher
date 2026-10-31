@@ -59,9 +59,10 @@ function Pill({ view }: { view: ShownView }) {
   const gold = view.kind === "ready" || view.kind === "installing";
   const passive =
     view.kind === "afterGame" || view.kind === "installing" || view.kind === "downloading";
-  // Next to "ready" the pill keeps its width, so nothing in the title bar moves when a game
-  // starts or ends, or while it installs: the ready label sizes it, unseen.
-  const sized = view.kind === "afterGame" || view.kind === "installing";
+  // Ready, waiting for the game and installing keep one width, so nothing in the title bar moves
+  // when a game starts or ends, or while it installs: the longer of the ready and the waiting
+  // label sizes it, unseen (in English the waiting one is the longer).
+  const sized = view.kind === "ready" || view.kind === "afterGame" || view.kind === "installing";
   const readyLabel = t("update.ready", { version: version ?? "" });
 
   const press = () => {
@@ -163,10 +164,22 @@ function Pill({ view }: { view: ShownView }) {
             <span className="tabular-nums">{label}</span>
           </motion.span>
           {sized ? (
-            <span aria-hidden className="invisible col-start-1 row-start-1 flex items-center gap-2">
-              <ArrowsClockwise size={14} weight="bold" />
-              <span className="tabular-nums">{readyLabel}</span>
-            </span>
+            <>
+              <span
+                aria-hidden
+                className="invisible col-start-1 row-start-1 flex items-center gap-2"
+              >
+                <ArrowsClockwise size={14} weight="bold" />
+                <span className="tabular-nums">{readyLabel}</span>
+              </span>
+              <span
+                aria-hidden
+                className="invisible col-start-1 row-start-1 flex items-center gap-2"
+              >
+                <GameController size={14} weight="bold" />
+                <span className="tabular-nums">{t("updates.afterGame")}</span>
+              </span>
+            </>
           ) : null}
         </span>
       </motion.button>
