@@ -15,6 +15,8 @@ tokio = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# The console's link rule (looks): a URL parser must read the same host.
+url = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }

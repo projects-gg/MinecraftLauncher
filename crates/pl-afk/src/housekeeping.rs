@@ -197,6 +197,8 @@ mod tests {
             text: "merhaba".into(),
             kind: ConsoleLineKind::Normal,
             origin: ConsoleOrigin::Client,
+            looks: None,
+            who: None,
         });
         // Waits for the writer thread, however long a loaded machine makes it take.
         futures::executor::block_on(log.close());

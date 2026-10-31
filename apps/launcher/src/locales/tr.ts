@@ -4,6 +4,7 @@ import { trAfkClear } from "./tr-afk-clear";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkMod } from "./tr-afk-mod";
 import { trAfkPanel } from "./tr-afk-panel";
+import { trAfkPanelSize } from "./tr-afk-panel-size";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
 import { trAutojoin } from "./tr-autojoin";
@@ -118,6 +119,7 @@ export const tr = {
   cloudStale: trCloudStale,
   afkMod: trAfkMod,
   afkPanel: trAfkPanel,
+  afkPanelSize: trAfkPanelSize,
   afkClear: trAfkClear,
   projectsSkin: trProjectsSkin,
   host: trHost,

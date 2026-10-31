@@ -1,31 +1,27 @@
-// A cloud account's panel in a side sheet. Its console, as the desktop console: the machine's masked
-// lines while the sheet is on screen (the socket closes when it is closed or the window leaves the
-// screen), earlier lines on request, and a command line. A password command is sealed by the
-// backend before it leaves the launcher; nothing typed is echoed, the server's answer shows.
+// A cloud account's panel in the AFK side panel (sized by its left edge, AFK-UX). Its console, as
+// the desktop console: the machine's masked lines while the panel is on screen (the socket closes
+// when it is closed or the window leaves the screen), earlier lines on request, and a command line.
+// A password command is sealed by the backend before it leaves the launcher; nothing typed is
+// echoed, the server's answer shows.
 //
 // With the cloud features (CAFK-FEAT) and only while the service offers them: the console's kinds
 // (colours, the chips, "Adın geçenler", search, "İndir") and the status strip; the Envanter tab
 // beside Konsol, on a solid panel (inside glass Chromium resamples the inventory's pixels). With
 // console looks (CONSOLE-COLOR, Studio's switch) lines show in the game's colours: a part's hover
 // as the game's tooltip, a part's command or link waiting in the command line's place for the
-// player's word, a suggestion filling the command line, a copy copying.
+// player's word, a suggestion filling the command line, a copy copying. Across the whole window
+// the console keeps its place and the inventory and movement stand beside it instead of in tabs.
 import { ArrowDown, ArrowUp, Key, PaperPlaneRight, X } from "@phosphor-icons/react";
 import {
   Button,
   cn,
-  EntranceGate,
   enter,
-  GatedMotion,
   IconButton,
   leave,
-  scrimMotion,
-  sheetMotion,
-  sheetOutside,
   TabPanel,
   Tabs,
   Tooltip,
   toast,
-  useInteractionMotion,
   useMotionPrefs,
 } from "@pl/ui";
 import {
@@ -46,6 +42,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
 import {
   type KeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -59,6 +56,7 @@ import { openWebLink } from "@/lib/links";
 import { useWindowAway } from "@/lib/window-away";
 import { AfkHead } from "../afk-head";
 import { isFriendly } from "../errors";
+import { AfkSidePanel, PanelSizeButton, useAfkPanel } from "../panel/side-panel";
 import { SecretField } from "../secret";
 import { type CloudAccount, type CloudLiveEvent, cloudApi } from "./api";
 import {
@@ -223,7 +221,8 @@ function LineText({
         <button
           type="button"
           onClick={onInventory}
-          className="ml-2 cursor-pointer font-sans text-[12px] font-medium text-gold-300 underline-offset-2 outline-none select-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+          // The launcher's inline action: underlined bone words, never gold (design.md §2).
+          className="ml-2 cursor-pointer rounded-sm font-sans text-[12px] font-medium text-bone-100 underline decoration-white/35 underline-offset-[3px] outline-none transition-[text-decoration-color,scale] duration-150 select-none hover:decoration-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]"
         >
           {t("cloudAfkFeat.console.showInInventory")}
         </button>
@@ -250,7 +249,6 @@ export function CloudConsole({
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language === "en" ? "en" : "tr";
-  const animate = useInteractionMotion();
   const { reduce } = useMotionPrefs();
   const away = useWindowAway();
   const queryClient = useQueryClient();
@@ -434,6 +432,20 @@ export function CloudConsole({
     if (atEnd.current) setUnseen(false);
   };
 
+  // The panel's width changes (its edge dragged or settled): the newest lines stay in view.
+  const attachList = useCallback((el: HTMLDivElement | null) => {
+    listRef.current = el;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (atEnd.current) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      listRef.current = null;
+    };
+  }, []);
+
   const toEnd = () => {
     const list = listRef.current;
     if (!list) return;
@@ -613,7 +625,7 @@ export function CloudConsole({
       ) : null}
       <div className="relative min-h-0 flex-1">
         <div
-          ref={listRef}
+          ref={attachList}
           onScroll={onScroll}
           className="absolute inset-0 overflow-y-auto px-5 py-3 font-mono text-[12.5px] leading-relaxed"
           data-selectable
@@ -815,131 +827,155 @@ export function CloudConsole({
     </>
   ) : null;
 
+  const inventoryTab = { value: "inventory" as const, label: t("cloudAfkFeat.tabs.inventory") };
+  const movementTab = { value: "movement" as const, label: t("cloudAfkMove.tab") };
+  /** The inventory, in a tab of its own or beside the console. */
+  const inventoryPart = (active: boolean) =>
+    account ? (
+      <InventoryPanel
+        account={account}
+        active={active}
+        link={attempt}
+        art={art.art}
+        titleGlyph={art.titleGlyph}
+        onReconnect={() => onRestart(account)}
+        onOpenSettings={() => onOpenSettings(account.id)}
+        onUnavailable={inventoryUnavailable}
+      />
+    ) : null;
+  const movementPart = (active: boolean) =>
+    account ? (
+      <MovementPanel
+        account={account}
+        active={active}
+        link={attempt}
+        onReconnect={() => onRestart(account)}
+        onUnavailable={movementUnavailable}
+      />
+    ) : null;
+  // Beside the console, the inventory and movement share one place (the inventory first).
+  const sideTab: "inventory" | "movement" =
+    shownTab === "movement" || !inventory ? "movement" : "inventory";
+
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
-      <AnimatePresence>
-        {open && account ? (
-          <EntranceGate key="sheet">
-            <Dialog.Portal forceMount>
-              <Dialog.Overlay asChild forceMount>
-                <GatedMotion.div
-                  className="fixed inset-0 z-40 bg-obsidian-950/50"
-                  {...scrimMotion(!animate)}
-                />
-              </Dialog.Overlay>
-              <Dialog.Content
-                asChild
-                forceMount
-                aria-describedby={undefined}
-                // A press outside closes the panel, but never a toast's button.
-                {...sheetOutside}
-                onOpenAutoFocus={(event) => {
-                  event.preventDefault();
-                  const sheet = event.currentTarget as HTMLElement;
-                  // Opened on Hareket: the panel itself, so W, A, S, D walk at once.
-                  (
-                    sheet.querySelector<HTMLElement>("[data-movement-panel]") ??
-                    sheet.querySelector<HTMLElement>("input:not(:disabled)") ??
-                    sheet
-                  ).focus({
-                    preventScroll: true,
-                  });
+    <AfkSidePanel
+      open={open}
+      onClose={onClose}
+      // The inventory's pixels stay crisp only on a solid surface: obsidian with the glass edge, no
+      // blur (docs/design.md §6 "Cloud inventory").
+      solid={inventory}
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        const sheet = event.currentTarget as HTMLElement;
+        // Opened on Hareket: the panel itself, so W, A, S, D walk at once.
+        (
+          (shownTab === "movement"
+            ? sheet.querySelector<HTMLElement>("[data-movement-panel]")
+            : null) ??
+          sheet.querySelector<HTMLElement>("input:not(:disabled)") ??
+          sheet
+        ).focus({
+          preventScroll: true,
+        });
+      }}
+    >
+      {account ? (
+        <PanelLayout>
+          {(wide) => (
+            <>
+              <header className="flex items-center gap-3 border-b border-white/8 px-5 py-4">
+                <AfkHead nickname={account.name} size={36} />
+                <div className="min-w-0 flex-1">
+                  <Dialog.Title className="truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
+                    {tabbed ? account.name : t("cloudAfk.console.title", { name: account.name })}
+                  </Dialog.Title>
+                  <CloudStateLine account={account} skewMs={skewMs} className="mt-0.5" />
+                </div>
+                <PanelSizeButton />
+                <Dialog.Close asChild>
+                  <IconButton label={t("common.close")} icon={<X size={18} />} size="sm" />
+                </Dialog.Close>
+              </header>
+              <Banner
+                status={status}
+                hostOnline={hostOnline}
+                noHost={!host}
+                onReopen={() => {
+                  setStatus("connecting");
+                  setAttempt((n) => n + 1);
                 }}
-              >
-                <GatedMotion.aside
-                  tabIndex={-1}
-                  className={cn(
-                    "fixed top-0 right-0 bottom-0 z-50 flex w-[min(560px,92vw)] flex-col shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none",
-                    // The inventory's pixels stay crisp only on a solid surface: obsidian with the
-                    // glass edge, no blur (docs/design.md §6 "Cloud inventory").
-                    inventory
-                      ? "border-l border-white/7 bg-obsidian-900 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),-30px_0_80px_rgb(34_6_6/0.5)]"
-                      : "glass-strong",
-                  )}
-                  {...sheetMotion(!animate)}
-                >
-                  <header className="flex items-center gap-3 border-b border-white/8 px-5 py-4">
-                    <AfkHead nickname={account.name} size={36} />
-                    <div className="min-w-0 flex-1">
-                      <Dialog.Title className="truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
-                        {tabbed
-                          ? account.name
-                          : t("cloudAfk.console.title", { name: account.name })}
-                      </Dialog.Title>
-                      <CloudStateLine account={account} skewMs={skewMs} className="mt-0.5" />
-                    </div>
-                    <Dialog.Close asChild>
-                      <IconButton label={t("common.close")} icon={<X size={18} />} size="sm" />
-                    </Dialog.Close>
-                  </header>
-                  <Banner
-                    status={status}
-                    hostOnline={hostOnline}
-                    noHost={!host}
-                    onReopen={() => {
-                      setStatus("connecting");
-                      setAttempt((n) => n + 1);
-                    }}
-                  />
-                  {tabbed ? (
-                    <Tabs
-                      value={shownTab}
-                      onValueChange={setTab}
-                      label={t("cloudAfkFeat.tabs.label")}
-                      items={[
-                        { value: "console", label: t("cloudAfkFeat.tabs.console") },
-                        ...(inventory
-                          ? [
-                              {
-                                value: "inventory" as const,
-                                label: t("cloudAfkFeat.tabs.inventory"),
-                              },
-                            ]
-                          : []),
-                        ...(movement
-                          ? [{ value: "movement" as const, label: t("cloudAfkMove.tab") }]
-                          : []),
-                      ]}
-                      className="[&>[role=tablist]]:px-3.5"
-                    >
-                      <TabPanel value="console" className="flex flex-col overflow-hidden pt-1">
-                        {consoleBody}
-                      </TabPanel>
-                      {inventory ? (
+              />
+              {wide && tabbed ? (
+                // The whole window: the console and, beside it, the inventory and movement.
+                <div className="flex min-h-0 flex-1">
+                  <section
+                    aria-label={t("cloudAfkFeat.tabs.console")}
+                    className="flex min-h-0 min-w-0 flex-1 flex-col pt-1"
+                  >
+                    {consoleBody}
+                  </section>
+                  <div className="flex w-[clamp(400px,36vw,580px)] shrink-0 flex-col border-l border-white/8">
+                    {inventory && movement ? (
+                      <Tabs
+                        value={sideTab}
+                        onValueChange={setTab}
+                        label={t("cloudAfkFeat.tabs.label")}
+                        items={[inventoryTab, movementTab]}
+                        className="[&>[role=tablist]]:px-3.5"
+                      >
                         <TabPanel value="inventory" className="px-5 pt-5">
-                          <InventoryPanel
-                            account={account}
-                            active={shownTab === "inventory"}
-                            link={attempt}
-                            art={art.art}
-                            titleGlyph={art.titleGlyph}
-                            onReconnect={() => onRestart(account)}
-                            onOpenSettings={() => onOpenSettings(account.id)}
-                            onUnavailable={inventoryUnavailable}
-                          />
+                          {inventoryPart(sideTab === "inventory")}
                         </TabPanel>
-                      ) : null}
-                      {movement ? (
                         <TabPanel value="movement" className="px-5 pt-5">
-                          <MovementPanel
-                            account={account}
-                            active={shownTab === "movement"}
-                            link={attempt}
-                            onReconnect={() => onRestart(account)}
-                            onUnavailable={movementUnavailable}
-                          />
+                          {movementPart(sideTab === "movement")}
                         </TabPanel>
-                      ) : null}
-                    </Tabs>
-                  ) : (
-                    consoleBody
-                  )}
-                </GatedMotion.aside>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </EntranceGate>
-        ) : null}
-      </AnimatePresence>
-    </Dialog.Root>
+                      </Tabs>
+                    ) : (
+                      <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-4">
+                        {inventory ? inventoryPart(true) : movementPart(true)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : tabbed ? (
+                <Tabs
+                  value={shownTab}
+                  onValueChange={setTab}
+                  label={t("cloudAfkFeat.tabs.label")}
+                  items={[
+                    { value: "console", label: t("cloudAfkFeat.tabs.console") },
+                    ...(inventory ? [inventoryTab] : []),
+                    ...(movement ? [movementTab] : []),
+                  ]}
+                  className="[&>[role=tablist]]:px-3.5"
+                >
+                  <TabPanel value="console" className="flex flex-col overflow-hidden pt-1">
+                    {consoleBody}
+                  </TabPanel>
+                  {inventory ? (
+                    <TabPanel value="inventory" className="px-5 pt-5">
+                      {inventoryPart(shownTab === "inventory")}
+                    </TabPanel>
+                  ) : null}
+                  {movement ? (
+                    <TabPanel value="movement" className="px-5 pt-5">
+                      {movementPart(shownTab === "movement")}
+                    </TabPanel>
+                  ) : null}
+                </Tabs>
+              ) : (
+                consoleBody
+              )}
+            </>
+          )}
+        </PanelLayout>
+      ) : null}
+    </AfkSidePanel>
   );
+}
+
+/** The surrounding panel's width class, for the layout inside it. */
+function PanelLayout({ children }: { children: (wide: boolean) => ReactNode }) {
+  const { wide } = useAfkPanel();
+  return <>{children(wide)}</>;
 }

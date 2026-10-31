@@ -72,13 +72,34 @@ pub fn client_takes_nonce(version: &str) -> bool {
 /// `(major, minor)` of a client version, without a leading `v` and a `-…`/`+…` suffix, a missing
 /// part as 0. `None` unless every dot-separated part is a number.
 fn major_minor(version: &str) -> Option<(u64, u64)> {
+    version_parts(version).map(|(major, minor, _)| (major, minor))
+}
+
+/// `(major, minor, patch)` of a client version, read as [`major_minor`] reads it.
+fn version_parts(version: &str) -> Option<(u64, u64, u64)> {
     let version = version.trim();
     let version = version.strip_prefix(['v', 'V']).unwrap_or(version);
     let core = version.split(['-', '+']).next().unwrap_or_default();
     let mut parts = core.split('.').map(|part| part.parse::<u64>().ok());
     let major = parts.next().flatten()?;
     let minor = parts.next().unwrap_or(Some(0))?;
-    parts.all(|part| part.is_some()).then_some((major, minor))
+    let patch = parts.next().unwrap_or(Some(0))?;
+    parts
+        .all(|part| part.is_some())
+        .then_some((major, minor, patch))
+}
+
+/// The first client version that gives console line looks and dialog cards with the console
+/// kinds (`MCC_CONSOLE_KINDS`).
+pub const LOOKS_SINCE: (u64, u64, u64) = (4, 2, 4);
+/// The fork's variable that turns console writes into `line` events (with a nonce only).
+pub const CONSOLE_KINDS_ENV_VAR: &str = "MCC_CONSOLE_KINDS";
+
+/// Whether a released client of `version` gives console looks and dialog cards: 4.2.4 and later.
+/// Unlike [`client_takes_nonce`] it fails closed: a version that does not read as one keeps the
+/// plain console.
+pub fn client_gives_looks(version: &str) -> bool {
+    version_parts(version).is_some_and(|parts| parts >= LOOKS_SINCE)
 }
 
 /// [`parse_line`] for a client given `nonce`: only `<nonce>@@MCC@@` lines are events, everything
@@ -131,6 +152,8 @@ pub enum BridgeEvent {
     Connecting {
         host: Option<String>,
         port: Option<i64>,
+        /// What the client offers (4.2.4: `dialog` while it reports dialog cards).
+        caps: Vec<String>,
     },
     Joined {
         user: Option<String>,
@@ -157,7 +180,30 @@ pub enum BridgeEvent {
         message: Option<String>,
         version_error: bool,
     },
-    /// A well-formed event this launcher does not handle.
+    /// A console write while the console kinds are on: where the client saw it (`system`,
+    /// `player`, `overlay`, `title`, `subtitle`, `client`, `error`), its plain one-line text, the
+    /// sender it named and its own parse (`chat`, `pm`), and from 4.2.4 its look (`st`, `ev`, read
+    /// by [`crate::looks`]).
+    Line {
+        src: String,
+        text: String,
+        who: Option<String>,
+        guess: Option<String>,
+        st: Option<Value>,
+        ev: Option<Value>,
+    },
+    /// The server's dialog as a card would show it (4.2.4, console kinds); `None` once it closed.
+    Dialog {
+        rev: i64,
+        dialog: Option<Value>,
+    },
+    /// The client's answer to a press of the card (`dialogres`): done, or why not.
+    DialogResult {
+        rev: i64,
+        ok: bool,
+        why: Option<String>,
+    },
+    /// A well-formed event this launcher does not handle (`boss` too).
     Unknown(String),
 }
 
@@ -190,6 +236,39 @@ fn parse_event(payload: &Map<String, Value>) -> Option<BridgeEvent> {
         "connecting" => BridgeEvent::Connecting {
             host: text(payload, "host"),
             port: integer(payload, "port"),
+            caps: payload
+                .get("caps")
+                .and_then(Value::as_array)
+                .map(|caps| {
+                    caps.iter()
+                        .filter_map(Value::as_str)
+                        .filter(|cap| cap.len() <= 32)
+                        .take(16)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default(),
+        },
+        "line" => BridgeEvent::Line {
+            src: string(payload, "src")?,
+            text: string(payload, "text")?,
+            who: string(payload, "who"),
+            guess: string(payload, "guess"),
+            st: payload.get("st").cloned(),
+            ev: payload.get("ev").cloned(),
+        },
+        "dialog" => BridgeEvent::Dialog {
+            rev: integer(payload, "rev")?,
+            dialog: if payload.get("clear") == Some(&Value::Bool(true)) {
+                None
+            } else {
+                Some(payload.get("dialog").filter(|d| d.is_object())?.clone())
+            },
+        },
+        "dialogres" => BridgeEvent::DialogResult {
+            rev: integer(payload, "rev").unwrap_or_default(),
+            ok: matches!(payload.get("ok"), Some(Value::Bool(true))),
+            why: string(payload, "why"),
         },
         "joined" => BridgeEvent::Joined {
             user: text(payload, "user"),
@@ -218,6 +297,11 @@ fn parse_event(payload: &Map<String, Value>) -> Option<BridgeEvent> {
         },
         _ => BridgeEvent::Unknown(name),
     })
+}
+
+/// A field that is a JSON string.
+fn string(payload: &Map<String, Value>, key: &str) -> Option<String> {
+    payload.get(key)?.as_str().map(str::to_owned)
 }
 
 fn text(payload: &Map<String, Value>, key: &str) -> Option<String> {
@@ -264,7 +348,16 @@ mod tests {
             event(r#"@@MCC@@{"e":"connecting","host":"play.projects.gg","port":25565}"#),
             BridgeEvent::Connecting {
                 host: Some("play.projects.gg".into()),
-                port: Some(25565)
+                port: Some(25565),
+                caps: Vec::new()
+            }
+        );
+        assert_eq!(
+            event(r#"@@MCC@@{"e":"connecting","host":"h","port":1,"caps":["dialog",7]}"#),
+            BridgeEvent::Connecting {
+                host: Some("h".into()),
+                port: Some(1),
+                caps: vec!["dialog".into()]
             }
         );
         assert_eq!(
@@ -335,6 +428,80 @@ mod tests {
             DisconnectReason::parse("Banned"),
             DisconnectReason::Other("Banned".into())
         );
+    }
+
+    #[test]
+    fn console_kinds_events() {
+        assert_eq!(
+            event(
+                r#"@@MCC@@{"e":"line","src":"player","text":"<Kaan_07> selam","ct":"minecraft:chat","who":"Kaan_07","st":[[15,"e"]]}"#
+            ),
+            BridgeEvent::Line {
+                src: "player".into(),
+                text: "<Kaan_07> selam".into(),
+                who: Some("Kaan_07".into()),
+                guess: None,
+                st: Some(serde_json::json!([[15, "e"]])),
+                ev: None,
+            }
+        );
+        // A line event without its text is broken, not a line.
+        assert_eq!(
+            parse_line(r#"@@MCC@@{"e":"line","src":"system"}"#),
+            ClientLine::Malformed
+        );
+        assert_eq!(
+            parse_line(r#"@@MCC@@{"e":"line","src":"system","text":7}"#),
+            ClientLine::Malformed
+        );
+        assert_eq!(
+            event(r#"@@MCC@@{"e":"dialog","rev":3,"dialog":{"title":"Kurallar"}}"#),
+            BridgeEvent::Dialog {
+                rev: 3,
+                dialog: Some(serde_json::json!({ "title": "Kurallar" }))
+            }
+        );
+        assert_eq!(
+            event(r#"@@MCC@@{"e":"dialog","rev":4,"clear":true}"#),
+            BridgeEvent::Dialog {
+                rev: 4,
+                dialog: None
+            }
+        );
+        assert_eq!(
+            parse_line(r#"@@MCC@@{"e":"dialog","rev":4,"dialog":"Kurallar"}"#),
+            ClientLine::Malformed
+        );
+        assert_eq!(
+            event(r#"@@MCC@@{"e":"dialogres","rev":4,"ok":false,"why":"stale"}"#),
+            BridgeEvent::DialogResult {
+                rev: 4,
+                ok: false,
+                why: Some("stale".into())
+            }
+        );
+        assert_eq!(
+            event(r#"@@MCC@@{"e":"boss","op":"add","id":"x"}"#),
+            BridgeEvent::Unknown("boss".into())
+        );
+    }
+
+    #[test]
+    fn looks_need_a_client_of_4_2_4() {
+        for old in [
+            "4.2.3",
+            "4.1.9",
+            "v4.2",
+            "3.9.9",
+            "garbage",
+            "",
+            LEGACY_CLIENT_VERSION,
+        ] {
+            assert!(!client_gives_looks(old), "{old}");
+        }
+        for new in ["4.2.4", "v4.2.4", "4.2.4-rc.1", "4.2.10", "4.3", "5"] {
+            assert!(client_gives_looks(new), "{new}");
+        }
     }
 
     #[test]
