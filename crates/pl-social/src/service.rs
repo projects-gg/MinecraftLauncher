@@ -2281,7 +2281,11 @@ impl SocialService {
     /// "Verilerimi sil": the account and everything about it, for good. Signed out after.
     pub async fn delete_account(&self) -> Result<()> {
         // The service closes the presence socket (4002) before it answers.
-        self.lock().deleting = true;
+        let account = {
+            let mut core = self.lock();
+            core.deleting = true;
+            core.state.me().map(|me| me.profile.id.clone())
+        };
         let result = self
             .call(|session| async move { session.delete_account().await })
             .await;
@@ -2294,10 +2298,12 @@ impl SocialService {
         };
         {
             let mut core = self.lock();
+            // The account's chat history on this computer goes with it, also when that close
+            // signed it out here first (the usual order).
+            if let Some(account) = &account {
+                History::open(core.chat_root.as_deref(), account).erase();
+            }
             if core.generation == generation {
-                if let Some(history) = core.history.as_mut() {
-                    history.erase();
-                }
                 reset(&mut core);
             }
         }
@@ -6297,8 +6303,15 @@ mod tests {
         .await;
         let tokens = Arc::new(MemoryTokenStore::new());
         tokens.save(&token()).unwrap();
+        // The account's chat history on this computer.
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("social").join("chat");
+        let history = chat.join("123456789012345678");
+        std::fs::create_dir_all(&history).unwrap();
+        std::fs::write(history.join("index.json"), b"{}").unwrap();
         let harness = Harness::new(tokens);
         *slot.lock().unwrap() = Some(harness.service.clone());
+        harness.service.keep_chat_in(&chat);
         harness.service.configure(url(&server));
         harness.until("friends", |view| view.loaded).await;
 
@@ -6309,6 +6322,8 @@ mod tests {
             !harness.notices().contains(&SocialNotice::SignedOutRemotely),
             "no \"signed out elsewhere\" right after deleting here"
         );
+        // The close signed the account out here first; its chat history goes all the same.
+        assert!(!history.exists(), "the chat history kept here is gone");
     }
 
     #[tokio::test]
