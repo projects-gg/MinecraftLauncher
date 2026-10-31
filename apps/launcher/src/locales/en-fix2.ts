@@ -10,7 +10,7 @@ export const enFix2: typeof trFix2 = {
     staff: "Removed by Projects moderators",
   },
   menu: {
-    chat: "Send message",
+    chat: "Message",
     addFriend: "Add friend",
     requestSent: "Request sent",
     requestSentTo: "Friend request sent",

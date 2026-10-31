@@ -178,7 +178,7 @@ export const en: DeepPartial<Strings> = {
       accept: "Accept",
       accepted: "You and {{name}} are now friends",
       decline: "Decline",
-      cancelRequest: "Cancel request",
+      cancelRequest: "Withdraw request",
       cancel: "Cancel",
       dismiss: "Dismiss",
       friendsSince: "Friends since {{date}}",

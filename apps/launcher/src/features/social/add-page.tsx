@@ -173,9 +173,12 @@ type Found =
 function ResultCard({
   found,
   onSent,
+  onUnblocked,
 }: {
   found: Extract<Found, { kind: "found" }>;
   onSent: (outcome: "requested" | "friends") => void;
+  /** The block is gone (nothing was sent): the card offers "İstek gönder" again. */
+  onUnblocked: () => void;
 }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
@@ -190,11 +193,20 @@ function ResultCard({
       announce(outcome === "friends" ? t("social.add.nowFriends") : t("social.add.sent"));
     }
   };
-  const act = async (work: () => Promise<void>) => {
+  const accept = async () => {
     setBusy(true);
-    const done = await attempt(work);
+    const done = await attempt(() => api.social.accept(lookup.profile.id));
     setBusy(false);
-    if (done !== undefined) onSent(lookup.relation === "incoming" ? "friends" : "requested");
+    if (done !== undefined) onSent("friends");
+  };
+  const unblock = async () => {
+    setBusy(true);
+    const done = await attempt(() => api.social.unblock(lookup.profile.id));
+    setBusy(false);
+    if (done !== undefined) {
+      onUnblocked();
+      announce(t("social.actions.unblocked", { name: lookup.profile.name }));
+    }
   };
   const status = sent
     ? sent === "friends"
@@ -241,7 +253,7 @@ function ResultCard({
           variant="primary"
           size="sm"
           disabled={busy}
-          onClick={() => void act(() => api.social.accept(lookup.profile.id))}
+          onClick={() => void accept()}
         >
           {t("social.actions.accept")}
         </Button>
@@ -250,7 +262,7 @@ function ResultCard({
           variant="secondary"
           size="sm"
           disabled={busy}
-          onClick={() => void act(() => api.social.unblock(lookup.profile.id))}
+          onClick={() => void unblock()}
         >
           {t("social.actions.unblock")}
         </Button>
@@ -380,7 +392,13 @@ function FindForm() {
             </motion.div>
           ) : found.kind === "found" ? (
             <motion.div key={`found:${found.lookup.code}`} {...rise(reduce, 6, 0.26)}>
-              <ResultCard found={found} onSent={(sent) => setFound({ ...found, sent })} />
+              <ResultCard
+                found={found}
+                onSent={(sent) => setFound({ ...found, sent })}
+                onUnblocked={() =>
+                  setFound({ ...found, lookup: { ...found.lookup, relation: "none" } })
+                }
+              />
             </motion.div>
           ) : found.kind === "error" ? (
             <motion.p
