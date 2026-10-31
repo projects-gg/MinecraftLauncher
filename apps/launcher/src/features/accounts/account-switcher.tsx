@@ -27,6 +27,7 @@ export function AccountSwitcher() {
   const playing = usePlayingAccountIds();
   const switchTo = useSwitchAccount();
   const openCenter = useAccountsUi((s) => s.openCenter);
+  const openLogin = useAccountsUi((s) => s.openLogin);
   const trigger = useRef<HTMLButtonElement>(null);
   // Opening the center from the menu: the sheet takes focus, the menu must not take it back.
   const handoff = useRef(false);
@@ -165,6 +166,16 @@ export function AccountSwitcher() {
                               value={account.id}
                               textValue={account.username}
                               className={cn(itemClass, "h-14")}
+                              // An expired session's row says "Oturumun süresi doldu": picking it
+                              // signs in again (the active one changed nothing before).
+                              onSelect={
+                                expired
+                                  ? () => {
+                                      handoff.current = true;
+                                      openLogin(account.id);
+                                    }
+                                  : undefined
+                              }
                             >
                               <AccountFace account={account} size={32} />
                               <span className="min-w-0 flex-1">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DISK_FULL, launchErrorAction, launchErrorCode } from "./launch-error";
+import { DISK_FULL, launchErrorAction, launchErrorCode, NO_ACCOUNT } from "./launch-error";
 
 describe("launchErrorCode", () => {
   it("reads the code from the first line of the details", () => {
@@ -9,6 +9,10 @@ describe("launchErrorCode", () => {
     expect(launchErrorCode("SURUM-YOK\nMinecraft version 1.99 was not found")).toBe("SURUM-YOK");
     expect(launchErrorCode("SUREC\n")).toBe("SUREC");
     expect(launchErrorCode("AG-YOK")).toBe("AG-YOK");
+    // Microsoft's own reason follows the first part as it is.
+    expect(launchErrorCode("MSA-invalid_grant\nAADSTS70000: token expired")).toBe(
+      "MSA-invalid_grant",
+    );
   });
 
   it("finds no code in other details", () => {
@@ -25,5 +29,12 @@ describe("launchErrorAction", () => {
     for (const code of ["DISK", "SURUM-YOK", "SUREC", "BULUNAMADI", "OYUN", "PAKET", ""]) {
       expect(launchErrorAction(code)).toBe("copyDetails");
     }
+  });
+
+  it("offers a new sign-in for an expired session and an account when there is none", () => {
+    expect(launchErrorAction("MSA-invalid_grant")).toBe("signIn");
+    expect(launchErrorAction("MSA-NOREFRESH")).toBe("signIn");
+    expect(launchErrorAction("KC-YOK")).toBe("signIn");
+    expect(launchErrorAction(NO_ACCOUNT)).toBe("addAccount");
   });
 });

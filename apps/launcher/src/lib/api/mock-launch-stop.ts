@@ -6,7 +6,8 @@ import type { LaunchEvent } from "./types";
  * (`src-tauri/src/error.rs`; the code on the first line of the details, as `tauri.ts` passes it):
  * `?disk=low` (not enough room, before anything is downloaded), `?disk=full` (the disk fills up
  * during the download) and `?launchError=version|process|file|game|worldOpen`. Also from localStorage
- * (`pl.mock.disk`, `pl.mock.launchError`).
+ * (`pl.mock.disk`, `pl.mock.launchError`). `?launchError=signIn` (an expired Microsoft session) and
+ * `?launchError=noAccount` (no account to play with) stop it with their own fix on the toast.
  */
 function flag(key: string): string {
   try {
@@ -64,6 +65,24 @@ const stops: Record<string, { code: string; message: () => string; details: stri
     message: () =>
       pick("Gereken bir dosya bulunamadı. Tekrar dene.", "A file it needs is missing. Try again."),
     details: "client jar of 1.21.1 not found",
+  },
+  signIn: {
+    code: "MSA-invalid_grant",
+    message: () =>
+      pick(
+        "Oturumunun süresi doldu. Microsoft hesabınla yeniden giriş yap.",
+        "Your session has expired. Sign in with your Microsoft account again.",
+      ),
+    details: "AADSTS70000: The provided grant has expired",
+  },
+  noAccount: {
+    code: "HESAP-YOK",
+    message: () =>
+      pick(
+        "Oynamak için önce bir hesap ekle (Ayarlar > Hesaplar).",
+        "Add an account first to play (Settings > Accounts).",
+      ),
+    details: "no account selected",
   },
   /** A launch straight into a world the player's other game has open (PLAY-AGAIN). */
   worldOpen: {

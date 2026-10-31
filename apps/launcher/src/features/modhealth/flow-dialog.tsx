@@ -46,7 +46,7 @@ import {
 import { copyDetails as copySupportText } from "@/lib/clipboard";
 import { type CrashInfo, useLaunch } from "@/stores/launch";
 import { Checklist, type ChecklistRow } from "./checklist";
-import { type FlowStep, useModFlow } from "./flow";
+import { type FlowStep, retryOptions, useModFlow } from "./flow";
 import { IssueList } from "./issue-list";
 import { useKeysStep } from "./key-clash";
 import {
@@ -256,8 +256,9 @@ export function ModFlowDialog() {
   };
   const playNow = (ignoreModIssues = false) => {
     const id = instanceId;
+    const options = retryOptions(flow.options, ignoreModIssues);
     close();
-    if (id) void play(id, ignoreModIssues ? { ignoreModIssues: true } : undefined);
+    if (id) void play(id, options);
   };
   // "Onar" from the mod check or the crash summary: the repair starts at once, and the button
   // stays pressed in until its plan is known (at most REPAIR_HOLD_MS), so "Modlar onarılıyor"

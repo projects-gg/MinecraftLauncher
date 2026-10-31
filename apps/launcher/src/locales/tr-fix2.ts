@@ -12,7 +12,7 @@ export const trFix2 = {
   },
   /** The same menu for a person or a crew wherever they show. */
   menu: {
-    chat: "Mesaj gönder",
+    chat: "Mesaj",
     addFriend: "Arkadaş ekle",
     requestSent: "İstek gönderildi",
     requestSentTo: "Arkadaşlık isteği gönderildi",

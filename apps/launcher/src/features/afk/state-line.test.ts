@@ -87,6 +87,14 @@ describe("primaryAction", () => {
     expect(primaryAction({ kind: "preparing", step: "checking" })).toBe("cancel");
     expect(primaryAction({ kind: "clientFailed", problem: "broken" })).toBe("retry");
   });
+
+  it("leads to the login to fix when the server keeps refusing it", () => {
+    const stopped = (cause: "wrongPassword" | "loginTimeout") =>
+      ({ kind: "error", reason: "Giriş süresi doldu", cause }) as const;
+    expect(primaryAction(stopped("wrongPassword"))).toBe("fixPassword");
+    // No or wrong login commands: "Bağla" would only run the same loop again.
+    expect(primaryAction(stopped("loginTimeout"))).toBe("fixLogin");
+  });
 });
 
 describe("reconnect countdown", () => {
@@ -114,7 +122,21 @@ describe("reconnect countdown", () => {
       attempt: 3,
       nextAttemptAt: new Date(at + 11_000).toISOString(),
     };
-    expect(stateText(third, at, t)).toBe("11 sn sonra yeniden bağlanacak");
+    expect(stateText(third, at, t)).toBe("11 saniye sonra yeniden bağlanacak");
+  });
+
+  it("says a longer wait in minutes and renders only when they change", () => {
+    // Back-to-back failures grow the wait to 240 s: "4 dakika", not "240 sn".
+    const long: AfkState = {
+      kind: "reconnecting",
+      attempt: 5,
+      nextAttemptAt: new Date(at + 240_000).toISOString(),
+    };
+    expect(stateText(long, at, t)).toBe("4 dakika sonra yeniden bağlanacak");
+    // "4 dakika" holds down to 210 s left; the next render is at 209 s ("3 dakika").
+    expect(nextChangeMs(long, at)).toBe(31_000);
+    expect(stateText(long, at + 31_000, t)).toBe("3 dakika sonra yeniden bağlanacak");
+    expect(stateText(long, at + 30_000, t)).toBe("4 dakika sonra yeniden bağlanacak");
   });
 
   it("never guesses a number before the backend knows when", () => {

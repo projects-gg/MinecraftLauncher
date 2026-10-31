@@ -1114,6 +1114,13 @@ const people: Record<string, CodeLookup["profile"]> = {
     username: "netherkral",
     avatar: "preset:axolotl",
   },
+  // The blocked one of the default scenario: its card offers "Engeli kaldır".
+  "PRJ-5PMH-3SPX": {
+    id: "501",
+    name: "spam_hesap",
+    username: "spam_hesap",
+    avatar: "discord",
+  },
 };
 
 export const mockSocial: SocialApi = {
@@ -1244,7 +1251,11 @@ export const mockSocial: SocialApi = {
     }
     const person = people[normalized];
     if (!person) throw codeNotFound();
-    const relation = view.friends.some((f) => f.id === person.id) ? "friend" : "none";
+    const relation = view.friends.some((f) => f.id === person.id)
+      ? "friend"
+      : view.blocked.some((b) => b.id === person.id)
+        ? "blocked"
+        : "none";
     return { profile: person, relation, code: normalized };
   },
   async sendRequest(code) {

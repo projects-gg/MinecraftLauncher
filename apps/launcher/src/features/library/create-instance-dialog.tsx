@@ -30,6 +30,7 @@ import {
 import { InstanceIcon, instanceIcons } from "@/shell/instance-icon";
 import { usePrefs } from "@/stores/prefs";
 import { defaultInstanceName } from "./default-name";
+import { ConfirmDialog } from "./parts";
 
 type Source = "new" | "sets" | "browse" | "import";
 type VersionFilter = "release" | "snapshot" | "old";
@@ -136,6 +137,9 @@ export function CreateInstanceDialog({
   }, [open]);
 
   const [manual, setManual] = useState<ModpackImportResult | null>(null);
+  // The footer's × of a running import or install asks first: stopping deletes the half-made
+  // instance.
+  const [askStop, setAskStop] = useState(false);
   const finishPack = (
     result: ModpackImportResult,
     key: "modpack.import.done" | "modpack.browse.done",
@@ -153,15 +157,18 @@ export function CreateInstanceDialog({
     active: open && source === "import",
     onCancel: () => onOpenChange(false),
     onDone: (result) => finishPack(result, "modpack.import.done"),
+    onStop: () => setAskStop(true),
   });
   const browseFlow = useModpackBrowser({
     active: open && source === "browse",
     onCancel: () => onOpenChange(false),
     onDone: (result) => finishPack(result, "modpack.browse.done"),
+    onStop: () => setAskStop(true),
   });
   const setFlow = useSetSource({
     active: open && source === "sets",
     onCancel: () => onOpenChange(false),
+    onStop: () => setAskStop(true),
     instances: (instancesQuery.data ?? []).map((i) => i.name),
     onDone: (created) => {
       void queryClient.invalidateQueries({ queryKey: ["instances"] });
@@ -172,15 +179,24 @@ export function CreateInstanceDialog({
       void navigate({ to: "/library/$instanceId", params: { instanceId: created.id } });
     },
   });
+  const running = importFlow.running || browseFlow.running || setFlow.running;
+  // A running import or install goes on: Esc and the dialog's close button no longer stop it
+  // in silence (the dialog is not dismissible meanwhile); only the footer's stop does, after one
+  // question.
   const close = (next: boolean) => {
-    if (!next) {
-      // Closing the dialog stops a running import or install.
-      importFlow.cancelJob();
-      browseFlow.cancelJob();
-      setFlow.cancelJob();
-    }
+    if (!next && running) return;
     onOpenChange(next);
   };
+  const stop = () => {
+    importFlow.cancelJob();
+    browseFlow.cancelJob();
+    setFlow.cancelJob();
+  };
+  // A job that ended while the question was open takes the question with it (the next job does
+  // not open with it).
+  useEffect(() => {
+    if (!running) setAskStop(false);
+  }, [running]);
 
   const create = useMutation({
     mutationFn: () =>
@@ -201,7 +217,22 @@ export function CreateInstanceDialog({
     },
     onError: (error) => showError(error),
   });
-  const canCreate = !create.isPending && Boolean(mcVersion);
+  // A modded instance needs its loader's build for the version: none (or the list failed) says
+  // so under the box, and "Kurulum oluştur" waits for one (also while the list loads); before,
+  // it made an instance whose first OYNA could only fail.
+  const loaderProblem =
+    loader === "vanilla" || loaderQuery.isPending
+      ? null
+      : loaderQuery.isError
+        ? t("qol.create.loaderFailed")
+        : (loaderQuery.data?.length ?? 0) === 0
+          ? t("qol.create.noLoaderBuild", { loader: t(`loaders.${loader}`) })
+          : null;
+  // The picked loader version must be one of this version's (a version change keeps the old pick
+  // until the new list is in).
+  const loaderPicked =
+    loader === "vanilla" || Boolean(loaderQuery.data?.some((v) => v.version === loaderVersion));
+  const canCreate = !create.isPending && Boolean(mcVersion) && loaderPicked && !loaderProblem;
   const versionSearch = {
     searchLabel: t("modCenter.versions.search"),
     emptyText: t("create.noMatch"),
@@ -219,6 +250,7 @@ export function CreateInstanceDialog({
         morph={motionPrefs.layout}
         // A form (and a modpack search) made as a whole: a stray click beside it keeps it.
         dismissOnOutsideClick={false}
+        dismissible={!running}
         footer={
           source === "sets" ? (
             setFlow.footer
@@ -348,6 +380,7 @@ export function CreateInstanceDialog({
               <Field
                 label={t("create.loader")}
                 help={loader === "vanilla" ? t("create.loaderHelpVanilla") : t("create.loaderHelp")}
+                error={loaderProblem}
               >
                 <div className="flex flex-col gap-2">
                   <Select
@@ -356,7 +389,8 @@ export function CreateInstanceDialog({
                     label={t("create.loader")}
                     options={loaderOptions.map((l) => ({ value: l, label: t(`loaders.${l}`) }))}
                   />
-                  {loader !== "vanilla" ? (
+                  {/* With no build for this version the line under the box says so: no empty box. */}
+                  {loader !== "vanilla" && !loaderProblem ? (
                     <Select
                       value={loaderVersion}
                       onValueChange={setLoaderVersion}
@@ -382,6 +416,14 @@ export function CreateInstanceDialog({
         )}
       </Dialog>
       <ManualModsDialog result={manual} onClose={() => setManual(null)} />
+      <ConfirmDialog
+        open={askStop && running}
+        title={t("qol.install.stopTitle")}
+        body={t("qol.install.stopBody")}
+        confirmLabel={t("qol.install.stop")}
+        onConfirm={stop}
+        onClose={() => setAskStop(false)}
+      />
     </>
   );
 }

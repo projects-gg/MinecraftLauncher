@@ -173,9 +173,12 @@ type Found =
 function ResultCard({
   found,
   onSent,
+  onUnblocked,
 }: {
   found: Extract<Found, { kind: "found" }>;
   onSent: (outcome: "requested" | "friends") => void;
+  /** The block is gone (nothing was sent): the card offers "İstek gönder" again. */
+  onUnblocked: () => void;
 }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
@@ -190,11 +193,20 @@ function ResultCard({
       announce(outcome === "friends" ? t("social.add.nowFriends") : t("social.add.sent"));
     }
   };
-  const act = async (work: () => Promise<void>) => {
+  const accept = async () => {
     setBusy(true);
-    const done = await attempt(work);
+    const done = await attempt(() => api.social.accept(lookup.profile.id));
     setBusy(false);
-    if (done !== undefined) onSent(lookup.relation === "incoming" ? "friends" : "requested");
+    if (done !== undefined) onSent("friends");
+  };
+  const unblock = async () => {
+    setBusy(true);
+    const done = await attempt(() => api.social.unblock(lookup.profile.id));
+    setBusy(false);
+    if (done !== undefined) {
+      onUnblocked();
+      announce(t("social.actions.unblocked", { name: lookup.profile.name }));
+    }
   };
   const status = sent
     ? sent === "friends"
@@ -237,21 +249,11 @@ function ResultCard({
           {t("social.add.send")}
         </Button>
       ) : lookup.relation === "incoming" ? (
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={busy}
-          onClick={() => void act(() => api.social.accept(lookup.profile.id))}
-        >
+        <Button variant="primary" size="sm" disabled={busy} onClick={() => void accept()}>
           {t("social.actions.accept")}
         </Button>
       ) : lookup.relation === "blocked" ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={busy}
-          onClick={() => void act(() => api.social.unblock(lookup.profile.id))}
-        >
+        <Button variant="secondary" size="sm" disabled={busy} onClick={() => void unblock()}>
           {t("social.actions.unblock")}
         </Button>
       ) : null}
@@ -317,6 +319,8 @@ function FindForm() {
         <div className="flex gap-2">
           <input
             ref={inputRef}
+            // biome-ignore lint/a11y/noAutofocus: the player opened this page to paste or type a code (a link fills it itself)
+            autoFocus={!prefill}
             id={inputId}
             value={value}
             onPaste={() => {
@@ -378,7 +382,13 @@ function FindForm() {
             </motion.div>
           ) : found.kind === "found" ? (
             <motion.div key={`found:${found.lookup.code}`} {...rise(reduce, 6, 0.26)}>
-              <ResultCard found={found} onSent={(sent) => setFound({ ...found, sent })} />
+              <ResultCard
+                found={found}
+                onSent={(sent) => setFound({ ...found, sent })}
+                onUnblocked={() =>
+                  setFound({ ...found, lookup: { ...found.lookup, relation: "none" } })
+                }
+              />
             </motion.div>
           ) : found.kind === "error" ? (
             <motion.p

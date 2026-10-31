@@ -207,13 +207,22 @@ export function mockSetFiles(instanceId: string): {
   return files;
 }
 
+/** `?jobStepMs=<ms>`: a set's install goes slower (its footer's stop can be pressed in a preview). */
+function stepMs(): number {
+  try {
+    return Number(new URLSearchParams(window.location.search).get("jobStepMs")) || 110;
+  } catch {
+    return 110;
+  }
+}
+
 async function simulate(jobId: string, onProgress: (p: JobProgress) => void, totalFiles: number) {
   onProgress({ stage: "resolving", doneFiles: 0, totalFiles: 0, bytesPerSec: 0 });
   await delay(420);
   const steps = 14;
   for (let i = 1; i <= steps; i++) {
     if (cancelled.delete(jobId)) throw new Error("İşlem iptal edildi.");
-    await delay(110);
+    await delay(stepMs());
     onProgress({
       stage: "downloading",
       percent: (i / steps) * 100,

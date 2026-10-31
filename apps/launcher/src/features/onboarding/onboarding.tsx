@@ -293,7 +293,12 @@ export function Onboarding() {
                 />
               ) : null}
               {step === "projects" ? (
-                <ProjectsStep headingRef={headingRef} onBack={() => go(-1)} onFinish={finish} />
+                <ProjectsStep
+                  headingRef={headingRef}
+                  onBack={() => go(-1)}
+                  onFinish={finish}
+                  onSkip={skip}
+                />
               ) : null}
             </motion.div>
           </AnimatePresence>
@@ -456,6 +461,9 @@ function AccountStep({
   const [name, setName] = useState(suggestedName ?? "");
   const [final, setFinal] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
+  // The Microsoft account has no Minecraft: its dialog's "Oyuncu adıyla oyna" leads to the name
+  // field below, which takes the focus once the dialog has gone (as in the account center).
+  const toName = useRef(false);
 
   const hasAccount = Boolean(accounts?.length);
   // The name rules show as the player types (Turkish letters, spaces, a name already used);
@@ -620,6 +628,16 @@ function AccountStep({
           setLoginOpen(open);
           if (!open) setAdding(false);
         }}
+        onUseOffline={() => {
+          toName.current = true;
+          setAdding(true);
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!toName.current) return;
+          toName.current = false;
+          event.preventDefault();
+          nameInput.current?.focus();
+        }}
       />
     </StepFrame>
   );
@@ -629,10 +647,13 @@ function ProjectsStep({
   headingRef,
   onBack,
   onFinish,
+  onSkip,
 }: {
   headingRef: RefObject<HTMLHeadingElement | null>;
   onBack: () => void;
   onFinish: (instance?: InstanceSummary) => void;
+  /** Finishes without the instance, which is made again in the background ("Şimdilik geç"). */
+  onSkip: () => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -683,7 +704,9 @@ function ProjectsStep({
           ? t("onboarding.projects.title")
           : offered
             ? t("lib1.empty.question")
-            : t("onboarding.projects.preparing")
+            : failed
+              ? t("qol.welcome.later")
+              : t("onboarding.projects.preparing")
       }
       body={t("onboarding.projects.body")}
     >
@@ -786,11 +809,13 @@ function ProjectsStep({
       </div>
 
       <div className="mt-9 flex flex-wrap items-center gap-3">
+        {/* A preparation that failed is no dead end: "Hazırım" goes on without the instance (made
+            again in the background, as "Şimdilik geç" does), beside "Tekrar dene". */}
         <Button
           variant="primary"
           size="lg"
-          disabled={!instance && !offered}
-          onClick={() => onFinish(instance)}
+          disabled={!instance && !offered && !failed}
+          onClick={() => (!instance && !offered ? onSkip() : onFinish(instance))}
         >
           {t("onboarding.projects.finish")}
         </Button>

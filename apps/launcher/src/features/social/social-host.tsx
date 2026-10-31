@@ -57,7 +57,7 @@ import { MarkedSentence } from "./person-mark";
 import { PersonAskDialog } from "./person-menu";
 import { PlanReminders } from "./plan-reminders";
 import { ReportDialog } from "./report-dialog";
-import { useSocialPrefs, useSocialUi } from "./store";
+import { friendListShown, useSocialPrefs, useSocialUi } from "./store";
 import { useCallTicker } from "./use-call-clock";
 
 /** A friend coming online or joining projects.gg notifies at most this often. */
@@ -160,7 +160,7 @@ function showCrew(id: string) {
 
 /** A click on a friend's or an invite's system notification: the friends list. */
 function openFriends() {
-  useSocialUi.getState().openPanel({ page: "list" });
+  useSocialUi.getState().openPanel({ page: "list", tab: "friends" });
 }
 
 /** A click on a crew call's system notification: the first crew it names (else the list). */
@@ -238,7 +238,7 @@ function handleNotice(notice: SocialNotice) {
         {
           action: {
             label: i18n.t("social.notices.show"),
-            onClick: () => useSocialUi.getState().openPanel({ page: "list" }),
+            onClick: openFriends,
           },
         },
       );
@@ -448,17 +448,16 @@ function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>)
   });
 }
 
-/** The friends list is on screen (the panel is open on it). */
+/** The friends list is on screen (the panel is open on it, on "Arkadaşlar" when chat is on). */
 function listInView(): boolean {
-  const ui = useSocialUi.getState();
-  return ui.open && ui.page === "list";
+  return friendListShown(useSocialUi.getState());
 }
 
 /** A crew call is on screen with its answers: the panel is open on the list or the crew page, or
  * Home's line shows it (SMALL12: the line and a toast said the same call twice). */
 function callInView(call: CrewCall): boolean {
   const ui = useSocialUi.getState();
-  if (ui.open) return ui.page === "list" || ui.page === "team";
+  if (ui.open) return friendListShown(ui) || ui.page === "team";
   return homeShowsCall(call);
 }
 

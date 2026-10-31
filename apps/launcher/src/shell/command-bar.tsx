@@ -22,6 +22,7 @@ import { DropdownMenu } from "radix-ui";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountFace, type FaceAccount } from "@/features/accounts/account-face";
+import { useAccountsUi } from "@/features/accounts/store";
 import { useAccounts } from "@/features/accounts/use-accounts";
 import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launch";
 import { RoutePicker } from "@/features/autojoin/route-picker";
@@ -149,7 +150,7 @@ function InstancePicker({
   instances,
   selected,
   loading,
-  locked,
+  lock,
   hint,
   onSelect,
 }: {
@@ -157,8 +158,11 @@ function InstancePicker({
   selected: InstanceSummary | undefined;
   /** Still loading the list (an empty list then reads "Kurulum seç", not "Yükleniyor"). */
   loading: boolean;
-  /** A game is being prepared or played: the bar stays on it until it ends. */
-  locked: boolean;
+  /**
+   * A game is being prepared or played: the bar stays on it until it ends, and the menu says why
+   * the other rows are off (and how to free them while it prepares).
+   */
+  lock: "preparing" | "playing" | null;
   /** Background preparation of the selected instance, when there is something to show. */
   hint: PrepareHint | null;
   onSelect: (id: string) => void;
@@ -214,6 +218,11 @@ function InstancePicker({
           sideOffset={10}
           className="glass-strong pop-motion z-50 w-[300px] rounded-[var(--radius-panel)] p-1 shadow-[0_24px_60px_rgb(34_6_6/0.55)]"
         >
+          {lock && ordered.length > 1 ? (
+            <DropdownMenu.Label className="px-2 pt-1.5 pb-1 text-[12px] leading-snug text-ash-400">
+              {t(lock === "preparing" ? "qol.picker.lockedPreparing" : "qol.picker.lockedPlaying")}
+            </DropdownMenu.Label>
+          ) : null}
           {/* A long library scrolls here; the two actions below always stay in view. */}
           <div className="max-h-[min(392px,calc(var(--radix-dropdown-menu-content-available-height)-88px))] overflow-y-auto">
             {ordered.map((i) => (
@@ -221,7 +230,7 @@ function InstancePicker({
                 key={i.id}
                 instance={i}
                 chosen={selected?.id === i.id}
-                disabled={locked && selected?.id !== i.id}
+                disabled={lock !== null && selected?.id !== i.id}
                 onSelect={() => onSelect(i.id)}
               />
             ))}
@@ -728,10 +737,36 @@ export function CommandBar() {
   const selectedLaunchId = selected?.id;
   useEffect(() => {
     if (phase.kind !== "error") return;
+    const action = launchErrorAction(phase.code);
     if (phase.code === WORLD_OPEN) {
       // The world is open in the player's other game (PLAY-AGAIN): nothing to copy or to fix.
       toast(phase.message, { id: "launch-world-open" });
-    } else if (launchErrorAction(phase.code) === "makeSpace") {
+    } else if (action === "signIn") {
+      // The session expired or its secrets are gone: only a new sign-in of that account helps
+      // (the troubleshooter checks no account). The message already says so. A launch names its
+      // account only when asked to; else it played with the selected one.
+      const launch = useLaunch.getState();
+      const account = launch.account?.id ?? launch.selected ?? null;
+      // Its own line: the backend's ends with what the button says ("... yeniden giriş yap.").
+      toast.error(t("qol.launch.signedOut"), {
+        id: "launch-sign-in",
+        duration: 10_000,
+        action: {
+          label: t("accounts.center.relogin"),
+          onClick: () => useAccountsUi.getState().openLogin(account),
+        },
+      });
+    } else if (action === "addAccount") {
+      // The backend's line points to Ayarlar > Hesaplar; the button opens it.
+      toast.error(t("qol.launch.noAccount"), {
+        id: "launch-no-account",
+        duration: 10_000,
+        action: {
+          label: t("accounts.add"),
+          onClick: () => useAccountsUi.getState().openCenter({ focus: "add" }),
+        },
+      });
+    } else if (action === "makeSpace") {
       // The disk cannot hold the download: nothing was fetched yet (or the half-done file went).
       // Settings → Veri shows what can go and how much room it makes; OYNA tries again after.
       toast.error(phase.message, {
@@ -791,7 +826,7 @@ export function CommandBar() {
         instances={instances}
         selected={selected}
         loading={instancesLoading}
-        locked={busy}
+        lock={phase.kind === "working" ? "preparing" : busy ? "playing" : null}
         hint={hint}
         onSelect={selectInstance}
       />

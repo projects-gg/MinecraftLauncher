@@ -18,6 +18,7 @@ export function AccountDialog({
   width = 480,
   closeLabel,
   initialFocus,
+  onCloseAutoFocus,
   className,
 }: {
   open: boolean;
@@ -30,6 +31,8 @@ export function AccountDialog({
   closeLabel: string;
   /** Receives focus when the dialog opens. */
   initialFocus?: RefObject<HTMLElement | null>;
+  /** Once it has closed: `preventDefault` keeps the focus off the control that opened it. */
+  onCloseAutoFocus?: (event: Event) => void;
   className?: string;
 }) {
   const calm = useCalm();
@@ -59,6 +62,7 @@ export function AccountDialog({
                     target.focus();
                   }
                 }}
+                onCloseAutoFocus={onCloseAutoFocus}
               >
                 <motion.div
                   className={cn(

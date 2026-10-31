@@ -47,6 +47,7 @@ import { trPlayTogether } from "./tr-play-together";
 import { trPrepare } from "./tr-prepare";
 import { trProjectsSkin } from "./tr-projects-skin";
 import { trQaFix } from "./tr-qa-fix";
+import { trQol } from "./tr-qol";
 import { trReminders } from "./tr-reminders";
 import { trReports } from "./tr-reports";
 import { trSafety } from "./tr-safety";
@@ -99,6 +100,7 @@ export const tr = {
   small7: trSmall7,
   small9: trSmall9,
   small10: trSmall10,
+  qol: trQol,
   qaFix: trQaFix,
   crews: trCrews,
   chat: trChat,
@@ -213,6 +215,8 @@ export const tr = {
       natives: "Sistem dosyaları hazırlanıyor",
       loader: "Mod yükleyici kuruluyor",
       pack: "Mod paketi eşitleniyor",
+      /** Files already on disk are only checked (a launch of an installed game): nothing downloads. */
+      checking: "Dosyalar denetleniyor",
     },
     files: "{{done}} / {{total}} dosya",
     eta: "{{time}} kaldı",
@@ -793,7 +797,8 @@ export const tr = {
       starting: "Başlatılıyor",
       connecting: "Bağlanıyor",
       connected: "Oyunda, {{uptime}}",
-      reconnecting: "{{secs}} sn sonra yeniden bağlanacak",
+      /** `time` in words ("45 saniye", "4 dakika"). */
+      reconnecting: "{{time}} sonra yeniden bağlanacak",
       stopping: "Durduruluyor",
       error: "Bağlantı kesildi",
     },
@@ -1013,7 +1018,8 @@ export const tr = {
     errors: {
       hostInvalid:
         "Adres yalnızca harf, rakam, nokta, tire ve alt çizgi içerebilir. Örnek: play.projects.gg",
-      hostPort: "Portu adrese yazma. Port alanına yaz.",
+      /** One address field holds the port: it goes after one colon at the end. */
+      hostPort: "Port, adresin sonunda iki noktadan sonra gelir. Örnek: mc.sunucu.net:25570",
       number: "Bir sayı gir.",
       integer: "Tam sayı gir.",
       range: "{{min}} ile {{max}} arasında bir değer gir.",
@@ -1095,7 +1101,7 @@ export const tr = {
       current: "Sürüm {{version}}",
       upToDate: "Launcher güncel.",
       ready: "Yeni sürüm hazır. Yeniden başlatınca kurulur.",
-      restart: "Yeniden başlat ve güncelle",
+      restart: "Yeniden başlat",
       unavailable: "Güncelleme sunucusuna ulaşılamadı. Biraz sonra tekrar dene.",
     },
     discord: {

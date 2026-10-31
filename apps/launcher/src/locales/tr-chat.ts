@@ -22,7 +22,7 @@ export const trChat = {
   },
   actions: {
     message: "Mesaj",
-    discord: "Discord'dan mesajlaş",
+    discord: "Discord'dan mesaj at",
     send: "Gönder",
     retry: "Tekrar dene",
     discard: "Sil",

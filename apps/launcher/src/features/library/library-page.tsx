@@ -205,13 +205,36 @@ export function LibraryPage() {
   // A deletion or its "Geri al" may take the official pack away or bring it back.
   const invalidateOfficial = () =>
     void queryClient.invalidateQueries({ queryKey: ["official-status"] });
+  // A copy with big worlds takes a while: a toast says it is on its way and turns into the
+  // result, and the instance's "Kopyasını oluştur" waits meanwhile (a second press made a second
+  // copy).
+  const [copying, setCopying] = useState<ReadonlySet<string>>(() => new Set());
   const duplicate = useMutation({
     mutationFn: (i: InstanceSummary) => api.duplicateInstance(i.id),
-    onSuccess: (copy) => {
-      invalidate();
-      toast.success(t("library.duplicated", { name: copy.name }));
+    onMutate: (i) => {
+      setCopying((now) => new Set(now).add(i.id));
+      toast(t("qol.copy.copying", { name: i.name }), {
+        id: `copy:${i.id}`,
+        duration: Number.POSITIVE_INFINITY,
+      });
     },
-    onError: (error) => showError(error),
+    onSuccess: (copy, i) => {
+      invalidate();
+      toast.success(t("library.duplicated", { name: copy.name }), {
+        id: `copy:${i.id}`,
+        duration: 4000,
+      });
+    },
+    onError: (error, i) => {
+      toast.dismiss(`copy:${i.id}`);
+      showError(error);
+    },
+    onSettled: (_copy, _error, i) =>
+      setCopying((now) => {
+        const next = new Set(now);
+        next.delete(i.id);
+        return next;
+      }),
   });
   // A deleted instance waits in the launcher trash: the toast puts it back in one click.
   const undoDelete = async (trashId: string) => {
@@ -262,7 +285,10 @@ export function LibraryPage() {
       void play(i.id);
     },
     openFolder: (i) => void api.openInstanceFolder(i.id),
-    duplicate: (i) => duplicate.mutate(i),
+    duplicate: (i) => {
+      if (!copying.has(i.id)) duplicate.mutate(i);
+    },
+    copying: (i) => copying.has(i.id),
     exportPack: (i) => setExporting(i),
     group: (i) => setGrouping(i),
     shortcut: (i) => void createDesktopShortcut(i),

@@ -22,6 +22,8 @@ export interface InstanceActions {
   play: (i: InstanceSummary) => void;
   openFolder: (i: InstanceSummary) => void;
   duplicate: (i: InstanceSummary) => void;
+  /** A copy of it is being made: its "Kopyasını oluştur" waits (no second copy). */
+  copying: (i: InstanceSummary) => boolean;
   exportPack: (i: InstanceSummary) => void;
   /** Move to a library group (official instances always stay in their own section). */
   group: (i: InstanceSummary) => void;
@@ -182,6 +184,7 @@ export function InstanceCard({
                     label: t("library.actions.duplicate"),
                     icon: <Copy size={16} />,
                     onSelect: () => actions.duplicate(instance),
+                    disabled: actions.copying(instance),
                   },
                   {
                     label: t("library.actions.export"),

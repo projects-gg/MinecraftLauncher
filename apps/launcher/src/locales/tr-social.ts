@@ -90,7 +90,7 @@ export const trSocial = {
     accept: "Kabul et",
     accepted: "{{name}} ile artık arkadaşsınız",
     decline: "Reddet",
-    cancelRequest: "İsteği geri al",
+    cancelRequest: "İsteği geri çek",
     cancel: "Vazgeç",
     dismiss: "Kapat",
     friendsSince: "{{date}} tarihinden beri arkadaşsınız",

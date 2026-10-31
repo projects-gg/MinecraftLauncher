@@ -46,6 +46,7 @@ import { enPlayTogether } from "./en-play-together";
 import { enPrepare } from "./en-prepare";
 import { enProjectsSkin } from "./en-projects-skin";
 import { enQaFix } from "./en-qa-fix";
+import { enQol } from "./en-qol";
 import { enReminders } from "./en-reminders";
 import { enReports } from "./en-reports";
 import { enSafety } from "./en-safety";
@@ -177,7 +178,7 @@ export const en: DeepPartial<Strings> = {
       accept: "Accept",
       accepted: "You and {{name}} are now friends",
       decline: "Decline",
-      cancelRequest: "Cancel request",
+      cancelRequest: "Withdraw request",
       cancel: "Cancel",
       dismiss: "Dismiss",
       friendsSince: "Friends since {{date}}",
@@ -306,6 +307,7 @@ export const en: DeepPartial<Strings> = {
   small7: enSmall7,
   small9: enSmall9,
   small10: enSmall10,
+  qol: enQol,
   qaFix: enQaFix,
   crews: enCrews,
   chat: enChat,
@@ -419,6 +421,7 @@ export const en: DeepPartial<Strings> = {
       natives: "Preparing system files",
       loader: "Installing mod loader",
       pack: "Syncing the modpack",
+      checking: "Checking files",
     },
     files: "{{done}} / {{total}} files",
     eta: "{{time}} left",
@@ -1032,7 +1035,7 @@ export const en: DeepPartial<Strings> = {
       starting: "Starting",
       connecting: "Connecting",
       connected: "In game, {{uptime}}",
-      reconnecting: "Reconnecting in {{secs}} s",
+      reconnecting: "Reconnecting in {{time}}",
       stopping: "Stopping",
       error: "Disconnected",
     },
@@ -1255,7 +1258,7 @@ export const en: DeepPartial<Strings> = {
     errors: {
       hostInvalid:
         "Use only letters, numbers, dots, hyphens and underscores. Example: play.projects.gg",
-      hostPort: "Don't put the port in the address. Use the Port field.",
+      hostPort: "The port goes at the end, after one colon. Example: mc.server.net:25570",
       number: "Enter a number.",
       integer: "Enter a whole number.",
       range: "Enter a value between {{min}} and {{max}}.",
@@ -1337,7 +1340,7 @@ export const en: DeepPartial<Strings> = {
       current: "Version {{version}}",
       upToDate: "The launcher is up to date.",
       ready: "A new version is ready. It installs when you restart.",
-      restart: "Restart and update",
+      restart: "Restart",
       unavailable: "Can't reach the update server. Try again in a bit.",
     },
     discord: {

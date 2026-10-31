@@ -42,8 +42,9 @@ export function UpdateSettingsAction() {
     }
     return (
       <InstallConfirm from="settings">
+        {/* Secondary even when ready: OYNA is the screen's one gold (TASTE-2 on QOL-L). */}
         <Button
-          variant={waiting ? "secondary" : "primary"}
+          variant="secondary"
           icon={icon}
           // Busy keeps full strength (it is working, not unavailable) but takes no second press.
           aria-disabled={applying || undefined}

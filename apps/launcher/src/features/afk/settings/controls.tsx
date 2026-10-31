@@ -20,6 +20,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { formatCount } from "@/lib/format";
 import { joinAddress, splitAddress } from "../address";
+import { limitWords } from "../spans";
 import type { Issue, Limit } from "./model";
 
 /** Translated text of an inline problem. */
@@ -32,9 +33,12 @@ export function useIssueText() {
     // A stop for a refused password, on its line (the 7/24 Bulut panel's words).
     if (issue.code === "wrongPassword") return t("afkPanel.wrongPassword");
     if (issue.code === "wrongPasswordKept") return t("afkPanel.wrongPasswordSealed");
+    // A span of time says its range in words: "1 saniye ile 7 gün arasında".
+    const limit = issue.limit;
+    const said = (value: number) => (limit?.seconds ? limitWords(value, t) : formatCount(value));
     return t(`afkSettings.errors.${issue.code}`, {
-      min: issue.limit ? formatCount(issue.limit.min) : undefined,
-      max: issue.limit ? formatCount(issue.limit.max) : undefined,
+      min: limit ? said(limit.min) : undefined,
+      max: limit ? said(limit.max) : undefined,
     });
   };
 }

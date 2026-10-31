@@ -20,7 +20,7 @@ import {
 } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AddPage } from "./add-page";
 import { ChatHeader, ChatPage } from "./chat/chat-page";
@@ -146,6 +146,10 @@ export function FriendsSheet() {
   const { reduce } = useSocialMotion();
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  // Where the friend list was scrolled to: "Geri" from a page it opened (a friend's chat) comes
+  // back there instead of the top. Read while the list is the page; a new opening starts on top.
+  const listTop = useRef(0);
+  const shownNow = useRef<string>("list");
   const variants = pageVariants(reduce);
 
   const chatConv = useSocialUi((s) => s.chatConv);
@@ -160,6 +164,12 @@ export function FriendsSheet() {
       : view.auth === "restoring"
         ? "restoring"
         : "consent";
+  shownNow.current = shown;
+  const scrollTarget = useRef(0);
+  scrollTarget.current = shown === "list" && direction < 0 ? listTop.current : 0;
+  useEffect(() => {
+    if (!open) listTop.current = 0;
+  }, [open]);
   // A conversation fills the panel: its own list scrolls, the composer stays at the bottom.
   const fill =
     shown === "chat" ||
@@ -208,6 +218,11 @@ export function FriendsSheet() {
                       <div
                         ref={scroller}
                         data-social-scroller
+                        onScroll={(event) => {
+                          if (shownNow.current === "list") {
+                            listTop.current = event.currentTarget.scrollTop;
+                          }
+                        }}
                         className={cn(
                           "relative min-h-0 flex-1 overflow-x-hidden overscroll-contain",
                           fill ? "overflow-y-hidden" : "overflow-y-auto",
@@ -226,7 +241,11 @@ export function FriendsSheet() {
                             initial="enter"
                             animate="center"
                             exit="exit"
-                            onAnimationStart={() => scroller.current?.scrollTo({ top: 0 })}
+                            // The leaving page's motion keeps its first props: both read the
+                            // same target, set by this render.
+                            onAnimationStart={() =>
+                              scroller.current?.scrollTo({ top: scrollTarget.current })
+                            }
                             className={cn("px-4 pt-3", fill ? "flex h-full flex-col pb-0" : "pb-8")}
                           >
                             {shown === "consent" ? (

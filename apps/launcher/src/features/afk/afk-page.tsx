@@ -106,13 +106,19 @@ function AfkCard({
       icon: <Key size={16} />,
       onSelect: onSettings,
     },
+    fixLogin: {
+      label: t("qol.afk.fixLogin"),
+      icon: <Key size={16} />,
+      onSelect: onSettings,
+    },
   };
 
   // One list for the "more" button and the right click.
   const items: Array<MenuItem | null> = [
     main[primaryAction(account.state)],
     // Fixed in another way (on the server's site): connecting stays one press away.
-    ...(primaryAction(account.state) === "fixPassword"
+    ...(primaryAction(account.state) === "fixPassword" ||
+    primaryAction(account.state) === "fixLogin"
       ? [{ label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect }]
       : []),
     ...(connected

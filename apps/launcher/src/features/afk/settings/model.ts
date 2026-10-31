@@ -69,18 +69,21 @@ export function unsavedGroups(draft: Draft, baseline: Draft): Set<GroupId> {
   return new Set(GROUPS.filter((group) => GROUP_FIELDS[group].some(differs)));
 }
 
-/** Number ranges (form.rs): the backend clamps into these, the sheet asks for them. */
+/**
+ * Number ranges (form.rs): the backend clamps into these, the sheet asks for them. `seconds`: a
+ * span of time, whose range is said in words ("1 saniye ile 7 gün arasında", not "1 ile 604.800").
+ */
 export const LIMITS = {
-  port: { min: 0, max: 65535, integer: true },
-  loginDelay: { min: 0, max: 60, integer: false },
-  antiAfkDelay: { min: 1, max: 3600, integer: false },
-  walkRange: { min: 1, max: 32, integer: true },
-  walkRetries: { min: 1, max: 100, integer: true },
-  relogDelay: { min: 5, max: 3600, integer: false },
-  relogRetries: { min: 1, max: 100, integer: true },
-  threshold: { min: 0, max: 20, integer: true },
-  cooldown: { min: 0, max: 86_400, integer: true },
-  taskSeconds: { min: 1, max: 604_800, integer: false },
+  port: { min: 0, max: 65535, integer: true, seconds: false },
+  loginDelay: { min: 0, max: 60, integer: false, seconds: true },
+  antiAfkDelay: { min: 1, max: 3600, integer: false, seconds: true },
+  walkRange: { min: 1, max: 32, integer: true, seconds: false },
+  walkRetries: { min: 1, max: 100, integer: true, seconds: false },
+  relogDelay: { min: 5, max: 3600, integer: false, seconds: true },
+  relogRetries: { min: 1, max: 100, integer: true, seconds: false },
+  threshold: { min: 0, max: 20, integer: true, seconds: false },
+  cooldown: { min: 0, max: 86_400, integer: true, seconds: true },
+  taskSeconds: { min: 1, max: 604_800, integer: false, seconds: true },
 } as const;
 
 export type Limit = (typeof LIMITS)[keyof typeof LIMITS];

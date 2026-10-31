@@ -190,12 +190,15 @@ export function MicrosoftLoginDialog({
   onOpenChange,
   relogin = null,
   onUseOffline,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   relogin?: AccountSummary | null;
   /** Offered when the account has no Minecraft: switch to adding an offline account. */
   onUseOffline?: () => void;
+  /** Once it has closed (where the focus goes then: see `AccountDialog`). */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const { t } = useTranslation();
   const calm = useCalm();
@@ -304,7 +307,9 @@ export function MicrosoftLoginDialog({
           icon={<MicrosoftMark size={15} />}
           onClick={start}
         >
-          {t("accounts.login.retry")}
+          {/* No Minecraft on that account: the sign-in asks which account (select_account), so
+              the way on is another one, not the same again (TASTE-2 on QOL-L). */}
+          {phase.failure === "noLicense" ? t("qol.login.otherAccount") : t("accounts.login.retry")}
         </Button>
       </>
     );
@@ -314,6 +319,7 @@ export function MicrosoftLoginDialog({
       open={open}
       onOpenChange={close}
       initialFocus={action}
+      onCloseAutoFocus={onCloseAutoFocus}
       title={relogin ? t("accounts.login.reloginTitle") : t("accounts.login.title")}
       // Only a renewal needs a word: it must be the same Microsoft account.
       description={

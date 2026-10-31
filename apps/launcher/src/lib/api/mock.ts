@@ -1067,6 +1067,8 @@ export const mockApi: LauncherApi = {
   },
   async openInstanceFolder() {},
   async duplicateInstance(id: string) {
+    // A copy takes a while (`?copyMs=<ms>` holds it longer, for its toast).
+    await delay(Number(mockFlag("copyMs")) || 600);
     const source = instances.find((i) => i.id === id);
     if (!source) throw new Error("not found");
     const copy = {
@@ -1115,6 +1117,8 @@ export const mockApi: LauncherApi = {
   },
   async loaderVersions(loader: LoaderKind) {
     await delay(200);
+    // `?loaderNone=neoForge` (any loader key): that loader has no build for any version.
+    if (mockFlag("loaderNone") === loader) return [];
     return loader === "vanilla" ? [] : loaderVersionTable[loader];
   },
   async launch(instanceId: string, onEvent: (e: LaunchEvent) => void, options?: LaunchOptions) {
@@ -1139,10 +1143,12 @@ export const mockApi: LauncherApi = {
     const parts: Array<[LaunchStage[], number, number]> = [];
     if (options?.java === "install") parts.push([["java"], 10, 0]);
     if (heavy && modded) parts.push([["loader"], 12, 0]);
+    // An installed game only checks its files: "Dosyalar denetleniyor", no speed (the backend's
+    // download stages that fetched nothing).
     parts.push([
-      heavy ? ["metadata", "libraries", "assets", "natives"] : ["metadata"],
+      heavy ? ["metadata", "libraries", "assets", "natives"] : ["metadata", "checking"],
       70,
-      heavy ? 3204 : 0,
+      3204,
     ]);
     parts.push([["pack"], 18, 48]);
     const sum = parts.reduce((total, [, share]) => total + share, 0);
@@ -1156,6 +1162,20 @@ export const mockApi: LauncherApi = {
         const fraction = step / steps;
         const stage =
           stages[Math.min(stages.length - 1, Math.floor(fraction * stages.length * 0.999))];
+        // `?launchHold=<stage>` stops the preview on that stage until the launch is cancelled.
+        if (stage && stage === mockFlag("launchHold")) {
+          onEvent({
+            type: "progress",
+            stage,
+            percent: from + span * fraction,
+            doneFiles: Math.round(fraction * totalFiles),
+            totalFiles,
+            bytesPerSec: heavy ? 9_400_000 : 0,
+            etaSecs: heavy ? 40 : undefined,
+          });
+          while (!job.cancelled) await delay(200);
+          throw new Error("cancelled");
+        }
         onEvent({
           type: "progress",
           stage: stage ?? "metadata",
@@ -1163,8 +1183,12 @@ export const mockApi: LauncherApi = {
           doneFiles: Math.round(fraction * totalFiles),
           totalFiles,
           bytesPerSec:
-            stage === "loader" && fraction > 0.4 ? 0 : 9_400_000 + Math.random() * 6_000_000,
-          etaSecs: heavy ? Math.round((1 - fraction) * steps * 0.11 + (100 - from - span) / 14) : 1,
+            (stage === "loader" && fraction > 0.4) || !heavy
+              ? 0
+              : 9_400_000 + Math.random() * 6_000_000,
+          etaSecs: heavy
+            ? Math.round((1 - fraction) * steps * 0.11 + (100 - from - span) / 14)
+            : undefined,
         });
       }
       from += span;

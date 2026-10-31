@@ -30,7 +30,7 @@ export const enCloudAfk = {
     runningNow: "In game",
     connecting: "Connecting",
     waiting: "Reconnecting soon",
-    waitingIn: "Reconnecting in {{secs}} s",
+    waitingIn: "Reconnecting in {{time}}",
     queued: "Queued",
     queuedFull: "Queued: the server's cloud limit is full",
     stopped: "Stopped",
