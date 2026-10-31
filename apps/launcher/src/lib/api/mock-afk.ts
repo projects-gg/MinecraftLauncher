@@ -680,7 +680,7 @@ let mockDialog: { rev: number; dialog: string; at: string; wait?: boolean } | nu
             rev: 1,
             at: now(),
             dialog: JSON.stringify({
-              title: "Sunucu Kuralları",
+              title: "Sunucu kuralları",
               titleSt: [[16, "6l"]],
               body: [
                 { text: "1. Saygılı ol, küfür etme.\n2. Hile ve makro yok.\n3. Reklam yapma." },

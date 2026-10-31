@@ -1,8 +1,9 @@
-// A server's dialog as a card in the console's command line place (DIALOG-CARD; every dialog as a
-// real form since CONSOLE-ANY): its title and body in the game's looks (an item part with the
-// game's own tooltip), its inputs as the game draws them (a checkbox, radio buttons for up to five
-// options and a list beyond, a slider in the game's steps and words, a text field of the game's
-// lines), its buttons in the game's columns, widths and tooltips, a long list in pages. A command
+// A server's dialog in the console's command line place, as the panel's lower section, not a card
+// of its own (DIALOG-CARD; every dialog as a real form since CONSOLE-ANY): its title and body in
+// the game's colours in our type (an item part with the game's own tooltip), its inputs as the game
+// draws them (a checkbox, radio buttons for up to five options and a list beyond, a slider in the
+// game's steps and words, a text field of the game's lines), its buttons in the game's columns,
+// each filling its column, with their tooltips, a long list in pages. A command
 // button waits for the player's word in ConsoleActionCard with the exact command its inputs build
 // (the machine and the client refuse any other); a link too, https only. Close, custom and
 // nested-dialog buttons go as the game's own button would. Nothing here runs on its own, and nothing
@@ -39,6 +40,7 @@ import {
   sliderValue,
   stepValue,
 } from "./dialog";
+import type { ConsoleGround } from "./ground";
 import { type ConsoleClick, lineRuns } from "./looks";
 import { CONSOLE_TEXTS } from "./texts";
 
@@ -69,9 +71,19 @@ const PAGE = 8;
 const AREA =
   "w-full resize-none rounded-md border border-white/10 bg-obsidian-800/80 px-3 py-2 text-[13.5px] leading-relaxed text-bone-50 transition-[border-color,box-shadow] duration-150 hover:border-white/18 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/25 focus:outline-none";
 
-/** A label in the game's looks (plain words where it has none). */
-function Words({ text, st, lang }: { text: string; st?: unknown; lang: InventoryLang }) {
-  return <ConsoleText text={text} st={st} lang={lang} />;
+/** A label in the game's looks (plain words where it has none), on the console or a plate. */
+function Words({
+  text,
+  st,
+  lang,
+  ground,
+}: {
+  text: string;
+  st?: unknown;
+  lang: InventoryLang;
+  ground?: ConsoleGround;
+}) {
+  return <ConsoleText text={text} st={st} lang={lang} ground={ground} />;
 }
 
 /** A text field as the game's: one line, or its lines (taller as the game sizes it). */
@@ -231,9 +243,9 @@ function ChoiceField({
             key={option.id}
             value={option.id}
             className={cn(
-              "group flex w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-panel)] px-2.5 py-1.5 text-left outline-none ring-1 ring-white/[0.07] transition-[background-color,box-shadow] duration-150",
+              "group flex w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-panel)] px-2.5 py-1.5 text-left outline-none transition-[background-color,box-shadow] duration-150",
               "hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300",
-              "data-[state=checked]:bg-white/[0.06] data-[state=checked]:ring-white/25",
+              "data-[state=checked]:bg-white/[0.06]",
             )}
           >
             <span
@@ -243,7 +255,12 @@ function ChoiceField({
               <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
             </span>
             <span className="min-w-0 text-[13px] text-bone-50">
-              <Words text={option.label || option.id} st={option.labelSt} lang={lang} />
+              <Words
+                text={option.label || option.id}
+                st={option.labelSt}
+                lang={lang}
+                ground="plate"
+              />
             </span>
           </RadioGroup.Item>
         ))}
@@ -344,7 +361,7 @@ function InputField({
 /** A body part: a text, or an item on its tile with the game's tooltip and its own words beside it. */
 function Part({ part, lang }: { part: DialogPart; lang: InventoryLang }) {
   const words = part.text ? (
-    <p className="min-w-0 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-bone-100">
+    <p className="min-w-0 text-body break-words whitespace-pre-wrap text-bone-100">
       <ConsoleText text={part.text} st={part.st} lang={lang} />
     </p>
   ) : null;
@@ -457,12 +474,12 @@ export function DialogCard({
     <section
       aria-labelledby={titleId}
       aria-roledescription={t.dialogLabel}
-      className={cn(
-        "flex flex-col gap-3 rounded-[10px] border border-white/[0.08] bg-obsidian-800/80 p-4 font-sans",
-        className,
-      )}
+      className={cn("flex flex-col gap-3 font-sans", className)}
     >
-      <h3 id={titleId} className="font-mono text-[14px] font-semibold text-bone-50">
+      <h3
+        id={titleId}
+        className="font-display text-section font-semibold text-balance text-bone-50"
+      >
         <ConsoleText text={dialog.title} st={dialog.titleSt} lang={lang} />
       </h3>
       {dialog.body.map((part, i) => (
@@ -492,7 +509,7 @@ export function DialogCard({
           // A command or a link ends in the console's line icon, in its label's last colour, as a
           // console part does: the player sees which buttons ask before they act.
           const glyph = command || button.a === "open_url";
-          const runs = glyph ? lineRuns(button.label, button.labelSt) : null;
+          const runs = glyph ? lineRuns(button.label, button.labelSt, [], "plate") : null;
           const control = (
             <Button
               key={button.i}
@@ -500,12 +517,12 @@ export function DialogCard({
               size="md"
               disabled={off}
               onClick={() => press(button)}
-              // The game's width (its pixels at its usual scale of two), never past the column.
-              className="w-full justify-self-center"
-              style={button.w ? { maxWidth: `${button.w * 2}px` } : undefined}
+              // Each button fills its column, so a row's edges line up (the game's width is never
+              // wider than a column of the console).
+              className="w-full"
             >
               <span className="truncate">
-                <ConsoleText text={button.label} st={button.labelSt} lang={lang} />
+                <ConsoleText text={button.label} st={button.labelSt} lang={lang} ground="plate" />
                 {glyph ? (
                   <ActIcon a={button.a} color={runs ? runs[runs.length - 1]?.color : undefined} />
                 ) : null}
@@ -602,13 +619,7 @@ export function DialogWaiting({
     return () => clearTimeout(timer);
   }, [left]);
   return (
-    <section
-      aria-label={t.dialogLabel}
-      className={cn(
-        "flex flex-col gap-3 rounded-[10px] border border-white/[0.08] bg-obsidian-800/80 p-4 font-sans",
-        className,
-      )}
-    >
+    <section aria-label={t.dialogLabel} className={cn("flex flex-col gap-3 font-sans", className)}>
       <p role="status" className="text-[13.5px] font-medium text-bone-50">
         {t.dialogWaiting}
       </p>
@@ -618,7 +629,7 @@ export function DialogWaiting({
         </p>
       ) : null}
       <Button
-        variant="secondary"
+        variant="ghost"
         size="sm"
         className="self-end tabular-nums"
         disabled={left > 0 || busy}
@@ -658,8 +669,15 @@ export function DialogMenus({
       {shown.map((menu) => {
         const label = menus[menu];
         return label ? (
-          <Button key={menu} variant="ghost" size="sm" disabled={busy} onClick={() => onOpen(menu)}>
-            <ConsoleText text={label.text} st={label.st} lang={lang} />
+          <Button
+            key={menu}
+            variant="secondary"
+            size="sm"
+            className="hit-area"
+            disabled={busy}
+            onClick={() => onOpen(menu)}
+          >
+            <ConsoleText text={label.text} st={label.st} lang={lang} ground="plate" />
           </Button>
         ) : null;
       })}

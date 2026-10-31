@@ -39,6 +39,14 @@ export {
 } from "./dialog-card";
 export { ConsoleDirection } from "./direction";
 export {
+  type ConsoleGround,
+  contrastOn,
+  GROUND_RGB,
+  groundColor,
+  hslOf,
+  rgbOf,
+} from "./ground";
+export {
   type ConsoleClick,
   type ConsoleClickAction,
   type ConsoleEvent,

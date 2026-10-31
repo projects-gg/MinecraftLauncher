@@ -57,10 +57,7 @@ export function ConsoleActionCard({
     <fieldset
       aria-labelledby={titleId}
       onKeyDown={onKeyDown}
-      className={cn(
-        "min-w-0 rounded-[10px] border border-white/[0.08] bg-obsidian-800/80 p-4 font-sans",
-        className,
-      )}
+      className={cn("m-0 min-w-0 border-0 p-0 font-sans", className)}
     >
       <p id={titleId} className="text-[14px] font-medium text-bone-50">
         {run ? t.runTitle : t.openTitle}

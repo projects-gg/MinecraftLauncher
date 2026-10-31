@@ -341,7 +341,7 @@ describe("DialogCard", () => {
     expect(onAct).toHaveBeenCalledWith({ i: 2, inputs });
     fireEvent.click(screen.getByText("Kabul"));
     expect(onAct).toHaveBeenCalledWith({ i: 3, inputs });
-    fireEvent.click(screen.getByText("Oyunda kapat"));
+    fireEvent.click(screen.getByText("Pencereyi kapat"));
     expect(onAct).toHaveBeenCalledWith({ cancel: true });
   });
 
@@ -360,7 +360,7 @@ describe("DialogCard", () => {
     expect(icon("Gönder")?.getAttribute("fill")).toBe(green);
     expect(icon("Kurallar")?.getAttribute("fill")).toBe("currentColor");
     expect(icon("Kabul")).toBeNull();
-    expect(screen.getByText("Oyunda kapat")).not.toBeNull();
+    expect(screen.getByText("Pencereyi kapat")).not.toBeNull();
     const closing = { ...raw, buttons: [...raw.buttons, { i: 4, label: "Vazgeç", a: "close" }] };
     rerender(
       <TooltipProvider>
@@ -373,7 +373,7 @@ describe("DialogCard", () => {
       </TooltipProvider>,
     );
     expect(screen.getByText("Vazgeç")).not.toBeNull();
-    expect(screen.queryByText("Oyunda kapat")).toBeNull();
+    expect(screen.queryByText("Pencereyi kapat")).toBeNull();
   });
 
   it("draws each input as the game does: a checkbox, radios or a list, a slider in its words", () => {
@@ -429,7 +429,7 @@ describe("DialogCard", () => {
     expect(screen.getByText("1 / 3")).not.toBeNull();
     fireEvent.click(screen.getByLabelText("Sonraki sayfa"));
     expect(screen.getByText("Sunucu 8")).not.toBeNull();
-    expect(screen.getByText("Pencerenin bir kısmı burada görünmüyor.")).not.toBeNull();
+    expect(screen.getByText("Bu pencerenin bir kısmı yalnız oyunda görünür.")).not.toBeNull();
     fireEvent.click(screen.getByText("Vazgeç"));
     expect(onAct).toHaveBeenCalledWith({ cancel: true });
   });
@@ -469,7 +469,7 @@ describe("the game's waiting screen and menus", () => {
     show(<DialogWaiting lang="tr" onBack={onBack} />);
     expect(screen.getByRole("status").textContent).toBe("Sunucu bekleniyor");
     const back = () => screen.getByRole("button") as HTMLButtonElement;
-    expect(back().textContent).toBe("Geri (5)");
+    expect(back().textContent).toBe("Geri (5 sn)");
     expect(back().disabled).toBe(true);
     for (let i = 0; i < 5; i++) {
       act(() => {

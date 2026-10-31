@@ -271,8 +271,14 @@ export function readableColor(hex: string): string {
 /** A part's code (the frame's spans, a console line's `st`): colour, then the flags in order. */
 export const STYLE_CODE = /^(?:[0-9a-f]|#[0-9a-f]{6})?k?l?m?n?o?$/;
 
-/** A part code's look: its colour made readable (none when the code has none) and its flags. */
-export function codeLook(code: string): Omit<TextRun, "text" | "color"> & { color?: string } {
+/**
+ * A part code's look: its colour made readable by `colorOf` (the tooltip's rule unless a caller
+ * draws on another ground; none when the code has none) and its flags.
+ */
+export function codeLook(
+  code: string,
+  colorOf: (hex: string) => string = readableColor,
+): Omit<TextRun, "text" | "color"> & { color?: string } {
   let color: string | undefined;
   let flags = code;
   if (code.startsWith("#")) {
@@ -283,7 +289,7 @@ export function codeLook(code: string): Omit<TextRun, "text" | "color"> & { colo
     flags = code.slice(1);
   }
   const look: Omit<TextRun, "text" | "color"> & { color?: string } = {};
-  if (color) look.color = readableColor(color);
+  if (color) look.color = colorOf(color);
   if (flags.includes("k")) look.obfuscated = true;
   if (flags.includes("l")) look.bold = true;
   if (flags.includes("m")) look.strikethrough = true;
