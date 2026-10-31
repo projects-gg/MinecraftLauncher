@@ -22,6 +22,7 @@ import { DropdownMenu } from "radix-ui";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountFace, type FaceAccount } from "@/features/accounts/account-face";
+import { useAccountsUi } from "@/features/accounts/store";
 import { useAccounts } from "@/features/accounts/use-accounts";
 import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launch";
 import { RoutePicker } from "@/features/autojoin/route-picker";
@@ -728,10 +729,32 @@ export function CommandBar() {
   const selectedLaunchId = selected?.id;
   useEffect(() => {
     if (phase.kind !== "error") return;
+    const action = launchErrorAction(phase.code);
     if (phase.code === WORLD_OPEN) {
       // The world is open in the player's other game (PLAY-AGAIN): nothing to copy or to fix.
       toast(phase.message, { id: "launch-world-open" });
-    } else if (launchErrorAction(phase.code) === "makeSpace") {
+    } else if (action === "signIn") {
+      // The session expired or its secrets are gone: only a new sign-in of that account helps
+      // (the troubleshooter checks no account). The message already says so.
+      const account = useLaunch.getState().account?.id ?? null;
+      toast.error(phase.message, {
+        id: "launch-sign-in",
+        duration: 10_000,
+        action: {
+          label: t("accounts.center.relogin"),
+          onClick: () => useAccountsUi.getState().openLogin(account),
+        },
+      });
+    } else if (action === "addAccount") {
+      toast.error(phase.message, {
+        id: "launch-no-account",
+        duration: 10_000,
+        action: {
+          label: t("accounts.add"),
+          onClick: () => useAccountsUi.getState().openCenter({ focus: "add" }),
+        },
+      });
+    } else if (action === "makeSpace") {
       // The disk cannot hold the download: nothing was fetched yet (or the half-done file went).
       // Settings → Veri shows what can go and how much room it makes; OYNA tries again after.
       toast.error(phase.message, {

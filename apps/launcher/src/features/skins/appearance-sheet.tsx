@@ -47,6 +47,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { needsSignIn } from "@/features/accounts/sign-in";
 import { useDropAnnouncement, useDropZone } from "@/features/drop/store";
 import { announcementOf, zoneTitle } from "@/features/drop/text";
 import { isSkinFile } from "@/features/drop/zones";
@@ -92,8 +93,6 @@ function friendly(error: unknown, fallback: string): FriendlyError {
   };
 }
 
-/** Sessions that only a new sign-in can fix (expired or revoked refresh token, lost secrets). */
-const needsSignIn = (code: string) => code.startsWith("MSA-") || code === "KC-YOK";
 
 /** Minecraft refused a skin change as too frequent; "Giy" rests this long afterwards. */
 const RATE_LIMITED_MS = 60_000;

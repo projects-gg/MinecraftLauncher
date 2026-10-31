@@ -4,7 +4,14 @@ import { helpsWithLaunchError, helpToastLine } from "./launch";
 describe("helpsWithLaunchError", () => {
   it("leaves the errors that say their own fix alone", () => {
     expect(helpsWithLaunchError("DISK-DOLU")).toBe(false);
+    expect(helpsWithLaunchError("HESAP-YOK")).toBe(false);
     expect(helpsWithLaunchError("OYUN")).toBe(true);
+  });
+
+  it("leaves a session only a new sign-in fixes to its own button", () => {
+    expect(helpsWithLaunchError("MSA-invalid_grant")).toBe(false);
+    expect(helpsWithLaunchError("KC-YOK")).toBe(false);
+    expect(helpsWithLaunchError("MSA")).toBe(true);
   });
 });
 
