@@ -37,4 +37,11 @@ export const trQol = {
     /** Kütüphane → "Kopyasını oluştur" while the copy is made (big worlds take a while). */
     copying: "{{name}} kopyalanıyor",
   },
+  afk: {
+    /**
+     * A desktop AFK account the login plugin kept turning away (its time ran out: no or wrong
+     * login commands): the card's button opens its settings on Komutlar ("Bağla" ran the loop).
+     */
+    fixLogin: "Girişi düzelt",
+  },
 };

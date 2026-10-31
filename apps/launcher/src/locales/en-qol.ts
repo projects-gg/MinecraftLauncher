@@ -20,4 +20,7 @@ export const enQol = {
   copy: {
     copying: "Duplicating {{name}}",
   },
+  afk: {
+    fixLogin: "Fix login",
+  },
 };

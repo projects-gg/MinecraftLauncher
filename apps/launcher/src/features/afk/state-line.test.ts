@@ -87,6 +87,14 @@ describe("primaryAction", () => {
     expect(primaryAction({ kind: "preparing", step: "checking" })).toBe("cancel");
     expect(primaryAction({ kind: "clientFailed", problem: "broken" })).toBe("retry");
   });
+
+  it("leads to the login to fix when the server keeps refusing it", () => {
+    const stopped = (cause: "wrongPassword" | "loginTimeout") =>
+      ({ kind: "error", reason: "Giriş süresi doldu", cause }) as const;
+    expect(primaryAction(stopped("wrongPassword"))).toBe("fixPassword");
+    // No or wrong login commands: "Bağla" would only run the same loop again.
+    expect(primaryAction(stopped("loginTimeout"))).toBe("fixLogin");
+  });
 });
 
 describe("reconnect countdown", () => {

@@ -380,6 +380,11 @@ function useHereItems(here: AfkAccount | null, onFixPassword: () => void): MenuI
       icon: <Key size={16} />,
       onSelect: onFixPassword,
     },
+    fixLogin: {
+      label: t("qol.afk.fixLogin"),
+      icon: <Key size={16} />,
+      onSelect: onFixPassword,
+    },
   };
   return [
     items[primaryAction(here.state)],

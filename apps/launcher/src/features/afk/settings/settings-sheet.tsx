@@ -21,7 +21,7 @@ import { type AfkAccount, type AfkSettingsView, api } from "@/lib/api";
 import { PlusChangeDock } from "../cloud/plus/change-dock";
 import { useGuardedConnect } from "../cloud/use-cloud";
 import { afkFailed, isFriendly, runAfk } from "../errors";
-import { stoppedOnPassword } from "../primary-action";
+import { stoppedOnLogin, stoppedOnPassword } from "../primary-action";
 import { SectionTitle, useIssueText } from "./controls";
 import { draftKey, type HeldDraft, rebaseDraft, remindKept, useAfkDrafts } from "./drafts";
 import { CommandsSection, RepliesSection } from "./list-sections";
@@ -208,7 +208,8 @@ function Editor({
   const [section, setSection] = useState<GroupId>(() => {
     const line = onPassword ? passwordIssue(draft, baseline, view.sensitiveCommands) : null;
     if (line) return GROUP_OF[line.section];
-    if (onPassword) return "commands";
+    // The login plugin's time ran out again and again: the login commands are what to fix.
+    if (onPassword || stoppedOnLogin(account.state)) return "commands";
     return GROUPS.find((group) => unsavedGroups(draft, baseline).has(group)) ?? "connection";
   });
   const [submitted, setSubmitted] = useState(false);
