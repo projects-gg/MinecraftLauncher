@@ -7,7 +7,12 @@
 //   has a chest or a server menu open, or answers slowly (the empty window shows meanwhile);
 // - `&legacy=1`: Madenci07's replies still match the old way;
 // - `&bars=0`: no status strip;
-// - `&looks=1` (with `feat`): console looks (CONSOLE-COLOR), the lines in the game's colours.
+// - `&looks=1` (with `feat`): console looks (CONSOLE-COLOR), the lines in the game's colours;
+// - `&dialogs=1` (with `feat`): dialog cards (DIALOG-CARD): a watch of an account in game opens
+//   the server's rules as a card, and the pause screen has a menu;
+// - `&kinds=0` (with `feat`): Studio's console kinds off, as client 4.2.5's side events run
+//   (afk-host 0.3.4): the classic console, its lines without their kinds (no chips, no strip);
+//   `&looks=1` and `&dialogs=1` still bring the colours and the card (SMALLS-L3).
 import {
   createMockMachine,
   type InvFrame,
@@ -43,6 +48,8 @@ function param(key: string): string | null {
 
 export const featScenario: "off" | "on" | "view" =
   param("feat") === "on" ? "on" : param("feat") === "view" ? "view" : "off";
+/** Studio's console kinds switch (`&kinds=0`: off, the classic console with side events). */
+export const kindsOn = featScenario !== "off" && param("kinds") !== "0";
 const invScenario = param("inv");
 export const MADENCI = "a_7KQ2MZ3P9TW4XB1C";
 
@@ -50,7 +57,7 @@ export function offerFeatures(): CloudFeatures | null {
   if (featScenario === "off") return null;
   return {
     inventory: featScenario === "view" ? "view" : "full",
-    consoleKinds: true,
+    consoleKinds: kindsOn,
     placeholders: true,
     placeholderCommands: ["msg", "m", "tell", "w", "whisper", "r", "reply", "pm"],
   };
@@ -64,10 +71,53 @@ export function accountFeatures(id: string): CloudAccountFeatures | null {
       mode: offer.inventory,
       on: !(id === MADENCI && invScenario === "setting"),
     },
-    consoleKinds: true,
+    consoleKinds: kindsOn,
     consoleLooks: param("looks") === "1",
+    dialogCards: param("dialogs") === "1",
     placeholders: true,
-    legacyRules: id === MADENCI && param("legacy") === "1",
+    legacyRules: kindsOn && id === MADENCI && param("legacy") === "1",
+  };
+}
+
+/** The server's rules as its dialog (`&dialogs=1`), as a client 4.2.5 reports it. */
+const RULES_DIALOG = {
+  title: "Sunucu kuralları",
+  titleSt: [[16, "6l"]],
+  body: [{ text: "1. Hile yok.\n2. Sohbette saygılı ol.\n3. Başkasının yapısına dokunma." }],
+  inputs: [],
+  buttons: [
+    { i: 0, label: "Kabul ediyorum", labelSt: [[14, "a"]], a: "run_command", v: "/kurallar kabul" },
+    { i: 1, label: "Sonra", a: "close" },
+  ],
+  cancel: true,
+  play: true,
+  cols: 2,
+};
+
+/** What a watch of an account in game brings with dialog cards: the open dialog and the menus. */
+export function dialogEvents(acct: string): CloudLiveEvent[] {
+  if (featScenario === "off" || param("dialogs") !== "1") return [];
+  return [
+    { kind: "dialog", acct, rev: 1, dialog: JSON.stringify(RULES_DIALOG), wait: false },
+    { kind: "menus", acct, menus: JSON.stringify({ pause: { label: "Sunucu menüsü" } }) },
+  ];
+}
+
+/**
+ * A line as the machine sends it: with console kinds off the classic console's line (no kind, no
+ * other player, no link), its looks still riding on it.
+ */
+function sent(line: CloudConsoleLine): CloudConsoleLine {
+  if (kindsOn) return line;
+  return {
+    at: line.at,
+    text: line.text,
+    k: line.k,
+    c: null,
+    who: null,
+    goto: null,
+    ...(line.st ? { st: line.st } : {}),
+    ...(line.ev ? { ev: line.ev } : {}),
   };
 }
 
@@ -262,7 +312,7 @@ export function kindLines(
   const lines = Array.from({ length: shown }, (_, i) =>
     kindLine(source[i] ?? ["n", "sys", ""], endAt - (shown - i) * 37 - shift, name, server),
   );
-  return looks ? [...lines, ...lookLines(endAt)] : lines;
+  return (looks ? [...lines, ...lookLines(endAt)] : lines).map(sent);
 }
 
 export function liveKindLine(
@@ -271,12 +321,13 @@ export function liveKindLine(
   name: string,
   server: string,
 ): CloudConsoleLine {
-  return kindLine(LIVE_LINES[n % LIVE_LINES.length] ?? ["n", "sys", ""], at, name, server);
+  return sent(kindLine(LIVE_LINES[n % LIVE_LINES.length] ?? ["n", "sys", ""], at, name, server));
 }
 
 /** The strip right after a watch: a timer on the action bar and an event's boss bar. */
 export function barsEvent(acct: string): CloudLiveEvent | null {
-  if (featScenario === "off" || param("bars") === "0") return null;
+  // The strip comes with console kinds only.
+  if (!kindsOn || param("bars") === "0") return null;
   const now = Date.now();
   return {
     kind: "bars",

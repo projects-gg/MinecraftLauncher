@@ -35,9 +35,11 @@ import type {
 import {
   accountFeatures,
   barsEvent,
+  dialogEvents,
   featScenario,
   inventoryMove,
   kindLines,
+  kindsOn,
   liveKindLine,
   mockTryReply,
   offerFeatures,
@@ -736,7 +738,7 @@ export const mockCloudApi: CloudApi = {
             at: nowSecs(),
             text: `[Projects] Komut alındı: ${line.split(" ")[0]}`,
             k: "n",
-            c: featScenario === "off" ? null : "sys",
+            c: kindsOn ? "sys" : null,
             who: null,
             goto: null,
           },
@@ -772,6 +774,8 @@ export const mockCloudApi: CloudApi = {
       });
       const bars = cloud.live.state === "running" ? barsEvent(id) : null;
       if (bars) emit(bars);
+      // `&dialogs=1`: the server's open dialog and its menus come with every watch.
+      if (cloud.live.state === "running") for (const event of dialogEvents(id)) emit(event);
     }, 260);
     let n = 0;
     window.clearInterval(watching.get(id));
