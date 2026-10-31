@@ -31,7 +31,10 @@
 // one day, broken by a day line, "Yeni mesajlar" or a local line, its time under its last message;
 // the pointer resting on a message shows its full time (time-tip.tsx). The clock the rows read
 // moves when the list changes, when the conversation or the window comes back on screen and when
-// a row's window closes: nothing wakes up for the day lines.
+// a row's window closes: nothing wakes up for the day lines. CHAT-UX2: reading back, the day of
+// the rows under the top edge floats there on a quiet plate (floating-day.ts), gone at the newest
+// messages and over a day line that shows, and fading when the scroll ends; read at a scroll, a
+// fade only.
 import { ArrowDown, CalendarBlank, HandWaving } from "@phosphor-icons/react";
 import { cn, scrollBehavior, toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
@@ -61,6 +64,7 @@ import { dayLineText, sameLocalDay } from "./chat-time";
 import { Composer, type ComposerState } from "./composer";
 import { crewOf, deletionOf, peerOf, readable, sameGroup, tombstoneKind } from "./conversations";
 import { useChatExtras, useLinkRules } from "./extras";
+import { firstRowUnder, floatingDayAt } from "./floating-day";
 import { MessageRow, type RowActions, type RowShared, rowWindows } from "./message-row";
 import { messageLine } from "./preview";
 import { quickReactions, REACTION_WINDOW_MS, reactVerdict, withMyReaction } from "./reactions";
@@ -98,6 +102,9 @@ const PAGE_SHARE = 0.85;
 const DIVIDER_GAP = 8;
 /** More messages than this arriving at once are told as a count, not one by one. */
 const TOLD_ONE_BY_ONE = 3;
+/** The webview says when a scroll ends (`scrollend`: WebView2 does; WKWebView and WebKitGTK may
+ * not): the floating day line fades then (CHAT-UX2). */
+const SCROLL_ENDS = typeof window !== "undefined" && "onscrollend" in window;
 
 /** The row across the middle of the list, and where its top is (a share of the list's height). */
 function middleRow(list: HTMLElement): { row: HTMLElement; at: number } | null {
@@ -297,6 +304,9 @@ const MessageItem = memo(function MessageItem({
   const place = useMemo(() => ({ crew, first, last }), [crew, first, last]);
   return (
     <motion.li
+      // Its day, for the line that floats while the player reads back (CHAT-UX2).
+      data-day-at={message.at}
+      data-day-start={dayText ? "" : undefined}
       layout={layout ? "position" : false}
       transition={{ layout: glide }}
       initial={
@@ -383,6 +393,8 @@ const LineItem = memo(function LineItem({
 }) {
   return (
     <motion.li
+      data-day-at={line.at}
+      data-day-start={dayText ? "" : undefined}
       layout={layout ? "position" : false}
       transition={{ layout: glide }}
       initial={rising ? { opacity: 0 } : false}
@@ -776,6 +788,34 @@ export function Conversation({
     };
   }, [onScreen, open, unread, away, thread?.loaded, conv, extras.reads]);
 
+  // CHAT-UX2: reading back, the day of the first row under the list's top edge floats there
+  // (floating-day.ts): read from the rows' places at a scroll and when the list changes. It shows
+  // while the list moves and fades when the scroll ends (`scrollend`, an event: no timer), so it
+  // never stays over the words being read (TASTE-2 CHAT-UX2 r1); a webview without `scrollend`
+  // (WKWebView, WebKitGTK) keeps it while reading back.
+  const [floatingAt, setFloatingAt] = useState<number | null>(null);
+  const [settled, setSettled] = useState(SCROLL_ENDS);
+  const readFloating = useCallback(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const rows = element.querySelectorAll<HTMLElement>("ol[role='log'] > li");
+    const edge = element.getBoundingClientRect().top;
+    const bottomOf = (i: number) => rows[i]?.getBoundingClientRect().bottom ?? 0;
+    const row = rows[firstRowUnder(rows.length, bottomOf, edge)];
+    const at = Number(row?.dataset.dayAt);
+    setFloatingAt(
+      floatingDayAt(
+        row && Number.isFinite(at)
+          ? { top: row.getBoundingClientRect().top, at, start: row.dataset.dayStart !== undefined }
+          : null,
+        edge,
+        !atBottom.current,
+      ),
+    );
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the rows moved when the list changed
+  useLayoutEffect(() => readFloating(), [items, readFloating]);
+
   const onScroll = () => {
     const element = scroller.current;
     if (!element) return;
@@ -791,6 +831,8 @@ export function Conversation({
       void loadOlder(conv);
     }
     before.current.top = element.scrollTop;
+    readFloating();
+    setSettled(false);
   };
 
   const [flash, setFlash] = useState<{ key: string; n: number } | null>(null);
@@ -1115,6 +1157,7 @@ export function Conversation({
           ref={scroller}
           layoutScroll
           onScroll={onScroll}
+          onScrollEnd={() => setSettled(SCROLL_ENDS)}
           className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-2 [scrollbar-gutter:stable]"
         >
           {/* With "yazıyor…" on, the list keeps a line free under its newest message for it. */}
@@ -1131,6 +1174,22 @@ export function Conversation({
           </div>
         </motion.div>
       </MotionConfig>
+      {/* CHAT-UX2: reading back, the day under the top edge on a quiet plate over the list while it
+          moves (its own size at any text size; a fade, nothing moves). */}
+      <AnimatePresence initial={false}>
+        {floatingAt !== null && !settled ? (
+          <motion.div
+            key="day"
+            aria-hidden
+            className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md bg-obsidian-800/95 px-2.5 py-1 text-[12px] font-medium whitespace-nowrap text-ash-300 shadow-[0_10px_30px_rgb(34_6_6/0.5)] ring-1 ring-white/8"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: enter(0.16) }}
+            exit={{ opacity: 0, transition: leave(0.12) }}
+          >
+            {dayLineText(floatingAt, now, dayWords)}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
       <TimeTip list={scroller} cue={items} />
       <div className="relative">
         <AnimatePresence initial={false}>
