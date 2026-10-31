@@ -4,6 +4,7 @@
 import type { SignalState } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { formatDuration, uiLocale } from "@/lib/format";
+import { waitWords, waitWordsChangeIn } from "../spans";
 import type { CloudAccount, CloudOverview } from "./api";
 import { categoryText, stopHint } from "./moderation";
 import { type AccountReach, LIVE_REACH, lastKnownText } from "./reach";
@@ -189,12 +190,14 @@ export function cloudStatus(
       if (!live.retryAt) return still("idle", t("cloudAfk.state.waiting"), "muted");
       const left = live.retryAt * 1000 - nowMs;
       if (left <= 1000) return still("pending", t("cloudAfk.state.connecting"), "muted");
+      // In words, as the desktop card beside it says it ("4 dakika sonra"; design.md §7).
+      const secs = Math.ceil(left / 1000);
       return {
         signal: "idle",
-        text: t("cloudAfk.state.waitingIn", { secs: Math.ceil(left / 1000) }),
+        text: t("cloudAfk.state.waitingIn", { time: waitWords(secs, t) }),
         tone: "muted",
         hint: null,
-        nextChangeMs: left % 1000 || 1000,
+        nextChangeMs: Math.max(1, left - (secs - waitWordsChangeIn(secs)) * 1000),
       };
     }
     case "stopped":
