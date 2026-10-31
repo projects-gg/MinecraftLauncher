@@ -96,10 +96,7 @@ export function AfkPrimaryAction({
     else runAfk(api.afkStop(account.id), t("afk.stopFailed"));
   };
   const gold =
-    action === "connect" ||
-    action === "retry" ||
-    action === "fixPassword" ||
-    action === "fixLogin";
+    action === "connect" || action === "retry" || action === "fixPassword" || action === "fixLogin";
   const needsPlayer = action === "retry" || action === "fixPassword" || action === "fixLogin";
   const variant = card
     ? needsPlayer && !quiet

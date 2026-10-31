@@ -93,7 +93,6 @@ function friendly(error: unknown, fallback: string): FriendlyError {
   };
 }
 
-
 /** Minecraft refused a skin change as too frequent; "Giy" rests this long afterwards. */
 const RATE_LIMITED_MS = 60_000;
 const isRateLimited = (code: string) => code.endsWith("-429");

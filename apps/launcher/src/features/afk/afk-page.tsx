@@ -117,7 +117,8 @@ function AfkCard({
   const items: Array<MenuItem | null> = [
     main[primaryAction(account.state)],
     // Fixed in another way (on the server's site): connecting stays one press away.
-    ...(primaryAction(account.state) === "fixPassword" || primaryAction(account.state) === "fixLogin"
+    ...(primaryAction(account.state) === "fixPassword" ||
+    primaryAction(account.state) === "fixLogin"
       ? [{ label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect }]
       : []),
     ...(connected

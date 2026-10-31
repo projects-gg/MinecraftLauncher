@@ -470,8 +470,7 @@ export function InstanceSets({ instance, onAdd }: { instance: InstanceDetail; on
       />
     );
   }
-  const barMode =
-    job && pending.length > 0 ? "applying" : gameRunning ? "running" : "summary";
+  const barMode = job && pending.length > 0 ? "applying" : gameRunning ? "running" : "summary";
   return (
     <div className="relative flex min-h-full flex-col gap-3 pb-8">
       {gameRunning ? (

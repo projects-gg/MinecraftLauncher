@@ -249,21 +249,11 @@ function ResultCard({
           {t("social.add.send")}
         </Button>
       ) : lookup.relation === "incoming" ? (
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={busy}
-          onClick={() => void accept()}
-        >
+        <Button variant="primary" size="sm" disabled={busy} onClick={() => void accept()}>
           {t("social.actions.accept")}
         </Button>
       ) : lookup.relation === "blocked" ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={busy}
-          onClick={() => void unblock()}
-        >
+        <Button variant="secondary" size="sm" disabled={busy} onClick={() => void unblock()}>
           {t("social.actions.unblock")}
         </Button>
       ) : null}
