@@ -228,10 +228,11 @@ export function CreateInstanceDialog({
         : (loaderQuery.data?.length ?? 0) === 0
           ? t("qol.create.noLoaderBuild", { loader: t(`loaders.${loader}`) })
           : null;
-  const canCreate =
-    !create.isPending &&
-    Boolean(mcVersion) &&
-    (loader === "vanilla" || (Boolean(loaderVersion) && !loaderProblem));
+  // The picked loader version must be one of this version's (a version change keeps the old pick
+  // until the new list is in).
+  const loaderPicked =
+    loader === "vanilla" || Boolean(loaderQuery.data?.some((v) => v.version === loaderVersion));
+  const canCreate = !create.isPending && Boolean(mcVersion) && loaderPicked && !loaderProblem;
   const versionSearch = {
     searchLabel: t("modCenter.versions.search"),
     emptyText: t("create.noMatch"),
