@@ -47,6 +47,18 @@ function startOnPassword(): boolean {
   }
 }
 
+/**
+ * Preview switches `?afk=loginTimeout` (TarlaBot_1 stopped after the login plugin's time ran out
+ * again and again: "Girişi düzelt") and `?afk=reconnectLong` (its next reconnect in 4 minutes).
+ */
+function startFlag(name: "loginTimeout" | "reconnectLong"): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get("afk") === name;
+  } catch {
+    return false;
+  }
+}
+
 /** The refused password's words in the interface's language (the backend words them so). */
 const refusedPassword = (): AfkState => ({
   kind: "error",
@@ -80,11 +92,19 @@ const accounts: AfkAccount[] = startEmpty()
         mcVersionRecommended: true,
         state: startOnPassword()
           ? refusedPassword()
-          : {
-              kind: "reconnecting",
-              attempt: 2,
-              nextAttemptAt: new Date(Date.now() + 22_000).toISOString(),
-            },
+          : startFlag("loginTimeout")
+            ? {
+                kind: "error",
+                reason: pick("Giriş süresi doldu", "Login timed out"),
+                cause: "loginTimeout",
+              }
+            : {
+                kind: "reconnecting",
+                attempt: startFlag("reconnectLong") ? 5 : 2,
+                nextAttemptAt: new Date(
+                  Date.now() + (startFlag("reconnectLong") ? 240_000 : 22_000),
+                ).toISOString(),
+              },
         settingsChanged: false,
         showDate: true,
       },
