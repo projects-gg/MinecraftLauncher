@@ -291,13 +291,14 @@ export function readBundles(dir) {
 
 /**
  * Tauri's static updater JSON (`latest.json`), plus the channel fields of docs/content-format.md
- * when `channel` is given (`releases/<channel>.json`).
+ * when `channel` is given (`releases/<channel>.json`). `notes`: `{ tr, en }` as `readNotes` gives
+ * them, or one text (`notesFields`).
  */
 export function buildManifest({ version, notes, pubDate, bundles, baseUrl, channel, ...extra }) {
   const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   const manifest = {
     version: parseVersion(version).raw,
-    notes: notes ?? "",
+    ...notesFields(notes),
     pub_date: pubDate ?? rfc3339(),
     platforms: buildPlatforms(bundles, base),
   };
@@ -350,11 +351,6 @@ export function rfc3339(date = new Date()) {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-export function readNotes(path) {
-  if (!path) return "";
-  return readFileSync(path, "utf8").replace(/\r\n/g, "\n").trim();
-}
-
 const CONTENT_TYPES = [
   [/\.json$/, "application/json; charset=utf-8"],
   [/\.sig$/, "text/plain; charset=utf-8"],
@@ -370,6 +366,84 @@ const CONTENT_TYPES = [
 
 export function contentType(name) {
   return CONTENT_TYPES.find(([re]) => re.test(name))?.[1] ?? "application/octet-stream";
+}
+
+// --- Release notes -------------------------------------------------------------------------
+
+/**
+ * A `--- word ---` line (three or more dashes on each side, spaces optional): `--- en ---` or
+ * `--- tr ---` (any case) starts that language's part of the release notes. Not a `#` heading: git
+ * drops such lines from a tag message.
+ */
+const NOTES_MARKER = /^-{3,}\s*(\p{L}[\p{L} ]*?)\s*-{3,}$/u;
+
+/**
+ * Release notes per language, as a release tag's message (or a notes file) gives them: the
+ * Turkish notes, then optionally a `--- en ---` line and the English ones (docs/release.md). Text
+ * before any marker is Turkish; line ends become LF and each part is trimmed. A language given
+ * twice, a marker with nothing under it, or any other `--- word ---` line (`--- English ---` would
+ * otherwise put the English notes in the Turkish ones) is an error: the release stops before
+ * anything builds.
+ */
+export function parseNotes(text) {
+  let part = { lang: "tr", marked: false, lines: [] };
+  const parts = [part];
+  for (const line of String(text ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")) {
+    const marker = NOTES_MARKER.exec(line.trim());
+    if (!marker) {
+      part.lines.push(line);
+      continue;
+    }
+    const lang = marker[1].toLowerCase();
+    if (lang !== "tr" && lang !== "en") {
+      throw new Error(
+        `release notes: "${line.trim()}" is not a language line; the English notes start at "--- en ---"`,
+      );
+    }
+    part = { lang, marked: true, lines: [] };
+    parts.push(part);
+  }
+  const notes = { tr: "", en: "" };
+  for (const { lang, marked, lines } of parts) {
+    const body = lines.join("\n").trim();
+    if (!body) {
+      if (marked) throw new Error(`release notes: nothing under "--- ${lang} ---"`);
+      continue;
+    }
+    if (notes[lang]) throw new Error(`release notes: the ${lang} notes are given twice`);
+    notes[lang] = body;
+  }
+  return notes;
+}
+
+/** `parseNotes` of a file; no file, no notes. */
+export function readNotes(path) {
+  return parseNotes(path ? readFileSync(path, "utf8") : "");
+}
+
+/**
+ * The notes fields of an updater manifest. `notes` is the one text every launcher reads (Tauri's
+ * own field; launchers before per-language notes show it whatever their language): the Turkish
+ * notes, else the English ones. `localizedNotes` gives each language's notes to the launchers
+ * that pick by language, only when there are English notes, so Turkish-only notes write exactly
+ * what they always did. A plain string is one text, taken as it is (Turkish).
+ */
+export function notesFields(notes) {
+  const { tr, en } =
+    typeof notes === "string"
+      ? { tr: notes, en: "" }
+      : { tr: notes?.tr ?? "", en: notes?.en ?? "" };
+  const fields = { notes: tr || en };
+  if (en) fields.localizedNotes = tr ? { tr, en } : { en };
+  return fields;
+}
+
+/** The GitHub release's text: the Turkish notes, then a rule and the English ones. */
+export function releaseBody({ tr, en }) {
+  const body = [tr, en].filter(Boolean).join("\n\n---\n\n");
+  return body ? `${body}\n` : "";
 }
 
 // --- R2 (S3 API, AWS Signature Version 4) ---------------------------------------------------

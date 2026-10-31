@@ -25,6 +25,7 @@ import {
   parseSigners,
   planPrune,
   RELEASE_CERT,
+  readMakeNotes,
   verifyChannel,
 } from "./android-channel.mjs";
 import { canonicalJson, parseListing, signRequest } from "./lib.mjs";
@@ -193,6 +194,47 @@ test("the channel file's rules", () => {
   assert.throws(() => cleanNotes("a\u0007b", "x"), /control characters/);
   assert.throws(() => cleanNotes("x".repeat(1501), "x"), /1500 characters/);
   assert.throws(() => cleanNotes(Array(21).fill("x").join("\n"), "x"), /20 lines/);
+});
+
+test("make's notes: two files, or one with a --- en --- line as a launcher release's", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pl-android-notes-"));
+  try {
+    const file = (name, text) => {
+      writeFileSync(join(dir, name), text);
+      return join(dir, name);
+    };
+    const tr = file("notes-0.4.6-tr.txt", "- Yeni\n- Daha hızlı\n");
+    const en = file("notes-0.4.6-en.txt", "- New\n- Faster\n");
+    const both = file(
+      "notes-0.4.6.txt",
+      "- Yeni\n- Daha hızlı\r\n\r\n--- en ---\r\n- New\n- Faster\n",
+    );
+    const fromTwo = readMakeNotes({ "notes-tr": tr, "notes-en": en });
+    const fromOne = readMakeNotes({ notes: both });
+    const channel = (notes) =>
+      buildChannel({
+        facts: sampleFacts(),
+        size: 1,
+        sha256: "b".repeat(64),
+        channel: "stable",
+        cdn: "https://cdn.projects.gg",
+        pubDate: "2026-11-02T12:00:00Z",
+        ...notes,
+      });
+    assert.deepEqual(channel(fromOne).notes, { tr: "- Yeni\n- Daha hızlı", en: "- New\n- Faster" });
+    assert.deepEqual(channel(fromOne), channel(fromTwo));
+    // The app needs both languages, whichever way they come.
+    const turkishOnly = readMakeNotes({ notes: file("tr-only.txt", "- Yeni\n") });
+    assert.throws(() => channel(turkishOnly), /notes\.en: the notes are empty/);
+    assert.throws(() => readMakeNotes({ notes: both, "notes-tr": tr }), /not both/);
+    assert.throws(() => readMakeNotes({ "notes-tr": tr }), /needs --notes-tr and --notes-en/);
+    assert.throws(
+      () => readMakeNotes({ notes: file("bad.txt", "- Yeni\n--- English ---\n- New\n") }),
+      /not a language line/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("reading aapt2's badging and apksigner's certificates", () => {

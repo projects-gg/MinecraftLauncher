@@ -12,6 +12,8 @@
 //!    first and come back by themselves after the restart. A one-shot note (`pl_data::restart`)
 //!    carries them over, together with the window, the page the player was on and the new
 //!    version's notes. A failed install keeps the update and brings the accounts back at once.
+//! 5. The notes are in the language the player reads the launcher in (`localizedNotes`, else the
+//!    other language's, else the channel's one `notes` text: `pl_content::release_notes`).
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -150,7 +152,9 @@ pub async fn update_check(
         state: state_text.into(),
         current: current_text,
         version: Some(release.version.clone()),
-        notes: release.notes.clone(),
+        notes: release
+            .notes_for(pl_lang::Lang::current())
+            .map(str::to_owned),
     })
 }
 
@@ -405,10 +409,14 @@ pub async fn update_apply(
         ));
     }
     let path = note_path(&state);
+    // The notes in the language the player reads now, from the channel file the update came from
+    // (Tauri's updater keeps it whole); its `body` is that file's one `notes` text.
+    let notes = pl_content::release_notes_in(&update.raw_json, pl_lang::Lang::current())
+        .or_else(|| update.body.clone().filter(|notes| !notes.trim().is_empty()));
     let mut note = RestartNote {
         saved_at: pl_data::restart::now_ms(),
         version: update.version.clone(),
-        notes: update.body.clone().filter(|notes| !notes.trim().is_empty()),
+        notes,
         afk_accounts: Vec::new(),
         window_visible: window_on_screen(&app),
         route: route.as_deref().and_then(pl_data::restart::clean_route),

@@ -53,7 +53,7 @@ const LINES: AfkLogLine[] = [
 ];
 
 const RULES = {
-  title: "Sunucu Kuralları",
+  title: "Sunucu kuralları",
   body: [{ text: "1. Saygılı ol." }],
   inputs: [],
   buttons: [
@@ -116,7 +116,7 @@ describe("the desktop console's looks", () => {
     const pressed = vi.spyOn(api, "afkDialogPress").mockResolvedValue({ ok: false, why: "stale" });
     renderConsole();
     const accept = await screen.findByRole("button", { name: /Kabul et/ });
-    expect(screen.getByText("Sunucu Kuralları")).toBeTruthy();
+    expect(screen.getByText("Sunucu kuralları")).toBeTruthy();
     await act(async () => {
       fireEvent.click(accept);
     });

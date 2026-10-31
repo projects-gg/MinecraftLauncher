@@ -20,6 +20,8 @@
 //   node scripts/release/android-channel.mjs make --apk <release.apk> --notes-tr <txt> --notes-en <txt> \
 //     --out <dir> [--channel stable|beta] [--key secrets/updater.key] [--pubkey <key>] [--cert <sha256>|any] \
 //     [--package gg.projects.mobile] [--source-tag android-<v>] [--sdk <Android SDK>] [--allow-http]
+//   (or --notes <txt> for both languages in one file, as a launcher release's notes: the Turkish,
+//   then a `--- en ---` line and the English; lib.mjs `parseNotes`)
 //   node scripts/release/android-channel.mjs verify --dir <dir> | --url <channel url> [--check-apk] [--channel stable]
 //   node scripts/release/android-channel.mjs publish --dir <dir> [--dry-run] [--allow-downgrade] [--no-prune]
 //   node scripts/release/android-channel.mjs show [--channel stable]
@@ -46,6 +48,7 @@ import {
   compareVersions,
   md5Hex,
   parseArgs,
+  parseNotes,
   parseVersion,
   R2Client,
   rfc3339,
@@ -55,7 +58,7 @@ import {
 } from "./lib.mjs";
 
 const USAGE = `usage: node scripts/release/android-channel.mjs <make|verify|publish|show> [options]
-  make    --apk <apk> --notes-tr <file> --notes-en <file> --out <dir> [--channel stable|beta]
+  make    --apk <apk> (--notes-tr <file> --notes-en <file> | --notes <file>) --out <dir> [--channel stable|beta]
           [--key <minisign secret key>] [--pubkey <public key>] [--cert <sha256>|any]
           [--package <application id>] [--source-tag <tag>] [--sdk <dir>] [--tauri <tauri.js>] [--allow-http]
   verify  --dir <dir> | --url <channel url> [--check-apk] [--channel stable|beta] [--pubkey <public key>]
@@ -310,6 +313,28 @@ export function verifyChannel(json, sig, channel, keys, options = {}) {
   return { doc, key: signed.key };
 }
 
+/**
+ * The notes `make` writes, as read from its files: `--notes-tr` and `--notes-en`, or `--notes`, one
+ * file with both as a launcher release's notes (the Turkish, then a `--- en ---` line and the
+ * English). Both languages are required either way (`cleanNotes`, in `buildChannel`).
+ */
+export function readMakeNotes(flags) {
+  if (flags.notes) {
+    if (flags["notes-tr"] || flags["notes-en"]) {
+      throw new UsageError("make takes --notes or --notes-tr with --notes-en, not both");
+    }
+    const { tr, en } = parseNotes(readFileSync(flags.notes, "utf8"));
+    return { notesTr: tr, notesEn: en };
+  }
+  if (!flags["notes-tr"] || !flags["notes-en"]) {
+    throw new UsageError("make needs --notes-tr and --notes-en (or --notes)");
+  }
+  return {
+    notesTr: readFileSync(flags["notes-tr"], "utf8"),
+    notesEn: readFileSync(flags["notes-en"], "utf8"),
+  };
+}
+
 /** The channel file for an APK's facts. */
 export function buildChannel({
   facts,
@@ -439,9 +464,10 @@ function sign(file, version, keyPath, tauriJs) {
 }
 
 async function make(flags) {
-  for (const name of ["apk", "notes-tr", "notes-en", "out"]) {
+  for (const name of ["apk", "out"]) {
     if (!flags[name]) throw new UsageError(`make needs --${name}`);
   }
+  const notes = readMakeNotes(flags);
   const channel = checkChannelName(flags.channel ?? "stable");
   const facts = apkFacts(flags.apk, flags.sdk);
   const wantPackage = flags.package ?? DEFAULT_PACKAGE;
@@ -461,8 +487,7 @@ async function make(flags) {
     size: apk.size,
     sha256: apk.sha256,
     channel,
-    notesTr: readFileSync(flags["notes-tr"], "utf8"),
-    notesEn: readFileSync(flags["notes-en"], "utf8"),
+    ...notes,
     cdn: CDN,
     sourceTag: flags["source-tag"],
   });
@@ -740,6 +765,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const { flags, positional } = parseArgs(rest, {
       apk: "string",
       "check-apk": "boolean",
+      notes: "string",
       "notes-tr": "string",
       "notes-en": "string",
       out: "string",

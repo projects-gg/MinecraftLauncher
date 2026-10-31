@@ -22,6 +22,7 @@ let server;
 let env;
 let dir;
 let notes;
+let bilingual;
 
 function startServer() {
   return new Promise((resolve) => {
@@ -110,6 +111,9 @@ before(async () => {
   for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
   notes = join(mkdtempSync(join(tmpdir(), "pl-notes-")), "notes.md");
   writeFileSync(notes, "Yeni ana ekran.\n");
+  // A tag message with English notes under a "--- en ---" line (CRLF, as an editor may save it).
+  bilingual = join(dirname(notes), "notes-both.md");
+  writeFileSync(bilingual, "Yeni ana ekran.\r\n\r\n--- en ---\r\n\r\nA new home screen.\r\n");
 });
 
 after(() => {
@@ -139,11 +143,42 @@ test("publish uploads immutable files, then the channel file", async () => {
   assert.equal(beta.channel, "beta");
   assert.equal(beta.rollout, 100);
   assert.equal(beta.notes, "Yeni ana ekran.");
+  // Turkish-only notes write the channel file as before per-language notes.
+  assert.equal(beta.localizedNotes, undefined);
   assert.equal(beta.platforms["windows-x86_64"].signature, "c2lnLXdpbg==");
   assert.equal(
     beta.platforms["darwin-aarch64"].url,
     "https://cdn.example.test/v1/releases/2.1.0/Projects.Launcher_2.1.0_universal.app.tar.gz",
   );
+});
+
+test("publish carries English notes next to the Turkish ones", async () => {
+  const { stdout } = await publishR2(
+    "publish",
+    "--dir",
+    dir,
+    "--version",
+    "2.1.0",
+    "--channel",
+    "beta",
+    "--notes-file",
+    bilingual,
+  );
+  assert.match(stdout, /beta already announces 2\.1\.0; rewriting it/);
+  const beta = JSON.parse(objects.get("v1/releases/beta.json").body);
+  // Older launchers (and Tauri) read `notes`: still the Turkish notes.
+  assert.equal(beta.notes, "Yeni ana ekran.");
+  assert.deepEqual(beta.localizedNotes, { en: "A new home screen.", tr: "Yeni ana ekran." });
+
+  // A mistyped marker stops the publish before anything is written.
+  const before = objects.get("v1/releases/beta.json").body;
+  const mistyped = join(dirname(notes), "notes-mistyped.md");
+  writeFileSync(mistyped, "Yeni ana ekran.\n\n--- English ---\n\nA new home screen.\n");
+  await assert.rejects(
+    publishR2("publish", "--dir", dir, "--version", "2.1.0", "--notes-file", mistyped),
+    /"--- English ---" is not a language line/,
+  );
+  assert.equal(objects.get("v1/releases/beta.json").body, before);
 });
 
 test("re-publishing identical files is a no-op, changed bytes are refused", async () => {
@@ -172,6 +207,8 @@ test("promote copies beta to stable with a staged rollout and keeps channels mon
   assert.equal(stable.rollout, 25);
   assert.equal(stable.minVersion, "2.0.3");
   assert.equal(stable.mandatory, false);
+  assert.equal(stable.notes, "Yeni ana ekran.");
+  assert.deepEqual(stable.localizedNotes, { en: "A new home screen.", tr: "Yeni ana ekran." });
 
   await publishR2(
     "promote",
@@ -188,6 +225,7 @@ test("promote copies beta to stable with a staged rollout and keeps channels mon
   assert.equal(widened.rollout, 100);
   assert.equal(widened.minVersion, "2.0.3");
   assert.equal(widened.pub_date, stable.pub_date);
+  assert.deepEqual(widened.localizedNotes, stable.localizedNotes);
 
   await assert.rejects(
     publishR2("publish", "--dir", dir, "--version", "2.0.9", "--channel", "beta"),
@@ -208,11 +246,15 @@ test("channel.mjs writes latest.json for the GitHub release", async () => {
     "https://github.com/projects-gg/MinecraftLauncher/releases/download/v2.1.0",
     "--require",
     "windows-x86_64,darwin-aarch64,darwin-x86_64,linux-x86_64",
+    "--notes-file",
+    bilingual,
     "--out",
     out,
   ]);
   const latest = JSON.parse(readFileSync(out, "utf8"));
   assert.equal(latest.channel, undefined);
+  assert.equal(latest.notes, "Yeni ana ekran.");
+  assert.deepEqual(latest.localizedNotes, { en: "A new home screen.", tr: "Yeni ana ekran." });
   assert.equal(
     latest.platforms["linux-x86_64"].url,
     "https://github.com/projects-gg/MinecraftLauncher/releases/download/v2.1.0/Projects.Launcher_2.1.0_amd64.AppImage",

@@ -1,6 +1,7 @@
 // CONSOLE-COLOR: a console line's parts and events as the view checks them again (the contract:
 // the Studio repository's services/cloud-afk README, "Console looks").
 import {
+  groundColor,
   hoverEntityLines,
   hoverTextLines,
   lineRuns,
@@ -10,7 +11,6 @@ import {
   safeUrl,
 } from "@pl/ui/console";
 import { describe, expect, it } from "vitest";
-import { readableColor } from "../../../../packages/ui/src/components/inventory/text";
 
 const joined = (runs: { text: string }[] | null) => runs?.map((run) => run.text).join("");
 
@@ -23,13 +23,13 @@ describe("a line's parts", () => {
       [20, ""],
     ]);
     expect(joined(runs)).toBe(text);
-    // The game's blue reads too dark on the console: lifted in its own hue.
+    // The game's blue reads too dark on the console: lifted in its own hue, lightness only.
     expect(runs?.[0]).toMatchObject({
       text: "[Parti]  ",
-      color: readableColor("#5555ff"),
+      color: "#6868ff",
       bold: true,
     });
-    expect(readableColor("#5555ff")).not.toBe("#5555ff");
+    expect(groundColor("#5555ff")).toBe("#6868ff");
     expect(runs?.[1]).toMatchObject({ text: "FrostyOtter88", color: "#55ffff" });
     // No colour of its own: the line's (its kind's tone).
     expect(runs?.[2]).toEqual({ text: ": lobiye   geliyorum" });

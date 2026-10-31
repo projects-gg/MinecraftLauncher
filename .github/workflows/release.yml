@@ -15,7 +15,12 @@ on:
         required: true
         type: string
       notes:
-        description: "Sürüm notları (Markdown). Etiketle yayında etiket mesajı kullanılır."
+        description: "Türkçe sürüm notları (Markdown). Etiketle yayında etiket mesajı kullanılır."
+        required: false
+        type: string
+        default: ""
+      notes_en:
+        description: "İngilizce sürüm notları (Markdown, isteğe bağlı)"
         required: false
         type: string
         default: ""
@@ -72,6 +77,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_NOTES: ${{ inputs.notes }}
+          INPUT_NOTES_EN: ${{ inputs.notes_en }}
           INPUT_CHANNEL: ${{ inputs.channel }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
@@ -84,17 +90,23 @@ jobs:
           echo "channel=${INPUT_CHANNEL:-beta}" >> "$GITHUB_OUTPUT"
           echo "dry_run=${INPUT_DRY_RUN:-false}" >> "$GITHUB_OUTPUT"
 
-          # Release notes: the dispatch input, else the annotated tag's message.
+          # Release notes: the dispatch inputs, else the annotated tag's message: the Turkish notes,
+          # then optionally a "--- en ---" line and the English ones (docs/release.md). notes.mjs
+          # stops the release here when they are malformed; the channel files carry both languages.
           : > notes.md
-          if [ -n "$INPUT_NOTES" ]; then
+          if [ -n "$INPUT_NOTES" ] || [ -n "$INPUT_NOTES_EN" ]; then
             printf '%s\n' "$INPUT_NOTES" > notes.md
+            if [ -n "$INPUT_NOTES_EN" ]; then
+              printf '\n--- en ---\n\n%s\n' "$INPUT_NOTES_EN" >> notes.md
+            fi
           elif [ "$EVENT" = "push" ]; then
             git fetch --no-tags --depth=1 origin "+refs/tags/$tag:refs/tags/$tag"
             if [ "$(git cat-file -t "$tag")" = "tag" ]; then
               git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$tag" > notes.md
             fi
           fi
-          { echo "## Projects Launcher $version"; echo; cat notes.md; } >> "$GITHUB_STEP_SUMMARY"
+          node scripts/release/notes.mjs notes.md --body release-body.md
+          { echo "## Projects Launcher $version"; echo; cat release-body.md; } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -151,7 +163,7 @@ jobs:
           else
             id="$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
               -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
-              -f name="Projects Launcher $VERSION" -F body=@notes.md \
+              -f name="Projects Launcher $VERSION" -F body=@release-body.md \
               -F draft=true -F prerelease="$PRERELEASE" --jq .id)"
             echo "Created draft release $id"
           fi

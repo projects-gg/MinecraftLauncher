@@ -3,7 +3,14 @@
 // game's colours and flags, never markup. A click is one of four kinds, with a value the contract
 // allows, and nothing happens without the player. `text` stays the line: search, copy and
 // everything else read it, never these.
-import { codeLook, STYLE_CODE, type TextRun, type TooltipLine } from "../inventory/text";
+import {
+  codeLook,
+  readableColor,
+  STYLE_CODE,
+  type TextRun,
+  type TooltipLine,
+} from "../inventory/text";
+import { type ConsoleGround, groundColor } from "./ground";
 
 /** `[n, code]`, or `[n, code, e]` with the index of its event: n UTF-16 code units of the text. */
 export type ConsoleSpan = readonly [number, string] | readonly [number, string, number];
@@ -244,13 +251,15 @@ export function safeClick(value: unknown): ConsoleClick | null {
 /**
  * The parts of `text` as `st` gives them, or null when they are not the contract's (a code
  * outside it, more than `max` parts, a part between a character's halves, not covering the text
- * exactly). A part's event stays only when `events` has it.
+ * exactly). A part's event stays only when `events` has it; its colour as `colorOf` draws it on
+ * its ground (a tooltip's by default).
  */
 function partsOf(
   text: string,
   st: unknown,
   max: number,
   events: readonly (ConsoleEvent | null)[],
+  colorOf: (hex: string) => string = readableColor,
 ): ConsoleRun[] | null {
   if (!Array.isArray(st) || st.length === 0 || st.length > max) return null;
   const runs: ConsoleRun[] = [];
@@ -265,7 +274,7 @@ function partsOf(
     const first = text.charCodeAt(at);
     const last = text.charCodeAt(end - 1);
     if ((first >= 0xdc00 && first <= 0xdfff) || (last >= 0xd800 && last <= 0xdbff)) return null;
-    const { obfuscated: _still, ...look } = codeLook(code);
+    const { obfuscated: _still, ...look } = codeLook(code, colorOf);
     const run: ConsoleRun = { text: text.slice(at, end), ...look };
     if (
       span.length === 3 &&
@@ -345,14 +354,15 @@ export function safeEvents(ev: unknown): (ConsoleEvent | null)[] {
 /**
  * The line in its parts, or null when it has none the contract allows: the line then shows as
  * today. The parts' words joined are `text` exactly (a copy is the line); obfuscated words stay
- * as they are, still.
+ * as they are, still. Colours as `groundColor` draws them on `ground`.
  */
 export function lineRuns(
   text: string,
   st: unknown,
   events: readonly (ConsoleEvent | null)[] = [],
+  ground: ConsoleGround = "console",
 ): ConsoleRun[] | null {
-  return partsOf(text, st, MAX_SPANS, events);
+  return partsOf(text, st, MAX_SPANS, events, (hex) => groundColor(hex, ground));
 }
 
 /** White: the game's hover text without a colour of its own. */

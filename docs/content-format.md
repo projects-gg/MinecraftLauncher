@@ -2011,6 +2011,10 @@ protocol and the range from the jar. The index entry records the run (`run`).
 {
   "version": "2.1.0",
   "notes": "Yeni ana ekran ve daha hızlı indirmeler.",
+  "localizedNotes": {
+    "tr": "Yeni ana ekran ve daha hızlı indirmeler.",
+    "en": "A new home screen and faster downloads."
+  },
   "pub_date": "2026-10-15T12:00:00Z",
   "platforms": {
     "windows-x86_64": {
@@ -2035,6 +2039,13 @@ protocol and the range from the jar. The index entry records the run (`run`).
 
 - `platforms` keys are Tauri targets (`windows-x86_64`, `darwin-aarch64`, `darwin-x86_64`,
   `linux-x86_64`, …); `signature` is the content of the bundle's minisign `.sig` file.
+- `notes`: the release notes (Markdown), the one text Tauri and older launchers read whatever the
+  player's language. Writers put the Turkish notes here (the English ones when there are none).
+- `localizedNotes` (optional): `{ "tr", "en" }`, the notes per language, written when the release
+  has English notes. A launcher shows the notes in its interface language, else the other
+  language's, else `notes`; a blank text counts as missing, and an odd value reads as none (display
+  text never refuses the file). The update restart's "Yenilikler" keeps the language the player
+  read when installing.
 - `rollout` (0–100, default 100): an install is offered the release when
   `bucket < rollout`, with `bucket = u32_be(first 4 bytes of SHA-256(install id)) % 100`.
 - `mandatory`: eligible installs must update before playing.
