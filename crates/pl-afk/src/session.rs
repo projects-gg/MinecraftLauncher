@@ -907,11 +907,23 @@ impl Actor {
             kill,
             nonce,
         });
-        {
+        let saved_since = {
             let mut shared = self.shared.lock();
+            let saved_since = is_restart
+                && shared
+                    .launched_revision
+                    .is_some_and(|before| before != revision);
             shared.running = true;
             shared.client_version = Some(client.version);
             shared.launched_revision = Some(revision);
+            saved_since
+        };
+        // Settings saved since the launch before (a new login command): the kicks in a row were
+        // the old settings' and no longer count. The restarts still do (the back-off goes on and
+        // the retry limit keeps counting).
+        if saved_since {
+            self.last_cause = None;
+            self.cause_repeats = 0;
         }
         tracing::info!(account = %self.id, is_restart, "AFK client started");
         self.set_state(SessionState::Connecting);
@@ -1180,7 +1192,7 @@ impl Actor {
             self.failure.take(),
             Failure::new(reason, masked.as_deref(), version_error),
         );
-        self.forget_failures_after_a_lasting_connection();
+        self.forget_failures_after_a_lasting_connection(Some(&failure));
         let relog = self.latest_relog();
         let decision = decide_failure(
             &relog,
@@ -1230,10 +1242,10 @@ impl Actor {
             .emit(&self.id, AfkEventKind::Stats(SessionStats::default()));
         tracing::info!(account = %self.id, ?code, "AFK client exited");
 
-        self.forget_failures_after_a_lasting_connection();
+        let failure = self.failure.take();
+        self.forget_failures_after_a_lasting_connection(failure.as_ref());
         self.joined_at = None;
         let relog = self.latest_relog();
-        let failure = self.failure.take();
         let repeats = failure
             .as_ref()
             .map_or(0, |failure| self.repeats_of(failure));
@@ -1255,12 +1267,14 @@ impl Actor {
         self.apply_decision(decision);
     }
 
-    /// In game for [`RestartSchedule::stable_after`]: the connection worked, so the failures
-    /// before it no longer count.
-    fn forget_failures_after_a_lasting_connection(&mut self) {
+    /// In game for [`RestartSchedule::stable_after`] and not kicked for the login
+    /// ([`RestartSchedule::lasting`]): the connection worked, so the failures before it no longer
+    /// count. `failure` is how it ended, as far as the client said.
+    fn forget_failures_after_a_lasting_connection(&mut self, failure: Option<&Failure>) {
+        let cause = failure.and_then(|f| kick_cause(f.reason.as_ref(), f.message.as_deref()));
         if self
             .joined_at
-            .is_some_and(|at| at.elapsed() >= self.env.schedule.stable_after)
+            .is_some_and(|at| self.env.schedule.lasting(at.elapsed(), cause))
         {
             self.restart_attempts = 0;
             self.last_cause = None;
