@@ -307,7 +307,9 @@ export function MicrosoftLoginDialog({
           icon={<MicrosoftMark size={15} />}
           onClick={start}
         >
-          {t("accounts.login.retry")}
+          {/* No Minecraft on that account: the sign-in asks which account (select_account), so
+              the way on is another one, not the same again (TASTE-2 on QOL-L). */}
+          {phase.failure === "noLicense" ? t("qol.login.otherAccount") : t("accounts.login.retry")}
         </Button>
       </>
     );

@@ -40,7 +40,27 @@ describe("splitAddress", () => {
 
   it("hands an over-long port to the port's own check", () => {
     expect(splitAddress("a.net:999999")).toEqual({ host: "a.net", port: "999999" });
-    expect(splitAddress("a.net:9999999").port).toBe("");
+    expect(splitAddress("a.net:9999999")).toEqual({ host: "a.net", port: "9999999" });
+  });
+
+  it("takes the address out of a pasted link", () => {
+    expect(splitAddress("https://mc.sunucu.net:25565")).toEqual({
+      host: "mc.sunucu.net",
+      port: "25565",
+    });
+    expect(splitAddress(" http://play.projects.gg/ ")).toEqual({
+      host: "play.projects.gg",
+      port: "",
+    });
+    expect(splitAddress("minecraft://mc.sunucu.net:25570/join?x=1")).toEqual({
+      host: "mc.sunucu.net",
+      port: "25570",
+    });
+    expect(splitAddress("mc.sunucu.net:25570/")).toEqual({ host: "mc.sunucu.net", port: "25570" });
+  });
+
+  it("leaves a link without an address empty for the host's own check", () => {
+    expect(splitAddress("https://")).toEqual({ host: "", port: "" });
   });
 
   it("finds no port in a bare IPv6 address", () => {

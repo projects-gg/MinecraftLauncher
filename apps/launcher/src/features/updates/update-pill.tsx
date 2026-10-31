@@ -56,7 +56,8 @@ function Pill({ view }: { view: ShownView }) {
   const version = useUpdate((s) => s.version);
   const asking = useUpdate((s) => s.asking?.from === "pill");
 
-  const gold = view.kind === "ready" || view.kind === "installing";
+  // Never gold (design.md §2, TASTE-2 on QOL-L): OYNA is the screen's one gold; a ready update is
+  // the same quiet plate, its words say it is ready.
   const passive =
     view.kind === "afterGame" || view.kind === "installing" || view.kind === "downloading";
   // Ready, waiting for the game and installing keep one width, so nothing in the title bar moves
@@ -123,7 +124,7 @@ function Pill({ view }: { view: ShownView }) {
         exit={{ opacity: 0, transition: { duration: 0.14, ease: easeOutExpo } }}
         className={cn(
           "group relative isolate flex h-7 items-center justify-center px-3 text-[12.5px] font-semibold whitespace-nowrap [--cut:5px] focus-visible:outline-none",
-          gold ? "text-gold-ink" : "text-bone-100",
+          "text-bone-100",
           // A download in progress keeps one width while its percent grows.
           view.kind === "downloading" && "min-w-[148px]",
           passive
@@ -137,21 +138,7 @@ function Pill({ view }: { view: ShownView }) {
           aria-hidden
           className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity [--chamfer-ring-gap:1px] group-focus-visible:opacity-100"
         />
-        {/* Two surfaces cross-fade when the pill changes meaning (a game starts or ends). */}
-        <span
-          aria-hidden
-          className={cn(
-            "chamfer absolute inset-0 -z-10 bg-gold-500 transition-opacity duration-200 ease-out",
-            gold ? "opacity-100" : "opacity-0",
-          )}
-        />
-        <span
-          aria-hidden
-          className={cn(
-            "chamfer absolute inset-0 -z-10 bg-white/10 transition-opacity duration-200 ease-out",
-            gold ? "opacity-0" : "opacity-100",
-          )}
-        />
+        <span aria-hidden className="chamfer absolute inset-0 -z-10 bg-white/10" />
         <span className="grid">
           <motion.span
             key={contentKey}

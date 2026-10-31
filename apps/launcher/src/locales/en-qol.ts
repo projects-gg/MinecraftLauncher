@@ -4,6 +4,9 @@ export const enQol = {
     signedOut: "Your account was signed out.",
     noAccount: "You need an account to play.",
   },
+  login: {
+    otherAccount: "Use another account",
+  },
   welcome: {
     later: "The instance will be set up later",
   },

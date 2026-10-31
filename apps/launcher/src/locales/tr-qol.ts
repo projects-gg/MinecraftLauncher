@@ -9,6 +9,13 @@ export const trQol = {
     /** OYNA without any account: the toast's line, its button "Hesap ekle". */
     noAccount: "Oynamak için bir hesap gerekiyor.",
   },
+  login: {
+    /**
+     * The Microsoft sign-in's main button after "Bu hesapta Minecraft yok": the sign-in lets the
+     * player pick the account, so it signs in with another one.
+     */
+    otherAccount: "Başka hesapla giriş yap",
+  },
   welcome: {
     /**
      * The welcome's last step when the Projects instance could not be prepared: "Hazırım" goes on

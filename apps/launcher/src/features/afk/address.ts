@@ -9,15 +9,27 @@ export function joinAddress(host: string, port: number | string): string {
 }
 
 /**
- * Host and port in what is typed: digits after the one colon at the end are the port ("" while
- * there are none). Anything else stays in the host, whose own check names the problem; a bare
- * IPv6 address (several colons) has no port.
+ * The server's address in a pasted link: without "<scheme>://" in front ("https://") and without
+ * a path behind ("/", "/join"), which no server address has (QOL-L, TASTE-2: a link copied from a
+ * website was refused with a sentence about the port).
+ */
+function addressOf(text: string): string {
+  const unlinked = text.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  const slash = unlinked.indexOf("/");
+  return (slash < 0 ? unlinked : unlinked.slice(0, slash)).trim();
+}
+
+/**
+ * Host and port in what is typed or pasted: digits after the one colon at the end are the port
+ * ("" while there are none; any count, so a port too long is the port's own range problem).
+ * Anything else stays in the host, whose own check names the problem; a bare IPv6 address
+ * (several colons) has no port.
  */
 export function splitAddress(text: string): { host: string; port: string } {
-  const trimmed = text.trim();
+  const trimmed = addressOf(text.trim());
   const colon = trimmed.lastIndexOf(":");
   if (colon < 0 || trimmed.indexOf(":") !== colon) return { host: trimmed, port: "" };
   const port = trimmed.slice(colon + 1).trim();
-  if (!/^\d{0,6}$/.test(port)) return { host: trimmed, port: "" };
+  if (!/^\d*$/.test(port)) return { host: trimmed, port: "" };
   return { host: trimmed.slice(0, colon).trim(), port };
 }
