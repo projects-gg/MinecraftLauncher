@@ -41,10 +41,10 @@ The launcher is in Turkish and English and updates itself from signed stable and
 
 ## Download
 
-Get the installer from [projects.gg](https://projects.gg/indir/) or from
-[Releases](https://github.com/projects-gg/MinecraftLauncher/releases). Installed launchers update
+Get the installer for Windows, macOS or Linux from [projects.gg](https://projects.gg/en/launcher/) or
+from [Releases](https://github.com/projects-gg/MinecraftLauncher/releases). Installed launchers update
 themselves. Windows files follow our
-[code signing policy](https://projects.gg/kod-imzalama/#en).
+[code signing policy](https://projects.gg/en/code-signing/).
 
 Questions and feedback: [Discord](https://projects.gg/discord) (Turkish).
 
