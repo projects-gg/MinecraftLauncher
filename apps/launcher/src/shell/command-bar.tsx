@@ -150,7 +150,7 @@ function InstancePicker({
   instances,
   selected,
   loading,
-  locked,
+  lock,
   hint,
   onSelect,
 }: {
@@ -158,8 +158,11 @@ function InstancePicker({
   selected: InstanceSummary | undefined;
   /** Still loading the list (an empty list then reads "Kurulum seç", not "Yükleniyor"). */
   loading: boolean;
-  /** A game is being prepared or played: the bar stays on it until it ends. */
-  locked: boolean;
+  /**
+   * A game is being prepared or played: the bar stays on it until it ends, and the menu says why
+   * the other rows are off (and how to free them while it prepares).
+   */
+  lock: "preparing" | "playing" | null;
   /** Background preparation of the selected instance, when there is something to show. */
   hint: PrepareHint | null;
   onSelect: (id: string) => void;
@@ -215,6 +218,11 @@ function InstancePicker({
           sideOffset={10}
           className="glass-strong pop-motion z-50 w-[300px] rounded-[var(--radius-panel)] p-1 shadow-[0_24px_60px_rgb(34_6_6/0.55)]"
         >
+          {lock && ordered.length > 1 ? (
+            <DropdownMenu.Label className="px-2 pt-1.5 pb-1 text-[12px] leading-snug text-ash-400">
+              {t(lock === "preparing" ? "qol.picker.lockedPreparing" : "qol.picker.lockedPlaying")}
+            </DropdownMenu.Label>
+          ) : null}
           {/* A long library scrolls here; the two actions below always stay in view. */}
           <div className="max-h-[min(392px,calc(var(--radix-dropdown-menu-content-available-height)-88px))] overflow-y-auto">
             {ordered.map((i) => (
@@ -222,7 +230,7 @@ function InstancePicker({
                 key={i.id}
                 instance={i}
                 chosen={selected?.id === i.id}
-                disabled={locked && selected?.id !== i.id}
+                disabled={lock !== null && selected?.id !== i.id}
                 onSelect={() => onSelect(i.id)}
               />
             ))}
@@ -814,7 +822,7 @@ export function CommandBar() {
         instances={instances}
         selected={selected}
         loading={instancesLoading}
-        locked={busy}
+        lock={phase.kind === "working" ? "preparing" : busy ? "playing" : null}
         hint={hint}
         onSelect={selectInstance}
       />
