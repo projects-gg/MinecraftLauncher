@@ -108,15 +108,23 @@ export interface InventoryViewProps {
    * largest one its width and its height both hold, the line under the window counted. The host
    * gives it both (a panel, a dialog: it fills its parent's height and has no size of its own, so
    * a shrink-to-fit parent gives it none), and the art sits in the middle (`align="start"`: at
-   * its top).
+   * its top). Down as across, a server's art never takes the window below the readable scale
+   * while the window and its line fit: the art is cut where it does not, under the window first,
+   * then at its top (inventory.css).
    */
   fit?: "width" | "contain";
   /**
    * The art's size, whenever it changes: its box in GUI pixels (the window and a server's picture
-   * past it) and the line under the window in CSS pixels. For a host that sizes itself to the art
-   * at its own scale (a dialog as wide as the window it shows); `fit="contain"` needs none of it.
+   * past it), the window's own size in GUI pixels and the line under the window in CSS pixels.
+   * For a host that sizes itself to the art at its own scale (a dialog as wide as the window it
+   * shows).
    */
-  onArt?: (art: { width: number; height: number; under: number }) => void;
+  onArt?: (art: {
+    width: number;
+    height: number;
+    under: number;
+    window: { width: number; height: number };
+  }) => void;
   /** What a `static` picture is called for screen readers. */
   label?: string;
   className?: string;
@@ -1034,8 +1042,13 @@ export function InventoryView({
     onArtRef.current = onArt;
   }, [onArt]);
   useEffect(() => {
-    onArtRef.current?.({ width: box.width, height: box.height, under });
-  }, [box.width, box.height, under]);
+    onArtRef.current?.({
+      width: box.width,
+      height: box.height,
+      under,
+      window: { width: screen.width, height: screen.height },
+    });
+  }, [box.width, box.height, under, screen.width, screen.height]);
   const headPx = `${headUnit}px`;
   const menuLabel = menuItem
     ? itemName(menuItem, lang)
@@ -1050,6 +1063,10 @@ export function InventoryView({
     // height, as tall as the hand slot) in CSS pixels.
     "--pl-inv-h": box.height,
     "--pl-inv-under": `${under}px`,
+    // And the window's own height (the readable floor down, as `--pl-inv-ww` across) and its
+    // bottom from the art's top: the art under it is what a short room cuts first (GUI pixels).
+    "--pl-inv-wh": screen.height,
+    "--pl-inv-wb": screen.height - box.top,
     "--pl-inv-min": minScale,
     "--pl-inv-max": maxScale,
     ...(dpr ? { "--pl-inv-dpr": dpr } : {}),

@@ -87,4 +87,30 @@ describe("a server's art past the window", () => {
     );
     expect(picture).toContain("--pl-inv-under:0px");
   });
+
+  it("gives a short room the window's own height and its bottom in the art (INV-SCALE)", () => {
+    // A Projects menu's picture: a 256 px texture from 17 GUI pixels above a 54-slot window's top
+    // to 17 under its bottom. The scale keeps the window readable (`--pl-inv-wh`) and a short
+    // room cuts the art under the window first (`--pl-inv-wb`).
+    const menu: ReadonlyMap<number, TitleGlyph> = new Map([
+      [0xf808, { advance: -8 }],
+      [0xe04d, { advance: 187, image: { src: "menu.png", width: 256, height: 256, ascent: 30 } }],
+    ]);
+    const html = renderToString(
+      <InventoryView
+        inventory={SAMPLE_INVENTORY}
+        window={{
+          wseq: 1,
+          open: { type: "generic_9x6", title: "\uf808\ue04dPrestij", size: 54 },
+          items: [],
+        }}
+        titleGlyph={(codePoint) => menu.get(codePoint)}
+        fit="contain"
+        onOp={async () => ({ ok: true })}
+      />,
+    );
+    expect(html).toContain("--pl-inv-h:256");
+    expect(html).toContain("--pl-inv-wh:222");
+    expect(html).toContain("--pl-inv-wb:239");
+  });
 });
