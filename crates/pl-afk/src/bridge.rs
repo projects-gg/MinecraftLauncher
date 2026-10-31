@@ -102,6 +102,19 @@ pub fn client_gives_looks(version: &str) -> bool {
     version_parts(version).is_some_and(|parts| parts >= LOOKS_SINCE)
 }
 
+/// The first client version that gives looks and dialogs as side events beside its classic
+/// console (`MCC_CONSOLE_SIDE`, CONSOLE-ANY).
+pub const SIDE_SINCE: (u64, u64, u64) = (4, 2, 5);
+/// The fork's variable for side events: `looks`, `dialogs` or both, comma-separated (with a nonce
+/// only); the console prints exactly what it prints without them.
+pub const CONSOLE_SIDE_ENV_VAR: &str = "MCC_CONSOLE_SIDE";
+
+/// Whether a released client of `version` gives side events: 4.2.5 and later (fails closed, as
+/// [`client_gives_looks`]).
+pub fn client_gives_side(version: &str) -> bool {
+    version_parts(version).is_some_and(|parts| parts >= SIDE_SINCE)
+}
+
 /// [`parse_line`] for a client given `nonce`: only `<nonce>@@MCC@@` lines are events, everything
 /// else (a bare `@@MCC@@` line too) is text. `None`: a client without a nonce, as [`parse_line`].
 pub fn parse_line_with_nonce<'a>(line: &'a str, nonce: Option<&str>) -> ClientLine<'a> {
@@ -192,10 +205,31 @@ pub enum BridgeEvent {
         st: Option<Value>,
         ev: Option<Value>,
     },
-    /// The server's dialog as a card would show it (4.2.4, console kinds); `None` once it closed.
+    /// Client 4.2.5's side events: the looks of the very next console line when it is exactly
+    /// `text` (`st`, `ev`, read by [`crate::looks`]).
+    Looks {
+        text: String,
+        st: Option<Value>,
+        ev: Option<Value>,
+    },
+    /// The server's dialog as a card would show it (4.2.4, console kinds; 4.2.5 side events too);
+    /// `None` once it closed, or (`wait`, 4.2.5) while the game shows its "waiting for response"
+    /// screen in its place.
     Dialog {
         rev: i64,
         dialog: Option<Value>,
+        wait: bool,
+    },
+    /// What the game's pause screen and quick actions key open (4.2.5): the event's `pause` and
+    /// `quick`, each `{label, labelSt?}`.
+    Menus {
+        menus: Map<String, Value>,
+    },
+    /// The client's answer to a menu's opening (4.2.5, `menures`).
+    MenuResult {
+        menu: Option<String>,
+        ok: bool,
+        why: Option<String>,
     },
     /// The client's answer to a press of the card (`dialogres`): done, or why not.
     DialogResult {
@@ -257,13 +291,34 @@ fn parse_event(payload: &Map<String, Value>) -> Option<BridgeEvent> {
             st: payload.get("st").cloned(),
             ev: payload.get("ev").cloned(),
         },
-        "dialog" => BridgeEvent::Dialog {
-            rev: integer(payload, "rev")?,
-            dialog: if payload.get("clear") == Some(&Value::Bool(true)) {
-                None
-            } else {
-                Some(payload.get("dialog").filter(|d| d.is_object())?.clone())
-            },
+        "looks" => BridgeEvent::Looks {
+            text: string(payload, "text")?,
+            st: payload.get("st").cloned(),
+            ev: payload.get("ev").cloned(),
+        },
+        "dialog" => {
+            let closed = payload.get("clear") == Some(&Value::Bool(true));
+            let wait = !closed && payload.get("wait") == Some(&Value::Bool(true));
+            BridgeEvent::Dialog {
+                rev: integer(payload, "rev")?,
+                dialog: if closed || wait {
+                    None
+                } else {
+                    Some(payload.get("dialog").filter(|d| d.is_object())?.clone())
+                },
+                wait,
+            }
+        }
+        "menus" => BridgeEvent::Menus {
+            menus: ["pause", "quick"]
+                .into_iter()
+                .filter_map(|menu| Some((menu.to_owned(), payload.get(menu)?.clone())))
+                .collect(),
+        },
+        "menures" => BridgeEvent::MenuResult {
+            menu: string(payload, "menu"),
+            ok: matches!(payload.get("ok"), Some(Value::Bool(true))),
+            why: string(payload, "why"),
         },
         "dialogres" => BridgeEvent::DialogResult {
             rev: integer(payload, "rev").unwrap_or_default(),
@@ -458,16 +513,54 @@ mod tests {
             event(r#"@@MCC@@{"e":"dialog","rev":3,"dialog":{"title":"Kurallar"}}"#),
             BridgeEvent::Dialog {
                 rev: 3,
-                dialog: Some(serde_json::json!({ "title": "Kurallar" }))
+                dialog: Some(serde_json::json!({ "title": "Kurallar" })),
+                wait: false
             }
         );
         assert_eq!(
             event(r#"@@MCC@@{"e":"dialog","rev":4,"clear":true}"#),
             BridgeEvent::Dialog {
                 rev: 4,
-                dialog: None
+                dialog: None,
+                wait: false
             }
         );
+        // Client 4.2.5: the game's waiting screen, the side events' looks, the menus.
+        assert_eq!(
+            event(r#"@@MCC@@{"e":"dialog","rev":5,"wait":true}"#),
+            BridgeEvent::Dialog {
+                rev: 5,
+                dialog: None,
+                wait: true
+            }
+        );
+        assert_eq!(
+            event(r#"@@MCC@@{"e":"looks","text":"[Sunucu] Merhaba","st":[[16,"6"]]}"#),
+            BridgeEvent::Looks {
+                text: "[Sunucu] Merhaba".into(),
+                st: Some(serde_json::json!([[16, "6"]])),
+                ev: None
+            }
+        );
+        let BridgeEvent::Menus { menus } =
+            event(r#"@@MCC@@{"e":"menus","pause":{"label":"Kurallar"},"other":1}"#)
+        else {
+            panic!("no menus");
+        };
+        assert_eq!(
+            serde_json::Value::Object(menus),
+            serde_json::json!({ "pause": { "label": "Kurallar" } })
+        );
+        assert_eq!(
+            event(r#"@@MCC@@{"e":"menures","menu":"quick","ok":false,"why":"menu"}"#),
+            BridgeEvent::MenuResult {
+                menu: Some("quick".into()),
+                ok: false,
+                why: Some("menu".into())
+            }
+        );
+        assert!(client_gives_side("4.2.5") && client_gives_side("v4.3.0"));
+        assert!(!client_gives_side("4.2.4") && !client_gives_side("dev"));
         assert_eq!(
             parse_line(r#"@@MCC@@{"e":"dialog","rev":4,"dialog":"Kurallar"}"#),
             ClientLine::Malformed

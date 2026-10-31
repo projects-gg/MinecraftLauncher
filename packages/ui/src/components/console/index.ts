@@ -1,22 +1,42 @@
 export { ConsoleActionCard, type ConsoleActionCardProps } from "./action-card";
-export { ConsoleText, type ConsoleTextProps } from "./console-text";
+export { ConsoleText, type ConsoleTextProps, GameTipTarget, itemTipLines } from "./console-text";
 export {
   type Dialog,
+  type DialogAfter,
   type DialogButton,
   type DialogInput,
+  type DialogMenu,
+  type DialogMenuLabels,
+  type DialogPart,
   type DialogPress,
+  type DialogRangeInput,
   type DialogText,
+  type DialogTextInput,
   type DialogValues,
   dialogCommand,
   dialogInputs,
   dialogPress,
   dialogRefusal,
+  escapeText,
+  fieldText,
   initialValues,
+  javaFloat,
   numberText,
+  parseTemplate,
   safeDialog,
-  snap,
+  safeMenus,
+  sliderLabel,
+  sliderTakes,
+  sliderText,
+  sliderValue,
 } from "./dialog";
-export { type DialogAct, DialogCard, type DialogCardProps } from "./dialog-card";
+export {
+  type DialogAct,
+  DialogCard,
+  type DialogCardProps,
+  DialogMenus,
+  DialogWaiting,
+} from "./dialog-card";
 export { ConsoleDirection } from "./direction";
 export {
   type ConsoleClick,

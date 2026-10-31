@@ -5,7 +5,9 @@
 // pl-afk decides) lines show in the game's colours: a part's hover as the game's tooltip, a
 // command or link waiting in the command line's place for the player's word, a suggestion filling
 // the command line, a copy copying; nothing happens on its own. A server's dialog shows there as a
-// card (dialog cards); a press goes to pl-afk and the client, which check it again and answer.
+// card (dialog cards); a press goes to pl-afk and the client, which check it again and answer. A
+// client of 4.2.5 also shows the game's waiting screen there, and what the server's pause screen
+// and quick actions key open as a quiet row above the command line (CONSOLE-ANY).
 import { ArrowDown, PaperPlaneRight, X } from "@phosphor-icons/react";
 import { cn, enter, IconButton, leave, Switch, toast, useMotionPrefs } from "@pl/ui";
 import {
@@ -16,8 +18,12 @@ import {
   copiedPreview,
   type DialogAct,
   DialogCard,
+  type DialogMenu,
+  DialogMenus,
+  DialogWaiting,
   dialogRefusal,
   safeDialog,
+  safeMenus,
 } from "@pl/ui/console";
 import { fill } from "@pl/ui/inventory";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -168,6 +174,8 @@ export function AfkConsole({
   const [pressing, setPressing] = useState(false);
   /** Why the last press of the dialog card did not go through. */
   const [dialogError, setDialogError] = useState<string | null>(null);
+  // A menu's opening that did not go through (its dialog comes as a card when it does).
+  const [menuError, setMenuError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const atEnd = useRef(true);
@@ -189,6 +197,8 @@ export function AfkConsole({
   });
   const dialog = useMemo(() => {
     if (!dialogView) return null;
+    // The game's waiting screen in a dialog's place (client 4.2.5).
+    if (dialogView.wait) return { rev: dialogView.rev, dialog: null, at: dialogView.at };
     try {
       const checked = safeDialog(JSON.parse(dialogView.dialog));
       return checked ? { rev: dialogView.rev, dialog: checked, at: dialogView.at } : null;
@@ -196,6 +206,19 @@ export function AfkConsole({
       return null;
     }
   }, [dialogView]);
+  // What the server's pause screen and quick actions key open (client 4.2.5).
+  const { data: menusView = null } = useQuery({
+    queryKey: ["afk-dialog-menus", id],
+    queryFn: () => api.afkDialogMenus(id ?? ""),
+    enabled: open && live,
+  });
+  const menus = useMemo(() => {
+    try {
+      return safeMenus(menusView ? JSON.parse(menusView) : null);
+    } catch {
+      return {};
+    }
+  }, [menusView]);
 
   // Remembered for every account (AFK settings.json); lines with passwords never reach the UI.
   const { data: global } = useQuery({
@@ -219,7 +242,9 @@ export function AfkConsole({
   useEffect(
     () =>
       api.onAfkDialog((accountId) => {
-        if (accountId === id) void queryClient.invalidateQueries({ queryKey: ["afk-dialog", id] });
+        if (accountId !== id) return;
+        void queryClient.invalidateQueries({ queryKey: ["afk-dialog", id] });
+        void queryClient.invalidateQueries({ queryKey: ["afk-dialog-menus", id] });
       }),
     [queryClient, id],
   );
@@ -246,7 +271,10 @@ export function AfkConsole({
 
   // A new dialog (or its close): an error of an earlier press no longer applies.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the dialog changes
-  useEffect(() => setDialogError(null), [dialog?.rev]);
+  useEffect(() => {
+    setDialogError(null);
+    setMenuError(null);
+  }, [dialog?.rev]);
 
   // New lines: followed while the player reads the end; otherwise a button offers the way down.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs for every new line
@@ -366,6 +394,21 @@ export function AfkConsole({
       setPressing(false);
     }
   };
+  // A menu of the server's pause screen or quick actions key: opens as the game opens it (its
+  // dialog comes as a card).
+  const openMenu = async (menu: DialogMenu) => {
+    if (!account || pressing) return;
+    setPressing(true);
+    setMenuError(null);
+    try {
+      const outcome = await api.afkDialogPress(account.id, { open: menu });
+      if (!outcome.ok) setMenuError(dialogRefusal(outcome.why, lang));
+    } catch (error) {
+      setMenuError(isFriendly(error) ? error.message : t("afk.sendFailed"));
+    } finally {
+      setPressing(false);
+    }
+  };
   // The card's own clicks: a confirmed link opens, a suggestion fills the command line (shown
   // again once the dialog closes), a copy copies.
   const onDialogClick = (click: ConsoleClick) => {
@@ -373,7 +416,8 @@ export function AfkConsole({
     else if (click.a === "suggest_command") setLine(click.v);
     else if (click.a === "copy_to_clipboard") copy(click.v);
   };
-  const card = live && dialog && !pending ? dialog : null;
+  const card = live && dialog?.dialog && !pending ? { ...dialog, dialog: dialog.dialog } : null;
+  const waiting = live && dialog && !dialog.dialog && !pending ? dialog : null;
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (!account) return;
@@ -506,16 +550,41 @@ export function AfkConsole({
               />
             </div>
           ) : null}
+          {waiting ? (
+            <div className="border-t border-white/8 p-4">
+              <DialogWaiting
+                key={waiting.rev}
+                lang={lang}
+                busy={pressing}
+                error={dialogError}
+                onBack={() => void pressDialog({ cancel: true })}
+              />
+            </div>
+          ) : null}
           <form
             className={cn(
               "flex flex-col gap-2 border-t border-white/8 p-4",
-              (pending || card) && "hidden",
+              (pending || card || waiting) && "hidden",
             )}
             onSubmit={(e) => {
               e.preventDefault();
               send();
             }}
           >
+            {/* What the server's pause screen and quick actions key open (client 4.2.5). */}
+            {live ? (
+              <DialogMenus
+                menus={menus}
+                lang={lang}
+                busy={pressing}
+                onOpen={(menu) => void openMenu(menu)}
+              />
+            ) : null}
+            {live && menuError ? (
+              <p role="alert" className="text-[12.5px] text-flare-400">
+                {menuError}
+              </p>
+            ) : null}
             <div className="flex gap-2">
               {/* A password command turns secret as it is typed: the AFK surfaces' one look for
                   secret lines (secret.tsx). */}

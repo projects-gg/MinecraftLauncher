@@ -12,17 +12,28 @@
 //! button's command filled in from the inputs, and answers with a `dialogres` event (the client
 //! fork's `docs/agent-bridge.md`, "Client 4.2.4: dialog cards"). The view checks the dialog again
 //! too (`@pl/ui` `safeDialog`). Nothing of it reaches an AI: this computer runs no AFK+ agent.
+//!
+//! Client 4.2.5 (CONSOLE-ANY) reports them beside its classic console too (side events), shows the
+//! game's "waiting for response" screen in a dialog's place ([`ShownDialog::waiting`], left with a
+//! close of its revision), and says what the game's pause screen and quick actions key open
+//! ([`check_menus`]; a press `{"open": "pause" | "quick"}` opens one, answered by `menures`).
 
 use serde_json::{Map, Value};
 
 use crate::looks::{click_fits, is_forbidden, units};
 
-/// Most bytes of a dialog's JSON (the client's cap).
-pub const MAX_DIALOG_BYTES: usize = 8 * 1024;
+/// Most bytes of a dialog's JSON (the client's cap; 4.2.5's).
+pub const MAX_DIALOG_BYTES: usize = 16 * 1024;
 /// Most characters of a press's JSON (the client's).
 pub const MAX_PRESS_CHARS: usize = 4096;
-const MAX_BUTTONS: usize = 12;
-const MAX_INPUTS: usize = 8;
+const MAX_BUTTONS: usize = 64;
+const MAX_INPUTS: usize = 16;
+/// Most bytes of the menus' JSON (two labels with their looks).
+pub const MAX_MENUS_BYTES: usize = 2 * 1024;
+/// The menus a client 4.2.5 reports: the pause screen's and the quick actions key's.
+const MENUS: [&str; 2] = ["pause", "quick"];
+/// A label's most UTF-16 code units (the client's).
+const MAX_LABEL_UNITS: usize = 64;
 /// Longest input value, in UTF-16 code units.
 const MAX_INPUT_UNITS: usize = 256;
 /// How deep the dialog's JSON goes (title, body parts, inputs' options and their looks).
@@ -43,12 +54,61 @@ const BUTTON_ACTIONS: [&str; 7] = [
 pub struct ShownDialog {
     /// The client's revision of it (every new dialog counts up).
     pub rev: u32,
-    /// Its JSON as checked here.
+    /// Its JSON as checked here (empty for the waiting screen).
     pub json: String,
+    /// The game's "waiting for response" screen in a dialog's place (client 4.2.5): no buttons,
+    /// only its close.
+    pub wait: bool,
     /// Each button's index and action, for the presses.
     buttons: Vec<(i64, String)>,
     /// The inputs' keys.
     inputs: Vec<String>,
+}
+
+impl ShownDialog {
+    /// The game's waiting screen of revision `rev` (client 4.2.5).
+    pub fn waiting(rev: i64) -> Option<Self> {
+        Some(Self {
+            rev: u32::try_from(rev).ok()?,
+            json: String::new(),
+            wait: true,
+            buttons: Vec::new(),
+            inputs: Vec::new(),
+        })
+    }
+}
+
+/// The menus of a client 4.2.5 `menus` event as the card may offer them: `pause` and `quick`,
+/// each with a label of at most 64 code units outside the rule list that the account's mask leaves
+/// as it is (its looks go along; the view checks them). Their JSON, or none when none is left.
+pub fn check_menus(menus: &Map<String, Value>, mask: &dyn Fn(&str) -> String) -> Option<String> {
+    let mut out = Map::new();
+    for name in MENUS {
+        let Some(menu) = menus.get(name).and_then(Value::as_object) else {
+            continue;
+        };
+        let Some(label) = menu.get("label").and_then(Value::as_str) else {
+            continue;
+        };
+        if label.is_empty()
+            || units(label) > MAX_LABEL_UNITS
+            || label.chars().any(is_forbidden)
+            || mask(label) != label
+        {
+            continue;
+        }
+        let mut shown = Map::new();
+        shown.insert("label".into(), Value::from(label));
+        if let Some(looks) = menu.get("labelSt") {
+            shown.insert("labelSt".into(), looks.clone());
+        }
+        out.insert(name.to_owned(), Value::Object(shown));
+    }
+    if out.is_empty() {
+        return None;
+    }
+    let json = Value::Object(out).to_string();
+    (json.len() <= MAX_MENUS_BYTES).then_some(json)
 }
 
 /// What goes to the client for a press, and the command it may run (from then on masked in the
@@ -80,8 +140,8 @@ fn unmasked(value: &Value, mask: &dyn Fn(&str) -> String, depth: usize) -> bool 
 }
 
 /// The client's dialog when the card may show it: an object of at most [`MAX_DIALOG_BYTES`], every
-/// string of it left as it is by the account's mask, at most 12 buttons of the known actions with
-/// distinct indexes (a value only as the console's click rules allow it), at most 8 inputs with
+/// string of it left as it is by the account's mask, at most 64 buttons of the known actions with
+/// distinct indexes (a value only as the console's click rules allow it), at most 16 inputs with
 /// the client's keys, each once.
 pub fn check(rev: i64, dialog: &Value, mask: &dyn Fn(&str) -> String) -> Option<ShownDialog> {
     let rev = u32::try_from(rev).ok()?;
@@ -133,21 +193,46 @@ pub fn check(rev: i64, dialog: &Value, mask: &dyn Fn(&str) -> String) -> Option<
     Some(ShownDialog {
         rev,
         json,
+        wait: false,
         buttons,
         inputs,
     })
 }
 
 /// A press of the card (`{rev, i, inputs?, cmd?}` or `{rev, cancel: true}`, as `@pl/ui`
-/// `dialogPress` builds it) checked against the dialog it was made on, as the client's
-/// `/dialog act` line. `Err` with the client's own word for the refusal: `line` (not a press),
-/// `stale` (another dialog now), `button`, `input`, `cmd`.
-pub fn press_line(press: &str, shown: &ShownDialog) -> Result<PressLine, &'static str> {
+/// `dialogPress` builds it) checked against the dialog it was made on (`shown`), as the client's
+/// `/dialog act` line; client 4.2.5's `{open: "pause" | "quick"}` only for a menu it offers
+/// (`menus`: [`check_menus`]'s JSON). `Err` with the client's own word for the refusal: `line`
+/// (not a press), `stale` (another dialog now, or none), `button`, `input`, `cmd`, `menu`.
+pub fn press_line(
+    press: &str,
+    shown: Option<&ShownDialog>,
+    menus: Option<&str>,
+) -> Result<PressLine, &'static str> {
     if press.len() > MAX_PRESS_CHARS {
         return Err("line");
     }
     let value: Value = serde_json::from_str(press).map_err(|_| "line")?;
     let fields = value.as_object().ok_or("line")?;
+    if let Some(open) = fields.get("open") {
+        let menu = open
+            .as_str()
+            .filter(|menu| MENUS.contains(menu))
+            .ok_or("line")?;
+        let offered = menus
+            .and_then(|json| serde_json::from_str::<Value>(json).ok())
+            .is_some_and(|menus| menus.get(menu).is_some());
+        if !offered {
+            return Err("menu");
+        }
+        let mut out = Map::new();
+        out.insert("open".into(), Value::from(menu));
+        return Ok(PressLine {
+            line: act_line(out),
+            command: None,
+        });
+    }
+    let shown = shown.ok_or("stale")?;
     let rev = fields.get("rev").and_then(Value::as_u64).ok_or("line")?;
     if rev != u64::from(shown.rev) {
         return Err("stale");
@@ -160,6 +245,10 @@ pub fn press_line(press: &str, shown: &ShownDialog) -> Result<PressLine, &'stati
             line: act_line(out),
             command: None,
         });
+    }
+    // The waiting screen has no buttons, only its close.
+    if shown.wait {
+        return Err("stale");
     }
     let index = fields.get("i").and_then(Value::as_i64).ok_or("line")?;
     let (_, action) = shown
@@ -283,7 +372,8 @@ mod tests {
         let shown = check(3, &rules(), &same).unwrap();
         let line = press_line(
             r#"{"rev":3,"i":0,"inputs":{"name":"Ejder","ok":"true"},"cmd":"/klan kur Ejder"}"#,
-            &shown,
+            Some(&shown),
+            None,
         )
         .unwrap();
         assert_eq!(line.command.as_deref(), Some("/klan kur Ejder"));
@@ -294,9 +384,9 @@ mod tests {
             json!({ "rev": 3, "i": 0, "inputs": { "name": "Ejder", "ok": "true" }, "cmd": "/klan kur Ejder" })
         );
 
-        let link = press_line(r#"{"rev":3,"i":1,"inputs":{}}"#, &shown).unwrap();
+        let link = press_line(r#"{"rev":3,"i":1,"inputs":{}}"#, Some(&shown), None).unwrap();
         assert_eq!(link.command, None);
-        let cancel = press_line(r#"{"rev":3,"cancel":true}"#, &shown).unwrap();
+        let cancel = press_line(r#"{"rev":3,"cancel":true}"#, Some(&shown), None).unwrap();
         assert_eq!(cancel.command, None);
         assert_eq!(
             serde_json::from_str::<Value>(&cancel.line["/dialog act ".len()..]).unwrap(),
@@ -320,12 +410,13 @@ mod tests {
             (r#"{"i":1}"#, "line"),
             ("not json", "line"),
         ] {
-            assert_eq!(press_line(press, &shown), Err(why), "{press}");
+            assert_eq!(press_line(press, Some(&shown), None), Err(why), "{press}");
         }
         assert_eq!(
             press_line(
                 &format!("{{\"rev\":3,\"i\":1,\"x\":\"{}\"}}", "a".repeat(5000)),
-                &shown
+                Some(&shown),
+                None
             ),
             Err("line")
         );
@@ -336,7 +427,8 @@ mod tests {
         let shown = check(7, &rules(), &same).unwrap();
         let line = press_line(
             r#"{"rev":7,"i":0,"inputs":{"name":"%100"},"cmd":"/klan kur %100"}"#,
-            &shown,
+            Some(&shown),
+            None,
         )
         .unwrap();
         assert!(!line.line.contains('%'));
@@ -346,7 +438,61 @@ mod tests {
         assert_eq!(sent["cmd"], json!("/klan kur %100"));
         // A multiline text keeps its line break, escaped on the one line.
         let shown = check(8, &rules(), &same).unwrap();
-        let line = press_line(r#"{"rev":8,"i":2,"inputs":{"name":"a\nb"}}"#, &shown).unwrap();
+        let line = press_line(
+            r#"{"rev":8,"i":2,"inputs":{"name":"a\nb"}}"#,
+            Some(&shown),
+            None,
+        )
+        .unwrap();
         assert!(!line.line.contains('\n'));
+    }
+    #[test]
+    fn client_4_2_5_s_waiting_screen_and_menus() {
+        // The waiting screen takes only its close.
+        let waiting = ShownDialog::waiting(4).unwrap();
+        let close = press_line(r#"{"rev":4,"cancel":true}"#, Some(&waiting), None).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&close.line["/dialog act ".len()..]).unwrap(),
+            json!({ "rev": 4, "cancel": true })
+        );
+        assert_eq!(
+            press_line(r#"{"rev":4,"i":0}"#, Some(&waiting), None),
+            Err("stale")
+        );
+        assert_eq!(
+            press_line(r#"{"rev":4,"cancel":true}"#, None, None),
+            Err("stale")
+        );
+
+        // Menus: checked labels, the account's mask, only the two the game has.
+        let menus = json!({
+            "pause": { "label": "Kurallar", "labelSt": [[8, "6"]] },
+            "quick": { "label": "şifre hunter22" },
+            "other": { "label": "x" }
+        });
+        let mask = |text: &str| text.replace("hunter22", "******");
+        let checked = check_menus(menus.as_object().unwrap(), &mask).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&checked).unwrap(),
+            json!({ "pause": { "label": "Kurallar", "labelSt": [[8, "6"]] } })
+        );
+        assert_eq!(check_menus(&Map::new(), &same), None);
+
+        // Opening one: only a menu the client offered.
+        let open = press_line(r#"{"open":"pause"}"#, None, Some(&checked)).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&open.line["/dialog act ".len()..]).unwrap(),
+            json!({ "open": "pause" })
+        );
+        assert_eq!(open.command, None);
+        assert_eq!(
+            press_line(r#"{"open":"quick"}"#, None, Some(&checked)),
+            Err("menu")
+        );
+        assert_eq!(press_line(r#"{"open":"pause"}"#, None, None), Err("menu"));
+        assert_eq!(
+            press_line(r#"{"open":"inventory"}"#, None, Some(&checked)),
+            Err("line")
+        );
     }
 }

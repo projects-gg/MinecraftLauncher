@@ -179,6 +179,103 @@ function boxOf(el: Element): { left: number; top: number; right: number; bottom:
   return { left, top, right, bottom };
 }
 
+/** An item's tooltip lines as the game writes them (the inventory's own). */
+export function itemTipLines(item: InvItem, lang: InventoryLang): TooltipLine[] {
+  return tooltipLines(item, lang, INVENTORY_TEXTS[lang]);
+}
+
+/**
+ * Something the game draws its tooltip for outside a line (a dialog's item, CONSOLE-ANY): the
+ * console's own game tooltip, beside the pointer while it is over it, beside it for the keyboard's
+ * focus and for a tap (the next tap elsewhere, a scroll or Escape closes it). Without lines it is
+ * the plain element.
+ */
+export function GameTipTarget({
+  lines,
+  label,
+  className,
+  children,
+}: {
+  lines: TooltipLine[] | null;
+  /** Its accessible name (what the tooltip says first). */
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const [tip, setTip] = useState<{ anchor: TipAnchor; by: "pointer" | "touch" | "keyboard" } | null>(
+    null,
+  );
+  const tipRef = useRef<TipHandle>(null);
+  const node = useRef<HTMLSpanElement>(null);
+  const frame = useRef(0);
+  const pointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  useEffect(() => {
+    if (!tip) return;
+    const close = () => setTip(null);
+    const away = (e: Event) => {
+      if (!node.current?.contains(e.target as Node)) close();
+    };
+    const onEscape = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("pointerdown", away, true);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [tip]);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  const follow = (e: PointerEvent) => {
+    if (e.pointerType === "touch" || !lines) return;
+    pointer.current = { x: e.clientX, y: e.clientY };
+    if (tip?.by !== "pointer") {
+      setTip({ anchor: { pointer: pointer.current }, by: "pointer" });
+      return;
+    }
+    if (!frame.current) {
+      frame.current = requestAnimationFrame(() => {
+        frame.current = 0;
+        tipRef.current?.place({ pointer: pointer.current });
+      });
+    }
+  };
+  return (
+    <>
+      <span
+        ref={node}
+        role="img"
+        aria-label={label}
+        tabIndex={lines ? 0 : undefined}
+        className={className}
+        onPointerEnter={follow}
+        onPointerMove={follow}
+        onPointerLeave={(e) => {
+          if (e.pointerType !== "touch" && tip?.by === "pointer") setTip(null);
+        }}
+        onPointerDown={(e) => {
+          if (e.pointerType !== "touch" || !lines || !node.current) return;
+          const box = boxOf(node.current);
+          setTip((open) => (open ? null : { anchor: { slot: box, by: "touch" }, by: "touch" }));
+        }}
+        onFocus={() => {
+          if (lines && node.current?.matches(":focus-visible")) {
+            setTip({ anchor: { slot: boxOf(node.current), by: "keyboard" }, by: "keyboard" });
+          }
+        }}
+        onBlur={() => setTip((open) => (open?.by === "keyboard" ? null : open))}
+      >
+        {children}
+      </span>
+      {tip && lines ? <GameTip ref={tipRef} lines={lines} anchor={tip.anchor} /> : null}
+    </>
+  );
+}
+
 function ActivePart({
   run,
   event,
