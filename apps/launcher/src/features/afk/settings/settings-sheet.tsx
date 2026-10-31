@@ -223,6 +223,10 @@ function Editor({
   const saved = useRef(false);
   const [settling, setSettling] = useState(false);
   const active = isActive(account);
+  // Counts the saves the backend took and the edits dropped: the address field then shows what was
+  // kept, not a pasted link (SMALLS-L3). Counted when the save is taken, not when it is read back:
+  // the read-back's own effect may come after the save settled.
+  const [revision, setRevision] = useState(0);
 
   // Runs when a save comes back as the stored settings.
   useEffect(() => {
@@ -276,6 +280,7 @@ function Editor({
       }
       saved.current = true;
       setSettling(true);
+      setRevision((n) => n + 1);
       hold(slot, null);
       void queryClient.invalidateQueries({ queryKey: ["afk"] });
       const done = t("afkSettings.saved", { name: account.nickname });
@@ -321,6 +326,7 @@ function Editor({
   const discard = () => {
     hold(slot, null);
     setDraftState(baseline);
+    setRevision((n) => n + 1);
     setSubmitted(false);
     setServerIssues([]);
     setSaveError(null);
@@ -427,6 +433,7 @@ function Editor({
         errorFor={errorFor}
         view={view}
         onOpenFolder={openFolder}
+        revision={revision}
       />
     </PanelBody>
   );

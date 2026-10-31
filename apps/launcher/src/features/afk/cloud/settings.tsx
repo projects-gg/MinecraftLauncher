@@ -224,6 +224,10 @@ function Editor({
   // button waits, then the edits give way to the stored settings and the bar slides away.
   const savedRef = useRef(false);
   const [settling, setSettling] = useState(false);
+  // Counts the saves the service took and the edits dropped: the address field then shows what was
+  // kept, not a pasted link (SMALLS-L3). Counted when the save is taken, not when it is read back:
+  // the read-back's own effect may come after the save settled.
+  const [revision, setRevision] = useState(0);
   // Studio's placeholder switch: its checks answer while typing too (the backend checks again).
   const page = useCloudPage().data;
   const features = page?.overview.features ?? null;
@@ -337,6 +341,7 @@ function Editor({
       if (result.kind === "saved") {
         savedRef.current = true;
         setSettling(true);
+        setRevision((n) => n + 1);
         hold(slot, null);
         storeAccount(queryClient, result.account);
         void queryClient.invalidateQueries({ queryKey: CLOUD_KEY });
@@ -385,6 +390,7 @@ function Editor({
   const discard = () => {
     hold(slot, null);
     setDraftState(baseline);
+    setRevision((n) => n + 1);
     setAdded(new Map());
     setSubmitted(false);
     setServerIssues([]);
@@ -414,6 +420,7 @@ function Editor({
     issues: shown,
     features,
     aiPatterns,
+    revision,
     // "Yanlışsa bildir" heard the text saves now: its refusal no longer holds the save.
     clearRefusal: (at) => setServerIssues((list) => withoutRefusal(list, at)),
   };
