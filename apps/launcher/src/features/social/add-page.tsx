@@ -317,6 +317,8 @@ function FindForm() {
         <div className="flex gap-2">
           <input
             ref={inputRef}
+            // biome-ignore lint/a11y/noAutofocus: the player opened this page to paste or type a code (a link fills it itself)
+            autoFocus={!prefill}
             id={inputId}
             value={value}
             onPaste={() => {

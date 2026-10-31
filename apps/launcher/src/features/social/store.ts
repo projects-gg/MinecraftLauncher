@@ -73,6 +73,12 @@ interface SocialUi {
     tab?: ListTab;
   }) => void;
   closePanel: () => void;
+  /**
+   * The friend list's search: kept while another page of the panel is open (a friend's chat,
+   * "Geri" brings the same filtered list back), cleared when the panel closes.
+   */
+  listQuery: string;
+  setListQuery: (query: string) => void;
   goTo: (page: SocialPage) => void;
   takePrefill: () => string | null;
   takeLink: () => string | null;
@@ -211,7 +217,9 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
         (document.activeElement instanceof HTMLElement ? document.activeElement : null),
     }));
   },
-  closePanel: () => set({ open: false, categoryDraft: null, teamIntent: null }),
+  closePanel: () => set({ open: false, categoryDraft: null, teamIntent: null, listQuery: "" }),
+  listQuery: "",
+  setListQuery: (listQuery) => set({ listQuery }),
   goTo: (page) =>
     set((s) => ({
       page,

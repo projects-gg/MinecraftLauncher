@@ -516,7 +516,8 @@ export function ListPage() {
   const openTeam = useSocialUi((s) => s.openTeam);
   const listRef = useRef<HTMLUListElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState("");
+  const query = useSocialUi((s) => s.listQuery);
+  const setQuery = useSocialUi((s) => s.setListQuery);
   const searchable = view.friends.length >= SEARCH_FROM;
   const q = searchable ? query.trim() : "";
   // Typing filters at once (no fades or glides per key); the render that clears the search
@@ -549,7 +550,7 @@ export function ListPage() {
   // The name field sits under the whole list: a search would hide it.
   useEffect(() => {
     if (creating) setQuery("");
-  }, [creating]);
+  }, [creating, setQuery]);
 
   const categoriesOn = doc !== null;
   const grouped = Boolean(doc && doc.groups.length > 0) && !q;
