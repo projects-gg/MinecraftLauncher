@@ -12,7 +12,8 @@ import java.time.ZoneId;
  * time the pointer resting on a message shows ("28 Ekim 2026 Çarşamba 14:05") and which messages read as one group.
  * Days are calendar days in the player's zone, never 24-hour spans, so summer time and a message just before midnight
  * read right; a time a little ahead of this computer's clock reads as today. The words come from the overlay's
- * dictionary ({@link Words}: {@code chat.day.*}, {@code chat.month.*}, {@code chat.weekday.*}, {@code chat.time.full}).
+ * dictionary ({@link Words}: {@code chat.day.*}, the shared {@code month.*}, {@code chat.weekday.*},
+ * {@code chat.time.full}).
  * Pure: the list works them out when it lays out (ChatTimeTest).
  */
 public final class ChatTime {
@@ -63,7 +64,7 @@ public final class ChatTime {
             return words.get("chat.day.ago", ago);
         }
         LocalDate d = date(at, zone);
-        String month = words.get("chat.month." + d.getMonthValue());
+        String month = words.get("month." + d.getMonthValue());
         return d.getYear() == date(now, zone).getYear() ? words.get("chat.day.date", d.getDayOfMonth(), month)
             : words.get("chat.day.date_year", d.getDayOfMonth(), month, d.getYear());
     }
@@ -77,7 +78,7 @@ public final class ChatTime {
     /** The full time: "28 Ekim 2026 Çarşamba 14:05" / "Wednesday, 28 October 2026 at 14:05". */
     public static String full(long at, ZoneId zone, Words words) {
         LocalDate d = date(at, zone);
-        String date = words.get("chat.day.date_year", d.getDayOfMonth(), words.get("chat.month." + d.getMonthValue()),
+        String date = words.get("chat.day.date_year", d.getDayOfMonth(), words.get("month." + d.getMonthValue()),
             d.getYear());
         return words.get("chat.time.full", date, words.get("chat.weekday." + d.getDayOfWeek().getValue()),
             clock(at, zone));
