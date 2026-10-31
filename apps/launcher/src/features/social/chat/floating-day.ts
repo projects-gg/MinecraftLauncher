@@ -2,7 +2,8 @@
 // list's top edge floats there on a quiet plate ("Dün", "3 gün önce", "19 Ekim"), unless that
 // row's own day line shows there already; at the newest messages nothing floats. It is read from
 // the rows' places when the list scrolls or changes, never on a timer, and the plate sits over the
-// list (nothing moves under it). Pure (floating-day.test.ts).
+// list (nothing moves under it); the conversation shows it while the list moves and fades it when
+// the scroll ends (`scrollend`), so it never covers the words being read. Pure (floating-day.test.ts).
 
 /** A row as the floating line reads it: its top edge (window px), its time, and whether it starts
  * a day (carries the day's line at its top). */
