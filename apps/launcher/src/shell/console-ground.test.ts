@@ -27,16 +27,16 @@ const LEGACY = [
 describe("a server's colour on the console's grounds", () => {
   it("draws each of the game's colours as the console and a plate pin them", () => {
     expect(LEGACY.map((hex) => groundColor(hex, "console"))).toEqual([
-      "#7c7c7c",
-      "#6868ff",
+      "#858585",
+      "#7474ff",
       "#00aa00",
       "#00aaaa",
-      "#f90000",
-      "#db00db",
+      "#ff2d2d",
+      "#ea00ea",
       "#ffaa00",
       "#aaaaaa",
-      "#7c7c7c",
-      "#6868ff",
+      "#858585",
+      "#7474ff",
       "#55ff55",
       "#55ffff",
       "#ff5555",
@@ -83,13 +83,13 @@ describe("a server's colour on the console's grounds", () => {
   });
 
   it("draws a line on the console and a chosen row or a button on its plate", () => {
-    expect(lineRuns("Mavi", [[4, "9"]])?.[0]?.color).toBe("#6868ff");
+    expect(lineRuns("Mavi", [[4, "9"]])?.[0]?.color).toBe("#7474ff");
     expect(lineRuns("Mavi", [[4, "9"]], [], "plate")?.[0]?.color).toBe("#7b7bff");
     expect(lineRuns("Yeşil", [[5, "a"]], [], "plate")?.[0]?.color).toBe("#55ff55");
   });
 
   it("measures each ground at its lightest", () => {
-    expect(GROUND_RGB.console).toEqual([0x12, 0x10, 0x16]);
+    expect(GROUND_RGB.console).toEqual([0x1f, 0x1d, 0x23]);
     expect(GROUND_RGB.plate).toEqual([0x27, 0x22, 0x2c]);
   });
 });

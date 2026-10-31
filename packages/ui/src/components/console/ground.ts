@@ -8,10 +8,12 @@ export type ConsoleGround = "console" | "plate";
 
 /**
  * Each ground at its lightest, so a colour that reads there reads wherever the ground is drawn:
- * the console is obsidian-900, a plate at most obsidian-700 (the chosen row's white veil, a button).
+ * the console at most the launcher's glass sheet (obsidian-900 at 88 %) over a mid-grey stretch of
+ * the art (the site's and the solid panel's obsidian-900 are darker), a plate at most obsidian-700
+ * (the chosen row's white veil, a button).
  */
 export const GROUND_RGB: Record<ConsoleGround, readonly [number, number, number]> = {
-  console: [0x12, 0x10, 0x16],
+  console: [0x1f, 0x1d, 0x23],
   plate: [0x27, 0x22, 0x2c],
 };
 
