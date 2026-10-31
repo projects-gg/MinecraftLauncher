@@ -235,6 +235,59 @@ async fn a_dialog_press_is_checked_and_answered() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_server_switch_closes_the_card_and_keeps_the_menus() {
+    let env = TestEnv::with_client_version("4.2.5");
+    let id = env.add("SwitchBot").id;
+    let s = ScriptedSpawner::new(|_, mut proc| async move {
+        proc.event(r#"{"e":"connecting","host":"h","port":25565,"caps":["dialog"]}"#)
+            .await;
+        proc.event(r#"{"e":"joined","user":"SwitchBot","host":"h","port":25565,"protocol":777}"#)
+            .await;
+        proc.event(r#"{"e":"menus","pause":{"label":"Kurallar"}}"#)
+            .await;
+        proc.event(&rules_dialog(2)).await;
+        loop {
+            let line = proc.read().await?;
+            if line == "/quit" {
+                return Some(0);
+            }
+            // A proxy's server switch as client 4.2.5 reports it: the new server's join only, no
+            // close of the old server's dialog (the game closed it).
+            if line == "/server survival" {
+                proc.event(
+                    r#"{"e":"joined","user":"SwitchBot","host":"h","port":25565,"protocol":777}"#,
+                )
+                .await;
+                proc.event(r#"{"e":"players","n":7}"#).await;
+            }
+        }
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.set_console_features(ON);
+    manager.connect(&id).await.unwrap();
+    until("the dialog", LONG, || manager.dialog(&id).is_some()).await;
+    manager.send(&id, "/server survival").unwrap();
+    until("the new server", LONG, || {
+        manager.snapshot(&id).stats.players == Some(7)
+    })
+    .await;
+    assert!(manager.dialog(&id).is_none());
+    assert!(manager.dialog_menus(&id).unwrap().contains("Kurallar"));
+    // A press of the old card is refused here and never reaches the client.
+    let outcome = manager
+        .press_dialog(&id, r#"{"rev":2,"i":1}"#)
+        .await
+        .unwrap();
+    assert_eq!(outcome.why.as_deref(), Some("stale"));
+    assert!(s.received.lock().iter().all(|l| !l.starts_with("/dialog")));
+    assert!(matches!(
+        manager.snapshot(&id).state,
+        SessionState::Connected { .. }
+    ));
+    manager.shutdown().await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn no_card_without_the_switch_or_the_client_s_word() {
     for (features, caps) in [
         (
