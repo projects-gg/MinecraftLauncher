@@ -65,6 +65,11 @@ body[data-scroll-locked] > #layer-shield {
   pointer-events: auto;
 }
 
+/* The AFK panel leaves the title bar free (AFK-UX): the window moves and its buttons work. */
+body[data-scroll-locked][data-titlebar-free] > #layer-shield {
+  top: var(--spacing-titlebar);
+}
+
 ::view-transition-old(root),
 ::view-transition-new(root),
 ::view-transition-group(toasts),

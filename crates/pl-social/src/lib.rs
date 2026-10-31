@@ -131,7 +131,7 @@ pub use model::{
 };
 pub use presence::{
     ChatSetup, InviteOutcome, PresenceControl, PresenceEvent, PresenceEvents, PresenceHandle,
-    PresenceOptions, StopReason,
+    PresenceOptions, RelVersion, StopReason,
 };
 pub use protocol::{
     AFK_CAP, BADGES_CAP, CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall,

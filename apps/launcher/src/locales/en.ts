@@ -3,6 +3,7 @@ import { enAfkClear } from "./en-afk-clear";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkMod } from "./en-afk-mod";
 import { enAfkPanel } from "./en-afk-panel";
+import { enAfkPanelSize } from "./en-afk-panel-size";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enAfkPlus } from "./en-afkplus";
 import { enAutojoin } from "./en-autojoin";
@@ -325,6 +326,7 @@ export const en: DeepPartial<Strings> = {
   cloudStale: enCloudStale,
   afkMod: enAfkMod,
   afkPanel: enAfkPanel,
+  afkPanelSize: enAfkPanelSize,
   afkClear: enAfkClear,
   projectsSkin: enProjectsSkin,
   host: enHost,

@@ -646,6 +646,30 @@ export interface AfkLogLine {
   time: string;
   text: string;
   kind: "chat" | "system" | "error" | "script" | "self";
+  /** The player whose chat line it is (a client with the console kinds). */
+  who?: string | null;
+  /**
+   * The line in the game's colours (console looks): its parts and events in 7/24 Bulut's form,
+   * checked again by `@pl/ui/console`; `text` stays the line.
+   */
+  st?: unknown;
+  ev?: unknown;
+}
+
+/** A server's dialog of a desktop account as its console card shows it (DIALOG-CARD). */
+export interface AfkDialog {
+  /** The client's revision of it: a press names it. */
+  rev: number;
+  /** Its JSON as pl-afk checked it (the card checks it again: `safeDialog`). */
+  dialog: string;
+  /** When it opened (RFC 3339). */
+  at: string;
+}
+
+/** The client's answer to a press of the card: done, or why not (`stale`: another dialog now). */
+export interface AfkDialogOutcome {
+  ok: boolean;
+  why: string | null;
 }
 
 export interface AppInfo {

@@ -342,6 +342,12 @@ pub struct AfkSettings {
     /// Show login-script lines in the console. Lines with passwords stay hidden (and are masked
     /// at the source) either way.
     pub show_script_commands: bool,
+    /// Studio's console switches as 7/24 Bulut's offer last said them (console looks, dialog
+    /// cards): an account that connects before the offer is read again uses these. Not the UI's.
+    #[serde(skip)]
+    pub console_looks: bool,
+    #[serde(skip)]
+    pub dialog_cards: bool,
 }
 
 /// Lines typed after joining. The command list itself is a secret kept in the OS keychain.

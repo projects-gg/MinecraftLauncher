@@ -637,7 +637,7 @@ export function MovementPanel({
       ref={rootRef}
       data-movement-panel=""
       tabIndex={-1}
-      className="flex flex-col gap-3 pb-4 outline-none"
+      className="@container/move flex flex-col gap-3 pb-4 outline-none"
       onKeyDown={onKeyDown}
       onKeyUp={onKeyUp}
     >
@@ -710,7 +710,8 @@ export function MovementPanel({
         ref={controlsRef}
         inert={locked}
         className={cn(
-          "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-6 transition-opacity duration-150",
+          // Beside the console (AFK-UX) the panel is narrower: the pad over the coordinates there.
+          "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-6 transition-opacity duration-150 @max-[440px]/move:grid-cols-1",
           locked && "opacity-45",
         )}
       >

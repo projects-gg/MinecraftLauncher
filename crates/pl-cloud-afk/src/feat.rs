@@ -34,6 +34,11 @@ pub struct OfferFeatures {
     pub console_kinds: bool,
     pub placeholders: bool,
     pub placeholder_commands: Vec<String>,
+    /// Studio's console looks switch (CONSOLE-COLOR): the cloud's machines say per account, the
+    /// desktop console of a client 4.2.4 follows it alone (AFK-UX). Off from a service before it.
+    pub console_looks: bool,
+    /// Studio's dialog cards switch (DIALOG-CARD), likewise.
+    pub dialog_cards: bool,
 }
 
 impl Default for OfferFeatures {
@@ -41,6 +46,8 @@ impl Default for OfferFeatures {
         Self {
             inventory: "off".into(),
             console_kinds: false,
+            console_looks: false,
+            dialog_cards: false,
             placeholders: false,
             placeholder_commands: DEFAULT_PLACEHOLDER_COMMANDS
                 .iter()
@@ -1265,6 +1272,12 @@ mod tests {
         assert!(account.inventory.on && account.console_kinds && !account.legacy_rules);
         assert_eq!(PlaceholderRules::of(Some(&odd)), PlaceholderRules::off());
         assert!(PlaceholderRules::of(Some(&offer)).on);
+        // Studio's console switches for the desktop console: off unless the service says them.
+        assert!(!offer.console_looks && !offer.dialog_cards);
+        let switches: OfferFeatures =
+            serde_json::from_str(r#"{"inventory":"off","consoleLooks":true,"dialogCards":true}"#)
+                .unwrap();
+        assert!(switches.console_looks && switches.dialog_cards);
     }
 
     #[test]

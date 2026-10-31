@@ -11,6 +11,7 @@ use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 
+use crate::looks::LineLooks;
 use crate::util::{eq_ignore_case, find_ignore_case};
 
 /// Lines kept per session (legacy `MaxLogLines`).
@@ -57,6 +58,14 @@ pub struct ConsoleLine {
     pub text: String,
     pub kind: ConsoleLineKind,
     pub origin: ConsoleOrigin,
+    /// The line in the game's colours, with its hovers and clicks (a client with the console
+    /// kinds and Studio's switch; [`crate::looks`]): only on a normal line the account's rules left
+    /// as it came. Read from the console snapshot; events and the log never carry it.
+    #[serde(skip)]
+    pub looks: Option<LineLooks>,
+    /// The player whose chat line it is, as the client named them (a name only).
+    #[serde(skip)]
+    pub who: Option<String>,
 }
 
 impl ConsoleLine {
@@ -326,7 +335,9 @@ impl LineFilter {
     }
 }
 
-fn cap_line(text: &str) -> String {
+/// The line as the console keeps it: at most [`MAX_LINE_CHARS`] characters, a longer one cut with
+/// "…" after them.
+pub(crate) fn cap_line(text: &str) -> String {
     match text.char_indices().nth(MAX_LINE_CHARS) {
         Some((cut, _)) => {
             let mut capped = text[..cut].to_owned();
@@ -335,6 +346,13 @@ fn cap_line(text: &str) -> String {
         }
         None => text.to_owned(),
     }
+}
+
+/// For a line [`cap_line`] cuts: the UTF-16 code units of what it keeps before the "…".
+pub(crate) fn cut_units(text: &str) -> Option<usize> {
+    text.char_indices()
+        .nth(MAX_LINE_CHARS)
+        .map(|(cut, _)| crate::looks::units(&text[..cut]))
 }
 
 #[cfg(test)]
@@ -347,6 +365,8 @@ mod tests {
             text: String::new(),
             kind,
             origin: ConsoleOrigin::Client,
+            looks: None,
+            who: None,
         }
     }
 
@@ -475,5 +495,9 @@ mod tests {
         let (text, _) = filter.process(&"ş".repeat(MAX_LINE_CHARS + 5));
         assert_eq!(text.chars().count(), MAX_LINE_CHARS + 1);
         assert!(text.ends_with('…'));
+        // What a cut keeps, in UTF-16 units (a look is cut there).
+        assert_eq!(cut_units(&"ş".repeat(MAX_LINE_CHARS)), None);
+        let wide = format!("{}{}", "😀".repeat(MAX_LINE_CHARS), "x");
+        assert_eq!(cut_units(&wide), Some(2 * MAX_LINE_CHARS));
     }
 }

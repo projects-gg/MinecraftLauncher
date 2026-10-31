@@ -350,6 +350,15 @@ pub struct FriendsOverview {
     /// What the service offers besides friends and crews: `push`, `chat` (none from an older one).
     #[serde(default)]
     pub features: Vec<String>,
+    /// SCALE-SOC: the player's profile as `GET /v1/me` gives it, read with the lists (`?rel=1`;
+    /// none from an older service).
+    #[serde(default)]
+    pub me: Option<Me>,
+    /// SCALE-SOC: the relations version of this answer (`?rel=1`; none from an older service):
+    /// the presence `hello` names the current one after a reconnect, and the launcher reads the
+    /// lists again only when the two differ.
+    #[serde(default)]
+    pub rel: Option<String>,
 }
 
 /// `features`: crew chat and direct messages (CHAT1).

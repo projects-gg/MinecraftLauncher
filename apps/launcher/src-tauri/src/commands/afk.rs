@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use pl_afk::looks::{Hover, LineLooks, LookEvent, Span};
 use pl_afk::{
     AfkAccount, AfkError, AfkEventKind, AfkSettings, ClientProblem, ClientStep, ConsoleLine,
     ConsoleLineKind, EventSink, PatternProblem, SessionState, SessionStats, SettingsPage,
     ValidationIssue, VersionOption,
 };
+use pl_cloud_afk::{CloudClick, CloudHover, CloudHoverEntity, CloudLineEvent, CloudSpan};
 use pl_lang::pick;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -207,6 +209,34 @@ pub struct ConsoleLineView {
     pub text: String,
     /// "normal" | "script" (sensitive lines never reach the UI)
     pub kind: String,
+    /// The player whose chat line it is (a client with the console kinds), for the card of a
+    /// command clicked in it.
+    pub who: Option<String>,
+    /// The line in the game's colours (console looks, AFK-UX): its parts and what they do, in
+    /// 7/24 Bulut's form; the view checks them again (`@pl/ui/console`).
+    pub st: Option<Vec<CloudSpan>>,
+    pub ev: Option<Vec<CloudLineEvent>>,
+}
+
+/// The server's dialog of a desktop account as its console card shows it (DIALOG-CARD on this
+/// computer): its JSON as pl-afk checked it (the view checks it again: `safeDialog`).
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AfkDialogView {
+    /// The client's revision of it: a press names it.
+    pub rev: u32,
+    pub dialog: String,
+    /// When it opened (RFC 3339).
+    pub at: String,
+}
+
+/// The client's answer to a press of the card: done, or why not (`stale`: another dialog now;
+/// anything else: it did not work).
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AfkDialogOutcome {
+    pub ok: bool,
+    pub why: Option<String>,
 }
 
 fn server_label(account: &AfkAccount) -> String {
@@ -343,28 +373,112 @@ pub fn afk_send(state: State<'_, AppState>, id: String, line: String) -> CmdResu
     Ok(())
 }
 
-fn line_view(line: ConsoleLine) -> Option<ConsoleLineView> {
+/// Largest looks of one console read, newest line first: a line past it shows plain (the view
+/// reads the whole console after every event).
+const LOOKS_BUDGET: usize = 48 * 1024;
+
+fn span_view(span: &Span) -> CloudSpan {
+    let units = u32::try_from(span.units).unwrap_or(u32::MAX);
+    match span.ev.and_then(|index| u8::try_from(index).ok()) {
+        Some(index) => CloudSpan::Event(units, span.code.clone(), index),
+        None => CloudSpan::Plain(units, span.code.clone()),
+    }
+}
+
+fn spans_view(spans: &[Span]) -> Vec<CloudSpan> {
+    spans.iter().map(span_view).collect()
+}
+
+fn event_view(event: &LookEvent) -> CloudLineEvent {
+    CloudLineEvent {
+        click: event.click.as_ref().map(|click| CloudClick {
+            a: click.a.clone(),
+            v: click.v.clone(),
+        }),
+        hover: event.hover.as_ref().map(|hover| match hover {
+            Hover::Text { text, st } => CloudHover::Text {
+                text: text.clone(),
+                st: st.as_deref().map(spans_view),
+            },
+            Hover::Entity { name, st } => CloudHover::Entity {
+                entity: CloudHoverEntity {
+                    label: None,
+                    name: Some(name.clone()),
+                    st: st.as_deref().map(spans_view),
+                },
+            },
+        }),
+    }
+}
+
+fn line_view(line: ConsoleLine, budget: &mut usize) -> Option<ConsoleLineView> {
     let kind = match line.kind {
         ConsoleLineKind::Normal => "normal",
         ConsoleLineKind::Script => "script",
         ConsoleLineKind::Sensitive => return None,
     };
+    let looks: Option<&LineLooks> = line.looks.as_ref().filter(|looks| {
+        let bytes = pl_afk::looks::json_bytes(looks);
+        let fits = bytes <= *budget;
+        if fits {
+            *budget -= bytes;
+        }
+        fits
+    });
+    let st = looks.map(|looks| spans_view(&looks.st));
+    let ev = looks
+        .filter(|looks| !looks.ev.is_empty())
+        .map(|looks| looks.ev.iter().map(event_view).collect());
     Some(ConsoleLineView {
         time: line.at.to_string(),
         text: line.text,
         kind: kind.to_owned(),
+        who: line.who,
+        st,
+        ev,
     })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn afk_console(state: State<'_, AppState>, id: String) -> Vec<ConsoleLineView> {
-    state
+    let mut budget = LOOKS_BUDGET;
+    let mut lines: Vec<ConsoleLineView> = state
         .afk
         .console(&id)
         .into_iter()
-        .filter_map(line_view)
-        .collect()
+        .rev()
+        .filter_map(|line| line_view(line, &mut budget))
+        .collect();
+    lines.reverse();
+    lines
+}
+
+/// The server's dialog of the account, as its console card shows it (none while it has none).
+#[tauri::command]
+#[specta::specta]
+pub fn afk_dialog(state: State<'_, AppState>, id: String) -> Option<AfkDialogView> {
+    state.afk.dialog(&id).map(|dialog| AfkDialogView {
+        rev: dialog.rev,
+        dialog: dialog.json,
+        at: dialog.at.to_string(),
+    })
+}
+
+/// A press of the account's dialog card (`press`: its JSON as `@pl/ui` `dialogPress` built it):
+/// checked by pl-afk and by the client, which answers.
+#[tauri::command]
+#[specta::specta]
+pub async fn afk_dialog_press(
+    state: State<'_, AppState>,
+    id: String,
+    press: String,
+) -> CmdResult<AfkDialogOutcome> {
+    let outcome = state.afk.press_dialog(&id, &press).await?;
+    Ok(AfkDialogOutcome {
+        ok: outcome.ok,
+        why: outcome.why,
+    })
 }
 
 #[tauri::command]

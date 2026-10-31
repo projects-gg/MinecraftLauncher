@@ -15,10 +15,14 @@
 //!   with chat, one capability each; a frame of one the service did not take never goes out (an
 //!   older service would refuse it). The first sync after the device gained them reaches back a
 //!   week once ([`ChatSetup::catch_up`]). Link cards are asked on the same socket.
+//! - Relations version (SCALE-SOC, [`RelVersion`]): every connect names the version of the friend
+//!   list the launcher holds (`rel=`), and `hello` names the current one
+//!   ([`PresenceEvent::Connected`]'s `rel`): the owner reads the lists again only when they
+//!   differ.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures::stream::{SplitSink, SplitStream};
@@ -86,6 +90,46 @@ impl ChatSetup {
     }
 }
 
+/// SCALE-SOC: the relations version of the profile and friend list the launcher holds (from
+/// `GET /v1/friends?rel=1`), shared by its owner and the presence task: every connect names it
+/// (`rel=`), so the service's `hello` can say whether the lists changed. None: the launcher
+/// holds no version it trusts (none yet, or an event changed its copy since).
+#[derive(Debug, Clone, Default)]
+pub struct RelVersion(Arc<Mutex<Option<String>>>);
+
+impl RelVersion {
+    pub fn get(&self) -> Option<String> {
+        self.0.lock().map(|held| held.clone()).unwrap_or(None)
+    }
+
+    pub fn set(&self, version: Option<String>) {
+        if let Ok(mut held) = self.0.lock() {
+            *held = version;
+        }
+    }
+}
+
+/// Whether `version` looks like one the service gives (16 lowercase hex digits).
+fn is_rel_version(version: &str) -> bool {
+    version.len() == 16
+        && version
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// The address of one connect: `url` naming the version `rel` holds, when it holds one.
+fn connect_url(url: &Url, rel: Option<&RelVersion>) -> Url {
+    let mut url = url.clone();
+    if let Some(version) = rel.and_then(RelVersion::get).filter(|v| is_rel_version(v)) {
+        let query = match url.query() {
+            Some(query) if !query.is_empty() => format!("{query}&rel={version}"),
+            _ => format!("rel={version}"),
+        };
+        url.set_query(Some(&query));
+    }
+    url
+}
+
 /// A link's card can take this long: the hub reads the page itself (3 s, up to 3 redirects).
 const UNFURL_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -127,12 +171,14 @@ pub enum PresenceEvent {
     /// now (replace the whole online list), invites that waited for you (show them as a quiet
     /// list) and every open crew call you see (replace the list; show them without a
     /// notification). `clock` is the service's time (Unix seconds) for the calls' deadlines.
+    /// `rel` (SCALE-SOC): the relations version as it is now, when the connect named one.
     Connected {
         status: StatusMode,
         friends: Vec<Presence>,
         invites: Vec<Invite>,
         calls: Vec<CrewCall>,
         clock: Option<i64>,
+        rel: Option<String>,
         /// The chat state, when chat was asked for and the service took it (None: no chat on
         /// this connection).
         chat: Option<ChatStatus>,
@@ -911,6 +957,7 @@ impl PresenceHandle {
         user_agent: String,
         options: PresenceOptions,
         chat: Option<ChatSetup>,
+        rel: Option<RelVersion>,
     ) -> Self {
         let (status, status_rx) = watch::channel(Outgoing::default());
         let (commands, commands_rx) = mpsc::channel(32);
@@ -921,6 +968,7 @@ impl PresenceHandle {
             user_agent,
             connect_timeout: options.connect_timeout,
             chat,
+            rel,
         };
         let task = tokio::spawn(run(endpoint, status_rx, commands_rx, events_tx, options));
         Self {
@@ -1017,12 +1065,14 @@ struct Endpoint {
     user_agent: String,
     connect_timeout: Duration,
     chat: Option<ChatSetup>,
+    /// SCALE-SOC: the relations version every connect names.
+    rel: Option<RelVersion>,
 }
 
 impl Endpoint {
     async fn connect(&self) -> std::result::Result<Socket, Outcome> {
-        let mut request = self
-            .url
+        let url = connect_url(&self.url, self.rel.as_ref());
+        let mut request = url
             .as_str()
             .into_client_request()
             .map_err(|_| Outcome::Stop(StopReason::Shutdown))?;
@@ -1600,6 +1650,7 @@ async fn on_text(
             chat,
             plans,
             worlds,
+            rel,
         } => {
             tracing::debug!(?caps, "presence connected");
             state.greeted = true;
@@ -1637,6 +1688,7 @@ async fn on_text(
                 invites,
                 calls,
                 clock: now,
+                rel: rel.filter(|version| is_rel_version(version)),
                 chat: chat.filter(|_| chat_on),
                 plans: if state.plans_on {
                     Some(plans.unwrap_or_default())
@@ -2201,6 +2253,58 @@ mod tests {
         ))
         .unwrap();
         (listener, client)
+    }
+
+    /// SCALE-SOC: every connect names the relations version its owner holds (a malformed one never
+    /// goes), and hello's version comes with `Connected`; an older service names none.
+    #[tokio::test]
+    async fn names_the_relations_version_on_every_connect() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let last_uri = |seen: &Arc<Mutex<Vec<(String, String)>>>| {
+            seen.lock()
+                .unwrap()
+                .iter()
+                .rev()
+                .find(|(name, _)| name == ":uri")
+                .map(|(_, value)| value.clone())
+                .unwrap()
+        };
+        let caps = "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile";
+        let rel = RelVersion::default();
+        rel.set(Some("0123456789abcdef".into()));
+        let mut handle =
+            client
+                .session(token())
+                .connect_presence_with(fast(), None, false, Some(rel.clone()));
+        let mut server = accept(&listener, None, seen.clone()).await.unwrap();
+        assert_eq!(last_uri(&seen), format!("{caps}&rel=0123456789abcdef"));
+        let mut greeting = hello();
+        greeting["rel"] = serde_json::json!("fedcba9876543210");
+        send_json(&mut server, greeting).await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::Connected { rel, .. } => {
+                assert_eq!(rel.as_deref(), Some("fedcba9876543210"));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        // The owner holds no version it trusts now: the next connect names none.
+        rel.set(Some("NOT-A-VERSION".into()));
+        drop(server);
+        let mut server = accept(&listener, None, seen.clone()).await.unwrap();
+        assert_eq!(last_uri(&seen), caps);
+        // An older service: no version in hello.
+        send_json(&mut server, hello()).await;
+        loop {
+            match handle.next_event().await.unwrap() {
+                PresenceEvent::Disconnected { .. } => continue,
+                PresenceEvent::Connected { rel, .. } => {
+                    assert_eq!(rel, None);
+                    break;
+                }
+                other => panic!("unexpected {other:?}"),
+            }
+        }
     }
 
     #[tokio::test]
@@ -3604,7 +3708,7 @@ mod tests {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let mut handle = client
             .session(token())
-            .connect_presence_with(fast(), None, true);
+            .connect_presence_with(fast(), None, true, None);
         let mut server = accept(&listener, None, seen.clone()).await.unwrap();
         assert!(seen.lock().unwrap().iter().any(|(name, value)| {
             name == ":uri" && value.contains("caps=") && value.ends_with(",worlds2")

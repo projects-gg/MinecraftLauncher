@@ -2173,6 +2173,8 @@ mod tests {
             crews: None,
             crew_limit: None,
             features: Vec::new(),
+            me: None,
+            rel: None,
         });
         state
     }
@@ -2233,6 +2235,7 @@ mod tests {
                 invites: vec![invite("i1", "1", NOW - 10, false)],
                 calls: vec![],
                 clock: None,
+                rel: None,
                 chat: None,
                 plans: None,
             },
@@ -2263,6 +2266,7 @@ mod tests {
                 invites: vec![],
                 calls: vec![],
                 clock: None,
+                rel: None,
                 chat: None,
                 plans: None,
             },
@@ -2536,6 +2540,7 @@ mod tests {
             invites,
             calls: vec![],
             clock: None,
+            rel: None,
             chat: None,
             plans: None,
         }
@@ -2653,6 +2658,7 @@ mod tests {
                 invites: vec![],
                 calls: vec![],
                 clock: None,
+                rel: None,
                 chat: None,
                 plans: None,
             },
@@ -2763,6 +2769,7 @@ mod tests {
                 invites: vec![],
                 calls: vec![],
                 clock: None,
+                rel: None,
                 chat: None,
                 plans: None,
             },
@@ -2982,6 +2989,7 @@ mod tests {
                     service_now + 900,
                 )],
                 clock: Some(service_now),
+                rel: None,
                 chat: None,
                 plans: None,
             },
@@ -3864,6 +3872,7 @@ mod tests {
             invites: vec![],
             calls: vec![],
             clock: Some(clock),
+            rel: None,
             chat: None,
             plans: Some(plans),
         }

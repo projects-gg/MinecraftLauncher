@@ -564,6 +564,10 @@ pub(crate) enum ServerMessage {
         /// the capabilities).
         #[serde(default)]
         worlds: Option<crate::world::WorldsStatus>,
+        /// SCALE-SOC: the relations version as it is now, only when the connection named the one
+        /// the launcher holds (`rel=`; none from an older service).
+        #[serde(default)]
+        rel: Option<String>,
     },
     /// A crew call, new or changed (its server or kind, its crews, or answers that went away):
     /// replaces the one with the same id. `quiet`: show it, never announce it.

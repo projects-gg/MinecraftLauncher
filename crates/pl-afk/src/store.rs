@@ -350,11 +350,26 @@ impl AccountStore {
 
     /// Persists the console filter toggle. Returns whether the value changed.
     pub fn set_show_script_commands(&self, show: bool) -> Result<bool> {
+        self.update_settings(|settings| settings.show_script_commands = show)
+    }
+
+    /// Persists Studio's console switches as last known (see [`AfkSettings::console_looks`]).
+    /// Returns whether they changed.
+    pub fn set_console_switches(&self, looks: bool, dialogs: bool) -> Result<bool> {
+        self.update_settings(|settings| {
+            settings.console_looks = looks;
+            settings.dialog_cards = dialogs;
+        })
+    }
+
+    fn update_settings(&self, change: impl FnOnce(&mut AfkSettings)) -> Result<bool> {
         let mut state = self.state.lock();
-        if state.settings.show_script_commands == show {
+        let mut settings = state.settings;
+        change(&mut settings);
+        if settings == state.settings {
             return Ok(false);
         }
-        state.settings.show_script_commands = show;
+        state.settings = settings;
         let path = self.paths.settings_file();
         let text = legacy::write_settings(&state.settings)?;
         if let Err(error) = write_atomic(&path, text.as_bytes(), false) {
