@@ -1,6 +1,6 @@
 // SHEET-UX: the server's address and port in one field, as Minecraft's server list writes them.
 import { describe, expect, it } from "vitest";
-import { joinAddress, splitAddress } from "./address";
+import { joinAddress, shownAddress, splitAddress } from "./address";
 
 describe("joinAddress", () => {
   it("shows the port only when the server needs one", () => {
@@ -74,5 +74,47 @@ describe("splitAddress", () => {
     ] as const) {
       expect(splitAddress(joinAddress(host, port))).toEqual({ host, port });
     }
+  });
+});
+
+describe("shownAddress", () => {
+  it("keeps what is typed while it reads as the same address", () => {
+    expect(shownAddress("mc.sunucu.net:", "mc.sunucu.net", 0)).toBe("mc.sunucu.net:");
+    expect(shownAddress("https://mc.sunucu.net:25565", "mc.sunucu.net", 25565)).toBe(
+      "https://mc.sunucu.net:25565",
+    );
+    expect(shownAddress("http://play.projects.gg/", "play.projects.gg", "")).toBe(
+      "http://play.projects.gg/",
+    );
+  });
+
+  it("shows another address that came from outside", () => {
+    expect(shownAddress("mc.eski.net", "mc.yeni.net", 25570)).toBe("mc.yeni.net:25570");
+    expect(shownAddress("mc.eski.net:25570", "mc.eski.net", 0)).toBe("mc.eski.net");
+  });
+
+  it("writes a saved link back as the address that was kept", () => {
+    expect(shownAddress("https://mc.sunucu.net:25565", "mc.sunucu.net", 25565, true)).toBe(
+      "mc.sunucu.net:25565",
+    );
+    // The 7/24 Bulut draft keeps the port as text.
+    expect(
+      shownAddress("minecraft://mc.sunucu.net:25570/join", "mc.sunucu.net", "25570", true),
+    ).toBe("mc.sunucu.net:25570");
+  });
+
+  it("writes the port back only when one was given", () => {
+    expect(shownAddress(" http://play.projects.gg/ ", "play.projects.gg", 0, true)).toBe(
+      "play.projects.gg",
+    );
+    expect(shownAddress("https://mc.sunucu.net", "mc.sunucu.net", "", true)).toBe("mc.sunucu.net");
+    expect(shownAddress("mc.sunucu.net:", "mc.sunucu.net", 0, true)).toBe("mc.sunucu.net");
+  });
+
+  it("leaves a clean address as it is when saved", () => {
+    expect(shownAddress("mc.sunucu.net:25565", "mc.sunucu.net", 25565, true)).toBe(
+      "mc.sunucu.net:25565",
+    );
+    expect(shownAddress("", "", 0, true)).toBe("");
   });
 });

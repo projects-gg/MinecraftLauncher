@@ -1,6 +1,6 @@
 //! Test helpers: a tiny HTTP/1.1 server (with ETag support and hit counters) and fixtures.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
@@ -26,6 +26,8 @@ struct Route {
 struct Shared {
     routes: HashMap<String, Route>,
     hits: HashMap<String, usize>,
+    /// Paths answered with half their body and then nothing: a download that stays in flight.
+    held: HashSet<String>,
 }
 
 pub(crate) struct TestServer {
@@ -70,6 +72,19 @@ impl TestServer {
             .insert(path.to_owned(), Route { body, etag });
     }
 
+    /// The file at `url` (a URL of this server) comes half and then hangs: its download stays in
+    /// flight until it is cancelled.
+    pub(crate) fn hold(&self, url: &str) {
+        let path = url.strip_prefix(&self.url("")).unwrap_or(url);
+        self.shared.lock().unwrap().held.insert(path.to_owned());
+    }
+
+    /// The file at `url` comes whole again (after [`Self::hold`]).
+    pub(crate) fn release(&self, url: &str) {
+        let path = url.strip_prefix(&self.url("")).unwrap_or(url);
+        self.shared.lock().unwrap().held.remove(path);
+    }
+
     pub(crate) fn hits(&self, path: &str) -> usize {
         self.shared
             .lock()
@@ -109,11 +124,26 @@ async fn handle(mut stream: TcpStream, shared: Arc<Mutex<Shared>>) -> std::io::R
         .find(|(name, _)| name.trim().eq_ignore_ascii_case("if-none-match"))
         .map(|(_, value)| value.trim().to_owned());
 
-    let route = {
+    let (route, held) = {
         let mut shared = shared.lock().unwrap();
         *shared.hits.entry(path.clone()).or_default() += 1;
-        shared.routes.get(&path).cloned()
+        (
+            shared.routes.get(&path).cloned(),
+            shared.held.contains(&path),
+        )
     };
+    if held && let Some(route) = &route {
+        let head = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            route.body.len()
+        );
+        stream.write_all(head.as_bytes()).await?;
+        stream
+            .write_all(&route.body[..route.body.len() / 2])
+            .await?;
+        stream.flush().await?;
+        std::future::pending::<()>().await;
+    }
     let response = match route {
         None => {
             b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()
