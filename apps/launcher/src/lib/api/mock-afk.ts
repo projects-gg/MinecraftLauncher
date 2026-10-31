@@ -627,7 +627,14 @@ const FORM_DIALOG = {
       initial: 8,
       fmt: "%s: %s",
     },
-    { key: "open", kind: "bool", label: "Herkes katılabilsin", initial: true, onTrue: "acik", onFalse: "kapali" },
+    {
+      key: "open",
+      kind: "bool",
+      label: "Herkes katılabilsin",
+      initial: true,
+      onTrue: "acik",
+      onFalse: "kapali",
+    },
     {
       key: "motto",
       kind: "text",
@@ -669,39 +676,46 @@ let mockDialog: { rev: number; dialog: string; at: string; wait?: boolean } | nu
     : param("dialog") === "wait"
       ? { rev: 3, at: now(), dialog: "", wait: true }
       : param("dialog") === "1"
-    ? {
-        rev: 1,
-        at: now(),
-        dialog: JSON.stringify({
-          title: "Sunucu Kuralları",
-          titleSt: [[16, "6l"]],
-          body: [{ text: "1. Saygılı ol, küfür etme.\n2. Hile ve makro yok.\n3. Reklam yapma." }],
-          inputs: [
-            {
-              key: "ok",
-              kind: "bool",
-              label: "Kuralları okudum",
-              initial: false,
-              onTrue: "evet",
-              onFalse: "hayir",
-            },
-          ],
-          buttons: [
-            {
-              i: 0,
-              label: "Kabul et",
-              labelSt: [[8, "a"]],
-              a: "run_command",
-              v: "/kurallar kabul $(ok)",
-            },
-            { i: 1, label: "Forumda oku", a: "open_url", v: "https://forum.projects.gg/kurallar" },
-          ],
-          cancel: true,
-          play: true,
-          cols: 2,
-        }),
-      }
-    : null;
+        ? {
+            rev: 1,
+            at: now(),
+            dialog: JSON.stringify({
+              title: "Sunucu Kuralları",
+              titleSt: [[16, "6l"]],
+              body: [
+                { text: "1. Saygılı ol, küfür etme.\n2. Hile ve makro yok.\n3. Reklam yapma." },
+              ],
+              inputs: [
+                {
+                  key: "ok",
+                  kind: "bool",
+                  label: "Kuralları okudum",
+                  initial: false,
+                  onTrue: "evet",
+                  onFalse: "hayir",
+                },
+              ],
+              buttons: [
+                {
+                  i: 0,
+                  label: "Kabul et",
+                  labelSt: [[8, "a"]],
+                  a: "run_command",
+                  v: "/kurallar kabul $(ok)",
+                },
+                {
+                  i: 1,
+                  label: "Forumda oku",
+                  a: "open_url",
+                  v: "https://forum.projects.gg/kurallar",
+                },
+              ],
+              cancel: true,
+              play: true,
+              cols: 2,
+            }),
+          }
+        : null;
 const dialogListeners = new Set<(accountId: string) => void>();
 
 function setState(account: AfkAccount, state: AfkAccount["state"]) {

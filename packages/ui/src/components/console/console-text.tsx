@@ -202,9 +202,10 @@ export function GameTipTarget({
   className?: string;
   children: ReactNode;
 }) {
-  const [tip, setTip] = useState<{ anchor: TipAnchor; by: "pointer" | "touch" | "keyboard" } | null>(
-    null,
-  );
+  const [tip, setTip] = useState<{
+    anchor: TipAnchor;
+    by: "pointer" | "touch" | "keyboard";
+  } | null>(null);
   const tipRef = useRef<TipHandle>(null);
   const node = useRef<HTMLButtonElement>(null);
   const frame = useRef(0);

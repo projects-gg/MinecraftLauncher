@@ -5,8 +5,9 @@
 // machine and the client refuse any other. A client 4.2.5 dialog (CONSOLE-ANY) fills in and writes
 // its values as Minecraft's own client does (InputControlHandlers, StringTag.escapeWithoutQuotes,
 // StringTemplate, NumberRangeInput.RangeInfo, Java's Float.toString); a 4.2.4 one as 4.2.4 did.
-import type { InventoryLang } from "../inventory/texts";
+
 import { safeInvItem } from "../inventory/safe-item";
+import type { InventoryLang } from "../inventory/texts";
 import type { InvItem } from "../inventory/types";
 import { type ConsoleSpan, clean, lineRuns, MAX_VALUE, safeClick } from "./looks";
 import { CONSOLE_TEXTS } from "./texts";
@@ -348,7 +349,8 @@ export function safeDialog(value: unknown): Dialog | null {
     buttons.push(button);
   }
   const cols = Number.isInteger(value.cols) ? Math.min(4, Math.max(1, value.cols as number)) : 1;
-  const after: DialogAfter = value.after === "none" || value.after === "wait" ? value.after : "close";
+  const after: DialogAfter =
+    value.after === "none" || value.after === "wait" ? value.after : "close";
   if (value.after !== undefined && after === "close") return null;
   const cancel = value.cancel === true;
   let exit: DialogText | null = null;
@@ -396,7 +398,11 @@ function shortest(value: number): { negative: boolean; digits: string; exp: numb
     return { negative, digits, exp: Number(exp) };
   }
   const [mantissa = "0", exp = "0"] = size.toExponential(8).split("e");
-  return { negative, digits: mantissa.replace(".", "").replace(/0+$/, "") || "0", exp: Number(exp) };
+  return {
+    negative,
+    digits: mantissa.replace(".", "").replace(/0+$/, "") || "0",
+    exp: Number(exp),
+  };
 }
 
 /** Digits as a plain decimal; `wholeEnd` ends a whole number (Java writes ".0"). */
@@ -448,7 +454,9 @@ const f32 = Math.fround;
 
 /** The game's place of a value on the slider (`scaledValueToSlider`). */
 function sliderPlace(value: number, input: DialogRangeInput): number {
-  return input.start === input.end ? 0.5 : f32(f32(value - input.start) / f32(input.end - input.start));
+  return input.start === input.end
+    ? 0.5
+    : f32(f32(value - input.start) / f32(input.end - input.start));
 }
 
 const outOfRange = (value: number, input: DialogRangeInput): boolean => {
@@ -506,7 +514,8 @@ export const stepValue = (input: DialogRangeInput, n: number): number =>
 export function sliderLabel(input: DialogRangeInput, value: number): string {
   const text = sliderText(value);
   const format = input.fmt ?? "%s: %s";
-  if (format.includes("%1$s")) return format.split("%1$s").join(input.label).split("%2$s").join(text);
+  if (format.includes("%1$s"))
+    return format.split("%1$s").join(input.label).split("%2$s").join(text);
   const [first = "", second = "", third = ""] = format.split("%s");
   return `${first}${input.label}${second}${text}${third}`;
 }
@@ -560,8 +569,7 @@ export function escapeText(value: string): string {
         out += "\\r";
         break;
       default:
-        out +=
-          c < " " ? `\\x${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}` : c;
+        out += c < " " ? `\\x${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}` : c;
     }
   }
   return out;

@@ -2,6 +2,8 @@
 // DIALOG-CARD: a server's dialog checked as the contract writes it, the command its inputs build
 // as the client builds it, and the card that never runs a command the player has not seen.
 // CONSOLE-ANY: a client 4.2.5 dialog as a real form, its values written as the game writes them.
+
+import { TooltipProvider } from "@pl/ui";
 import {
   type Dialog,
   DialogCard,
@@ -24,7 +26,6 @@ import {
   sliderText,
   sliderValue,
 } from "@pl/ui/console";
-import { TooltipProvider } from "@pl/ui";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -87,7 +88,8 @@ describe("a server's dialog", () => {
     ).toBeNull();
     expect(odd({ buttons: [{ i: 1, label: "x", a: "open_file", v: "C:/x" }] })).toBeNull();
     // Up to 64 buttons (client 4.2.5).
-    const many = (n: number) => Array.from({ length: n }, (_, i) => ({ i, label: "x", a: "close" }));
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ i, label: "x", a: "close" }));
     expect(odd({ buttons: many(64) })).not.toBeNull();
     expect(odd({ buttons: many(65) })).toBeNull();
     expect(odd({ inputs: [{ key: "Bad Key", kind: "text", label: "x", max: 8 }] })).toBeNull();
@@ -127,7 +129,15 @@ describe("a server's dialog", () => {
       ],
       inputs: [
         { ...RAW.inputs[0], fmt: "%s: %s" },
-        { key: "note", kind: "text", label: "Not", max: 64, multiline: true, lines: 4, initial: "" },
+        {
+          key: "note",
+          kind: "text",
+          label: "Not",
+          max: 64,
+          multiline: true,
+          lines: 4,
+          initial: "",
+        },
       ],
       buttons: [
         EXACT.buttons[0],
@@ -177,10 +187,10 @@ describe("a server's dialog", () => {
     const dialog = safeDialog(EXACT) as Dialog;
     const button = dialog.buttons[0];
     if (!button) throw new Error("no button");
-    const values = { ...initialValues(dialog), note: "don't \"$(amount)\"", fast: true };
+    const values = { ...initialValues(dialog), note: 'don\'t "$(amount)"', fast: true };
     // Each variable once, never inside a value; a text escaped as StringTag.escapeWithoutQuotes.
     expect(dialogCommand(dialog, button, values)).toBe(
-      "/trade send diamond 16 evet don\\'t \\\"$(amount)\\\"",
+      '/trade send diamond 16 evet don\\\'t \\"$(amount)\\"',
     );
     // A plain command is sent as it is; a name without an input is nothing.
     const plain = { ...button, v: "/warp $(note)", tpl: false };
@@ -293,7 +303,9 @@ describe("DialogCard", () => {
 
   it("asks before a command runs, with the command its inputs build", () => {
     const onAct = vi.fn();
-    show(<DialogCard dialog={safeDialog(RAW) as Dialog} lang="tr" clock="17:30:00" onAct={onAct} />);
+    show(
+      <DialogCard dialog={safeDialog(RAW) as Dialog} lang="tr" clock="17:30:00" onAct={onAct} />,
+    );
     fireEvent.click(screen.getByText("Gönder"));
     expect(onAct).not.toHaveBeenCalled();
     expect(screen.getByText("Bu komut çalışsın mı?")).not.toBeNull();
@@ -391,11 +403,21 @@ describe("DialogCard", () => {
 
   it("pages a long list, says when the client cut it, and closes with the dialog's own exit", () => {
     const onAct = vi.fn();
-    const buttons = Array.from({ length: 20 }, (_, i) => ({ i, label: `Sunucu ${i}`, a: "custom" }));
+    const buttons = Array.from({ length: 20 }, (_, i) => ({
+      i,
+      label: `Sunucu ${i}`,
+      a: "custom",
+    }));
     show(
       <DialogCard
         dialog={
-          safeDialog({ ...RAW, inputs: [], buttons, cut: true, exit: { label: "Vazgeç" } }) as Dialog
+          safeDialog({
+            ...RAW,
+            inputs: [],
+            buttons,
+            cut: true,
+            exit: { label: "Vazgeç" },
+          }) as Dialog
         }
         lang="tr"
         clock="17:30:00"

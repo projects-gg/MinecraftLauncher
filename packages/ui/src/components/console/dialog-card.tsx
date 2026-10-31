@@ -9,7 +9,7 @@
 // of it reaches the AFK+ agent. The game's waiting screen and its pause and quick action menus are
 // DialogWaiting and DialogMenus below.
 import { CaretLeft, CaretRight, Check as CheckIcon } from "@phosphor-icons/react";
-import { Checkbox, Slider as RadixSlider, RadioGroup } from "radix-ui";
+import { Checkbox, RadioGroup, Slider as RadixSlider } from "radix-ui";
 import { type CSSProperties, useEffect, useId, useMemo, useState } from "react";
 import { ItemSprite } from "../../items/item-sprite";
 import { cn } from "../../lib/cn";
@@ -651,7 +651,10 @@ export function DialogMenus({
   const shown = (["pause", "quick"] as const).filter((menu) => menus[menu]);
   if (!shown.length) return null;
   return (
-    <div role="group" aria-label={t.dialogMenus} className={cn("flex flex-wrap gap-2", className)}>
+    <fieldset
+      aria-label={t.dialogMenus}
+      className={cn("m-0 flex min-w-0 flex-wrap gap-2 border-0 p-0", className)}
+    >
       {shown.map((menu) => {
         const label = menus[menu];
         return label ? (
@@ -660,6 +663,6 @@ export function DialogMenus({
           </Button>
         ) : null;
       })}
-    </div>
+    </fieldset>
   );
 }
