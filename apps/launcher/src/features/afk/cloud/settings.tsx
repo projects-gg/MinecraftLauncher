@@ -26,6 +26,7 @@ import {
   useAfkDrafts,
 } from "../settings/drafts";
 import { SettingsPanel } from "../settings/panel";
+import { useReadBack } from "../settings/read-back";
 import { type CloudAccount, type CloudEditData, cloudApi } from "./api";
 import { withoutRefusal } from "./moderation";
 import { DOCK_HEIGHT, PlusChangeDock } from "./plus/change-dock";
@@ -220,14 +221,21 @@ function Editor({
   // Which save runs: "start" also starts an account stopped on its password (AFK-CLEAR).
   const [saving, setSaving] = useState<"save" | "start" | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
-  // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
-  // button waits, then the edits give way to the stored settings and the bar slides away.
-  const savedRef = useRef(false);
   const [settling, setSettling] = useState(false);
   // Counts the saves the service took and the edits dropped: the address field then shows what was
-  // kept, not a pasted link (SMALLS-L3). Counted when the save is taken, not when it is read back:
-  // the read-back's own effect may come after the save settled.
+  // kept, not a pasted link (SMALLS-L3). Counted when the save is taken, not when it is read back.
   const [revision, setRevision] = useState(0);
+  // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
+  // button waits, then the edits give way to the stored settings and the bar slides away. An edit
+  // made meanwhile stays.
+  const readBack = useReadBack(baseline, (stored) => {
+    setDraftState(stored);
+    setAdded(new Map());
+    setSubmitted(false);
+    setServerIssues([]);
+    setFailure(null);
+    setConflict(false);
+  });
   // Studio's placeholder switch: its checks answer while typing too (the backend checks again).
   const page = useCloudPage().data;
   const features = page?.overview.features ?? null;
@@ -257,26 +265,15 @@ function Editor({
   const [setup, setSetup] = useState<{ step: AccountStep; direction: 1 | -1 } | null>(null);
   const offerSetup = accountNeedsSetup(baseline.config) && !setupPutAway.has(account.id);
 
-  // Runs when a save comes back as the stored settings.
-  useEffect(() => {
-    if (!savedRef.current) return;
-    savedRef.current = false;
-    setDraftState(baseline);
-    setAdded(new Map());
-    setSubmitted(false);
-    setServerIssues([]);
-    setFailure(null);
-    setConflict(false);
-  }, [baseline]);
-
   const dirty = isDirty(draft, baseline);
   // "Ayarları bir kez kaydet" (old rules): saving is worth it even with nothing changed.
   const savable = dirty || Boolean(account.features?.legacyRules);
   useEffect(() => {
-    if (!savedRef.current) hold(slot, dirty ? { draft, base: baseline } : null);
-  }, [hold, slot, dirty, draft, baseline]);
+    if (!readBack.waiting()) hold(slot, dirty ? { draft, base: baseline } : null);
+  }, [hold, slot, dirty, draft, baseline, readBack]);
 
   const setDraft = (update: (d: Draft) => Draft) => {
+    readBack.cancel();
     setDraftState(update);
     setServerIssues([]);
     setFailure(null);
@@ -339,7 +336,7 @@ function Editor({
     try {
       const result = await cloudApi.save(account.id, toEdit(draft, baseline, view));
       if (result.kind === "saved") {
-        savedRef.current = true;
+        readBack.expect();
         setSettling(true);
         setRevision((n) => n + 1);
         hold(slot, null);
@@ -361,10 +358,8 @@ function Editor({
           t("cloudAfk.settings.saved", { name: result.account.name }),
           description ? { description } : undefined,
         );
-        void onSaved().finally(() => {
-          savedRef.current = false;
-          setSettling(false);
-        });
+        // The read-back itself reaches the editor a tick after this settles (useReadBack).
+        void onSaved().finally(() => setSettling(false));
         return true;
       }
       if (result.kind === "invalid") {
