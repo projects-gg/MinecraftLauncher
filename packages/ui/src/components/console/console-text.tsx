@@ -206,7 +206,7 @@ export function GameTipTarget({
     null,
   );
   const tipRef = useRef<TipHandle>(null);
-  const node = useRef<HTMLSpanElement>(null);
+  const node = useRef<HTMLButtonElement>(null);
   const frame = useRef(0);
   const pointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   useEffect(() => {
@@ -244,13 +244,20 @@ export function GameTipTarget({
       });
     }
   };
+  if (!lines) {
+    return (
+      <span role="img" aria-label={label} className={className}>
+        {children}
+      </span>
+    );
+  }
   return (
     <>
-      <span
+      {/* A button only to show its tooltip: the keyboard reaches it, a tap opens it. */}
+      <button
         ref={node}
-        role="img"
+        type="button"
         aria-label={label}
-        tabIndex={lines ? 0 : undefined}
         className={className}
         onPointerEnter={follow}
         onPointerMove={follow}
@@ -270,7 +277,7 @@ export function GameTipTarget({
         onBlur={() => setTip((open) => (open?.by === "keyboard" ? null : open))}
       >
         {children}
-      </span>
+      </button>
       {tip && lines ? <GameTip ref={tipRef} lines={lines} anchor={tip.anchor} /> : null}
     </>
   );

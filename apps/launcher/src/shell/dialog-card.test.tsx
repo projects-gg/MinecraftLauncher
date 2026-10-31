@@ -422,10 +422,21 @@ describe("DialogCard", () => {
         onAct={vi.fn()}
       />,
     );
-    const tile = screen.getByRole("img", { name: "Elmas" });
-    expect(tile.getAttribute("tabindex")).toBe("0");
+    // The keyboard reaches its tooltip: the tile is a button that shows it.
+    expect(screen.getByRole("button", { name: "Elmas" }).getAttribute("type")).toBe("button");
     expect(screen.getByText("Ödülün")).not.toBeNull();
     expect(screen.getByText("3")).not.toBeNull();
+    cleanup();
+    // The game draws no tooltip for it: a picture with its name.
+    show(
+      <DialogCard
+        dialog={safeDialog({ ...RAW, body: [{ text: "Ödülün", item, noTip: true }] }) as Dialog}
+        lang="tr"
+        clock="17:30:00"
+        onAct={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("img", { name: "Elmas" })).not.toBeNull();
   });
 });
 
