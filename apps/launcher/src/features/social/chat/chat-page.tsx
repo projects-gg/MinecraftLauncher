@@ -3,7 +3,7 @@
 // when it is installed) and the conversation's menu (mute here, clear the history here, report);
 // the body is the conversation.
 import { BellSlash, Broom, CaretLeft, DotsThree, Flag, SpeakerHigh } from "@phosphor-icons/react";
-import { Button, cn, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
+import { Button, ContentIcon, cn, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
 import { Dialog as RadixDialog } from "radix-ui";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -362,9 +362,13 @@ export function ChatPage() {
       onScreen
       onReport={report}
       empty={
-        <p className="text-center text-[13px] text-ash-400">
-          {peer ? t("chat.list.noMessages") : t("chat.composer.notFriends")}
-        </p>
+        // The crew's empty chat's quiet bubble over its line (design.md §6, CHAT-UX).
+        <div className="flex flex-col items-center gap-2 text-center">
+          <ContentIcon kind="chat" quiet />
+          <p className="text-[13px] text-ash-400">
+            {peer ? t("chat.list.noMessages") : t("chat.composer.notFriends")}
+          </p>
+        </div>
       }
     />
   );

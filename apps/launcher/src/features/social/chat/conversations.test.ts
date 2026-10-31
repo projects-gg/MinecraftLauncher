@@ -134,4 +134,16 @@ describe("conversations", () => {
     expect(newDay(undefined, first)).toBe(true);
     expect(newDay(first, message("i:5", 1_000 + 86_400_000))).toBe(true);
   });
+
+  it("group a sender's messages up to five minutes apart on one local day (CHAT-UX)", () => {
+    const at = new Date(2026, 9, 31, 14, 0).getTime();
+    const first = message("i:1", at);
+    expect(sameGroup(first, message("i:2", at + 5 * 60_000))).toBe(true);
+    expect(sameGroup(first, message("i:3", at + 5 * 60_000 + 1))).toBe(false);
+    // Two minutes apart across midnight: two days, two groups.
+    const late = message("i:4", new Date(2026, 9, 30, 23, 59).getTime());
+    const early = message("i:5", new Date(2026, 9, 31, 0, 1).getTime());
+    expect(sameGroup(late, early)).toBe(false);
+    expect(newDay(late, early)).toBe(true);
+  });
 });
