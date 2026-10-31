@@ -1,7 +1,7 @@
 // A direct conversation in the friends panel: the header carries the friend (picture, presence,
-// the crew tag they wear, TEAM6), a small ghost "Discord'dan mesajlaş" (Discord's own mark, the app
-// when it is installed) and the conversation's menu (mute here, clear the history here, report);
-// the body is the conversation.
+// the crew tag they wear, TEAM6), "Discord'dan mesajlaş" as Discord's own mark alone (its words the
+// tooltip; the app when it is installed) and the conversation's menu (mute here, clear the history
+// here, report); the body is the conversation.
 import { BellSlash, Broom, CaretLeft, DotsThree, Flag, SpeakerHigh } from "@phosphor-icons/react";
 import { Button, ContentIcon, cn, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
 import { Dialog as RadixDialog } from "radix-ui";
@@ -246,15 +246,14 @@ export function ChatHeader() {
         </div>
       </PersonContextMenu>
       {peer ? (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="shrink-0 px-2"
-          icon={<DiscordGlyph />}
+        // Discord's mark alone, its words the tooltip and the name (CHAT-UX: beside the presence
+        // line the words cut it, "Başka sunucuda 1…").
+        <IconButton
+          label={t("chat.actions.discord")}
+          icon={<DiscordGlyph height={14} />}
+          className="shrink-0"
           onClick={() => void openInDiscord(peer)}
-        >
-          {t("chat.actions.discord")}
-        </Button>
+        />
       ) : null}
       <Menu
         items={items}
