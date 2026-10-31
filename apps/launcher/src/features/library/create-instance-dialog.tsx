@@ -201,7 +201,21 @@ export function CreateInstanceDialog({
     },
     onError: (error) => showError(error),
   });
-  const canCreate = !create.isPending && Boolean(mcVersion);
+  // A modded instance needs its loader's build for the version: none (or the list failed) says
+  // so under the box, and "Kurulum oluştur" waits for one (also while the list loads); before,
+  // it made an instance whose first OYNA could only fail.
+  const loaderProblem =
+    loader === "vanilla" || loaderQuery.isPending
+      ? null
+      : loaderQuery.isError
+        ? t("qol.create.loaderFailed")
+        : (loaderQuery.data?.length ?? 0) === 0
+          ? t("qol.create.noLoaderBuild", { loader: t(`loaders.${loader}`) })
+          : null;
+  const canCreate =
+    !create.isPending &&
+    Boolean(mcVersion) &&
+    (loader === "vanilla" || (Boolean(loaderVersion) && !loaderProblem));
   const versionSearch = {
     searchLabel: t("modCenter.versions.search"),
     emptyText: t("create.noMatch"),
@@ -348,6 +362,7 @@ export function CreateInstanceDialog({
               <Field
                 label={t("create.loader")}
                 help={loader === "vanilla" ? t("create.loaderHelpVanilla") : t("create.loaderHelp")}
+                error={loaderProblem}
               >
                 <div className="flex flex-col gap-2">
                   <Select

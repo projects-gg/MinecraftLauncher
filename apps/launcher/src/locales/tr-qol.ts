@@ -15,4 +15,13 @@ export const trQol = {
     /** Modlar → Setler, the same. */
     setsLocked: "Oyun açıkken setler değiştirilemez.",
   },
+  create: {
+    /**
+     * "Yeni kurulum": the picked mod loader has no build for the picked Minecraft version (under
+     * the loader box; "Kurulum oluştur" stays off). `loader` is its name ("NeoForge").
+     */
+    noLoaderBuild: "{{loader}} bu sürümü desteklemiyor. Başka bir sürüm ya da yükleyici seç.",
+    /** The loader's versions could not be fetched (no connection). */
+    loaderFailed: "Yükleyici sürümleri alınamadı. Bağlantını kontrol et.",
+  },
 };

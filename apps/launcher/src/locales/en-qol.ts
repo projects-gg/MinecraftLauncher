@@ -8,4 +8,8 @@ export const enQol = {
     locked: "Mods can't be changed while the game is open.",
     setsLocked: "Sets can't be changed while the game is open.",
   },
+  create: {
+    noLoaderBuild: "{{loader}} doesn't support this version. Pick another version or loader.",
+    loaderFailed: "Couldn't get the loader versions. Check your connection.",
+  },
 };
