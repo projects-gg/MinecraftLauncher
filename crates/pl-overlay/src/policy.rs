@@ -144,6 +144,9 @@ pub enum Notice<'a> {
         mine: bool,
         /// From someone the player blocked.
         blocked: bool,
+        /// CHAT-CALM: it answers one of the player's own messages (there are no mentions): heard
+        /// in crew chat even while its notifications are off or the crew is muted.
+        to_me: bool,
     },
     /// A teammate called; `crews` are the crew ids the call names (none: the first crew).
     Call {
@@ -171,6 +174,7 @@ pub fn heard(notice: &Notice<'_>, s: &Situation<'_>) -> bool {
             crew,
             mine,
             blocked,
+            to_me,
             ..
         } => {
             if mine || blocked || s.prefs.conversation_muted(conv, s.now_ms) {
@@ -179,6 +183,11 @@ pub fn heard(notice: &Notice<'_>, s: &Situation<'_>) -> bool {
             let Some((crew, _)) = crew else {
                 return true;
             };
+            // A reply to the player is heard as a mention would be (CHAT-CALM): a crowded crew
+            // starts muted, and its chat says nothing else.
+            if to_me {
+                return true;
+            }
             // A crew the list does not have (yet) is never silent, as on the page.
             s.prefs.crew_chat
                 && s.crews
@@ -301,6 +310,8 @@ mod tests {
             mine: bool,
             #[serde(default)]
             blocked: bool,
+            #[serde(default, rename = "toMe")]
+            to_me: bool,
         },
         Call {
             #[serde(default)]
@@ -403,12 +414,14 @@ mod tests {
                     text: "selam",
                     mine: *mine,
                     blocked: *blocked,
+                    to_me: false,
                 },
                 Event::Crew {
                     conv,
                     crew,
                     mine,
                     blocked,
+                    to_me,
                 } => Notice::Message {
                     conv,
                     crew: Some((crew, "Gece Kuşları")),
@@ -416,6 +429,7 @@ mod tests {
                     text: "toplanın",
                     mine: *mine,
                     blocked: *blocked,
+                    to_me: *to_me,
                 },
                 Event::Call { crews } => Notice::Call {
                     id: "k1",
@@ -460,6 +474,7 @@ mod tests {
                 text: "Akşam bedwars?",
                 mine: false,
                 blocked: false,
+                to_me: false,
             },
             &s,
         )
@@ -484,6 +499,7 @@ mod tests {
                 text: "Toplanın",
                 mine: false,
                 blocked: false,
+                to_me: false,
             },
             &s,
         )

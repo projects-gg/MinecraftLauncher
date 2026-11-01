@@ -10,6 +10,7 @@ import { trAfkPlus } from "./tr-afkplus";
 import { trAutojoin } from "./tr-autojoin";
 import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
+import { trChatCalm } from "./tr-chat-calm";
 import { trChatProd } from "./tr-chat-prod";
 import { trChat2 } from "./tr-chat2";
 import { trCloudAfk } from "./tr-cloud-afk";
@@ -117,6 +118,7 @@ export const tr = {
   fix2: trFix2,
   chat2: trChat2,
   team6: trTeam6,
+  chatCalm: trChatCalm,
   verify: trVerify,
   identity: trIdentity,
   cloudAfk: trCloudAfk,
@@ -1072,8 +1074,8 @@ export const tr = {
     appearance: {
       performance: "Performans modu",
       performanceHelp:
-        "Video, kıvılcım ve bulanıklık efektlerini kapatır, animasyonları azaltır. Zayıf bilgisayarlarda önerilir.",
-      particles: "Ana sayfada kıvılcım efekti",
+        "Video, parçacık ve bulanıklık efektlerini kapatır, animasyonları azaltır. Zayıf bilgisayarlarda önerilir.",
+      particles: "Ana sayfada parçacıklar",
       sounds: "Arayüz sesleri",
       volume: "Ses düzeyi",
     },

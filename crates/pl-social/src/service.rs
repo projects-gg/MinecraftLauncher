@@ -50,12 +50,12 @@ use crate::minecraft::{McSignal, McSink};
 use crate::model::{
     ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMute, CrewMuteEdit, EditFeatures,
     FIRST_EMBLEMS, FriendGroup, FriendGroups, JoinMode, JoinOutcome, LimitedKey, LinkRule,
-    MAX_FRIEND_GROUPS, Me, NoticeKind, ProfileUpdate, ReportReason, RequestOutcome, SessionInfo,
-    SettingsMeta, SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS,
+    MAX_FRIEND_GROUPS, Me, NoticeKind, ProfileUpdate, ReportReason, RequestOutcome, SLOW_STEPS,
+    SessionInfo, SettingsMeta, SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS,
     TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK,
     TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES,
-    TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup,
-    TeamNotifications, TeamNotificationsEdit, TeamRole,
+    TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TEAM_FEATURE_SLOW, TeamEdit,
+    TeamLook, TeamLookup, TeamNotifications, TeamNotificationsEdit, TeamRole,
 };
 use crate::presence::{
     ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, RelVersion, StopReason,
@@ -693,7 +693,8 @@ impl SocialService {
             notices.retain(|notice| match notice {
                 SocialNotice::TeamInvite { .. }
                 | SocialNotice::TeamGone { .. }
-                | SocialNotice::CrewmateOnProjects { .. } => core.teams,
+                | SocialNotice::CrewmateOnProjects { .. }
+                | SocialNotice::CrowdedCrewMuted { .. } => core.teams,
                 SocialNotice::CrewCall { .. } | SocialNotice::CrewCallJoin { .. } => calls,
                 SocialNotice::JoinRequest { .. } | SocialNotice::RequestAccepted { .. } => requests,
                 SocialNotice::CrewPlan { .. } => plans,
@@ -1566,6 +1567,7 @@ impl SocialService {
             requests: self.offers(TEAM_FEATURE_REQUESTS),
             badges: self.offers(TEAM_FEATURE_BADGES),
             badge_requests: self.offers(TEAM_FEATURE_BADGE_REQUESTS),
+            slow: self.offers(TEAM_FEATURE_SLOW),
         });
         if edit.is_empty() {
             return Ok(());
@@ -1923,6 +1925,26 @@ impl SocialService {
             team,
             TeamEdit {
                 badge_requests: Some(on),
+                ..TeamEdit::default()
+            },
+        )
+        .await
+    }
+
+    /// "Yavaş mod" of one of the player's crews (the leader or a moderator; a service with
+    /// `slow`, CHAT-CALM): seconds between one member's messages in its chat, one of
+    /// [`SLOW_STEPS`] (0: off). Members see it in their composer at once (the `team` frame).
+    pub async fn set_team_slow(&self, team: &str, seconds: u32) -> Result<()> {
+        if !self.offers(TEAM_FEATURE_SLOW) {
+            return Err(SocialError::InvalidInput("slow mode"));
+        }
+        if !SLOW_STEPS.contains(&seconds) {
+            return Err(SocialError::InvalidInput("slow"));
+        }
+        self.edit_team(
+            team,
+            TeamEdit {
+                slow: Some(seconds),
                 ..TeamEdit::default()
             },
         )
@@ -6643,6 +6665,83 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn slow_mode_goes_only_to_a_service_that_has_it() {
+        // CHAT-CALM: "Yavaş mod" is a crew setting of its own steps; an older service hears none.
+        let bodies = Arc::new(Mutex::new(Vec::<String>::new()));
+        let offered = Arc::new(Mutex::new(true));
+        let server = MockServer::start({
+            let bodies = bodies.clone();
+            let offered = offered.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    if req.method != "GET" {
+                        bodies.lock().unwrap().push(format!(
+                            "{} {} {}",
+                            req.method,
+                            req.path,
+                            req.body_text()
+                        ));
+                    }
+                    let features = if *offered.lock().unwrap() {
+                        r#"["look","roles","multi","slow"]"#
+                    } else {
+                        r#"["look","roles","multi"]"#
+                    };
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => MockReply::json(200, ME),
+                        ("GET", "/v1/friends") => {
+                            MockReply::json(200, &friends_with_tags(features))
+                        }
+                        ("PATCH", "/v1/teams/0123456789abcdef") => {
+                            let slow = CREW_A.replacen('{', r#"{"slow":30,"#, 1);
+                            MockReply::json(200, &format!(r#"{{"team":{slow},"invited":[]}}"#))
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        assert_eq!(view.crews[0].slow, 0);
+        harness
+            .service
+            .set_team_slow("0123456789abcdef", 30)
+            .await
+            .unwrap();
+        assert_eq!(harness.service.view().crews[0].slow, 30);
+        // Only the service's steps go.
+        assert!(matches!(
+            harness.service.set_team_slow("0123456789abcdef", 15).await,
+            Err(SocialError::InvalidInput("slow"))
+        ));
+        assert_eq!(
+            bodies.lock().unwrap().clone(),
+            vec![r#"PATCH /v1/teams/0123456789abcdef {"slow":30}"#.to_owned()]
+        );
+        // A service without it: nothing goes, and a crew it sends shows none.
+        *offered.lock().unwrap() = false;
+        harness.service.refresh().await;
+        harness
+            .until("an older service", |view| {
+                !view.team_features.iter().any(|feature| feature == "slow")
+            })
+            .await;
+        assert!(matches!(
+            harness.service.set_team_slow("0123456789abcdef", 10).await,
+            Err(SocialError::InvalidInput("slow mode"))
+        ));
+        assert_eq!(bodies.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

@@ -52,6 +52,7 @@
 // - the ways into the account (SOC-ID: Microsoft, "Bağlı hesaplar", the name step):
 //   mock-identity.ts (`signedOutMicrosoft`, `microsoftOnly`, `linkedBoth`…).
 import { CHAT_SCENARIOS, mockChat } from "./mock-chat";
+import { CALM_SCENARIOS, calmApi, calmSnapshot, startCalm } from "./mock-chat-calm";
 import { BADGE_SCENARIOS, badgesApi, badgesSnapshot, startBadges } from "./mock-crew-badges";
 import { startWave2, WAVE2_SCENARIOS, wave2Api, wave2Snapshot } from "./mock-crew-wave2";
 import {
@@ -659,6 +660,8 @@ function initial(): SocialSnapshot {
           // On with crew tags' data (mock-crew-badges.ts).
           badges: false,
           badgeRequests: false,
+          // CHAT-CALM (mock-chat-calm.ts).
+          slow: false,
         },
     crewNotifications: keepsMutes
       ? {
@@ -671,6 +674,8 @@ function initial(): SocialSnapshot {
     crewLimit: previewLimit(),
     ...extra,
   });
+  // CHAT-CALM's (mock-chat-calm.ts): a plain member of a slow crew, or its leader.
+  if (CALM_SCENARIOS.includes(name)) return crewed([previewTeam(name === "chatCalmLead")]);
   // Chat previews (mock-chat.ts): the player leads the crew, so its chat is there too (GeceKurdu_ leads
   // it in `chatTombstones`, whose crew chat shows her deletion).
   if (CHAT_SCENARIOS.includes(name)) return crewed([previewTeam(name !== "chatTombstones")]);
@@ -856,6 +861,7 @@ const NO_CREW_FEATURES = {
   crewFriendRequests: false,
   badges: false,
   badgeRequests: false,
+  slow: false,
 };
 
 // Chat (CHAT1) lives in mock-chat.ts, on this preview's data.
@@ -870,9 +876,12 @@ let view = withPlace(
   placed(
     chat.prepare(
       identitySnapshot(
-        badgesSnapshot(
-          wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }),
-          badgesContext(),
+        calmSnapshot(
+          badgesSnapshot(
+            wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }),
+            badgesContext(),
+          ),
+          calmContext(),
         ),
         { scenario: scenario() },
       ),
@@ -883,6 +892,11 @@ let view = withPlace(
 /** What mock-identity.ts works on (SOC-ID): this preview's data and its ways to change it. */
 function identityContext() {
   return { scenario: scenario(), param: searchParam, view: () => view, commit, tell };
+}
+
+/** What mock-chat-calm.ts works on (CHAT-CALM). */
+function calmContext() {
+  return { scenario: scenario(), param: searchParam, commit, tell };
 }
 
 /** What mock-crew-badges.ts works on: this preview's data and its ways to change it. */
@@ -928,6 +942,7 @@ if (typeof window !== "undefined") {
   startWave2(wave2Context());
   startBadges(badgesContext());
   startIdentity(identityContext());
+  startCalm(calmContext());
   // `&liveAt=<ms>`: when the live moderators' step comes.
   const liveAt = Number(searchParam("liveAt")) || 1600;
   if (name === "restrictedLive") {
@@ -1118,6 +1133,7 @@ function wave2Context() {
 const wave2 = wave2Api(wave2Context());
 const badges = badgesApi(badgesContext());
 const identity = identityApi(identityContext());
+const calm = calmApi(calmContext());
 /** Crews whose leaders approve newcomers (with the second wave). */
 const APPROVING = new Set(["fedcba9876543210"]);
 
@@ -1150,6 +1166,7 @@ export const mockSocial: SocialApi = {
   answerTeamRequest: wave2.answerTeamRequest,
   setTeamLink: wave2.setTeamLink,
   setJoinMode: wave2.setJoinMode,
+  setTeamSlow: calm.setTeamSlow,
   makePlan: wave2.makePlan,
   setPlanNote: wave2.setPlanNote,
   answerPlan: wave2.answerPlan,

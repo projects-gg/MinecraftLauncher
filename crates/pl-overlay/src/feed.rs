@@ -666,6 +666,13 @@ impl Scene {
                             .iter()
                             .any(|one| one.id == crew && one.mute.on_at(now_ms))
                 });
+                // CHAT-CALM: the crew's slow mode, for a player who waits (not its leader or a
+                // moderator).
+                let slow = crew
+                    .and_then(|crew| view.crews.iter().find(|team| team.id == crew))
+                    .filter(|team| team.role != TeamRole::Founder && !team.moderator)
+                    .map(|team| team.slow)
+                    .filter(|slow| *slow > 0);
                 ConvView {
                     id: conv.id.clone(),
                     kind: if crew.is_some() {
@@ -678,6 +685,7 @@ impl Scene {
                     muted: prefs.conversation_muted(&conv.id, now_ms) || crew_muted,
                     writable: chat_on && conv.writable,
                     seen: conv.peer_read.filter(|_| reads && crew.is_none()),
+                    slow,
                 }
             })
             .collect();
@@ -1178,6 +1186,9 @@ fn failure_of(failure: Option<SocialFailure>, listener: Listener) -> SendFailure
         Some(SocialFailure::Links) if listener.chat2 => SendFailure::Links,
         Some(SocialFailure::LimitedLinks) if listener.chat2 => SendFailure::LimitedLinks,
         Some(SocialFailure::FeatureOff) if listener.chat2 => SendFailure::FeatureOff,
+        // CHAT-CALM: a crew's slow mode; an older mod says "too fast".
+        Some(SocialFailure::Slow) if listener.slow => SendFailure::Slow,
+        Some(SocialFailure::Slow) => SendFailure::Rate,
         Some(SocialFailure::Stickers | SocialFailure::Links) => SendFailure::DailyLimit,
         Some(SocialFailure::LimitedLinks) => SendFailure::Link,
         Some(SocialFailure::FeatureOff) => SendFailure::Off,
@@ -1192,6 +1203,9 @@ fn failure_of(failure: Option<SocialFailure>, listener: Listener) -> SendFailure
 pub struct Listener {
     pub english: bool,
     pub chat2: bool,
+    /// CHAT-CALM: the mod knows crew chat's slow mode (`slow` in its hello): it hears `slow` as a
+    /// reason and counts the wait down itself.
+    pub slow: bool,
 }
 
 impl Listener {
@@ -1212,6 +1226,9 @@ impl Listener {
             chat2: features
                 .iter()
                 .any(|feature| feature == crate::protocol::FEATURE_CHAT2),
+            slow: features
+                .iter()
+                .any(|feature| feature == crate::protocol::FEATURE_SLOW),
         }
     }
 }
@@ -1596,6 +1613,12 @@ pub fn toast_of(
                     text: &text,
                     mine: message.mine,
                     blocked: scene.is_blocked(&message.from),
+                    // CHAT-CALM: a reply to one of the player's messages reaches them in a muted
+                    // crew too.
+                    to_me: message
+                        .reply
+                        .as_ref()
+                        .is_some_and(|reply| !scene.me_id.is_empty() && reply.from == scene.me_id),
                 },
                 &situation,
             )
@@ -1777,6 +1800,7 @@ pub(crate) mod tests {
             hidden: false,
             badge_requests: true,
             wearers: 0,
+            slow: 0,
         }
     }
 
@@ -2502,7 +2526,85 @@ pub(crate) mod tests {
     const CHAT2: Listener = Listener {
         english: false,
         chat2: true,
+        slow: false,
     };
+
+    #[test]
+    fn slow_mode_reaches_the_mod_for_players_who_wait() {
+        // CHAT-CALM: a crew's slow mode on its conversation, only for a player who waits.
+        let mut v = view();
+        v.crews[0].slow = 30;
+        let scene = Scene::from_view(&v, &NotifyPrefs::default(), NOW);
+        let crew = |scene: &Scene| scene.convs.iter().find(|c| c.id == "c:t1").unwrap().slow;
+        assert_eq!(crew(&scene), Some(30));
+        assert!(
+            scene
+                .convs
+                .iter()
+                .filter(|c| c.id != "c:t1")
+                .all(|c| c.slow.is_none())
+        );
+        // The leader and the moderators never wait; nor does anyone in a crew without it.
+        v.crews[0].moderator = true;
+        assert_eq!(
+            crew(&Scene::from_view(&v, &NotifyPrefs::default(), NOW)),
+            None
+        );
+        v.crews[0].moderator = false;
+        v.crews[0].role = TeamRole::Founder;
+        assert_eq!(
+            crew(&Scene::from_view(&v, &NotifyPrefs::default(), NOW)),
+            None
+        );
+        v.crews[0].role = TeamRole::Member;
+        v.crews[0].slow = 0;
+        assert_eq!(
+            crew(&Scene::from_view(&v, &NotifyPrefs::default(), NOW)),
+            None
+        );
+        // The reason: precise for a mod that knows it, "too fast" for an older one.
+        let knows = Listener {
+            slow: true,
+            ..CHAT2
+        };
+        assert_eq!(
+            failure_of(Some(SocialFailure::Slow), knows),
+            SendFailure::Slow
+        );
+        assert_eq!(
+            failure_of(Some(SocialFailure::Slow), CHAT2),
+            SendFailure::Rate
+        );
+        assert!(Listener::from_hello("tr_tr", &["chat2".into(), "slow".into()], Lang::Tr).slow);
+        assert!(!Listener::from_hello("tr_tr", &["chat2".into()], Lang::Tr).slow);
+    }
+
+    #[test]
+    fn a_reply_to_the_player_reaches_them_in_a_quiet_crew() {
+        // CHAT-CALM: crew chat notifications are off by default; a reply to the player is heard.
+        let scene = Scene::from_view(&view(), &NotifyPrefs::default(), NOW);
+        let reply = |to: &str| {
+            let mut message = message("i:9", "u-cem", false, MessageState::Sent);
+            message.reply = Some(pl_social::ChatReplyView {
+                id: 1,
+                from: to.into(),
+                key: None,
+                text: Some("gelen var mı".into()),
+                sticker: None,
+                deleted: false,
+                missing: false,
+            });
+            SocialNotice::ChatMessage {
+                conv: "c:t1".into(),
+                message: Box::new(message),
+                name: Some("Cem".into()),
+                crew: Some("t1".into()),
+            }
+        };
+        let prefs = NotifyPrefs::default();
+        assert!(toast_of(&reply("me"), &scene, &prefs, NOW, CHAT2).is_some());
+        assert!(toast_of(&reply("f-ayse"), &scene, &prefs, NOW, CHAT2).is_none());
+    }
 
     #[test]
     fn chat2_extras_are_features_each_on_its_own() {
@@ -2707,6 +2809,7 @@ pub(crate) mod tests {
             Listener {
                 english: true,
                 chat2: false,
+                slow: false,
             },
         );
         assert_eq!(english.text, "[Sticker: GG]");
@@ -2948,7 +3051,8 @@ pub(crate) mod tests {
             Listener::from_hello("en_us", &["connect".into(), "chat2".into()], Lang::Tr),
             Listener {
                 english: true,
-                chat2: true
+                chat2: true,
+                slow: false,
             }
         );
         assert_eq!(

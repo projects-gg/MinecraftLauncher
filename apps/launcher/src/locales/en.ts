@@ -9,6 +9,7 @@ import { enAfkPlus } from "./en-afkplus";
 import { enAutojoin } from "./en-autojoin";
 import { enBetaGate } from "./en-beta-gate";
 import { enChat } from "./en-chat";
+import { enChatCalm } from "./en-chat-calm";
 import { enChatProd } from "./en-chat-prod";
 import { enChat2 } from "./en-chat2";
 import { enCloudAfk } from "./en-cloud-afk";
@@ -324,6 +325,7 @@ export const en: DeepPartial<Strings> = {
   fix2: enFix2,
   chat2: enChat2,
   team6: enTeam6,
+  chatCalm: enChatCalm,
   verify: enVerify,
   identity: enIdentity,
   cloudAfk: enCloudAfk,
@@ -1311,8 +1313,8 @@ export const en: DeepPartial<Strings> = {
     appearance: {
       performance: "Performance mode",
       performanceHelp:
-        "Turns off video, ember and blur effects, and reduces animations. Recommended for slower computers.",
-      particles: "Ember effect on the home page",
+        "Turns off video, particle and blur effects, and reduces animations. Recommended for slower computers.",
+      particles: "Particles on the home page",
       sounds: "Interface sounds",
       volume: "Volume",
     },
