@@ -801,8 +801,17 @@ export const commands = {
 	 *  Shows a system notification; true when the system took it. On Windows a click comes back to
 	 *  the page as the `desktop-notification-click` event with `id`. False when the player turned the
 	 *  launcher's notifications off in Windows, so the page keeps its own toast.
+	 * 
+	 *  `tag` (CHAT-CALM, Windows): the conversation it is about. With `popup` it takes the place of the
+	 *  conversation's notification and pops up; without, the one shown says the new words in place
+	 *  (none shown, the player closed it: nothing happens, and that is fine too).
 	 */
-	desktopNotify: (title: string, body: string | null, id: number) => __TAURI_INVOKE<boolean>("desktop_notify", { title, body, id }),
+	desktopNotify: (title: string, body: string | null, id: number, tag: string | null, popup: boolean) => __TAURI_INVOKE<boolean>("desktop_notify", { title, body, id, tag, popup }),
+	/**
+	 *  Takes the conversation's notification (`tag`, CHAT-CALM) away from the notification center:
+	 *  the player read it in the launcher. Never fails.
+	 */
+	desktopNotifyClear: (tag: string) => __TAURI_INVOKE<void>("desktop_notify_clear", { tag }),
 	/**  What the dragged files are (called as soon as a drag enters the window). */
 	filesClassify: (paths: string[]) => __TAURI_INVOKE<DroppedFileView[]>("files_classify", { paths }),
 	/**

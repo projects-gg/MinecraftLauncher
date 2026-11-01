@@ -393,6 +393,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             shell::launcher_leave_for_game,
             shell::window_bring_forward,
             notify::desktop_notify,
+            notify::desktop_notify_clear,
             // small conveniences: dropped files, "Devam et", desktop shortcuts
             commands::drop::files_classify,
             commands::drop::files_drop,
