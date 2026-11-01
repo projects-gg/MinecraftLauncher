@@ -7,7 +7,8 @@ import java.util.List;
  * How the overlay looks and sounds on this computer: the player's fine-tuning from the panel's settings
  * page. The launcher decides whether a toast is sent; these decide how (or whether) the game shows it.
  * {@code keyUsed} is no preference: the overlay key has opened the panel here at least once (F7-OPEN: the toasts'
- * "Olmazsa [Fn] + [F7] tuşlarına bas" line stops for good). Immutable; the {@code with…} methods return a changed copy.
+ * "Açılmazsa [Fn] + [F7] tuşlarına bas" line stops for good). Immutable; the {@code with…} methods return a changed
+ * copy.
  */
 public record OverlaySettings(
     boolean messageToasts,
