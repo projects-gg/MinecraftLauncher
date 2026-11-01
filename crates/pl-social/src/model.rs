@@ -1236,6 +1236,7 @@ pub struct SessionInfo {
     /// How the session signed in (SOC-ID; None from an older service, and for a way this version
     /// does not know).
     #[serde(default, deserialize_with = "crate::identity::readable_provider")]
+    #[specta(type = Option<Provider>)]
     pub via: Option<Provider>,
 }
 
