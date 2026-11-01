@@ -152,7 +152,7 @@ public final class Team6Scenario implements ClientModInitializer {
                 if (secs() > MEASURE_S) {
                     results.add("idle", FrameClock.stop());
                     results.add("idleOverlay", perf(Perf.drain()));
-                    // Three toasts at once, two of them with a tag ("[GK] Ayşe", "[GKŞ] Mert").
+                    // Three toasts at once, two of them with a tag ("[GKR] Ayşe", "[GKŞ] Mert").
                     dev(overlay, "one");
                     dev(overlay, "crew-in");
                     dev(overlay, "crew-in", "from", "Deniz", "text", "Geliyorum, 5 dk");
