@@ -149,9 +149,10 @@ fn seen_before(midnight: f64) -> bool {
     }
     (0..=480).any(|step| {
         let lat = -MAX_LATITUDE + f64::from(step) * 0.25;
-        sky.sun_hour_angle(lat, SUNSET_ALTITUDE)
+        sky.sun
+            .hour_angle(lat, SUNSET_ALTITUDE)
             .is_some_and(|hour_angle| {
-                let lon = sky.longitude_at_sun_hour_angle(hour_angle);
+                let lon = sky.sun.longitude_at_hour_angle(hour_angle);
                 sky.moon_altitude(lat, lon) >= MIN_ALTITUDE
             })
     })

@@ -218,12 +218,51 @@ fn mean_sidereal(jd: f64) -> f64 {
     )
 }
 
-/// The Sun and the Moon as seen from the Earth's centre at one moment.
-pub(super) struct Sky {
+/// The Sun and the Earth's turn at one moment: all a sunset or a dawn needs.
+pub(super) struct SunSky {
     /// Greenwich apparent sidereal time.
     sidereal: f64,
-    sun_ra: f64,
-    sun_dec: f64,
+    ra: f64,
+    dec: f64,
+}
+
+impl SunSky {
+    pub(super) fn at(jd: f64) -> Self {
+        let jde = jd + delta_t_days(jd);
+        Self::with(jd, jde, &nutation(jde))
+    }
+
+    fn with(jd: f64, jde: f64, nut: &Nutation) -> Self {
+        let (ra, dec) = equatorial(sun_longitude(jde), 0.0, nut.obliquity);
+        Self {
+            sidereal: norm(mean_sidereal(jd) + nut.psi * cos_d(nut.obliquity)),
+            ra,
+            dec,
+        }
+    }
+
+    /// The Sun's hour angle at `altitude` for latitude `lat` (positive: afternoon), `None` while
+    /// it never gets there that day.
+    pub(super) fn hour_angle(&self, lat: f64, altitude: f64) -> Option<f64> {
+        let cos_h =
+            (sin_d(altitude) - sin_d(lat) * sin_d(self.dec)) / (cos_d(lat) * cos_d(self.dec));
+        (-1.0..=1.0).contains(&cos_h).then(|| cos_h.acos() * R2D)
+    }
+
+    /// The Sun's local hour angle at east longitude `lon`, −180..180.
+    pub(super) fn local_hour_angle(&self, lon: f64) -> f64 {
+        wrap180(self.sidereal + lon - self.ra)
+    }
+
+    /// The east longitude where the Sun's local hour angle is `hour_angle`.
+    pub(super) fn longitude_at_hour_angle(&self, hour_angle: f64) -> f64 {
+        wrap180(hour_angle - self.sidereal + self.ra)
+    }
+}
+
+/// The Sun and the Moon as seen from the Earth's centre at one moment.
+pub(super) struct Sky {
+    pub(super) sun: SunSky,
     moon_ra: f64,
     moon_dec: f64,
     /// The Moon's equatorial horizontal parallax.
@@ -240,40 +279,18 @@ impl Sky {
         let moon_lon = moon.lon + nut.psi;
         let sun_lon = sun_longitude(jde);
         let (moon_ra, moon_dec) = equatorial(moon_lon, moon.lat, nut.obliquity);
-        let (sun_ra, sun_dec) = equatorial(sun_lon, 0.0, nut.obliquity);
-        let elongation = (cos_d(moon.lat) * cos_d(moon_lon - sun_lon)).acos() * R2D;
         Self {
-            sidereal: norm(mean_sidereal(jd) + nut.psi * cos_d(nut.obliquity)),
-            sun_ra,
-            sun_dec,
+            sun: SunSky::with(jd, jde, &nut),
             moon_ra,
             moon_dec,
             moon_parallax: (6378.14 / moon.distance).asin() * R2D,
-            elongation,
+            elongation: (cos_d(moon.lat) * cos_d(moon_lon - sun_lon)).acos() * R2D,
         }
-    }
-
-    /// The Sun's hour angle at `altitude` for latitude `lat` (positive: afternoon), `None` while
-    /// it never gets there that day.
-    pub(super) fn sun_hour_angle(&self, lat: f64, altitude: f64) -> Option<f64> {
-        let cos_h = (sin_d(altitude) - sin_d(lat) * sin_d(self.sun_dec))
-            / (cos_d(lat) * cos_d(self.sun_dec));
-        (-1.0..=1.0).contains(&cos_h).then(|| cos_h.acos() * R2D)
-    }
-
-    /// The Sun's local hour angle at east longitude `lon`, −180..180.
-    pub(super) fn sun_local_hour_angle(&self, lon: f64) -> f64 {
-        wrap180(self.sidereal + lon - self.sun_ra)
-    }
-
-    /// The east longitude where the Sun's local hour angle is `hour_angle`.
-    pub(super) fn longitude_at_sun_hour_angle(&self, hour_angle: f64) -> f64 {
-        wrap180(hour_angle - self.sidereal + self.sun_ra)
     }
 
     /// The Moon's topocentric altitude (no refraction) at `lat`, east longitude `lon`.
     pub(super) fn moon_altitude(&self, lat: f64, lon: f64) -> f64 {
-        let hour_angle = self.sidereal + lon - self.moon_ra;
+        let hour_angle = self.sun.sidereal + lon - self.moon_ra;
         let geocentric = (sin_d(lat) * sin_d(self.moon_dec)
             + cos_d(lat) * cos_d(self.moon_dec) * cos_d(hour_angle))
         .asin()
@@ -293,10 +310,10 @@ pub(super) fn sun_crossing(
 ) -> Option<f64> {
     let mut jd = guess;
     for _ in 0..8 {
-        let sky = Sky::at(jd);
-        let target = sky.sun_hour_angle(lat, altitude)?;
+        let sun = SunSky::at(jd);
+        let target = sun.hour_angle(lat, altitude)?;
         let target = if setting { target } else { -target };
-        let step = wrap180(target - sky.sun_local_hour_angle(lon)) / 360.985_6;
+        let step = wrap180(target - sun.local_hour_angle(lon)) / 360.985_6;
         jd += step;
         if step.abs() < 1e-6 {
             break;
