@@ -240,6 +240,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             crew: crew.map(|(_, name)| name.to_owned()),
             sticker: None,
             badge: None,
+            marks: Vec::new(),
         },
         Notice::Call { id, crew, from, .. } => ToastView {
             kind: ToastKind::Call,
@@ -250,6 +251,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             crew: None,
             sticker: None,
             badge: None,
+            marks: Vec::new(),
         },
         Notice::Invite { id, from, .. } => ToastView {
             kind: ToastKind::Invite,
@@ -260,6 +262,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             crew: None,
             sticker: None,
             badge: None,
+            marks: Vec::new(),
         },
     })
 }

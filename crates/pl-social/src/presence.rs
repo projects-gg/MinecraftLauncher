@@ -55,7 +55,8 @@ use crate::model::{
 };
 use crate::protocol::{
     AFK_CAP, BADGES_CAP, CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, CrewPlan,
-    Invite, LocalStatus, MARKS_CAP, PLANS_CAP, PlanAnswer, Presence, ServerMessage, chat_caps,
+    Invite, LocalStatus, MARKS_CAP, MARKS2_CAP, PLANS_CAP, PlanAnswer, Presence, ServerMessage,
+    chat_caps,
 };
 use crate::tls;
 use crate::world::{WORLDS_CAP, WorldAnswer, WorldError, WorldEvent, WorldFrame};
@@ -309,11 +310,18 @@ pub enum PresenceEvent {
         id: String,
         badge: Option<CrewBadge>,
     },
-    /// The mark of a friend, a crewmate or the player changed (SOC-VERIFY; only on a connection
-    /// the service took `marks` on): their mark everywhere, None when they have none now.
-    MarkChanged {
+    /// The badges a friend, a crewmate or the player shows changed: their badges everywhere
+    /// (BADGES, a connection the service took `marks2` on: `marks` and SOC-VERIFY's `mark` of the
+    /// same set), or their SOC-VERIFY mark (a service from before badges that took `marks`:
+    /// `marks` empty). Both empty: none now.
+    MarksChanged {
         id: String,
+        marks: Vec<String>,
         mark: Option<ProfileMark>,
+    },
+    /// Studio's owner saved a new badge catalogue (BADGES, `marks2`): its revision.
+    MarkDefs {
+        rev: i64,
     },
     /// A friend invited you to their team.
     TeamInvited(TeamInvite),
@@ -1265,6 +1273,7 @@ async fn session(
         plans_on: false,
         badges_on: false,
         marks_on: false,
+        marks2_on: false,
         worlds_on: false,
         afk_on: false,
         sync: None,
@@ -1544,6 +1553,8 @@ struct SessionState {
     badges_on: bool,
     /// The service took profile mark changes on this connection (SOC-VERIFY).
     marks_on: bool,
+    /// The service took profile badge changes and catalogues on this connection (BADGES).
+    marks2_on: bool,
     /// The service took world sessions on this connection (HOST1).
     worlds_on: bool,
     /// The service took Cloud AFK's notices on this connection (AFKPLUS).
@@ -1677,6 +1688,7 @@ async fn on_text(
             state.plans_on = caps.iter().any(|cap| cap == PLANS_CAP);
             state.badges_on = caps.iter().any(|cap| cap == BADGES_CAP);
             state.marks_on = caps.iter().any(|cap| cap == MARKS_CAP);
+            state.marks2_on = caps.iter().any(|cap| cap == MARKS2_CAP);
             state.afk_on = caps.iter().any(|cap| cap == AFK_CAP);
             state.sync = None;
             state.sync_again = None;
@@ -1757,9 +1769,19 @@ async fn on_text(
         ServerMessage::Badge { id, badge } if state.badges_on => {
             PresenceEvent::BadgeChanged { id, badge }
         }
-        ServerMessage::Mark { id, mark } if state.marks_on => {
-            PresenceEvent::MarkChanged { id, mark }
+        // A service that took `marks2` says every change with the whole set (`marks`): a single
+        // SOC-VERIFY mark would hide the other badges, so it is not taken from it.
+        ServerMessage::Mark { id, mark } if state.marks_on && !state.marks2_on => {
+            PresenceEvent::MarksChanged {
+                id,
+                marks: Vec::new(),
+                mark,
+            }
         }
+        ServerMessage::Marks { id, marks, mark } if state.marks2_on => {
+            PresenceEvent::MarksChanged { id, marks, mark }
+        }
+        ServerMessage::MarkDefs { rev } if state.marks2_on => PresenceEvent::MarkDefs { rev },
         ServerMessage::TeamInvite { invite } => PresenceEvent::TeamInvited(invite),
         ServerMessage::TeamRequests {
             crew,
@@ -2059,6 +2081,8 @@ async fn on_text(
         | ServerMessage::PlanRemoved { .. }
         | ServerMessage::Badge { .. }
         | ServerMessage::Mark { .. }
+        | ServerMessage::Marks { .. }
+        | ServerMessage::MarkDefs { .. }
         | ServerMessage::WorldInvite { .. }
         | ServerMessage::WorldUpdate { .. }
         | ServerMessage::WorldClosed { .. }
@@ -2270,7 +2294,7 @@ mod tests {
                 .map(|(_, value)| value.clone())
                 .unwrap()
         };
-        let caps = "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile";
+        let caps = "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,marks2";
         let rel = RelVersion::default();
         rel.set(Some("0123456789abcdef".into()));
         let mut handle =
@@ -2325,7 +2349,7 @@ mod tests {
             );
             // What this launcher understands rides on the address (older services ignore it).
             assert!(headers.iter().any(|(k, v)| k == ":uri"
-                && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile"));
+                && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,marks2"));
         }
         send_json(&mut server, hello()).await;
         match handle.next_event().await.unwrap() {
@@ -2870,7 +2894,7 @@ mod tests {
         let mut server = accept(&listener, None, seen.clone()).await.unwrap();
         // Plans are asked for on every connection (older services ignore it).
         assert!(seen.lock().unwrap().iter().any(|(k, v)| k == ":uri"
-            && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile"));
+            && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,marks2"));
         let mut greeting = hello();
         greeting["caps"] = serde_json::json!(["callServer", "crews", "plans"]);
         greeting["now"] = serde_json::json!(1_792_521_300);
@@ -3191,8 +3215,9 @@ mod tests {
         .await;
         assert_eq!(
             handle.next_event().await.unwrap(),
-            PresenceEvent::MarkChanged {
+            PresenceEvent::MarksChanged {
                 id: "222222222222222222".into(),
+                marks: Vec::new(),
                 mark: Some(ProfileMark::Verified)
             }
         );
@@ -3203,10 +3228,67 @@ mod tests {
         .await;
         assert_eq!(
             handle.next_event().await.unwrap(),
-            PresenceEvent::MarkChanged {
+            PresenceEvent::MarksChanged {
                 id: "222222222222222222".into(),
+                marks: Vec::new(),
                 mark: None
             }
+        );
+        // BADGES' messages need `marks2`.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "marks", "id": "222222222222222222",
+                "marks": ["moderator"], "mark": null}),
+        )
+        .await;
+        send_json(&mut server, serde_json::json!({"t": "markdefs", "rev": 2})).await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "status", "status": "dnd"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::StatusChanged(StatusMode::Dnd)
+        );
+        handle.shutdown().await;
+
+        // BADGES: a service that took `marks2` says the whole set and new catalogues; a stray
+        // SOC-VERIFY mark from it would hide the other badges and is not taken.
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        let mut greeting = hello();
+        greeting["caps"] = serde_json::json!(["callServer", "crews", "marks", "marks2"]);
+        send_json(&mut server, greeting).await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Connected { .. }
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "mark", "id": "222222222222222222", "mark": "admin"}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "marks", "id": "222222222222222222",
+                "marks": ["admin", "premium"], "mark": "admin"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::MarksChanged {
+                id: "222222222222222222".into(),
+                marks: vec!["admin".into(), "premium".into()],
+                mark: Some(ProfileMark::Admin)
+            }
+        );
+        send_json(&mut server, serde_json::json!({"t": "markdefs", "rev": 3})).await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::MarkDefs { rev: 3 }
         );
         handle.shutdown().await;
 
@@ -3252,7 +3334,7 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|(k, v)| k == ":uri"
-                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,chat,replies,stickers,reactions,typing,reads"),
+                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,marks2,chat,replies,stickers,reactions,typing,reads"),
             "chat and its extras are asked for"
         );
         // A service from before CHAT2 takes chat alone.
