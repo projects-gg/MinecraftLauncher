@@ -60,4 +60,7 @@ export const tauriData: DataApi = {
   async cancelMove() {
     await commands.dataMoveCancel();
   },
+  async reset() {
+    await ok(commands.dataReset());
+  },
 };

@@ -52,6 +52,7 @@ import { isTauri } from "@/lib/platform";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { TitleBar } from "@/shell/title-bar";
 import { usePrefs } from "@/stores/prefs";
+import { afterReset, forgetReset } from "./fresh-start";
 
 type Step = "welcome" | "legacy" | "import" | "account" | "projects";
 
@@ -145,9 +146,12 @@ export function Onboarding() {
   });
   // Read early for the last step (its switch's description), so nothing moves there.
   useQuery({ queryKey: ["afk"], queryFn: () => api.afkAccounts() });
+  // After "Launcher'ı sıfırla": no v1 import and no suggested name, which would bring the
+  // removed names back (Settings → Veri still has both).
+  const [fresh] = useState(afterReset);
   const steps: Step[] = [
     "welcome",
-    ...(scan?.found ? (["legacy"] as const) : []),
+    ...(scan?.found && !fresh ? (["legacy"] as const) : []),
     ...(imports?.sources.length ? (["import"] as const) : []),
     "account",
     "projects",
@@ -173,6 +177,7 @@ export function Onboarding() {
     if (instance) selectInstance(instance.id);
     set("legacyOffered", true);
     set("onboarded", true);
+    forgetReset();
     void navigate({ to: "/" });
   };
 
@@ -287,7 +292,7 @@ export function Onboarding() {
               {step === "account" ? (
                 <AccountStep
                   headingRef={headingRef}
-                  suggestedName={suggestedName(imports)}
+                  suggestedName={fresh ? undefined : suggestedName(imports)}
                   onBack={() => go(-1)}
                   onNext={() => go(1)}
                 />

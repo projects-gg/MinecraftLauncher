@@ -1,21 +1,35 @@
-import { EmberField, type ParticleKind, useAmbientMotion, useLiveMotion } from "@pl/ui";
-import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
-import { useEffect, useRef } from "react";
+import {
+  EmberField,
+  type EmberPalette,
+  type ParticleKind,
+  useAmbientMotion,
+  useLiveMotion,
+} from "@pl/ui";
+import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from "motion/react";
+import { type CSSProperties, useEffect, useRef } from "react";
 import { PerfAdvisor } from "@/features/perf/perf-advisor";
+import { DEFAULT_SCRIM } from "@/lib/season";
 
 /**
  * The season art behind every page: sharp with embers on Home, blurred and dimmed elsewhere.
  * Both layers stay mounted and cross-fade, so navigating never flashes black. It also hosts the
- * one-time Performance mode check, which measures Home's frames (features/perf).
+ * one-time Performance mode check, which measures Home's frames (features/perf). A season theme
+ * (SEASON-AUTO, `lib/season.ts`) picks Home's particles and their colours and tints the glow
+ * under the hero's words.
  */
 export function Backdrop({
   imageUrl,
   variant,
   particles,
+  palette = "ember",
+  scrim = DEFAULT_SCRIM,
 }: {
   imageUrl: string;
   variant: "home" | "page";
   particles: ParticleKind;
+  palette?: EmberPalette;
+  /** The glow's colour as `R G B`. */
+  scrim?: string;
 }) {
   // The drift waits for the player (it rests with the embers); the parallax only ever follows
   // the pointer, so it needs no rest of its own and holds where it is when the player stops.
@@ -104,14 +118,26 @@ export function Backdrop({
           animate={{ opacity: home ? 1 : 0 }}
           transition={{ duration: 0.45 }}
         >
-          <div className="absolute inset-0 bg-[radial-gradient(120%_85%_at_0%_100%,rgb(34_6_6/0.92)_0%,rgb(34_6_6/0.55)_38%,transparent_68%)]" />
+          {/* The glow under the hero's words; a new season fades its tint in (a season changes
+              at midnight, a few times a year: one opacity fade, nothing runs between). */}
+          <AnimatePresence initial={false}>
+            <motion.div
+              key={scrim}
+              className="absolute inset-0 bg-[radial-gradient(120%_85%_at_0%_100%,rgb(var(--scrim)/0.92)_0%,rgb(var(--scrim)/0.55)_38%,transparent_68%)]"
+              style={{ "--scrim": scrim } as CSSProperties}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.45 }}
+            />
+          </AnimatePresence>
           <div className="absolute inset-x-0 bottom-0 h-56 bg-[linear-gradient(to_top,rgb(10_9_12/0.92),transparent)]" />
           <div className="absolute inset-y-0 right-0 w-[420px] bg-[linear-gradient(to_left,rgb(10_9_12/0.7),transparent)]" />
           <div className="absolute inset-x-0 top-0 h-28 bg-[linear-gradient(to_bottom,rgb(10_9_12/0.6),transparent)]" />
         </motion.div>
         <div className="absolute inset-0 bg-[radial-gradient(140%_120%_at_50%_40%,transparent_55%,rgb(10_9_12/0.65))]" />
 
-        {home ? <EmberField kind={particles} /> : null}
+        {home ? <EmberField kind={particles} palette={palette} /> : null}
 
         {/* Static film grain on a fixed layer (never on scrolling containers). */}
         <div className="absolute inset-0 opacity-[0.045] mix-blend-overlay [background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22160%22 height=%22160%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%222%22 stitchTiles=%22stitch%22/></filter><rect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23n)%22/></svg>')]" />

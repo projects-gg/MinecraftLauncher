@@ -77,6 +77,7 @@ export const commands = {
 	 */
 	contentHome: () => typedError<{
 	hero: HeroView,
+	season: SeasonView,
 	banners: BannerView[],
 	/**
 	 *  Studio's and the news feed's events that have not ended, in event card order (the card
@@ -1136,6 +1137,12 @@ export const commands = {
 	dataMoveStart: (picked: string, onProgress: Channel<MoveProgressView>) => typedError<null, CmdError>(__TAURI_INVOKE("data_move_start", { picked, onProgress })),
 	/**  Stops a running move; its partial copy is removed and the data stays where it was. */
 	dataMoveCancel: () => __TAURI_INVOKE<void>("data_move_cancel"),
+	/**
+	 *  "Launcher'ı sıfırla": when nothing runs that writes what a reset removes, leaves the note for
+	 *  the next start and restarts; that start runs the reset before anything opens the files
+	 *  (`crate::reset`). What goes and what stays: `pl_data::reset`.
+	 */
+	dataReset: () => typedError<null, CmdError>(__TAURI_INVOKE("data_reset")),
 	/**  Whether cleaning is possible right now, and the data folder's disk. */
 	cleanupStatus: () => typedError<CleanupStatusView, CmdError>(__TAURI_INVOKE("cleanup_status")),
 	/**  Version sets not played for `older_than_days` days, across every instance. */
@@ -4823,6 +4830,7 @@ export type HeroView = {
 
 export type HomeView = {
 	hero: HeroView,
+	season: SeasonView,
 	banners: BannerView[],
 	/**
 	 *  Studio's and the news feed's events that have not ended, in event card order (the card
@@ -9130,6 +9138,14 @@ export type ScreenshotView = {
 	/**  Local path; the UI converts it with `convertFileSrc`. */
 	path: string,
 	takenAt: string,
+};
+
+/**  The season theme on the player's date (SEASON-AUTO, `pl_content::Theme::season_at`). */
+export type SeasonView = {
+	/**  `none | halloween | winter | holiday | event`, or `unknown` for a newer Studio's look. */
+	season: string,
+	/**  When the look may change next (RFC 3339): the UI asks for the home content again then. */
+	until: string | null,
 };
 
 /**  Why one of the player's messages did not go. */
