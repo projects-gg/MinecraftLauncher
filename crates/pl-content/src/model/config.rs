@@ -493,8 +493,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 }
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
-/// `skins`, `worlds`, `fastPacks`, `subServers` and `overlayJars`, which stay off until Studio turns
-/// them on.
+/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars` and `phoneAfk`, which stay off until
+/// Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -542,6 +542,11 @@ pub struct Features {
     /// `overlay` until it is on; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub overlay_jars: bool,
+    /// "Telefonda AFK" (PHONE-AFK): the Android app's local AFK (a bot on the phone). Off by
+    /// default: the app shows nothing of it until it is on; do not turn it on before the
+    /// agreement's bot exception is live. Written only when on, so configs keep their exact shape.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub phone_afk: bool,
 }
 
 impl Default for Features {
@@ -559,6 +564,7 @@ impl Default for Features {
             fast_packs: false,
             sub_servers: false,
             overlay_jars: false,
+            phone_afk: false,
         }
     }
 }
@@ -778,6 +784,34 @@ mod tests {
             serde_json::to_value(&fast).unwrap()["features"]["fastPacks"],
             serde_json::Value::Bool(true)
         );
+    }
+
+    #[test]
+    fn phone_afk_is_off_by_default_and_written_only_when_on() {
+        let config: LauncherConfig = serde_json::from_str("{}").unwrap();
+        assert!(!config.features.phone_afk);
+        let written = serde_json::to_value(&config).unwrap();
+        assert!(written["features"].get("phoneAfk").is_none());
+
+        let on: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"phoneAfk": true}}"#).unwrap();
+        assert!(on.features.phone_afk && on.features.afk && !on.features.friends);
+        assert_eq!(
+            serde_json::to_value(&on).unwrap()["features"]["phoneAfk"],
+            serde_json::Value::Bool(true)
+        );
+
+        let off: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"phoneAfk": false}}"#).unwrap();
+        assert!(
+            serde_json::to_value(&off).unwrap()["features"]
+                .get("phoneAfk")
+                .is_none()
+        );
+        // An older config (flags it does not list) still parses.
+        let older: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"afk": true, "overlayJars": true}}"#).unwrap();
+        assert!(!older.features.phone_afk && older.features.overlay_jars);
     }
 
     #[test]
