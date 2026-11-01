@@ -31,6 +31,7 @@ import { enHost } from "./en-host";
 import { enIdentity } from "./en-identity";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
+import { enLauncherReset } from "./en-launcher-reset";
 import { enLib1 } from "./en-lib1";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
@@ -342,6 +343,7 @@ export const en: DeepPartial<Strings> = {
   chatProd: enChatProd,
   setup: enSetup,
   motion: enMotion,
+  launcherReset: enLauncherReset,
   nav: {
     home: "Home",
     library: "Library",
@@ -1482,7 +1484,7 @@ export const en: DeepPartial<Strings> = {
         title: "Cache and old logs",
         caption: "{{count}} files",
         caption_one: "{{count}} file",
-        cache: "Mod icons and news images",
+        cache: "Mod icons and screenshot previews",
         downloads: "Unfinished downloads",
         logs: "Old game logs",
         crashReports: "Old crash reports",

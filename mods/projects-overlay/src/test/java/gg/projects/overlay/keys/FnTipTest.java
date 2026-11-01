@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-/** F7-OPEN: "Olmazsa [Fn] + [F7] tuşlarına bas" shows only where Fn can be what is missing, and only a few times. */
+/** F7-OPEN: "Açılmazsa [Fn] + [F7] tuşlarına bas" shows only where Fn can be what is missing, and only a few times. */
 class FnTipTest {
     @Test
     void onlyAnFKeyOnALaptopThatNeverOpenedThePanel() {

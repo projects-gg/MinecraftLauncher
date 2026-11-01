@@ -17,10 +17,36 @@ interface Ember {
 
 export type ParticleKind = "embers" | "sparks" | "snow" | "none";
 
-/** Hue range of the embers (`hue` below) and how finely their glow sprites are cut. */
-const HUE_MIN = 28;
-const HUE_SPAN = 18;
-const HUE_STEPS = 8;
+/**
+ * The colours of embers and sparks (snow stays bone): the brand's fire, a season's own (SEASON-AUTO:
+ * Halloween's pumpkin orange with witch violet, a feast's gold).
+ */
+export type EmberPalette = "ember" | "halloween" | "gold";
+
+/** Hue bands of a palette: each ember draws its hue from one band, chosen by weight. */
+const PALETTES: Record<EmberPalette, Array<{ min: number; span: number; weight: number }>> = {
+  ember: [{ min: 28, span: 18, weight: 1 }],
+  halloween: [
+    { min: 18, span: 16, weight: 0.62 },
+    { min: 268, span: 22, weight: 0.38 },
+  ],
+  gold: [{ min: 40, span: 12, weight: 1 }],
+};
+
+/** A hue from `palette` for the random numbers `pick` and `spread` (both 0 to 1). */
+export function emberHue(palette: EmberPalette, pick: number, spread: number): number {
+  const bands = PALETTES[palette];
+  let left = pick;
+  for (const band of bands) {
+    if (left < band.weight) return band.min + spread * band.span;
+    left -= band.weight;
+  }
+  const last = bands[bands.length - 1] ?? { min: 28, span: 18 };
+  return last.min + spread * last.span;
+}
+
+/** Glow sprites are cut every 2° of hue. */
+const HUE_STEP = 2;
 const SPRITE_PX = 64;
 const sprites = new Map<number, HTMLCanvasElement>();
 
@@ -40,10 +66,7 @@ const FRAME_SLACK_MS = 2;
  * embers up to 60 times a second).
  */
 function emberSprite(hue: number): HTMLCanvasElement | null {
-  const step = Math.min(
-    HUE_STEPS - 1,
-    Math.max(0, Math.floor(((hue - HUE_MIN) / HUE_SPAN) * HUE_STEPS)),
-  );
+  const step = Math.floor(hue / HUE_STEP);
   const cached = sprites.get(step);
   if (cached) return cached;
   const sprite = document.createElement("canvas");
@@ -51,7 +74,7 @@ function emberSprite(hue: number): HTMLCanvasElement | null {
   sprite.height = SPRITE_PX;
   const ctx = sprite.getContext("2d");
   if (!ctx) return null;
-  const h = HUE_MIN + ((step + 0.5) * HUE_SPAN) / HUE_STEPS;
+  const h = (step + 0.5) * HUE_STEP;
   const c = SPRITE_PX / 2;
   const g = ctx.createRadialGradient(c, c, 0, c, c, c);
   g.addColorStop(0, `hsla(${h + 12}, 100%, 78%, 1)`);
@@ -91,10 +114,12 @@ export function emberStrength(strength: number, dtMs: number, on: boolean, resti
  */
 export function EmberField({
   kind = "embers",
+  palette = "ember",
   density = 1,
   className,
 }: {
   kind?: ParticleKind;
+  palette?: EmberPalette;
   density?: number;
   className?: string;
 }) {
@@ -160,7 +185,7 @@ export function EmberField({
             : 0.8 + Math.random() * 1.9,
         life: initial ? Math.random() * maxLife : 0,
         maxLife,
-        hue: HUE_MIN + Math.random() * HUE_SPAN,
+        hue: emberHue(palette, Math.random(), Math.random()),
         phase: Math.random() * Math.PI * 2,
       };
     };
@@ -264,10 +289,10 @@ export function EmberField({
     return () => {
       wake.current = null;
       observer.disconnect();
-      // Gone with its page, or a new kind of particles: at once.
+      // Gone with its page, or a new kind of particles or palette (a season began): at once.
       if (running) stop();
     };
-  }, [kind, density]);
+  }, [kind, density, palette]);
 
   useEffect(() => {
     wish.current = { on, resting, reduce };

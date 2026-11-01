@@ -19,10 +19,17 @@ export const trImport = {
     instances: "Yeni kurulum olarak aktarılır",
   },
   rows: {
+    /** One row above the launchers: the game settings come from one place (IMPORT-SET). */
     options: "Oyun ayarları",
-    optionsMeta: "Dil, tuşlar, görüntü",
-    /** The Projects instance has game settings of its own: the row cannot be ticked. */
-    optionsKept: "Zaten ayarlı",
+    optionsMeta: "Tuşlar, görüntü ve ses",
+    /** An earlier import brought them from the place shown: unticked, so later changes stay. */
+    optionsBefore: "Daha önce aktarıldı",
+    /** The select that picks where they come from (screen readers). */
+    optionsFrom: "Ayarlar nereden gelsin",
+    /** Before that select, so it reads as the settings' place, not the import's. */
+    optionsFromLabel: "Nereden",
+    /** The only place, an instance of another launcher ("TLauncher'dan" names a launcher). */
+    optionsFromInstance: "{{name}} kurulumundan",
     servers: "Sunucu listesi",
     serversMeta: "{{count}} sunucu",
     worlds: "Dünyalar",
@@ -112,8 +119,10 @@ export const trImport = {
   },
   outcome: {
     options: "Oyun ayarların {{from}} Projects'e geldi.",
-    /** Projects already had game settings (its own, or another launcher's that came first). */
-    optionsKept: "{{What}} yerine Projects'teki ayarlar korundu.",
+    /** From one of the other launcher's instances ("Fabulously Optimized kurulumundan"). */
+    optionsFromInstance: "Oyun ayarların {{name}} kurulumundan Projects'e geldi.",
+    /** Projects already had exactly these settings: nothing changed. */
+    optionsSame: "{{What}} zaten aynı.",
     servers: "{{from}} {{count}} sunucu eklendi.",
     worlds: "{{from}} {{count}} dünya geldi.",
     /** Where worlds went, when they went to more than one instance. */
@@ -164,5 +173,14 @@ export const trImport = {
   attention: {
     title: "Aktarım tamamlandı",
     body: "Diğer launcher'dan getirdiklerin hazır.",
+  },
+  /** The game settings' "Geri al" in a summary: every file back as it was before the import. */
+  undo: {
+    action: "Geri al",
+    done: "Oyun ayarların aktarımdan önceki hâline döndü.",
+    /** A newer import replaced it, or its copies are gone. */
+    gone: "Artık geri alamazsın.",
+    /** The v1 launcher's step says what came with its own words. */
+    v1: "Oyun ayarların eski launcher'dan Projects'e geldi.",
   },
 };

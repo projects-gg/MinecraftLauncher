@@ -12,6 +12,7 @@ import type {
   ProfileMeasure,
   SourceKind,
   SourceMeasure,
+  SourceRequest,
 } from "@/lib/api";
 
 /** Rows bigger than this start unticked: the player decides about gigabytes. */
@@ -35,11 +36,90 @@ export const profileKey = (sourceId: string, id: string): RowKey => `${sourceId}
 
 /**
  * - `ready`: can be ticked.
- * - `kept`: game settings, while the Projects instance has its own (they stay).
  * - `imported`: a profile an earlier import already made into an instance.
  * - `unsupported`: a profile whose loader or version cannot be installed here.
  */
-export type RowState = "ready" | "kept" | "imported" | "unsupported";
+export type RowState = "ready" | "imported" | "unsupported";
+
+/**
+ * The game settings' row: one for the whole import (IMPORT-SET), above the launchers, since the
+ * Projects instance takes its settings from one place.
+ */
+export const SETTINGS_KEY: RowKey = "settings";
+
+/** A place the game settings can come from: a launcher's shared folder, or one of its instances. */
+export interface SettingsCandidate {
+  /** `sourceId`, or `sourceId|profileId` for an instance. */
+  key: string;
+  sourceId: string;
+  /** The instance whose own folder has them; `null`: the launcher's shared folder. */
+  profileId: string | null;
+  /** The instance's name, or the launcher's. */
+  name: string;
+  kind: SourceKind;
+  lastUsedMs: number | null;
+  /** An earlier import brought the Projects instance's settings from here (not taken back). */
+  imported: boolean;
+}
+
+export interface SettingsRow {
+  candidates: SettingsCandidate[];
+  /** Picked at first: where an earlier import brought them from, else the most recently played. */
+  first: string;
+  /**
+   * Ticked at first: not after an earlier import brought settings (the player's changes since
+   * stay), nor when it would bring back a Projects instance the player deleted (LIB1).
+   */
+  ticked: boolean;
+}
+
+/**
+ * The game settings' row, or `null` when no launcher has settings to bring. Its candidates come
+ * in the scan's order (the `.minecraft` folders first).
+ */
+export function settingsRowOf(scan: ImportScanView): SettingsRow | null {
+  const from = scan.projectsSettingsFrom;
+  const candidates: SettingsCandidate[] = [];
+  for (const source of scan.sources) {
+    const imported = (profileId: string | null) =>
+      from?.sourceId === source.id && (from.profileId ?? null) === profileId;
+    if (source.shared?.options) {
+      candidates.push({
+        key: source.id,
+        sourceId: source.id,
+        profileId: null,
+        name: LAUNCHER_NAMES[source.kind],
+        kind: source.kind,
+        lastUsedMs: source.lastUsedMs,
+        imported: imported(null),
+      });
+    }
+    for (const profile of source.profiles) {
+      if (!profile.hasOptions) continue;
+      candidates.push({
+        key: `${source.id}|${profile.id}`,
+        sourceId: source.id,
+        profileId: profile.id,
+        name: profile.name,
+        kind: source.kind,
+        lastUsedMs: profile.lastUsedMs,
+        imported: imported(profile.id),
+      });
+    }
+  }
+  const [head] = candidates;
+  if (!head) return null;
+  const earlier = candidates.find((c) => c.imported);
+  const recent = candidates.reduce(
+    (best, c) => ((c.lastUsedMs ?? -1) > (best.lastUsedMs ?? -1) ? c : best),
+    head,
+  );
+  return {
+    candidates,
+    first: (earlier ?? recent).key,
+    ticked: !earlier && !scan.projectsRemoved,
+  };
+}
 
 export interface SharedRow {
   type: "shared";
@@ -140,18 +220,19 @@ export function rowsOf(
   return scan.sources.map((source) => {
     const measure = measures[source.id];
     const current = measure !== undefined && upToDate?.has(source.id) === true;
-    const shared: SharedRow[] = SHARED_KINDS.filter((kind) => sharedCount(source, kind) > 0).map(
-      (kind) => ({
-        type: "shared",
-        key: sharedKey(source.id, kind),
-        sourceId: source.id,
-        kind,
-        count: sharedCount(source, kind),
-        bytes: sharedBytes(kind, measure),
-        state: kind === "options" && scan.projectsHasOptions ? "kept" : "ready",
-        ...(scan.projectsRemoved && kind !== "worlds" ? { bringsProjects: true } : {}),
-      }),
-    );
+    // The game settings have one row for the whole import (`settingsRowOf`).
+    const shared: SharedRow[] = SHARED_KINDS.filter(
+      (kind) => kind !== "options" && sharedCount(source, kind) > 0,
+    ).map((kind) => ({
+      type: "shared",
+      key: sharedKey(source.id, kind),
+      sourceId: source.id,
+      kind,
+      count: sharedCount(source, kind),
+      bytes: sharedBytes(kind, measure),
+      state: "ready",
+      ...(scan.projectsRemoved && kind !== "worlds" ? { bringsProjects: true } : {}),
+    }));
     const profiles: ProfileRow[] = source.profiles.map((profile) => {
       const measured = measure?.profiles.find((p) => p.id === profile.id);
       const state: RowState =
@@ -176,6 +257,23 @@ export function rowsOf(
 
 export const allRows = (rows: SourceRows[]): ImportRow[] =>
   rows.flatMap((r) => [...r.shared, ...r.profiles]);
+
+/**
+ * Where a scrolling list that does not fit (`content` > `room`, in px) should end: a list whose
+ * edge falls between two rows looks complete, so it then ends half way into the last row it
+ * shows, and the half-shown row says there is more. `rows` are the rows' tops and heights in the
+ * list, top first. `undefined`: it fits, or its edge already cuts a row.
+ */
+export function listCut(
+  rows: ReadonlyArray<{ top: number; height: number }>,
+  room: number,
+  content: number,
+): number | undefined {
+  if (room <= 0 || content <= room + 1) return undefined;
+  const last = rows.filter((row) => row.top < room).at(-1);
+  if (!last || last.top + last.height > room - 2) return undefined;
+  return Math.round(last.top + last.height / 2);
+}
 
 /** Whether `kind` can be dropped to make room (settings and servers weigh nothing). */
 const weighty = (row: ImportRow) =>
@@ -256,14 +354,27 @@ export function fits(total: number, freeBytes: number | null | undefined, reserv
   return total + reserveBytes <= freeBytes;
 }
 
-export function requestOf(rows: SourceRows[], ticks: Set<RowKey>): ImportRequest {
+/**
+ * What to send: the ticked rows of each launcher and, when the game settings are ticked, where
+ * they come from (`settings`: its launcher's shared folder, or one of its instances).
+ */
+export function requestOf(
+  rows: SourceRows[],
+  ticks: Set<RowKey>,
+  settings?: SettingsCandidate,
+): ImportRequest {
   const sources = rows
-    .map((source) => ({
-      sourceId: source.source.id,
-      shared: source.shared.filter((row) => ticks.has(row.key)).map((row) => row.kind),
-      profiles: source.profiles.filter((row) => ticks.has(row.key)).map((row) => row.profile.id),
-    }))
-    .filter((source) => source.shared.length > 0 || source.profiles.length > 0);
+    .map((source): SourceRequest => {
+      const fromHere = settings?.sourceId === source.source.id;
+      const shared = source.shared.filter((row) => ticks.has(row.key)).map((row) => row.kind);
+      return {
+        sourceId: source.source.id,
+        shared: fromHere ? ["options", ...shared] : shared,
+        profiles: source.profiles.filter((row) => ticks.has(row.key)).map((row) => row.profile.id),
+        ...(fromHere && settings?.profileId ? { settingsFrom: settings.profileId } : {}),
+      };
+    })
+    .filter((source) => (source.shared?.length ?? 0) > 0 || (source.profiles?.length ?? 0) > 0);
   return { sources };
 }
 
@@ -346,6 +457,8 @@ export interface SummaryLine {
   source?: SourceKind;
   /** Follow-up sentences in the same line. */
   more: Array<{ key: string; params: Record<string, string | number>; what?: ImportShared }>;
+  /** The game settings' line of a run that changed them: it offers "Geri al". */
+  undo?: boolean;
 }
 
 /** Follow-ups that say where worlds went (one list, not sentences). */
@@ -398,9 +511,12 @@ function sharedLine(outcome: ItemOutcome, kind: ImportShared): SummaryLine | nul
   switch (outcome.status) {
     case "done":
     case "partial": {
+      // Settings from an instance name it ("Fabulously Optimized kurulumundan").
       const done =
         kind === "options"
-          ? line("done", "outcome.options")
+          ? outcome.label
+            ? line("done", "outcome.optionsFromInstance", { name: outcome.label })
+            : line("done", "outcome.options")
           : line(outcome.status, `outcome.${kind}`, { count: outcome.copied });
       // Worlds go into the instances that play them: the line says which.
       if (kind === "worlds") {
@@ -421,8 +537,9 @@ function sharedLine(outcome: ItemOutcome, kind: ImportShared): SummaryLine | nul
       return done;
     }
     case "skipped":
-      if (outcome.reason === "keptExisting") return line("skipped", "outcome.optionsKept");
-      if (outcome.reason === "alreadyThere") return line("skipped", "outcome.already");
+      if (outcome.reason === "alreadyThere") {
+        return line("skipped", kind === "options" ? "outcome.optionsSame" : "outcome.already");
+      }
       return null;
     case "failed":
       return line("failed", reasonLine(outcome.reason));
@@ -473,7 +590,10 @@ function profileLine(outcome: ItemOutcome): SummaryLine | null {
   }
 }
 
-/** The summary's lines in the order the items ran; cancelled items are one line at the end. */
+/**
+ * The summary's lines in the order the items ran; cancelled items are one line at the end. The
+ * game settings' line offers "Geri al" while the run's settings change can be taken back.
+ */
 export function summaryLines(report: ImportReport): SummaryLine[] {
   const lines: SummaryLine[] = [];
   let cancelled = false;
@@ -486,6 +606,9 @@ export function summaryLines(report: ImportReport): SummaryLine[] {
       outcome.item.type === "shared"
         ? sharedLine(outcome, outcome.item.kind)
         : profileLine(outcome);
+    if (line && report.settings && outcome.item.type === "shared") {
+      if (outcome.item.kind === "options" && outcome.status !== "skipped") line.undo = true;
+    }
     if (line) lines.push(line);
   }
   if (cancelled || report.cancelled) {

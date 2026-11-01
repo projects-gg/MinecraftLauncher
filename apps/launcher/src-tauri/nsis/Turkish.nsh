@@ -1,16 +1,17 @@
 ; Projects Launcher kurulum sihirbazı: Türkçe metinler.
 ;
 ; tauri.conf.json > bundle > windows > nsis > customLanguageFiles ile Tauri'nin hazır
-; Turkish.nsh dosyasının yerine geçer; bu yüzden Tauri'nin tüm metinleri (ilk blok) burada
-; tanımlı olmalıdır. Tauri sürümü yükseltilince yeni metin eklenmiş mi kontrol edin:
-; crates/tauri-bundler/src/bundle/windows/nsis/languages/Turkish.nsh
+; Turkish.nsh dosyasının yerine geçer; bu yüzden kurulum şablonunun (nsis/installer.nsi, Tauri'nin
+; şablonu ve INSTALL-UX değişiklikleri) kullandığı bütün metinler burada tanımlı olmalıdır.
+; English.nsh aynı adları taşır; scripts/release/nsis-template.test.mjs ikisini de denetler.
 ;
-; İkinci blok, NSIS'in Türkçe sayfa metinlerindeki yazım hatalarını düzeltir. Aynı metni
+; Son blok, NSIS'in Türkçe sayfa metinlerindeki yazım hatalarını düzeltir. Aynı metni
 ; yeniden tanımladığı için derlemede "set multiple times" uyarısı çıkar; beklenen bir durumdur.
 ;
 ; {{product_name}} kurulum sırasında uygulama adıyla değiştirilir, silmeyin.
-; Projects Studio'daki kopyası: projects-studio deposunda apps/studio/src-tauri/nsis/Turkish.nsh
-; (iki dosya birlikte güncellenir)
+; Projects Studio'nun kurulumu Tauri'nin kendi şablonunu kullanır (projects-studio deposunda
+; apps/studio/src-tauri/nsis/Turkish.nsh): oradaki metinler Tauri'ninkilerle aynı kalır, buradakiler
+; bu şablona göredir.
 
 ; --- Tauri metinleri ---------------------------------------------------------------------------
 LangString addOrReinstall ${LANG_TURKISH} "Bileşenleri ekle veya yeniden kur"
@@ -39,7 +40,14 @@ LangString webview2DownloadSuccess ${LANG_TURKISH} "WebView2 kurulum dosyası in
 LangString webview2Downloading ${LANG_TURKISH} "WebView2 kurulum dosyası indiriliyor..."
 LangString webview2InstallError ${LANG_TURKISH} "WebView2 kurulamadı."
 LangString webview2InstallSuccess ${LANG_TURKISH} "WebView2 kuruldu"
-LangString deleteAppData ${LANG_TURKISH} "Uygulama önbelleğini de sil"
+
+; --- Projects metinleri (INSTALL-UX: bu sürüm ya da daha yenisi zaten kurulu) ------------------
+LangString projectsInstalledSub ${LANG_TURKISH} "${PRODUCTNAME} bu bilgisayarda kurulu."
+LangString projectsSameText ${LANG_TURKISH} "Bu sürüm zaten kurulu. Yeniden kurmanıza gerek yok."
+LangString projectsNewerText ${LANG_TURKISH} "Bilgisayarınızdaki sürüm bu kurulum dosyasından daha yeni. Bir şey yapmanıza gerek yok."
+LangString projectsReinstall ${LANG_TURKISH} "Yine de yeniden kur (launcher açılmıyorsa)"
+LangString projectsOpenButton ${LANG_TURKISH} "Launcher'ı aç"
+LangString projectsReinstallButton ${LANG_TURKISH} "Yeniden kur"
 
 ; --- NSIS sayfa metinleri (Modern UI 2) --------------------------------------------------------
 LangString MUI_TEXT_WELCOME_INFO_TITLE ${LANG_TURKISH} "$(^NameDA) kurulum sihirbazına hoş geldiniz"
@@ -59,7 +67,7 @@ LangString MUI_TEXT_FINISH_REBOOTNOW ${LANG_TURKISH} "Şimdi yeniden başlat"
 LangString MUI_TEXT_FINISH_REBOOTLATER ${LANG_TURKISH} "Daha sonra kendim yeniden başlatacağım"
 LangString MUI_TEXT_FINISH_RUN ${LANG_TURKISH} "$(^NameDA) uygulamasını başlat"
 LangString MUI_UNTEXT_CONFIRM_TITLE ${LANG_TURKISH} "$(^NameDA) uygulamasını kaldır"
-LangString MUI_UNTEXT_CONFIRM_SUBTITLE ${LANG_TURKISH} "Uygulama bilgisayarınızdan kaldırılacak. Oyun dosyalarınız ve dünyalarınız silinmez."
+LangString MUI_UNTEXT_CONFIRM_SUBTITLE ${LANG_TURKISH} "Hesaplarınız, ayarlarınız ve dünyalarınız bu bilgisayarda kalır."
 LangString MUI_UNTEXT_UNINSTALLING_TITLE ${LANG_TURKISH} "Kaldırılıyor"
 LangString MUI_UNTEXT_UNINSTALLING_SUBTITLE ${LANG_TURKISH} "$(^NameDA) kaldırılırken lütfen bekleyin."
 LangString MUI_UNTEXT_FINISH_TITLE ${LANG_TURKISH} "Kaldırma tamamlandı"

@@ -104,6 +104,13 @@ fn read_choice(content: Option<&[u8]>) -> (Option<String>, bool) {
     (pack, on)
 }
 
+/// The shader pack Iris's settings (`content` of `config/iris.properties`, or OptiFine's
+/// `optionsshaders.txt`, which keeps its choice the same way) choose, if any, and whether shaders
+/// are on: what an import brings over as the player's choice.
+pub fn read_shader_choice(content: &[u8]) -> (Option<String>, bool) {
+    read_choice(Some(content))
+}
+
 /// `content` with shaders turned `on` or off: every `enableShaders` line says so (one is added at
 /// the end when there is none), every other byte stays. `None` when nothing changes.
 fn with_shaders(content: Option<&[u8]>, on: bool) -> Option<Vec<u8>> {

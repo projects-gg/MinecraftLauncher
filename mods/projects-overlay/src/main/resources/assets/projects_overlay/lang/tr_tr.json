@@ -233,7 +233,7 @@
   "projects_overlay.toast.hint.open": "Açmak için %s tuşuna bas",
   "projects_overlay.toast.hint.call": "Yanıtlamak için %s tuşuna bas",
   "projects_overlay.toast.hint.unbound": "Açmak için Kontroller'den bir tuş ata",
-  "projects_overlay.toast.hint.fn": "Olmazsa %s + %s tuşlarına bas",
+  "projects_overlay.toast.hint.fn": "Açılmazsa %s + %s tuşlarına bas",
   "projects_overlay.toast.narration.message": "%s: %s",
   "projects_overlay.toast.narration.crew": "%s, %s: %s",
   "projects_overlay.toast.narration.notice": "%s: %s",
