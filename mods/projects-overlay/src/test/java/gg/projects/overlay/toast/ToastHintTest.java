@@ -37,7 +37,7 @@ class ToastHintTest {
         int s = ToastCard.HINT_SPACE;
         // "Açmak için [F7] tuşuna bas": words, a cap, words.
         assertEquals(37 + s + 14 + s + 36, ToastCard.lineWidth(new int[] {37, 36}, new int[] {14}));
-        // "Olmazsa [Fn] + [F7] tuşlarına bas": the "+" between the caps is a word of its own.
+        // "Açılmazsa [Fn] + [F7] tuşlarına bas": the "+" between the caps is a word of its own.
         assertEquals(29 + s + 14 + s + 5 + s + 14 + s + 48,
             ToastCard.lineWidth(new int[] {29, 5, 48}, new int[] {14, 14}));
         // A sentence that starts with its key, and words alone.
@@ -49,8 +49,8 @@ class ToastHintTest {
     void theKeysGoWhereTheSentenceHasThem() {
         assertEquals(List.of("Açmak için", "tuşuna bas"), ToastCard.split("Açmak için \u0000 tuşuna bas"));
         assertEquals(List.of("Press", "to open"), ToastCard.split("Press \u0000 to open"));
-        assertEquals(List.of("Olmazsa", "+", "tuşlarına bas"),
-            ToastCard.split("Olmazsa \u0000 + \u0000 tuşlarına bas"));
+        assertEquals(List.of("Açılmazsa", "+", "tuşlarına bas"),
+            ToastCard.split("Açılmazsa \u0000 + \u0000 tuşlarına bas"));
         assertEquals(List.of("If nothing happens, press", "+", ""),
             ToastCard.split("If nothing happens, press \u0000 + \u0000"));
         assertEquals(List.of("Açmak için Kontroller'den bir tuş ata"),
@@ -73,11 +73,12 @@ class ToastHintTest {
             assertTrue(tr.endsWith(" için %s tuşuna bas"), key + ": " + tr);
             assertTrue(en.startsWith("Press %s to "), key + ": " + en);
         }
-        // Both keys named, the way laptop makers write it.
-        assertEquals("Olmazsa %s + %s tuşlarına bas", words.template(Language.TURKISH, FN_HINT));
+        // Both keys named, the way laptop makers write it, and the condition said ("Olmazsa" also reads "if not
+        // allowed").
+        assertEquals("Açılmazsa %s + %s tuşlarına bas", words.template(Language.TURKISH, FN_HINT));
         assertEquals("If nothing happens, press %s + %s", words.template(Language.ENGLISH, FN_HINT));
         assertEquals("Açmak için Kontroller'den bir tuş ata", words.template(Language.TURKISH, UNBOUND));
-        assertEquals("Set a key in Controls to open", words.template(Language.ENGLISH, UNBOUND));
+        assertEquals("To open, set a key in Controls", words.template(Language.ENGLISH, UNBOUND));
         assertEquals("Fn", ToastCard.FN);
     }
 

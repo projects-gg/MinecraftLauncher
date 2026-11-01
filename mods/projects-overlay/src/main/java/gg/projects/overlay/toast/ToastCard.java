@@ -31,7 +31,7 @@ import net.minecraft.util.FormattedCharSequence;
  * arkadaşlarına açık", "Mert dünyana katıldı") are the overlay's, under the player's "Diğer bildirimler".
  *
  * <p>The hint says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked it), and where
- * the key may need Fn a second line says so ("Olmazsa [Fn] + [F7] tuşlarına bas", {@link
+ * the key may need Fn a second line says so ("Açılmazsa [Fn] + [F7] tuşlarına bas", {@link
  * gg.projects.overlay.keys.FnTip}).
  */
 public final class ToastCard {
@@ -79,7 +79,7 @@ public final class ToastCard {
     final StickerSet.Sticker sticker;
     /** The hint lines under the text, top first ("Açmak için [F7] tuşuna bas", then maybe the Fn line); maybe none. */
     final List<Hint> hints;
-    /** The hints end with "Olmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN). */
+    /** The hints end with "Açılmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN). */
     final boolean fnTip;
     /** The face is the world's grass block (a world invite, the world opening) rather than a disc. */
     final boolean sprite;
@@ -177,8 +177,8 @@ public final class ToastCard {
     }
 
     /**
-     * One hint line, laid out once: words with key caps among them ("Açmak için [F7] tuşuna bas", "Olmazsa [Fn] + [F7]
-     * tuşlarına bas"), or words alone.
+     * One hint line, laid out once: words with key caps among them ("Açmak için [F7] tuşuna bas", "Açılmazsa [Fn] +
+     * [F7] tuşlarına bas"), or words alone.
      */
     static final class Hint {
         /** The words, one more than the keys: before the first key, between two, after the last; null where none. */
@@ -299,7 +299,7 @@ public final class ToastCard {
      * @param count how many messages it stands for (shown from 2 on)
      * @param showText the player's "Mesaj metnini göster"
      * @param keyName the overlay key's name, or null when none is bound
-     * @param fnTip the key hint gets "Olmazsa [Fn] + [F7] tuşlarına bas" under it (F7-OPEN)
+     * @param fnTip the key hint gets "Açılmazsa [Fn] + [F7] tuşlarına bas" under it (F7-OPEN)
      */
     public static ToastCard of(OverlayState.ToastRequest request, boolean crewChat, int count, boolean showText,
         String keyName, boolean fnTip) {
@@ -439,7 +439,7 @@ public final class ToastCard {
         return kind;
     }
 
-    /** Whether the card carries "Olmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN: a game shows it a few times only). */
+    /** Whether the card carries "Açılmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN: a game shows it a few times only). */
     public boolean fnTip() {
         return fnTip;
     }
