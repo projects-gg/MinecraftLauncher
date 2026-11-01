@@ -584,17 +584,16 @@ function About() {
           </Button>
         ))}
       </div>
-      {/* The only link to the repository: where the code is, and that a star helps (STARS). A
-          secondary button: as a ghost beside its label it read as part of the sentence. */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-        <span className="text-[13px] text-ash-300">{t("stars.aboutLabel")}</span>
+      {/* The only link to the repository: the code is public, and a star helps (STARS). A
+          secondary button as tall as the links above (a ghost beside the words read as text). */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="text-[13px] text-ash-300">{t("stars.code")}</span>
         <Button
           variant="secondary"
-          size="sm"
-          icon={<GithubLogo size={15} weight="fill" aria-hidden />}
+          icon={<GithubLogo size={16} weight="fill" aria-hidden />}
           onClick={() => openWebLink(SOURCE_URL)}
         >
-          {t("stars.aboutAction")}
+          {t("stars.action")}
         </Button>
       </div>
       <p className="mt-6 text-[12.5px] text-ash-400">{t("settings.about.credits")}</p>
