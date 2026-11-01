@@ -371,7 +371,8 @@ if (args.chat2) {
 // TEAM6: the cards of the tags friends and crewmates wear, who wears which, and the crews' join lines.
 const CARDS = {
   "t-gk": {
-    tag: "GK",
+    // The launcher's previews and the landing page's crew are "Gece Kartalları" [GKR] too (GAME-BATCH).
+    tag: "GKR",
     color: "navy",
     frame: "shield",
     emblem: "moon",

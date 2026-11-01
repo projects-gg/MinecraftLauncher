@@ -57,7 +57,9 @@ pub enum FromGame {
         #[serde(default)]
         features: Vec<String>,
     },
-    /// The player opened or closed the panel.
+    /// The player opened or closed the panel. A mod also says `false` when the open panel leaves
+    /// its chat page (no conversation is on screen; nothing it gets counts as read) until the next
+    /// `open-conv` (GAME-BATCH).
     Panel { open: bool },
     /// The panel shows this conversation: send its history and count it as read.
     OpenConv { conv: String },

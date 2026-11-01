@@ -74,8 +74,9 @@ public final class OverlayScreen extends Screen {
     private static final long PAGE_MS = 220;
     private static final String[] ANSWERS = {"coming", "soon", "cant"};
 
-    private record Notice(Icon icon, int iconColor, List<FormattedCharSequence> lines, ActionButton button,
-        int y, int height) {
+    /** A card over the lists: its first {@code strong} lines (one sentence, maybe wrapped) in bone, a detail in ash. */
+    private record Notice(Icon icon, int iconColor, List<FormattedCharSequence> lines, int strong,
+        ActionButton button, int y, int height) {
     }
 
     private final OverlayClient overlay;
@@ -1148,7 +1149,10 @@ public final class OverlayScreen extends Screen {
         Shapes.prepare();
         if (conversation != null) {
             messages.open(conversation, isCrew(conversation), unreadOf(conversation));
-            overlay.openConversation(conversation);
+            // Only the chat page shows it: opened on the friends, its messages stay unread until the player looks.
+            if (page == Page.CHATS) {
+                overlay.openConversation(conversation);
+            }
         }
         sync(true);
         if (carriedReply != null) {
@@ -1210,7 +1214,9 @@ public final class OverlayScreen extends Screen {
             if (next != null && !next.equals(conversation)) {
                 conversation = next;
                 messages.open(next, isCrew(next), unreadOf(next));
-                overlay.openConversation(next);
+                if (page == Page.CHATS) {
+                    overlay.openConversation(next);
+                }
             } else if (next == null) {
                 conversation = null;
                 messages.open(null, false, 0);
@@ -1237,14 +1243,22 @@ public final class OverlayScreen extends Screen {
         if (next == Page.WORLD) {
             host.sync(now());
         }
+        boolean leftChats = page == Page.CHATS;
         page = next;
         overlay.rememberPage(next);
         pageChangedAt = now();
         picker.close();
+        if (page == Page.CHATS && conversation != null && unreadOf(conversation) > 0) {
+            // What came while another page was on screen is still unread: the list opens at it, under
+            // "Yeni mesajlar", as when the panel opens.
+            messages.open(conversation, isCrew(conversation), unreadOf(conversation));
+        }
         layout();
         setFocused(initialFocus());
         if (page == Page.CHATS && conversation != null) {
             overlay.openConversation(conversation);
+        } else if (leftChats) {
+            overlay.conversationHidden();
         }
     }
 
@@ -1257,7 +1271,9 @@ public final class OverlayScreen extends Screen {
         clearReply();
         picker.close();
         messages.open(id, isCrew(id), unreadOf(id));
-        overlay.openConversation(id);
+        if (page == Page.CHATS) {
+            overlay.openConversation(id);
+        }
         chips.update(state, id);
         layout();
     }
@@ -1637,23 +1653,25 @@ public final class OverlayScreen extends Screen {
                     : Texts.str("detail.ended");
                 default -> null;
             };
-            List<FormattedCharSequence> lines = new ArrayList<>(Texts.wrap(Fonts.ui(), line, textW, 3));
+            List<FormattedCharSequence> head = Texts.wrap(Fonts.ui(), line, textW, 3);
+            List<FormattedCharSequence> lines = new ArrayList<>(head);
             if (detail != null) {
                 lines.addAll(Texts.wrap(ui, detail, textW, 2));
             }
             y = addNotice(x0, cw, y, status == BridgeClient.Status.CONNECTING ? Icon.CLOCK : Icon.UNPLUGGED,
-                status == BridgeClient.Status.CONNECTING ? Theme.ASH_300 : Theme.FLARE_300, lines,
+                status == BridgeClient.Status.CONNECTING ? Theme.ASH_300 : Theme.FLARE_300, lines, head.size(),
                 retryable ? retry : null);
         } else if (!state.signedIn()) {
-            y = addNotice(x0, cw, y, Icon.INFO, Theme.ASH_300,
-                Texts.wrap(ui, Texts.str("detail.signed_out"), textW, 3), null);
+            // One sentence: all of it in bone when it wraps (GAME-BATCH: its second line was ash).
+            List<FormattedCharSequence> lines = Texts.wrap(ui, Texts.str("detail.signed_out"), textW, 3);
+            y = addNotice(x0, cw, y, Icon.INFO, Theme.ASH_300, lines, lines.size(), null);
         }
         // No first-run tip (CHAT2-O2 follow-up): the gear says where the settings are, and the card took ~60 GUI
         // pixels of a 240 px tall panel from the conversation.
         return y;
     }
 
-    private int addNotice(int x0, int cw, int y, Icon icon, int color, List<FormattedCharSequence> lines,
+    private int addNotice(int x0, int cw, int y, Icon icon, int color, List<FormattedCharSequence> lines, int strong,
         ActionButton button) {
         int h = 8 + lines.size() * 10 + 8;
         if (button != null) {
@@ -1662,7 +1680,7 @@ public final class OverlayScreen extends Screen {
             h += 2 + ActionButton.HEIGHT;
             PanelWidget.place(button, x0 + cw - 8 - bw, y + h - 8 - ActionButton.HEIGHT, bw, ActionButton.HEIGHT);
         }
-        notices.add(new Notice(icon, color, lines, button, y, h));
+        notices.add(new Notice(icon, color, lines, strong, button, y, h));
         return y + h + 6;
     }
 
@@ -2098,12 +2116,12 @@ public final class OverlayScreen extends Screen {
         Draw.frame(g, Frames.CARD, x0, n.y(), cw, n.height());
         Draw.icon(g, n.icon(), 10, x0 + 8, n.y() + 8, n.iconColor());
         float ty = n.y() + 8;
-        boolean first = true;
+        int i = 0;
         for (FormattedCharSequence line : n.lines()) {
             Draw.text(g, Fonts.ui(), line, x0 + 8 + 10 + 6, Fonts.centeredY(Fonts.Face.UI, ty + 5),
-                first ? Theme.BONE_100 : Theme.ASH_300);
+                i < n.strong() ? Theme.BONE_100 : Theme.ASH_300);
             ty += 10;
-            first = false;
+            i++;
         }
         if (n.button() != null) {
             render(g, n.button(), mouseX, mouseY);
