@@ -14,22 +14,28 @@ import { DEFAULT_SCRIM } from "@/lib/season";
  * The season art behind every page: sharp with embers on Home, blurred and dimmed elsewhere.
  * Both layers stay mounted and cross-fade, so navigating never flashes black. It also hosts the
  * one-time Performance mode check, which measures Home's frames (features/perf). A season theme
- * (SEASON-AUTO, `lib/season.ts`) picks Home's particles and their colours and tints the glow
- * under the hero's words.
+ * (SEASON-AUTO, `lib/season.ts`) picks Home's particles, their colours and how many, tints the
+ * glow under the hero's words and may grade Home's art (Halloween's night).
  */
 export function Backdrop({
   imageUrl,
   variant,
   particles,
   palette = "ember",
+  density = 1,
   scrim = DEFAULT_SCRIM,
+  grade,
 }: {
   imageUrl: string;
   variant: "home" | "page";
   particles: ParticleKind;
   palette?: EmberPalette;
+  /** How many particles against the embers' count. */
+  density?: number;
   /** The glow's colour as `R G B`. */
   scrim?: string;
+  /** A gradient Home's art is blended with in soft light (`SeasonLook.grade`). */
+  grade?: string;
 }) {
   // The drift waits for the player (it rests with the embers); the parallax only ever follows
   // the pointer, so it needs no rest of its own and holds where it is when the player stops.
@@ -87,6 +93,22 @@ export function Backdrop({
             className="size-full animate-kenburns object-cover object-[88%_center]"
             style={{ animationPlayState: ambient && home ? "running" : "paused" }}
           />
+          {/* A season's grade blends with the art inside this layer, so it meets the art alone
+              and fades with it (a blend outside would meet a see-through group while Home
+              fades). A new season fades it in: one opacity fade, nothing runs between. */}
+          <AnimatePresence initial={false}>
+            {grade ? (
+              <motion.div
+                key={grade}
+                className="absolute inset-0 mix-blend-soft-light"
+                style={{ backgroundImage: grade }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.45 }}
+              />
+            ) : null}
+          </AnimatePresence>
         </motion.div>
 
         {/* Blurred, dimmed art (other pages). A quarter-size copy is blurred and then scaled up
@@ -137,7 +159,7 @@ export function Backdrop({
         </motion.div>
         <div className="absolute inset-0 bg-[radial-gradient(140%_120%_at_50%_40%,transparent_55%,rgb(10_9_12/0.65))]" />
 
-        {home ? <EmberField kind={particles} palette={palette} /> : null}
+        {home ? <EmberField kind={particles} palette={palette} density={density} /> : null}
 
         {/* Static film grain on a fixed layer (never on scrolling containers). */}
         <div className="absolute inset-0 opacity-[0.045] mix-blend-overlay [background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22160%22 height=%22160%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%222%22 stitchTiles=%22stitch%22/></filter><rect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23n)%22/></svg>')]" />

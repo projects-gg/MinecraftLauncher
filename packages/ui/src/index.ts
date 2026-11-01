@@ -35,6 +35,8 @@ export {
   type EmberPalette,
   emberHue,
   type ParticleKind,
+  particleFade,
+  snowTopFade,
 } from "./components/ember-field";
 export {
   Field,
