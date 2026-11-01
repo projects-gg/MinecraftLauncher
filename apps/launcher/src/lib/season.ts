@@ -3,21 +3,25 @@ import type { ParticleKind, SeasonKind } from "@/lib/api/types";
 import { isWindowAway, onWindowAwayChange } from "@/lib/window-away";
 
 /**
- * What a season changes on Home (SEASON-AUTO): the particles over the art, their colours, the
- * tint of the scrim behind the hero's words and, for a season that changes the hour, a grade over
- * the art. Everything else stays: the art is Studio's, and the particles keep every rule of the
- * ember field (Performance mode, reduced motion, rest, a running game, the tray).
+ * What a season changes on Home (SEASON-AUTO): the particles over the art, their colours and how
+ * many, the tint of the scrim behind the hero's words and, for Halloween's night, a grade over the
+ * art. Everything else stays: the art is Studio's, and the particles keep every rule of the ember
+ * field (Performance mode, reduced motion, rest, a running game, the tray). Each season has a glow
+ * of its own colour and a particle of its own, so none reads as "no season" on the fiery art (the
+ * review of 1 November).
  */
 export interface SeasonLook {
   /** The season's particles; missing keeps Studio's choice for the hero. */
   particles?: FieldKind;
   palette: EmberPalette;
+  /** How many particles, against the embers' count (missing: as many). */
+  density?: number;
   /** The scrim's colour as `R G B` (as dark as the brand's maroon, so the words keep AA). */
   scrim: string;
   /**
-   * A gradient the art is multiplied by, top to bottom (white leaves it as it is): Halloween's
-   * night, a feast's evening sky. The brand's fiery art hid the seasons' particles and glow alone
-   * (the review of 1 November: Halloween and Bayram read as no season at all).
+   * A gradient the art is blended with in soft light, top to bottom: dark values deepen the
+   * shadows and mid-tones and leave the fire's highlights (Halloween's night). A multiplied grade
+   * dimmed the whole art, the dragon's head most, and read as disabled.
    */
   grade?: string;
 }
@@ -25,13 +29,9 @@ export interface SeasonLook {
 /** The brand's maroon (`ember-900`'s glow): the scrim outside the seasons. */
 export const DEFAULT_SCRIM = "34 6 6";
 
-/** Halloween's night: the whole art darker and cooler, the fire still burning orange. */
+/** Halloween's night: the sky darkest, the ground less; neutral, so nothing turns violet. */
 export const NIGHT_GRADE =
-  "linear-gradient(180deg, rgb(112 98 162) 0%, rgb(150 136 196) 55%, rgb(196 186 226) 100%)";
-
-/** A feast's evening: the sky above the art turns to dusk, the ground keeps its warmth. */
-export const EVENING_GRADE =
-  "linear-gradient(180deg, rgb(104 118 178) 0%, rgb(176 182 214) 38%, rgb(255 255 255) 68%)";
+  "linear-gradient(180deg, rgb(14 12 22) 0%, rgb(40 36 48) 60%, rgb(70 66 78) 100%)";
 
 export function seasonLook(kind: SeasonKind | undefined): SeasonLook {
   switch (kind) {
@@ -41,10 +41,11 @@ export function seasonLook(kind: SeasonKind | undefined): SeasonLook {
     case "winter":
       return { particles: "snow", palette: "ember", scrim: "6 13 28" };
     case "holiday":
-      // Bayram: warm lights rising slowly into the evening.
-      return { particles: "lights", palette: "gold", scrim: DEFAULT_SCRIM, grade: EVENING_GRADE };
+      // Bayram: warm lights floating up, over a deep teal glow (gold and teal, a feast's colours).
+      return { particles: "lights", palette: "gold", scrim: "6 24 22" };
     case "event":
-      return { particles: "sparks", palette: "ember", scrim: DEFAULT_SCRIM };
+      // Bright gold glints, more of them, over an amber glow.
+      return { particles: "sparks", palette: "spark", density: 1.3, scrim: "36 20 4" };
     default:
       return { palette: "ember", scrim: DEFAULT_SCRIM };
   }

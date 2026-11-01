@@ -23,9 +23,10 @@ export type ParticleKind = "embers" | "sparks" | "snow" | "lights" | "none";
 
 /**
  * The colours of embers and sparks (snow stays bone): the brand's fire, a season's own (SEASON-AUTO:
- * Halloween's pumpkin orange with witch violet, a feast's gold).
+ * Halloween's pumpkin orange with witch violet, a feast's gold, an event's bright gold glints, drawn
+ * with the lights' pale core so they show on the fiery art).
  */
-export type EmberPalette = "ember" | "halloween" | "gold";
+export type EmberPalette = "ember" | "halloween" | "gold" | "spark";
 
 /** Hue bands of a palette: each ember draws its hue from one band, chosen by weight. */
 const PALETTES: Record<EmberPalette, Array<{ min: number; span: number; weight: number }>> = {
@@ -35,6 +36,7 @@ const PALETTES: Record<EmberPalette, Array<{ min: number; span: number; weight: 
     { min: 268, span: 22, weight: 0.38 },
   ],
   gold: [{ min: 40, span: 12, weight: 1 }],
+  spark: [{ min: 44, span: 10, weight: 1 }],
 };
 
 /** A hue from `palette` for the random numbers `pick` and `spread` (both 0 to 1). */
@@ -56,7 +58,7 @@ const sprites = new Map<number, HTMLCanvasElement>();
 const lightSprites = new Map<number, HTMLCanvasElement>();
 
 /** Lights are a calm few: this share of the embers' count. */
-const LIGHTS_SHARE = 0.45;
+const LIGHTS_SHARE = 0.6;
 /**
  * Snow comes in under the title bar (`--spacing-titlebar`, 0 where there is none): no flake above
  * it, full strength this far below it.
@@ -110,10 +112,12 @@ function emberSprite(hue: number, light = false): HTMLCanvasElement | null {
 
 /**
  * How strong a particle is at `t` of its life (0 to 1): embers flare up fast and die out slowly;
- * lights hold their strength through most of their rise; snow fades in fast and melts slowly.
+ * lights and snow hold their strength through most of their way (a flake that faded early read as
+ * a sparse, peach-tinted snowfall over the fire).
  */
 export function particleFade(kind: ParticleKind, t: number): number {
   if (kind === "lights") return Math.min(1, t / 0.15) * Math.min(1, (1 - t) / 0.3);
+  if (kind === "snow") return Math.min(1, t / 0.1) * Math.min(1, (1 - t) / 0.25);
   return Math.min(1, t * 6) * (1 - t) ** 1.4;
 }
 
@@ -191,6 +195,8 @@ export function EmberField({
     const particles: Ember[] = [];
     const snow = kind === "snow";
     const lights = kind === "lights";
+    // Lights and an event's glints draw with the pale, bright core.
+    const pale = lights || palette === "spark";
     // The title bar's height: snow comes in under it.
     let clearTop = 0;
 
@@ -216,13 +222,17 @@ export function EmberField({
           : 3.5 + Math.random() * 4.5;
       return {
         x: Math.random() * width,
+        // Snow falls in from the top and embers rise from below; a light is lit where it floats
+        // (it fades in over the lower two thirds), so the few of them fill the scene.
         y: snow
           ? initial
             ? Math.random() * height
             : -10
           : initial
             ? height * (0.35 + Math.random() * 0.65)
-            : height + 10,
+            : lights
+              ? height * (0.3 + Math.random() * 0.7)
+              : height + 10,
         vx: (Math.random() - 0.5) * (snow ? 14 : lights ? 6 : 10),
         vy: snow
           ? 18 + Math.random() * 26
@@ -234,7 +244,7 @@ export function EmberField({
           : kind === "sparks"
             ? 0.6 + Math.random() * 1.2
             : lights
-              ? 1.6 + Math.random() * 1.4
+              ? 1.8 + Math.random() * 1.6
               : 0.8 + Math.random() * 1.9,
         life: initial ? Math.random() * maxLife : 0,
         maxLife,
@@ -312,13 +322,13 @@ export function EmberField({
         const top = snow ? snowTopFade(p.y, clearTop) : 1;
         const alpha = particleFade(kind, t) * flicker * top * strength;
         if (snow) {
-          ctx.fillStyle = `rgba(243, 235, 221, ${alpha * 0.75})`;
+          ctx.fillStyle = `rgba(243, 235, 221, ${alpha * 0.9})`;
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          const r = p.size * (lights ? 3.6 : 3.2);
-          const sprite = emberSprite(p.hue, lights);
+          const r = p.size * (lights ? 4 : 3.2);
+          const sprite = emberSprite(p.hue, pale);
           if (!sprite) continue;
           ctx.globalAlpha = alpha;
           ctx.drawImage(sprite, p.x - r, p.y - r, r * 2, r * 2);

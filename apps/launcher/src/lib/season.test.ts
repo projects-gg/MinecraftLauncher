@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   type ClockEnv,
   DEFAULT_SCRIM,
-  EVENING_GRADE,
   homeParticles,
   MAX_TIMER_MS,
   NIGHT_GRADE,
@@ -72,32 +71,50 @@ describe("season looks", () => {
   it("dress Home by season and leave the rest to Studio", () => {
     expect(seasonLook("winter")).toEqual({ particles: "snow", palette: "ember", scrim: "6 13 28" });
     expect(seasonLook("halloween")).toMatchObject({ palette: "halloween", grade: NIGHT_GRADE });
-    expect(seasonLook("holiday")).toMatchObject({
+    expect(seasonLook("holiday")).toEqual({
       particles: "lights",
       palette: "gold",
-      grade: EVENING_GRADE,
+      scrim: "6 24 22",
     });
-    expect(seasonLook("event").grade).toBeUndefined();
+    expect(seasonLook("event")).toMatchObject({
+      particles: "sparks",
+      palette: "spark",
+      density: 1.3,
+    });
     expect(seasonLook("none")).toEqual({ palette: "ember", scrim: DEFAULT_SCRIM });
     expect(seasonLook(undefined)).toEqual(seasonLook("none"));
   });
 
-  it("grade the art only by multiplying it, darkest at the top", () => {
-    // A multiply grade never lightens: every stop is a colour, the last one of the evening white.
-    for (const grade of [NIGHT_GRADE, EVENING_GRADE]) {
-      const stops = [...grade.matchAll(/rgb\((\d+) (\d+) (\d+)\)/g)].map((m) =>
-        [m[1], m[2], m[3]].map(Number).reduce((sum, v) => sum + v, 0),
-      );
-      expect(stops.length).toBeGreaterThanOrEqual(3);
-      expect([...stops].sort((a, b) => a - b)).toEqual(stops);
+  it("give every season a glow of its own", () => {
+    const glows = (["none", "halloween", "winter", "holiday", "event"] as const).map(
+      (kind) => seasonLook(kind).scrim,
+    );
+    expect(new Set(glows).size).toBe(glows.length);
+    // As dark as the brand's maroon, so the hero's words keep their contrast.
+    for (const glow of glows) {
+      expect(Math.max(...glow.split(" ").map(Number))).toBeLessThanOrEqual(36);
     }
-    expect(EVENING_GRADE).toMatch(/rgb\(255 255 255\) \d+%\)$/);
   });
 
-  it("let lights hold their strength and snow come in under the title bar", () => {
+  it("darken Halloween's night in soft light, the sky most, nothing violet", () => {
+    const stops = [...NIGHT_GRADE.matchAll(/rgb\((\d+) (\d+) (\d+)\)/g)].map((m) =>
+      [m[1], m[2], m[3]].map(Number),
+    );
+    expect(stops.length).toBeGreaterThanOrEqual(3);
+    // Below mid-grey every stop darkens in soft light; lighter towards the ground.
+    for (const stop of stops) expect(Math.max(...stop)).toBeLessThan(128);
+    const sums = stops.map((s) => s.reduce((a, b) => a + b, 0));
+    expect([...sums].sort((a, b) => a - b)).toEqual(sums);
+    // Near neutral: blue at most a little above red and green.
+    for (const [r = 0, g = 0, b = 0] of stops) expect(b - Math.min(r, g)).toBeLessThanOrEqual(12);
+  });
+
+  it("let lights and snow hold their strength and snow come in under the title bar", () => {
     expect(particleFade("lights", 0.5)).toBe(1);
     expect(particleFade("lights", 0)).toBe(0);
     expect(particleFade("lights", 1)).toBe(0);
+    expect(particleFade("snow", 0.5)).toBe(1);
+    expect(particleFade("snow", 0.9)).toBeCloseTo(0.4);
     // Embers flare up and die out: never at full strength for long.
     expect(particleFade("embers", 0.5)).toBeLessThan(0.4);
     expect(snowTopFade(10, 34)).toBe(0);
@@ -121,6 +138,7 @@ describe("season looks", () => {
     expect(emberHue("halloween", 0.1, 0.5)).toBeLessThan(40);
     expect(emberHue("halloween", 0.9, 0.5)).toBeGreaterThan(260);
     expect(emberHue("gold", 0.3, 0.5)).toBe(46);
+    expect(emberHue("spark", 0.3, 1)).toBe(54);
   });
 });
 
