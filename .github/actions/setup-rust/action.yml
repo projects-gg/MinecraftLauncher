@@ -1,7 +1,7 @@
 name: Set up Rust
 description: >-
-  Stable Rust (see rust-toolchain.toml) with rustfmt and clippy, optional extra targets,
-  the Linux system packages Tauri needs, and the cargo cache.
+  The Rust version rust-toolchain.toml pins (the calling repository's) with rustfmt and clippy,
+  optional extra targets, the Linux system packages Tauri needs, and the cargo cache.
 
 inputs:
   targets:
@@ -16,18 +16,31 @@ inputs:
 runs:
   using: composite
   steps:
+    # A stuck mirror fails fast and gets one more try (.github/scripts/apt-install.sh).
     - name: Install Tauri system packages
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
+        bash "$GITHUB_ACTION_PATH/../../scripts/apt-install.sh" \
           libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
           libdbus-1-dev pkg-config build-essential file
 
+    # The pinned version, so CI builds with the local gates' compiler and the extra targets go to
+    # the toolchain cargo uses.
+    - name: Pinned toolchain
+      id: toolchain
+      shell: bash
+      run: |
+        channel=$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' "$GITHUB_WORKSPACE/rust-toolchain.toml")
+        if [ -z "$channel" ]; then
+          echo "::error::rust-toolchain.toml names no channel"
+          exit 1
+        fi
+        echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
     - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
       with:
-        toolchain: stable
+        toolchain: ${{ steps.toolchain.outputs.channel }}
         components: rustfmt, clippy
         targets: ${{ inputs.targets }}
 

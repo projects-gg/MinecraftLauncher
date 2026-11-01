@@ -1,3 +1,5 @@
 [toolchain]
-channel = "stable"
+# Pinned, so CI and the local gates build with one compiler (projects-studio pins the same). A bump
+# is deliberate: both files together, one full rebuild of each shared target dir in a quiet slot.
+channel = "1.98.0"
 components = ["rustfmt", "clippy"]
