@@ -693,8 +693,13 @@ mod tests {
 
     #[test]
     fn publishing_writes_the_lasting_pick_for_older_readers() {
-        let mut config = LauncherConfig::default();
-        config.theme.season = Season::Winter;
+        let mut config = LauncherConfig {
+            theme: Theme {
+                season: Season::Winter,
+                ..Theme::default()
+            },
+            ..LauncherConfig::default()
+        };
         config.normalize_for_publish();
         assert_eq!(
             config.theme.season,

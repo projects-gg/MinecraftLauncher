@@ -255,7 +255,7 @@ impl MonthDay {
         };
         let month = digits(&bytes[..2])?;
         let day = digits(&bytes[3..])?;
-        ((1..=12).contains(&month) && day >= 1 && day <= days_in_month(month, true))
+        ((1..=12).contains(&month) && (1..=days_in_month(month, true)).contains(&day))
             .then_some(Self { month, day })
     }
 
