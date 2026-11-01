@@ -1,4 +1,5 @@
 import {
+  ArrowCounterClockwise,
   ArrowsLeftRight,
   CheckCircle,
   FolderOpen,
@@ -18,6 +19,7 @@ import { useUi } from "@/stores/ui";
 import { CleanupCard } from "./cleanup/cleanup-card";
 import { TrashRow } from "./cleanup/trash-row";
 import { ErrorLine, type Failure, failure } from "./failure";
+import { ResetDialog } from "./reset/reset-dialog";
 
 /**
  * One setting, laid out like the settings `Row` (title and help on the left, actions on the
@@ -48,11 +50,15 @@ function Item({
   );
 }
 
-/** Settings → Veri: the data folder, cleanup, the launcher trash, support bundle and v1 import. */
+/**
+ * Settings → Veri: the data folder, cleanup, the launcher trash, support bundle, the imports and,
+ * last, "Launcher'ı sıfırla".
+ */
 export function DataSection() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const motionPrefs = useMotionPrefs();
+  const [resetOpen, setResetOpen] = useState(false);
   // Fresh numbers every time the section opens (logs grow while playing).
   const overview = useQuery({
     queryKey: ["data-overview"],
@@ -227,6 +233,21 @@ export function DataSection() {
             </Button>
           }
         />
+
+        <Item
+          title={t("launcherReset.title")}
+          help={t("launcherReset.help")}
+          actions={
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<ArrowCounterClockwise size={15} />}
+              onClick={() => setResetOpen(true)}
+            >
+              {t("launcherReset.action")}
+            </Button>
+          }
+        />
       </motion.div>
 
       <MoveDialog
@@ -234,6 +255,7 @@ export function DataSection() {
         onPickAgain={() => pick.mutate()}
         onClose={() => setPicked(null)}
       />
+      <ResetDialog open={resetOpen} onClose={() => setResetOpen(false)} />
     </>
   );
 }

@@ -1144,6 +1144,12 @@ export const commands = {
 	dataMoveStart: (picked: string, onProgress: Channel<MoveProgressView>) => typedError<null, CmdError>(__TAURI_INVOKE("data_move_start", { picked, onProgress })),
 	/**  Stops a running move; its partial copy is removed and the data stays where it was. */
 	dataMoveCancel: () => __TAURI_INVOKE<void>("data_move_cancel"),
+	/**
+	 *  "Launcher'ı sıfırla": when nothing runs that writes what a reset removes, leaves the note for
+	 *  the next start and restarts; that start runs the reset before anything opens the files
+	 *  (`crate::reset`). What goes and what stays: `pl_data::reset`.
+	 */
+	dataReset: () => typedError<null, CmdError>(__TAURI_INVOKE("data_reset")),
 	/**  Whether cleaning is possible right now, and the data folder's disk. */
 	cleanupStatus: () => typedError<CleanupStatusView, CmdError>(__TAURI_INVOKE("cleanup_status")),
 	/**  Version sets not played for `older_than_days` days, across every instance. */

@@ -1,0 +1,22 @@
+// English for tr-launcher-reset.ts. Missing keys fall back to Turkish.
+export const enLauncherReset = {
+  title: "Reset the launcher",
+  help: "Removes the accounts you added and the launcher's settings, without touching your installations and worlds.",
+  action: "Reset",
+  dialogTitle: "Reset the launcher?",
+  dialogBody: "You'll need to add your accounts and AFK accounts again.",
+  removed: "Goes",
+  kept: "Stays",
+  accounts: "Accounts: {{names}}",
+  afk: "AFK accounts: {{names}}",
+  settings: "Launcher settings and your Discord sign-in",
+  keptValue: "Your installations, worlds, screenshots and game files",
+  stopAfk: "Stop your AFK accounts first, then reset.",
+  confirmLabel: 'Type "reset" to confirm',
+  word: "reset",
+  confirm: "Reset",
+  working: "Resetting",
+  restartingTitle: "Resetting the launcher",
+  restarting: "The launcher is restarting",
+  failed: "Couldn't reset the launcher.",
+};

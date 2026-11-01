@@ -15,6 +15,9 @@
 //!   in the copy, never copied through.
 //! - [`restart`]: the one-shot note an update leaves for the next start (AFK accounts to bring
 //!   back, the window, the page, the release notes).
+//! - [`reset`]: "Launcher'ı sıfırla": what a reset removes (accounts, AFK accounts, the friends
+//!   feature's data, the launcher's settings and logs) and keeps (the game: instances, worlds, game
+//!   files), and the note that has the next start run it.
 //! - [`troubleshoot`]: the troubleshooter's rules (Settings → Sorun yardımcısı): what each check
 //!   found, its code for support and its one-tap fix, put together as the checks come in.
 //!
@@ -28,6 +31,7 @@ mod links;
 pub mod logfile;
 pub mod mask;
 pub mod relocate;
+pub mod reset;
 pub mod restart;
 pub mod troubleshoot;
 pub mod usage;

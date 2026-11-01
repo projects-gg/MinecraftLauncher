@@ -58,4 +58,9 @@ export interface DataApi {
   /** Copies, verifies and switches; the launcher restarts shortly after this resolves. */
   move(picked: string, onProgress: (progress: MoveProgress) => void): Promise<void>;
   cancelMove(): Promise<void>;
+  /**
+   * "Launcher'ı sıfırla": refused while a game, AFK accounts or a data job runs; otherwise the
+   * launcher restarts shortly after this resolves and the start removes accounts and settings.
+   */
+  reset(): Promise<void>;
 }
