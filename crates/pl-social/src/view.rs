@@ -6,9 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{
     ChatExtras, ChatLinkRules, CrewMute, FriendGroup, JoinMode, LimitedItem, LimitedKey, Limits,
-    LinkRule, Me, NoticeKind, Privacy, PublicProfile, Relation, ReportReason,
-    SettingsMeta, StatusMode, TeamExit, TeamPermissions, TeamRelation, TeamRole,
-    discord_avatar_url,
+    LinkRule, Me, NoticeKind, Privacy, PublicProfile, Relation, ReportReason, SettingsMeta,
+    StatusMode, TeamExit, TeamPermissions, TeamRelation, TeamRole, discord_avatar_url,
 };
 use crate::protocol::{
     CallAnswer, CallKind, Game, LocalStatus, PlanAnswer, PresenceState, is_projects_host,

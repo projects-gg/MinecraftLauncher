@@ -142,9 +142,8 @@ pub use presence::{
 pub use protocol::{
     AFK_CAP, BADGES_CAP, CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall,
     CrewPlan, Game, GameLocation, Invite, LocalStatus, MARKS_CAP, MARKS2_CAP, MC_CAP, OnlineStatus,
-    PLANS_CAP,
-    PRESENCE_CAPS, PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP,
-    STICKERS_CAP, TYPING_CAP, is_projects_host, presence_caps,
+    PLANS_CAP, PRESENCE_CAPS, PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP,
+    REPLIES_CAP, STICKERS_CAP, TYPING_CAP, is_projects_host, presence_caps,
 };
 pub use qr::{QrPath, qr_path};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};

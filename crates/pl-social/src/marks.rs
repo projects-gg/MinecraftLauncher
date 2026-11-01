@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn a_catalogue_reads_and_leaves_out_what_this_version_cannot_draw() {
-        let body = br#"{"rev":3,"marks":[
+        let body = r#"{"rev":3,"marks":[
             {"key":"admin","name":{"tr":"Projects yöneticisi","en":"Projects admin"},"color":"red","glyph":"check","shape":"seal"},
             {"key":"m10","name":{"tr":"Yeni","en":"New"},"color":"gold","glyph":"check","shape":"seal"},
             {"key":"m11","name":{"tr":"Kalkan","en":"Shield"},"color":"teal","glyph":"rocket","shape":"seal"},
@@ -324,7 +324,7 @@ mod tests {
             {"key":"cloud","name":{"tr":"Bulut AFK kullanıcısı","en":"Cloud AFK user"},"color":"teal","glyph":"cloud","shape":"round","extra":1},
             "not a badge"
         ]}"#;
-        let catalog = MarkCatalog::parse(body).unwrap();
+        let catalog = MarkCatalog::parse(body.as_bytes()).unwrap();
         assert_eq!(catalog.rev, 3);
         let order: Vec<&str> = catalog.marks.iter().map(|def| def.key.as_str()).collect();
         assert_eq!(order, ["admin", "cloud"]);
@@ -336,10 +336,7 @@ mod tests {
 
     #[test]
     fn soc_verifys_mark_reads_as_a_list_of_one_and_back() {
-        assert_eq!(
-            shown_keys(&[], Some(ProfileMark::Admin)),
-            keys(&["admin"])
-        );
+        assert_eq!(shown_keys(&[], Some(ProfileMark::Admin)), keys(&["admin"]));
         assert_eq!(
             shown_keys(&[], Some(ProfileMark::Verified)),
             keys(&["verified"])
@@ -347,7 +344,10 @@ mod tests {
         assert!(shown_keys(&[], None).is_empty());
         // A list wins over the older field.
         assert_eq!(
-            shown_keys(&keys(&["moderator", "premium"]), Some(ProfileMark::Verified)),
+            shown_keys(
+                &keys(&["moderator", "premium"]),
+                Some(ProfileMark::Verified)
+            ),
             keys(&["moderator", "premium"])
         );
         assert_eq!(

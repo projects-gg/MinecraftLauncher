@@ -3228,12 +3228,7 @@ pub(crate) mod tests {
             CHAT2,
         );
         assert!(mine.marks.is_empty());
-        assert!(
-            serde_json::to_value(&mine)
-                .unwrap()
-                .get("marks")
-                .is_none()
-        );
+        assert!(serde_json::to_value(&mine).unwrap().get("marks").is_none());
         let direct = msg_view(
             "d:f-ayse:me",
             &message("i:3", "f-ayse", false, MessageState::Sent),

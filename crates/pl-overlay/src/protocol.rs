@@ -426,7 +426,9 @@ pub enum ToGame {
     /// key, colour, glyph, shape and name in both languages (the mod says it in its own). It
     /// replaces what the mod holds; friends, messages and toasts name badges by key. Only to a mod
     /// that said `marks`, before the snapshot, and again when Studio's owner changes it.
-    Marks { defs: Vec<pl_social::MarkDef> },
+    Marks {
+        defs: Vec<pl_social::MarkDef>,
+    },
     /// TEAM6-O (T7): a quiet line in a crew's chat ("Ece ekibe katıldı"; the mod words it). Lines
     /// are not kept anywhere: whoever came in while this launcher ran. Only to a mod that said
     /// `tags`.

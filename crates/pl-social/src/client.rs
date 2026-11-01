@@ -265,7 +265,10 @@ impl SocialClient {
             _ => crate::MarkCatalog::parse(&reply.body)
                 .map(|catalog| Some((catalog, reply.etag.clone())))
                 .ok_or_else(|| {
-                    SocialError::Protocol(format!("invalid badge catalogue (HTTP {})", reply.status))
+                    SocialError::Protocol(format!(
+                        "invalid badge catalogue (HTTP {})",
+                        reply.status
+                    ))
                 }),
         }
     }

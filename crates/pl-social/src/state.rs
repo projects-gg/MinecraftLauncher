@@ -578,6 +578,8 @@ impl SocialState {
             | PresenceEvent::ChatRead { .. } => {}
             // World sessions belong to the launcher's host (HOST1, `crate::world`).
             PresenceEvent::World(_) => {}
+            // The badge catalogue lives in the service (`SocialService::read_catalog`).
+            PresenceEvent::MarkDefs { .. } => {}
         }
         notices
     }

@@ -1504,23 +1504,24 @@ impl SocialService {
         result.map(|_| ())
     }
 
-    /// "Rozetlerim" (BADGES): the badges the player keeps off their profile, every one of them
-    /// (`[]` shows all). Shown at once like the other profile changes (SOC-LAG); keys the
-    /// catalogue does not know are left out. Only with a service that keeps the choice.
+    /// "Rozetler" (BADGES-UI): the badges the player keeps off their profile, every one of them
+    /// (`[]` shows all). Shown at once like the other profile changes (SOC-LAG). Keys this
+    /// launcher's catalogue does not know yet stay in the list (the service ignores keys it does
+    /// not know, and one it knows must not show because this copy is behind); malformed ones go.
+    /// Only with a service that keeps the choice.
     pub async fn set_marks_hidden(&self, keys: Vec<String>) -> Result<()> {
         let keys = {
             let core = self.lock();
-            let offered = core
-                .state
-                .me()
-                .is_some_and(|me| me.marks_hidden.is_some());
+            let offered = core.state.me().is_some_and(|me| me.marks_hidden.is_some());
             if !offered {
                 return Err(SocialError::InvalidInput("badges are not offered"));
             }
-            let keys = core.catalog.order(keys);
-            keys.into_iter()
-                .filter(|key| core.catalog.get(key).is_some())
-                .collect::<Vec<_>>()
+            let mut keys = core.catalog.order(
+                keys.into_iter()
+                    .filter(|key| crate::marks::is_mark_key(key)),
+            );
+            keys.truncate(crate::marks::MAX_MARKS);
+            keys
         };
         self.update_profile(ProfileUpdate::default().marks_hidden(keys))
             .await
@@ -4493,11 +4494,10 @@ fn catalog_behind(core: &Core, rev: Option<i64>) -> bool {
 
 /// BADGES: whether a view names a badge the catalogue does not know (made with a newer one).
 fn names_unknown_marks(view: &SocialView, catalog: &MarkCatalog) -> bool {
-    let me = view.me.iter().flat_map(|me| {
-        me.marks
-            .iter()
-            .chain(me.marks_hidden.iter().flatten())
-    });
+    let me = view
+        .me
+        .iter()
+        .flat_map(|me| me.marks.iter().chain(me.marks_hidden.iter().flatten()));
     let friends = view.friends.iter().flat_map(|friend| friend.marks.iter());
     let requests = view
         .incoming
@@ -5144,6 +5144,15 @@ mod tests {
         paths
     }
 
+    /// [`paths`] without the badge catalogue, which a launcher run reads at its first connect
+    /// (BADGES-UI): what a test about the lists cares for.
+    fn list_paths(asked: &[Recorded]) -> Vec<&str> {
+        paths(asked)
+            .into_iter()
+            .filter(|path| *path != "/v1/marks")
+            .collect()
+    }
+
     /// The relations version the presence connect named, if any.
     fn named_rel(asked: &[Recorded]) -> Option<String> {
         let connect = asked.iter().find(|r| r.path == "/v1/presence")?;
@@ -5220,7 +5229,10 @@ mod tests {
         let before = server.requests().len();
         hello(&second, Some(REL_1));
         tokio::time::sleep(Duration::from_millis(200)).await;
-        assert_eq!(server.requests().len(), before, "nothing read again");
+        assert!(
+            list_paths(&server.requests()[before..]).is_empty(),
+            "nothing read again"
+        );
         assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_1));
         second.service.configure(None);
 
@@ -5236,7 +5248,7 @@ mod tests {
             third.service.lock().rel.get().as_deref() == Some(REL_2)
         })
         .await;
-        assert_eq!(paths(&server.requests()[before..]), ["/v1/friends"]);
+        assert_eq!(list_paths(&server.requests()[before..]), ["/v1/friends"]);
         assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_2));
     }
 
@@ -7325,7 +7337,10 @@ mod tests {
         assert_eq!(view.mark_defs.len(), 2);
         let me = view.me.unwrap();
         assert_eq!(me.marks, ["staff"]);
-        assert_eq!(me.marks_hidden.as_deref(), Some(&["premium".to_owned()][..]));
+        assert_eq!(
+            me.marks_hidden.as_deref(),
+            Some(&["premium".to_owned()][..])
+        );
         let settle = || async {
             let deadline = Instant::now() + Duration::from_secs(5);
             while harness.service.lock().catalog_reading && Instant::now() < deadline {
