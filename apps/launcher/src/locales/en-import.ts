@@ -78,7 +78,7 @@ export const enImport = {
     servers: "your servers {{from}}",
     worlds: "your worlds {{from}}",
     resourcePacks: "your resource packs {{from}}",
-    shaderPacks: "your shaders {{from}}",
+    shaderPacks: "your shader packs {{from}}",
     screenshots: "your screenshots {{from}}",
   },
   from: {
@@ -114,10 +114,16 @@ export const enImport = {
     worldsInOne: "In {{name}}",
     resourcePacks: "{{count}} resource packs came over {{from}}.",
     resourcePacks_one: "{{count}} resource pack came over {{from}}.",
-    shaderPacks: "{{count}} shaders came over {{from}}.",
-    shaderPacks_one: "{{count}} shader came over {{from}}.",
+    shaderPacks: "{{count}} shader packs came over {{from}}.",
+    shaderPacks_one: "{{count}} shader pack came over {{from}}.",
     screenshots: "{{count}} screenshots came over {{from}}.",
     screenshots_one: "{{count}} screenshot came over {{from}}.",
+    /** Some stayed behind: the line says so itself, with the total. */
+    serversSome: "{{count}} of {{total}} servers added {{from}}.",
+    worldsSome: "{{count}} of {{total}} worlds came over {{from}}.",
+    resourcePacksSome: "{{count}} of {{total}} resource packs came over {{from}}.",
+    shaderPacksSome: "{{count}} of {{total}} shader packs came over {{from}}.",
+    screenshotsSome: "{{count}} of {{total}} screenshots came over {{from}}.",
     /** Never a number first: after "2 in Forge 1.20.1." a sentence "1 can…" read "1.20.1. 1". */
     leftBecause: {
       noSpace: "There wasn't enough space for the other {{count}}.",
@@ -133,8 +139,9 @@ export const enImport = {
       cancelled: "The other {{count}} were cancelled.",
       cancelled_one: "The other one was cancelled.",
       needsInstance:
-        "The other {{count}} can only come over with the instances they were played in.",
-      needsInstance_one: "The other one can only come over with the instance it was played in.",
+        "The other {{count}} come over if you also import the instances they were played in.",
+      needsInstance_one:
+        "The other one comes over if you also import the instance it was played in.",
     },
     already: "{{What}} are already here.",
     profile: "{{name}} was added to your library.",
@@ -151,7 +158,7 @@ export const enImport = {
     noTarget: "The Projects instance couldn't be set up, so {{what}} didn't come over.",
     unreadable: "Couldn't read {{what}}.",
     inUse: "{{What}} were open in a running game.",
-    needsInstance: "{{What}} can only come over with the instances they were played in.",
+    needsInstance: "{{What}} come over if you also import the instances they were played in.",
     failed: "Couldn't import {{what}}.",
     cancelled: "The rest was cancelled.",
   },
@@ -181,6 +188,18 @@ export const enImport = {
       worlds: "worlds",
       screenshots: "screenshots",
       packs: "packs",
+    },
+    choices: {
+      premium: "Your Microsoft account",
+      nickname: "Username",
+      afk: "AFK accounts",
+      afkMeta: "{{count}} accounts",
+      afkMeta_one: "{{count}} account",
+      gameData: "Game settings and files",
+      gameDataMeta: "Server list, screenshots, resource and shader packs",
+      worlds: "Worlds",
+      worldsMeta: "{{count}} worlds, {{size}}",
+      worldsMeta_one: "{{count}} world, {{size}}",
     },
   },
 };

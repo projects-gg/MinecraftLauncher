@@ -266,9 +266,11 @@ describe("import rows", () => {
   it("describe a profile in its second line", () => {
     const rows = rowsOf(scan(), measures(1 * GB));
     const [fabric, vanilla, lite, done] = rows[0]?.profiles ?? [];
-    // The name says the version; the measured mods replace the file count.
+    // The name says the version; the measured mods replace the file count. The count is all of
+    // them, those that stay behind among them (17 come, 3 stay: "20 mod, 3 tanesi …"), as the
+    // summary says "içinde 17 mod var" and "3 mod … gelmedi".
     expect(fabric && profileMeta(fabric)).toEqual([
-      { key: "profile.mods", params: { count: 17 } },
+      { key: "profile.mods", params: { count: 20 } },
       { key: "profile.leftMods", params: { count: 3 } },
     ]);
     expect(vanilla && profileMeta(vanilla)).toEqual([{ key: "profile.noOptifine" }]);
@@ -429,7 +431,7 @@ describe("import summary", () => {
     expect(lines.map((l) => [l.tone, l.key])).toEqual([
       ["done", "outcome.options"],
       ["done", "outcome.servers"],
-      ["partial", "outcome.worlds"],
+      ["partial", "outcome.worldsSome"],
       ["partial", "outcome.profileMods"],
       ["failed", "outcome.profileUnsupported"],
       ["skipped", "outcome.already"],
@@ -438,6 +440,11 @@ describe("import summary", () => {
       "outcome.worldsIn",
       "outcome.worldsIn",
       "outcome.leftBecause.noSpace",
+    ]);
+    // What stayed behind is in the line itself, with the total ("5 dünyanın 4 tanesi geldi").
+    expect([lines[2]?.key, lines[2]?.params]).toEqual([
+      "outcome.worldsSome",
+      { count: 4, total: 5 },
     ]);
     expect(lines[3]?.params).toEqual({ name: "Fabric 1.21.4", count: 17 });
     expect(lines[3]?.more).toEqual([{ key: "outcome.profileLeftMods", params: { count: 3 } }]);

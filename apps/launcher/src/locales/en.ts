@@ -820,14 +820,7 @@ export const en: DeepPartial<Strings> = {
     },
     legacy: {
       title: "We found your old launcher",
-      body: "You can bring your {{things}} to the new launcher. Your old files stay where they are.",
-      things: {
-        nickname: "username",
-        afk: "AFK accounts",
-        screenshots: "screenshots",
-        worlds: "worlds",
-        data: "data",
-      },
+      body: "You can bring what we found to the new launcher. Your old files stay where they are.",
       nickname: "Username: {{name}}",
       afk: "{{count}} AFK accounts",
       afk_one: "{{count}} AFK account",
@@ -835,7 +828,7 @@ export const en: DeepPartial<Strings> = {
       screenshots_one: "{{count}} screenshot",
       worlds: "{{count}} worlds",
       worlds_one: "{{count}} world",
-      import: "Import my data",
+      import: "Import",
       skip: "Continue without importing",
     },
     account: {
@@ -994,20 +987,13 @@ export const en: DeepPartial<Strings> = {
   migrate: {
     title: "Import from the old launcher",
     description:
-      "We found your data from the old Projects Launcher. What you pick comes over to the new launcher. The old launcher isn't touched.",
-    premium: "Your Microsoft account",
-    nickname: "Username: {{name}}",
-    afk: "{{count}} AFK accounts and the AFK client",
-    afk_one: "{{count}} AFK account and the AFK client",
-    gameData: "Game settings, server list, screenshots and packs",
-    worlds: "Worlds ({{count}} worlds, {{size}})",
-    worlds_one: "Worlds ({{count}} world, {{size}})",
+      "We found your data from the old Projects Launcher. What you pick is copied here. Your files there stay as they are.",
     worldsNoSpace: "Not enough disk space, so your worlds stay in the old launcher.",
     start: "Import",
     later: "Not now",
     working: "Importing",
     donePremium: "Your Microsoft account was imported.",
-    doneNickname: "{{name}} added.",
+    doneNickname: "The account {{name}} was added.",
     doneAfk: "{{count}} AFK accounts imported.",
     doneAfk_one: "{{count}} AFK account imported.",
     close: "Done",
@@ -1569,7 +1555,7 @@ export const en: DeepPartial<Strings> = {
     reveal: "Show in folder",
     legacy: "Import from the old launcher",
     legacyHelp:
-      "Brings over worlds, settings, AFK accounts and the premium sign-in from the old launcher.",
+      "Brings over your worlds, settings, AFK accounts and Microsoft account from the old launcher.",
     import: "Import",
     moveDialog: {
       title: "Move the data folder",

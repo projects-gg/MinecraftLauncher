@@ -13,20 +13,23 @@ import { formatBytes, listFormat, uiLocale } from "@/lib/format";
 import { broughtThings } from "./summary";
 
 /**
- * One choice of the v1 import: the app's own chamfered checkbox (bone when ticked: the dialog's
- * one gold is "İçe aktar", design.md §2), its words the box's label. A choice that cannot be
- * made dims its box and title; its hint says why.
+ * One choice of the v1 import, written as the other launchers' rows are (a title and a quiet
+ * second line): the app's own chamfered checkbox (bone when ticked: the dialog's one gold is
+ * "Aktar", design.md §2), its words the box's label. A choice that cannot be made dims its box and
+ * title; its hint says why.
  */
 function Choice({
   checked,
   onChange,
   label,
+  meta,
   hint,
   disabled,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  meta?: string;
   hint?: string;
   disabled?: boolean;
 }) {
@@ -34,20 +37,22 @@ function Choice({
   return (
     <label
       htmlFor={id}
-      className="flex items-start gap-3 rounded-md px-2 py-2 transition-colors duration-150 has-[button:enabled]:cursor-pointer has-[button:enabled]:hover:bg-white/4"
+      className="flex items-center gap-3 rounded-md px-2 py-[7px] transition-colors duration-150 has-[button:enabled]:cursor-pointer has-[button:enabled]:hover:bg-white/4"
     >
-      <Check
-        id={id}
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={onChange}
-        className="mt-0.5"
-      />
+      <Check id={id} checked={checked} disabled={disabled} onCheckedChange={onChange} />
       <span className="min-w-0">
-        <span className={cn("block text-[14px]", disabled ? "text-ash-300" : "text-bone-50")}>
+        <span
+          className={cn(
+            "block text-[13.5px] leading-tight",
+            disabled ? "text-ash-300" : "text-bone-50",
+          )}
+        >
           {label}
         </span>
-        {hint ? <span className="block text-[12.5px] text-ash-400">{hint}</span> : null}
+        {meta ? (
+          <span className="mt-0.5 block text-[12px] text-ash-400 tabular-nums">{meta}</span>
+        ) : null}
+        {hint ? <span className="mt-0.5 block text-[12px] text-ash-400">{hint}</span> : null}
       </span>
     </label>
   );
@@ -207,31 +212,48 @@ export function MigrationDialog({
       ) : !scan?.found ? (
         <p className="text-ash-300">{t("migrate.notFound")}</p>
       ) : (
-        <div className="space-y-0.5 pt-1">
+        // The boxes stand on the text's edge; the rows' hover plate reaches past it.
+        <div className="-mx-2 space-y-0.5 pt-1">
           {scan.hasPremium ? (
-            <Choice checked={premium} onChange={setPremium} label={t("migrate.premium")} />
+            <Choice
+              checked={premium}
+              onChange={setPremium}
+              label={t("import.v1.choices.premium")}
+            />
           ) : null}
           {scan.nickname ? (
             <Choice
               checked={nickname}
               onChange={setNickname}
-              label={t("migrate.nickname", { name: scan.nickname })}
+              label={t("import.v1.choices.nickname")}
+              meta={scan.nickname}
             />
           ) : null}
           {scan.afkAccounts > 0 || scan.hasAfkClient ? (
             <Choice
               checked={afk}
               onChange={setAfk}
-              label={t("migrate.afk", { count: scan.afkAccounts })}
+              label={t("import.v1.choices.afk")}
+              meta={
+                scan.afkAccounts > 0
+                  ? t("import.v1.choices.afkMeta", { count: scan.afkAccounts })
+                  : undefined
+              }
             />
           ) : null}
-          <Choice checked={gameData} onChange={setGameData} label={t("migrate.gameData")} />
+          <Choice
+            checked={gameData}
+            onChange={setGameData}
+            label={t("import.v1.choices.gameData")}
+            meta={t("import.v1.choices.gameDataMeta")}
+          />
           {scan.worlds > 0 ? (
             <Choice
               checked={worlds && gameData}
               onChange={setWorlds}
               disabled={!gameData || !worldsFit}
-              label={t("migrate.worlds", {
+              label={t("import.v1.choices.worlds")}
+              meta={t("import.v1.choices.worldsMeta", {
                 count: scan.worlds,
                 size: formatBytes(scan.worldsBytes),
               })}

@@ -58,8 +58,9 @@ export const trImport = {
     unknownVersion: "Sürümü okunamadı",
   },
   space: {
-    total: "Seçtiklerin {{size}}, diskte {{free}} boş",
-    totalNoFree: "Seçtiklerin {{size}}",
+    /** A verb after the size: "3,7 GB, diskte" put a sentence comma beside the decimal one. */
+    total: "Seçtiklerin {{size}} tutuyor, diskte {{free}} boş",
+    totalNoFree: "Seçtiklerin {{size}} tutuyor",
     nothing: "Aktarılacak bir şey seçmedin",
     short: "Diskte yeterli yer yok. Bazı seçimleri kaldır.",
   },
@@ -89,7 +90,7 @@ export const trImport = {
     servers: "{{at}} sunucuların",
     worlds: "{{at}} dünyaların",
     resourcePacks: "{{at}} kaynak paketlerin",
-    shaderPacks: "{{at}} shader'ların",
+    shaderPacks: "{{at}} shader paketlerin",
     screenshots: "{{at}} ekran görüntülerin",
   },
   /**
@@ -134,8 +135,18 @@ export const trImport = {
     /** Where worlds went, when they all went to one instance. */
     worldsInOne: "{{name}} kurulumunda",
     resourcePacks: "{{from}} {{count}} kaynak paketi geldi.",
-    shaderPacks: "{{from}} {{count}} shader geldi.",
+    /** "paket", as the picker counts them ("2 paket"). */
+    shaderPacks: "{{from}} {{count}} shader paketi geldi.",
     screenshots: "{{from}} {{count}} ekran görüntüsü geldi.",
+    /**
+     * When some of them stayed behind the line says so itself, with the total, so the mark beside
+     * it and the follow-up's "Kalan 1 tanesi" match it.
+     */
+    serversSome: "{{from}} {{total}} sunucunun {{count}} tanesi eklendi.",
+    worldsSome: "{{from}} {{total}} dünyanın {{count}} tanesi geldi.",
+    resourcePacksSome: "{{from}} {{total}} kaynak paketinin {{count}} tanesi geldi.",
+    shaderPacksSome: "{{from}} {{total}} shader paketinin {{count}} tanesi geldi.",
+    screenshotsSome: "{{from}} {{total}} ekran görüntüsünün {{count}} tanesi geldi.",
     /**
      * After a count line when some of them did not come over, with why. Never a number first: a
      * sentence after "Forge 1.20.1 kurulumunda" read "1.20.1. 1".
@@ -147,8 +158,11 @@ export const trImport = {
       noTarget: "Kalan {{count}} tanesi için Projects kurulumu hazırlanamadı.",
       failed: "Kalan {{count}} tanesi aktarılamadı.",
       cancelled: "Kalan {{count}} tanesi iptal edildi.",
-      /** Worlds whose version and loader no instance here plays (their own was not picked). */
-      needsInstance: "Kalan {{count}} tanesi yalnız oynandığı kurulumla gelebilir.",
+      /**
+       * Worlds whose version and loader no instance here plays (their own was not picked): the
+       * sentence says what brings them.
+       */
+      needsInstance: "Kalan {{count}} tanesi, oynandığı kurulumu da aktarırsan gelir.",
     },
     already: "{{What}} zaten burada.",
     profile: "{{name}} kütüphanene eklendi.",
@@ -163,7 +177,7 @@ export const trImport = {
     noTarget: "Projects kurulumu hazırlanamadığı için {{what}} gelmedi.",
     unreadable: "{{What}} okunamadı.",
     inUse: "{{What}} açık bir oyunda kullanıldığı için gelmedi.",
-    needsInstance: "{{What}} yalnız oynandıkları kurulumlarla gelebilir.",
+    needsInstance: "{{What}}, oynandıkları kurulumları da aktarırsan gelir.",
     failed: "{{What}} aktarılamadı.",
     cancelled: "Kalanlar iptal edildi.",
   },
@@ -202,6 +216,17 @@ export const trImport = {
       worlds: "dünyaların",
       screenshots: "ekran görüntülerin",
       packs: "paketlerin",
+    },
+    /** Its choices, as the picker's rows are written: a title and a quiet second line. */
+    choices: {
+      premium: "Microsoft hesabın",
+      nickname: "Oyuncu adı",
+      afk: "AFK hesapları",
+      afkMeta: "{{count}} hesap",
+      gameData: "Oyun ayarları ve dosyaları",
+      gameDataMeta: "Sunucu listesi, ekran görüntüleri, kaynak ve shader paketleri",
+      worlds: "Dünyalar",
+      worldsMeta: "{{count}} dünya, {{size}}",
     },
   },
 };
