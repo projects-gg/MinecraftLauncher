@@ -129,8 +129,9 @@ jobs:
         with:
           node-version: 24
 
+      # A stuck mirror fails fast and gets one more try.
       - name: Virtual display for the game test
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/apt-install.sh" xvfb
 
       # A target's own row by its key; a new version with the last compatibility class and the Fabric API found for it.
       - name: Gradle properties of the try
