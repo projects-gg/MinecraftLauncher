@@ -57,6 +57,7 @@ import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
 import { enSmall9 } from "./en-small9";
 import { enSmall10 } from "./en-small10";
+import { enStars } from "./en-stars";
 import { enTeam6 } from "./en-team6";
 import { enTeams } from "./en-teams";
 import { enTray } from "./en-tray";
@@ -342,6 +343,7 @@ export const en: DeepPartial<Strings> = {
   setup: enSetup,
   motion: enMotion,
   launcherReset: enLauncherReset,
+  stars: enStars,
   nav: {
     home: "Home",
     library: "Library",

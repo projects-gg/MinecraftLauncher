@@ -59,6 +59,7 @@ import { trSmall7 } from "./tr-small7";
 import { trSmall9 } from "./tr-small9";
 import { trSmall10 } from "./tr-small10";
 import { trSocial } from "./tr-social";
+import { trStars } from "./tr-stars";
 import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
 import { trTray } from "./tr-tray";
@@ -135,6 +136,7 @@ export const tr = {
   setup: trSetup,
   motion: trMotion,
   launcherReset: trLauncherReset,
+  stars: trStars,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",
