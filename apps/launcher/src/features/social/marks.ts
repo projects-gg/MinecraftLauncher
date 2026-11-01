@@ -78,11 +78,7 @@ export function heldMarks(
 }
 
 /** The keys the player keeps off after switching `key` on or off, in the catalogue's order. */
-export function hiddenAfter(
-  held: readonly HeldMark[],
-  key: string,
-  show: boolean,
-): string[] {
+export function hiddenAfter(held: readonly HeldMark[], key: string, show: boolean): string[] {
   return held
     .filter((one) => (one.item.key === key ? !show : !one.shown))
     .map((one) => one.item.key);

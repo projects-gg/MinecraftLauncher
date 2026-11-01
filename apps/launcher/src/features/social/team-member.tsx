@@ -47,6 +47,7 @@ import { openMenuFromKey } from "./menu-key";
 import { type PersonAction, personMenu } from "./menus";
 import { isJoinable, presenceLine, presenceParts } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { PersonMarkList, useMarks } from "./person-mark";
 import { type PersonQuestion, usePersonItems } from "./person-menu";
 import { PresenceText } from "./presence-text";
 import { SocialAvatar } from "./social-face";
@@ -72,16 +73,17 @@ export function RoleBadge({
   member,
   size = 12,
 }: {
-  member: Pick<TeamMember, "role" | "moderator" | "mark">;
+  member: Pick<TeamMember, "role" | "moderator" | "marks">;
   size?: number;
 }) {
   const { t } = useTranslation();
+  const marked = useMarks(member.marks).length > 0;
   if (member.role === "founder") {
     return (
       <Crown
         size={size}
         weight="fill"
-        className={cn("shrink-0 text-gold-300", member.mark && "ml-1")}
+        className={cn("shrink-0 text-gold-300", marked && "ml-1")}
         aria-label={t("teams.founder")}
       />
     );
@@ -91,7 +93,7 @@ export function RoleBadge({
     <ShieldStar
       size={size + 1}
       weight="fill"
-      className={cn("shrink-0 text-gold-300/75", member.mark && "ml-1")}
+      className={cn("shrink-0 text-gold-300/75", marked && "ml-1")}
       aria-label={t("teams.moderator")}
     />
   );
@@ -357,7 +359,7 @@ function MemberCard({
             name={member.name}
             badge={member.badge}
             wearer={member.id}
-            mark={member.mark}
+            marks={member.marks}
             size="lg"
             chip="button"
             className="gap-2"
@@ -392,6 +394,8 @@ function MemberCard({
           </p>
         </div>
       </div>
+      {/* Every badge with its name (BADGES-UI), under the name block at the card's full width. */}
+      <PersonMarkList marks={member.marks} className="mt-3" />
       <p className="mt-3 text-[12.5px] text-ash-400">
         {days >= 1 ? t("teams.member.since", { count: days }) : t("teams.member.sinceToday")}
       </p>
@@ -572,6 +576,7 @@ export function TeamMemberRow({
     ? t("teams.member.blocked")
     : presenceLine(friend && member.state === "offline" ? friend : member, t);
   const badge = useShownBadge(member.badge);
+  const marks = useMarks(member.marks);
   const shown =
     line === "presence" ||
     member.blocked ||
@@ -618,7 +623,7 @@ export function TeamMemberRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${badgeRowLabel(member.name, badge, t, member.mark)}, ${presence}`}
+              aria-label={`${badgeRowLabel(member.name, badge, t, marks)}, ${presence}`}
               className={cn(
                 "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
                 line === "where" ? "py-1.5" : "py-2",
@@ -636,7 +641,7 @@ export function TeamMemberRow({
                   name={member.name}
                   badge={member.badge}
                   wearer={member.id}
-                  mark={member.mark}
+                  marks={member.marks}
                   dim={member.state === "offline" || member.blocked}
                   nameClassName={cn(
                     "text-[14px] font-semibold",

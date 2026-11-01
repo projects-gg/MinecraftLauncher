@@ -8,7 +8,7 @@
 // name a sentence only mentions ("Ayşe aracılığıyla"), never in the system's notifications (text
 // only), never on the title bar's Minecraft account (another identity).
 import { cn, type MarkItem, type MarkSize, ProfileMarkList, ProfileMarks } from "@pl/ui";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { BUILTIN_MARK_DEFS, markedName, markItems, sentenceParts } from "./marks";
 import { useSocialUi } from "./store";
@@ -31,6 +31,20 @@ export function useMarks(keys: readonly string[] | undefined): MarkItem[] {
 export function useMarkedName(name: string, keys: readonly string[] | undefined): string {
   const { t } = useTranslation();
   return markedName(name, useMarks(keys), t);
+}
+
+/**
+ * `useMarkedName` for a component that names someone after its early returns (a hook's place
+ * stays fixed): the namer, called with the name and the badge keys.
+ */
+export function useMarkNamer(): (name: string, keys: readonly string[] | undefined) => string {
+  const defs = useSocialUi((s) => s.view.markDefs) ?? BUILTIN_MARK_DEFS;
+  const { t, i18n } = useTranslation();
+  const english = i18n.language === "en";
+  return useCallback(
+    (name, keys) => markedName(name, markItems(keys, defs, english), t),
+    [defs, english, t],
+  );
 }
 
 /**

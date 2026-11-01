@@ -105,8 +105,8 @@ function showCrewArrival(id: string) {
     const text = sentence(name);
     void notifyOutside(text, { onClick: openFriends }).then((sent) => {
       if (sent) return;
-      // The first crewmate's mark right after their name (SOC-VERIFY; the system's notice is text).
-      toast(<MarkedSentence text={sentence} name={name} mark={crewmate(first)?.mark} />, {
+      // The first crewmate's badge right after their name (BADGES-UI; the system's notice is text).
+      toast(<MarkedSentence text={sentence} name={name} marks={crewmate(first)?.marks} />, {
         action: { label: i18n.t("social.actions.join"), onClick: () => void joinProjects() },
       });
     });
@@ -144,7 +144,7 @@ function showFriendNotice(id: string, kind: "online" | "projects") {
         : i18n.t("social.notices.online", { name: who });
     const text = sentence(name);
     void notifyOutside(text, { onClick: openFriends }).then((sent) => {
-      if (!sent) toast(<MarkedSentence text={sentence} name={name} mark={friendOf(id)?.mark} />);
+      if (!sent) toast(<MarkedSentence text={sentence} name={name} marks={friendOf(id)?.marks} />);
     });
   }, 400);
   pendingFriendNotices.set(id, { kind, timer });
@@ -232,9 +232,9 @@ function handleNotice(notice: SocialNotice) {
         announce(text);
         break;
       }
-      // Their mark right after their name (SOC-VERIFY): a stranger's request says who is verified.
+      // Their badge right after their name (BADGES-UI): a stranger's request says who is verified.
       toast(
-        <MarkedSentence text={sentence} name={notice.request.name} mark={notice.request.mark} />,
+        <MarkedSentence text={sentence} name={notice.request.name} marks={notice.request.marks} />,
         {
           action: {
             label: i18n.t("social.notices.show"),
@@ -250,7 +250,7 @@ function handleNotice(notice: SocialNotice) {
       if (listInView()) announce(text);
       else
         toast.success(
-          <MarkedSentence text={sentence} name={notice.friend.name} mark={notice.friend.mark} />,
+          <MarkedSentence text={sentence} name={notice.friend.name} marks={notice.friend.marks} />,
         );
       break;
     }
@@ -341,7 +341,7 @@ function handleNotice(notice: SocialNotice) {
       }
       void notifyOutside(text, { onClick: () => showCrew(crew.id) });
       const asker = notice.request;
-      toast(<MarkedSentence text={sentence} name={asker.name} mark={asker.mark} />, {
+      toast(<MarkedSentence text={sentence} name={asker.name} marks={asker.marks} />, {
         action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(crew.id) },
       });
       break;

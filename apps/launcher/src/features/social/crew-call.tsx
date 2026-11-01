@@ -248,7 +248,7 @@ export function CallStrip({ call, team }: { call: CrewCall; team: SocialTeam }) 
                 <MarkedSentence
                   text={(name) => callSentenceOf(call, crews, t, true, name)}
                   name={caller.name || t("teams.call.someone")}
-                  mark={caller.mark}
+                  marks={caller.marks}
                 />
               </span>
               <WhereLine call={call} />
@@ -326,7 +326,7 @@ export function CallRow({ call, team }: { call: CrewCall; team: SocialTeam }) {
               <MarkedSentence
                 text={(name) => callSentenceOf(call, crews, t, false, name)}
                 name={caller.name || t("teams.call.someone")}
-                mark={caller.mark}
+                marks={caller.marks}
               />
             </span>
             <WhereLine call={call} />
@@ -379,7 +379,7 @@ function CallToast({
                   : callSentenceOf(live, crews, t, false, who)
               }
               name={name}
-              mark={caller.mark}
+              marks={caller.marks}
             />
           </p>
           <WhereLine call={live} />

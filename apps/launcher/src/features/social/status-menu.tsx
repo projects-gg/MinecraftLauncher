@@ -3,9 +3,11 @@
 // Görünmez). The chosen status shows at once and settles when the service confirms; a failure puts
 // the old one back. The panel's menu changes it too. With crew tags (TEAM6) the tag the player
 // wears sits before the name (its card as on anyone's), and the picker's "Ekip etiketi ▸" puts one
-// on, switches or takes it off ("Etiket yok").
+// on, switches or takes it off ("Etiket yok"). The player's profile badges (BADGES-UI) show as
+// others see them: the first beside the name, every one with its name at the picker's top (the
+// panel's header stays one row; "Rozetlerim" in the friends settings hides them).
 import { CaretDown, CaretRight, Check, TagSimple } from "@phosphor-icons/react";
-import { cn, easeOutExpo, returnFocusAfterKeys } from "@pl/ui";
+import { cn, easeOutExpo, ProfileMarkList, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useState } from "react";
@@ -22,6 +24,7 @@ import { BadgedName } from "./crew-badge";
 import { LimitedChip } from "./limited-chip";
 import { dayMonth } from "./limits";
 import { swap, useSocialMotion } from "./motion";
+import { useMarks } from "./person-mark";
 import { PresenceDot, SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
@@ -63,6 +66,7 @@ export function MeCard({ me }: { me: SocialMe }) {
   const tags = useSocialUi((s) => s.view.crew.badges);
   const crews = useSocialUi((s) => s.view.crews);
   const choices = tags ? tagChoices(crews, Date.now()) : [];
+  const marks = useMarks(me.marks);
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -77,7 +81,7 @@ export function MeCard({ me }: { me: SocialMe }) {
           name={me.name}
           badge={badge}
           wearer={me.id}
-          mark={me.mark}
+          marks={me.marks}
           chip="button"
           nameClassName="text-[15px] leading-tight font-semibold text-bone-50"
         />
@@ -132,6 +136,14 @@ export function MeCard({ me }: { me: SocialMe }) {
                       })}
                       exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.12 } })}
                     >
+                      {marks.length > 0 ? (
+                        <>
+                          <DropdownMenu.Label className="px-2.5 pt-1.5 pb-1">
+                            <ProfileMarkList marks={marks} />
+                          </DropdownMenu.Label>
+                          <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
+                        </>
+                      ) : null}
                       <DropdownMenu.RadioGroup
                         value={status}
                         onValueChange={(value) => choose(value as StatusMode)}
