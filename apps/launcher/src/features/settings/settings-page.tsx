@@ -6,6 +6,7 @@ import {
   DownloadSimple,
   GameController,
   Gear,
+  GithubLogo,
   HardDrives,
   Info,
   Lifebuoy,
@@ -42,6 +43,7 @@ import logo from "@/assets/brand/logo-96.webp";
 import { FastPackRow } from "@/features/fastpack/settings-row";
 import { HelpSection } from "@/features/help/help-panel";
 import { platformName } from "@/features/home/community-links";
+import { SOURCE_URL } from "@/features/home/stars";
 import { EmojiRow, OverlayRow } from "@/features/overlay/settings-row";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
@@ -57,7 +59,7 @@ import {
   loadEnglish,
   setLanguage,
 } from "@/lib/i18n";
-import { openLink } from "@/lib/links";
+import { openLink, openWebLink } from "@/lib/links";
 import { detectOs } from "@/lib/platform";
 import { playSound } from "@/lib/sound";
 import { type Place, usePlace, usePlacement } from "@/stores/placement";
@@ -581,11 +583,18 @@ function About() {
             {link.label}
           </Button>
         ))}
+      </div>
+      {/* The only link to the repository: where the code is, and that a star helps (STARS). A
+          secondary button: as a ghost beside its label it read as part of the sentence. */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <span className="text-[13px] text-ash-300">{t("stars.aboutLabel")}</span>
         <Button
-          variant="ghost"
-          onClick={() => void api.openUrl("https://github.com/projects-gg/MinecraftLauncher")}
+          variant="secondary"
+          size="sm"
+          icon={<GithubLogo size={15} weight="fill" aria-hidden />}
+          onClick={() => openWebLink(SOURCE_URL)}
         >
-          {t("settings.about.source")}
+          {t("stars.aboutAction")}
         </Button>
       </div>
       <p className="mt-6 text-[12.5px] text-ash-400">{t("settings.about.credits")}</p>
