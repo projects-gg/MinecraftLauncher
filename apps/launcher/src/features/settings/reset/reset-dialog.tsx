@@ -13,7 +13,7 @@ function Line({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[84px_1fr] gap-3 py-1.5">
       <dt className="text-[13px] text-ash-400">{label}</dt>
-      <dd className="min-w-0 space-y-0.5 text-[13.5px] break-words text-bone-100">{children}</dd>
+      <dd className="min-w-0 space-y-1.5 text-[13.5px] break-words text-bone-100">{children}</dd>
     </div>
   );
 }
@@ -52,7 +52,7 @@ export function ResetDialog({ open, onClose }: { open: boolean; onClose: () => v
       title={restarting ? t(`${r}.title`) : t(`${r}.dialogTitle`)}
       description={restarting ? undefined : t(`${r}.dialogBody`)}
       closeLabel={t("common.close")}
-      width={480}
+      width={520}
       morph
       dismissible={!busy}
       dismissOnOutsideClick={false}
@@ -78,11 +78,9 @@ export function ResetDialog({ open, onClose }: { open: boolean; onClose: () => v
       }
     >
       {restarting ? (
-        <div className="flex flex-col items-center gap-3 py-4 text-center" aria-live="polite">
-          <p className="font-display text-[18px] font-semibold text-bone-50">
-            {t(`${r}.restarting`)}
-          </p>
-          <Progress className="w-56" label={t(`${r}.restarting`)} />
+        <div className="pt-1 pb-2" aria-live="polite">
+          <p className="text-[14px] font-medium text-bone-50">{t(`${r}.restarting`)}</p>
+          <Progress className="mt-3" label={t(`${r}.restarting`)} />
         </div>
       ) : (
         <div className="pt-1">
@@ -100,6 +98,10 @@ export function ResetDialog({ open, onClose }: { open: boolean; onClose: () => v
               <p>{t(`${r}.keptValue`)}</p>
             </Line>
           </dl>
+          {/* Above the field: a refusal (AFK accounts on, a game open) is not about the word. */}
+          {reset.error ? (
+            <ErrorLine className="mt-4" error={failure(reset.error, t(`${r}.failed`))} />
+          ) : null}
           <Field label={t(`${r}.confirmLabel`)} htmlFor={inputId} className="mt-4">
             <Input
               id={inputId}
@@ -114,9 +116,6 @@ export function ResetDialog({ open, onClose }: { open: boolean; onClose: () => v
               }}
             />
           </Field>
-          {reset.error ? (
-            <ErrorLine className="mt-4" error={failure(reset.error, t(`${r}.failed`))} />
-          ) : null}
         </div>
       )}
     </Dialog>

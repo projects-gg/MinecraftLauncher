@@ -10,7 +10,7 @@ export const trLauncherReset = {
   /** The saved accounts by name, e.g. "Hesaplar: GeceKartali ve Blok_Ustasi" (names take no suffix). */
   accounts: "Hesaplar: {{names}}",
   afk: "AFK hesapları: {{names}}",
-  settings: "Launcher ayarları, Discord girişin ve kayıtlar",
+  settings: "Launcher ayarları, Discord girişin ve kayıt dosyaları",
   keptValue: "Kurulumların, dünyaların, ekran görüntülerin ve oyun dosyaların",
   confirmLabel: 'Onaylamak için "sıfırla" yaz',
   /** What the player types to confirm (any case, ı or i). */

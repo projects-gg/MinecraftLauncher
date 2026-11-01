@@ -9,7 +9,7 @@ export const enLauncherReset = {
   kept: "Kept",
   accounts: "Accounts: {{names}}",
   afk: "AFK accounts: {{names}}",
-  settings: "Launcher settings, your Discord sign-in and logs",
+  settings: "Launcher settings, your Discord sign-in and log files",
   keptValue: "Your installations, worlds, screenshots and game files",
   confirmLabel: 'Type "reset" to confirm',
   word: "reset",
