@@ -216,6 +216,8 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
     const page = options?.page ?? "list";
     set((s) => ({
       open: true,
+      // A refusal from the last sign-in attempt is gone when the panel opens again.
+      ...(s.open ? {} : { signInError: null }),
       page,
       direction: DEPTH[page] >= DEPTH[s.page] ? 1 : -1,
       prefillCode: options?.code ?? s.prefillCode,

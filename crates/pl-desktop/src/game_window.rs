@@ -2,7 +2,7 @@
 //! launcher says "Açılıyor" until the window is there and "Oyunda" from then on.
 //!
 //! Windows: a visible top-level window of the kind Minecraft draws in (GLFW for 1.13 and later and
-//! for Forge's and NeoForge's loading window, LWJGL 2 for 1.12 and older), owned by the game's
+//! for Forge's and NeoForge's loading window, SDL3 for 26.3, LWJGL 2 for 1.12 and older), owned by the game's
 //! process or by one it started (the Java behind a wrapper command). Dialogs do not count (a driver
 //! warning, the mod loader's error window): the game is not on screen until its own window is.
 //! Nothing is sent to any window, so a window that hangs cannot hold the look. Elsewhere there is
@@ -18,6 +18,8 @@ pub fn probe() -> Option<fn(u32) -> bool> {
 pub fn is_game_window_class(class: &str) -> bool {
     let class = class.to_ascii_lowercase();
     (class.starts_with("glfw") && !class.contains("helper")) || class.starts_with("lwjgl")
+        // Minecraft 26.3 draws with SDL3.
+        || class == "sdl_app"
 }
 
 /// Whether `pid` is `root` or was started by it, directly or through others: a wrapper command
@@ -156,8 +158,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn minecraft_draws_in_glfw_or_lwjgl_windows() {
-        for class in ["GLFW30", "glfw30", "LWJGL", "LWJGLWindow"] {
+    fn minecraft_draws_in_glfw_lwjgl_or_sdl_windows() {
+        for class in ["GLFW30", "glfw30", "LWJGL", "LWJGLWindow", "SDL_app"] {
             assert!(is_game_window_class(class), "{class}");
         }
         for class in [

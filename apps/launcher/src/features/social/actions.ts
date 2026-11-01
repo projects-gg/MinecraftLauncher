@@ -5,7 +5,7 @@ import { toast } from "@pl/ui";
 import { announce, friendlyError } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { Friend } from "@/lib/api/social-types";
-import { type NotificationPlace, showNotification } from "@/lib/attention";
+import { type NotificationPlace, showNotification, windowAway } from "@/lib/attention";
 import { copyText as writeClipboard } from "@/lib/clipboard";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
@@ -76,7 +76,7 @@ export async function notifyOutside(
   title: string,
   { body, onClick, place }: { body?: string; onClick?: () => void; place?: NotificationPlace } = {},
 ): Promise<boolean> {
-  if (!isTauri() || document.hasFocus() || !usePrefs.getState().desktopNotifications) {
+  if (!isTauri() || !windowAway() || !usePrefs.getState().desktopNotifications) {
     return false;
   }
   return showNotification(title, body, onClick, place);
