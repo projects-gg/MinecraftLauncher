@@ -2,6 +2,7 @@ import {
   ArrowCounterClockwise,
   ArrowsLeftRight,
   CheckCircle,
+  DownloadSimple,
   FolderOpen,
   Lifebuoy,
   WarningCircle,
@@ -210,9 +211,11 @@ export function DataSection() {
           title={t("dataSettings.legacy")}
           help={t("dataSettings.legacyHelp")}
           actions={
+            // "Aktar" with the download mark, as the dialog it opens says (IMPORT-POLISH).
             <Button
               variant="secondary"
               size="sm"
+              icon={<DownloadSimple size={15} />}
               onClick={() => useUi.getState().setMigrationOpen(true)}
             >
               {t("dataSettings.import")}
@@ -227,6 +230,7 @@ export function DataSection() {
             <Button
               variant="secondary"
               size="sm"
+              icon={<DownloadSimple size={15} />}
               onClick={() => useImportJob.getState().setDialogOpen(true)}
             >
               {t("import.settings.action")}

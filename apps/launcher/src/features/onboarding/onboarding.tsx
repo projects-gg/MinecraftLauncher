@@ -1,6 +1,6 @@
 import {
-  ArrowLeft,
   Check,
+  DownloadSimple,
   GlobeHemisphereWest,
   Image as ImageIcon,
   Robot,
@@ -47,7 +47,6 @@ import { MicrosoftLoginDialog } from "@/features/settings/accounts-section";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import { api, type InstanceSummary, type LegacyScan } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
-import { listFormat, uiLocale } from "@/lib/format";
 import { isTauri } from "@/lib/platform";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { TitleBar } from "@/shell/title-bar";
@@ -262,7 +261,7 @@ export function Onboarding() {
                     <Button variant="primary" size="lg" onClick={() => go(1)}>
                       {t("onboarding.welcome.start")}
                     </Button>
-                    <Button variant="ghost" onClick={skip}>
+                    <Button variant="ghost" size="lg" onClick={skip}>
                       {t("onboarding.skip")}
                     </Button>
                   </div>
@@ -346,10 +345,14 @@ function StepFrame({
   );
 }
 
+/**
+ * The flow's "Geri": a plain ghost button as tall as the row's others (every action of the
+ * welcome flow is `lg`), with no arrow, like the multi-step dialogs' "Geri" (design.md §7).
+ */
 function BackButton({ onClick }: { onClick: () => void }) {
   const { t } = useTranslation();
   return (
-    <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={onClick}>
+    <Button variant="ghost" size="lg" onClick={onClick}>
       {t("onboarding.back")}
     </Button>
   );
@@ -369,59 +372,58 @@ function LegacyStep({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  // Each line found, and its words in the sentence above the list ("oyuncu adını").
-  const items: Array<{ icon: ReactNode; text: string; thing: string }> = [];
+  // Each thing found, with its count. The sentence above stays general: it named the same things
+  // again (IMPORT-POLISH), and it never promises what was not found.
+  const items: Array<{ icon: ReactNode; text: string }> = [];
   if (scan.nickname)
     items.push({
       icon: <User size={18} />,
       text: t("onboarding.legacy.nickname", { name: scan.nickname }),
-      thing: t("onboarding.legacy.things.nickname"),
     });
   if (scan.afkAccounts > 0)
     items.push({
       icon: <Robot size={18} />,
       text: t("onboarding.legacy.afk", { count: scan.afkAccounts }),
-      thing: t("onboarding.legacy.things.afk"),
     });
   if (scan.screenshots > 0)
     items.push({
       icon: <ImageIcon size={18} />,
       text: t("onboarding.legacy.screenshots", { count: scan.screenshots }),
-      thing: t("onboarding.legacy.things.screenshots"),
     });
   if (scan.worlds > 0)
     items.push({
       icon: <GlobeHemisphereWest size={18} />,
       text: t("onboarding.legacy.worlds", { count: scan.worlds }),
-      thing: t("onboarding.legacy.things.worlds"),
     });
-  // The sentence names only what was found (it promised worlds to players who had none).
-  const things = items.length
-    ? items.map((item) => item.thing)
-    : [t("onboarding.legacy.things.data")];
-  const body = t("onboarding.legacy.body", { things: listFormat().format(things) });
 
   return (
     <StepFrame
       headingRef={headingRef}
       title={t("onboarding.legacy.title")}
-      body={body.charAt(0).toLocaleUpperCase(uiLocale()) + body.slice(1)}
+      body={t("onboarding.legacy.body")}
     >
       {items.length ? (
         <ul className="mt-6 space-y-2.5">
           {items.map((item) => (
             <li key={item.text} className="flex items-center gap-3 text-[14.5px] text-bone-100">
-              <span className="text-gold-300">{item.icon}</span>
+              {/* Quiet marks: the screen's one gold is "Aktar" (design.md §2). */}
+              <span className="text-ash-300">{item.icon}</span>
               {item.text}
             </li>
           ))}
         </ul>
       ) : null}
       <div className="mt-9 flex flex-wrap items-center gap-3">
-        <Button variant="primary" size="lg" onClick={() => setOpen(true)}>
+        {/* The same action and words as the next step's "Aktar". */}
+        <Button
+          variant="primary"
+          size="lg"
+          icon={<DownloadSimple size={17} weight="bold" />}
+          onClick={() => setOpen(true)}
+        >
           {t("onboarding.legacy.import")}
         </Button>
-        <Button variant="secondary" onClick={onNext}>
+        <Button variant="secondary" size="lg" onClick={onNext}>
           {t("onboarding.legacy.skip")}
         </Button>
         <BackButton onClick={onBack} />
@@ -519,7 +521,9 @@ function AccountStep({
               key={a.id}
               className={cn(
                 "flex items-center gap-3.5 rounded-[var(--radius-panel)] bg-obsidian-900/70 px-3.5 py-3 ring-1",
-                a.active ? "ring-gold-400/40" : "ring-white/8",
+                // The chosen account is quiet (bone edge and check): the screen's one gold is its
+                // main action (design.md §1.3, §2).
+                a.active ? "ring-white/25" : "ring-white/8",
               )}
             >
               <AccountFace account={a} size={40} />
@@ -529,7 +533,7 @@ function AccountStep({
                   <p className="text-[12.5px] text-ash-400">{t("accounts.microsoft")}</p>
                 ) : null}
               </div>
-              {a.active ? <Check size={18} className="text-gold-300" aria-hidden /> : null}
+              {a.active ? <Check size={18} className="text-bone-100" aria-hidden /> : null}
             </li>
           ))}
         </ul>
@@ -616,12 +620,17 @@ function AccountStep({
             {t("onboarding.account.continue")}
           </Button>
         ) : (
-          <Button variant="secondary" onClick={onNext}>
+          <Button variant="secondary" size="lg" onClick={onNext}>
             {t("onboarding.skip")}
           </Button>
         )}
         {hasAccount && !adding ? (
-          <Button variant="ghost" icon={<UserPlus size={16} />} onClick={() => setAdding(true)}>
+          <Button
+            variant="ghost"
+            size="lg"
+            icon={<UserPlus size={16} />}
+            onClick={() => setAdding(true)}
+          >
             {t("onboarding.account.addAnother")}
           </Button>
         ) : null}

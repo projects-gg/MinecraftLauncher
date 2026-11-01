@@ -266,9 +266,11 @@ describe("import rows", () => {
   it("describe a profile in its second line", () => {
     const rows = rowsOf(scan(), measures(1 * GB));
     const [fabric, vanilla, lite, done] = rows[0]?.profiles ?? [];
-    // The name says the version; the measured mods replace the file count.
+    // The name says the version; the measured mods replace the file count. The count is all of
+    // them, those that stay behind among them (17 come, 3 stay: "20 mod, 3 tanesi …"), as the
+    // summary says "içinde 17 mod var" and "3 mod … gelmedi".
     expect(fabric && profileMeta(fabric)).toEqual([
-      { key: "profile.mods", params: { count: 17 } },
+      { key: "profile.mods", params: { count: 20 } },
       { key: "profile.leftMods", params: { count: 3 } },
     ]);
     expect(vanilla && profileMeta(vanilla)).toEqual([{ key: "profile.noOptifine" }]);
@@ -425,11 +427,12 @@ describe("import summary", () => {
         }),
       ]),
     );
+    // Honest marks: what left something behind is partial, mods made for another version too.
     expect(lines.map((l) => [l.tone, l.key])).toEqual([
       ["done", "outcome.options"],
       ["done", "outcome.servers"],
-      ["partial", "outcome.worlds"],
-      ["done", "outcome.profileMods"],
+      ["partial", "outcome.worldsSome"],
+      ["partial", "outcome.profileMods"],
       ["failed", "outcome.profileUnsupported"],
       ["skipped", "outcome.already"],
     ]);
@@ -437,6 +440,11 @@ describe("import summary", () => {
       "outcome.worldsIn",
       "outcome.worldsIn",
       "outcome.leftBecause.noSpace",
+    ]);
+    // What stayed behind is in the line itself, with the total ("5 dünyanın 4 tanesi geldi").
+    expect([lines[2]?.key, lines[2]?.params]).toEqual([
+      "outcome.worldsSome",
+      { count: 4, total: 5 },
     ]);
     expect(lines[3]?.params).toEqual({ name: "Fabric 1.21.4", count: 17 });
     expect(lines[3]?.more).toEqual([{ key: "outcome.profileLeftMods", params: { count: 3 } }]);
@@ -507,6 +515,11 @@ describe("import summary", () => {
     ]);
     // A run whose settings did not change offers nothing to take back.
     expect(summaryLines(report([outcome({})]))[0]?.undo).toBeUndefined();
+    // Settings that came only in part are marked so.
+    const [part] = summaryLines(
+      report([outcome({ status: "partial", left: 1, reason: "unreadable" })], false, change),
+    );
+    expect([part?.tone, part?.undo]).toEqual(["partial", true]);
   });
 
   it("keep two launchers' alike lines apart", () => {
@@ -677,6 +690,28 @@ describe("import words", () => {
       // "TLauncher'dan" → "TLauncher'daki", "Modrinth App'ten" → "Modrinth App'teki".
       expect(at).toBe(from.replace(/n$/, "ki"));
       expect(enImport.from[kind as keyof typeof enImport.from]).toContain(name);
+    }
+  });
+
+  it("never start a sentence with a number after a version", () => {
+    // "…Forge 1.20.1 kurulumunda 2. 1 tanesi…" read "2.1": follow-ups start with a word, and
+    // where worlds went puts its count before the instance's name.
+    const followUps = [
+      ...Object.values(trImport.outcome.leftBecause),
+      ...Object.values(enImport.outcome.leftBecause),
+    ];
+    for (const text of followUps) expect(text).not.toMatch(/^(\{\{count\}\}|\d)/);
+    expect(trImport.outcome.worldsIn).toMatch(/^\{\{count\}\} tanesi \{\{name\}\}/);
+    expect(trImport.outcome.worldsIn).not.toMatch(/\{\{count\}\}$/);
+  });
+
+  it("call the Projects instance the same way the picker does", () => {
+    const tr = [trImport.outcome.options, trImport.outcome.optionsFromInstance, trImport.undo.v1];
+    for (const text of [...tr, trImport.groups.projects]) {
+      expect(text).toContain("Projects kurulumu");
+    }
+    for (const text of [enImport.outcome.options, enImport.undo.v1, enImport.groups.projects]) {
+      expect(text).toContain("the Projects instance");
     }
   });
 
