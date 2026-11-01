@@ -824,24 +824,24 @@ fn reset_block(app: &AppHandle, state: &AppState) -> Option<CmdError> {
         (
             "SIFIRLA-OYUN",
             pick(
-                "Oyun açıkken launcher sıfırlanamaz. Önce oyunu kapat.",
-                "You can't reset the launcher while the game is open. Close the game first.",
+                "Sıfırlamak için önce oyunu kapat.",
+                "Close the game first, then reset.",
             ),
         )
     } else if state.launch_cancel.lock().is_some() {
         (
             "SIFIRLA-HAZIRLIK",
             pick(
-                "Oyun hazırlanırken launcher sıfırlanamaz. Bitmesini bekle.",
-                "You can't reset the launcher while a game is getting ready. Wait for it to finish.",
+                "Oyun hazırlanıyor. Bitince tekrar dene.",
+                "A game is getting ready. Try again when it's done.",
             ),
         )
     } else if state.afk.any_active() {
         (
             "SIFIRLA-AFK",
             pick(
-                "AFK hesapların açıkken launcher sıfırlanamaz. Önce onları durdur.",
-                "You can't reset the launcher while AFK accounts are on. Stop them first.",
+                "Sıfırlamak için önce AFK hesaplarını durdur.",
+                "Stop your AFK accounts first, then reset.",
             ),
         )
     } else if crate::commands::modrinth::jobs_running(app)

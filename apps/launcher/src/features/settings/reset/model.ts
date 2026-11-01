@@ -11,6 +11,14 @@ export function confirmMatches(typed: string, word: string): boolean {
   return expected.length > 0 && fold(typed) === expected;
 }
 
+/** AFK states in which an account runs or is on its way: the reset waits for them to stop. */
+const AFK_RESTING = new Set(["stopped", "clientFailed", "error"]);
+
+/** Some AFK account runs (the backend refuses a reset then; the dialog says so before typing). */
+export function afkRunning(afk: readonly { state: { kind: string } }[] | undefined): boolean {
+  return (afk ?? []).some((account) => !AFK_RESTING.has(account.state.kind));
+}
+
 /** The saved names a reset removes, as the dialog lists them (in the order the player sees). */
 export function removedNames(
   accounts: readonly { username: string }[] | undefined,

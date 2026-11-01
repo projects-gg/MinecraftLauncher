@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { confirmMatches, removedNames } from "./model";
+import { afkRunning, confirmMatches, removedNames } from "./model";
+
+describe("afkRunning", () => {
+  const afk = (...kinds: string[]) => kinds.map((kind) => ({ state: { kind } }));
+
+  it("is off while every AFK account rests", () => {
+    expect(afkRunning(undefined)).toBe(false);
+    expect(afkRunning(afk())).toBe(false);
+    expect(afkRunning(afk("stopped", "error", "clientFailed"))).toBe(false);
+  });
+
+  it("is on while one runs or is on its way", () => {
+    for (const kind of [
+      "queued",
+      "preparing",
+      "starting",
+      "connecting",
+      "connected",
+      "reconnecting",
+      "stopping",
+    ]) {
+      expect(afkRunning(afk("stopped", kind)), kind).toBe(true);
+    }
+  });
+});
 
 describe("confirmMatches", () => {
   it("takes the word whatever its case, spaces or i", () => {
