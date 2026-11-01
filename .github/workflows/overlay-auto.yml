@@ -9,14 +9,15 @@ name: Overlay for new Minecraft versions
 # signs the index on the owner's computer.
 #
 # A run on demand (Actions, or `gh workflow run overlay-auto.yml --ref v2 -f minecraft=26.3`) tries one version; its
-# dry run (the default) opens no issue. A push that changes this workflow or its script tries the newest target as a
-# dry run. Only runs on v2 upload an artifact: Studio fetches jars itself from this workflow's green v2 runs (their
-# event push, schedule or workflow_dispatch) and nowhere else. Scheduled runs start once this file is on the default
-# branch.
+# dry run (the default) opens no issue. A push that changes the mod, this workflow or its scripts tries the newest
+# target as a dry run: a target added for a new version (its compat class) leaves its tested jar for Studio without
+# waiting for a launcher release. Only runs on v2 upload an artifact: Studio fetches jars itself from this workflow's
+# green v2 runs (their event push, schedule or workflow_dispatch) and nowhere else. Scheduled runs start once this
+# file is on the default branch; every six hours, so a new release's jar is ready within hours of its Fabric API.
 
 on:
   schedule:
-    - cron: "41 5 * * *"
+    - cron: "41 */6 * * *"
   workflow_dispatch:
     inputs:
       minecraft:
@@ -32,7 +33,10 @@ on:
     branches: [v2]
     paths:
       - ".github/workflows/overlay-auto.yml"
+      - ".github/scripts/apt-install.sh"
       - "scripts/release/overlay-auto.mjs"
+      - "scripts/release/overlay-jars.mjs"
+      - "mods/projects-overlay/**"
 
 permissions:
   contents: read
@@ -108,6 +112,12 @@ jobs:
       COMPAT: ${{ matrix.compat }}
       FABRIC_API: ${{ matrix.fabricApi }}
       RANGE: ${{ matrix.range }}
+      # Minecraft 26 opens its window with SDL3 on Mesa's software OpenGL (llvmpipe) over a 24-bit virtual screen. Loom's
+      # own xvfb-run starts an 8-bit screen and the game found no window there, then waited on its error dialog (the runs
+      # of 30 Oct and 1 Nov held the job's 40 minutes), so the steps start xvfb-run themselves and tell Loom not to
+      # (-Povl.xvfb=false); the game test's step also takes its context from EGL (see there).
+      XVFB_SCREEN: -screen 0 1920x1080x24
+      LIBGL_ALWAYS_SOFTWARE: "1"
     defaults:
       run:
         working-directory: mods/projects-overlay
@@ -129,9 +139,22 @@ jobs:
         with:
           node-version: 24
 
-      # A stuck mirror fails fast and gets one more try.
+      # A stuck mirror fails fast and gets one more try. Mesa's software OpenGL (GLX and EGL), its software Vulkan
+      # (lavapipe, the game's second backend), and glxinfo/eglinfo for the check below.
       - name: Virtual display for the game test
-        run: bash "$GITHUB_WORKSPACE/.github/scripts/apt-install.sh" xvfb
+        run: >-
+          bash "$GITHUB_WORKSPACE/.github/scripts/apt-install.sh"
+          xvfb libgl1-mesa-dri libglx-mesa0 libegl1 libegl-mesa0 mesa-vulkan-drivers mesa-utils
+
+      # The display before the game: a runner without OpenGL is not the new version's fault (no compat issue).
+      - name: OpenGL on the virtual display
+        run: |
+          set -o pipefail
+          xvfb-run -a -s "$XVFB_SCREEN" glxinfo -B 2>&1 | tee "$RUNNER_TEMP/glxinfo.log"
+          grep -Eq 'OpenGL core profile version string: ([4-9]|3\.[3-9])' "$RUNNER_TEMP/glxinfo.log"
+          # Only for the log: sRGB-capable GLX visuals, and the EGL side the game uses (SDL_VIDEO_FORCE_EGL below).
+          echo "sRGB GLX lines: $(xvfb-run -a -s "$XVFB_SCREEN" glxinfo -v 2>/dev/null | grep -ci srgb || true)"
+          if command -v eglinfo > /dev/null; then xvfb-run -a -s "$XVFB_SCREEN" eglinfo -B 2>&1 | head -40 || true; fi
 
       # A target's own row by its key; a new version with the last compatibility class and the Fabric API found for it.
       - name: Gradle properties of the try
@@ -151,9 +174,29 @@ jobs:
 
       - id: gametest
         name: Client game test against the jar
+        # A game that starts no graphics backend waits on its error dialog: the watch below fails the step as soon as the
+        # log says so (both backends tried), and the step's own limit catches any other hang.
+        timeout-minutes: 20
+        env:
+          # The game's window asks SDL3 for a core 3.3, forward-compatible, sRGB-capable context; SDL's GLX path finds no
+          # visual for it on Xvfb ("Couldn't find matching GLX visual", run of 1 Nov 08:20) although glxinfo lists sRGB
+          # ones. SDL takes the context from Mesa's EGL instead (green on 1 Nov 08:44: OpenGL backend, llvmpipe).
+          SDL_VIDEO_FORCE_EGL: "1"
         run: |
           set -o pipefail
-          ./gradlew runProductionClientGameTest --no-daemon --console=plain $GRADLE_ARGS 2>&1 | tee "$RUNNER_TEMP/gametest.log"
+          log="$RUNNER_TEMP/gametest.log"
+          (xvfb-run -a -s "$XVFB_SCREEN" ./gradlew runProductionClientGameTest --no-daemon --console=plain $GRADLE_ARGS \
+            -Povl.xvfb=false 2>&1 | tee "$log") &
+          game=$!
+          while kill -0 "$game" 2>/dev/null; do
+            if grep -q 'Failed to create backend Vulkan' "$log" 2>/dev/null; then
+              echo "::error::The game started no graphics backend: OpenGL and Vulkan both failed (see the log above)"
+              pkill -f KnotClient || true
+              exit 1
+            fi
+            sleep 5
+          done
+          wait "$game"
 
       - id: report
         name: Report

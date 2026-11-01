@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 use reqwest::StatusCode;
@@ -88,7 +88,11 @@ impl Http {
                     }),
                 };
             }
-            tokio::time::sleep(backoff(attempt)).await;
+            let retry_after = match &outcome {
+                Ok(resp) => retry_after_delay(resp.status(), resp.headers(), SystemTime::now()),
+                Err(_) => None,
+            };
+            tokio::time::sleep(retry_delay(attempt, retry_after, random_unit())).await;
             attempt += 1;
         }
     }
@@ -161,9 +165,105 @@ fn is_retryable_status(status: StatusCode) -> bool {
         || status == StatusCode::REQUEST_TIMEOUT
 }
 
-pub(crate) fn backoff(attempt: u32) -> Duration {
-    // 400ms, 800ms, 1.6s, 3.2s ... capped at 8s.
+/// Longest wait a server's `Retry-After` can impose on one retry.
+pub(crate) const MAX_RETRY_AFTER: Duration = Duration::from_secs(30);
+
+/// Exponential ceiling for an attempt: 400ms, 800ms, 1.6s ... capped at 8s.
+fn backoff_ceiling(attempt: u32) -> Duration {
     Duration::from_millis((400u64 << attempt.min(5)).min(8_000))
+}
+
+/// Backoff with "equal jitter": between half the ceiling and the ceiling, so launchers that
+/// failed together do not retry together. `unit` is a random number in `[0, 1]`.
+pub(crate) fn backoff_with(attempt: u32, unit: f64) -> Duration {
+    let ceiling = backoff_ceiling(attempt);
+    let unit = if unit.is_finite() {
+        unit.clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    ceiling / 2 + ceiling.div_f64(2.0).mul_f64(unit)
+}
+
+pub(crate) fn backoff(attempt: u32) -> Duration {
+    backoff_with(attempt, random_unit())
+}
+
+/// The wait before the next retry: the jittered backoff, or the server's (capped) `Retry-After`
+/// when that is longer.
+pub(crate) fn retry_delay(attempt: u32, retry_after: Option<Duration>, unit: f64) -> Duration {
+    let jittered = backoff_with(attempt, unit);
+    match retry_after {
+        Some(wait) => jittered.max(wait.min(MAX_RETRY_AFTER)),
+        None => jittered,
+    }
+}
+
+fn random_unit() -> f64 {
+    f64::from(rand::random::<u16>()) / f64::from(u16::MAX)
+}
+
+/// `Retry-After` of a 429 or 503 answer (the statuses that define it).
+pub(crate) fn retry_after_delay(
+    status: StatusCode,
+    headers: &reqwest::header::HeaderMap,
+    now: SystemTime,
+) -> Option<Duration> {
+    if status != StatusCode::TOO_MANY_REQUESTS && status != StatusCode::SERVICE_UNAVAILABLE {
+        return None;
+    }
+    let value = headers.get(reqwest::header::RETRY_AFTER)?.to_str().ok()?;
+    parse_retry_after(value, now)
+}
+
+/// Parses `Retry-After`: delta-seconds or an HTTP-date (IMF-fixdate). Garbage gives `None`;
+/// a date in the past gives zero. Not capped here (see `retry_delay`), but saturating.
+pub(crate) fn parse_retry_after(value: &str, now: SystemTime) -> Option<Duration> {
+    let value = value.trim();
+    if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) {
+        return Some(Duration::from_secs(value.parse().unwrap_or(u64::MAX)));
+    }
+    let target = parse_http_date(value)?;
+    Some(target.duration_since(now).unwrap_or(Duration::ZERO))
+}
+
+/// `Sun, 06 Nov 1994 08:49:37 GMT`.
+fn parse_http_date(value: &str) -> Option<SystemTime> {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let (_, rest) = value.split_once(", ")?;
+    let mut parts = rest.split(' ');
+    let day: u64 = parts.next()?.parse().ok()?;
+    let month_name = parts.next()?;
+    let month = MONTHS.iter().position(|m| *m == month_name)? as u64 + 1;
+    let year: u64 = parts.next()?.parse().ok()?;
+    let mut clock = parts.next()?.split(':');
+    let hour: u64 = clock.next()?.parse().ok()?;
+    let minute: u64 = clock.next()?.parse().ok()?;
+    let second: u64 = clock.next()?.parse().ok()?;
+    if parts.next()? != "GMT" || parts.next().is_some() || clock.next().is_some() {
+        return None;
+    }
+    if !(1970..=9999).contains(&year)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
+        return None;
+    }
+    // Days from civil (Howard Hinnant), year >= 1970.
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y / 400;
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    UNIX_EPOCH.checked_add(Duration::from_secs(
+        days * 86_400 + hour * 3_600 + minute * 60 + second,
+    ))
 }
 
 #[cfg(test)]
@@ -171,10 +271,143 @@ mod tests {
     use super::*;
 
     #[test]
-    fn backoff_grows_and_caps() {
-        assert_eq!(backoff(0), Duration::from_millis(400));
-        assert_eq!(backoff(1), Duration::from_millis(800));
-        assert_eq!(backoff(10), Duration::from_millis(8_000));
+    fn backoff_stays_within_jitter_bounds() {
+        for (attempt, ceiling) in [(0, 400u64), (1, 800), (2, 1_600), (5, 8_000), (10, 8_000)] {
+            assert_eq!(
+                backoff_with(attempt, 0.0),
+                Duration::from_millis(ceiling / 2)
+            );
+            assert_eq!(backoff_with(attempt, 1.0), Duration::from_millis(ceiling));
+            let mid = backoff_with(attempt, 0.5);
+            assert!(
+                mid > Duration::from_millis(ceiling / 2) && mid < Duration::from_millis(ceiling)
+            );
+        }
+        // Out-of-range or NaN random input stays bounded.
+        assert_eq!(backoff_with(0, 7.0), Duration::from_millis(400));
+        assert_eq!(backoff_with(0, -1.0), Duration::from_millis(200));
+        assert_eq!(backoff_with(0, f64::NAN), Duration::from_millis(400));
+        for _ in 0..200 {
+            let d = backoff(3);
+            assert!(d >= Duration::from_millis(1_600) && d <= Duration::from_millis(3_200));
+        }
+    }
+
+    fn at(secs: u64) -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(secs)
+    }
+
+    #[test]
+    fn retry_after_seconds() {
+        let now = at(0);
+        assert_eq!(
+            parse_retry_after("120", now),
+            Some(Duration::from_secs(120))
+        );
+        assert_eq!(parse_retry_after(" 0 ", now), Some(Duration::ZERO));
+        assert_eq!(parse_retry_after("-5", now), None);
+        assert_eq!(parse_retry_after("1.5", now), None);
+        assert_eq!(parse_retry_after("", now), None);
+        assert_eq!(parse_retry_after("soon", now), None);
+        assert_eq!(
+            parse_retry_after("99999999999999999999999999", now),
+            Some(Duration::from_secs(u64::MAX))
+        );
+    }
+
+    #[test]
+    fn retry_after_http_date() {
+        // Sun, 06 Nov 1994 08:49:37 GMT = 784111777
+        let date = "Sun, 06 Nov 1994 08:49:37 GMT";
+        assert_eq!(
+            parse_retry_after(date, at(784_111_777 - 90)),
+            Some(Duration::from_secs(90))
+        );
+        assert_eq!(
+            parse_retry_after(date, at(784_111_777 + 5)),
+            Some(Duration::ZERO)
+        );
+        assert_eq!(
+            parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"),
+            Some(at(0))
+        );
+        assert_eq!(
+            parse_http_date("Fri, 29 Feb 2008 12:00:00 GMT"),
+            Some(at(1_204_286_400))
+        );
+        for bad in [
+            "Sun, 06 Nov 1994 08:49:37",
+            "Sun, 06 Foo 1994 08:49:37 GMT",
+            "Sun, 06 Nov 1994 25:49:37 GMT",
+            "Sun, 06 Nov 1969 08:49:37 GMT",
+            "Sun 06 Nov 1994 08:49:37 GMT",
+            "Sun, 06 Nov 1994 08:49:37 GMT extra",
+        ] {
+            assert_eq!(parse_retry_after(bad, at(0)), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn retry_after_only_read_on_429_and_503() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::RETRY_AFTER, "7".parse().unwrap());
+        let now = at(0);
+        assert_eq!(
+            retry_after_delay(StatusCode::TOO_MANY_REQUESTS, &headers, now),
+            Some(Duration::from_secs(7))
+        );
+        assert_eq!(
+            retry_after_delay(StatusCode::SERVICE_UNAVAILABLE, &headers, now),
+            Some(Duration::from_secs(7))
+        );
+        assert_eq!(
+            retry_after_delay(StatusCode::BAD_GATEWAY, &headers, now),
+            None
+        );
+        let empty = reqwest::header::HeaderMap::new();
+        assert_eq!(
+            retry_after_delay(StatusCode::TOO_MANY_REQUESTS, &empty, now),
+            None
+        );
+    }
+
+    #[test]
+    fn retry_delay_honours_and_caps_retry_after() {
+        assert_eq!(retry_delay(0, None, 0.0), Duration::from_millis(200));
+        // Shorter than the backoff: the backoff wins.
+        assert_eq!(
+            retry_delay(0, Some(Duration::ZERO), 1.0),
+            Duration::from_millis(400)
+        );
+        assert_eq!(
+            retry_delay(0, Some(Duration::from_secs(5)), 0.3),
+            Duration::from_secs(5)
+        );
+        // Huge values are capped.
+        assert_eq!(
+            retry_delay(0, Some(Duration::from_secs(86_400)), 0.3),
+            MAX_RETRY_AFTER
+        );
+        assert_eq!(
+            retry_delay(2, Some(Duration::from_secs(u64::MAX)), 1.0),
+            MAX_RETRY_AFTER
+        );
+    }
+
+    #[test]
+    fn total_wait_over_the_default_attempts_is_bounded() {
+        let config = HttpConfig::new("test");
+        let total = |unit: f64| -> Duration {
+            (0..config.retries)
+                .map(|attempt| retry_delay(attempt, None, unit))
+                .sum()
+        };
+        assert_eq!(total(0.0), Duration::from_millis(1_400));
+        assert_eq!(total(1.0), Duration::from_millis(2_800));
+        let with_header: Duration = (0..config.retries)
+            .map(|attempt| retry_delay(attempt, Some(Duration::MAX), 1.0))
+            .sum();
+        assert_eq!(with_header, MAX_RETRY_AFTER * config.retries);
     }
 
     #[test]

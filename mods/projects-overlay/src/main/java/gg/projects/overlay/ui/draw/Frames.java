@@ -22,6 +22,12 @@ public enum Frames {
         .withHighlight(Theme.withAlpha(Theme.GOLD_200, 0.08f))
         .withShadow(Theme.withAlpha(0x220606, 0.5f), 8f, 3f).fixedWidth(Sizes.TOAST_WIDTH)),
     /**
+     * Over a toast under the pointer where a press opens it (the chat; F7-OPEN): the card's edge in gold and a breath of
+     * light, the pause menu button's hover; drawn over the card at the hover's opacity.
+     */
+    TOAST_HOVER(FrameSpec.rounded(6, Theme.withAlpha(0xFFFFFF, 0.04f), Theme.withAlpha(Theme.GOLD_400, 0.45f))
+        .fixedWidth(Sizes.TOAST_WIDTH)),
+    /**
      * A question over the game (a link to open, a friend's server to join): the toast's card at any width (the
      * toast's own frame is baked at the toast's width only), a little denser, since it is read word by word.
      */

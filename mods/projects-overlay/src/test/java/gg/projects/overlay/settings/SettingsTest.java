@@ -36,15 +36,24 @@ class SettingsTest {
     }
 
     @Test
-    void resetKeepsTheFirstTimeHint() {
-        OverlaySettings s = OverlaySettings.DEFAULTS.withHintSeen(true).withMessageToasts(false)
+    void resetKeepsWhetherTheKeyWasUsed() {
+        OverlaySettings s = OverlaySettings.DEFAULTS.withKeyUsed(true).withMessageToasts(false)
             .withCorner(OverlaySettings.Corner.TOP_RIGHT);
         assertFalse(s.isDefault());
         OverlaySettings reset = s.reset();
         assertTrue(reset.isDefault());
-        assertTrue(reset.hintSeen());
-        // The hint alone is not a display preference.
-        assertTrue(OverlaySettings.DEFAULTS.withHintSeen(true).isDefault());
+        assertTrue(reset.keyUsed());
+        // F7-OPEN: whether the key opened the panel is no display preference.
+        assertTrue(OverlaySettings.DEFAULTS.withKeyUsed(true).isDefault());
+        assertFalse(OverlaySettings.DEFAULTS.keyUsed(), "the Fn line may show until the key works once");
+    }
+
+    @Test
+    void theFileKeepsThatTheKeyWorkedButNotTheOldTip() {
+        assertTrue(SettingsStore.parse(SettingsStore.format(OverlaySettings.DEFAULTS.withKeyUsed(true))).keyUsed());
+        assertFalse(SettingsStore.parse(SettingsStore.format(OverlaySettings.DEFAULTS)).keyUsed());
+        // "hintSeen", a first-time tip removed long ago, never meant the key reached the game.
+        assertFalse(SettingsStore.parse("{\"version\": 1, \"hintSeen\": true}").keyUsed());
     }
 
     @Test

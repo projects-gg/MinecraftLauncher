@@ -12,6 +12,8 @@ import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import gg.projects.overlay.ui.draw.PixelSprites;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -25,8 +27,12 @@ import net.minecraft.util.FormattedCharSequence;
  * travel toast ("Projects sunucusuna bağlanılıyor…") is one sentence beside the gold join sign. A sticker
  * message (CHAT2) shows the sticker small before its words ("Çıkartma · GG"), unless message text is hidden. A
  * message's sender who wears a crew tag has its chip before the name ("[GK] Ayşe", TEAM6). A friend's world invite
- * (HOST1) has the grass block for its face and "F7 ile katıl"; the host's own notes ("Dünyan arkadaşlarına açık", "Mert
- * dünyana katıldı") are the overlay's, under the player's "Diğer bildirimler".
+ * (HOST1) has the grass block for its face and "Katılmak için F7 tuşuna bas"; the host's own notes ("Dünyan
+ * arkadaşlarına açık", "Mert dünyana katıldı") are the overlay's, under the player's "Diğer bildirimler".
+ *
+ * <p>The hint says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked it), and where
+ * the key may need Fn a second line says so ("Açılmazsa [Fn] + [F7] tuşlarına bas", {@link
+ * gg.projects.overlay.keys.FnTip}).
  */
 public final class ToastCard {
     public static final int WIDTH = Frames.TOAST_WIDTH;
@@ -40,10 +46,19 @@ public final class ToastCard {
     static final int SMALL_H = 9;
     static final int HINT_GAP = 4;
     static final int HINT_H = 10;
+    /** Between two hint lines: their key caps stand clear of each other. */
+    static final int HINT_LINE_GAP = 2;
     static final int MAX_BODY_LINES = 2;
     /** A sticker's picture in a toast, GUI pixels (CHAT2 §8.3). */
     static final int STICKER = 16;
-    private static final int KEY_PAD = 3;
+    static final int KEY_PAD = 3;
+    /** Between a hint's words and its key cap. */
+    static final int HINT_SPACE = 3;
+    /** A key's name on its cap: at most this wide, and never cut below the shortest room (GUI pixels). */
+    static final int MAX_KEY_NAME = 48;
+    static final int MIN_KEY_NAME = 16;
+    /** The key the Fn line names: the same word on every keyboard and in both languages. */
+    static final String FN = "Fn";
 
     public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL, WORLD, HOST }
 
@@ -62,11 +77,10 @@ public final class ToastCard {
     final List<FormattedCharSequence> body;
     /** A sticker message's sticker, drawn small before the words. */
     final StickerSet.Sticker sticker;
-    final String hintBefore;
-    final int hintBeforeWidth;
-    final String hintKey;
-    final int hintKeyWidth;
-    final String hintAfter;
+    /** The hint lines under the text, top first ("Açmak için [F7] tuşuna bas", then maybe the Fn line); maybe none. */
+    final List<Hint> hints;
+    /** The hints end with "Açılmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN). */
+    final boolean fnTip;
     /** The face is the world's grass block (a world invite, the world opening) rather than a disc. */
     final boolean sprite;
     /** A travel card that only tells something (OVL-FIX): the quiet info sign instead of the gold join sign. */
@@ -74,9 +88,6 @@ public final class ToastCard {
     // The short strings again, in the form the game draws: made once here, not on every frame (each String
     // draw runs the game's bidirectional text pass).
     private final FormattedCharSequence countLine;
-    private final FormattedCharSequence hintBeforeLine;
-    private final FormattedCharSequence hintKeyLine;
-    private final FormattedCharSequence hintAfterLine;
     final float height;
     final Component narration;
 
@@ -94,37 +105,161 @@ public final class ToastCard {
         this.crew = b.crew;
         this.body = b.body;
         this.sticker = b.sticker;
-        this.hintBefore = b.hintBefore;
-        this.hintBeforeWidth = b.hintBefore == null ? 0 : Fonts.small().width(b.hintBefore);
-        this.hintKey = b.hintKey;
-        this.hintKeyWidth = b.hintKey == null ? 0 : Fonts.small().width(b.hintKey) + 2 * KEY_PAD;
-        this.hintAfter = b.hintAfter;
+        this.hints = List.copyOf(b.hints);
+        this.fnTip = b.fnTip;
         this.sprite = b.sprite;
         this.info = b.info;
         this.narration = b.narration;
         this.countLine = line(b.countText);
-        this.hintBeforeLine = line(b.hintBefore);
-        this.hintKeyLine = line(b.hintKey);
-        this.hintAfterLine = line(b.hintAfter);
         if (kind == Kind.TRAVEL) {
             this.height = PAD_Y + Math.max(FACE, body.size() * LINE_H) + PAD_Y;
             return;
         }
         float h = PAD_Y + TITLE_H + (crew != null ? SMALL_H : 0) + 1
             + (sticker != null ? Math.max(STICKER + 1, body.size() * LINE_H) : body.size() * LINE_H);
-        if (hasHint()) {
-            h += HINT_GAP + HINT_H;
+        if (!hints.isEmpty()) {
+            h += HINT_GAP + hintsHeight(hints.size());
         }
         this.height = h + PAD_Y;
     }
 
-    /** The hint line ("F7 ile arayüzü aç"): every kind but the overlay's quiet notes. */
-    private boolean hasHint() {
-        return hintBefore != null || hintKey != null;
+    /** The height of {@code lines} hint lines, one under the other. */
+    static int hintsHeight(int lines) {
+        return lines <= 0 ? 0 : lines * HINT_H + (lines - 1) * HINT_LINE_GAP;
     }
 
     private static FormattedCharSequence line(String text) {
         return text == null || text.isEmpty() ? null : Texts.visual(text);
+    }
+
+    /**
+     * The width a key's name may take on its cap in a hint line whose other parts take {@code others} (its words, the
+     * other caps, the spaces between the parts and this cap's padding), so the line stays inside the card: at most
+     * {@link #MAX_KEY_NAME}, never under {@link #MIN_KEY_NAME}.
+     */
+    static int keyRoom(int lineWidth, int others) {
+        return Math.max(MIN_KEY_NAME, Math.min(MAX_KEY_NAME, lineWidth - others));
+    }
+
+    /**
+     * The words of a hint sentence formatted with the NUL character where each key goes, each stripped: one more than
+     * the keys (an empty one where a key starts or ends the sentence).
+     */
+    static List<String> split(String formatted) {
+        List<String> words = new ArrayList<>(3);
+        int from = 0;
+        for (int at = formatted.indexOf('\u0000'); at >= 0; at = formatted.indexOf('\u0000', from)) {
+            words.add(formatted.substring(from, at).strip());
+            from = at + 1;
+        }
+        words.add(formatted.substring(from).strip());
+        return words;
+    }
+
+    /**
+     * How wide a hint line is: its words' widths in order (0 for an empty one) with a cap after each but the last
+     * ({@code caps}, padding included), and {@link #HINT_SPACE} between the parts that are there.
+     */
+    static int lineWidth(int[] words, int[] caps) {
+        int width = 0;
+        int parts = 0;
+        for (int i = 0; i < Math.max(words.length, caps.length); i++) {
+            if (i < words.length && words[i] > 0) {
+                width += words[i];
+                parts++;
+            }
+            if (i < caps.length) {
+                width += caps[i];
+                parts++;
+            }
+        }
+        return width + Math.max(0, parts - 1) * HINT_SPACE;
+    }
+
+    /**
+     * One hint line, laid out once: words with key caps among them ("Açmak için [F7] tuşuna bas", "Açılmazsa [Fn] +
+     * [F7] tuşlarına bas"), or words alone.
+     */
+    static final class Hint {
+        /** The words, one more than the keys: before the first key, between two, after the last; null where none. */
+        private final FormattedCharSequence[] words;
+        private final int[] wordWidths;
+        private final FormattedCharSequence[] keys;
+        /** Each cap's width, its padding included. */
+        private final int[] capWidths;
+
+        private Hint(List<String> words, List<String> keys) {
+            Font small = Fonts.small();
+            this.words = new FormattedCharSequence[words.size()];
+            this.wordWidths = new int[words.size()];
+            for (int i = 0; i < words.size(); i++) {
+                this.words[i] = line(words.get(i));
+                this.wordWidths[i] = words.get(i).isEmpty() ? 0 : small.width(words.get(i));
+            }
+            this.keys = new FormattedCharSequence[keys.size()];
+            this.capWidths = new int[keys.size()];
+            for (int i = 0; i < keys.size(); i++) {
+                this.keys[i] = line(keys.get(i));
+                this.capWidths[i] = small.width(keys.get(i)) + 2 * KEY_PAD;
+            }
+        }
+
+        /**
+         * The sentence {@code template} (its words' key) with each of {@code keyNames} on a cap in turn, each name cut
+         * to the room the rest of the line leaves it.
+         */
+        static Hint of(String template, String... keyNames) {
+            Object[] marks = new Object[keyNames.length];
+            Arrays.fill(marks, "\u0000");
+            List<String> words = split(Texts.str(template, marks));
+            while (words.size() < keyNames.length + 1) {
+                // A sentence without a slot for every key: the caps follow its words.
+                words.add("");
+            }
+            Font small = Fonts.small();
+            int[] wordWidths = new int[words.size()];
+            for (int i = 0; i < wordWidths.length; i++) {
+                wordWidths[i] = words.get(i).isEmpty() ? 0 : small.width(words.get(i));
+            }
+            int[] caps = new int[keyNames.length];
+            for (int i = 0; i < caps.length; i++) {
+                caps[i] = small.width(keyNames[i]) + 2 * KEY_PAD;
+            }
+            int line = lineWidth(wordWidths, caps);
+            List<String> names = new ArrayList<>(keyNames.length);
+            for (int i = 0; i < keyNames.length; i++) {
+                int others = line - (caps[i] - 2 * KEY_PAD);
+                names.add(Texts.fit(small, keyNames[i], keyRoom(TEXT_W, others)));
+            }
+            return new Hint(words, names);
+        }
+
+        /** Words without a key ("Açmak için Kontroller'den bir tuş ata"). */
+        static Hint plain(String text) {
+            return new Hint(List.of(text), List.of());
+        }
+
+        void draw(GuiGraphicsExtractor g, float x, float y) {
+            Font small = Fonts.small();
+            float textY = Fonts.centeredY(Fonts.Face.SMALL, y + HINT_H / 2f);
+            float cx = x;
+            boolean first = true;
+            for (int i = 0; i < Math.max(words.length, keys.length); i++) {
+                if (i < words.length && words[i] != null) {
+                    cx += first ? 0 : HINT_SPACE;
+                    Draw.text(g, small, words[i], cx, textY, Theme.ASH_300);
+                    cx += wordWidths[i];
+                    first = false;
+                }
+                if (i < keys.length) {
+                    cx += first ? 0 : HINT_SPACE;
+                    Draw.frame(g, Frames.KEYCAP, cx, y, capWidths[i], HINT_H);
+                    Draw.text(g, small, keys[i], cx + KEY_PAD, textY - 0.5f, Theme.BONE_100);
+                    cx += capWidths[i];
+                    first = false;
+                }
+            }
+        }
     }
 
     private static final class Builder {
@@ -140,9 +275,8 @@ public final class ToastCard {
         FormattedCharSequence crew;
         List<FormattedCharSequence> body;
         StickerSet.Sticker sticker;
-        String hintBefore;
-        String hintKey;
-        String hintAfter;
+        final List<Hint> hints = new ArrayList<>(2);
+        boolean fnTip;
         boolean sprite;
         boolean info;
         Component narration;
@@ -165,9 +299,10 @@ public final class ToastCard {
      * @param count how many messages it stands for (shown from 2 on)
      * @param showText the player's "Mesaj metnini göster"
      * @param keyName the overlay key's name, or null when none is bound
+     * @param fnTip the key hint gets "Açılmazsa [Fn] + [F7] tuşlarına bas" under it (F7-OPEN)
      */
     public static ToastCard of(OverlayState.ToastRequest request, boolean crewChat, int count, boolean showText,
-        String keyName) {
+        String keyName, boolean fnTip) {
         Builder b = new Builder();
         b.kind = kindOf(request.kind());
         b.conversation = request.conversation();
@@ -211,7 +346,7 @@ public final class ToastCard {
         b.sprite = b.kind == Kind.WORLD;
         if (b.kind != Kind.INFO) {
             hint(b, b.kind == Kind.CALL ? "toast.hint.call" : b.kind == Kind.WORLD ? "toast.hint.join"
-                : "toast.hint.open", keyName);
+                : "toast.hint.open", keyName, fnTip);
         }
         // The chip is drawn; the narrator says it with the name ("Ayşe, etiket GK").
         String spokenName = b.chip == null ? name : Texts.str("row.badge", name, b.chip.badge.tag());
@@ -224,25 +359,30 @@ public final class ToastCard {
         return new ToastCard(b);
     }
 
-    /** The hint with the overlay's key where the sentence has it ("F7 ile arayüzü aç", "Press F7 to open"). */
-    private static void hint(Builder b, String key, String keyName) {
+    /**
+     * The hint with the overlay's key where the sentence has it ("Açmak için [F7] tuşuna bas", "Press [F7] to open"),
+     * with {@code fnTip} the Fn line under it; with no key bound, where to bind one.
+     */
+    private static void hint(Builder b, String key, String keyName, boolean fnTip) {
         if (keyName == null) {
-            b.hintBefore = Texts.str("toast.hint.unbound");
+            b.hints.add(Hint.plain(Texts.str("toast.hint.unbound")));
             return;
         }
-        String template = Texts.str(key, "\u0000");
-        int at = template.indexOf('\u0000');
-        b.hintBefore = at < 0 ? template.strip() : template.substring(0, at).strip();
-        b.hintAfter = at < 0 ? "" : template.substring(at + 1).strip();
-        b.hintKey = Texts.fit(Fonts.small(), keyName, 48);
+        b.hints.add(Hint.of(key, keyName));
+        if (fnTip) {
+            // Both keys on caps, as laptop makers write it ("Fn + F7 tuşlarına basın").
+            b.hints.add(Hint.of("toast.hint.fn", FN, keyName));
+            b.fnTip = true;
+        }
     }
 
     /**
      * The host's own note (HOST1): {@code title} in bold with {@code body} under it, the grass block for its face when
      * it is about the world ({@code sprite}) or the friend's initial when it is about them; with {@code hintKey} the
-     * hint line ("F7 ile yönet") follows.
+     * hint line ("Yönetmek için [F7] tuşuna bas") follows, and with {@code fnTip} the Fn line.
      */
-    public static ToastCard host(String title, String body, boolean sprite, String hintKey, String keyName) {
+    public static ToastCard host(String title, String body, boolean sprite, String hintKey, String keyName,
+        boolean fnTip) {
         Builder b = new Builder();
         b.kind = Kind.HOST;
         b.sprite = sprite;
@@ -253,7 +393,7 @@ public final class ToastCard {
         b.initial = Texts.initial(title);
         b.body = body == null || body.isEmpty() ? List.of() : Texts.wrap(Fonts.ui(), body, TEXT_W, MAX_BODY_LINES);
         if (hintKey != null) {
-            hint(b, hintKey, keyName);
+            hint(b, hintKey, keyName, fnTip);
         }
         b.narration = Component.literal(body == null || body.isEmpty() ? title : title + ". " + body);
         return new ToastCard(b);
@@ -297,6 +437,11 @@ public final class ToastCard {
 
     public Kind kind() {
         return kind;
+    }
+
+    /** Whether the card carries "Açılmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN: a game shows it a few times only). */
+    public boolean fnTip() {
+        return fnTip;
     }
 
     /** Draws the card with its top-left corner at {@code x, y}; the caller set the opacity. */
@@ -347,8 +492,10 @@ public final class ToastCard {
             }
         }
         Draw.popAlpha();
-        if (hasHint()) {
-            drawHint(g, tx, ty + HINT_GAP);
+        float hy = ty + HINT_GAP;
+        for (Hint hint : hints) {
+            hint.draw(g, tx, hy);
+            hy += HINT_H + HINT_LINE_GAP;
         }
     }
 
@@ -402,22 +549,4 @@ public final class ToastCard {
         }
     }
 
-    private void drawHint(GuiGraphicsExtractor g, float x, float y) {
-        Font small = Fonts.small();
-        float textY = Fonts.centeredY(Fonts.Face.SMALL, y + HINT_H / 2f);
-        float cx = x;
-        if (hintBeforeLine != null) {
-            Draw.text(g, small, hintBeforeLine, cx, textY, Theme.ASH_300);
-            cx += hintBeforeWidth + 3;
-        }
-        if (hintKeyLine == null) {
-            return;
-        }
-        Draw.frame(g, Frames.KEYCAP, cx, y, hintKeyWidth, HINT_H);
-        Draw.text(g, small, hintKeyLine, cx + KEY_PAD, textY - 0.5f, Theme.BONE_100);
-        cx += hintKeyWidth + 3;
-        if (hintAfterLine != null) {
-            Draw.text(g, small, hintAfterLine, cx, textY, Theme.ASH_300);
-        }
-    }
 }
