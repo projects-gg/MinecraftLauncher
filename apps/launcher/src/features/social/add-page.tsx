@@ -16,6 +16,7 @@ import { announce, friendlyError } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { CodeLookup, SocialMe } from "@/lib/api/social-types";
 import { attempt, copyText } from "./actions";
+import { discordIdOf } from "./identity";
 import { formatCodeInput, normalizeCode } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
 import { NameWithMark } from "./person-mark";
@@ -224,7 +225,10 @@ function ResultCard({
           mark={lookup.profile.mark}
           className="text-[15px] font-semibold text-bone-50"
         />
-        <p className="truncate text-[12.5px] text-ash-400">@{lookup.profile.username}</p>
+        {/* SOC-ID: a Discord handle only for someone with Discord. */}
+        {discordIdOf(lookup.profile) !== null ? (
+          <p className="truncate text-[12.5px] text-ash-400">@{lookup.profile.username}</p>
+        ) : null}
         <div className="relative h-5">
           <AnimatePresence mode="popLayout" initial={false}>
             {status ? (

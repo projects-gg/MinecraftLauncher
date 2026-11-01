@@ -51,6 +51,7 @@ import { BadgedName, badgeRowLabel, focusFirstAction, useShownBadge } from "./cr
 import type { InviteState } from "./crews";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
+import { discordIdOf } from "./identity";
 import { REST } from "./groups";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
@@ -264,9 +265,12 @@ function FriendCard({
             className="gap-2"
             nameClassName="font-display text-[18px] leading-tight font-semibold text-bone-50"
           />
-          <p className="truncate text-[12.5px] text-ash-400" data-selectable>
-            @{friend.username}
-          </p>
+          {/* SOC-ID: a Discord handle only for someone with Discord. */}
+          {discordIdOf(friend) !== null ? (
+            <p className="truncate text-[12.5px] text-ash-400" data-selectable>
+              @{friend.username}
+            </p>
+          ) : null}
           <p
             className={cn(
               "mt-1 truncate text-[13px]",
@@ -324,9 +328,11 @@ function FriendCard({
             {t("chat.actions.message")}
           </Button>
         ) : null}
-        <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
-          {t("social.actions.message")}
-        </DiscordButton>
+        {friend.discordUrl ? (
+          <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
+            {t("social.actions.message")}
+          </DiscordButton>
+        ) : null}
         {team?.crews && team.state !== "member" ? (
           <Menu
             items={crewInviteItems(team.crews, t)}

@@ -18,8 +18,54 @@ export type GameWhere = "projects" | "other" | "singleplayer";
 export type LastSeen = "today" | "yesterday" | "week" | "long";
 export type Relation = "none" | "friend" | "outgoing" | "incoming" | "blocked" | "self";
 /** Why a sign-in did not finish: `restricted` (suspended or banned; `restriction` says until
- * when) and `signupsClosed` (no new accounts right now) come from the service. */
-export type SignInFailure = "expired" | "unavailable" | "failed" | "restricted" | "signupsClosed";
+ * when) and `signupsClosed` (no new accounts right now) come from the service; SOC-ID:
+ * `notLinked` (this Microsoft account is no Projects account's yet, and new ones are not made with
+ * it now) and `providerOff` (that way is switched off). */
+export type SignInFailure =
+  | "expired"
+  | "unavailable"
+  | "failed"
+  | "restricted"
+  | "signupsClosed"
+  | "notLinked"
+  | "providerOff";
+
+/** A way into a Projects account (SOC-ID). */
+export type SocialProvider = "discord" | "microsoft";
+
+/** One way into the account, as "Bağlı hesaplar" lists it (SOC-ID). */
+export interface SocialIdentity {
+  provider: SocialProvider;
+  /** `YYYY-MM-DD` (empty when not known). */
+  linkedOn: string;
+  /** Linked in the last 7 days ("Yeni"). */
+  isNew: boolean;
+  /** Discord: the Discord username. */
+  hint?: string;
+}
+
+/** Why a link or a removal did not go through (SOC-ID). */
+export type IdentityFailure =
+  | "providerOff"
+  | "exists"
+  | "notFound"
+  | "last"
+  | "taken"
+  | "proofFailed"
+  | "unavailable"
+  | "expired"
+  | "tooMany"
+  | "offline"
+  | "failed";
+
+/** What a link or a removal needs next (SOC-ID): the browser on that page, done, or refused. */
+export type IdentityStep =
+  | { kind: "browser"; url: string }
+  | { kind: "done" }
+  | { kind: "refused"; reason: IdentityFailure };
+
+/** What became of a new profile name (SOC-ID). */
+export type NameResult = "saved" | "invalid" | "rejected" | "tooMany" | "offline" | "failed";
 
 export interface SocialGame {
   where: GameWhere;
@@ -46,6 +92,12 @@ export interface SocialProfile {
   avatarUrl?: string;
   /** Their mark (SOC-VERIFY); none without one and from a service without marks. */
   mark?: ProfileMark;
+  /**
+   * Their Discord account (SOC-ID): `null` without one (no "Discord'dan mesaj at", no Discord
+   * photo, `username` is no Discord handle); absent: `id` is the Discord id (every account opened
+   * with Discord). Read it with `discordIdOf` (features/social/identity.ts).
+   */
+  discordId?: string | null;
 }
 
 /**
@@ -119,8 +171,16 @@ export interface QrCode {
 }
 
 export interface SocialMe extends SocialProfile {
-  /** The Discord picture (or Discord's default), for the picker. */
+  /** The Discord picture (or Discord's default), for the picker; empty without Discord. */
   discordAvatarUrl: string;
+  /** SOC-ID: the ways into the account ("Bağlı hesaplar"); absent: Discord alone. */
+  identities?: SocialIdentity[];
+  /** SOC-ID: how this session signed in ("Bu cihaz"); absent: Discord. */
+  signInVia?: SocialProvider;
+  /** SOC-ID: where the name comes from; `unset`: a new account's placeholder. */
+  nameSource?: "discord" | "own" | "unset";
+  /** SOC-ID: the service takes a name of the player's own ("Profil adı"; not an older one). */
+  ownNames?: boolean;
   /** `PRJ-XXXX-XXXX`. */
   friendCode: string;
   shareLink?: string;
@@ -165,18 +225,25 @@ export interface LimitedAccount {
   /** Unix seconds: the limits lift by themselves then. */
   until: number;
   items: Array<{ key: LimitedKey; perDay?: number }>;
+  /** SOC-ID: `account`: the account itself is new ("Hesabın yeni olduğu için…"); absent or
+   * `discord`: its Discord account is. */
+  reason?: "discord" | "account";
 }
 
 /** A one-time note from Projects' moderators. */
 export interface ModNotice {
   id: string;
-  /** `skinReset` (SKIN1): staff in game reset the player's Projects skin. */
-  kind: "warning" | "profileReset" | "skinReset";
+  /** `skinReset` (SKIN1): staff in game reset the player's Projects skin. SOC-ID:
+   * `identityLinked` / `identityRemoved`: a way into the account was linked or removed
+   * (`provider`), shown on the devices that did not do it. */
+  kind: "warning" | "profileReset" | "skinReset" | "identityLinked" | "identityRemoved";
   /** Unix seconds. */
   at: number;
   reason?: ReportReason;
   /** `skinReset`: skin changes stay off until then (`until` null: for good); none: no block. */
   blocked?: { until: number | null };
+  /** `identityLinked` / `identityRemoved`: the way in it names. */
+  provider?: SocialProvider;
 }
 
 /** A report reason, as players pick it. */
@@ -837,6 +904,12 @@ export interface SocialSnapshot {
   backupWaitsUntil?: number;
   /** Who came into the player's crews while this launcher was connected (TEAM6 "Hoş geldin"). */
   crewJoins?: CrewJoin[];
+  /** SOC-ID: the ways the sign-in screen offers now, Discord first (absent: Discord alone). */
+  providers?: SocialProvider[];
+  /** SOC-ID: the way of the sign-in in progress (its waiting card). */
+  signingInWith?: SocialProvider;
+  /** SOC-ID: a link or a removal waiting for its browser step. */
+  identityChange?: { provider: SocialProvider; unlink: boolean; url: string };
 }
 
 export type SocialNotice =
@@ -845,8 +918,14 @@ export type SocialNotice =
   | { kind: "friendAdded"; friend: Friend }
   | { kind: "friendOnline"; id: string }
   | { kind: "friendOnProjects"; id: string }
-  | { kind: "signedIn"; restore?: BackupMeta }
+  /** `askName` (SOC-ID): a new account with a placeholder name ("Arkadaşların seni hangi adla
+   * görsün?"). */
+  | { kind: "signedIn"; restore?: BackupMeta; askName?: boolean }
   | { kind: "signInFailed"; reason: SignInFailure }
+  /** SOC-ID: a way into the account was linked (`linked`) or removed ("Microsoft bağlandı."). */
+  | { kind: "identityChanged"; provider: SocialProvider; linked: boolean }
+  /** SOC-ID: a link or a removal that went to the browser did not go through. */
+  | { kind: "identityFailed"; provider: SocialProvider; unlink: boolean; reason: IdentityFailure }
   | { kind: "signedOutRemotely" }
   | { kind: "teamInvite"; invite: TeamInvite }
   /** `staff`: Projects' moderators did it (community rules). */
@@ -903,6 +982,8 @@ export interface SocialSession {
   lastUsedOn: string;
   /** This computer. */
   current: boolean;
+  /** SOC-ID: how it signed in ("Microsoft ile"); absent or null: Discord or not known. */
+  via?: SocialProvider | null;
 }
 
 export const HIDDEN_SNAPSHOT: SocialSnapshot = {
@@ -951,9 +1032,20 @@ export interface SocialApi {
   onView(listener: (view: SocialSnapshot) => void): () => void;
   /** Moments worth a toast or a notification. Returns an unsubscribe function. */
   onNotice(listener: (notice: SocialNotice) => void): () => void;
-  /** Opens Discord in the browser; returns that page (to open it again). */
-  signIn(): Promise<string>;
+  /** Opens the sign-in page of `provider` (Discord when not said) in the browser; returns that
+   * page (to open it again). */
+  signIn(provider?: SocialProvider): Promise<string>;
   cancelSignIn(): Promise<void>;
+  /** SOC-ID: asks which ways sign in now (at most once a minute); `providers` follows. */
+  refreshProviders(): Promise<void>;
+  /** SOC-ID "Hesap bağla": the browser opens on the service's page; `identityChange` waits. */
+  linkIdentity(provider: SocialProvider): Promise<IdentityStep>;
+  /** SOC-ID "Kaldır" (confirmed): done at once, or proved in the browser. */
+  unlinkIdentity(provider: SocialProvider): Promise<IdentityStep>;
+  /** SOC-ID: "Vazgeç" while the browser is open on a link or a removal. */
+  cancelIdentityChange(): Promise<void>;
+  /** SOC-ID: the profile name ("Profil adı"; a new account's name step). */
+  setName(name: string): Promise<NameResult>;
   signOut(): Promise<void>;
   /** "Tekrar dene" (throttled by the backend). */
   refresh(): Promise<void>;

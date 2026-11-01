@@ -1,20 +1,26 @@
 // The opt-in screen (S3): what is shared, in two sentences (a third about chat while chat may
-// show), a link to the privacy page, and Discord sign-in. Pressing the button after reading is the
-// consent. While the browser is open the button gives way to a calm waiting card; an expired or
-// failed sign-in says so in place, and so do a suspended or banned account (with the community
-// rules) and a day without new accounts (MOD1, SPAM1).
-import { ArrowSquareOut, Prohibit, WarningCircle } from "@phosphor-icons/react";
+// show), a link to the privacy page, and the sign-in. Pressing a button after reading is the
+// consent. SOC-ID: while the service offers Microsoft too, "Microsoft ile giriş yap" stands under
+// Discord's button, as tall; the screen asks which ways it offers each time it opens. While the
+// browser is open the buttons give way to a calm waiting card of that way (Microsoft's says where
+// the password goes); an expired or failed sign-in says so in place, and so do a suspended or
+// banned account (with the community rules), a day without new accounts (MOD1, SPAM1) and a
+// Microsoft account that is no Projects account's yet.
+import { ArrowSquareOut, LockSimple, Prohibit, WarningCircle } from "@phosphor-icons/react";
 import { Button, useAmbientMotion } from "@pl/ui";
+import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
 import { api } from "@/lib/api";
+import type { SignInFailure, SocialProvider } from "@/lib/api/social-types";
 import { currentLanguage } from "@/lib/i18n";
 import { openWebLink } from "@/lib/links";
 import { DiscordButton, DiscordTile } from "./discord-button";
 import { COMMUNITY_RULES_URL, dayMonth } from "./limits";
 import { rise, useSocialMotion } from "./motion";
+import { MicrosoftButton, ProviderTile } from "./provider-mark";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 
@@ -53,14 +59,33 @@ function Cluster() {
   );
 }
 
+/** What a failed sign-in says in place (`restricted` has its own panel). */
+function failureText(t: TFunction, error: SignInFailure | null): string | null {
+  switch (error) {
+    case null:
+    case "restricted":
+      return null;
+    case "signupsClosed":
+      return t("safety.signupsClosed");
+    case "notLinked":
+      return t("identity.consent.notLinked");
+    case "providerOff":
+      return t("identity.consent.providerOff");
+    default:
+      return t(`social.consent.${error}`);
+  }
+}
+
 export function ConsentPage() {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
-  // The Discord tile breathes while somebody uses this window. The player confirms in the
-  // browser meanwhile, so the window rests and the tile settles: an endless pulse kept a covered
-  // window drawing every frame (OPT2).
+  // The tile breathes while somebody uses this window. The player confirms in the browser
+  // meanwhile, so the window rests and the tile settles: an endless pulse kept a covered window
+  // drawing every frame (OPT2).
   const breathe = useAmbientMotion();
   const auth = useSocialUi((s) => s.view.auth);
+  const providers = useSocialUi((s) => s.view.providers);
+  const signingInWith = useSocialUi((s) => s.view.signingInWith);
   const signInUrl = useSocialUi((s) => s.signInUrl);
   const error = useSocialUi((s) => s.signInError);
   const setSignIn = useSocialUi((s) => s.setSignIn);
@@ -69,28 +94,28 @@ export function ConsentPage() {
   const restriction = useSocialUi((s) => s.view.restriction);
   const [starting, setStarting] = useState(false);
   const waiting = auth === "signingIn";
+  const microsoft = providers?.includes("microsoft") ?? false;
+  const way: SocialProvider = signingInWith ?? "discord";
+  // SOC-ID: which ways sign in now, asked whenever the screen opens (the backend asks at most
+  // once a minute).
+  useEffect(() => {
+    void api.social.refreshProviders().catch(() => undefined);
+  }, []);
   // A suspension that ended (or a ban lifted) no longer stands in the way.
   const restricted =
     restriction && (restriction.until === undefined || restriction.until * 1000 > Date.now())
       ? restriction
       : null;
-  const errorText =
-    error === "restricted"
-      ? null
-      : error === "signupsClosed"
-        ? t("safety.signupsClosed")
-        : error
-          ? t(`social.consent.${error}`)
-          : null;
+  const errorText = failureText(t, error);
 
-  const start = async () => {
+  const start = async (provider: SocialProvider) => {
     setStarting(true);
     setConsent();
     setSignIn(null, null);
     try {
-      setSignIn(await api.social.signIn(), null);
+      setSignIn(await api.social.signIn(provider), null);
     } catch (error) {
-      // Said in place, under the button: the service did not answer, or something else failed.
+      // Said in place, under the buttons: the service did not answer, or something else failed.
       const code = error instanceof Error && "code" in error ? String(error.code) : "";
       setSignIn(null, code === "SOSYAL-YOK" ? "unavailable" : "failed");
     } finally {
@@ -110,7 +135,7 @@ export function ConsentPage() {
         {t("social.consent.title")}
       </h2>
       <p className="mt-3 max-w-[36ch] text-[14px] leading-relaxed text-ash-300">
-        {t("social.consent.body")}
+        {microsoft ? t("identity.consent.body") : t("social.consent.body")}
         {chatAllowed ? ` ${t("chat.consent")}` : null}
       </p>
       <button
@@ -139,12 +164,28 @@ export function ConsentPage() {
                     : { duration: 0.4, ease: "easeOut" }
                 }
               >
-                <DiscordTile size={44} />
+                {way === "microsoft" ? (
+                  <ProviderTile provider="microsoft" size={44} />
+                ) : (
+                  <DiscordTile size={44} />
+                )}
               </motion.span>
               <p className="mt-4 text-[14.5px] font-semibold text-bone-50">
-                {t("social.consent.waiting")}
+                {way === "microsoft"
+                  ? t("identity.consent.waitingMicrosoft")
+                  : t("social.consent.waiting")}
               </p>
-              <p className="mt-1 text-[13px] text-ash-400">{t("social.consent.waitingNote")}</p>
+              <p className="mt-1 text-[13px] text-ash-400">
+                {way === "microsoft"
+                  ? t("identity.consent.waitingMicrosoftNote")
+                  : t("social.consent.waitingNote")}
+              </p>
+              {way === "microsoft" ? (
+                <p className="mt-3 flex items-start gap-1.5 text-left text-[12.5px] text-ash-300">
+                  <LockSimple size={14} className="mt-px shrink-0 text-ash-400" aria-hidden />
+                  {t("identity.consent.password")}
+                </p>
+              ) : null}
               <div className="mt-4 flex gap-2">
                 {signInUrl ? (
                   <Button size="sm" variant="secondary" onClick={() => void api.openUrl(signInUrl)}>
@@ -193,14 +234,25 @@ export function ConsentPage() {
                   </motion.p>
                 ) : null}
               </AnimatePresence>
-              <DiscordButton
-                size="lg"
-                className="w-full"
-                disabled={starting}
-                onClick={() => void start()}
-              >
-                {t("social.consent.signIn")}
-              </DiscordButton>
+              <div className="flex flex-col gap-2.5">
+                <DiscordButton
+                  size="lg"
+                  className="w-full transition-[transform,scale,opacity] duration-150 ease-out active:translate-y-0 active:scale-[0.97]"
+                  disabled={starting}
+                  onClick={() => void start("discord")}
+                >
+                  {t("social.consent.signIn")}
+                </DiscordButton>
+                {microsoft ? (
+                  <MicrosoftButton
+                    className="w-full"
+                    disabled={starting}
+                    onClick={() => void start("microsoft")}
+                  >
+                    {t("identity.consent.microsoft")}
+                  </MicrosoftButton>
+                ) : null}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

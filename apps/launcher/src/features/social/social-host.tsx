@@ -38,6 +38,7 @@ import { planWhen, withPlanNote } from "./crew-plans";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
 import { homeShowsCall } from "./home-strip";
+import { useIdentityUi } from "./identity-store";
 import { showInviteToast, showTeamInviteToast } from "./invite-toast";
 import { gameBusy, joinProjects } from "./join";
 import { JoinDialog } from "./join-dialog";
@@ -189,10 +190,28 @@ function handleNotice(notice: SocialNotice) {
     const restore = notice.restore;
     ui.setRestoreSettled(!restore);
     if (restore) restoreOffer.current?.(restore);
+    // SOC-ID: a new account with a placeholder name is asked for one, once.
+    if (notice.askName) useIdentityUi.getState().setNameStep(true);
     return;
   }
   if (notice.kind === "signInFailed") {
     ui.setSignIn(null, notice.reason);
+    return;
+  }
+  // SOC-ID: a link or a removal finished ("Microsoft bağlandı."), or what went wrong is said under
+  // "Bağlı hesaplar".
+  if (notice.kind === "identityChanged") {
+    const provider = i18n.t(`identity.providers.${notice.provider}`);
+    const text = i18n.t(notice.linked ? "identity.done.linked" : "identity.done.removed", {
+      provider,
+    });
+    useIdentityUi.getState().setFailure(null);
+    toast.success(text);
+    announce(text);
+    return;
+  }
+  if (notice.kind === "identityFailed") {
+    useIdentityUi.getState().setFailure({ provider: notice.provider, reason: notice.reason });
     return;
   }
   // Cloud AFK's notices (AFK+): their own quiet hours, not the friends status ("Rahatsız etmeyin").

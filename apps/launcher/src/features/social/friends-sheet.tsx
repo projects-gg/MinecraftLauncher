@@ -26,8 +26,10 @@ import { AddPage } from "./add-page";
 import { ChatHeader, ChatPage } from "./chat/chat-page";
 import { ConsentPage } from "./consent-page";
 import { CrewNotifyButton } from "./crew-notify";
+import { useIdentityUi } from "./identity-store";
 import { ListTabs } from "./list-tabs";
 import { crossfade, pageVariants, useSocialMotion } from "./motion";
+import { NameStep } from "./name-step";
 import { openPanelMenuFromKey, PanelContextMenu, PanelMenuButton } from "./panel-menu";
 import { SocialSettings } from "./settings-page";
 import { MeCard } from "./status-menu";
@@ -46,7 +48,7 @@ function HeaderSkeleton() {
   );
 }
 
-function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
+function Header({ page }: { page: SocialPage | "consent" | "restoring" | "name" }) {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
   const teams = useSocialUi((s) => s.view.teams);
@@ -154,13 +156,17 @@ export function FriendsSheet() {
 
   const chatConv = useSocialUi((s) => s.chatConv);
   const crewPane = useSocialUi((s) => s.crewPane);
-  const shown: SocialPage | "consent" | "restoring" =
+  // SOC-ID: a new account's name step fills the panel right after its sign-in.
+  const nameStep = useIdentityUi((s) => s.nameStep);
+  const shown: SocialPage | "consent" | "restoring" | "name" =
     view.auth === "signedIn"
-      ? view.me &&
-        (page !== "team" || view.teams) &&
-        (page !== "chat" || (view.chat !== undefined && chatConv !== null))
-        ? page
-        : "list"
+      ? nameStep && view.me
+        ? "name"
+        : view.me &&
+            (page !== "team" || view.teams) &&
+            (page !== "chat" || (view.chat !== undefined && chatConv !== null))
+          ? page
+          : "list"
       : view.auth === "restoring"
         ? "restoring"
         : "consent";
@@ -250,6 +256,8 @@ export function FriendsSheet() {
                           >
                             {shown === "consent" ? (
                               <ConsentPage />
+                            ) : shown === "name" ? (
+                              <NameStep />
                             ) : shown === "restoring" ? (
                               <RestoringBody />
                             ) : shown === "add" ? (

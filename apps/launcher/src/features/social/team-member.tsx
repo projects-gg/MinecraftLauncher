@@ -42,6 +42,7 @@ import { directConversation } from "./chat/conversations";
 import { BadgedName, badgeRowLabel, focusFirstAction, useShownBadge } from "./crew-badge";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
+import { discordIdOf } from "./identity";
 import { JoinButton } from "./friend-row";
 import { openMenuFromKey } from "./menu-key";
 import { type PersonAction, personMenu } from "./menus";
@@ -365,9 +366,12 @@ function MemberCard({
           >
             <RoleBadge member={member} size={15} />
           </BadgedName>
-          <p className="truncate text-[12.5px] text-ash-400" data-selectable>
-            @{member.username}
-          </p>
+          {/* SOC-ID: a Discord handle only for someone with Discord. */}
+          {discordIdOf(member) !== null ? (
+            <p className="truncate text-[12.5px] text-ash-400" data-selectable>
+              @{member.username}
+            </p>
+          ) : null}
           <p
             className={cn(
               "mt-1 truncate text-[13px]",
@@ -433,9 +437,11 @@ function MemberCard({
                 : t("fix2.menu.addFriend")}
           </Button>
         ) : null}
-        <DiscordButton className="w-full" onClick={() => void openInDiscord(member)}>
-          {t("social.actions.message")}
-        </DiscordButton>
+        {member.discordUrl ? (
+          <DiscordButton className="w-full" onClick={() => void openInDiscord(member)}>
+            {t("social.actions.message")}
+          </DiscordButton>
+        ) : null}
       </div>
 
       <div className="mt-3 border-t border-white/8 pt-2">

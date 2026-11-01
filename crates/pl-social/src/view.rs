@@ -4,6 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::identity::{
+    Identity, IdentityChangeView, IdentityFailure, LimitedReason, NameSource, Provider,
+};
 use crate::model::{
     ChatExtras, ChatLinkRules, CrewMute, FriendGroup, JoinMode, LimitedItem, LimitedKey, Limits,
     LinkRule, Me, NoticeKind, Privacy, ProfileMark, PublicProfile, Relation, ReportReason,
@@ -98,6 +101,13 @@ pub struct SocialView {
     pub restriction: Option<RestrictionView>,
     /// The settings backup waits until then (Unix seconds): the service protects its storage.
     pub backup_waits_until: Option<i64>,
+    /// The ways the sign-in screen offers now, Discord first (SOC-ID; Discord alone until the
+    /// service said otherwise, and from an older service).
+    pub providers: Vec<Provider>,
+    /// The way of the sign-in in progress (while `auth` is `signingIn`): its waiting card.
+    pub signing_in_with: Option<Provider>,
+    /// A link or a removal waiting for its browser step (SOC-ID).
+    pub identity_change: Option<IdentityChangeView>,
 }
 
 /// A suspension (`until`, Unix seconds) or a ban (`until` None) from the social features.
@@ -120,6 +130,8 @@ pub struct ModNoticeView {
     /// `skinReset` (SKIN1): staff also keep the player from changing skins (`until` null: for
     /// good); None: nothing is blocked.
     pub blocked: Option<SkinBlockView>,
+    /// `identityLinked` / `identityRemoved` (SOC-ID): the way in it names.
+    pub provider: Option<Provider>,
 }
 
 /// How long staff keep the player from changing their Projects skin (SKIN1).
@@ -130,20 +142,24 @@ pub struct SkinBlockView {
     pub until: Option<i64>,
 }
 
-/// A limited account ("Sınırlı hesap", a new Discord account): until when, and what is limited
-/// (only what this launcher knows how to say).
+/// A limited account ("Sınırlı hesap", a new Discord account or a new account): until when, and
+/// what is limited (only what this launcher knows how to say).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LimitedView {
     /// Unix seconds.
     pub until: i64,
     pub items: Vec<LimitedItem>,
+    /// SOC-ID: its Discord account is new ("Discord hesabın yeni olduğu için…"), or the account
+    /// itself ("Hesabın yeni olduğu için…").
+    pub reason: LimitedReason,
 }
 
 impl LimitedView {
     pub(crate) fn of(limited: &crate::model::Limited) -> Self {
         Self {
             until: limited.until,
+            reason: limited.reason,
             items: limited
                 .items
                 .iter()
@@ -965,7 +981,10 @@ pub struct TeamMemberView {
     pub dnd: bool,
     /// Where they play; `projects` means "Katıl". Never another server's address.
     pub game: Option<Game>,
+    /// Their Discord profile, for "Discord'dan mesaj at"; empty when they have no Discord.
     pub discord_url: String,
+    /// Their Discord account (SOC-ID; None: no Discord).
+    pub discord_id: Option<String>,
     /// Unix seconds.
     pub joined_at: i64,
     /// Seconds the player and they were on Projects together this month, as this computer kept
@@ -1028,8 +1047,21 @@ pub struct MeView {
     pub avatar: String,
     /// Discord picture URL when `avatar` is `discord`.
     pub avatar_url: Option<String>,
-    /// The Discord picture (or Discord's default one), for the picker's Discord choice.
+    /// The Discord picture (or Discord's default one), for the picker's Discord choice; empty
+    /// without a Discord account.
     pub discord_avatar_url: String,
+    /// SOC-ID: the linked Discord account (None: none). It is `id` for every account opened with
+    /// Discord; SKIN1 and 7/24 Bulut work only then for now.
+    pub discord_id: Option<String>,
+    /// The ways into the account ("Bağlı hesaplar"), in the service's order.
+    pub identities: Vec<Identity>,
+    /// How this session signed in ("Bu cihaz").
+    pub sign_in_via: Provider,
+    /// Where the profile name comes from (`unset`: the placeholder of a new account).
+    pub name_source: NameSource,
+    /// The service takes a profile name of the player's own ("Profil adı"; false from an older
+    /// service, which turns the field away).
+    pub own_names: bool,
     /// `PRJ-XXXX-XXXX`
     pub friend_code: String,
     /// What the QR points to: `<service>/f/PRJ-XXXX-XXXX`.
@@ -1058,6 +1090,8 @@ pub struct ProfileView {
     pub avatar_url: Option<String>,
     /// Their mark (SOC-VERIFY).
     pub mark: Option<ProfileMark>,
+    /// Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle).
+    pub discord_id: Option<String>,
 }
 
 impl From<&PublicProfile> for ProfileView {
@@ -1069,6 +1103,7 @@ impl From<&PublicProfile> for ProfileView {
             avatar: profile.avatar.clone(),
             avatar_url: profile.discord_avatar_url(128),
             mark: profile.mark,
+            discord_id: profile.discord_id().map(str::to_owned),
         }
     }
 }
@@ -1090,8 +1125,10 @@ pub struct FriendView {
     pub dnd: bool,
     /// Where they play; `projects` means "Katıl". `host` of another server only when shared.
     pub game: Option<Game>,
-    /// Their Discord profile, for "Discord'dan mesaj at".
+    /// Their Discord profile, for "Discord'dan mesaj at"; empty when they have no Discord.
     pub discord_url: String,
+    /// Their Discord account (SOC-ID; None: no Discord).
+    pub discord_id: Option<String>,
     /// The crew tag they wear before their name (TEAM6; None while crew tags are off).
     pub badge: Option<Box<CrewBadgeView>>,
     /// Their mark right of the name (SOC-VERIFY).
@@ -1203,6 +1240,11 @@ pub enum SignInFailure {
     Restricted,
     /// No new accounts are made right now; this Discord account has none yet.
     SignupsClosed,
+    /// SOC-ID: this Microsoft account is no Projects account's yet, and new ones are not made
+    /// with Microsoft now (`identity_not_linked`): sign in with Discord and link it.
+    NotLinked,
+    /// SOC-ID: that way is switched off right now (`provider_off`).
+    ProviderOff,
 }
 
 /// A moment worth telling the player about (toasts, notifications). Views carry the state.
@@ -1229,9 +1271,23 @@ pub enum SocialNotice {
     FriendOnProjects {
         id: String,
     },
-    /// Signed in. `restore` is a settings backup saved by another computer, worth offering.
+    /// Signed in. `restore` is a settings backup saved by another computer, worth offering;
+    /// `ask_name`: a new account with a placeholder name (SOC-ID), "Arkadaşların seni hangi adla
+    /// görsün?".
     SignedIn {
         restore: Option<SettingsMeta>,
+        ask_name: bool,
+    },
+    /// SOC-ID: a way into the account was linked (`linked`) or removed: "Microsoft bağlandı.".
+    IdentityChanged {
+        provider: Provider,
+        linked: bool,
+    },
+    /// SOC-ID: a link or a removal that went to the browser did not go through.
+    IdentityFailed {
+        provider: Provider,
+        unlink: bool,
+        reason: IdentityFailure,
     },
     /// A friend invited the player to their team (only while teams are on).
     TeamInvite {
@@ -1317,11 +1373,15 @@ pub(crate) fn me_view(
         username: me.profile.username.clone(),
         avatar: me.profile.avatar.clone(),
         avatar_url: me.profile.discord_avatar_url(128),
-        discord_avatar_url: discord_avatar_url(
-            &me.profile.id,
-            me.discord_avatar_hash.as_deref(),
-            128,
-        ),
+        discord_avatar_url: me
+            .discord_id()
+            .map(|id| discord_avatar_url(id, me.discord_avatar_hash.as_deref(), 128))
+            .unwrap_or_default(),
+        discord_id: me.discord_id().map(str::to_owned),
+        identities: me.identities(),
+        sign_in_via: me.sign_in_via(),
+        name_source: me.name_source(),
+        own_names: me.name_from.is_some(),
         friend_code: me.friend_code.clone(),
         share_link,
         qr,

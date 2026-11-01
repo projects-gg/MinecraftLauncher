@@ -518,6 +518,12 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_state,
             commands::social::social_sign_in,
             commands::social::social_sign_in_cancel,
+            // SOC-ID: the ways into the account and the profile name
+            commands::social::social_refresh_providers,
+            commands::social::social_link_identity,
+            commands::social::social_unlink_identity,
+            commands::social::social_identity_cancel,
+            commands::social::social_set_name,
             commands::social::social_sign_out,
             commands::social::social_refresh,
             commands::social::social_lookup,

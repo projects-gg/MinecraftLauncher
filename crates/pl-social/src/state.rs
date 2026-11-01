@@ -590,7 +590,9 @@ impl SocialState {
 
     /// A note from moderators, once (the same id again changes nothing).
     fn add_notice(&mut self, notice: ModNotice) {
+        // A note about the ways in (SOC-ID) says which one; without one it cannot be worded.
         if notice.kind == NoticeKind::Other
+            || (notice.kind.is_identity() && notice.provider.is_none())
             || self.seen_notices.contains(&notice.id)
             || self.notices.iter().any(|n| n.id == notice.id)
         {
@@ -608,6 +610,7 @@ impl SocialState {
                 kind: notice.kind,
                 at: notice.at,
                 reason: notice.reason,
+                provider: notice.provider.filter(|_| notice.kind.is_identity()),
                 // Only a skin reset blocks anything; a time of 0 or less is no block.
                 blocked: match (notice.kind, notice.until) {
                     (NoticeKind::SkinReset, Some(None)) => Some(SkinBlockView { until: None }),
@@ -1703,7 +1706,8 @@ impl SocialState {
                             host: None,
                             ver: game.ver,
                         }),
-                    discord_url: member.profile.discord_profile_url(),
+                    discord_url: member.profile.discord_profile_url().unwrap_or_default(),
+                    discord_id: member.profile.discord_id().map(str::to_owned),
                     joined_at: member.joined_at,
                     together_month: 0,
                     badge: self.badge_view(&member.profile),
@@ -2018,7 +2022,8 @@ fn friend_view(
         game: online
             .filter(|p| p.state == PresenceState::Playing)
             .and_then(|p| p.game.clone()),
-        discord_url: profile.discord_profile_url(),
+        discord_url: profile.discord_profile_url().unwrap_or_default(),
+        discord_id: profile.discord_id().map(str::to_owned),
         badge,
         mark: profile.mark,
     }
@@ -2113,6 +2118,7 @@ mod tests {
             avatar_hash: None,
             badge: None,
             mark: None,
+            discord: None,
         }
     }
 
@@ -2140,6 +2146,9 @@ mod tests {
             settings: None,
             limited: None,
             notices: Vec::new(),
+            linked: None,
+            via: None,
+            name_from: None,
         }
     }
 

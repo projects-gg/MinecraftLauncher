@@ -48,10 +48,20 @@
 // - the crews' second wave (TEAM5: join requests, invite links, plans, time together): its
 //   scenarios and switches are in mock-crew-wave2.ts (`crewApproval`, `crewPlans`, `crewAsk`…);
 // - crew tags (TEAM6: tags before names, their cards, hidden crews, requests from a tag, "Hoş
-//   geldin"): mock-crew-badges.ts (`badges`, `badgesLive`, `badgesHidden`, `badgesJoined`).
+//   geldin"): mock-crew-badges.ts (`badges`, `badgesLive`, `badgesHidden`, `badgesJoined`);
+// - the ways into the account (SOC-ID: Microsoft, "Bağlı hesaplar", the name step):
+//   mock-identity.ts (`signedOutMicrosoft`, `microsoftOnly`, `linkedBoth`…).
 import { CHAT_SCENARIOS, mockChat } from "./mock-chat";
 import { BADGE_SCENARIOS, badgesApi, badgesSnapshot, startBadges } from "./mock-crew-badges";
 import { startWave2, WAVE2_SCENARIOS, wave2Api, wave2Snapshot } from "./mock-crew-wave2";
+import {
+  IDENTITY_SCENARIOS,
+  identityApi,
+  identitySignIn,
+  identitySnapshot,
+  microsoftMe,
+  startIdentity,
+} from "./mock-identity";
 import { pick } from "./mock-lang";
 import type {
   BackupMeta,
@@ -859,13 +869,21 @@ const chat = mockChat({
 let view = withPlace(
   placed(
     chat.prepare(
-      badgesSnapshot(
-        wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }),
-        badgesContext(),
+      identitySnapshot(
+        badgesSnapshot(
+          wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }),
+          badgesContext(),
+        ),
+        { scenario: scenario() },
       ),
     ),
   ),
 );
+
+/** What mock-identity.ts works on (SOC-ID): this preview's data and its ways to change it. */
+function identityContext() {
+  return { scenario: scenario(), param: searchParam, view: () => view, commit, tell };
+}
 
 /** What mock-crew-badges.ts works on: this preview's data and its ways to change it. */
 function badgesContext() {
@@ -909,6 +927,7 @@ if (typeof window !== "undefined") {
   chat.start();
   startWave2(wave2Context());
   startBadges(badgesContext());
+  startIdentity(identityContext());
   // `&liveAt=<ms>`: when the live moderators' step comes.
   const liveAt = Number(searchParam("liveAt")) || 1600;
   if (name === "restrictedLive") {
@@ -1098,6 +1117,7 @@ function wave2Context() {
 }
 const wave2 = wave2Api(wave2Context());
 const badges = badgesApi(badgesContext());
+const identity = identityApi(identityContext());
 /** Crews whose leaders approve newcomers (with the second wave). */
 const APPROVING = new Set(["fedcba9876543210"]);
 
@@ -1171,23 +1191,31 @@ export const mockSocial: SocialApi = {
     await delay(120);
     commit((v) => ({ ...v, notices: v.notices.filter((notice) => !ids.includes(notice.id)) }));
   },
-  async signIn() {
+  async signIn(provider = "discord") {
     await delay(300);
-    commit((v) => ({ ...v, auth: "signingIn" }));
+    commit((v) => ({ ...v, auth: "signingIn", signingInWith: provider }));
+    // SOC-ID: a Microsoft sign-in may stop at its end (`notLinked`), or open a new account.
+    const way = identitySignIn({ scenario: scenario() }, provider);
     // The browser step, then the deep link.
     setTimeout(() => {
       const name = scenario();
-      if (name === "restricted" || name === "banned" || name === "signupsClosed") {
+      if (
+        name === "restricted" ||
+        name === "banned" ||
+        name === "signupsClosed" ||
+        way.refused
+      ) {
         // The service turns the sign-in down at the end of the browser step.
-        commit((v) => ({ ...v, auth: "signedOut" }));
+        commit((v) => ({ ...v, auth: "signedOut", signingInWith: undefined }));
         tell({
           kind: "signInFailed",
-          reason: name === "signupsClosed" ? "signupsClosed" : "restricted",
+          reason:
+            way.refused ?? (name === "signupsClosed" ? "signupsClosed" : "restricted"),
         });
         return;
       }
       const signed = chat.prepare(initial());
-      commit(() => ({
+      commit((v) => ({
         ...signed,
         auth: "signedIn",
         connection: "online",
@@ -1197,26 +1225,34 @@ export const mockSocial: SocialApi = {
         outgoing: [],
         invites: [],
         enabled: true,
+        providers: v.providers,
+        signingInWith: undefined,
+        me: way.microsoft && signed.me ? microsoftMe(signed.me) : signed.me,
       }));
-      tell({ kind: "signedIn", restore: backup });
+      tell(
+        way.microsoft
+          ? { kind: "signedIn", askName: true }
+          : { kind: "signedIn", restore: backup },
+      );
       setTimeout(() => {
         const full = initial();
         commit((v) => ({
           ...v,
-          me: full.me ?? v.me,
+          me: way.microsoft ? v.me : (full.me ?? v.me),
           loaded: true,
-          friends: friendsList(),
-          incoming: full.incoming,
-          outgoing: full.outgoing,
-          blocked: full.blocked,
+          friends: way.microsoft ? [] : friendsList(),
+          incoming: way.microsoft ? [] : full.incoming,
+          outgoing: way.microsoft ? [] : full.outgoing,
+          blocked: way.microsoft ? [] : full.blocked,
         }));
       }, 900);
     }, 2600);
-    return "https://social.projects.gg/auth/discord/start?challenge=preview";
+    return `https://social.projects.gg/auth/${provider}/start?challenge=preview`;
   },
   async cancelSignIn() {
-    commit((v) => ({ ...v, auth: "signedOut" }));
+    commit((v) => ({ ...v, auth: "signedOut", signingInWith: undefined }));
   },
+  ...identity,
   async signOut() {
     await delay(200);
     commit((v) => signedOut(v));
@@ -1441,6 +1477,8 @@ export const mockSocial: SocialApi = {
         createdOn: "2026-09-02",
         lastUsedOn: "2026-09-21",
         current: false,
+        // SOC-ID: one came in with Microsoft in the scenarios of the ways in.
+        via: IDENTITY_SCENARIOS.includes(scenario()) ? "microsoft" : undefined,
       },
     ];
   },

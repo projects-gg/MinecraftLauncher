@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
+use crate::identity::LimitedReason;
 use crate::model::{ChatQuota, ChatRejection, LimitedKey, LinkRule, SettingsMeta};
 
 /// Stable error codes of the service (`{"error": {"code": …}}`).
@@ -146,6 +147,29 @@ pub enum ErrorCode {
     BadgeRequestClosed,
     /// The crew took its 10 join requests from its tag today (TEAM6; Turkey days).
     LimitBadgeRequests,
+    /// SOC-ID: this Microsoft account is no Projects account's, and new ones are not made with
+    /// Microsoft now (the sign-in's claim).
+    IdentityNotLinked,
+    /// SOC-ID: that way into accounts is switched off right now.
+    ProviderOff,
+    /// SOC-ID: the way is linked already.
+    IdentityExists,
+    /// SOC-ID: the way is not linked.
+    IdentityNotFound,
+    /// SOC-ID: the account's only way in cannot go.
+    LastIdentity,
+    /// SOC-ID: that account belongs to another Projects account.
+    IdentityTaken,
+    /// SOC-ID: the proof with a linked account did not hold.
+    ProofFailed,
+    /// SOC-ID: that account cannot be linked now.
+    IdentityUnavailable,
+    /// SOC-ID: not a profile name (3–16 letters, digits, spaces or `_`).
+    InvalidName,
+    /// SOC-ID: the service's filter turned the name away.
+    NameRejected,
+    /// SOC-ID: SKIN1 and 7/24 Bulut work only for accounts opened with Discord for now.
+    DiscordRequired,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -237,6 +261,17 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("badges_off", ErrorCode::BadgesOff),
     ("badge_request_closed", ErrorCode::BadgeRequestClosed),
     ("limit_badge_requests", ErrorCode::LimitBadgeRequests),
+    ("identity_not_linked", ErrorCode::IdentityNotLinked),
+    ("provider_off", ErrorCode::ProviderOff),
+    ("identity_exists", ErrorCode::IdentityExists),
+    ("identity_not_found", ErrorCode::IdentityNotFound),
+    ("last_identity", ErrorCode::LastIdentity),
+    ("identity_taken", ErrorCode::IdentityTaken),
+    ("proof_failed", ErrorCode::ProofFailed),
+    ("identity_unavailable", ErrorCode::IdentityUnavailable),
+    ("invalid_name", ErrorCode::InvalidName),
+    ("name_rejected", ErrorCode::NameRejected),
+    ("discord_required", ErrorCode::DiscordRequired),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),
@@ -309,12 +344,14 @@ pub enum SocialError {
     #[error("the account is restricted")]
     Restricted { until: Option<i64> },
     /// A limited account may not do this (`item`), or not more today (`retry_after` until the
-    /// next day). The limits end at `until` (Unix seconds; SPAM1).
+    /// next day). The limits end at `until` (Unix seconds; SPAM1). `reason` (SOC-ID): its Discord
+    /// account is new, or the account itself, as the profile says.
     #[error("a limited account cannot do this: {item:?}")]
     Limited {
         item: LimitedKey,
         until: Option<i64>,
         retry_after: Option<Duration>,
+        reason: LimitedReason,
     },
     /// No new accounts are made right now; existing ones sign in as usual.
     #[error("no new accounts right now")]
@@ -421,6 +458,9 @@ struct ErrorBody {
     /// `account_limited`: what is limited.
     #[serde(default)]
     item: Option<String>,
+    /// `account_limited` (SOC-ID): why, when the service says (`discord` or `account`).
+    #[serde(default)]
+    reason: Option<String>,
 }
 
 /// Maps a non-success response. Bodies that are not the service's JSON envelope (for example a
@@ -453,6 +493,7 @@ pub(crate) fn from_response(status: u16, retry_after: Option<&str>, body: &[u8])
             item: LimitedKey::parse(body.item.as_deref().unwrap_or_default()),
             until: body.until,
             retry_after,
+            reason: LimitedReason::parse(body.reason.as_deref().unwrap_or_default()),
         },
         (403, Some(body)) if body.code == "signups_closed" => {
             SocialError::SignupsClosed { retry_after }

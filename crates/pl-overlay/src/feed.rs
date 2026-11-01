@@ -1673,6 +1673,11 @@ pub(crate) mod tests {
             avatar: "discord".into(),
             avatar_url: None,
             discord_avatar_url: String::new(),
+            discord_id: Some("me".into()),
+            identities: Vec::new(),
+            sign_in_via: pl_social::Provider::Discord,
+            name_source: pl_social::NameSource::Discord,
+            own_names: false,
             friend_code: "PRJ-AAAA-BBBB".into(),
             share_link: None,
             qr: None,
@@ -1708,6 +1713,7 @@ pub(crate) mod tests {
             dnd: false,
             game,
             discord_url: String::new(),
+            discord_id: None,
             badge: None,
             mark: None,
         }
@@ -1752,6 +1758,7 @@ pub(crate) mod tests {
                     dnd: false,
                     game: None,
                     discord_url: String::new(),
+                    discord_id: None,
                     joined_at: 0,
                     together_month: 0,
                     badge: None,
@@ -1824,6 +1831,7 @@ pub(crate) mod tests {
                 avatar: "discord".into(),
                 avatar_url: None,
                 mark: None,
+                discord_id: None,
             }],
             invites: vec![InviteView {
                 id: "inv-1".into(),
@@ -1900,6 +1908,9 @@ pub(crate) mod tests {
             notices: Vec::new(),
             restriction: None,
             backup_waits_until: None,
+            providers: vec![pl_social::Provider::Discord],
+            signing_in_with: None,
+            identity_change: None,
         }
     }
 

@@ -87,6 +87,7 @@ import { CrewPlans } from "./crew-plans-view";
 import { CrewRail } from "./crew-rail";
 import { CrewRequests, MyRequests } from "./crew-requests";
 import { callableCrews, canAddCrew, NEW_CREW_TAB, shownCrew } from "./crews";
+import { newAccount } from "./identity";
 import { dayMonth, limitOf, opensIn } from "./limits";
 import { openMenuFromKey } from "./menu-key";
 import { type Leaving, leavingOf } from "./menus";
@@ -169,7 +170,9 @@ function CreateCrew() {
         <SectionTitle>{t("teams.create.title")}</SectionTitle>
         <p className="flex items-start gap-2.5 text-[13px] leading-snug text-ash-300">
           <LockSimple size={16} className="mt-px shrink-0 text-ash-400" aria-hidden />
-          {t("safety.limited.crewFound", { when: opensIn(t, limit.until, Date.now()) })}
+          {t(newAccount(me) ? "identity.limited.crewFound" : "safety.limited.crewFound", {
+            when: opensIn(t, limit.until, Date.now()),
+          })}
         </p>
       </section>
     );
