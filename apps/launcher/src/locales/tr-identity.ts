@@ -8,26 +8,26 @@ export const trIdentity = {
     microsoft: "Microsoft",
   },
   consent: {
-    body: "Discord ya da Microsoft hesabınla giriş yaparsın. Arkadaşların adını, profil fotoğrafını ve ne oynadığını görür. E-postan ve şifren bize gelmez.",
+    body: "Discord ya da Microsoft hesabınla giriş yaparsın. Arkadaşların senin adını, profil fotoğrafını ve ne oynadığını görür. E-postan ve şifren bize gelmez.",
     microsoft: "Microsoft ile giriş yap",
     /** Over Microsoft while it signs in only the accounts it is linked to. */
-    linkedWay: "Bağlı hesabınla gir",
+    linkedWay: "Microsoft hesabını bağladıysan",
     /** Home's invitation once Microsoft opens accounts too (no brand). */
     signIn: "Giriş yap",
-    waitingMicrosoft: "Tarayıcıda Microsoft'a gir",
-    waitingMicrosoftNote: "Girince burada devam edersin.",
+    waitingMicrosoft: "Tarayıcıda Microsoft'a giriş yap",
+    waitingMicrosoftNote: "Giriş yapınca burada devam edersin.",
     password: "Şifreni yalnız Microsoft'un kendi sayfasında gir.",
     notLinked:
-      "Bu Microsoft hesabı henüz bir Projects hesabına bağlı değil. Önce Discord ile gir, sonra Ayarlar'dan bağla.",
+      "Bu Microsoft hesabı henüz bağlı değil. Önce Discord ile giriş yap, sonra Arkadaş ayarları'ndan bağla.",
     providerOff: "Şu an Microsoft ile giriş yapılamıyor. Başka bir yolla dene.",
   },
   name: {
     title: "Arkadaşların seni hangi adla görsün?",
     label: "Adın",
-    rules: "3–16 karakter: harf, rakam, boşluk ya da _",
+    rules: "3–16 karakter: harf, rakam, boşluk ya da alt çizgi (_)",
     save: "Devam et",
     close: "Şimdi değil",
-    invalid: "Adın 3–16 karakter olmalı: harf, rakam, boşluk ya da _.",
+    invalid: "Adın 3–16 karakter olmalı: harf, rakam, boşluk ya da alt çizgi (_).",
     rejected: "Bu ad kullanılamıyor.",
     tooMany: "Adını bugün daha fazla değiştiremezsin.",
     providerOff: "Şu an adını değiştiremezsin.",
@@ -54,14 +54,14 @@ export const trIdentity = {
     title: "{{provider}} bağlantısı kaldırılsın mı?",
     /** Discord is the account's number: 7/24 Bulut and the Projects skin need it. */
     discordNumber:
-      "Discord olmadan 7/24 Bulut açılmaz. Projects skini eşlemen ve forumdaki ekip etiketin de kalkar.",
+      "Discord olmadan 7/24 Bulut açılmaz, Projects skinin ve forumdaki ekip etiketin de kalkar.",
     discord: "Discord fotoğrafın ve forumdaki ekip etiketin de kalkar.",
     confirm: "Kaldır",
     cancel: "Vazgeç",
   },
   waiting: {
-    microsoft: "Tarayıcıda Microsoft'a gir",
-    microsoftNote: "Girince burada devam edersin.",
+    microsoft: "Tarayıcıda Microsoft'a giriş yap",
+    microsoftNote: "Giriş yapınca burada devam edersin.",
     discord: "Tarayıcıda Discord'u onayla",
     discordNote: "Onaylayınca burada devam edersin.",
     password: "Şifreni yalnız Microsoft'un kendi sayfasında gir.",
@@ -78,7 +78,7 @@ export const trIdentity = {
     notFound: "Bu hesap artık bağlı değil.",
     last: "Son bağlı hesabını kaldıramazsın.",
     taken: "Bu {{provider}} hesabı başka bir Projects hesabına bağlı.",
-    proofFailed: "Bağlı hesaplarından biriyle gir.",
+    proofFailed: "Bağlı hesaplarından biriyle giriş yap.",
     unavailable: "Bu {{provider}} hesabı şu an bağlanamıyor.",
     expired: "Tamamlanamadı. Tekrar dene.",
     tooMany: "Bugün daha fazla değişiklik yapamazsın.",
@@ -87,10 +87,11 @@ export const trIdentity = {
   },
   notice: {
     linkedTitle: "Hesabına {{provider}} bağlandı",
-    linked: "Sen yapmadıysan kaldır ve öteki oturumları kapat.",
+    /** "Diğer cihazlardan çıkış yap" is the sessions' own button (one name per action). */
+    linked: "Sen yapmadıysan kaldır ve diğer cihazlardan çıkış yap.",
     removedTitle: "Hesabından {{provider}} bağlantısı kaldırıldı",
-    removed: "Sen yapmadıysan öteki oturumları kapat.",
-    open: "Bağlı hesapları aç",
+    removed: "Sen yapmadıysan diğer cihazlardan çıkış yap.",
+    open: "Bağlı hesaplara bak",
     ok: "Tamam",
   },
   /** SKIN1 and 7/24 Bulut, for an account not opened with Discord. */

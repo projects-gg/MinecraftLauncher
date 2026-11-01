@@ -1468,11 +1468,16 @@ export const mockSocial: SocialApi = {
       {
         id: "9a8b7c6d5e4f3021",
         device: "OKUL-PC",
-        createdOn: "2026-09-02",
-        lastUsedOn: "2026-09-21",
+        // SOC-ID: in the scenarios of the ways in it came in with Microsoft yesterday, after
+        // Microsoft was linked.
+        ...(IDENTITY_SCENARIOS.includes(scenario())
+          ? {
+              createdOn: new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
+              lastUsedOn: new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
+              via: "microsoft" as const,
+            }
+          : { createdOn: "2026-09-02", lastUsedOn: "2026-09-21" }),
         current: false,
-        // SOC-ID: one came in with Microsoft in the scenarios of the ways in.
-        via: IDENTITY_SCENARIOS.includes(scenario()) ? "microsoft" : undefined,
       },
     ];
   },

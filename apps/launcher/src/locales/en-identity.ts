@@ -8,22 +8,22 @@ export const enIdentity = {
   consent: {
     body: "You sign in with your Discord or Microsoft account. Your friends see your name, profile picture and what you're playing. Your email and password never reach us.",
     microsoft: "Sign in with Microsoft",
-    linkedWay: "Use a linked account",
+    linkedWay: "If you've linked Microsoft",
     signIn: "Sign in",
     waitingMicrosoft: "Sign in to Microsoft in your browser",
     waitingMicrosoftNote: "Once you're in, you'll continue here.",
     password: "Only enter your password on Microsoft's own page.",
     notLinked:
-      "This Microsoft account isn't linked to a Projects account yet. Sign in with Discord first, then link it in Settings.",
+      "This Microsoft account isn't linked yet. Sign in with Discord first, then link it in Friend settings.",
     providerOff: "You can't sign in with Microsoft right now. Try another way.",
   },
   name: {
     title: "What name should friends see?",
     label: "Your name",
-    rules: "3–16 characters: letters, digits, spaces or _",
+    rules: "3–16 characters: letters, digits, spaces or underscores (_)",
     save: "Continue",
     close: "Not now",
-    invalid: "Your name needs 3–16 characters: letters, digits, spaces or _.",
+    invalid: "Your name needs 3–16 characters: letters, digits, spaces or underscores (_).",
     rejected: "You can't use this name.",
     tooMany: "You can't change your name again today.",
     providerOff: "You can't change your name right now.",
@@ -48,7 +48,7 @@ export const enIdentity = {
   remove: {
     title: "Remove {{provider}}?",
     discordNumber:
-      "24/7 Cloud won't open without Discord. Your Projects skin link and your crew tag on the forum go too.",
+      "24/7 Cloud won't open without Discord, and your Projects skin and your crew tag on the forum go too.",
     discord: "Your Discord photo and your crew tag on the forum go too.",
     confirm: "Remove",
     cancel: "Cancel",
@@ -81,10 +81,10 @@ export const enIdentity = {
   },
   notice: {
     linkedTitle: "{{provider}} was linked to your account",
-    linked: "If it wasn't you, remove it and sign out your other sessions.",
+    linked: "If it wasn't you, remove it and sign out of other devices.",
     removedTitle: "{{provider}} was removed from your account",
-    removed: "If it wasn't you, sign out your other sessions.",
-    open: "Open linked accounts",
+    removed: "If it wasn't you, sign out of other devices.",
+    open: "See linked accounts",
     ok: "OK",
   },
   /** SKIN1 and 7/24 Bulut, for an account not opened with Discord. */

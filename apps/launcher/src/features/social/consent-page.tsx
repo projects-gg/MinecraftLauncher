@@ -143,7 +143,7 @@ export function ConsentPage() {
       <button
         type="button"
         onClick={() => void api.openUrl(PRIVACY_URL[currentLanguage()])}
-        className="mt-2 inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[13px] font-medium text-gold-300 underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+        className="mt-2 inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[13px] font-medium text-bone-100 underline decoration-white/30 underline-offset-[3px] outline-none transition-colors hover:text-bone-50 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300"
       >
         {t("social.consent.privacy")}
         <ArrowSquareOut size={13} aria-hidden />
@@ -218,7 +218,7 @@ export function ConsentPage() {
                     <button
                       type="button"
                       onClick={() => openWebLink(COMMUNITY_RULES_URL)}
-                      className="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[13px] font-medium text-gold-300 underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[13px] font-medium text-bone-100 underline decoration-white/30 underline-offset-[3px] outline-none transition-colors hover:text-bone-50 hover:decoration-current focus-visible:ring-2 focus-visible:ring-gold-300"
                     >
                       {t("safety.restricted.rules")}
                       <ArrowSquareOut size={13} aria-hidden />
