@@ -84,13 +84,16 @@ impl Feast {
     }
 }
 
+/// First days already worked out in this process, by feast and Gregorian year.
+type FeastCache = Mutex<HashMap<(Feast, i16), Vec<Date>>>;
+
 /// The first days of `feast` in the Gregorian `year`, in order: one, or two in the years a lunar
 /// year fits twice (Ramazan Bayramı in 2000 and 2033). Empty outside 1900–2500.
 pub fn feast_first_days(feast: Feast, year: i16) -> Vec<Date> {
     if !YEARS.contains(&year) {
         return Vec::new();
     }
-    static CACHE: OnceLock<Mutex<HashMap<(Feast, i16), Vec<Date>>>> = OnceLock::new();
+    static CACHE: OnceLock<FeastCache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(days) = cache
         .lock()
