@@ -885,7 +885,7 @@ public final class MessageList extends PanelWidget {
             return "connection";
         }
         return switch (reason) {
-            case "link", "phone", "words", "rate", "muted", "off", "stickers", "links" -> reason;
+            case "link", "phone", "words", "rate", "muted", "off", "stickers", "links", "slow" -> reason;
             case "daily-limit" -> "daily_limit";
             case "too-long" -> "too_long";
             case "limited-links" -> "limited_links";

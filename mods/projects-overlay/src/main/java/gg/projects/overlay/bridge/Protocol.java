@@ -33,9 +33,10 @@ public final class Protocol {
      * "yazıyor…", "Görüldü", links; docs/tasks/ovl2-protocol.md, CHAT2-O), {@code tags} (crew tags and their
      * cards, the crews' "ekibe katıldı" lines; TEAM6-O), {@code link} (codeless Discord linking: the launcher's
      * permit to a Projects server that asks, and its question; SKIN1-O), {@code host} (opening a singleplayer world
-     * to friends: the gate, the screens, the pause menu's button; HOST1-M, rows H1–H16).
+     * to friends: the gate, the screens, the pause menu's button; HOST1-M, rows H1–H16), {@code slow} (a crew chat's
+     * slow mode: {@code slow} on conversations, the wait in the composer, {@code slow} as a reason; CHAT-CALM).
      */
-    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link", "host");
+    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link", "host", "slow");
     /** Minecraft's legacy formatting sign; launcher text must never carry formatting into the game. */
     private static final int SECTION_SIGN = 0xA7;
     /** The keycap mark (1️⃣): the digit stays, the mark would draw as a dashed box. */
