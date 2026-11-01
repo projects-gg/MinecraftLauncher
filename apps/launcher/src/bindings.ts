@@ -703,6 +703,13 @@ export const commands = {
 	 *  the others. `content_cancel(job_id)` stops it after the file being copied.
 	 */
 	importStart: (request: ImportRequest, jobId: string, onProgress: Channel<ImportProgress>) => typedError<ImportReport, CmdError>(__TAURI_INVOKE("import_start", { request, jobId, onProgress })),
+	/**
+	 *  "Geri al" for the game settings an import (or the v1 launcher's step) brought into an
+	 *  instance: every file goes back to exactly what it was (`pl_import::undo_settings`). `false`
+	 *  when that import's copies are gone or a newer one replaced it: nothing changes then. Refused
+	 *  while the instance's game runs (it writes its settings when it closes) or an import runs.
+	 */
+	importUndoSettings: (instanceId: string, backup: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("import_undo_settings", { instanceId, backup })),
 	updateCheck: (channel: string) => typedError<UpdateStatus, CmdError>(__TAURI_INVOKE("update_check", { channel })),
 	/**
 	 *  Download the update of `channel` in the background (signature verified by the updater) and
@@ -802,8 +809,17 @@ export const commands = {
 	 *  Shows a system notification; true when the system took it. On Windows a click comes back to
 	 *  the page as the `desktop-notification-click` event with `id`. False when the player turned the
 	 *  launcher's notifications off in Windows, so the page keeps its own toast.
+	 * 
+	 *  `tag` (CHAT-CALM, Windows): the conversation it is about. With `popup` it takes the place of the
+	 *  conversation's notification and pops up; without, the one shown says the new words in place
+	 *  (none shown, the player closed it: nothing happens, and that is fine too).
 	 */
-	desktopNotify: (title: string, body: string | null, id: number) => __TAURI_INVOKE<boolean>("desktop_notify", { title, body, id }),
+	desktopNotify: (title: string, body: string | null, id: number, tag: string | null, popup: boolean) => __TAURI_INVOKE<boolean>("desktop_notify", { title, body, id, tag, popup }),
+	/**
+	 *  Takes the conversation's notification (`tag`, CHAT-CALM) away from the notification center:
+	 *  the player read it in the launcher. Never fails.
+	 */
+	desktopNotifyClear: (tag: string) => __TAURI_INVOKE<void>("desktop_notify_clear", { tag }),
 	/**  What the dragged files are (called as soon as a drag enters the window). */
 	filesClassify: (paths: string[]) => __TAURI_INVOKE<DroppedFileView[]>("files_classify", { paths }),
 	/**
@@ -1137,6 +1153,12 @@ export const commands = {
 	dataMoveStart: (picked: string, onProgress: Channel<MoveProgressView>) => typedError<null, CmdError>(__TAURI_INVOKE("data_move_start", { picked, onProgress })),
 	/**  Stops a running move; its partial copy is removed and the data stays where it was. */
 	dataMoveCancel: () => __TAURI_INVOKE<void>("data_move_cancel"),
+	/**
+	 *  "Launcher'ı sıfırla": when nothing runs that writes what a reset removes, leaves the note for
+	 *  the next start and restarts; that start runs the reset before anything opens the files
+	 *  (`crate::reset`). What goes and what stays: `pl_data::reset`.
+	 */
+	dataReset: () => typedError<null, CmdError>(__TAURI_INVOKE("data_reset")),
 	/**  Whether cleaning is possible right now, and the data folder's disk. */
 	cleanupStatus: () => typedError<CleanupStatusView, CmdError>(__TAURI_INVOKE("cleanup_status")),
 	/**  Version sets not played for `older_than_days` days, across every instance. */
@@ -1479,6 +1501,11 @@ export const commands = {
 	 *  to join from the tag's card. Requests already waiting stay answerable.
 	 */
 	socialTeamBadgeRequests: (team: string, on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_badge_requests", { team, on })),
+	/**
+	 *  "Yavaş mod" of one of the player's crews (the leader or a moderator; CHAT-CALM): seconds
+	 *  between one member's messages in its chat, one of 0 (off), 5, 10 and 30.
+	 */
+	socialTeamSlow: (team: string, seconds: number) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_slow", { team, seconds })),
 	/**
 	 *  "Katılma isteği gönder" on the card of the tag `via` (a friend) wears: a join request to crew
 	 *  `team` that waits for its leaders. The crew's refusals and the player's own limits are answers
@@ -4963,6 +4990,11 @@ export type ImportProfile = {
 	ownFolder: boolean,
 	/**  Mod files in its mods folder, before they are checked. */
 	modFiles: number,
+	/**
+	 *  Its own folder has game settings (`options.txt`): they can go into the Projects instance
+	 *  ("Oyun ayarları", IMPORT-SET).
+	 */
+	hasOptions: boolean,
 	lastUsedMs: number | null,
 	/**  An earlier import made it into this instance, which still exists. */
 	importedAs: string | null,
@@ -4986,6 +5018,8 @@ export type ImportReport = {
 	created: CreatedInstance[],
 	/**  The Projects instance, when shared data went into it. */
 	officialId: string | null,
+	/**  The game settings it changed in the Projects instance, for "Geri al". */
+	settings: SettingsChange | null,
 };
 
 export type ImportRequest = {
@@ -4999,8 +5033,11 @@ export type ImportScanView = {
 	freeBytes: number | null,
 	/**  What the import leaves free (the games still download). */
 	reserveBytes: number,
-	/**  The Projects instance already has game settings of its own: they are kept. */
-	projectsHasOptions: boolean,
+	/**
+	 *  Where an earlier import brought the Projects instance's game settings from (not undone
+	 *  since): that "Oyun ayarları" starts unticked, so the player's later changes stay.
+	 */
+	projectsSettingsFrom: SettingsOrigin | null,
 	/**
 	 *  The player deleted the Projects instance (LIB1): what goes into it is not ticked by
 	 *  default, and ticking it installs the instance again.
@@ -5707,7 +5744,12 @@ export type LegacyImportReport = {
 	instanceId: string | null,
 	copiedFiles: number,
 	linkedFiles: number,
-	/**  Turkish notes for the summary screen (things skipped and why). */
+	/**
+	 *  The game settings it brought into the Projects instance, for "Geri al"
+	 *  (`import_undo_settings`).
+	 */
+	settings: SettingsChange | null,
+	/**  Notes for the summary screen in the launcher's language (things skipped and why). */
 	notes: string[],
 };
 
@@ -9171,7 +9213,9 @@ export type SendFailure =
 /**  A limited account (a new Discord account) sends no links (CHAT2). */
 "limitedLinks" | 
 /**  Studio switched this extra off (CHAT2: stickers). */
-"featureOff";
+"featureOff" | 
+/**  The crew chat's slow mode: the player's last message was too recent (CHAT-CALM). */
+"slow";
 
 /**  Result of sending a request by code. */
 export type SendOutcome = 
@@ -9369,6 +9413,16 @@ export type SetVariantView = {
 	downloadBytes: number,
 };
 
+/**
+ *  Game settings an import changed in an instance; "Geri al" ([`crate::undo_settings`]) puts
+ *  back exactly what was there.
+ */
+export type SettingsChange = {
+	instanceId: string,
+	/**  The copies "Geri al" restores (a folder name the import chose). */
+	backup: string,
+};
+
 /**  Settings backup metadata, enough for "Bu bilgisayara ayarlarını getireyim mi?". */
 export type SettingsMeta = {
 	version: number,
@@ -9378,6 +9432,15 @@ export type SettingsMeta = {
 	device: string,
 	/**  Bytes. */
 	size: number,
+};
+
+/**
+ *  Where an earlier import brought the Projects instance's game settings from (and nothing took
+ *  them back since): a source, and its profile when they came from an instance's own folder.
+ */
+export type SettingsOrigin = {
+	sourceId: string,
+	profileId: string | null,
 };
 
 /**
@@ -9604,7 +9667,12 @@ crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: ne
  *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
  *  is muted).
  */
-({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  The player just joined a crowded crew and the service muted it for them (CHAT-CALM): said
+ *  once, with "Sesi aç".
+ */
+({ kind: "crowdedCrewMuted"; crew: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
 ({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
@@ -9669,7 +9737,12 @@ crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: ne
  *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
  *  is muted).
  */
-({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  The player just joined a crowded crew and the service muted it for them (CHAT-CALM): said
+ *  once, with "Sesi aç".
+ */
+({ kind: "crowdedCrewMuted"; crew: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
 ({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
@@ -9880,6 +9953,12 @@ export type SourceRequest = {
 	shared?: ImportShared[],
 	/**  Profile ids, each becoming an instance. */
 	profiles?: string[],
+	/**
+	 *  With [`ImportShared::Options`]: the profile whose own folder the game settings come from
+	 *  (an instance of CurseForge, the Modrinth App, Prism...). `None`: the source's shared
+	 *  folder (`.minecraft`). The screens send settings from one place only.
+	 */
+	settingsFrom?: string | null,
 };
 
 export type StatusMode = "online" | 
@@ -10354,6 +10433,11 @@ export type TeamView_Deserialize = {
 	badgeRequests: boolean,
 	/**  How many members wear this crew's tag ("Etiketi takan 8 üyenin etiketi çıkarılacak."). */
 	wearers: number,
+	/**
+	 *  "Yavaş mod" (CHAT-CALM): seconds between one member's messages in the crew's chat, 0 when
+	 *  off (always 0 from a service without `slow`). The leader and moderators never wait.
+	 */
+	slow: number,
 };
 
 export type TeamView_Serialize = {
@@ -10424,6 +10508,11 @@ export type TeamView_Serialize = {
 	badgeRequests: boolean,
 	/**  How many members wear this crew's tag ("Etiketi takan 8 üyenin etiketi çıkarılacak."). */
 	wearers: number,
+	/**
+	 *  "Yavaş mod" (CHAT-CALM): seconds between one member's messages in the crew's chat, 0 when
+	 *  off (always 0 from a service without `slow`). The leader and moderators never wait.
+	 */
+	slow: number,
 };
 
 /**  Something in the launcher trash. */

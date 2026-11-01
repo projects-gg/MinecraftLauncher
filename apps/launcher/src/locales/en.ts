@@ -9,6 +9,7 @@ import { enAfkPlus } from "./en-afkplus";
 import { enAutojoin } from "./en-autojoin";
 import { enBetaGate } from "./en-beta-gate";
 import { enChat } from "./en-chat";
+import { enChatCalm } from "./en-chat-calm";
 import { enChatProd } from "./en-chat-prod";
 import { enChat2 } from "./en-chat2";
 import { enCloudAfk } from "./en-cloud-afk";
@@ -30,6 +31,7 @@ import { enHomeLinks } from "./en-home-links";
 import { enHost } from "./en-host";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
+import { enLauncherReset } from "./en-launcher-reset";
 import { enLib1 } from "./en-lib1";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
@@ -56,6 +58,7 @@ import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
 import { enSmall9 } from "./en-small9";
 import { enSmall10 } from "./en-small10";
+import { enStars } from "./en-stars";
 import { enTeam6 } from "./en-team6";
 import { enTeams } from "./en-teams";
 import { enTray } from "./en-tray";
@@ -321,6 +324,7 @@ export const en: DeepPartial<Strings> = {
   fix2: enFix2,
   chat2: enChat2,
   team6: enTeam6,
+  chatCalm: enChatCalm,
   verify: enVerify,
   cloudAfk: enCloudAfk,
   cloudAfkFeat: enCloudAfkFeat,
@@ -340,6 +344,8 @@ export const en: DeepPartial<Strings> = {
   chatProd: enChatProd,
   setup: enSetup,
   motion: enMotion,
+  launcherReset: enLauncherReset,
+  stars: enStars,
   nav: {
     home: "Home",
     library: "Library",
@@ -816,14 +822,7 @@ export const en: DeepPartial<Strings> = {
     },
     legacy: {
       title: "We found your old launcher",
-      body: "You can bring your {{things}} to the new launcher. Your old files stay where they are.",
-      things: {
-        nickname: "username",
-        afk: "AFK accounts",
-        screenshots: "screenshots",
-        worlds: "worlds",
-        data: "data",
-      },
+      body: "You can bring what we found to the new launcher. Your old files stay as they are.",
       nickname: "Username: {{name}}",
       afk: "{{count}} AFK accounts",
       afk_one: "{{count}} AFK account",
@@ -831,7 +830,7 @@ export const en: DeepPartial<Strings> = {
       screenshots_one: "{{count}} screenshot",
       worlds: "{{count}} worlds",
       worlds_one: "{{count}} world",
-      import: "Import my data",
+      import: "Import",
       skip: "Continue without importing",
     },
     account: {
@@ -990,25 +989,15 @@ export const en: DeepPartial<Strings> = {
   migrate: {
     title: "Import from the old launcher",
     description:
-      "We found your data from the old Projects Launcher. What you pick comes over to the new launcher. The old launcher isn't touched.",
-    premium: "Your Microsoft account",
-    nickname: "Username: {{name}}",
-    afk: "{{count}} AFK accounts and the AFK client",
-    afk_one: "{{count}} AFK account and the AFK client",
-    gameData: "Game settings, server list, screenshots and packs",
-    worlds: "Worlds ({{count}} worlds, {{size}})",
-    worlds_one: "Worlds ({{count}} world, {{size}})",
+      "We found your data from the old Projects Launcher. What you pick is copied here. Your files there stay as they are.",
     worldsNoSpace: "Not enough disk space, so your worlds stay in the old launcher.",
     start: "Import",
     later: "Not now",
     working: "Importing",
-    doneTitle: "Import complete",
-    donePremium: "Your Microsoft account was imported.",
-    doneNickname: "{{name}} added.",
-    doneAfk: "{{count}} AFK accounts imported.",
-    doneAfk_one: "{{count}} AFK account imported.",
-    doneFiles: "{{count}} files imported.",
-    doneFiles_one: "{{count}} file imported.",
+    donePremium: "Your Microsoft account came over.",
+    doneNickname: "The account {{name}} was added.",
+    doneAfk: "{{count}} AFK accounts came over.",
+    doneAfk_one: "{{count}} AFK account came over.",
     close: "Done",
     notFound: "No old launcher data found on this computer.",
   },
@@ -1305,8 +1294,8 @@ export const en: DeepPartial<Strings> = {
     appearance: {
       performance: "Performance mode",
       performanceHelp:
-        "Turns off video, ember and blur effects, and reduces animations. Recommended for slower computers.",
-      particles: "Ember effect on the home page",
+        "Turns off video, particle and blur effects, and reduces animations. Recommended for slower computers.",
+      particles: "Particles on the home page",
       sounds: "Interface sounds",
       volume: "Volume",
     },
@@ -1359,7 +1348,6 @@ export const en: DeepPartial<Strings> = {
       discord: "Discord server",
       store: "Store",
       support: "Support",
-      source: "Source code",
       bits: "{{bits}}-bit",
       credits: "Fonts: Tektur and Figtree (OFL). Icons: Phosphor (MIT).",
     },
@@ -1480,7 +1468,7 @@ export const en: DeepPartial<Strings> = {
         title: "Cache and old logs",
         caption: "{{count}} files",
         caption_one: "{{count}} file",
-        cache: "Mod icons and news images",
+        cache: "Mod icons and screenshot previews",
         downloads: "Unfinished downloads",
         logs: "Old game logs",
         crashReports: "Old crash reports",
@@ -1568,8 +1556,7 @@ export const en: DeepPartial<Strings> = {
     supportFailed: "Couldn't create the support bundle.",
     reveal: "Show in folder",
     legacy: "Import from the old launcher",
-    legacyHelp:
-      "Brings over worlds, settings, AFK accounts and the premium sign-in from the old launcher.",
+    legacyHelp: "Brings over your worlds, settings and accounts from the old launcher.",
     import: "Import",
     moveDialog: {
       title: "Move the data folder",

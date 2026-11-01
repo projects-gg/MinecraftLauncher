@@ -34,7 +34,7 @@ interface TableSituation {
 
 type TableEvent =
   | { kind: "direct"; conv: string; mine?: boolean; blocked?: boolean }
-  | { kind: "crew"; conv: string; crew: string; mine?: boolean; blocked?: boolean }
+  | { kind: "crew"; conv: string; crew: string; mine?: boolean; blocked?: boolean; toMe?: boolean }
   | { kind: "call"; crews?: string[] }
   | { kind: "invite"; quiet?: boolean };
 
@@ -74,6 +74,7 @@ function heard(event: TableEvent, s: TableSituation, now: number): boolean {
         mutedHere: chatMutedNow(event.conv, s.chatMutes ?? {}, now),
         crewMuted: crew ? crewMutedNow(crew, service, now) : false,
         crewChatOn: s.crewChat ?? false,
+        toMe: event.kind === "crew" && (event.toMe ?? false),
       });
       return way !== "none";
     }

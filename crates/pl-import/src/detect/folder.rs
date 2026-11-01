@@ -363,6 +363,7 @@ fn profile_of(
         without_optifine: info.optifine,
         own_folder,
         mod_files,
+        has_options: false,
         last_used_ms,
         imported_as: None,
         game_dir,

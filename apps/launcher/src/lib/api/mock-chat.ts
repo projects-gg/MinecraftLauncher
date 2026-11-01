@@ -55,6 +55,9 @@ export const CHAT_SCENARIOS: readonly string[] = [
   "chatDeleteLive",
   "chat2",
   "chat2Live",
+  // CHAT-CALM (mock-chat-calm.ts): a crew chat in slow mode.
+  "chatCalm",
+  "chatCalmLead",
 ];
 
 const EXTRA_KEYS = ["replies", "stickers", "reactions", "typing", "reads", "links"] as const;
@@ -438,6 +441,10 @@ export function mockChat(host: ChatHost) {
         t0 - 2 * MINUTE,
       ),
     );
+    // CHAT-CALM: in the slow crew the player wrote 12 s ago, so the composer counts down.
+    if (host.scenario === "chatCalm") {
+      crew.push(message(CREW_CONV, ME, pick("Tamam, geliyorum", "Okay, coming"), t0 - 12_000));
+    }
     // The limited preview has no crew.
     if (host.scenario !== "limited") {
       threads.set(CREW_CONV, crew);
@@ -855,6 +862,22 @@ export function mockChat(host: ChatHost) {
     }
     if (host.scenario !== "chatLive") return;
     const at = Number(host.param("chatAt")) || 1600;
+    // CHAT-CALM: `&burst=5`, the friend writes that many in a row; one notice tells them all.
+    const burst = Math.min(20, Number(host.param("burst")) || 0);
+    if (burst > 0) {
+      const lines: ReadonlyArray<readonly [string, string]> = [
+        ["Hazır mısın?", "Ready?"],
+        ["Başlıyoruz", "We're starting"],
+        ["Neredesin", "Where are you"],
+        ["Lobideyiz", "We're in the lobby"],
+        ["Hadi gel", "Come on"],
+      ];
+      for (let i = 0; i < burst; i += 1) {
+        const [tr, en] = lines[i % lines.length] ?? ["", ""];
+        setTimeout(() => arrive(direct("301"), "301", pick(tr, en)), at + i * 300);
+      }
+      return;
+    }
     setTimeout(
       () => arrive(direct("301"), "301", pick("Hazır mısın? Başlıyoruz", "Ready? We're starting")),
       at,

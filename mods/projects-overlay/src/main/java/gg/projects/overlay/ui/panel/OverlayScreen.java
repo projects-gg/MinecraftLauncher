@@ -159,6 +159,8 @@ public final class OverlayScreen extends Screen {
     private String pendingAnswer;
     private int composerY;
     private String composerNote;
+    /** CHAT-CALM: the words the field's hint shows now (it follows the slow mode's wait). */
+    private String hintShown = "";
     private long openedAt;
     private long pageChangedAt;
     private boolean closing;
@@ -1284,12 +1286,41 @@ public final class OverlayScreen extends Screen {
     }
 
     private boolean canSend() {
-        return composerOpen() && !Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS).isEmpty();
+        return composerOpen() && slowLeft() == 0
+            && !Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS).isEmpty();
+    }
+
+    /** CHAT-CALM: whole seconds before the player may write again in this crew's chat (its slow mode), 0 now. */
+    private int slowLeft() {
+        long until = conversation == null ? 0 : state.slowUntil(conversation);
+        long left = until - System.currentTimeMillis();
+        return left <= 0 ? 0 : (int) Math.min(3600, (left + 999) / 1000);
+    }
+
+    /**
+     * CHAT-CALM: the field's hint: "Ekibine yaz (yavaş mod: 30 sn)" in a crew with a slow mode, and after a message
+     * "Göndermek için 12 saniye bekle" (writing goes on; only sending waits).
+     */
+    private Component composerHint() {
+        Component plain = Texts.tr(isCrew(conversation) ? "chat.hint.crew" : "chat.hint");
+        OverlayState.Conversation open = state.conversation(conversation);
+        if (open == null || open.slow() <= 0) {
+            return plain;
+        }
+        int wait = slowLeft();
+        if (wait == 1) {
+            return Texts.tr("chat.slow.wait_one");
+        }
+        if (wait > 0) {
+            return Texts.tr("chat.slow.wait", wait);
+        }
+        return Texts.tr("chat.slow.hint", plain, Texts.str("chat.slow.seconds", open.slow()));
     }
 
     private void sendDraft() {
         String text = Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS);
-        if (text.isEmpty() || !composerOpen()) {
+        // In slow mode the text waits in the field until it may go.
+        if (text.isEmpty() || !composerOpen() || slowLeft() > 0) {
             return;
         }
         field.setValue("");
@@ -1298,7 +1329,7 @@ public final class OverlayScreen extends Screen {
     }
 
     private void sendText(String text) {
-        if (conversation == null || !composerOpen()) {
+        if (conversation == null || !composerOpen() || slowLeft() > 0) {
             return;
         }
         overlay.sendChat(conversation, text, replying() ? replyTo : null);
@@ -1307,7 +1338,7 @@ public final class OverlayScreen extends Screen {
     }
 
     private void sendSticker(String sticker) {
-        if (conversation == null || !composerOpen() || !state.has("stickers")) {
+        if (conversation == null || !composerOpen() || !state.has("stickers") || slowLeft() > 0) {
             return;
         }
         picker.close();
@@ -1562,7 +1593,9 @@ public final class OverlayScreen extends Screen {
             } else {
                 picker.close();
             }
-            field.setPlaceholder(Texts.tr(isCrew(conversation) ? "chat.hint.crew" : "chat.hint"));
+            Component hint = composerHint();
+            field.setPlaceholder(hint);
+            hintShown = hint.getString();
             int above = composerY;
             replyY = -1;
             if (replying()) {
@@ -2182,7 +2215,21 @@ public final class OverlayScreen extends Screen {
             // The pictures get ready while the pointer is on the button: the picker opens with them.
             StickerArt.prepare(StickerPicker.artSize(cw));
         }
+        // CHAT-CALM: the hint counts the slow mode's wait down; with words in the field the seconds stand where the
+        // count would.
+        Component hint = composerHint();
+        if (!hint.getString().equals(hintShown)) {
+            field.setPlaceholder(hint);
+            hintShown = hint.getString();
+        }
         int length = field.getValue().codePointCount(0, field.getValue().length());
+        int wait = slowLeft();
+        if (wait > 0 && length > 0 && length < 250) {
+            String left = Texts.str("chat.slow.seconds", wait);
+            Font small = Fonts.small();
+            // As quiet as the launcher's seconds on its send button (ash, never a bright white).
+            Draw.text(g, small, left, send.getX() - 4 - small.width(left), composerY - 10f, Theme.ASH_300);
+        }
         if (length >= 250) {
             String count = length + "/" + Protocol.MAX_MESSAGE_CHARS;
             Font small = Fonts.small();

@@ -8,6 +8,7 @@ mod identity;
 mod notify;
 mod overlay;
 mod prepare;
+mod reset;
 mod shell;
 mod shot_copy;
 #[cfg(target_os = "macos")]
@@ -21,7 +22,14 @@ pub fn run() {
     // Debug builds run under an identity of their own (identifier, keychain service, data
     // folder): they never forward to, read from or write over an installed launcher.
     identity::check();
+    // "Launcher'ı sıfırla" asked for at the last run: it runs before anything opens the data
+    // folder, the keychain or the page, and before the log opens (the logs go too).
+    let reset_done = reset::run_pending();
     init_logging();
+    if let Some(done) = &reset_done {
+        reset::log(done);
+        commands::updates::show_after_reset();
+    }
     // Windows: windows and notifications under the identity's AppUserModelID, the one the
     // installer's shortcuts carry, before any window exists (notify).
     notify::adopt_app_id();
@@ -67,6 +75,10 @@ pub fn run() {
                     shell::close_requested(window.app_handle());
                 }
             });
+    }
+    // ...and the page clears its own storage on its first load.
+    if let Some(done) = &reset_done {
+        builder = builder.plugin(reset::page_storage(done.id));
     }
 
     builder
@@ -378,6 +390,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::import::import_scan,
             commands::import::import_measure,
             commands::import::import_start,
+            commands::import::import_undo_settings,
             commands::updates::update_check,
             commands::updates::update_download,
             commands::updates::update_apply,
@@ -393,6 +406,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             shell::launcher_leave_for_game,
             shell::window_bring_forward,
             notify::desktop_notify,
+            notify::desktop_notify_clear,
             // small conveniences: dropped files, "Devam et", desktop shortcuts
             commands::drop::files_classify,
             commands::drop::files_drop,
@@ -477,6 +491,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::data::data_move_plan,
             commands::data::data_move_start,
             commands::data::data_move_cancel,
+            commands::data::data_reset,
             // cleanup (Settings → Veri → Temizlik)
             commands::cleanup::cleanup_status,
             commands::cleanup::cleanup_old_sets,
@@ -593,6 +608,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_set_badge,
             commands::social::social_team_hidden,
             commands::social::social_team_badge_requests,
+            commands::social::social_team_slow,
             commands::social::social_request_from_badge,
             commands::social::social_crew_greet,
             commands::social::social_report,

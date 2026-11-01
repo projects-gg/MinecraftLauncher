@@ -201,11 +201,13 @@ async fn moved_launchers_are_found_brought_over_and_left_as_they_were() {
                 source_id: "modrinth".into(),
                 shared: vec![],
                 profiles: vec!["instance:Create".into()],
+                settings_from: None,
             },
             SourceRequest {
                 source_id: "curseforge".into(),
                 shared: vec![],
                 profiles: vec!["instance:ATM9".into()],
+                settings_from: None,
             },
         ],
     };

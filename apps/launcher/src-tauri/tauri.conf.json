@@ -67,11 +67,14 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "allowDowngrades": false,
       "nsis": {
+        "template": "nsis/installer.nsi",
         "installMode": "currentUser",
         "languages": ["English", "Turkish"],
         "displayLanguageSelector": false,
         "customLanguageFiles": {
+          "English": "nsis/English.nsh",
           "Turkish": "nsis/Turkish.nsh"
         },
         "installerIcon": "icons/icon.ico",

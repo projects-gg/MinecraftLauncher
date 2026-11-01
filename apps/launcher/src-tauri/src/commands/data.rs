@@ -1,6 +1,7 @@
-//! Settings → Veri: the data folder, its caches and logs, support bundles, and moving the folder
-//! to another disk. The work itself lives in `pl_data`; this module adds the app's state, the
-//! progress channel and the restart.
+//! Settings → Veri: the data folder, its caches and logs, support bundles, moving the folder to
+//! another disk, and "Launcher'ı sıfırla" ([`data_reset`], run by the next start: `crate::reset`).
+//! The work itself lives in `pl_data`; this module adds the app's state, the progress channel and
+//! the restart.
 //!
 //! A moved folder is found through a pointer file outside the data folder
 //! (`<OS config>/gg.projects.launcher/location.json`; debug builds use their own identifier's
@@ -77,6 +78,8 @@ pub(crate) enum DataJob {
     Moving(CancellationToken),
     /// Deleting the folders an earlier move left behind.
     Finishing,
+    /// A reset was asked for and the launcher restarts to run it.
+    Resetting,
 }
 
 /// The data job in progress, created on first use (no setup code needed).
@@ -135,6 +138,10 @@ pub(crate) fn begin_job(app: &AppHandle, job: DataJob) -> CmdResult<JobGuard> {
             DataJob::Finishing => pick(
                 "Önceki taşıma tamamlanıyor. Biraz sonra tekrar dene.",
                 "The last move is finishing. Try again in a bit.",
+            ),
+            DataJob::Resetting => pick(
+                "Launcher sıfırlanmak için yeniden açılıyor.",
+                "The launcher is restarting to reset.",
             ),
         };
         return Err(CmdError::new(
@@ -773,6 +780,86 @@ pub fn data_move_cancel(app: AppHandle) {
     if let Some(DataJob::Moving(cancel)) = data_jobs(&app).current.lock().as_ref() {
         cancel.cancel();
     }
+}
+
+/// "Launcher'ı sıfırla": when nothing runs that writes what a reset removes, leaves the note for
+/// the next start and restarts; that start runs the reset before anything opens the files
+/// (`crate::reset`). What goes and what stays: `pl_data::reset`.
+#[tauri::command]
+#[specta::specta]
+pub async fn data_reset(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    if let Some(block) = reset_block(&app, &state) {
+        return Err(block);
+    }
+    let job = begin_job(&app, DataJob::Resetting)?;
+    let root = state.root.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::reset::request(&root))
+        .await
+        .map_err(CmdError::internal)?
+        .map_err(|error| {
+            CmdError::new(
+                "SIFIRLA-YAZ",
+                pick(
+                    "Launcher sıfırlanamadı. Tekrar dene.",
+                    "Couldn't reset the launcher. Try again.",
+                ),
+                error.to_string(),
+            )
+        })?;
+    tracing::info!("reset asked: restarting to run it");
+    // No other data job until the restart; the UI says it restarts for a moment first.
+    std::mem::forget(job);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        handle.request_restart();
+    });
+    Ok(())
+}
+
+/// What a reset must wait for: a game or AFK accounts (they write the logs and AFK folders it
+/// removes) and the jobs that write the data folder.
+fn reset_block(app: &AppHandle, state: &AppState) -> Option<CmdError> {
+    let (code, message) = if state.games.lock().any() {
+        (
+            "SIFIRLA-OYUN",
+            pick(
+                "Sıfırlamak için önce oyunu kapat.",
+                "Close the game first, then reset.",
+            ),
+        )
+    } else if state.launch_cancel.lock().is_some() {
+        (
+            "SIFIRLA-HAZIRLIK",
+            pick(
+                "Oyun hazırlanıyor. Bitince tekrar dene.",
+                "A game is getting ready. Try again when it's done.",
+            ),
+        )
+    } else if state.afk.any_active() {
+        (
+            "SIFIRLA-AFK",
+            pick(
+                "Sıfırlamak için önce AFK hesaplarını durdur.",
+                "Stop your AFK accounts first, then reset.",
+            ),
+        )
+    } else if crate::commands::modrinth::jobs_running(app)
+        || crate::commands::library::jobs_running(app)
+        || crate::commands::java::job_running(app)
+        || job_running(app)
+    {
+        (
+            "SIFIRLA-ISLEM",
+            pick(
+                "Arka planda bir kurulum ya da yedekleme sürüyor. Bitince tekrar dene.",
+                "An install or backup is running in the background. Try again when it's done.",
+            ),
+        )
+    } else {
+        return None;
+    };
+    Some(CmdError::new(code, message, "reset blocked"))
 }
 
 /// After a move: once the launcher has run a while from the new folder, the old ones are deleted

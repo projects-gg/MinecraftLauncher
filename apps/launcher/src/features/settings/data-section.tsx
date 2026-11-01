@@ -1,6 +1,8 @@
 import {
+  ArrowCounterClockwise,
   ArrowsLeftRight,
   CheckCircle,
+  DownloadSimple,
   FolderOpen,
   Lifebuoy,
   WarningCircle,
@@ -18,6 +20,7 @@ import { useUi } from "@/stores/ui";
 import { CleanupCard } from "./cleanup/cleanup-card";
 import { TrashRow } from "./cleanup/trash-row";
 import { ErrorLine, type Failure, failure } from "./failure";
+import { ResetDialog } from "./reset/reset-dialog";
 
 /**
  * One setting, laid out like the settings `Row` (title and help on the left, actions on the
@@ -48,11 +51,15 @@ function Item({
   );
 }
 
-/** Settings → Veri: the data folder, cleanup, the launcher trash, support bundle and v1 import. */
+/**
+ * Settings → Veri: the data folder, cleanup, the launcher trash, support bundle, the imports and,
+ * last, "Launcher'ı sıfırla".
+ */
 export function DataSection() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const motionPrefs = useMotionPrefs();
+  const [resetOpen, setResetOpen] = useState(false);
   // Fresh numbers every time the section opens (logs grow while playing).
   const overview = useQuery({
     queryKey: ["data-overview"],
@@ -204,9 +211,11 @@ export function DataSection() {
           title={t("dataSettings.legacy")}
           help={t("dataSettings.legacyHelp")}
           actions={
+            // "Aktar" with the download mark, as the dialog it opens says (IMPORT-POLISH).
             <Button
               variant="secondary"
               size="sm"
+              icon={<DownloadSimple size={15} />}
               onClick={() => useUi.getState().setMigrationOpen(true)}
             >
               {t("dataSettings.import")}
@@ -221,9 +230,25 @@ export function DataSection() {
             <Button
               variant="secondary"
               size="sm"
+              icon={<DownloadSimple size={15} />}
               onClick={() => useImportJob.getState().setDialogOpen(true)}
             >
               {t("import.settings.action")}
+            </Button>
+          }
+        />
+
+        <Item
+          title={t("launcherReset.title")}
+          help={t("launcherReset.help")}
+          actions={
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<ArrowCounterClockwise size={15} />}
+              onClick={() => setResetOpen(true)}
+            >
+              {t("launcherReset.action")}
             </Button>
           }
         />
@@ -234,6 +259,7 @@ export function DataSection() {
         onPickAgain={() => pick.mutate()}
         onClose={() => setPicked(null)}
       />
+      <ResetDialog open={resetOpen} onClose={() => setResetOpen(false)} />
     </>
   );
 }

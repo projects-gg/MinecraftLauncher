@@ -21,6 +21,11 @@ const CLICK_ACTIONS_KEPT = 32;
  */
 let lastId = Math.floor(Date.now() / 1000) % 1_000_000_000;
 let hearingClicks = false;
+/**
+ * CHAT-CALM: the number of the notification shown for each tag (a conversation). A change in place
+ * keeps the notification Windows shows, and so the number its click comes back with.
+ */
+const tagIds = new Map<string, number>();
 
 /**
  * A click on one of the launcher's notifications (Windows, `src-tauri/src/notify.rs`): the shell
@@ -38,6 +43,13 @@ function hearClicks() {
   });
 }
 
+/** CHAT-CALM: one notification per `tag` (a conversation); `popup: false` changes the one shown
+ * in place without popping up. */
+export interface NotificationPlace {
+  tag: string;
+  popup: boolean;
+}
+
 /**
  * A system notification under the launcher's own name, whatever the player chose in Settings
  * (callers check it). `onClick` runs when the player clicks it (Windows). True when the system
@@ -48,10 +60,14 @@ export async function showNotification(
   title: string,
   body?: string,
   onClick?: () => void,
+  place?: NotificationPlace,
 ): Promise<boolean> {
   if (!isTauri()) return false;
-  lastId += 1;
-  const id = lastId;
+  // A change in place answers to the number the shown notification was given.
+  const kept = place && !place.popup ? tagIds.get(place.tag) : undefined;
+  if (kept === undefined) lastId += 1;
+  const id = kept ?? lastId;
+  if (place?.popup) tagIds.set(place.tag, id);
   if (onClick) {
     hearClicks();
     clickActions.set(id, onClick);
@@ -61,7 +77,13 @@ export async function showNotification(
     }
   }
   try {
-    const shown = await commands.desktopNotify(title, body ?? null, id);
+    const shown = await commands.desktopNotify(
+      title,
+      body ?? null,
+      id,
+      place?.tag ?? null,
+      place?.popup ?? true,
+    );
     if (!shown) clickActions.delete(id);
     return shown;
   } catch {
@@ -69,6 +91,17 @@ export async function showNotification(
     clickActions.delete(id);
     return false;
   }
+}
+
+/** CHAT-CALM: takes the notification of `tag` (a conversation the player read) away from Windows'
+ * notification center. Never throws. */
+export function clearNotification(tag: string) {
+  const id = tagIds.get(tag);
+  if (id === undefined) return;
+  tagIds.delete(tag);
+  clickActions.delete(id);
+  if (!isTauri()) return;
+  commands.desktopNotifyClear(tag).catch(() => undefined);
 }
 
 /**

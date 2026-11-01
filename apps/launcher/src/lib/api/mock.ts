@@ -1296,17 +1296,19 @@ export const mockApi: LauncherApi = {
   async setTrayInGame() {},
   async legacyScan() {
     // `?legacy=noWorlds`: an old launcher without worlds; `?legacy=empty`: none of the kinds the
-    // welcome lists (its sentence names only what was found); `?legacy=none`: no old launcher.
+    // welcome lists (its sentence names only what was found); `?legacy=none`: no old launcher;
+    // `?legacy=notes`: the import leaves the worlds behind (the summary's notes).
     const legacy = mockFlag("legacy");
     const empty = legacy === "empty";
+    const noWorlds = legacy !== "" && legacy !== "notes";
     return {
       found: legacy !== "none",
       hasPremium: false,
       nickname: empty ? null : "EjderAvcisi",
       afkAccounts: empty ? 0 : 3,
       hasAfkClient: !empty,
-      worlds: legacy ? 0 : 4,
-      worldsBytes: legacy ? 0 : 812_000_000,
+      worlds: noWorlds ? 0 : 4,
+      worldsBytes: noWorlds ? 0 : 812_000_000,
       screenshots: empty ? 0 : 37,
       resourcePacks: 2,
       shaderPacks: 1,
@@ -1315,6 +1317,15 @@ export const mockApi: LauncherApi = {
   },
   async legacyImport() {
     await delay(1800);
+    // The backend's notes come in the launcher's language (`pick`).
+    const notes =
+      mockFlag("legacy") === "notes"
+        ? [
+            document.documentElement.lang === "en"
+              ? "The worlds weren't copied because the disk is too full. Your worlds are still in the old launcher."
+              : "Dünyalar diskte yeterli yer olmadığı için kopyalanmadı. Eski launcher'daki dünyaların yerinde duruyor.",
+          ]
+        : [];
     return {
       premiumImported: false,
       nickname: "EjderAvcisi",
@@ -1323,7 +1334,8 @@ export const mockApi: LauncherApi = {
       instanceId: "projects",
       copiedFiles: 214,
       linkedFiles: 3912,
-      notes: [],
+      settings: { instanceId: "projects", backup: "20261101-120000" },
+      notes,
     };
   },
   async openUrl(url: string) {

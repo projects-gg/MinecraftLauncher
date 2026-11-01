@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use pl_mc::instance::store::free_name as free_instance_name;
 use pl_mc::instance::{
     DEFAULT_SERVER_ADDRESS, DEFAULT_SERVER_NAME, InstanceIcon, InstanceLoader, InstanceStore,
-    KeyBinding, NewInstance, official_pack_bindings, official_pack_key_lines,
+    NewInstance,
 };
 use pl_mc::loaders::LoaderKind;
 use pl_mc::server::ServerList;
@@ -32,10 +32,13 @@ use crate::journal::{Journal, JournalFrom, WorldIndex, WorldRecord, imported_pro
 use crate::measure::{instance_skip, plan_mods, shared_sizes};
 use crate::model::{
     CreatedInstance, ImportProfile, ImportProgress, ImportReport, ImportRequest, ImportShared,
-    ImportSource, ImportStage, ItemOutcome, ItemRef, OutcomeReason, OutcomeStatus, SourceKind,
+    ImportSource, ImportStage, ItemOutcome, ItemRef, OutcomeReason, OutcomeStatus, SettingsChange,
+    SourceKind,
 };
-use crate::options::merge_options;
 use crate::servers::merge_server_lists;
+use crate::settings::{
+    SettingsTarget, SettingsTx, ShaderChoice, bring_settings, place_shader, target_of,
+};
 use crate::worlds::{WorldDir, in_use, list_worlds};
 
 /// The lock of an instance (the app's: launches, mod changes and installs take it too).
@@ -44,7 +47,6 @@ pub type ProgressFn = Arc<dyn Fn(ImportProgress) + Send + Sync>;
 
 /// How often progress is reported while bytes flow.
 const PROGRESS_EVERY: Duration = Duration::from_millis(120);
-const MAX_OPTIONS: u64 = 2 * 1024 * 1024;
 
 /// The Projects instance: where shared data goes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,6 +106,12 @@ struct Origin {
 }
 
 enum Task<'a> {
+    /// The game settings of `from` (the source's shared folder, or `profile`'s own).
+    Settings {
+        source: &'a ImportSource,
+        from: PathBuf,
+        profile: Option<&'a ImportProfile>,
+    },
     Shared {
         source: &'a ImportSource,
         kind: ImportShared,
@@ -135,6 +143,8 @@ pub async fn run_import(
         locked: HashSet::new(),
         made: Vec::new(),
         index: None,
+        settings: None,
+        shader: None,
     };
     for (task, expected) in tasks.iter().zip(sizes) {
         let outcome = if runner.ctx.cancel.is_cancelled() {
@@ -166,6 +176,7 @@ pub async fn run_import(
             name: m.target.name.clone(),
         })
         .collect();
+    runner.report.settings = runner.settings.as_ref().and_then(|(_, tx)| tx.change());
     runner.report.cancelled |= runner.ctx.cancel.is_cancelled();
     progress.emit(true);
     runner.report
@@ -191,7 +202,31 @@ fn plan<'a>(sources: &'a [ImportSource], request: &ImportRequest) -> Vec<Task<'a
             }
         }
     };
-    shared(&mut tasks, &[ImportShared::Options, ImportShared::Servers]);
+    // Game settings first (instant, and the most missed): from the source's shared folder, or
+    // from the folder of the profile the player picked (an instance launcher's instance).
+    for &(source, req) in &picked {
+        if !req.shared.contains(&ImportShared::Options) {
+            continue;
+        }
+        match req.settings_from.as_deref() {
+            Some(id) => {
+                if let Some(profile) = source.profiles.iter().find(|p| p.id == id) {
+                    tasks.push(Task::Settings {
+                        source,
+                        from: profile.game_dir.clone(),
+                        profile: Some(profile),
+                    });
+                }
+            }
+            None if source.shared.is_some() => tasks.push(Task::Settings {
+                source,
+                from: source.root.clone(),
+                profile: None,
+            }),
+            None => {}
+        }
+    }
+    shared(&mut tasks, &[ImportShared::Servers]);
     for &(source, req) in &picked {
         for id in &req.profiles {
             if let Some(profile) = source.profiles.iter().find(|p| &p.id == id) {
@@ -213,6 +248,9 @@ fn plan<'a>(sources: &'a [ImportSource], request: &ImportRequest) -> Vec<Task<'a
 
 fn task_outcome(task: &Task<'_>) -> ItemOutcome {
     match task {
+        Task::Settings {
+            source, profile, ..
+        } => settings_outcome(source, *profile),
         Task::Shared { source, kind } => {
             ItemOutcome::new(source, ItemRef::Shared { kind: *kind }, "")
         }
@@ -226,11 +264,26 @@ fn task_outcome(task: &Task<'_>) -> ItemOutcome {
     }
 }
 
+/// The game settings' outcome: named after the profile they came from (empty for a source's
+/// shared folder).
+fn settings_outcome(source: &ImportSource, profile: Option<&ImportProfile>) -> ItemOutcome {
+    ItemOutcome::new(
+        source,
+        ItemRef::Shared {
+            kind: ImportShared::Options,
+        },
+        profile.map(|p| p.name.as_str()).unwrap_or_default(),
+    )
+}
+
 /// What each task copies, for the progress bar and the free-space checks.
 async fn task_sizes(tasks: &[Task<'_>]) -> Vec<u64> {
     let jobs: Vec<SizeJob> = tasks
         .iter()
         .map(|task| match task {
+            Task::Settings { source, .. } => {
+                SizeJob::Shared(source.root.clone(), ImportShared::Options)
+            }
             Task::Shared { source, kind } => SizeJob::Shared(source.root.clone(), *kind),
             Task::Profile { profile, source } => {
                 SizeJob::Profile(Box::new((*profile).clone()), source.root.clone())
@@ -287,13 +340,26 @@ struct Runner {
     made: Vec<Made>,
     /// The worlds imports brought so far (every instance's journal), read when first needed.
     index: Option<WorldIndex>,
+    /// The game settings this run brought into the Projects instance, one change "Geri al"
+    /// undoes as a whole.
+    settings: Option<(SettingsTarget, SettingsTx)>,
+    /// The player's shader choice, waiting for its pack (the run's shader packs come later).
+    shader: Option<ShaderChoice>,
 }
 
 impl Runner {
     async fn run_task(&mut self, task: &Task<'_>, expected: u64) -> ItemOutcome {
         match task {
+            Task::Settings {
+                source,
+                from,
+                profile,
+            } => self.settings(source, from.clone(), *profile).await,
             Task::Shared { source, kind } => match kind {
-                ImportShared::Options => self.options(source).await,
+                ImportShared::Options => {
+                    // Planned as `Task::Settings`.
+                    settings_outcome(source, None).skipped(OutcomeReason::NotFound)
+                }
                 ImportShared::Servers => self.servers(source).await,
                 ImportShared::Worlds => self.worlds(source).await,
                 ImportShared::ResourcePacks
@@ -364,44 +430,127 @@ impl Runner {
             .unwrap_or_default()
     }
 
-    async fn options(&mut self, source: &ImportSource) -> ItemOutcome {
-        let out = ItemOutcome::new(
-            source,
-            ItemRef::Shared {
-                kind: ImportShared::Options,
-            },
-            "",
-        );
+    /// The game settings of `from` into the Projects instance (`crate::settings`): their values
+    /// win, everything changed is kept for "Geri al".
+    async fn settings(
+        &mut self,
+        source: &ImportSource,
+        from: PathBuf,
+        profile: Option<&ImportProfile>,
+    ) -> ItemOutcome {
+        let mut out = settings_outcome(source, profile);
         let target = match self.official(&out).await {
             Ok(target) => target,
             Err(outcome) => return *outcome,
         };
-        let pack: Vec<KeyBinding> = match &self.ctx.official {
-            Some(o) if o.official_pack && !official_pack_key_lines(&o.minecraft).is_empty() => {
-                official_pack_bindings().to_vec()
+        // Settings from two places in one request (the screens send one) make one change.
+        let (settings_target, tx) = match self.settings.take() {
+            Some(open) => open,
+            None => {
+                let Some(official) = self.ctx.official.clone() else {
+                    return out.failed(OutcomeReason::NoTarget, "no Projects instance");
+                };
+                match target_of(
+                    &self.ctx.store,
+                    &official.id,
+                    official.official_pack,
+                    &official.minecraft,
+                ) {
+                    Ok(settings_target) => {
+                        let tx = SettingsTx::begin(&settings_target, &from);
+                        (settings_target, tx)
+                    }
+                    Err(error) => return fail(out, &error),
+                }
             }
-            _ => Vec::new(),
         };
-        let from = source.root.join("options.txt");
-        let job_target = target.clone();
-        let result = blocking(move || {
-            let mut journal = Journal::read(&job_target.instance_dir);
-            if journal.copied_to(&from, &job_target.game_dir).is_some() {
-                return Ok(Some(OutcomeReason::AlreadyThere));
-            }
-            let dest = job_target.game_dir.join("options.txt");
-            if dest.exists() {
-                return Ok(Some(OutcomeReason::KeptExisting));
-            }
-            let text = read_text(&from, MAX_OPTIONS)?;
-            let merged = merge_options(&text, &pack);
-            write_new(&dest, merged.text.as_bytes())?;
-            journal.record("options.txt", &from);
-            journal.write(&job_target.instance_dir)?;
-            Ok(None)
+        let job_target = settings_target.clone();
+        let mut tx = tx;
+        let (brought, tx) = match blocking(move || {
+            let brought = bring_settings(&from, &job_target, &mut tx);
+            Ok((brought, tx))
+        })
+        .await
+        {
+            Ok(done) => done,
+            Err(error) => return fail(out, &error),
+        };
+        self.settings = Some((settings_target, tx));
+        let brought = match brought {
+            Ok(brought) => brought,
+            Err(error) => return fail(out, &error),
+        };
+        if let Some(choice) = brought.shader {
+            self.shader = Some(choice);
+        }
+        if !brought.found {
+            return out.skipped(OutcomeReason::NotFound);
+        }
+        if brought.changed == 0 {
+            return out.skipped(OutcomeReason::AlreadyThere);
+        }
+        out.copied = brought.changed;
+        out.add_destination(&target.id, &target.name, 1);
+        out
+    }
+
+    /// The player's shader choice, once the shader packs of `from` (a source's folder) are in:
+    /// it names the pack where it went. The game settings' outcome counts it.
+    async fn settle_shader(&mut self, from: &Path) {
+        let waiting = self.shader.as_ref().is_some_and(|choice| {
+            choice
+                .pack
+                .parent()
+                .is_some_and(|dir| path_key(dir) == path_key(from))
+        });
+        if !waiting {
+            return;
+        }
+        let (Some(choice), Some((settings_target, mut tx))) =
+            (self.shader.take(), self.settings.take())
+        else {
+            return;
+        };
+        let job_target = settings_target.clone();
+        let placed = blocking(move || {
+            let placed = place_shader(&job_target, &mut tx, &choice);
+            Ok((placed, tx))
         })
         .await;
-        finish_single(out, result, &target)
+        let Ok((placed, tx)) = placed else {
+            return;
+        };
+        let instance = settings_target.instance_id.clone();
+        self.settings = Some((settings_target, tx));
+        match placed {
+            Ok(Some(true)) => {
+                let name = self
+                    .ctx
+                    .official
+                    .as_ref()
+                    .map(|o| o.name.clone())
+                    .unwrap_or_default();
+                if let Some(out) = self.report.outcomes.iter_mut().rev().find(|o| {
+                    o.item
+                        == ItemRef::Shared {
+                            kind: ImportShared::Options,
+                        }
+                }) {
+                    out.copied += 1;
+                    if out.status == OutcomeStatus::Skipped
+                        && out.reason == Some(OutcomeReason::AlreadyThere)
+                    {
+                        out.status = OutcomeStatus::Done;
+                        out.reason = None;
+                    }
+                    if out.destinations.is_empty() {
+                        out.add_destination(&instance, &name, 1);
+                    }
+                }
+            }
+            Ok(_) => {}
+            Err(error) => tracing::warn!(%error, "the shader choice was not brought over"),
+        }
     }
 
     async fn servers(&mut self, source: &ImportSource) -> ItemOutcome {
@@ -755,6 +904,7 @@ impl Runner {
         };
         let (cancel, progress) = self.copier_parts();
         let from = source.root.join(folder);
+        let job_from = from.clone();
         let job_target = target.clone();
         let reserve = self.ctx.reserve_bytes;
         let result = blocking(move || {
@@ -763,9 +913,12 @@ impl Runner {
                 cancel: &cancel,
                 on_bytes: &count,
             };
-            copy_entries(&copier, kind, &from, &job_target, folder, reserve)
+            copy_entries(&copier, kind, &job_from, &job_target, folder, reserve)
         })
         .await;
+        if kind == ImportShared::ShaderPacks {
+            self.settle_shader(&from).await;
+        }
         let mut out = out;
         match result {
             Ok(counts) => {
@@ -845,6 +998,55 @@ fn pick<'a>(homes: &'a [Home], world: &WorldDir) -> Option<&'a Home> {
         })
         .min_by_key(|(key, _)| *key)
         .map(|(_, home)| home)
+}
+
+/// The game settings of the game folder `from` (the v1 launcher's) into the Projects instance
+/// `official`, by the rules of another launcher's ("Oyun ayarları", `crate::settings`): the
+/// player's values win, the shader choice comes when its pack is there, and everything changed is
+/// kept for "Geri al" ([`crate::undo_settings`]). `None` when nothing changed. Blocking; the caller
+/// holds the instance's lock and its game is not running.
+pub fn bring_folder_settings(
+    store: &InstanceStore,
+    official: &OfficialTarget,
+    from: &Path,
+) -> Result<Option<SettingsChange>> {
+    let target = target_of(
+        store,
+        &official.id,
+        official.official_pack,
+        &official.minecraft,
+    )?;
+    let mut tx = SettingsTx::begin(&target, from);
+    match bring_settings(from, &target, &mut tx) {
+        Ok(_) => Ok(tx.change()),
+        // What changed before the failure stays undoable.
+        Err(error) if tx.change().is_some() => {
+            tracing::warn!(%error, "some game settings were not brought over");
+            Ok(tx.change())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// The server list of the game folder `from` merged into the Projects instance `official`'s:
+/// the Projects server first, nothing twice ([`merge_server_lists`]). Returns how many servers
+/// were added. Blocking.
+pub fn merge_folder_servers(
+    store: &InstanceStore,
+    official: &OfficialTarget,
+    from: &Path,
+) -> Result<u32> {
+    let target = Target {
+        id: official.id.clone(),
+        name: official.name.clone(),
+        instance_dir: store.instance_dir(&official.id)?,
+        game_dir: store.game_dir(&official.id)?,
+    };
+    let servers = from.join("servers.dat");
+    if !servers.is_file() {
+        return Ok(0);
+    }
+    merge_servers_into(Some(&servers), &target, true).map(|(added, _)| added)
 }
 
 /// The game folder entries copied one by one after the rest, whose failures leave the instance
@@ -1252,27 +1454,6 @@ async fn remove_instance(target: &Target) {
     }
 }
 
-fn read_text(path: &Path, max: u64) -> Result<String> {
-    let meta = std::fs::metadata(path).map_err(|e| Error::io(path, e))?;
-    if meta.len() > max {
-        return Err(Error::Invalid(format!("{} is too large", path.display())));
-    }
-    let bytes = std::fs::read(path).map_err(|e| Error::io(path, e))?;
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
-}
-
-/// Writes a file that must not exist yet (flushed: the player's settings).
-fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
-    if path.exists() {
-        return Err(Error::io(
-            path,
-            std::io::Error::new(std::io::ErrorKind::AlreadyExists, "already exists"),
-        ));
-    }
-    pl_mc::paths::write_durable_blocking(path, bytes)?;
-    Ok(())
-}
-
 async fn blocking<T, F>(work: F) -> Result<T>
 where
     F: FnOnce() -> Result<T> + Send + 'static,
@@ -1325,23 +1506,6 @@ fn settle(out: ItemOutcome, already: u32) -> ItemOutcome {
         });
     }
     out.settle(OutcomeReason::Failed)
-}
-
-fn finish_single(
-    out: ItemOutcome,
-    result: Result<Option<OutcomeReason>>,
-    target: &Target,
-) -> ItemOutcome {
-    match result {
-        Ok(None) => {
-            let mut out = out;
-            out.copied = 1;
-            out.add_destination(&target.id, &target.name, 1);
-            out
-        }
-        Ok(Some(reason)) => out.skipped(reason),
-        Err(error) => fail(out, &error),
-    }
 }
 
 /// Progress shared with the copying threads; reported at most every [`PROGRESS_EVERY`] while

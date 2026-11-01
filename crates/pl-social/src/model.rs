@@ -395,6 +395,11 @@ pub const TEAM_FEATURE_BADGES: &str = "badges";
 /// crew's "Etiketten istek", `via` on requests; TEAM6). Listed only with [`TEAM_FEATURE_BADGES`]
 /// and while Studio's "Etiketten katılma istekleri" is on.
 pub const TEAM_FEATURE_BADGE_REQUESTS: &str = "badgeRequests";
+/// `teamFeatures`: crew chat slow mode (`slow` on crews, `PATCH /v1/teams/:id {slow}`; CHAT-CALM).
+pub const TEAM_FEATURE_SLOW: &str = "slow";
+/// The slow mode steps the service takes (seconds; 0 is off). Up to half a minute: older phones
+/// read a longer wait as the day's limit (older launchers from a minute on).
+pub const SLOW_STEPS: [u32; 4] = [0, 5, 10, 30];
 /// A plan's note: one line of at most this many characters (code points).
 pub const PLAN_NOTE_MAX: usize = 80;
 
@@ -824,6 +829,10 @@ pub struct Team {
     /// friends may ask to join from the tag's card. On by default, as the service keeps it.
     #[serde(default = "badge_requests_on")]
     pub badge_requests: bool,
+    /// Crew chat slow mode (CHAT-CALM, a service with [`TEAM_FEATURE_SLOW`]): seconds between one
+    /// member's messages, 0 when off. The leader and moderators never wait.
+    #[serde(default)]
+    pub slow: u32,
 }
 
 fn badge_requests_on() -> bool {
@@ -1029,6 +1038,10 @@ pub struct TeamEdit {
     /// `hidden`.
     #[serde(rename = "badgeRequests", skip_serializing_if = "Option::is_none")]
     pub badge_requests: Option<bool>,
+    /// "Yavaş mod" (the leader and moderators; [`TEAM_FEATURE_SLOW`], CHAT-CALM): one of
+    /// [`SLOW_STEPS`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slow: Option<u32>,
 }
 
 /// What a service offers that a crew change may use (`teamFeatures`).
@@ -1044,6 +1057,8 @@ pub struct EditFeatures {
     pub badges: bool,
     /// [`TEAM_FEATURE_BADGE_REQUESTS`]: "Etiketten istek" (TEAM6).
     pub badge_requests: bool,
+    /// [`TEAM_FEATURE_SLOW`]: crew chat slow mode (CHAT-CALM).
+    pub slow: bool,
 }
 
 impl TeamEdit {
@@ -1072,6 +1087,9 @@ impl TeamEdit {
         }
         if !offers.badge_requests {
             edit.badge_requests = None;
+        }
+        if !offers.slow {
+            edit.slow = None;
         }
         if !offers.requests {
             edit.join = None;
@@ -1720,6 +1738,8 @@ pub enum ChatQuota {
     Links,
     /// Link cards the hub fetched for the player (60 a day).
     Unfurls,
+    /// The crew chat's slow mode: the player's next message waits `retryAfter` (CHAT-CALM).
+    Slow,
     Other,
 }
 
@@ -1730,6 +1750,7 @@ impl ChatQuota {
             "reactions" => Self::Reactions,
             "links" => Self::Links,
             "unfurls" => Self::Unfurls,
+            "slow" => Self::Slow,
             _ => Self::Other,
         }
     }
@@ -2430,6 +2451,38 @@ mod tests {
         );
         // An older service: nothing.
         assert!(edit.limited_to(EditFeatures::default()).is_empty());
+    }
+
+    #[test]
+    fn slow_mode_reads_off_from_older_services_and_goes_only_where_offered() {
+        // CHAT-CALM: a crew from a service without slow mode has none.
+        let older: Team = serde_json::from_str(
+            r#"{"id":"0123456789abcdef","name":"Gece","tag":"GKR","emblem":"sword",
+                "code":"TKM-ABCD-EFGH","createdOn":"2026-10-19","members":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(older.slow, 0);
+        let slow: Team = serde_json::from_str(
+            r#"{"id":"0123456789abcdef","name":"Gece","tag":"GKR","emblem":"sword",
+                "code":"TKM-ABCD-EFGH","createdOn":"2026-10-19","members":[],"slow":30}"#,
+        )
+        .unwrap();
+        assert_eq!(slow.slow, 30);
+        let edit = TeamEdit {
+            slow: Some(10),
+            ..TeamEdit::default()
+        };
+        assert_eq!(serde_json::to_string(&edit).unwrap(), r#"{"slow":10}"#);
+        // Not a text change: it never uses the crew's 10 daily text edits.
+        assert!(!edit.changes_text());
+        let offered = EditFeatures {
+            slow: true,
+            ..EditFeatures::default()
+        };
+        assert_eq!(edit.clone().limited_to(offered), edit);
+        assert!(edit.limited_to(EditFeatures::default()).is_empty());
+        // The steps stop at half a minute: older phones read a longer wait as the day's limit.
+        assert_eq!(SLOW_STEPS.last(), Some(&30));
     }
 
     #[test]

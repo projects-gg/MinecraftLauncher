@@ -360,16 +360,19 @@ fn everything(sources: &[ImportSource]) -> ImportRequest {
                     profile_id(mc, "Minecraft 1.8.9"),
                     profile_id(mc, "LiteLoader 1.12.2"),
                 ],
+                settings_from: None,
             },
             SourceRequest {
                 source_id: "curseforge".into(),
                 shared: vec![],
                 profiles: vec!["instance:ATM9".into()],
+                settings_from: None,
             },
             SourceRequest {
                 source_id: "prism".into(),
                 shared: vec![],
                 profiles: vec!["instance:FO".into()],
+                settings_from: None,
             },
         ],
     }
@@ -427,6 +430,7 @@ fn shared_only(kinds: &[ImportShared]) -> ImportRequest {
             source_id: "minecraft".into(),
             shared: kinds.to_vec(),
             profiles: vec![],
+            settings_from: None,
         }],
     }
 }
@@ -788,6 +792,7 @@ async fn worlds_follow_the_instance_an_earlier_run_made_while_it_fits() {
             source_id: "minecraft".into(),
             shared: vec![],
             profiles: vec![profile_id(source(sources, "minecraft"), "Forge 1.20.1")],
+            settings_from: None,
         }],
     })
     .await;
@@ -856,7 +861,7 @@ async fn a_world_renamed_there_does_not_come_again() {
 }
 
 #[tokio::test]
-async fn the_projects_instances_own_settings_stay_and_nothing_is_replaced() {
+async fn the_players_settings_replace_the_projects_instances_and_worlds_are_never_replaced() {
     let dir = tempfile::tempdir().unwrap();
     let root = home(dir.path());
     // The player's survival world was last played on the version Projects plays.
@@ -868,7 +873,7 @@ async fn the_projects_instances_own_settings_stay_and_nothing_is_replaced() {
     );
     let data = data().await;
     let projects_game = data.store.game_dir(&data.official.id).unwrap();
-    write(&projects_game.join("options.txt"), "lang:en_us\n");
+    write(&projects_game.join("options.txt"), "lang:en_us\nfov:0.5\n");
     write(
         &projects_game.join("saves/Survival/level.dat"),
         "a different world",
@@ -881,20 +886,20 @@ async fn the_projects_instances_own_settings_stay_and_nothing_is_replaced() {
                 source_id: "minecraft".into(),
                 shared: vec![ImportShared::Options, ImportShared::Worlds],
                 profiles: vec![],
+                settings_from: None,
             }],
         },
         context(&data, CancellationToken::new(), |_| {}),
     )
     .await;
+    // The settings the player picked to bring win; the line only Projects had stays.
     let options = outcome(&report, &shared(ImportShared::Options));
-    assert_eq!(
-        (options.status, options.reason),
-        (OutcomeStatus::Skipped, Some(OutcomeReason::KeptExisting))
-    );
-    assert_eq!(
-        std::fs::read_to_string(projects_game.join("options.txt")).unwrap(),
-        "lang:en_us\n"
-    );
+    assert_eq!(options.status, OutcomeStatus::Done);
+    let written = std::fs::read_to_string(projects_game.join("options.txt")).unwrap();
+    assert!(written.starts_with("version:3955\nlang:tr_tr\nguiScale:3\n"));
+    assert!(written.contains("\nfov:0.5\n"));
+    assert!(written.contains("key_key.wi_zoom.zoom:key.keyboard.c\n"));
+    assert!(report.settings.is_some());
     // Their own "Survival" stays; the imported one gets a free name. With no Forge instance
     // made, the Forge world stays where it is: Projects would open it without its mods.
     assert_eq!(
@@ -976,4 +981,303 @@ async fn a_cancelled_import_leaves_only_whole_copies() {
         );
     }
     assert_eq!(snapshot(&root), before);
+}
+
+// --- game settings (IMPORT-SET) ----------------------------------------------------------------
+
+/// The Projects instance's settings as its game left them (CRLF on Windows): vanilla keys, a
+/// pack mod's key, an option of its newer version.
+const PROJECTS_OPTIONS: &str = "version:4790\r\nlang:en_us\r\nguiScale:2\r\nmenuBackgroundBlurriness:5\r\nkey_key.attack:key.mouse.left\r\nkey_key.sprint:key.keyboard.left.control\r\nkey_key.drop:key.keyboard.q\r\nkey_key.voice_chat:key.keyboard.v\r\n";
+
+fn read(path: &Path) -> Vec<u8> {
+    std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+#[tokio::test]
+async fn the_settings_come_whole_and_one_undo_takes_them_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = home(dir.path());
+    let mc = root.join("AppData/Roaming/.minecraft");
+    write(&mc.join("hotbar.nbt"), b"their hotbars");
+    write(
+        &mc.join("optionsshaders.txt"),
+        "shaderPack=BSL.zip\nantialiasingLevel=0\n",
+    );
+    write(
+        &mc.join("config/voicechat/voicechat-client.properties"),
+        "microphone=USB Mic\nvoice_chat_volume=1.5\n",
+    );
+    write(&mc.join("optionsof.txt"), "ofFastRender:true\n");
+    let before = snapshot(&root);
+    let locations = Locations::under(&root, Os::Windows);
+    let data = data().await;
+    let projects_dir = data.store.instance_dir(&data.official.id).unwrap();
+    let game = data.store.game_dir(&data.official.id).unwrap();
+    write(&game.join("options.txt"), PROJECTS_OPTIONS);
+    write(&game.join("hotbar.nbt"), b"projects hotbars");
+
+    let report = run(&data, &locations, |_| {
+        shared_only(&[ImportShared::Options, ImportShared::ShaderPacks])
+    })
+    .await;
+
+    // Their settings win: language, GUI scale, keys; the lines only Projects has stay. Their
+    // sprint key is Caps Lock, so push to talk comes unbound.
+    let options = String::from_utf8(read(&game.join("options.txt"))).unwrap();
+    assert!(
+        options.starts_with(
+            "version:3955\nlang:tr_tr\nguiScale:3\nkey_key.sprint:key.keyboard.caps.lock\nkey_key.drop:key.keyboard.q\n"
+        ),
+        "{options}"
+    );
+    assert!(options.contains("\nmenuBackgroundBlurriness:5\n"));
+    assert!(options.contains("\nkey_key.voice_chat:key.keyboard.v\n"));
+    assert!(options.contains("\nkey_key.push_to_talk:key.keyboard.unknown\n"));
+    assert!(options.contains("\nkey_key.wi_zoom.zoom:key.keyboard.c\n"));
+    // Hotbars, the voice chat settings and the shader they drew (its pack came in the same run).
+    assert_eq!(read(&game.join("hotbar.nbt")), b"their hotbars");
+    assert_eq!(
+        read(&game.join("config/voicechat/voicechat-client.properties")),
+        b"microphone=USB Mic\nvoice_chat_volume=1.5\n"
+    );
+    assert_eq!(
+        read(&game.join("config/iris.properties")),
+        b"enableShaders=true\nshaderPack=BSL.zip\n"
+    );
+    // OptiFine's own settings stay behind: nothing here runs OptiFine.
+    assert!(!game.join("optionsof.txt").exists());
+    let settings = outcome(&report, &shared(ImportShared::Options));
+    assert_eq!((settings.status, settings.copied), (OutcomeStatus::Done, 4));
+    assert_eq!(settings.destinations[0].instance_name, "Projects");
+    let change = report.settings.clone().expect("an undo for the settings");
+    assert_eq!(change.instance_id, data.official.id);
+    assert_eq!(snapshot(&root), before);
+
+    // The same again changes nothing: no second copy, no undo.
+    let again = run(&data, &locations, |_| {
+        shared_only(&[ImportShared::Options, ImportShared::ShaderPacks])
+    })
+    .await;
+    let settings = outcome(&again, &shared(ImportShared::Options));
+    assert_eq!(
+        (settings.status, settings.reason),
+        (OutcomeStatus::Skipped, Some(OutcomeReason::AlreadyThere))
+    );
+    assert!(again.settings.is_none());
+
+    // "Geri al": every file exactly as it was; what the import made is gone.
+    assert!(pl_import::undo_settings(&projects_dir, &change.backup).unwrap());
+    assert_eq!(read(&game.join("options.txt")), PROJECTS_OPTIONS.as_bytes());
+    assert_eq!(read(&game.join("hotbar.nbt")), b"projects hotbars");
+    assert!(
+        !game
+            .join("config/voicechat/voicechat-client.properties")
+            .exists()
+    );
+    assert!(!game.join("config/iris.properties").exists());
+    assert!(
+        !projects_dir
+            .join(".launcher/import-backups")
+            .join(&change.backup)
+            .exists()
+    );
+    // Once only; a new import can bring them again.
+    assert!(!pl_import::undo_settings(&projects_dir, &change.backup).unwrap());
+    let third = run(&data, &locations, |_| shared_only(&[ImportShared::Options])).await;
+    assert_eq!(
+        outcome(&third, &shared(ImportShared::Options)).status,
+        OutcomeStatus::Done
+    );
+    assert_eq!(read(&game.join("hotbar.nbt")), b"their hotbars");
+    assert_eq!(snapshot(&root), before);
+}
+
+#[tokio::test]
+async fn a_preset_picked_before_the_first_launch_leaves_imported_video_settings_alone() {
+    use pl_mc::instance::{FirstKeys, GraphicsPreset, OptionsSeed};
+    let dir = tempfile::tempdir().unwrap();
+    let root = home(dir.path());
+    let data = data().await;
+    let projects_dir = data.store.instance_dir(&data.official.id).unwrap();
+    let game = data.store.game_dir(&data.official.id).unwrap();
+    // "Güzel" picked in Settings while Projects never started: it waits for the first launch.
+    pl_mc::instance::set_graphics_preset(&game, "26.1.2", GraphicsPreset::Quality)
+        .await
+        .unwrap();
+    let picked = pl_mc::instance::picked_preset_file(&game).unwrap();
+    assert!(picked.is_file());
+
+    let report = run(&data, &Locations::under(&root, Os::Windows), |_| {
+        shared_only(&[ImportShared::Options])
+    })
+    .await;
+    let imported = read(&game.join("options.txt"));
+    assert!(
+        !picked.exists(),
+        "their video settings take the pick's place"
+    );
+    // The first launch leaves the imported file as it is.
+    let seeded = pl_mc::instance::seed_options(
+        &game,
+        "26.1.2",
+        &dir.path().join("no-client.jar"),
+        pl_lang::Lang::Tr,
+        FirstKeys::OfficialPack,
+    )
+    .await
+    .unwrap();
+    assert_eq!(seeded, OptionsSeed::Exists);
+    assert_eq!(read(&game.join("options.txt")), imported);
+
+    // "Geri al" brings back the state before: no options.txt, the pick waiting.
+    let change = report.settings.unwrap();
+    assert!(pl_import::undo_settings(&projects_dir, &change.backup).unwrap());
+    assert!(!game.join("options.txt").exists());
+    assert_eq!(read(&picked), b"quality");
+}
+
+#[tokio::test]
+async fn an_instance_launchers_instance_can_give_projects_its_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = home(dir.path());
+    let fo = root.join("AppData/Roaming/PrismLauncher/instances/FO/.minecraft");
+    write(
+        &fo.join("options.txt"),
+        "version:3955\nlang:tr_tr\nrenderDistance:6\nsoundCategory_music:0.0\n",
+    );
+    write(&fo.join("hotbar.nbt"), b"fo hotbars");
+    let locations = Locations::under(&root, Os::Windows);
+    let data = data().await;
+    let projects_dir = data.store.instance_dir(&data.official.id).unwrap();
+    let game = data.store.game_dir(&data.official.id).unwrap();
+    let sources = pl_import::scan(&locations, &[]);
+    let prism = source(&sources, "prism");
+    assert!(prism.shared.is_none());
+    assert!(prism.profiles[0].has_options);
+    // A Modrinth profile without settings of its own offers none.
+    assert!(!source(&sources, "modrinth").profiles[0].has_options);
+
+    // The instance comes over as its own, and its settings go to Projects too.
+    let report = run(&data, &locations, |_| ImportRequest {
+        sources: vec![SourceRequest {
+            source_id: "prism".into(),
+            shared: vec![ImportShared::Options],
+            profiles: vec!["instance:FO".into()],
+            settings_from: Some("instance:FO".into()),
+        }],
+    })
+    .await;
+    let settings = outcome(&report, &shared(ImportShared::Options));
+    assert_eq!(settings.status, OutcomeStatus::Done);
+    assert_eq!(settings.label, "Fabulously Optimized");
+    let options = String::from_utf8(read(&game.join("options.txt"))).unwrap();
+    assert!(
+        options
+            .starts_with("version:3955\nlang:tr_tr\nrenderDistance:6\nsoundCategory_music:0.0\n")
+    );
+    assert_eq!(read(&game.join("hotbar.nbt")), b"fo hotbars");
+    let made = instance_named(&data.store, "Fabulously Optimized").await;
+    let made_game = data.store.game_dir(&made.id).unwrap();
+    assert_eq!(
+        read(&made_game.join("options.txt")),
+        read(&fo.join("options.txt"))
+    );
+
+    // The next scan knows where Projects' settings came from (the screens leave them unticked).
+    let sources = pl_import::scan(&locations, &pl_import::imported_profiles(data.store.root()));
+    assert_eq!(
+        pl_import::settings_came_from(&sources, &projects_dir),
+        Some(pl_import::SettingsOrigin {
+            source_id: "prism".into(),
+            profile_id: Some("instance:FO".into()),
+        })
+    );
+    // Taken back, they came from nowhere.
+    assert!(pl_import::undo_settings(&projects_dir, &report.settings.unwrap().backup).unwrap());
+    assert_eq!(pl_import::settings_came_from(&sources, &projects_dir), None);
+}
+
+#[tokio::test]
+async fn mod_settings_come_only_where_the_pack_and_its_mods_leave_them_to_the_player() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = home(dir.path());
+    let mc = root.join("AppData/Roaming/.minecraft");
+    let voice = "config/voicechat/voicechat-client.properties";
+    write(&mc.join(voice), "microphone=USB Mic\n");
+    // OptiFine drew BSL, but this run brings no shader packs and Projects has none.
+    write(&mc.join("optionsshaders.txt"), "shaderPack=BSL.zip\n");
+    let locations = Locations::under(&root, Os::Windows);
+    let data = data().await;
+    let game = data.store.game_dir(&data.official.id).unwrap();
+    let options_only = |_: &[ImportSource]| shared_only(&[ImportShared::Options]);
+
+    // The pack installs that file itself: it stays the pack's.
+    write(
+        &game.join(".projects/pack-state.json"),
+        format!(r#"{{"packId":"projects","files":{{"{voice}":{{"sha1":"x"}}}}}}"#),
+    );
+    run(&data, &locations, options_only).await;
+    assert!(!game.join(voice).exists());
+    assert!(!game.join("config/iris.properties").exists());
+
+    // The pack's mods are in place and Simple Voice Chat is not among them.
+    std::fs::remove_file(game.join(".projects/pack-state.json")).unwrap();
+    write(&game.join("mods/lithium.jar"), fabric_jar("lithium", None));
+    run(&data, &locations, options_only).await;
+    assert!(!game.join(voice).exists());
+
+    // With it, the player's own microphone and volumes come.
+    write(
+        &game.join("mods/voicechat.jar"),
+        fabric_jar("voicechat", None),
+    );
+    let report = run(&data, &locations, options_only).await;
+    assert_eq!(read(&game.join(voice)), b"microphone=USB Mic\n");
+    assert_eq!(
+        outcome(&report, &shared(ImportShared::Options)).copied,
+        1,
+        "the game settings themselves came with the first run"
+    );
+}
+
+#[tokio::test]
+async fn the_v1_launchers_settings_follow_the_same_rules() {
+    let dir = tempfile::tempdir().unwrap();
+    let v1 = dir.path().join("v1/.projects");
+    write(
+        &v1.join("options.txt"),
+        "version:4189\nlang:tr_tr\nkey_key.attack:key.mouse.left\nkey_key.drop:key.keyboard.c\n",
+    );
+    write(&v1.join("optionsof.txt"), "ofFastRender:true\n");
+    write(
+        &v1.join("servers.dat"),
+        servers(&[
+            ("Eski", "old.example.org"),
+            ("Projects", "play.projects.gg"),
+        ]),
+    );
+    let data = data().await;
+    let projects_dir = data.store.instance_dir(&data.official.id).unwrap();
+    let game = data.store.game_dir(&data.official.id).unwrap();
+    write(&game.join("options.txt"), "lang:en_us\n");
+
+    let change = pl_import::bring_folder_settings(&data.store, &data.official, &v1)
+        .unwrap()
+        .expect("the settings changed");
+    let options = String::from_utf8(read(&game.join("options.txt"))).unwrap();
+    assert!(options.starts_with("version:4189\nlang:tr_tr\n"));
+    // Their drop key is C: the pack's zoom comes unbound.
+    assert!(options.contains("key_key.wi_zoom.zoom:key.keyboard.unknown\n"));
+    assert!(!game.join("optionsof.txt").exists());
+
+    assert_eq!(
+        pl_import::merge_folder_servers(&data.store, &data.official, &v1).unwrap(),
+        1
+    );
+    let list = ServerList::from_nbt(&read(&game.join("servers.dat"))).unwrap();
+    let ips: Vec<&str> = list.servers.iter().map(|s| s.ip.as_str()).collect();
+    assert_eq!(ips, ["play.projects.gg", "old.example.org"]);
+
+    assert!(pl_import::undo_settings(&projects_dir, &change.backup).unwrap());
+    assert_eq!(read(&game.join("options.txt")), b"lang:en_us\n");
 }
