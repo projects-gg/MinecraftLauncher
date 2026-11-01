@@ -22,6 +22,7 @@ sha1 = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 parking_lot = { workspace = true }
+rand = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 # Connection cost, battery saver and full-screen apps for background downloads (background.rs).
