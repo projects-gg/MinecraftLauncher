@@ -6,7 +6,6 @@ import type {
   CrewCall,
   CrewNotifications,
   Friend,
-  ProfileMark,
   SocialGame,
   SocialNotice,
   SocialSnapshot,
@@ -227,8 +226,8 @@ export interface PlayingPerson {
   avatar?: string;
   avatarUrl?: string;
   game?: SocialGame;
-  /** Studio's mark (SOC-VERIFY), shown right after the first person's name. */
-  mark?: ProfileMark;
+  /** Their profile badges (BADGES), the first right after the first person's name. */
+  marks?: string[];
 }
 
 /**

@@ -48,6 +48,7 @@ import { planWhen, withPlanNote } from "./crew-plans";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
 import { homeShowsCall } from "./home-strip";
+import { useIdentityUi, useKeepMicrosoftOffer } from "./identity-store";
 import { showInviteToast, showTeamInviteToast } from "./invite-toast";
 import { gameBusy, joinProjects } from "./join";
 import { JoinDialog } from "./join-dialog";
@@ -115,8 +116,8 @@ function showCrewArrival(id: string) {
     const text = sentence(name);
     void notifyOutside(text, { onClick: openFriends }).then((sent) => {
       if (sent) return;
-      // The first crewmate's mark right after their name (SOC-VERIFY; the system's notice is text).
-      toast(<MarkedSentence text={sentence} name={name} mark={crewmate(first)?.mark} />, {
+      // The first crewmate's badge right after their name (BADGES-UI; the system's notice is text).
+      toast(<MarkedSentence text={sentence} name={name} marks={crewmate(first)?.marks} />, {
         action: { label: i18n.t("social.actions.join"), onClick: () => void joinProjects() },
       });
     });
@@ -154,7 +155,7 @@ function showFriendNotice(id: string, kind: "online" | "projects") {
         : i18n.t("social.notices.online", { name: who });
     const text = sentence(name);
     void notifyOutside(text, { onClick: openFriends }).then((sent) => {
-      if (!sent) toast(<MarkedSentence text={sentence} name={name} mark={friendOf(id)?.mark} />);
+      if (!sent) toast(<MarkedSentence text={sentence} name={name} marks={friendOf(id)?.marks} />);
     });
   }, 400);
   pendingFriendNotices.set(id, { kind, timer });
@@ -199,10 +200,28 @@ function handleNotice(notice: SocialNotice) {
     const restore = notice.restore;
     ui.setRestoreSettled(!restore);
     if (restore) restoreOffer.current?.(restore);
+    // SOC-ID: a new account with a placeholder name is asked for one, once.
+    if (notice.askName) useIdentityUi.getState().setNameStep(true);
     return;
   }
   if (notice.kind === "signInFailed") {
     ui.setSignIn(null, notice.reason);
+    return;
+  }
+  // SOC-ID: a link or a removal finished ("Microsoft bağlandı."), or what went wrong is said under
+  // "Bağlı hesaplar".
+  if (notice.kind === "identityChanged") {
+    const provider = i18n.t(`identity.providers.${notice.provider}`);
+    const text = i18n.t(notice.linked ? "identity.done.linked" : "identity.done.removed", {
+      provider,
+    });
+    useIdentityUi.getState().setFailure(null);
+    toast.success(text);
+    announce(text);
+    return;
+  }
+  if (notice.kind === "identityFailed") {
+    useIdentityUi.getState().setFailure({ provider: notice.provider, reason: notice.reason });
     return;
   }
   // Cloud AFK's notices (AFK+): their own quiet hours, not the friends status ("Rahatsız etmeyin").
@@ -242,9 +261,9 @@ function handleNotice(notice: SocialNotice) {
         announce(text);
         break;
       }
-      // Their mark right after their name (SOC-VERIFY): a stranger's request says who is verified.
+      // Their badge right after their name (BADGES-UI): a stranger's request says who is verified.
       toast(
-        <MarkedSentence text={sentence} name={notice.request.name} mark={notice.request.mark} />,
+        <MarkedSentence text={sentence} name={notice.request.name} marks={notice.request.marks} />,
         {
           action: {
             label: i18n.t("social.notices.show"),
@@ -260,7 +279,7 @@ function handleNotice(notice: SocialNotice) {
       if (listInView()) announce(text);
       else
         toast.success(
-          <MarkedSentence text={sentence} name={notice.friend.name} mark={notice.friend.mark} />,
+          <MarkedSentence text={sentence} name={notice.friend.name} marks={notice.friend.marks} />,
         );
       break;
     }
@@ -351,7 +370,7 @@ function handleNotice(notice: SocialNotice) {
       }
       void notifyOutside(text, { onClick: () => showCrew(crew.id) });
       const asker = notice.request;
-      toast(<MarkedSentence text={sentence} name={asker.name} mark={asker.mark} />, {
+      toast(<MarkedSentence text={sentence} name={asker.name} marks={asker.marks} />, {
         action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(crew.id) },
       });
       break;
@@ -783,6 +802,8 @@ export function SocialHost() {
   // "Yazıyor…" frames are kept from the start, so a list or a conversation that opens shows who
   // is writing at once (CHAT2; a pushed event, nothing is asked for).
   useTypingFeed();
+  // SOC-ID: how the service offers Microsoft is kept for the next start (Home's invitation).
+  useKeepMicrosoftOffer();
   return (
     <>
       <FriendsSheet />

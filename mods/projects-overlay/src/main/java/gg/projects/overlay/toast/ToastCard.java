@@ -5,6 +5,7 @@ import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.Marks;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -28,7 +29,9 @@ import net.minecraft.util.FormattedCharSequence;
  * message (CHAT2) shows the sticker small before its words ("Çıkartma · GG"), unless message text is hidden. A
  * message's sender who wears a crew tag has its chip before the name ("[GK] Ayşe", TEAM6). A friend's world invite
  * (HOST1) has the grass block for its face and "Katılmak için F7 tuşuna bas"; the host's own notes ("Dünyan
- * arkadaşlarına açık", "Mert dünyana katıldı") are the overlay's, under the player's "Diğer bildirimler".
+ * arkadaşlarına açık", "Mert dünyana katıldı") are the overlay's, under the player's "Diğer bildirimler". The person a
+ * title names (a message's sender, the friend of an invite or a world invite) has their first profile badge right of
+ * the name (BADGES-UI, {@link Marks}); the narrator says all of them with the name.
  *
  * <p>The hint says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked it), and where
  * the key may need Fn a second line says so ("Açılmazsa [Fn] + [F7] tuşlarına bas", {@link
@@ -71,6 +74,8 @@ public final class ToastCard {
     final int titleWidth;
     /** TEAM6: the sender's crew tag before the name, or null. */
     final TagChip chip;
+    /** BADGES-UI: the profile badges of the person the title names; the first is drawn right of the name. */
+    final List<OverlayState.MarkDef> marks;
     final String countText;
     final int countWidth;
     final FormattedCharSequence crew;
@@ -100,6 +105,7 @@ public final class ToastCard {
         this.title = b.title;
         this.titleWidth = b.titleWidth;
         this.chip = b.chip;
+        this.marks = b.marks;
         this.countText = b.countText;
         this.countWidth = b.countWidth;
         this.crew = b.crew;
@@ -270,6 +276,7 @@ public final class ToastCard {
         FormattedCharSequence title;
         int titleWidth;
         TagChip chip;
+        List<OverlayState.MarkDef> marks = List.of();
         String countText;
         int countWidth;
         FormattedCharSequence crew;
@@ -325,7 +332,12 @@ public final class ToastCard {
         if (b.kind == Kind.MESSAGE) {
             b.chip = TagChip.of(request.badge(), TagChip.ROW);
         }
-        int titleRoom = Math.round(TEXT_W - (b.countText == null ? 0 : b.countWidth + 4) - TagChip.room(b.chip));
+        if ((b.kind == Kind.MESSAGE || b.kind == Kind.INVITE || b.kind == Kind.WORLD) && request.marks() != null) {
+            // The title names a person: their first badge right of the name (BADGES-UI).
+            b.marks = request.marks();
+        }
+        int titleRoom = Math.round(TEXT_W - (b.countText == null ? 0 : b.countWidth + 4) - TagChip.room(b.chip)
+            - Marks.room(b.marks));
         String titleText = Texts.fit(strong, name, titleRoom);
         b.title = Texts.visual(titleText);
         b.titleWidth = strong.width(titleText);
@@ -348,10 +360,13 @@ public final class ToastCard {
             hint(b, b.kind == Kind.CALL ? "toast.hint.call" : b.kind == Kind.WORLD ? "toast.hint.join"
                 : "toast.hint.open", keyName, fnTip);
         }
-        // The chip is drawn; the narrator says it with the name ("Ayşe, etiket GK").
-        String spokenName = b.chip == null ? name : Texts.str("row.badge", name, b.chip.badge.tag());
+        // The chip and the badge are drawn; the narrator says them with the name ("Ayşe, Projects yöneticisi, etiket
+        // GK").
+        String marked = Marks.spoken(name, b.marks, Texts.current());
+        String spokenName = b.chip == null ? marked : Texts.str("row.badge", marked, b.chip.badge.tag());
         b.narration = switch (b.kind) {
-            case CALL, INVITE, WORLD -> Texts.tr("toast.narration.notice", name, bodyText);
+            case CALL -> Texts.tr("toast.narration.notice", name, bodyText);
+            case INVITE, WORLD -> Texts.tr("toast.narration.notice", marked, bodyText);
             case INFO, TRAVEL, HOST -> Component.literal(name + ". " + bodyText);
             case MESSAGE -> crewName != null ? Texts.tr("toast.narration.crew", spokenName, crewName, bodyText)
                 : Texts.tr("toast.narration.message", spokenName, bodyText);
@@ -439,6 +454,21 @@ public final class ToastCard {
         return kind;
     }
 
+    /** BADGES-UI: the badges of the person the title names (the tooltip of the one drawn names them all). */
+    public List<OverlayState.MarkDef> marks() {
+        return marks;
+    }
+
+    /** Where the title's name ends, from the card's left edge (its badge stands {@link Marks#GAP} right of it). */
+    float nameEnd() {
+        return TEXT_X + TagChip.room(chip) + titleWidth;
+    }
+
+    /** The middle of the title's line, from the card's top (its badge is centred on it). */
+    static float titleMid() {
+        return PAD_Y + TITLE_H / 2f;
+    }
+
     /** Whether the card carries "Açılmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN: a game shows it a few times only). */
     public boolean fnTip() {
         return fnTip;
@@ -460,8 +490,9 @@ public final class ToastCard {
         float nameX = tx + TagChip.room(chip);
         Draw.text(g, Fonts.strong(), title, nameX, Fonts.centeredY(Fonts.Face.STRONG, ty + TITLE_H / 2f),
             Theme.BONE_50);
+        Marks.draw(g, marks, nameX + titleWidth, ty + TITLE_H / 2f);
         if (countText != null) {
-            float px = nameX + titleWidth + 4;
+            float px = nameX + titleWidth + Marks.room(marks) + 4;
             float py = ty + (TITLE_H - 9) / 2f;
             Draw.frame(g, Frames.PILL, px, py, countWidth, 9);
             Draw.text(g, Fonts.small(), countLine, px + 4, Fonts.centeredY(Fonts.Face.SMALL, py + 4.5f),

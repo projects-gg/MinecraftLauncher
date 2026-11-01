@@ -8,6 +8,8 @@ import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.settings.OverlaySettings;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.ui.MarkTip;
+import gg.projects.overlay.ui.Marks;
 import gg.projects.overlay.ui.Sounds;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
@@ -29,7 +31,8 @@ import net.minecraft.client.gui.screens.TitleScreen;
  *
  * <p>In the chat the pointer is free, and a toast is pressed there like a button (F7-OPEN: players clicked the card's
  * key hint): under the pointer its edge lights gold over 120 ms and every toast's time stands still, and a press opens
- * the panel ({@link #cardAt}). The emoji picker, when it is open over a toast, keeps the pointer.
+ * the panel ({@link #cardAt}). The emoji picker, when it is open over a toast, keeps the pointer. The pointer resting on
+ * the profile badge right of a title's name names every badge of that person (BADGES-UI, {@link MarkTip}).
  */
 public final class ToastLayer implements HudElement {
     /** Something drawn over the HUD for a short while (the panel fading out after it closed). */
@@ -82,6 +85,12 @@ public final class ToastLayer implements HudElement {
     /** The toast under the pointer in the chat (its key), or the one going dark; null: none. */
     private String hoverKey;
     private final Tween hover = new Tween(0f);
+    /** The toast under the pointer this frame and where the pointer is (GUI pixels), for its badge's tooltip. */
+    private ToastStack.Entry<ToastCard> pointed;
+    private double pointerX;
+    private double pointerY;
+    /** BADGES-UI: the tooltip of the badge right of a title's name. */
+    private final MarkTip markTip = new MarkTip();
     /** A point the scenario driver stands the pointer at (GUI pixels), or null: the real pointer. */
     private float[] driverPointer;
 
@@ -262,6 +271,7 @@ public final class ToastLayer implements HudElement {
     /** The toast the pointer is on in the chat this frame lights; the one it left goes dark. */
     private void trackHover(Minecraft mc, long now) {
         String under = null;
+        pointed = null;
         if (Compat.screen(mc) instanceof ChatScreen) {
             double x;
             double y;
@@ -274,6 +284,9 @@ public final class ToastLayer implements HudElement {
             }
             ToastStack.Entry<ToastCard> e = pointerFree(mc, x, y) ? entryAt(x, y, now) : null;
             under = e == null ? null : e.key;
+            pointed = e;
+            pointerX = x;
+            pointerY = y;
         }
         if (under != null && !under.equals(hoverKey)) {
             hoverKey = under;
@@ -287,10 +300,29 @@ public final class ToastLayer implements HudElement {
         }
     }
 
+    /**
+     * BADGES-UI: the badge right of a title's name under the pointer (in the chat) names every badge of that person;
+     * {@code x} and {@code base} are where this frame draws the stack.
+     */
+    private void trackMark(long now, float x, float base) {
+        ToastStack.Entry<ToastCard> e = pointed;
+        if (e != null && !e.content().marks().isEmpty()) {
+            ToastCard card = e.content();
+            float mx = Marks.left(x + card.nameEnd());
+            float my = Marks.top(base + e.y() + ToastCard.titleMid());
+            if (Marks.over(pointerX, pointerY, mx, my)) {
+                markTip.track(e.key, card.marks(), mx, my, now);
+                return;
+            }
+        }
+        markTip.track(null, null, 0f, 0f, now);
+    }
+
     /** The panel opened: every toast fades where it is. */
     public void clear() {
         stack.clear(now());
         hoverKey = null;
+        markTip.track(null, null, 0f, 0f, now());
     }
 
     /** The world closed or the launcher went away. */
@@ -298,6 +330,7 @@ public final class ToastLayer implements HudElement {
         stack.reset();
         anchorPlaced = false;
         hoverKey = null;
+        markTip.track(null, null, 0f, 0f, now());
     }
 
     private ToastStack.Entry<ToastCard> find(String key) {
@@ -350,6 +383,7 @@ public final class ToastLayer implements HudElement {
         if (stack.isEmpty() || Compat.hudHidden(mc)) {
             // Nothing drawn: a press finds no toast where one was.
             hoverKey = null;
+            markTip.track(null, null, 0f, 0f, now);
             drawnAt = Long.MIN_VALUE / 2;
             Perf.toast(started);
             return;
@@ -390,6 +424,9 @@ public final class ToastLayer implements HudElement {
             }
             Draw.popAlpha();
         }
+        // A badge's tooltip over the cards, inside the screen.
+        trackMark(now, x, base);
+        markTip.draw(g, now, MARGIN, MARGIN, width - MARGIN);
         Perf.toast(started);
     }
 

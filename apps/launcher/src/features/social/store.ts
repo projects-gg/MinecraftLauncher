@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   HIDDEN_SNAPSHOT,
+  type MarkDef,
   type ReportTarget,
   type SignInFailure,
   type SocialProfile,
@@ -183,10 +184,21 @@ export function friendListShown(ui: {
   return ui.open && ui.page === "list" && (!ui.view.chat || ui.listTab === "friends");
 }
 
+/** The same badge catalogue (BADGES-UI) in two snapshots. */
+function sameMarkDefs(a: readonly MarkDef[] | undefined, b: readonly MarkDef[] | undefined) {
+  return a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b));
+}
+
 export const useSocialUi = create<SocialUi>()((set, get) => ({
   view: HIDDEN_SNAPSHOT,
-  setView: (view) => {
-    if (view.seq < get().view.seq) return;
+  setView: (next) => {
+    if (next.seq < get().view.seq) return;
+    // The same catalogue keeps the array already held: badges drawn from it stay as they are.
+    const defs = get().view.markDefs;
+    const view =
+      defs !== next.markDefs && sameMarkDefs(defs, next.markDefs)
+        ? { ...next, markDefs: defs }
+        : next;
     // A tag change under way ends once the list shows it.
     const pending = get().badgePending;
     const settled = pending !== undefined && (view.me?.badge?.crew ?? null) === pending;

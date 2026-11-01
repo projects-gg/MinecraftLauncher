@@ -1,8 +1,6 @@
-// Profile marks (SOC-VERIFY): the blue and red marks Projects' staff give in Studio, right of a
-// name. Their names are the tooltip and what a screen reader says; nothing else is written.
+// Profile badges (SOC-VERIFY's marks, BADGES): their names come from the catalogue (Studio); here
+// only how a row or a line names someone with them for screen readers.
 export const trVerify = {
-  verified: "Doğrulanmış hesap",
-  admin: "Projects yöneticisi",
-  /** A row or line named for screen readers: "Ayşe, Doğrulanmış hesap". */
+  /** "Ayşe, Projects yöneticisi, Premium Club üyesi" (the badges' names joined with commas). */
   named: "{{name}}, {{mark}}",
 };
