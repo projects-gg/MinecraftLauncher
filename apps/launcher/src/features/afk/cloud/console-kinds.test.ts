@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { appliesTo, reasonKey, tally } from "./bulk";
 import {
+  consoleShows,
   type KindLine,
   kindTone,
   lineKind,
@@ -32,6 +33,53 @@ const line = (k: string, c: string | null, text: string, who: string | null = nu
   text,
   who,
   goto: null,
+});
+
+describe("what the cloud console draws", () => {
+  it("takes the looks and the dialog cards by their own switches, with console kinds off too", () => {
+    // Studio's switches as they are now: client 4.2.5's side events (afk-host 0.3.4).
+    expect(consoleShows({ consoleKinds: false, consoleLooks: true, dialogCards: true })).toEqual({
+      kinds: false,
+      looks: true,
+      dialogCards: true,
+    });
+    expect(consoleShows({ consoleKinds: false, consoleLooks: true })).toEqual({
+      kinds: false,
+      looks: true,
+      dialogCards: false,
+    });
+    expect(consoleShows({ consoleKinds: false, dialogCards: true })).toEqual({
+      kinds: false,
+      looks: false,
+      dialogCards: true,
+    });
+  });
+
+  it("keeps an account with console kinds as it was", () => {
+    expect(consoleShows({ consoleKinds: true, consoleLooks: true, dialogCards: true })).toEqual({
+      kinds: true,
+      looks: true,
+      dialogCards: true,
+    });
+    expect(consoleShows({ consoleKinds: true })).toEqual({
+      kinds: true,
+      looks: false,
+      dialogCards: false,
+    });
+  });
+
+  it("shows none of them from a service before the features", () => {
+    const none = { kinds: false, looks: false, dialogCards: false };
+    expect(consoleShows(null)).toEqual(none);
+    expect(consoleShows(undefined)).toEqual(none);
+    expect(consoleShows({})).toEqual(none);
+  });
+
+  it("gives a classic line the classic console's colour", () => {
+    // A side event's line comes without its kind.
+    expect(kindTone(line("n", null, "<GeceKurdu_> selam"))).toBe("text-bone-100");
+    expect(kindTone(line("e", null, "Sunucuyla bağlantı koptu."))).toBe("text-flare-400");
+  });
 });
 
 describe("console kinds", () => {

@@ -2,6 +2,27 @@
 // filter chips, "Adın geçenler" and the colours. A line from before console kinds (no `c`) shows
 // as it always did, and only under "Hepsi".
 import { matchesQuery } from "@pl/ui";
+import type { CloudAccountFeatures } from "@/bindings";
+
+/**
+ * What an account's console draws, each part by its own switch (the contract's "Looks" and
+ * "Dialog cards"): the kinds' chips, search and strip; the lines in the game's colours; the
+ * server's dialogs as cards. With console kinds off a 4.2.5 client keeps the classic console and
+ * brings the looks and the dialogs beside it (afk-host 0.3.4's side events), as afk.projects.gg
+ * shows them (SMALLS-L3: the looks and cards waited for the kinds' switch).
+ */
+export function consoleShows(
+  features:
+    | Pick<CloudAccountFeatures, "consoleKinds" | "consoleLooks" | "dialogCards">
+    | null
+    | undefined,
+): { kinds: boolean; looks: boolean; dialogCards: boolean } {
+  return {
+    kinds: features?.consoleKinds === true,
+    looks: features?.consoleLooks === true,
+    dialogCards: features?.dialogCards === true,
+  };
+}
 
 export interface KindLine {
   at: number;

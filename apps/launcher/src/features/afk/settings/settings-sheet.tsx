@@ -41,6 +41,7 @@ import {
   validate,
 } from "./model";
 import { PanelBody, PanelSkeleton, SettingsPanel } from "./panel";
+import { useReadBack } from "./read-back";
 import { ConnectionSection, GameSection, LogSection, type SectionProps } from "./sections";
 
 const ICONS: Record<GroupId, Icon> = {
@@ -217,29 +218,28 @@ function Editor({
   const [saveError, setSaveError] = useState<Failure | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
-  // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
-  // buttons wait, then the edits give way to the stored settings and the bar slides away (the
-  // editor stays: no section rises in again).
-  const saved = useRef(false);
   const [settling, setSettling] = useState(false);
   const active = isActive(account);
-
-  // Runs when a save comes back as the stored settings.
-  useEffect(() => {
-    if (!saved.current) return;
-    saved.current = false;
-    setDraftState(baseline);
+  // Counts the saves the backend took and the edits dropped: the address field then shows what was
+  // kept, not a pasted link (SMALLS-L3). Counted when the save is taken, not when it is read back.
+  const [revision, setRevision] = useState(0);
+  // A save is read back before the editor starts from it: meanwhile nothing is held and the bar's
+  // buttons wait, then the edits give way to the stored settings and the bar slides away (the
+  // editor stays: no section rises in again). An edit made meanwhile stays.
+  const readBack = useReadBack(baseline, (stored) => {
+    setDraftState(stored);
     setSubmitted(false);
     setServerIssues([]);
     setSaveError(null);
-  }, [baseline]);
+  });
 
   const dirty = isDirty(draft, baseline);
   useEffect(() => {
-    if (!saved.current) hold(slot, dirty ? { draft, base: baseline } : null);
-  }, [hold, slot, dirty, draft, baseline]);
+    if (!readBack.waiting()) hold(slot, dirty ? { draft, base: baseline } : null);
+  }, [hold, slot, dirty, draft, baseline, readBack]);
 
   const setDraft = (update: (d: Draft) => Draft) => {
+    readBack.cancel();
     setDraftState(update);
     setServerIssues([]);
     setSaveError(null);
@@ -274,8 +274,9 @@ function Editor({
         if (found[0]) goTo(GROUP_OF[found[0].section]);
         return;
       }
-      saved.current = true;
+      readBack.expect();
       setSettling(true);
+      setRevision((n) => n + 1);
       hold(slot, null);
       void queryClient.invalidateQueries({ queryKey: ["afk"] });
       const done = t("afkSettings.saved", { name: account.nickname });
@@ -299,10 +300,8 @@ function Editor({
       } else {
         toast.success(done);
       }
-      void onSaved().finally(() => {
-        saved.current = false;
-        setSettling(false);
-      });
+      // The read-back itself reaches the editor a tick after this settles (useReadBack).
+      void onSaved().finally(() => setSettling(false));
     },
     onError: (error) => setSaveError(failure(error, t("afkSettings.saveFailed"))),
   });
@@ -321,6 +320,7 @@ function Editor({
   const discard = () => {
     hold(slot, null);
     setDraftState(baseline);
+    setRevision((n) => n + 1);
     setSubmitted(false);
     setServerIssues([]);
     setSaveError(null);
@@ -427,6 +427,7 @@ function Editor({
         errorFor={errorFor}
         view={view}
         onOpenFolder={openFolder}
+        revision={revision}
       />
     </PanelBody>
   );

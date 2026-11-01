@@ -33,3 +33,24 @@ export function splitAddress(text: string): { host: string; port: string } {
   if (!/^\d*$/.test(port)) return { host: trimmed, port: "" };
   return { host: trimmed.slice(0, colon).trim(), port };
 }
+
+/**
+ * What the field shows once its host or port change from outside. Typing is never fought: a text
+ * that still reads as that address stays as typed ("mc.sunucu.net:" while the port comes), another
+ * address (a reload) shows as stored. `stored`: a save was taken or the edits were dropped, so the
+ * field shows what was kept as Minecraft writes it, even when it reads the same: a pasted
+ * "https://mc.sunucu.net:25565" becomes "mc.sunucu.net:25565" (SMALLS-L3), the port only when one
+ * was given.
+ */
+export function shownAddress(
+  text: string,
+  host: string,
+  port: number | string,
+  stored = false,
+): string {
+  if (!stored) {
+    const typed = splitAddress(text);
+    if (typed.host === host.trim() && (typed.port || "0") === String(port || "0")) return text;
+  }
+  return joinAddress(host, port);
+}

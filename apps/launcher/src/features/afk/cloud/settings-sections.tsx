@@ -79,6 +79,8 @@ export interface PartProps {
   aiPatterns: boolean;
   /** "Yanlışsa bildir" heard the text saves now: that row's content refusal is lifted. */
   clearRefusal?: (at: { place: string; index: number; field: string }) => void;
+  /** Changes when a save is taken or the edits are dropped (the address field's `revision`). */
+  revision: number;
 }
 
 /** The command rows' questions: where each row sits, and a new row's place. */
@@ -398,7 +400,7 @@ export function IdentityPart({ draft, setDraft, view, issues }: PartProps) {
 }
 
 /** "Nereye girsin?": the server it joins and the game version. */
-export function ServerPart({ draft, setDraft, view, issues }: PartProps) {
+export function ServerPart({ draft, setDraft, view, issues, revision }: PartProps) {
   const { t } = useTranslation();
   const issueText = useIssueText(view, draft);
   const general = (field: string) => issueText(issueAt(issues, "general", null, field));
@@ -424,6 +426,7 @@ export function ServerPart({ draft, setDraft, view, issues }: PartProps) {
           host={draft.host}
           port={draft.port}
           error={general("server") ?? general("port")}
+          revision={revision}
           help={
             changes.used > 0 ? (
               <span className="tabular-nums">

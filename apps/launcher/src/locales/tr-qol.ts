@@ -50,7 +50,8 @@ export const trQol = {
   install: {
     /**
      * "Yeni kurulum": the footer's stop while a modpack or a set installs (Esc no longer stops
-     * it). Stopping deletes the half-made instance: one sentence says so.
+     * it). Stopping deletes the half-made instance: one sentence says so. "Set ekle" asks the
+     * same question without the sentence (stopping there deletes no instance).
      */
     stopTitle: "Kurulum durdurulsun mu?",
     stopBody: "Yarım kalan kurulum silinir.",

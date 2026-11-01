@@ -19,7 +19,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { formatCount } from "@/lib/format";
-import { joinAddress, splitAddress } from "../address";
+import { joinAddress, shownAddress, splitAddress } from "../address";
 import { limitWords } from "../spans";
 import type { Issue, Limit } from "./model";
 
@@ -450,7 +450,8 @@ export function LinesField({
 
 /**
  * The server's address as Minecraft's server list takes it, the port after a colon when the server
- * needs one ("mc.sunucu.net:25570"). What is typed stays as typed; host and port go to the draft.
+ * needs one ("mc.sunucu.net:25570"). What is typed stays as typed until it is saved; host and port
+ * go to the draft.
  */
 export function AddressField({
   id,
@@ -462,6 +463,7 @@ export function AddressField({
   error,
   invalid,
   placeholder,
+  revision = 0,
 }: {
   id: string;
   label: string;
@@ -473,16 +475,20 @@ export function AddressField({
   error?: string | null;
   invalid?: boolean;
   placeholder?: string;
+  /**
+   * Changes when a save is taken or the edits are dropped: the field then shows the address that
+   * was kept, not the link that was pasted.
+   */
+  revision?: number;
 }) {
   const [text, setText] = useState(() => joinAddress(host, port));
-  // Follow outside changes (a reload) without fighting the typing.
+  // Follow outside changes (a reload) without fighting the typing; after a save, what was kept.
+  const shownRevision = useRef(revision);
   useEffect(() => {
-    setText((current) => {
-      const typed = splitAddress(current);
-      const same = typed.host === host.trim() && (typed.port || "0") === String(port || "0");
-      return same ? current : joinAddress(host, port);
-    });
-  }, [host, port]);
+    const stored = shownRevision.current !== revision;
+    shownRevision.current = revision;
+    setText((current) => shownAddress(current, host, port, stored));
+  }, [host, port, revision]);
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-[13.5px] font-medium text-bone-100">

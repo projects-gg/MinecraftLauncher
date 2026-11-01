@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // INV-HEADS: a host that sizes itself to the art (the site's large window) hears the art's size
-// from the view, never from its inline styles.
+// from the view, never from its inline styles; INV-SCALE: the window's own size with it.
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -31,7 +31,13 @@ describe("the art's size for its host", () => {
         onArt={onArt}
       />,
     );
-    expect(onArt).toHaveBeenLastCalledWith({ width: 256, height: 168, under: 44 });
+    // The book's art is wider than its window (176 × 168).
+    expect(onArt).toHaveBeenLastCalledWith({
+      width: 256,
+      height: 168,
+      under: 44,
+      window: { width: 176, height: 168 },
+    });
     const calls = onArt.mock.calls.length;
     // A new callback alone says nothing new; the player's own screen does.
     const next = vi.fn();
@@ -55,6 +61,11 @@ describe("the art's size for its host", () => {
       />,
     );
     const own = screenFor(null);
-    expect(next).toHaveBeenLastCalledWith({ width: own.width, height: own.height, under: 44 });
+    expect(next).toHaveBeenLastCalledWith({
+      width: own.width,
+      height: own.height,
+      under: 44,
+      window: { width: own.width, height: own.height },
+    });
   });
 });

@@ -7,10 +7,12 @@
 // With the cloud features (CAFK-FEAT) and only while the service offers them: the console's kinds
 // (colours, the chips, "Adın geçenler", search, "İndir") and the status strip; the Envanter tab
 // beside Konsol, on a solid panel (inside glass Chromium resamples the inventory's pixels). With
-// console looks (CONSOLE-COLOR, Studio's switch) lines show in the game's colours: a part's hover
-// as the game's tooltip, a part's command or link waiting in the command line's place for the
-// player's word, a suggestion filling the command line, a copy copying. Across the whole window
-// the console keeps its place and the inventory and movement stand beside it instead of in tabs.
+// console looks (CONSOLE-COLOR, Studio's switch, with the kinds or without) lines show in the
+// game's colours: a part's hover as the game's tooltip, a part's command or link waiting in the
+// command line's place for the player's word, a suggestion filling the command line, a copy
+// copying. Dialog cards (DIALOG-CARD) follow their own switch the same way. Across the whole
+// window the console keeps its place and the inventory and movement stand beside it instead of in
+// tabs.
 import { ArrowDown, ArrowUp, Key, PaperPlaneRight, X } from "@phosphor-icons/react";
 import {
   Button,
@@ -65,6 +67,7 @@ import { AfkSidePanel, PanelSizeButton, useAfkPanel } from "../panel/side-panel"
 import { SecretField } from "../secret";
 import { type CloudAccount, type CloudLiveEvent, cloudApi } from "./api";
 import {
+  consoleShows,
   type KindFilter,
   type KindLine,
   kindTone,
@@ -262,9 +265,9 @@ export function CloudConsole({
   const open = Boolean(account);
   const id = account?.id;
   const host = account?.host ?? null;
-  const kinds = Boolean(account?.features?.consoleKinds);
-  const looks = kinds && Boolean(account?.features?.consoleLooks);
-  const dialogCards = kinds && Boolean(account?.features?.dialogCards);
+  // Each by its own switch: with console kinds off a 4.2.5 client still brings the looks and the
+  // dialogs beside the classic console (afk-host 0.3.4's side events).
+  const { kinds, looks, dialogCards } = consoleShows(account?.features);
   const [inventoryGone, setInventoryGone] = useState(false);
   const [movementGone, setMovementGone] = useState(false);
   const inventory =

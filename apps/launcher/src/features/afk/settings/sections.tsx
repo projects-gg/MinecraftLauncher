@@ -29,6 +29,8 @@ export interface SectionProps {
   view: AfkSettingsView;
   /** Opens the account's folder (where the chat log and the alerts are written). */
   onOpenFolder: () => void;
+  /** Changes when a save is taken or the edits are dropped (the address field's `revision`). */
+  revision: number;
 }
 
 type Nested = {
@@ -47,7 +49,7 @@ export function usePage(setDraft: SectionProps["setDraft"]) {
   };
 }
 
-function ServerBlock({ draft, setDraft, errorFor, view }: SectionProps) {
+function ServerBlock({ draft, setDraft, errorFor, view, revision }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const p = draft.page;
@@ -77,6 +79,7 @@ function ServerBlock({ draft, setDraft, errorFor, view }: SectionProps) {
           placeholder="play.projects.gg"
           help={t("afkSettings.server.hostHelp")}
           error={errorFor("serverHost") ?? errorFor("serverPort")}
+          revision={revision}
           onChange={(host, port) =>
             setDraft((d) => ({
               ...d,

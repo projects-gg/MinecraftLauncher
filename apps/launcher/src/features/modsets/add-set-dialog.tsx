@@ -18,6 +18,7 @@ import offlineArt from "@/assets/art/empty-offline.webp";
 import { newJobId, type RunningJob, showError } from "@/features/content/jobs";
 import { JobStatus } from "@/features/content/parts";
 import { useDebounced } from "@/features/content/use-content";
+import { ConfirmDialog } from "@/features/library/parts";
 import { type Direction, stepVariants, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type InstanceDetail, type SetCard } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
@@ -55,6 +56,9 @@ export function AddSetDialog({
   const [confirming, setConfirming] = useState(false);
   const [choices, setChoices] = useState<Record<string, boolean>>({});
   const [job, setJob] = useState<RunningJob | null>(null);
+  // The footer's × of a running install asks first, as in "Yeni kurulum" (QOL-L 17).
+  const [askStop, setAskStop] = useState(false);
+  const running = job !== null;
 
   useEffect(() => {
     if (!open) {
@@ -63,6 +67,11 @@ export function AddSetDialog({
       setChoices({});
     }
   }, [open]);
+  // An install that ended while the question was open takes the question with it (the next one
+  // does not open with it).
+  useEffect(() => {
+    if (!running) setAskStop(false);
+  }, [running]);
 
   const sets = catalog.data?.sets ?? [];
   const fitOf = (set: SetCard) => fitFor(set, instance.mcVersion, instance.loader);
@@ -200,7 +209,7 @@ export function AddSetDialog({
     sets.every((set) => fitOf(set).kind !== "fits" || addedIds.has(set.id)) &&
     sets.some((set) => fitOf(set).kind !== "fits");
   const footer = job ? (
-    <JobStatus job={job} onCancel={cancelJob} className="w-full" detailed />
+    <JobStatus job={job} onCancel={() => setAskStop(true)} className="w-full" detailed />
   ) : noneFits && !selected ? (
     <>
       <p className="mr-auto min-w-0 text-[12.5px] text-ash-400">
@@ -264,37 +273,48 @@ export function AddSetDialog({
   );
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          cancelJob();
-          onClose();
-        }
-      }}
-      title={t("modSets.add.title")}
-      closeLabel={t("common.close")}
-      width={680}
-      morph={prefs.layout}
-      dismissOnOutsideClick={false}
-      footer={footer}
-      // The sets arrive just as the panel has risen in, and it then grew a second time to their
-      // height (286 → 460 px at 1024 × 640): it opens at the list's height, so the skeleton turns
-      // into the cards in place and the entrance is the only movement (POLISH6).
-      className="min-h-[min(460px,80vh)]"
-    >
-      <AnimatePresence initial={false} mode="popLayout" custom={direction}>
-        <motion.div
-          key={step}
-          custom={direction}
-          variants={stepVariants(prefs.reduce)}
-          initial="enter"
-          animate="center"
-          exit="exit"
-        >
-          {step === "confirm" ? confirm : list}
-        </motion.div>
-      </AnimatePresence>
-    </Dialog>
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          // A running install goes on: Esc and the close button no longer stop it in silence (the
+          // dialog is not dismissible meanwhile); only the footer's ×, after one question.
+          if (!next && !running) onClose();
+        }}
+        title={t("modSets.add.title")}
+        closeLabel={t("common.close")}
+        width={680}
+        morph={prefs.layout}
+        dismissOnOutsideClick={false}
+        dismissible={!running}
+        footer={footer}
+        // The sets arrive just as the panel has risen in, and it then grew a second time to their
+        // height (286 → 460 px at 1024 × 640): it opens at the list's height, so the skeleton turns
+        // into the cards in place and the entrance is the only movement (POLISH6).
+        className="min-h-[min(460px,80vh)]"
+      >
+        <AnimatePresence initial={false} mode="popLayout" custom={direction}>
+          <motion.div
+            key={step}
+            custom={direction}
+            variants={stepVariants(prefs.reduce)}
+            initial="enter"
+            animate="center"
+            exit="exit"
+          >
+            {step === "confirm" ? confirm : list}
+          </motion.div>
+        </AnimatePresence>
+      </Dialog>
+      {/* The same question without "Yeni kurulum"'s sentence ("Yarım kalan kurulum silinir."):
+          stopping here deletes no instance, the set is just not added. */}
+      <ConfirmDialog
+        open={askStop && running}
+        title={t("qol.install.stopTitle")}
+        confirmLabel={t("qol.install.stop")}
+        onConfirm={cancelJob}
+        onClose={() => setAskStop(false)}
+      />
+    </>
   );
 }
