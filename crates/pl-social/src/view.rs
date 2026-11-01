@@ -1284,6 +1284,8 @@ pub enum SocialNotice {
     /// görsün?".
     SignedIn {
         restore: Option<SettingsMeta>,
+        /// `askName` on the wire (the enum's `rename_all` names the variants only).
+        #[serde(rename = "askName")]
         ask_name: bool,
     },
     /// SOC-ID: a way into the account was linked (`linked`) or removed: "Microsoft bağlandı.".
