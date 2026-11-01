@@ -3,6 +3,8 @@ import { Button, Dialog, Skeleton, SwapLabel, toast } from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { SettingsUndo } from "@/features/import/import-job";
+import { SettingsUndoLine, useSettingsUndo } from "@/features/import/import-status";
 import { api, type LegacyImportReport } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 
@@ -60,6 +62,9 @@ export function MigrationDialog({
   const [gameData, setGameData] = useState(true);
   const [worlds, setWorlds] = useState(true);
   const [report, setReport] = useState<LegacyImportReport | null>(null);
+  // The game settings it brought can be taken back from the summary (IMPORT-SET).
+  const [settingsUndo, setSettingsUndo] = useState<SettingsUndo>("idle");
+  const undoSettings = useSettingsUndo(report?.settings, settingsUndo, setSettingsUndo);
 
   const worldsFit = !scan?.freeBytes || scan.worldsBytes < scan.freeBytes - 2 * 1024 ** 3;
   useEffect(() => {
@@ -71,6 +76,7 @@ export function MigrationDialog({
       api.legacyImport({ premium, nickname, afk, gameData, worlds: worlds && gameData }),
     onSuccess: (result) => {
       setReport(result);
+      setSettingsUndo("idle");
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
@@ -119,6 +125,16 @@ export function MigrationDialog({
     >
       {report ? (
         <ul className="space-y-2.5 pt-1 text-[14px] text-bone-100">
+          {report.settings ? (
+            <SettingsUndoLine
+              icon={<CheckCircle size={18} weight="fill" className="text-jade-400" aria-hidden />}
+              state={settingsUndo}
+              onUndo={undoSettings}
+              className="text-[14px]"
+            >
+              {t("import.undo.v1")}
+            </SettingsUndoLine>
+          ) : null}
           {[
             report.premiumImported ? t("migrate.donePremium") : null,
             report.nickname ? t("migrate.doneNickname", { name: report.nickname }) : null,

@@ -33,5 +33,7 @@ rusqlite = { version = "0.40.2", default-features = false, features = ["bundled"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# The first launch's options (an imported file must not get a preset picked before it).
+pl-lang = { workspace = true }
 # Mod jars for the compatibility tests.
 zip = { workspace = true }

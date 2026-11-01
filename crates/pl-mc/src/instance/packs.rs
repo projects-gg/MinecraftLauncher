@@ -173,28 +173,24 @@ fn properties_value(text: &str) -> String {
     out
 }
 
-/// `content` (Iris's settings, `None` when the file does not exist) choosing `file_name`, when
-/// it chooses no shader pack yet. `None`: a shader is already chosen.
-fn choose_shader_in(content: Option<&[u8]>, file_name: &str) -> Option<Vec<u8>> {
-    let content = content.unwrap_or_default();
-    let lines = split_lines(content);
-    let property = |text: &[u8]| -> Option<(String, String)> {
-        let text = std::str::from_utf8(text).ok()?.trim_start();
-        if text.starts_with('#') || text.starts_with('!') {
-            return None;
-        }
-        let split = text.find(['=', ':'])?;
-        Some((
-            text[..split].trim().to_owned(),
-            text[split + 1..].trim().to_owned(),
-        ))
-    };
-    let chosen = lines.iter().any(|(text, _)| {
-        property(text).is_some_and(|(key, value)| key == "shaderPack" && !value.is_empty())
-    });
-    if chosen {
+/// One `key=value` (or `key:value`) line of Iris's settings, the value still escaped; comments
+/// give nothing.
+fn property(text: &[u8]) -> Option<(String, String)> {
+    let text = std::str::from_utf8(text).ok()?.trim_start();
+    if text.starts_with('#') || text.starts_with('!') {
         return None;
     }
+    let split = text.find(['=', ':'])?;
+    Some((
+        text[..split].trim().to_owned(),
+        text[split + 1..].trim().to_owned(),
+    ))
+}
+
+/// `content` (Iris's settings) with its `shaderPack` and `enableShaders` lines taken out and the
+/// choice of `file_name`, on or off, written at the end; every other line stays as it was.
+fn set_choice_in(content: &[u8], file_name: &str, on: bool) -> Vec<u8> {
+    let lines = split_lines(content);
     let crlf = lines.iter().any(|(_, ending)| *ending == b"\r\n");
     let line_end: &str = if crlf { "\r\n" } else { "\n" };
     let mut out = Vec::with_capacity(content.len() + 64);
@@ -211,12 +207,34 @@ fn choose_shader_in(content: Option<&[u8]>, file_name: &str) -> Option<Vec<u8>> 
     }
     out.extend_from_slice(
         format!(
-            "enableShaders=true{line_end}shaderPack={}{line_end}",
+            "enableShaders={on}{line_end}shaderPack={}{line_end}",
             properties_value(file_name)
         )
         .as_bytes(),
     );
-    Some(out)
+    out
+}
+
+/// `content` (Iris's settings, `None` when the file does not exist) choosing `file_name`, when
+/// it chooses no shader pack yet. `None`: a shader is already chosen.
+fn choose_shader_in(content: Option<&[u8]>, file_name: &str) -> Option<Vec<u8>> {
+    let content = content.unwrap_or_default();
+    let chosen = split_lines(content).iter().any(|(text, _)| {
+        property(text).is_some_and(|(key, value)| key == "shaderPack" && !value.is_empty())
+    });
+    (!chosen).then(|| set_choice_in(content, file_name, true))
+}
+
+/// `content` (Iris's settings, `None` when the file does not exist) choosing the shader pack
+/// `file_name` (its name in `shaderpacks/`), drawn or not (`on`): the player's own choice, brought
+/// over by an import. Every other line stays. `None` when the file already says exactly that.
+pub fn with_shader_choice(content: Option<&[u8]>, file_name: &str, on: bool) -> Option<Vec<u8>> {
+    let content = content.unwrap_or_default();
+    let (pack, drawn) = super::shaders::read_shader_choice(content);
+    if pack.as_deref() == Some(file_name) && drawn == on {
+        return None;
+    }
+    Some(set_choice_in(content, file_name, on))
 }
 
 /// Chooses the shader pack `file_name` in Iris (`config/iris.properties`) when no shader pack is
@@ -332,6 +350,29 @@ mod tests {
         assert_eq!(
             properties_value("Şık\\paket.zip"),
             "\\u015e\\u0131k\\\\paket.zip"
+        );
+    }
+
+    #[test]
+    fn an_imported_choice_takes_the_place_of_any_other() {
+        // A set's shader is replaced by the player's own, drawn or not; the rest stays.
+        let iris = b"#Iris settings\r\nenableShaders=true\r\nmaxShadowRenderDistance=32\r\nshaderPack=Soft.zip\r\n";
+        let out = with_shader_choice(Some(iris), "BSL_v8.2.zip", false).unwrap();
+        assert_eq!(
+            text(out),
+            "#Iris settings\r\nmaxShadowRenderDistance=32\r\nenableShaders=false\r\nshaderPack=BSL_v8.2.zip\r\n"
+        );
+        assert_eq!(
+            text(with_shader_choice(None, "Şık.zip", true).unwrap()),
+            "enableShaders=true\nshaderPack=\\u015e\\u0131k.zip\n"
+        );
+        // Already the same choice: nothing to write (a missing enableShaders is on).
+        assert_eq!(
+            with_shader_choice(Some(b"shaderPack=BSL_v8.2.zip\n"), "BSL_v8.2.zip", true),
+            None
+        );
+        assert!(
+            with_shader_choice(Some(b"shaderPack=BSL_v8.2.zip\n"), "BSL_v8.2.zip", false).is_some()
         );
     }
 

@@ -1306,6 +1306,7 @@ export const mockApi: LauncherApi = {
       instanceId: "projects",
       copiedFiles: 214,
       linkedFiles: 3912,
+      settings: { instanceId: "projects", backup: "20261101-120000" },
       notes: [],
     };
   },

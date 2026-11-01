@@ -10,7 +10,9 @@ import {
   requestOf,
   rowsKey,
   rowsOf,
+  SETTINGS_KEY,
   selectedBytes,
+  settingsRowOf,
   ticksOf,
 } from "./model";
 
@@ -96,12 +98,34 @@ export function useImportPicker(scan: ImportScanView | undefined) {
   const [choices, setChoices] = useState<ReadonlyMap<RowKey, boolean>>(() => new Map());
   const ticks = useMemo(() => ticksOf(rows, defaults, choices), [rows, defaults, choices]);
 
+  // The game settings: one row, from one place (IMPORT-SET).
+  const settingsRow = useMemo(() => (scan ? settingsRowOf(scan) : null), [scan]);
+  const [settingsPick, setSettingsPick] = useState<string>();
+  const settingsChoice =
+    settingsRow?.candidates.find((c) => c.key === settingsPick) ??
+    settingsRow?.candidates.find((c) => c.key === settingsRow.first);
+  const settingsOn =
+    settingsRow !== null && (choices.get(SETTINGS_KEY) ?? settingsRow.ticked) === true;
+
   const total = selectedBytes(rows, ticks);
-  const request = useMemo(() => requestOf(rows, ticks), [rows, ticks]);
+  const request = useMemo(
+    () => requestOf(rows, ticks, settingsOn ? settingsChoice : undefined),
+    [rows, ticks, settingsOn, settingsChoice],
+  );
   return {
     rows,
     ticks,
     toggle: (key: RowKey, on: boolean) => setChoices((current) => new Map(current).set(key, on)),
+    /** The game settings' row: where they come from and whether they come. */
+    settings:
+      settingsRow && settingsChoice
+        ? { row: settingsRow, choice: settingsChoice, on: settingsOn }
+        : null,
+    /** Another place for the game settings: picking one means bringing them. */
+    pickSettings: (key: string) => {
+      setSettingsPick(key);
+      setChoices((current) => new Map(current).set(SETTINGS_KEY, true));
+    },
     total,
     /** A ticked row is still being measured. */
     pending: measuring(rows, ticks),

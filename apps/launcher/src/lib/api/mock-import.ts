@@ -1,8 +1,9 @@
 // Browser preview of `api.importer`: a TLauncher `.minecraft`, two CurseForge instances and a
 // Modrinth profile, measured with a short delay and copied with live-looking progress.
 // `?import=` (or localStorage `pl.mock.import`): `none` (no other launcher), `one` (TLauncher
-// only), `big` (worlds too big for the disk), `kept` (Projects has game settings of its own),
-// `fail` (some items do not come over).
+// only), `big` (worlds too big for the disk), `again` (an earlier import brought Projects'
+// settings from TLauncher), `fail` (some items do not come over). The game settings' "Geri al"
+// works; `?import=gone` makes it find nothing to take back.
 import type {
   ImportApi,
   ImportProfile,
@@ -50,6 +51,7 @@ function profile(
     withoutOptifine: false,
     ownFolder: false,
     modFiles: 0,
+    hasOptions: false,
     lastUsedMs: null,
     importedAs: null,
     ...extra,
@@ -96,7 +98,7 @@ function sources(kind: string): ImportSource[] {
     offlineName: "EjderAvcisi",
     lastUsedMs: now - 2 * day,
   };
-  if (kind === "one" || kind === "big" || kind === "kept") return [tlauncher];
+  if (kind === "one" || kind === "big" || kind === "again") return [tlauncher];
   return [
     tlauncher,
     {
@@ -108,6 +110,7 @@ function sources(kind: string): ImportSource[] {
         profile("instance:All the Mods 9", "All the Mods 9", "1.20.1", "forge", {
           loaderVersion: "47.2.0",
           ownFolder: true,
+          hasOptions: true,
           modFiles: 402,
           lastUsedMs: now - 5 * day,
         }),
@@ -130,6 +133,7 @@ function sources(kind: string): ImportSource[] {
         profile("instance:Fabulously Optimized", "Fabulously Optimized", "1.21.1", "fabric", {
           loaderVersion: "0.16.5",
           ownFolder: true,
+          hasOptions: true,
           modFiles: 92,
           lastUsedMs: now - 14 * day,
         }),
@@ -178,7 +182,7 @@ export function createMockImport(): ImportApi {
         sources: sources(kind),
         freeBytes: kind === "big" ? 21.4 * GB : 118.2 * GB,
         reserveBytes: 2 * GB,
-        projectsHasOptions: kind === "kept",
+        projectsSettingsFrom: kind === "again" ? { sourceId: "minecraft", profileId: null } : null,
         // LIB1: `?library=empty` / `noOfficial` (mock.ts) deleted the Projects instance.
         projectsRemoved: ["empty", "noOfficial"].includes(
           new URLSearchParams(window.location.search).get("library") ?? "",
@@ -231,6 +235,9 @@ export function createMockImport(): ImportApi {
       }
       send("finishing", items.length);
       await delay(300);
+      const settingsCame = outcomes.some(
+        (o) => o.item.type === "shared" && o.item.kind === "options" && o.status === "done",
+      );
       return {
         outcomes,
         cancelled,
@@ -240,10 +247,15 @@ export function createMockImport(): ImportApi {
           )
           .map((o) => ({ id: o.label.toLowerCase().replace(/\W+/g, "-"), name: o.label })),
         officialId: "projects",
+        settings: settingsCame ? { instanceId: "projects", backup: "20261101-120000" } : null,
       };
     },
     async cancel() {
       cancelled = true;
+    },
+    async undoSettings() {
+      await delay(450);
+      return scenario() !== "gone";
     },
   };
 }
@@ -273,8 +285,20 @@ const projects = (count: number) => [{ instanceId: "projects", instanceName: "Pr
 
 function plan(request: ImportRequest, all: ImportSource[]): PlannedItem[] {
   const items: PlannedItem[] = [];
-  const order: ImportShared[] = ["options", "servers"];
+  const order: ImportShared[] = ["servers"];
   const later: ImportShared[] = ["worlds", "resourcePacks", "shaderPacks", "screenshots"];
+  // The game settings first, from one place: a launcher's shared folder or one of its instances.
+  for (const req of request.sources) {
+    const source = all.find((s) => s.id === req.sourceId);
+    if (!source || !req.shared?.includes("options")) continue;
+    const from = req.settingsFrom
+      ? source.profiles.find((p) => p.id === req.settingsFrom)?.name
+      : undefined;
+    const outcome = outcomeFor(source, { type: "shared", kind: "options" }, from ?? "");
+    outcome.copied = 3;
+    outcome.destinations = projects(1);
+    items.push({ bytes: 0, outcome });
+  }
   const shared = (kinds: ImportShared[]) => {
     for (const req of request.sources) {
       const source = all.find((s) => s.id === req.sourceId);
@@ -309,7 +333,7 @@ function plan(request: ImportRequest, all: ImportSource[]): PlannedItem[] {
           ];
         }
         items.push({
-          bytes: kind === "options" || kind === "servers" ? 0 : (sizes?.[kind] ?? 0),
+          bytes: kind === "servers" || kind === "options" ? 0 : (sizes?.[kind] ?? 0),
           current: kind === "worlds" ? WORLD_NAMES : undefined,
           outcome,
         });

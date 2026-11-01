@@ -378,6 +378,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::import::import_scan,
             commands::import::import_measure,
             commands::import::import_start,
+            commands::import::import_undo_settings,
             commands::updates::update_check,
             commands::updates::update_download,
             commands::updates::update_apply,

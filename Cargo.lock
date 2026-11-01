@@ -4357,6 +4357,7 @@ dependencies = [
  "flate2",
  "fs4",
  "jiff",
+ "pl-lang",
  "pl-mc",
  "regex",
  "rusqlite",
