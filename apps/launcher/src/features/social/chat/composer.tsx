@@ -613,7 +613,14 @@ export function Composer({
                   : t("chat.composer.placeholder")
           }
           maxLength={4_000}
-          className="min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3.5 text-[13.5px] leading-5 text-bone-50 outline-none placeholder:text-ash-500 [scrollbar-width:thin]"
+          className={cn(
+            "min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3.5 text-[13.5px] leading-5 text-bone-50 outline-none [scrollbar-width:thin]",
+            // The slow mode's hint and wait are information, not a decorative hint: ash-400 reads
+            // ~5.9:1 on the field (ash-500 measured 3.9:1, design.md §2).
+            wait > 0 || (slow > 0 && !editing)
+              ? "placeholder:text-ash-400"
+              : "placeholder:text-ash-500",
+          )}
           style={{ height: LINE + PAD * 2, zoom: writingZoom }}
         />
         <span className="mb-[3px] flex">

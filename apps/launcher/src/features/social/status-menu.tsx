@@ -145,7 +145,7 @@ export function MeCard({ me }: { me: SocialMe }) {
                             </span>
                             <span className="flex-1">{t(`social.status.${option}`)}</span>
                             <DropdownMenu.ItemIndicator>
-                              <Check size={15} weight="bold" className="text-gold-300" />
+                              <Check size={15} weight="bold" className="text-bone-100" />
                             </DropdownMenu.ItemIndicator>
                           </DropdownMenu.RadioItem>
                         ))}
@@ -188,7 +188,7 @@ export function MeCard({ me }: { me: SocialMe }) {
                                     <span className="flex w-5" aria-hidden />
                                     <span className="flex-1">{t("team6.noTag")}</span>
                                     <DropdownMenu.ItemIndicator>
-                                      <Check size={15} weight="bold" className="text-gold-300" />
+                                      <Check size={15} weight="bold" className="text-bone-100" />
                                     </DropdownMenu.ItemIndicator>
                                   </DropdownMenu.RadioItem>
                                   {choices.map(({ crew, main, blocked }) => (
@@ -224,7 +224,7 @@ export function MeCard({ me }: { me: SocialMe }) {
                                           <Check
                                             size={15}
                                             weight="bold"
-                                            className="text-gold-300"
+                                            className="text-bone-100"
                                           />
                                         </DropdownMenu.ItemIndicator>
                                       </span>

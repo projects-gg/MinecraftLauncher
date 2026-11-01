@@ -287,9 +287,7 @@ function FriendCard({
             ) : (
               <PresenceText friend={friend} t={t} joinable={joinable} />
             )}
-            {friend.dnd ? (
-              <span className="text-gold-300"> ({t("social.presence.dnd")})</span>
-            ) : null}
+            {friend.dnd ? <span> ({t("social.presence.dnd")})</span> : null}
           </p>
         </div>
       </div>
