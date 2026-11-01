@@ -16,7 +16,7 @@
 //! changes, and the crews' "Ece ekibe katıldı" lines (`note`). Friends, messages and toasts name a
 //! crew by its id.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use pl_lang::Lang;
 use pl_social::{
@@ -1376,17 +1376,37 @@ pub struct ChatOutcome {
     pub arrived: bool,
 }
 
+/// How many of the panel's messages told as not sent are remembered for a late answer.
+const LATE_MAX: usize = 32;
+
 /// The messages the panel sent: their keys in the history, mapped to the panel's own ids (`cid`),
 /// and the keys of those that did not go and are being dropped from the history.
 #[derive(Debug, Default)]
 pub struct Sends {
     by_key: HashMap<String, String>,
     dropped: HashSet<String>,
+    /// The panel's messages told as not sent (key, cid), newest last, at most [`LATE_MAX`]. The
+    /// service may still take one after the launcher gave up on it (its answer came after the
+    /// request's time): then the panel hears `sent` for its line, not a second copy (GAME-BATCH).
+    late: VecDeque<(String, String)>,
 }
 
 impl Sends {
     pub fn insert(&mut self, key: String, cid: String) {
         self.by_key.insert(key, cid);
+    }
+
+    fn remember_failed(&mut self, key: String, cid: String) {
+        self.late.retain(|(k, _)| *k != key);
+        if self.late.len() >= LATE_MAX {
+            self.late.pop_front();
+        }
+        self.late.push_back((key, cid));
+    }
+
+    fn take_failed(&mut self, key: &str) -> Option<String> {
+        let at = self.late.iter().position(|(k, _)| k == key)?;
+        self.late.remove(at).map(|(_, cid)| cid)
     }
 
     /// Messages still on their way.
@@ -1466,6 +1486,7 @@ pub fn chat_frames(
                 MessageState::Failed => {
                     sends.by_key.remove(&message.key);
                     sends.dropped.insert(message.key.clone());
+                    sends.remember_failed(message.key.clone(), cid.clone());
                     let reason = failure_of(message.failure, listener);
                     out.frames.push(ToGame::SendFailed {
                         cid,
@@ -1477,6 +1498,25 @@ pub fn chat_frames(
                     });
                     out.discard.push(message.key.clone());
                 }
+            }
+            continue;
+        }
+        // A message of the panel's told as not sent went after all (the service answered after
+        // the launcher gave up on it): its line turns sent instead of a second copy showing up
+        // under it, and "Tekrar dene" no longer offers to send it twice.
+        if message.state == MessageState::Sent
+            && message.mine
+            && let Some(cid) = sends.take_failed(&message.key)
+        {
+            out.frames.push(ToGame::Sent {
+                cid,
+                id: message.key.clone(),
+                sid: message.id,
+            });
+            if listener.chat2 {
+                out.frames.push(ToGame::Msg(Box::new(msg_view(
+                    conv, message, scene, listener,
+                ))));
             }
             continue;
         }
@@ -2767,6 +2807,110 @@ pub(crate) mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn a_panel_message_told_as_not_sent_that_went_after_all_settles_its_line() {
+        let scene = Scene::from_view(&chat2_view(), &NotifyPrefs::default(), NOW);
+        let mut sends = Sends::default();
+        let change = |upsert: Vec<ChatMessageView>, remove: Vec<String>| ChatChangeView {
+            conv: "d:f-ayse:me".into(),
+            upsert,
+            remove,
+            reset: false,
+        };
+        sends.insert("n:late".into(), "cid-9".into());
+        // The launcher stopped waiting for the service's answer: the panel hears why, the history
+        // drops it, and its removal says nothing more to the panel.
+        let mut failed = message("n:late", "me", true, MessageState::Failed);
+        failed.failure = Some(SocialFailure::Connection);
+        let out = chat_frames(&change(vec![failed], Vec::new()), &scene, &mut sends, CHAT2);
+        assert_eq!(
+            out.frames,
+            [ToGame::SendFailed {
+                cid: "cid-9".into(),
+                reason: SendFailure::Offline,
+                rule: None,
+            }]
+        );
+        assert_eq!(out.discard, ["n:late"]);
+        let out = chat_frames(
+            &change(Vec::new(), vec!["n:late".into()]),
+            &scene,
+            &mut sends,
+            CHAT2,
+        );
+        assert!(out.frames.is_empty());
+        // The service took it after all: the panel's line turns sent (no second copy under it).
+        let mut went = message("n:late", "me", true, MessageState::Sent);
+        went.id = Some(77);
+        let out = chat_frames(
+            &change(vec![went.clone()], Vec::new()),
+            &scene,
+            &mut sends,
+            CHAT2,
+        );
+        assert_eq!(
+            out.frames[0],
+            ToGame::Sent {
+                cid: "cid-9".into(),
+                id: "n:late".into(),
+                sid: Some(77)
+            }
+        );
+        assert!(matches!(&out.frames[1..], [ToGame::Msg(m)] if m.id == "n:late"));
+        assert!(!out.arrived);
+        // Once: the same message again is only the message.
+        let out = chat_frames(&change(vec![went], Vec::new()), &scene, &mut sends, CHAT2);
+        assert!(matches!(&out.frames[..], [ToGame::Msg(m)] if m.id == "n:late"));
+        // An older mod hears `sent` alone; another device's message of the player's stays a message.
+        sends.insert("n:old".into(), "cid-10".into());
+        let failed = message("n:old", "me", true, MessageState::Failed);
+        chat_frames(
+            &change(vec![failed], Vec::new()),
+            &scene,
+            &mut sends,
+            Listener::default(),
+        );
+        let mut went = message("n:old", "me", true, MessageState::Sent);
+        went.id = Some(78);
+        let mut elsewhere = message("n:other", "me", true, MessageState::Sent);
+        elsewhere.id = Some(79);
+        let out = chat_frames(
+            &change(vec![went, elsewhere], Vec::new()),
+            &scene,
+            &mut sends,
+            Listener::default(),
+        );
+        assert_eq!(out.frames.len(), 2);
+        assert_eq!(
+            out.frames[0],
+            ToGame::Sent {
+                cid: "cid-10".into(),
+                id: "n:old".into(),
+                sid: Some(78)
+            }
+        );
+        assert!(matches!(&out.frames[1], ToGame::Msg(m) if m.id == "n:other"));
+    }
+
+    #[test]
+    fn the_late_answers_kept_are_bounded() {
+        let mut sends = Sends::default();
+        for n in 0..LATE_MAX + 5 {
+            sends.remember_failed(format!("n:{n}"), format!("cid-{n}"));
+        }
+        assert_eq!(sends.late.len(), LATE_MAX);
+        assert_eq!(sends.take_failed("n:0"), None);
+        assert_eq!(
+            sends.take_failed(&format!("n:{}", LATE_MAX + 4)).as_deref(),
+            Some(format!("cid-{}", LATE_MAX + 4).as_str())
+        );
+        // The same key again counts once.
+        sends.remember_failed("n:x".into(), "cid-a".into());
+        sends.remember_failed("n:x".into(), "cid-b".into());
+        assert_eq!(sends.take_failed("n:x").as_deref(), Some("cid-b"));
+        assert_eq!(sends.take_failed("n:x"), None);
     }
 
     #[test]
