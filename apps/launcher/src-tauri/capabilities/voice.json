@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "voice",
+  "description": "The hidden voice chat window: events with the launcher, nothing else",
+  "windows": ["voice"],
+  "permissions": ["core:event:default"]
+}

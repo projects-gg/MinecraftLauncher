@@ -14,6 +14,7 @@ mod shot_copy;
 #[cfg(target_os = "macos")]
 mod single_instance_macos;
 mod state;
+mod voice;
 mod webview_rest;
 
 use tauri::Manager;
@@ -60,6 +61,8 @@ pub fn run() {
                         StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED,
                     )
                     .with_filename(shell::window_state_file())
+                    // The voice window is never shown: nothing of it to keep.
+                    .with_denylist(&[pl_voice::VOICE_WINDOW])
                     .build(),
             )
             .plugin(tauri_plugin_updater::Builder::new().build())
@@ -139,6 +142,8 @@ pub fn run() {
             commands::java::start_java_updates(app.handle());
             // The chosen instance's files, downloaded gently while the launcher is idle (prepare).
             prepare::start(app.handle());
+            // Voice chat's hidden window: for now VOICE-0's probe, in debug builds asked for it.
+            voice::install(app);
             // Started at login: stay in the tray until the user opens the launcher (not after an
             // update the player installed from the open window).
             if !commands::updates::start_hidden() {

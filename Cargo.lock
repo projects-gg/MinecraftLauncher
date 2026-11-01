@@ -4515,6 +4515,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pl-voice"
+version = "2.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "pl-worlds"
 version = "2.0.0"
 dependencies = [
@@ -4776,6 +4785,7 @@ dependencies = [
  "pl-net",
  "pl-overlay",
  "pl-social",
+ "pl-voice",
  "pl-worlds",
  "semver",
  "serde",

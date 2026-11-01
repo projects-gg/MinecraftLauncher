@@ -1,0 +1,13 @@
+[package]
+name = "pl-voice"
+description = "Voice chat's rules on the launcher side: the voice window's microphone, policy and life, volumes, push-to-talk's key, and VOICE-0's measurement run"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
