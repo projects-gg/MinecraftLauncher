@@ -13,6 +13,7 @@ import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import gg.projects.overlay.ui.draw.PixelSprites;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -29,8 +30,9 @@ import net.minecraft.util.FormattedCharSequence;
  * (HOST1) has the grass block for its face and "Katılmak için F7 tuşuna bas"; the host's own notes ("Dünyan
  * arkadaşlarına açık", "Mert dünyana katıldı") are the overlay's, under the player's "Diğer bildirimler".
  *
- * <p>The hint says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked it), and where the
- * key may need Fn a second line says so ("Olmazsa [Fn] ile birlikte bas", {@link gg.projects.overlay.keys.FnTip}).
+ * <p>The hint says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked it), and where
+ * the key may need Fn a second line says so ("Olmazsa [Fn] + [F7] tuşlarına bas", {@link
+ * gg.projects.overlay.keys.FnTip}).
  */
 public final class ToastCard {
     public static final int WIDTH = Frames.TOAST_WIDTH;
@@ -77,7 +79,7 @@ public final class ToastCard {
     final StickerSet.Sticker sticker;
     /** The hint lines under the text, top first ("Açmak için [F7] tuşuna bas", then maybe the Fn line); maybe none. */
     final List<Hint> hints;
-    /** The hints end with "Olmazsa [Fn] ile birlikte bas" (F7-OPEN). */
+    /** The hints end with "Olmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN). */
     final boolean fnTip;
     /** The face is the world's grass block (a world invite, the world opening) rather than a disc. */
     final boolean sprite;
@@ -131,78 +133,131 @@ public final class ToastCard {
     }
 
     /**
-     * The width a key's name may take on its cap in a hint line whose words around it are this wide (0: none on that
-     * side), so the line stays inside the card: at most {@link #MAX_KEY_NAME}, never under {@link #MIN_KEY_NAME}.
+     * The width a key's name may take on its cap in a hint line whose other parts take {@code others} (its words, the
+     * other caps, the spaces between the parts and this cap's padding), so the line stays inside the card: at most
+     * {@link #MAX_KEY_NAME}, never under {@link #MIN_KEY_NAME}.
      */
-    static int keyRoom(int lineWidth, int beforeWidth, int afterWidth) {
-        int room = lineWidth - 2 * KEY_PAD - (beforeWidth > 0 ? beforeWidth + HINT_SPACE : 0)
-            - (afterWidth > 0 ? afterWidth + HINT_SPACE : 0);
-        return Math.max(MIN_KEY_NAME, Math.min(MAX_KEY_NAME, room));
+    static int keyRoom(int lineWidth, int others) {
+        return Math.max(MIN_KEY_NAME, Math.min(MAX_KEY_NAME, lineWidth - others));
     }
 
     /**
-     * The words of a hint sentence formatted with the NUL character where the key goes: {before, after}, each stripped
-     * ({@code after} empty when the sentence has no key).
+     * The words of a hint sentence formatted with the NUL character where each key goes, each stripped: one more than
+     * the keys (an empty one where a key starts or ends the sentence).
      */
-    static String[] around(String formatted) {
-        int at = formatted.indexOf('\u0000');
-        return at < 0 ? new String[] {formatted.strip(), ""}
-            : new String[] {formatted.substring(0, at).strip(), formatted.substring(at + 1).strip()};
+    static List<String> split(String formatted) {
+        List<String> words = new ArrayList<>(3);
+        int from = 0;
+        for (int at = formatted.indexOf('\u0000'); at >= 0; at = formatted.indexOf('\u0000', from)) {
+            words.add(formatted.substring(from, at).strip());
+            from = at + 1;
+        }
+        words.add(formatted.substring(from).strip());
+        return words;
     }
 
-    /** One hint line, laid out once: words around a key cap ("Açmak için [F7] tuşuna bas"), or words alone. */
+    /**
+     * How wide a hint line is: its words' widths in order (0 for an empty one) with a cap after each but the last
+     * ({@code caps}, padding included), and {@link #HINT_SPACE} between the parts that are there.
+     */
+    static int lineWidth(int[] words, int[] caps) {
+        int width = 0;
+        int parts = 0;
+        for (int i = 0; i < Math.max(words.length, caps.length); i++) {
+            if (i < words.length && words[i] > 0) {
+                width += words[i];
+                parts++;
+            }
+            if (i < caps.length) {
+                width += caps[i];
+                parts++;
+            }
+        }
+        return width + Math.max(0, parts - 1) * HINT_SPACE;
+    }
+
+    /**
+     * One hint line, laid out once: words with key caps among them ("Açmak için [F7] tuşuna bas", "Olmazsa [Fn] + [F7]
+     * tuşlarına bas"), or words alone.
+     */
     static final class Hint {
-        final String before;
-        final String key;
-        final String after;
-        final int beforeWidth;
-        final int keyWidth;
-        private final FormattedCharSequence beforeLine;
-        private final FormattedCharSequence keyLine;
-        private final FormattedCharSequence afterLine;
+        /** The words, one more than the keys: before the first key, between two, after the last; null where none. */
+        private final FormattedCharSequence[] words;
+        private final int[] wordWidths;
+        private final FormattedCharSequence[] keys;
+        /** Each cap's width, its padding included. */
+        private final int[] capWidths;
 
-        private Hint(String before, String key, String after) {
+        private Hint(List<String> words, List<String> keys) {
             Font small = Fonts.small();
-            this.before = before;
-            this.key = key;
-            this.after = after;
-            this.beforeWidth = before.isEmpty() ? 0 : small.width(before);
-            this.keyWidth = key == null ? 0 : small.width(key) + 2 * KEY_PAD;
-            this.beforeLine = line(before);
-            this.keyLine = line(key);
-            this.afterLine = line(after);
+            this.words = new FormattedCharSequence[words.size()];
+            this.wordWidths = new int[words.size()];
+            for (int i = 0; i < words.size(); i++) {
+                this.words[i] = line(words.get(i));
+                this.wordWidths[i] = words.get(i).isEmpty() ? 0 : small.width(words.get(i));
+            }
+            this.keys = new FormattedCharSequence[keys.size()];
+            this.capWidths = new int[keys.size()];
+            for (int i = 0; i < keys.size(); i++) {
+                this.keys[i] = line(keys.get(i));
+                this.capWidths[i] = small.width(keys.get(i)) + 2 * KEY_PAD;
+            }
         }
 
-        /** The sentence {@code template} (its words' key) with {@code keyName} on a cap, cut to the room it leaves. */
-        static Hint of(String template, String keyName) {
-            String[] words = around(Texts.str(template, "\u0000"));
+        /**
+         * The sentence {@code template} (its words' key) with each of {@code keyNames} on a cap in turn, each name cut
+         * to the room the rest of the line leaves it.
+         */
+        static Hint of(String template, String... keyNames) {
+            Object[] marks = new Object[keyNames.length];
+            Arrays.fill(marks, "\u0000");
+            List<String> words = split(Texts.str(template, marks));
+            while (words.size() < keyNames.length + 1) {
+                // A sentence without a slot for every key: the caps follow its words.
+                words.add("");
+            }
             Font small = Fonts.small();
-            int room = keyRoom(TEXT_W, words[0].isEmpty() ? 0 : small.width(words[0]),
-                words[1].isEmpty() ? 0 : small.width(words[1]));
-            return new Hint(words[0], Texts.fit(small, keyName, room), words[1]);
+            int[] wordWidths = new int[words.size()];
+            for (int i = 0; i < wordWidths.length; i++) {
+                wordWidths[i] = words.get(i).isEmpty() ? 0 : small.width(words.get(i));
+            }
+            int[] caps = new int[keyNames.length];
+            for (int i = 0; i < caps.length; i++) {
+                caps[i] = small.width(keyNames[i]) + 2 * KEY_PAD;
+            }
+            int line = lineWidth(wordWidths, caps);
+            List<String> names = new ArrayList<>(keyNames.length);
+            for (int i = 0; i < keyNames.length; i++) {
+                int others = line - (caps[i] - 2 * KEY_PAD);
+                names.add(Texts.fit(small, keyNames[i], keyRoom(TEXT_W, others)));
+            }
+            return new Hint(words, names);
         }
 
-        /** Words without a key ("Kontroller'den bir tuş ata"). */
-        static Hint words(String text) {
-            return new Hint(text, null, "");
+        /** Words without a key ("Açmak için Kontroller'den bir tuş ata"). */
+        static Hint plain(String text) {
+            return new Hint(List.of(text), List.of());
         }
 
         void draw(GuiGraphicsExtractor g, float x, float y) {
             Font small = Fonts.small();
             float textY = Fonts.centeredY(Fonts.Face.SMALL, y + HINT_H / 2f);
             float cx = x;
-            if (beforeLine != null) {
-                Draw.text(g, small, beforeLine, cx, textY, Theme.ASH_300);
-                cx += beforeWidth + HINT_SPACE;
-            }
-            if (keyLine == null) {
-                return;
-            }
-            Draw.frame(g, Frames.KEYCAP, cx, y, keyWidth, HINT_H);
-            Draw.text(g, small, keyLine, cx + KEY_PAD, textY - 0.5f, Theme.BONE_100);
-            cx += keyWidth + HINT_SPACE;
-            if (afterLine != null) {
-                Draw.text(g, small, afterLine, cx, textY, Theme.ASH_300);
+            boolean first = true;
+            for (int i = 0; i < Math.max(words.length, keys.length); i++) {
+                if (i < words.length && words[i] != null) {
+                    cx += first ? 0 : HINT_SPACE;
+                    Draw.text(g, small, words[i], cx, textY, Theme.ASH_300);
+                    cx += wordWidths[i];
+                    first = false;
+                }
+                if (i < keys.length) {
+                    cx += first ? 0 : HINT_SPACE;
+                    Draw.frame(g, Frames.KEYCAP, cx, y, capWidths[i], HINT_H);
+                    Draw.text(g, small, keys[i], cx + KEY_PAD, textY - 0.5f, Theme.BONE_100);
+                    cx += capWidths[i];
+                    first = false;
+                }
             }
         }
     }
@@ -244,7 +299,7 @@ public final class ToastCard {
      * @param count how many messages it stands for (shown from 2 on)
      * @param showText the player's "Mesaj metnini göster"
      * @param keyName the overlay key's name, or null when none is bound
-     * @param fnTip the key hint gets "Olmazsa [Fn] ile birlikte bas" under it (F7-OPEN)
+     * @param fnTip the key hint gets "Olmazsa [Fn] + [F7] tuşlarına bas" under it (F7-OPEN)
      */
     public static ToastCard of(OverlayState.ToastRequest request, boolean crewChat, int count, boolean showText,
         String keyName, boolean fnTip) {
@@ -310,12 +365,13 @@ public final class ToastCard {
      */
     private static void hint(Builder b, String key, String keyName, boolean fnTip) {
         if (keyName == null) {
-            b.hints.add(Hint.words(Texts.str("toast.hint.unbound")));
+            b.hints.add(Hint.plain(Texts.str("toast.hint.unbound")));
             return;
         }
         b.hints.add(Hint.of(key, keyName));
         if (fnTip) {
-            b.hints.add(Hint.of("toast.hint.fn", FN));
+            // Both keys on caps, as laptop makers write it ("Fn + F7 tuşlarına basın").
+            b.hints.add(Hint.of("toast.hint.fn", FN, keyName));
             b.fnTip = true;
         }
     }
@@ -383,7 +439,7 @@ public final class ToastCard {
         return kind;
     }
 
-    /** Whether the card carries "Olmazsa [Fn] ile birlikte bas" (F7-OPEN: a game shows it a few times only). */
+    /** Whether the card carries "Olmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN: a game shows it a few times only). */
     public boolean fnTip() {
         return fnTip;
     }

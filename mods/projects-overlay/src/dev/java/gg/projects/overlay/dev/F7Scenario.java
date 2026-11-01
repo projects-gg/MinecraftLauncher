@@ -164,16 +164,19 @@ public final class F7Scenario implements ClientModInitializer {
             results.addProperty("fnLineOnFirstToast", card != null && card.fnTip());
             shot(mc, "toast-fn");
         });
-        // GUI 3 at 720p (426 x 240 GUI pixels, the most common): the two hint lines inside the card.
+        // GUI 3 at 720p (426 x 240 GUI pixels, the most common): the two hint lines inside the card. A card is laid out
+        // when it comes, in that scale's letters: the next message lays this one out again.
         step(0.1, "gui 3", mc -> {
             mc.options.guiScale().set(3);
             mc.resizeGui();
         });
-        step(0.4, "shot toast gui 3", mc -> shot(mc, "toast-fn-gui3"));
+        step(0.3, "message at gui 3", mc -> dev("more"));
+        step(0.6, "shot toast gui 3", mc -> shot(mc, "toast-fn-gui3"));
         step(0.1, "gui 2", mc -> {
             mc.options.guiScale().set(2);
             mc.resizeGui();
         });
+        step(0.3, "message at gui 2", mc -> dev("one"));
         // The chat: the pointer is free there, so the toast is a button.
         step(0.2, "chat", mc -> Compat.openChat(mc));
         step(0.4, "point at the toast", mc -> {
