@@ -2067,6 +2067,7 @@ fn join_request_view(
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
         mark: profile.mark,
+        discord_id: profile.discord_id,
         sent_at: request.sent_at,
         via: via.map(|m| m.profile.id.clone()),
         via_name: via.map(|m| m.profile.name().to_owned()),
@@ -2097,6 +2098,7 @@ fn request_view(request: &FriendRequest) -> RequestView {
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
         mark: profile.mark,
+        discord_id: profile.discord_id,
         sent_at: request.sent_at,
     }
 }

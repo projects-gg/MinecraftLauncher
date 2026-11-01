@@ -173,7 +173,7 @@ function me(v: MeView): SocialMe {
     identities: v.identities.map((way) => ({
       provider: way.provider,
       linkedOn: way.linkedOn,
-      isNew: way.isNew,
+      isNew: way.isNew ?? false,
       hint: opt(way.hint),
     })),
     signInVia: v.signInVia,

@@ -773,6 +773,8 @@ pub struct JoinRequestView {
     pub avatar_url: Option<String>,
     /// Their mark (SOC-VERIFY).
     pub mark: Option<ProfileMark>,
+    /// Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle).
+    pub discord_id: Option<String>,
     /// Unix seconds.
     pub sent_at: i64,
     /// The member whose tag's card it came from (TEAM6): "Ayşe aracılığıyla", with their name as
@@ -1153,6 +1155,8 @@ pub struct RequestView {
     pub avatar_url: Option<String>,
     /// Their mark (SOC-VERIFY).
     pub mark: Option<ProfileMark>,
+    /// Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle).
+    pub discord_id: Option<String>,
     /// Unix seconds.
     pub sent_at: i64,
 }
