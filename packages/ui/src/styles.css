@@ -43,12 +43,22 @@
   --color-signal-poor: var(--color-flare-400);
   --color-signal-poor-shade: var(--color-ember-700);
 
-  /* Profile marks (VerifiedMark, SOC-VERIFY; docs/design.md §6): the two colours outside the palette
-     besides Discord's, only on the mark. Blue "Doğrulanmış hesap", red "Projects yöneticisi" (a
-     crimson, not the error flare); the white check is 3.5:1 and 4.1:1 on them, the marks 5.4:1 and
-     4.6:1 on obsidian-900. */
-  --color-mark-verified: #2a8af0;
-  --color-mark-admin: #e0434a;
+  /* Profile badges (ProfileMark; SOC-VERIFY's marks, BADGES' catalogue; docs/design.md §6): the
+     colours outside the palette besides Discord's, only on a badge. Blue was "Doğrulanmış hesap",
+     red "Projects yöneticisi" (a crimson, not the error flare). Each keeps its white glyph at 3.5:1
+     or more, and stands 4.4:1 or more on obsidian-900 and 3.5:1 or more on white (BADGES measured
+     them; the orange is darker and redder than the gold accent). */
+  --color-mark-blue: #2a8af0;
+  --color-mark-red: #e0434a;
+  --color-mark-purple: #9b5eeb;
+  --color-mark-green: #219453;
+  --color-mark-orange: #d95f1a;
+  --color-mark-teal: #138d89;
+  --color-mark-indigo: #6673e8;
+  --color-mark-pink: #df378b;
+  --color-mark-slate: #7f7a9f;
+  --color-mark-verified: var(--color-mark-blue);
+  --color-mark-admin: var(--color-mark-red);
 
   --font-display: "Tektur Variable", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;

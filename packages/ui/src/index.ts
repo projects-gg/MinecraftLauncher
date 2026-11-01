@@ -60,6 +60,22 @@ export {
   playPress,
 } from "./components/play-button";
 export {
+  MARK_COLORS,
+  MARK_GLYPHS,
+  MARK_SHAPES,
+  type MarkColor,
+  type MarkGlyph,
+  type MarkItem,
+  type MarkLook,
+  type MarkShape,
+  type MarkSize,
+  markDrawing,
+  markLookOf,
+  ProfileMark,
+  ProfileMarkList,
+  ProfileMarks,
+} from "./components/profile-mark";
+export {
   SignalBars,
   type SignalState,
   type SignalTone,
@@ -70,7 +86,7 @@ export { Switch } from "./components/switch";
 export { type TabItem, TabPanel, Tabs } from "./components/tabs";
 export { Toaster, toast } from "./components/toaster";
 export { isCut, OverflowTooltip, Tooltip, TooltipProvider } from "./components/tooltip";
-export { type MarkKind, type MarkSize, VerifiedMark } from "./components/verified-mark";
+export { type MarkKind, VerifiedMark } from "./components/verified-mark";
 export {
   EntranceGate,
   GatedMotion,
