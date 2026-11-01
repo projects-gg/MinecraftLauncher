@@ -2147,10 +2147,12 @@ fn socket_error(refusal: &SocketRefusal<'_>) -> SocialError {
         "chat_muted" => return SocialError::ChatMuted { until },
         // A new Discord account may not do this (a plan); the limits end at `until`.
         "account_limited" => {
+            // SOC-ID: `SocialService` puts in the profile's reason (`me.limited.reason`).
             return SocialError::Limited {
                 item: LimitedKey::parse(item.unwrap_or_default()),
                 until,
                 retry_after: retry_after.map(Duration::from_secs),
+                reason: crate::identity::LimitedReason::Discord,
             };
         }
         // An unexpected failure of the service: the frame may be sent again.

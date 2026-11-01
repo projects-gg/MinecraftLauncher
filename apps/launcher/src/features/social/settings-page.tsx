@@ -26,7 +26,10 @@ import { tagChoices } from "./badges";
 import { useChatTextSize } from "./chat/text-size";
 import { DEFAULT_TEXT_SIZE, TEXT_SIZES, zoomOf } from "./chat/text-zoom";
 import { CrewNotifyGroup } from "./crew-notify";
+import { discordIdOf, newAccount, ownNameOffered } from "./identity";
+import { useMicrosoftOffer } from "./identity-store";
 import { dayMonth, limitOf } from "./limits";
+import { LinkedAccountsSection, ProfileNameSection } from "./linked-accounts";
 import { BUILTIN_MARK_DEFS, heldMarks, hiddenAfter } from "./marks";
 import { rise, useSocialMotion } from "./motion";
 import { NameWithMark } from "./person-mark";
@@ -66,16 +69,21 @@ function PictureSection({ me }: { me: SocialMe }) {
   const texture = useMinecraftTexture();
   const [pending, setPending] = useState<string | null>(null);
   const leading = [
-    {
-      id: "discord",
-      label: t("social.settings.discordPhoto"),
-      face: (size: number) => (
-        <SocialFace
-          source={{ name: me.name, avatar: "discord", avatarUrl: me.discordAvatarUrl }}
-          size={size}
-        />
-      ),
-    },
+    // SOC-ID: the Discord photo only with a Discord account.
+    ...(discordIdOf(me) !== null && me.discordAvatarUrl
+      ? [
+          {
+            id: "discord",
+            label: t("social.settings.discordPhoto"),
+            face: (size: number) => (
+              <SocialFace
+                source={{ name: me.name, avatar: "discord", avatarUrl: me.discordAvatarUrl }}
+                size={size}
+              />
+            ),
+          },
+        ]
+      : []),
     ...(texture
       ? [
           {
@@ -539,7 +547,9 @@ function BackupSection({ me }: { me: SocialMe }) {
         label={t("social.settings.backupToggle")}
         description={
           limit
-            ? t("safety.limited.backup", { date: dayMonth(limit.until) })
+            ? t(newAccount(me) ? "identity.limited.backup" : "safety.limited.backup", {
+                date: dayMonth(limit.until),
+              })
             : enabled && waits
               ? t("safety.backupWaits")
               : enabled && me.backup
@@ -589,6 +599,8 @@ function SessionRow({ session, onRevoke }: { session: SocialSession; onRevoke: (
             : t("social.settings.lastUsed", {
                 when: formatRelative(`${session.lastUsedOn}T12:00:00Z`),
               })}
+          {/* SOC-ID: a session that came in with Microsoft says so, in the same sentence. */}
+          {session.via === "microsoft" ? `, ${t("identity.settings.viaMicrosoft")}` : null}
         </span>
       </span>
       {session.current ? null : (
@@ -759,9 +771,11 @@ function AccountSection() {
 
 export function SocialSettings() {
   const me = useSocialUi((s) => s.view.me);
+  const offer = useMicrosoftOffer();
   if (!me) return null;
   return (
     <div>
+      {ownNameOffered(me, offer) ? <ProfileNameSection me={me} /> : null}
       <PictureSection me={me} />
       <BadgesSection me={me} />
       <PrivacySection me={me} />
@@ -769,6 +783,7 @@ export function SocialSettings() {
       <WorldsSection />
       <NotificationSection />
       <BackupSection me={me} />
+      <LinkedAccountsSection me={me} />
       <SessionsSection />
       <BlockedSection />
       <AccountSection />

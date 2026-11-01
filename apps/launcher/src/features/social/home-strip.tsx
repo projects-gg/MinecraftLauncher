@@ -15,7 +15,8 @@
 // - friends in game (or the one crewmate on Projects), with "Katıl" when some are on projects.gg;
 // - before sign-in, the invitation: three faces, "Arkadaşlarınla birlikte oyna" and "Discord ile
 //   giriş yap" (the opt-in screen's own words, SMALL12), which opens the friends panel on that
-//   screen (what is shared, the privacy page, and the button that opens Discord);
+//   screen (what is shared, the privacy page, and the button that opens Discord); SOC-ID: once
+//   Microsoft opens accounts too, "Giriş yap" with the friends icon, no brand;
 // - signed in with nobody yet, the player's face, "Henüz arkadaşın yok" and "Arkadaş ekle".
 // The invitations close for good with ×; the friends button then lights up once wherever it is,
 // to show where friends live (from the keyboard the focus goes there too). A line that replaces
@@ -53,6 +54,7 @@ import {
 } from "./crews";
 import { DiscordMark } from "./discord-button";
 import { JoinButton } from "./friend-row";
+import { useMicrosoftOffer } from "./identity-store";
 import { gameBusy } from "./join";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
@@ -128,6 +130,8 @@ function InviteLine({ hint }: { hint: HomeHint }) {
   const place = usePlace("friends");
   const connect = hint === "connect";
   const faces = connect ? INVITE_FACES : me ? [me] : [];
+  // SOC-ID: with a second way to open an account the invitation names none of them.
+  const neutral = useMicrosoftOffer() === "open";
 
   return (
     <>
@@ -147,9 +151,21 @@ function InviteLine({ hint }: { hint: HomeHint }) {
           {connect ? t("social.consent.title") : t("social.list.emptyTitle")}
         </span>
         <ActionLook
-          icon={connect ? <DiscordMark height={12} /> : <UserPlus size={15} aria-hidden />}
+          icon={
+            !connect ? (
+              <UserPlus size={15} aria-hidden />
+            ) : neutral ? (
+              <UsersThree size={15} aria-hidden />
+            ) : (
+              <DiscordMark height={12} />
+            )
+          }
         >
-          {connect ? t("social.consent.signIn") : t("social.actions.add")}
+          {!connect
+            ? t("social.actions.add")
+            : neutral
+              ? t("identity.consent.signIn")
+              : t("social.consent.signIn")}
         </ActionLook>
       </button>
       <IconButton

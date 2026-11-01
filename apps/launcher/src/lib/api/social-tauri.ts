@@ -103,6 +103,8 @@ function profile(v: ProfileView): SocialProfile {
     avatar: v.avatar,
     avatarUrl: opt(v.avatarUrl),
     marks: marksOf(v.marks),
+    // SOC-ID: resolved by the backend (null: no Discord).
+    discordId: v.discordId,
   };
 }
 
@@ -137,6 +139,7 @@ function friend(v: FriendView): Friend {
     dnd: v.dnd,
     game: game(v.game),
     discordUrl: v.discordUrl,
+    discordId: v.discordId,
     badge: badge(v.badge),
     marks: marksOf(v.marks),
   };
@@ -168,6 +171,17 @@ function me(v: MeView): SocialMe {
     avatar: v.avatar,
     avatarUrl: opt(v.avatarUrl),
     discordAvatarUrl: v.discordAvatarUrl,
+    // SOC-ID: the ways in, resolved by the backend for an older service too.
+    discordId: v.discordId,
+    identities: v.identities.map((way) => ({
+      provider: way.provider,
+      linkedOn: way.linkedOn,
+      isNew: way.isNew ?? false,
+      hint: opt(way.hint),
+    })),
+    signInVia: v.signInVia,
+    nameSource: v.nameSource,
+    ownNames: v.ownNames,
     friendCode: v.friendCode,
     shareLink: opt(v.shareLink),
     qr: opt(v.qr),
@@ -186,6 +200,7 @@ function me(v: MeView): SocialMe {
           items: v.limited.items
             .filter((item) => item.key !== "other")
             .map((item) => ({ key: item.key as LimitedKey, perDay: opt(item.perDay) })),
+          reason: v.limited.reason,
         }
       : undefined,
     badge: badge(v.badge),
@@ -292,6 +307,9 @@ function chatChange(v: ChatChangeView): ChatChange {
 
 function modNotice(v: ModNoticeView): ModNotice | null {
   if (v.kind === "other") return null;
+  // SOC-ID: a note about the ways in names one (the backend drops those that do not).
+  const identity = v.kind === "identityLinked" || v.kind === "identityRemoved";
+  if (identity && !v.provider) return null;
   return {
     id: v.id,
     kind: v.kind,
@@ -299,6 +317,7 @@ function modNotice(v: ModNoticeView): ModNotice | null {
     reason: opt(v.reason),
     // SKIN1 `skinReset`: skin changes stay off until then (null: for good); none: no block.
     ...(v.blocked ? { blocked: { until: v.blocked.until } } : {}),
+    ...(identity && v.provider ? { provider: v.provider } : {}),
   };
 }
 
@@ -326,6 +345,7 @@ function teamMember(v: TeamMemberView): TeamMember {
     dnd: v.dnd,
     game: game(v.game),
     discordUrl: v.discordUrl,
+    discordId: v.discordId,
     joinedAt: v.joinedAt,
     togetherMonth: v.togetherMonth,
     badge: badge(v.badge),
@@ -537,6 +557,12 @@ export function snapshot(v: SocialView): SocialSnapshot {
     backupWaitsUntil: opt(v.backupWaitsUntil),
     crewJoins: v.crewJoins.map(crewJoin),
     markDefs: v.markDefs,
+    // SOC-ID: the ways in, the sign-in's way, a link or a removal waiting for the browser.
+    providers: v.providers,
+    signUpWays: v.signUpWays,
+    providersKnown: v.providersKnown,
+    signingInWith: opt(v.signingInWith),
+    identityChange: opt(v.identityChange),
   };
 }
 
@@ -553,9 +579,18 @@ function notice(v: NoticeBinding): SocialNotice {
     case "friendOnProjects":
       return { kind: "friendOnProjects", id: v.id };
     case "signedIn":
-      return { kind: "signedIn", restore: opt(v.restore) };
+      return { kind: "signedIn", restore: opt(v.restore), askName: v.askName };
     case "signInFailed":
       return { kind: "signInFailed", reason: v.reason };
+    case "identityChanged":
+      return { kind: "identityChanged", provider: v.provider, linked: v.linked };
+    case "identityFailed":
+      return {
+        kind: "identityFailed",
+        provider: v.provider,
+        unlink: v.unlink,
+        reason: v.reason,
+      };
     case "signedOutRemotely":
       return { kind: "signedOutRemotely" };
     case "teamInvite":
@@ -627,10 +662,19 @@ export const tauriSocial: SocialApi = {
       void unlisten.then((fn) => fn());
     };
   },
-  signIn: () => ok(commands.socialSignIn()),
+  signIn: (provider) => ok(commands.socialSignIn(provider ?? "discord")),
   async cancelSignIn() {
     await commands.socialSignInCancel();
   },
+  async refreshProviders() {
+    await ok(commands.socialRefreshProviders());
+  },
+  linkIdentity: (provider) => ok(commands.socialLinkIdentity(provider)),
+  unlinkIdentity: (provider) => ok(commands.socialUnlinkIdentity(provider)),
+  async cancelIdentityChange() {
+    await commands.socialIdentityCancel();
+  },
+  setName: (name) => ok(commands.socialSetName(name)),
   async signOut() {
     await ok(commands.socialSignOut());
   },

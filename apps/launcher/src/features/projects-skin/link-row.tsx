@@ -29,6 +29,7 @@ import { useTranslation } from "react-i18next";
 import { AccountFace } from "@/features/accounts/account-face";
 import { useAccountsUi } from "@/features/accounts/store";
 import { useAccounts } from "@/features/accounts/use-accounts";
+import { discordIsAccount } from "@/features/social/identity";
 import { useSocialUi } from "@/features/social/store";
 import type { AccountSummary } from "@/lib/api";
 import { projectsSkinApi } from "@/lib/api/projects-skin-api";
@@ -365,9 +366,10 @@ function RowBody({ link, skinsShown }: { link: ProjectsLink | null; skinsShown: 
   );
 }
 
-/** Shown only while signed in to friends, the feature is on and the service links. */
+/** Shown only while signed in to friends, the feature is on and the service links; SOC-ID: and
+ * only for an account opened with Discord (the link is to that Discord account). */
 export function ProjectsLinkRow() {
-  const signedIn = useSocialUi((s) => s.view.auth === "signedIn");
+  const signedIn = useSocialUi((s) => s.view.auth === "signedIn" && discordIsAccount(s.view.me));
   const overview = useProjectsSkinOverview();
   const data = overview.data;
   if (!signedIn || !data?.shown || !data.service?.link) return null;

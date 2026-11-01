@@ -152,7 +152,9 @@ impl SocialState {
     }
 
     pub fn set_me(&mut self, mut me: Me) {
-        for notice in std::mem::take(&mut me.notices) {
+        // SOC-ID: the notes about the ways in come in a list of their own, shown the same way.
+        let identity = std::mem::take(&mut me.identity_notices);
+        for notice in std::mem::take(&mut me.notices).into_iter().chain(identity) {
             self.add_notice(notice);
         }
         // The player's own entries in the crews' member lists wear what `me` says (TEAM6): a tag
@@ -601,7 +603,9 @@ impl SocialState {
 
     /// A note from moderators, once (the same id again changes nothing).
     fn add_notice(&mut self, notice: ModNotice) {
+        // A note about the ways in (SOC-ID) says which one; without one it cannot be worded.
         if notice.kind == NoticeKind::Other
+            || (notice.kind.is_identity() && notice.provider.is_none())
             || self.seen_notices.contains(&notice.id)
             || self.notices.iter().any(|n| n.id == notice.id)
         {
@@ -619,6 +623,7 @@ impl SocialState {
                 kind: notice.kind,
                 at: notice.at,
                 reason: notice.reason,
+                provider: notice.provider.filter(|_| notice.kind.is_identity()),
                 // Only a skin reset blocks anything; a time of 0 or less is no block.
                 blocked: match (notice.kind, notice.until) {
                     (NoticeKind::SkinReset, Some(None)) => Some(SkinBlockView { until: None }),
@@ -1721,7 +1726,8 @@ impl SocialState {
                             host: None,
                             ver: game.ver,
                         }),
-                    discord_url: member.profile.discord_profile_url(),
+                    discord_url: member.profile.discord_profile_url().unwrap_or_default(),
+                    discord_id: member.profile.discord_id().map(str::to_owned),
                     joined_at: member.joined_at,
                     together_month: 0,
                     badge: self.badge_view(&member.profile),
@@ -2041,7 +2047,8 @@ fn friend_view(
         game: online
             .filter(|p| p.state == PresenceState::Playing)
             .and_then(|p| p.game.clone()),
-        discord_url: profile.discord_profile_url(),
+        discord_url: profile.discord_profile_url().unwrap_or_default(),
+        discord_id: profile.discord_id().map(str::to_owned),
         badge,
         marks: profile.shown_marks(),
     }
@@ -2083,6 +2090,7 @@ fn join_request_view(
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
         marks: profile.marks,
+        discord_id: profile.discord_id,
         sent_at: request.sent_at,
         via: via.map(|m| m.profile.id.clone()),
         via_name: via.map(|m| m.profile.name().to_owned()),
@@ -2113,6 +2121,7 @@ fn request_view(request: &FriendRequest) -> RequestView {
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
         marks: profile.marks,
+        discord_id: profile.discord_id,
         sent_at: request.sent_at,
     }
 }
@@ -2136,6 +2145,7 @@ mod tests {
             avatar_hash: None,
             badge: None,
             mark: None,
+            discord: None,
             marks: Vec::new(),
         }
     }
@@ -2164,8 +2174,42 @@ mod tests {
             settings: None,
             limited: None,
             notices: Vec::new(),
+            identity_notices: Vec::new(),
+            linked: None,
+            via: None,
+            name_from: None,
             marks_hidden: None,
         }
+    }
+
+    /// SOC-ID: the notes about the ways in come in `identityNotices` and show like moderators'
+    /// notes; one without a way this version knows does not.
+    #[test]
+    fn notes_about_the_ways_in_show_from_their_own_list() {
+        let mut state = SocialState::default();
+        let mut with_notes = me();
+        with_notes.identity_notices = serde_json::from_str(
+            r#"[{"id":"n-ms","kind":"identity_linked","at":7,"provider":"microsoft"},
+            {"id":"n-steam","kind":"identity_linked","at":8,"provider":"steam"}]"#,
+        )
+        .unwrap();
+        state.set_me(with_notes);
+        let notices = state.notices();
+        assert_eq!(notices.len(), 1);
+        assert_eq!(notices[0].id, "n-ms");
+        assert_eq!(notices[0].kind, NoticeKind::IdentityLinked);
+        assert_eq!(
+            notices[0].provider,
+            Some(crate::identity::Provider::Microsoft)
+        );
+        // The same note again changes nothing.
+        let mut again = me();
+        again.identity_notices = serde_json::from_str(
+            r#"[{"id":"n-ms","kind":"identity_linked","at":7,"provider":"microsoft"}]"#,
+        )
+        .unwrap();
+        state.set_me(again);
+        assert_eq!(state.notices().len(), 1);
     }
 
     fn loaded() -> SocialState {

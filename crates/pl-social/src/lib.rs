@@ -1,5 +1,6 @@
 //! Client for the Projects Launcher friends service (`services/social` in the Studio
-//! repository): Discord sign-in, friends, blocks, privacy, friend categories, teams (TEAM6: crew
+//! repository): sign-in with Discord or Microsoft and the account's linked ways in with its
+//! profile name (SOC-ID, `identity`), friends, blocks, privacy, friend categories, teams (TEAM6: crew
 //! tags before names, hidden crews, join requests from a tag's card, "Hoş geldin"), settings
 //! backup, the presence WebSocket, crew chat and direct messages with their history on this
 //! device (CHAT2: replies, stickers, reactions, "yazıyor…", read marks, link cards), reports,
@@ -56,6 +57,7 @@ mod game;
 mod game_lead;
 mod gate;
 mod history;
+mod identity;
 mod kept;
 mod links;
 mod marks;
@@ -99,6 +101,10 @@ pub use game::{GameActivity, LogSignal, log_signal, may_signal, server_label};
 pub use game_lead::{GameLead, PresenceStep};
 pub use gate::service_url;
 pub use history::{HISTORY_LIMIT, crew_conversation, direct_conversation, same_emoji};
+pub use identity::{
+    Identity, IdentityAnswer, IdentityChangeView, IdentityFailure, IdentityStep, LimitedReason,
+    NameResult, NameSource, Provider, ProviderInfo, clean_name, sign_in_ways, sign_up_ways,
+};
 pub use links::{find_links, first_link, host_of};
 pub use marks::{
     MARK_COLORS, MARK_GLYPHS, MARK_SHAPES, MAX_MARKS, MarkCatalog, MarkDef, MarkName, is_mark_key,

@@ -63,6 +63,8 @@ export interface PersonRef extends Pick<SocialProfile, "id" | "name"> {
   avatar?: string;
   avatarUrl?: string;
   discordUrl?: string;
+  /** SOC-ID: their Discord account (null: none; absent: their id). */
+  discordId?: string | null;
 }
 
 /** What needs one sentence first. */
@@ -480,7 +482,14 @@ export function personItems(
           label: t("social.actions.message"),
           icon: <DiscordLogo size={16} />,
           onSelect: () => {
-            if (discordUrl) void openInDiscord({ id: person.id, discordUrl });
+            // SOC-ID: the Discord account of the same card the address came from.
+            if (discordUrl) {
+              void openInDiscord({
+                id: person.id,
+                discordId: (friend ?? member ?? person).discordId,
+                discordUrl,
+              });
+            }
           },
         };
       case "addFriend":

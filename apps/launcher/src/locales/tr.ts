@@ -31,6 +31,7 @@ import { trGraphics } from "./tr-graphics";
 import { trHelp } from "./tr-help";
 import { trHomeLinks } from "./tr-home-links";
 import { trHost } from "./tr-host";
+import { trIdentity } from "./tr-identity";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
 import { trLauncherReset } from "./tr-launcher-reset";
@@ -120,6 +121,7 @@ export const tr = {
   team6: trTeam6,
   chatCalm: trChatCalm,
   verify: trVerify,
+  identity: trIdentity,
   badges: trBadges,
   cloudAfk: trCloudAfk,
   cloudAfkFeat: trCloudAfkFeat,
