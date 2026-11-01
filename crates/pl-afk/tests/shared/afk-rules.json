@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "about": "Rules the desktop AFK (pl-afk) and the phone's (projects-mobile gg.projects.mobile.afk.core) share. tests/shared_rules.rs checks this file against restart.rs, pacing.rs and console.rs; the phone's JVM tests read their copy (app_pojavlauncher/src/test/resources/afk/afk-rules.json). Change both copies together. Messages are as the client reports them: formatting codes removed (a kick's §c is gone, a plugin's &c stays).",
+  "delays": [
+    {"min": 5, "max": 10, "seconds": [5, 10, 20, 40, 60, 90, 120, 180, 240, 240, 240]},
+    {"min": 15, "max": 60, "seconds": [15, 30, 60, 90, 120, 180, 240, 240]},
+    {"min": 120, "max": 300, "seconds": [120, 180, 240, 300, 300]},
+    {"min": 300, "max": 600, "seconds": [300, 400, 500, 600, 600]},
+    {"min": 30, "max": 30, "seconds": [30, 60, 90, 120, 180, 240, 240]},
+    {"min": 60, "max": 15, "seconds": [15, 30, 60, 90]},
+    {"min": 0, "max": 1, "seconds": [5, 10]},
+    {"min": 1000000000, "max": 1000000000000, "seconds": [3600]}
+  ],
+  "delayAt": [
+    {"min": 15, "max": 60, "attempt": 0, "seconds": 15},
+    {"min": 15, "max": 60, "attempt": 1000000, "seconds": 240},
+    {"min": 5, "max": 10, "attempt": 1, "seconds": 5}
+  ],
+  "spread": [
+    {"min": 15, "max": 60, "attempt": 3, "spread": 0.0, "millis": 48000},
+    {"min": 15, "max": 60, "attempt": 3, "spread": 0.5, "millis": 60000},
+    {"min": 15, "max": 60, "attempt": 3, "spread": 1.0, "millis": 72000},
+    {"min": 15, "max": 60, "attempt": 30, "spread": 0.0, "millis": 192000},
+    {"min": 15, "max": 60, "attempt": 30, "spread": 0.5, "millis": 240000},
+    {"min": 15, "max": 60, "attempt": 30, "spread": 1.0, "millis": 288000},
+    {"min": 15, "max": 60, "attempt": 1, "spread": -3.0, "millis": 12000},
+    {"min": 15, "max": 60, "attempt": 1, "spread": 9.0, "millis": 18000},
+    {"min": 5, "max": 10, "attempt": 1, "spread": 0.0, "millis": 4000},
+    {"min": 5, "max": 10, "attempt": 1, "spread": 1.0, "millis": 6000}
+  ],
+  "lasting": [
+    {"inGameSeconds": 119, "cause": null, "lasting": false},
+    {"inGameSeconds": 120, "cause": null, "lasting": true},
+    {"inGameSeconds": 125, "cause": "loginTimeout", "lasting": false},
+    {"inGameSeconds": 125, "cause": "wrongPassword", "lasting": false},
+    {"inGameSeconds": 125, "cause": "alreadyConnected", "lasting": false},
+    {"inGameSeconds": 125, "cause": "premiumOnly", "lasting": false},
+    {"inGameSeconds": 36000, "cause": "loginTimeout", "lasting": false},
+    {"inGameSeconds": 125, "cause": "banned", "lasting": true},
+    {"inGameSeconds": 125, "cause": "notWhitelisted", "lasting": true},
+    {"inGameSeconds": 125, "cause": "loggedInElsewhere", "lasting": true}
+  ],
+  "kickCauses": [
+    {"reason": "inGameKick", "message": "You are banned from this server!", "cause": "banned"},
+    {"reason": "inGameKick", "message": "Banned by an operator.", "cause": "banned"},
+    {"reason": "inGameKick", "message": "You are permanently banned. Reason: hile", "cause": "banned"},
+    {"reason": "inGameKick", "message": "Sunucudan YASAKLANDIN! Sebep: küfür", "cause": "banned"},
+    {"reason": "inGameKick", "message": "Banlandınız.", "cause": "banned"},
+    {"reason": "loginRejected", "message": "You are not whitelisted on this server!", "cause": "notWhitelisted"},
+    {"reason": "inGameKick", "message": "You are not white-listed on this server!", "cause": "notWhitelisted"},
+    {"reason": "inGameKick", "message": "Beyaz listede değilsin.", "cause": "notWhitelisted"},
+    {"reason": "inGameKick", "message": "&cWrong password!", "cause": "wrongPassword"},
+    {"reason": "inGameKick", "message": "Yanlış şifre!", "cause": "wrongPassword"},
+    {"reason": "inGameKick", "message": "YANLIŞ ŞİFRE!", "cause": "wrongPassword"},
+    {"reason": "inGameKick", "message": "Yanlis sifre!", "cause": "wrongPassword"},
+    {"reason": "loginRejected", "message": "Failed to verify username!", "cause": "premiumOnly"},
+    {"reason": "inGameKick", "message": "Invalid session (Try restarting your game)", "cause": "premiumOnly"},
+    {"reason": "inGameKick", "message": "You logged in from another location", "cause": "loggedInElsewhere"},
+    {"reason": "inGameKick", "message": "Başka bir konumdan giriş yaptınız", "cause": "loggedInElsewhere"},
+    {"reason": "loginRejected", "message": "You are already connected to this proxy!", "cause": "alreadyConnected"},
+    {"reason": "inGameKick", "message": "Bu isimle zaten bir oyuncu sunucuda bulunmakta!", "cause": "alreadyConnected"},
+    {"reason": "inGameKick", "message": "Login timeout exceeded, you have been kicked from the server", "cause": "loginTimeout"},
+    {"reason": "inGameKick", "message": "Giris zaman asimi suresi asildi, sunucudan atildiniz", "cause": "loginTimeout"},
+    {"reason": "inGameKick", "message": "Hesabınız kullanıma kapatılmıştır!", "cause": "banned"},
+    {"reason": "inGameKick", "message": "Bölgeniz yasaklı gözüküyor: TR", "cause": "banned"},
+    {"reason": "inGameKick", "message": "Sizin adınızda bir oyuncu şu an oyunda ya da ağda bir takılma mevcut.", "cause": "alreadyConnected"},
+    {"reason": "inGameKick", "message": "Uzun süredir şifre girilmediği için bağlantı kaybedildi.", "cause": "loginTimeout"},
+    {"reason": "inGameKick", "message": "Birçok kez hatalı şifre girdiğiniz için sunucudan atıldınız.", "cause": "wrongPassword"},
+    {"reason": "inGameKick", "message": "PROJECTS Yönetici hesabına bu adresten bağlanılamaz. projects.gg", "cause": "notWhitelisted"},
+    {"reason": "inGameKick", "message": "Server is restarting", "cause": null},
+    {"reason": "inGameKick", "message": "Sunucu bakımda, beyaz liste açık. Birazdan dön!", "cause": null},
+    {"reason": "inGameKick", "message": "Kicked for using a banned word", "cause": null},
+    {"reason": "inGameKick", "message": "Yasaklı kelime kullandığın için atıldın", "cause": null},
+    {"reason": "inGameKick", "message": "Spam yüzünden atıldınız", "cause": null},
+    {"reason": "inGameKick", "message": "Server is full", "cause": null},
+    {"reason": "inGameKick", "message": "Sunucu geliştirme modunda olarak gözüküyor!", "cause": null},
+    {"reason": "connectionLost", "message": "You are banned", "cause": null}
+  ],
+  "decisions": [
+    {"reason": "inGameKick", "message": "You are banned from this server!", "attempts": 0, "repeats": 0, "expect": "refused banned"},
+    {"reason": "loginRejected", "message": "You are already connected to this proxy!", "attempts": 0, "repeats": 0, "expect": "restart 1"},
+    {"reason": "loginRejected", "message": "You are already connected to this proxy!", "attempts": 3, "repeats": 3, "expect": "restart 4"},
+    {"reason": "loginRejected", "message": "You are already connected to this proxy!", "attempts": 4, "repeats": 4, "expect": "refused alreadyConnected"},
+    {"reason": "inGameKick", "message": "Login timeout exceeded, you have been kicked from the server", "attempts": 2, "repeats": 3, "expect": "restart 3"},
+    {"reason": "inGameKick", "message": "Login timeout exceeded, you have been kicked from the server", "attempts": 2, "repeats": 4, "expect": "refused loginTimeout"},
+    {"reason": "inGameKick", "message": "PROJECTS Yönetici hesabına bu adresten bağlanılamaz. projects.gg", "attempts": 0, "repeats": 0, "expect": "refused notWhitelisted"},
+    {"reason": "loginRejected", "message": "Failed to verify username!", "attempts": 6, "repeats": 0, "expect": "refused premiumOnly"},
+    {"reason": "inGameKick", "message": "Server is restarting", "attempts": 3, "repeats": 0, "expect": "restart 4"},
+    {"reason": "inGameKick", "message": "Sunucu bakımda, beyaz liste açık. Birazdan dön!", "attempts": 0, "repeats": 0, "expect": "restart 1"},
+    {"reason": "inGameKick", "message": "Sunucu dolu, yasaklandın sanma", "attempts": 0, "repeats": 0, "expect": "restart 1"},
+    {"reason": "inGameKick", "message": "SUNUCU YENİDEN BAŞLATILIYOR, banlandın sanma", "attempts": 1, "repeats": 0, "expect": "restart 2"},
+    {"reason": "connectionLost", "message": "You are banned", "attempts": 8, "repeats": 0, "expect": "restart 9"},
+    {"reason": "unsupportedVersion", "message": "Unsupported protocol", "attempts": 0, "repeats": 0, "expect": "fail unsupportedVersion"}
+  ],
+  "pacing": [
+    {
+      "spacingMs": 4500,
+      "steps": [
+        {"destination": "play.projects.gg", "atMs": 0, "slotMs": 0},
+        {"destination": "play.projects.gg", "atMs": 200, "slotMs": 4500},
+        {"destination": "play.projects.gg", "atMs": 500, "slotMs": 9000},
+        {"destination": "mc.example.org", "atMs": 600, "slotMs": 600},
+        {"destination": "play.projects.gg", "atMs": 1000, "slotMs": 13500},
+        {"destination": "play.projects.gg", "atMs": 20000, "slotMs": 20000},
+        {"destination": "play.projects.gg", "atMs": 20001, "slotMs": 24500}
+      ]
+    },
+    {
+      "spacingMs": 0,
+      "steps": [
+        {"destination": "a", "atMs": 0, "slotMs": 0},
+        {"destination": "a", "atMs": 0, "slotMs": 0}
+      ]
+    }
+  ],
+  "destinations": [
+    {"host": " Play.Projects.GG. ", "destination": "play.projects.gg"},
+    {"host": "mc.example.org", "destination": "mc.example.org"}
+  ],
+  "sensitiveCommands": [
+    {"command": "/login pw", "sensitive": true},
+    {"command": "  /LOGIN\tpw", "sensitive": true},
+    {"command": "/giriş Şifre!", "sensitive": true},
+    {"command": "/l pw", "sensitive": true},
+    {"command": "/kayıt Parola1 Parola1", "sensitive": true},
+    {"command": "/list", "sensitive": false},
+    {"command": "/kit login", "sensitive": false},
+    {"command": "", "sensitive": false}
+  ],
+  "masking": [
+    {
+      "loginCommands": ["/login hunter22", " /kit ", "", "/kit"],
+      "userCommands": [],
+      "lines": [
+        {"raw": "[Script] send /kit", "masked": "[Script] send /kit", "kind": "script"},
+        {"raw": "[Script] send /LOGIN hunter22", "masked": "[Script] send /login ******", "kind": "sensitive"},
+        {"raw": "Hoş geldin!", "masked": "Hoş geldin!", "kind": "normal"}
+      ]
+    },
+    {
+      "loginCommands": ["/login hunter22", "/register Parola1 Parola1", "/kit"],
+      "userCommands": [],
+      "lines": [
+        {"raw": "[Script] send /LOGIN hunter22", "masked": "[Script] send /login ******", "kind": "sensitive"},
+        {"raw": "[Betik] send /register Parola1 Parola1", "masked": "[Betik] send /register ******", "kind": "sensitive"},
+        {"raw": "parola: hunter22!", "masked": "parola: ******!", "kind": "normal"},
+        {"raw": "[Script] send /kit", "masked": "[Script] send /kit", "kind": "script"}
+      ]
+    },
+    {
+      "loginCommands": [],
+      "userCommands": ["/kit", "/l secret123"],
+      "lines": [
+        {"raw": "> /l secret123", "masked": "> /l ******", "kind": "normal"},
+        {"raw": "> /kit", "masked": "> /kit", "kind": "normal"}
+      ]
+    },
+    {
+      "loginCommands": ["/giriş Şifre123"],
+      "userCommands": [],
+      "lines": [
+        {"raw": "/GIRIŞ Şifre123", "masked": "/giriş ******", "kind": "sensitive"},
+        {"raw": "/GİRİŞ Şifre123", "masked": "/GİRİŞ ******", "kind": "normal"},
+        {"raw": "şifren: Şifre123", "masked": "şifren: ******", "kind": "normal"}
+      ]
+    }
+  ]
+}
