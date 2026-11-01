@@ -99,7 +99,9 @@ function Editor({
   const { data: accounts = [] } = useAccounts();
   const signedIn = useSocialUi((s) => s.view.auth === "signedIn");
   // SOC-ID: an account not opened with Discord gets one line instead of the editor.
-  const discordOnly = useSocialUi((s) => s.view.auth === "signedIn" && !discordIsAccount(s.view.me));
+  const discordOnly = useSocialUi(
+    (s) => s.view.auth === "signedIn" && !discordIsAccount(s.view.me),
+  );
   const told = useProjectsSkinUi((s) => s.told);
   const markTold = useProjectsSkinUi((s) => s.markTold);
 

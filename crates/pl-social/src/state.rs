@@ -152,7 +152,9 @@ impl SocialState {
     }
 
     pub fn set_me(&mut self, mut me: Me) {
-        for notice in std::mem::take(&mut me.notices) {
+        // SOC-ID: the notes about the ways in come in a list of their own, shown the same way.
+        let identity = std::mem::take(&mut me.identity_notices);
+        for notice in std::mem::take(&mut me.notices).into_iter().chain(identity) {
             self.add_notice(notice);
         }
         // The player's own entries in the crews' member lists wear what `me` says (TEAM6): a tag
@@ -2146,10 +2148,41 @@ mod tests {
             settings: None,
             limited: None,
             notices: Vec::new(),
+            identity_notices: Vec::new(),
             linked: None,
             via: None,
             name_from: None,
         }
+    }
+
+    /// SOC-ID: the notes about the ways in come in `identityNotices` and show like moderators'
+    /// notes; one without a way this version knows does not.
+    #[test]
+    fn notes_about_the_ways_in_show_from_their_own_list() {
+        let mut state = SocialState::default();
+        let mut with_notes = me();
+        with_notes.identity_notices = serde_json::from_str(
+            r#"[{"id":"n-ms","kind":"identity_linked","at":7,"provider":"microsoft"},
+            {"id":"n-steam","kind":"identity_linked","at":8,"provider":"steam"}]"#,
+        )
+        .unwrap();
+        state.set_me(with_notes);
+        let notices = state.notices();
+        assert_eq!(notices.len(), 1);
+        assert_eq!(notices[0].id, "n-ms");
+        assert_eq!(notices[0].kind, NoticeKind::IdentityLinked);
+        assert_eq!(
+            notices[0].provider,
+            Some(crate::identity::Provider::Microsoft)
+        );
+        // The same note again changes nothing.
+        let mut again = me();
+        again.identity_notices = serde_json::from_str(
+            r#"[{"id":"n-ms","kind":"identity_linked","at":7,"provider":"microsoft"}]"#,
+        )
+        .unwrap();
+        state.set_me(again);
+        assert_eq!(state.notices().len(), 1);
     }
 
     fn loaded() -> SocialState {

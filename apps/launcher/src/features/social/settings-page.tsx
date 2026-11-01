@@ -25,7 +25,8 @@ import { tagChoices } from "./badges";
 import { useChatTextSize } from "./chat/text-size";
 import { DEFAULT_TEXT_SIZE, TEXT_SIZES, zoomOf } from "./chat/text-zoom";
 import { CrewNotifyGroup } from "./crew-notify";
-import { discordIdOf, newAccount } from "./identity";
+import { discordIdOf, newAccount, ownNameOffered } from "./identity";
+import { useMicrosoftOffer } from "./identity-store";
 import { dayMonth, limitOf } from "./limits";
 import { LinkedAccountsSection, ProfileNameSection } from "./linked-accounts";
 import { rise, useSocialMotion } from "./motion";
@@ -506,8 +507,8 @@ function SessionRow({ session, onRevoke }: { session: SocialSession; onRevoke: (
             : t("social.settings.lastUsed", {
                 when: formatRelative(`${session.lastUsedOn}T12:00:00Z`),
               })}
-          {/* SOC-ID: a session that came in with Microsoft says so. */}
-          {session.via === "microsoft" ? ` · ${t("identity.settings.viaMicrosoft")}` : null}
+          {/* SOC-ID: a session that came in with Microsoft says so, in the same sentence. */}
+          {session.via === "microsoft" ? `, ${t("identity.settings.viaMicrosoft")}` : null}
         </span>
       </span>
       {session.current ? null : (
@@ -678,10 +679,11 @@ function AccountSection() {
 
 export function SocialSettings() {
   const me = useSocialUi((s) => s.view.me);
+  const offer = useMicrosoftOffer();
   if (!me) return null;
   return (
     <div>
-      {me.ownNames ? <ProfileNameSection me={me} /> : null}
+      {ownNameOffered(me, offer) ? <ProfileNameSection me={me} /> : null}
       <PictureSection me={me} />
       <PrivacySection me={me} />
       <ChatSection />

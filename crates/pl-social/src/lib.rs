@@ -102,7 +102,7 @@ pub use gate::service_url;
 pub use history::{HISTORY_LIMIT, crew_conversation, direct_conversation, same_emoji};
 pub use identity::{
     Identity, IdentityAnswer, IdentityChangeView, IdentityFailure, IdentityStep, LimitedReason,
-    NameResult, NameSource, Provider, ProviderInfo, clean_name, sign_in_ways,
+    NameResult, NameSource, Provider, ProviderInfo, clean_name, sign_in_ways, sign_up_ways,
 };
 pub use links::{find_links, first_link, host_of};
 pub use minecraft::{

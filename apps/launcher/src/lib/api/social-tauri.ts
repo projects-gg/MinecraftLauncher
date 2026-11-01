@@ -552,6 +552,8 @@ export function snapshot(v: SocialView): SocialSnapshot {
     crewJoins: v.crewJoins.map(crewJoin),
     // SOC-ID: the ways in, the sign-in's way, a link or a removal waiting for the browser.
     providers: v.providers,
+    signUpWays: v.signUpWays,
+    providersKnown: v.providersKnown,
     signingInWith: opt(v.signingInWith),
     identityChange: opt(v.identityChange),
   };

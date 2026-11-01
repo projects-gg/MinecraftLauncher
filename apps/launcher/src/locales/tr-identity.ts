@@ -1,14 +1,19 @@
 // SOC-ID: the ways into the friends account (Discord and Microsoft), "Bağlı hesaplar", the profile
-// name of a new account, and what works only with Discord. Short; a sentence of explanation only
-// where a step cannot be undone (a password typed on the wrong page).
+// name of a new account, and what works only with Discord. Short, the phone's words; a sentence of
+// explanation only where a step cannot be undone (a password typed on the wrong page, what goes with
+// Discord).
 export const trIdentity = {
   providers: {
     discord: "Discord",
     microsoft: "Microsoft",
   },
   consent: {
-    body: "Discord ya da Microsoft hesabınla giriş yaparsın. Arkadaşların adını, profil fotoğrafını ve ne oynadığını görür; e-postan ve şifren bize gelmez.",
+    body: "Discord ya da Microsoft hesabınla giriş yaparsın. Arkadaşların adını, profil fotoğrafını ve ne oynadığını görür. E-postan ve şifren bize gelmez.",
     microsoft: "Microsoft ile giriş yap",
+    /** Over Microsoft while it signs in only the accounts it is linked to. */
+    linkedWay: "Bağlı hesabınla gir",
+    /** Home's invitation once Microsoft opens accounts too (no brand). */
+    signIn: "Giriş yap",
     waitingMicrosoft: "Tarayıcıda Microsoft'a gir",
     waitingMicrosoftNote: "Girince burada devam edersin.",
     password: "Şifreni yalnız Microsoft'un kendi sayfasında gir.",
@@ -25,6 +30,7 @@ export const trIdentity = {
     invalid: "Adın 3–16 karakter olmalı: harf, rakam, boşluk ya da _.",
     rejected: "Bu ad kullanılamıyor.",
     tooMany: "Adını bugün daha fazla değiştiremezsin.",
+    providerOff: "Şu an adını değiştiremezsin.",
     offline: "Şu an kaydedilemedi. Biraz sonra tekrar dene.",
     failed: "Ad kaydedilemedi. Tekrar dene.",
     saved: "Adın kaydedildi.",
@@ -36,15 +42,20 @@ export const trIdentity = {
     cancel: "Vazgeç",
     linked: "Bağlı hesaplar",
     linkedOn: "{{date}} bağlandı",
-    thisDevice: "Bu cihaz",
-    new: "Yeni",
     remove: "Kaldır",
-    link: "Hesap bağla",
-    viaMicrosoft: "Microsoft ile",
+    link: {
+      discord: "Discord hesabını bağla",
+      microsoft: "Microsoft hesabını bağla",
+    },
+    /** A session's line: "Son kullanım dün, Microsoft ile girildi". */
+    viaMicrosoft: "Microsoft ile girildi",
   },
   remove: {
     title: "{{provider}} bağlantısı kaldırılsın mı?",
-    discord: "Projects skini eşlemen ve forumdaki ekip etiketin de kalkar.",
+    /** Discord is the account's number: 7/24 Bulut and the Projects skin need it. */
+    discordNumber:
+      "Discord olmadan 7/24 Bulut açılmaz. Projects skini eşlemen ve forumdaki ekip etiketin de kalkar.",
+    discord: "Discord fotoğrafın ve forumdaki ekip etiketin de kalkar.",
     confirm: "Kaldır",
     cancel: "Vazgeç",
   },
@@ -62,16 +73,16 @@ export const trIdentity = {
     removed: "{{provider}} bağlantısı kaldırıldı.",
   },
   errors: {
-    providerOff: "Şu an {{provider}} ile giriş yapılamıyor. Başka bir yolla dene.",
-    exists: "Bu hesap zaten bağlı.",
-    notFound: "Bu hesap bağlı değil.",
-    last: "Tek giriş yolun kaldırılamaz.",
+    providerOff: "Şu an {{provider}} hesabı bağlanamıyor.",
+    exists: "Hesabına zaten bir {{provider}} hesabı bağlı.",
+    notFound: "Bu hesap artık bağlı değil.",
+    last: "Son bağlı hesabını kaldıramazsın.",
     taken: "Bu {{provider}} hesabı başka bir Projects hesabına bağlı.",
     proofFailed: "Bağlı hesaplarından biriyle gir.",
     unavailable: "Bu {{provider}} hesabı şu an bağlanamıyor.",
-    expired: "Süre doldu. Tekrar dene.",
+    expired: "Tamamlanamadı. Tekrar dene.",
     tooMany: "Bugün daha fazla değişiklik yapamazsın.",
-    offline: "Şu an olmadı. Biraz sonra tekrar dene.",
+    offline: "Şu an bağlanılamıyor. Biraz sonra tekrar dene.",
     failed: "Bir sorun oluştu. Biraz sonra tekrar dene.",
   },
   notice: {

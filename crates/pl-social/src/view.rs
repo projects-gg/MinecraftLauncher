@@ -104,6 +104,14 @@ pub struct SocialView {
     /// The ways the sign-in screen offers now, Discord first (SOC-ID; Discord alone until the
     /// service said otherwise, and from an older service).
     pub providers: Vec<Provider>,
+    /// Of `providers`, the ways whose first sign-in opens a new account (Discord always). A way
+    /// that only signs in stands under "Bağlı hesabınla gir"; once one opens accounts too, the
+    /// invitations drop Discord's mark ("Giriş yap").
+    pub sign_up_ways: Vec<Provider>,
+    /// The service said its ways in since this launcher started (or since its address changed).
+    /// Until then `providers` and `sign_up_ways` are the defaults, and the launcher shows the ways
+    /// it kept from the last answer instead.
+    pub providers_known: bool,
     /// The way of the sign-in in progress (while `auth` is `signingIn`): its waiting card.
     pub signing_in_with: Option<Provider>,
     /// A link or a removal waiting for its browser step (SOC-ID).

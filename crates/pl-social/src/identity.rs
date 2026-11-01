@@ -96,14 +96,12 @@ pub(crate) fn readable_name_source<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<NameSource>, D::Error> {
     let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(
-        match raw.as_ref().and_then(serde_json::Value::as_str) {
-            Some("discord") => Some(NameSource::Discord),
-            Some("own") => Some(NameSource::Own),
-            Some("unset") => Some(NameSource::Unset),
-            _ => None,
-        },
-    )
+    Ok(match raw.as_ref().and_then(serde_json::Value::as_str) {
+        Some("discord") => Some(NameSource::Discord),
+        Some("own") => Some(NameSource::Own),
+        Some("unset") => Some(NameSource::Unset),
+        _ => None,
+    })
 }
 
 /// Why an account is limited ("Sınırlı hesap", `me.limited.reason`): its Discord account is new
@@ -240,6 +238,21 @@ pub fn sign_in_ways(list: &[ProviderInfo]) -> Vec<Provider> {
         .collect()
 }
 
+/// Of those, the ways whose first sign-in opens a new account: Discord always, then each other way
+/// whose sign-in and new accounts are both on. A way that only signs in stands under "Bağlı
+/// hesabınla gir" on the sign-in screen (its new accounts come weeks later, from Studio).
+pub fn sign_up_ways(list: &[ProviderInfo]) -> Vec<Provider> {
+    Provider::ALL
+        .into_iter()
+        .filter(|provider| {
+            *provider == Provider::Discord
+                || list
+                    .iter()
+                    .any(|info| info.provider == *provider && info.sign_in && info.sign_up)
+        })
+        .collect()
+}
+
 /// The answer to a removal: the page that proves it, or the profile when it is done at once.
 #[derive(Debug, Clone)]
 pub enum IdentityAnswer {
@@ -329,6 +342,9 @@ pub enum NameResult {
     Rejected,
     /// Three changes a day (`rate_limited`, item `name_changes`).
     TooMany,
+    /// An account with Discord names itself only while Microsoft signs in (`provider_off`): the
+    /// ways in are asked again and "Profil adı" goes.
+    ProviderOff,
     /// The service could not be reached.
     Offline,
     Failed,
@@ -343,6 +359,7 @@ impl NameResult {
             _ => match error.code() {
                 Some(ErrorCode::InvalidName | ErrorCode::BadRequest) => Self::Invalid,
                 Some(ErrorCode::NameRejected) => Self::Rejected,
+                Some(ErrorCode::ProviderOff) => Self::ProviderOff,
                 _ => Self::Failed,
             },
         }
@@ -360,7 +377,11 @@ fn name_letter(c: char) -> bool {
 /// letters, digits, spaces and `_`, with at least two letters or digits. Spaces at the ends go and
 /// a run of them becomes one.
 pub fn clean_name(name: &str) -> Option<String> {
-    let cleaned = name.split(' ').filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" ");
+    let cleaned = name
+        .split(' ')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
     let length = cleaned.chars().count();
     let allowed = cleaned
         .chars()
@@ -526,16 +547,30 @@ mod tests {
         .unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(sign_in_ways(&list), vec![Provider::Discord]);
-        let on = providers_of(
-            br#"{"providers":[{"id":"microsoft","signIn":true,"signUp":false}]}"#,
-        )
-        .unwrap();
+        let on =
+            providers_of(br#"{"providers":[{"id":"microsoft","signIn":true,"signUp":false}]}"#)
+                .unwrap();
         assert!(on[0].sign_in && !on[0].sign_up);
         assert_eq!(
             sign_in_ways(&on),
             vec![Provider::Discord, Provider::Microsoft]
         );
+        // Microsoft signs in, but no new account opens with it yet.
+        assert_eq!(sign_up_ways(&on), vec![Provider::Discord]);
+        let open =
+            providers_of(br#"{"providers":[{"id":"microsoft","signIn":true,"signUp":true}]}"#)
+                .unwrap();
+        assert_eq!(
+            sign_up_ways(&open),
+            vec![Provider::Discord, Provider::Microsoft]
+        );
+        // New accounts without sign-in open nothing.
+        let odd =
+            providers_of(br#"{"providers":[{"id":"microsoft","signIn":false,"signUp":true}]}"#)
+                .unwrap();
+        assert_eq!(sign_up_ways(&odd), vec![Provider::Discord]);
         assert_eq!(sign_in_ways(&[]), vec![Provider::Discord]);
+        assert_eq!(sign_up_ways(&[]), vec![Provider::Discord]);
         assert!(providers_of(b"[]").is_err());
         assert_eq!(Provider::Discord.other(), Provider::Microsoft);
         assert_eq!(
@@ -567,7 +602,11 @@ mod tests {
             (503, "unavailable", IdentityFailure::Offline),
             (400, "bad_request", IdentityFailure::Failed),
         ] {
-            assert_eq!(IdentityFailure::of(&refused(status, code)), reason, "{code}");
+            assert_eq!(
+                IdentityFailure::of(&refused(status, code)),
+                reason,
+                "{code}"
+            );
         }
         assert_eq!(
             IdentityFailure::of(&SocialError::Network("down".into())),
@@ -580,6 +619,11 @@ mod tests {
         assert_eq!(
             NameResult::of(&refused(422, "name_rejected")),
             NameResult::Rejected
+        );
+        // An account with Discord while Microsoft's sign-in is off.
+        assert_eq!(
+            NameResult::of(&refused(403, "provider_off")),
+            NameResult::ProviderOff
         );
         assert_eq!(
             NameResult::of(&SocialError::RateLimited {
@@ -597,14 +641,20 @@ mod tests {
     #[test]
     fn names_follow_the_services_rules() {
         assert_eq!(clean_name("  Gece   Kurdu "), Some("Gece Kurdu".into()));
-        assert_eq!(clean_name("ÇılgınÖğrenci_7"), Some("ÇılgınÖğrenci_7".into()));
+        assert_eq!(
+            clean_name("ÇılgınÖğrenci_7"),
+            Some("ÇılgınÖğrenci_7".into())
+        );
         assert_eq!(clean_name("Kâmil"), Some("Kâmil".into()));
         assert_eq!(clean_name("ab"), None);
         assert_eq!(clean_name("a_ _"), None);
         assert_eq!(clean_name("_a_"), None);
         assert_eq!(clean_name("x1_"), Some("x1_".into()));
         assert_eq!(clean_name("abcdefghijklmnopq"), None);
-        assert_eq!(clean_name("abcdefghijklmnop"), Some("abcdefghijklmnop".into()));
+        assert_eq!(
+            clean_name("abcdefghijklmnop"),
+            Some("abcdefghijklmnop".into())
+        );
         assert_eq!(clean_name("Ayşe!"), None);
         assert_eq!(clean_name("tab\tname"), None);
         assert_eq!(clean_name("José"), None);

@@ -70,8 +70,8 @@ import {
 } from "./crew-plans";
 import { leaveOnEscape } from "./edit-escape";
 import { JoinButton } from "./friend-row";
-import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { newAccount } from "./identity";
+import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { limitOf, opensIn } from "./limits";
 import { planMenu, rowsOf } from "./menus";
 import { enter, glide, leave, pop, rise, swap, useSocialMotion } from "./motion";

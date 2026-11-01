@@ -1909,6 +1909,8 @@ pub(crate) mod tests {
             restriction: None,
             backup_waits_until: None,
             providers: vec![pl_social::Provider::Discord],
+            sign_up_ways: vec![pl_social::Provider::Discord],
+            providers_known: false,
             signing_in_with: None,
             identity_change: None,
         }

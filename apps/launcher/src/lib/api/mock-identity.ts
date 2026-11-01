@@ -1,14 +1,16 @@
 // Browser preview of SOC-ID (the ways into the friends account), on mock-social.ts's data.
 // Scenarios (`?social=<scenario>`):
-// - `signedOutMicrosoft`: the sign-in screen while the service offers Microsoft too (both
-//   buttons); "Microsoft ile giriş yap" opens a new account without Discord and its name step;
+// - `signedOutMicrosoft`: the sign-in screen while Microsoft opens accounts too (both buttons as
+//   equals); "Microsoft ile giriş yap" opens a new account without Discord and its name step;
+// - `signedOutLinked`: the sign-in screen while Microsoft signs in only the accounts it is linked
+//   to (under "Bağlı hesabınla gir", one size smaller);
 // - `signingInMicrosoft`: the waiting card of a Microsoft sign-in;
-// - `notLinked`: Microsoft signs in, but this Microsoft account is no Projects account's yet;
+// - `notLinked`: as `signedOutLinked`, and this Microsoft account is no Projects account's yet;
 // - `nameStep`: a new account opened with Microsoft, its name step on screen;
 // - `microsoftOnly`: signed in with an account without Discord ("Bağlı hesaplar" with Microsoft
-//   alone, "Hesap bağla" for Discord; no Discord photo, no Projects skin, no 7/24 Bulut);
+//   alone, "Discord hesabını bağla"; no Discord photo, no Projects skin, no 7/24 Bulut);
 // - `linkedBoth`: an account opened with Discord with Microsoft linked three days ago;
-// - `linkedOne`: an account opened with Discord, Microsoft offered ("Hesap bağla");
+// - `linkedOne`: an account opened with Discord, Microsoft offered ("Microsoft hesabını bağla");
 // - `identityWaiting`: a link of Microsoft waits for the browser;
 // - `identityNotice`: Microsoft was linked on another device (the one-time note);
 // - `limitedAccount`: a new account without Discord is limited ("Hesabın yeni olduğu için…").
@@ -29,6 +31,7 @@ import type {
 
 export const IDENTITY_SCENARIOS = [
   "signedOutMicrosoft",
+  "signedOutLinked",
   "signingInMicrosoft",
   "notLinked",
   "nameStep",
@@ -51,6 +54,8 @@ interface Context {
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const now = () => Math.floor(Date.now() / 1000);
 const BOTH: SocialProvider[] = ["discord", "microsoft"];
+/** The scenarios where Microsoft signs in but opens no account yet. */
+const LINKED_ONLY = ["signedOutLinked", "notLinked"];
 const LINK_PAGE = "https://social.projects.gg/auth/link?t=preview";
 
 /** `YYYY-MM-DD` of `days` ago, on this computer's calendar. */
@@ -84,9 +89,7 @@ function discordMe(base: SocialMe, microsoft: boolean): SocialMe {
     ...base,
     identities: [
       { provider: "discord", linkedOn: "2026-10-16", isNew: false, hint: base.username },
-      ...(microsoft
-        ? [{ provider: "microsoft" as const, linkedOn: daysAgo(3), isNew: true }]
-        : []),
+      ...(microsoft ? [{ provider: "microsoft" as const, linkedOn: daysAgo(3), isNew: true }] : []),
     ],
     signInVia: "discord",
     nameSource: "discord",
@@ -107,10 +110,16 @@ function withoutDiscord(view: SocialSnapshot): SocialSnapshot {
 /** The scenario's view, on mock-social.ts's own. */
 export function identitySnapshot(view: SocialSnapshot, ctx: Pick<Context, "scenario">) {
   if (!IDENTITY_SCENARIOS.includes(ctx.scenario)) return view;
-  const base = withoutDiscord({ ...view, providers: BOTH });
+  const base = withoutDiscord({
+    ...view,
+    providers: BOTH,
+    signUpWays: LINKED_ONLY.includes(ctx.scenario) ? ["discord"] : BOTH,
+    providersKnown: true,
+  });
   const me = base.me;
   switch (ctx.scenario) {
     case "signedOutMicrosoft":
+    case "signedOutLinked":
     case "notLinked":
       return { ...base, auth: "signedOut" as const, me: undefined, loaded: false, friends: [] };
     case "signingInMicrosoft":
@@ -203,7 +212,14 @@ const FAILURES: IdentityFailure[] = [
   "offline",
   "failed",
 ];
-const NAME_RESULTS: NameResult[] = ["invalid", "rejected", "tooMany", "offline", "failed"];
+const NAME_RESULTS: NameResult[] = [
+  "invalid",
+  "rejected",
+  "tooMany",
+  "providerOff",
+  "offline",
+  "failed",
+];
 
 type IdentityApi = Pick<
   SocialApi,

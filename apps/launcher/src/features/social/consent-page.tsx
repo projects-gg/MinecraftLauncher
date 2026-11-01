@@ -1,7 +1,9 @@
 // The opt-in screen (S3): what is shared, in two sentences (a third about chat while chat may
 // show), a link to the privacy page, and the sign-in. Pressing a button after reading is the
-// consent. SOC-ID: while the service offers Microsoft too, "Microsoft ile giriş yap" stands under
-// Discord's button, as tall; the screen asks which ways it offers each time it opens. While the
+// consent. SOC-ID: while Microsoft signs in only the accounts it is linked to, "Microsoft ile giriş
+// yap" stands one size smaller under a thin "Bağlı hesabınla gir" divider; once it opens accounts
+// too it stands under Discord's button as its equal and the body names both. The screen asks which
+// ways the service offers each time it opens, and shows the last answer meanwhile. While the
 // browser is open the buttons give way to a calm waiting card of that way (Microsoft's says where
 // the password goes); an expired or failed sign-in says so in place, and so do a suspended or
 // banned account (with the community rules), a day without new accounts (MOD1, SPAM1) and a
@@ -18,6 +20,7 @@ import type { SignInFailure, SocialProvider } from "@/lib/api/social-types";
 import { currentLanguage } from "@/lib/i18n";
 import { openWebLink } from "@/lib/links";
 import { DiscordButton, DiscordTile } from "./discord-button";
+import { useMicrosoftOffer } from "./identity-store";
 import { COMMUNITY_RULES_URL, dayMonth } from "./limits";
 import { rise, useSocialMotion } from "./motion";
 import { MicrosoftButton, ProviderTile } from "./provider-mark";
@@ -84,7 +87,7 @@ export function ConsentPage() {
   // drawing every frame (OPT2).
   const breathe = useAmbientMotion();
   const auth = useSocialUi((s) => s.view.auth);
-  const providers = useSocialUi((s) => s.view.providers);
+  const offer = useMicrosoftOffer();
   const signingInWith = useSocialUi((s) => s.view.signingInWith);
   const signInUrl = useSocialUi((s) => s.signInUrl);
   const error = useSocialUi((s) => s.signInError);
@@ -94,7 +97,6 @@ export function ConsentPage() {
   const restriction = useSocialUi((s) => s.view.restriction);
   const [starting, setStarting] = useState(false);
   const waiting = auth === "signingIn";
-  const microsoft = providers?.includes("microsoft") ?? false;
   const way: SocialProvider = signingInWith ?? "discord";
   // SOC-ID: which ways sign in now, asked whenever the screen opens (the backend asks at most
   // once a minute).
@@ -135,7 +137,7 @@ export function ConsentPage() {
         {t("social.consent.title")}
       </h2>
       <p className="mt-3 max-w-[36ch] text-[14px] leading-relaxed text-ash-300">
-        {microsoft ? t("identity.consent.body") : t("social.consent.body")}
+        {offer === "open" ? t("identity.consent.body") : t("social.consent.body")}
         {chatAllowed ? ` ${t("chat.consent")}` : null}
       </p>
       <button
@@ -243,7 +245,7 @@ export function ConsentPage() {
                 >
                   {t("social.consent.signIn")}
                 </DiscordButton>
-                {microsoft ? (
+                {offer === "open" ? (
                   <MicrosoftButton
                     className="w-full"
                     disabled={starting}
@@ -253,6 +255,27 @@ export function ConsentPage() {
                   </MicrosoftButton>
                 ) : null}
               </div>
+              {/* The first answer of the service may bring it in while the screen is open: it
+                  rises in below everything, nothing above it moves. */}
+              <AnimatePresence initial={false}>
+                {offer === "linked" ? (
+                  <motion.div key="linked" className="mt-6" {...rise(reduce, 4)}>
+                    <p className="flex items-center gap-3 text-[12.5px] text-ash-300">
+                      <span aria-hidden className="h-px flex-1 bg-white/10" />
+                      {t("identity.consent.linkedWay")}
+                      <span aria-hidden className="h-px flex-1 bg-white/10" />
+                    </p>
+                    <MicrosoftButton
+                      size="md"
+                      className="mt-3 w-full"
+                      disabled={starting}
+                      onClick={() => void start("microsoft")}
+                    >
+                      {t("identity.consent.microsoft")}
+                    </MicrosoftButton>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>

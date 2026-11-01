@@ -38,7 +38,7 @@ import { planWhen, withPlanNote } from "./crew-plans";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
 import { homeShowsCall } from "./home-strip";
-import { useIdentityUi } from "./identity-store";
+import { useIdentityUi, useKeepMicrosoftOffer } from "./identity-store";
 import { showInviteToast, showTeamInviteToast } from "./invite-toast";
 import { gameBusy, joinProjects } from "./join";
 import { JoinDialog } from "./join-dialog";
@@ -704,6 +704,8 @@ export function SocialHost() {
   // "Yazıyor…" frames are kept from the start, so a list or a conversation that opens shows who
   // is writing at once (CHAT2; a pushed event, nothing is asked for).
   useTypingFeed();
+  // SOC-ID: how the service offers Microsoft is kept for the next start (Home's invitation).
+  useKeepMicrosoftOffer();
   return (
     <>
       <FriendsSheet />

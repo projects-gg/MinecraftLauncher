@@ -42,7 +42,7 @@ use crate::game::{self, GameActivity};
 use crate::history::{Change, Conversation, Entry, History, crew_conversation};
 use crate::identity::{
     IdentityAnswer, IdentityChangeView, IdentityFailure, IdentityStep, LimitedReason, NameResult,
-    NameSource, Provider, clean_name, sign_in_ways,
+    NameSource, Provider, clean_name, sign_in_ways, sign_up_ways,
 };
 use crate::kept::{KeptCopy, KeptLists};
 use crate::links::{find_links, first_link};
@@ -51,12 +51,11 @@ use crate::model::{
     ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMute, CrewMuteEdit, EditFeatures,
     FIRST_EMBLEMS, FriendGroup, FriendGroups, JoinMode, JoinOutcome, LimitedKey, LinkRule,
     MAX_FRIEND_GROUPS, Me, NoticeKind, ProfileUpdate, ReportReason, RequestOutcome, SessionInfo,
-    SettingsMeta,
-    SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS, TEAM_FEATURE_BADGES,
-    TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK,
-    TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS,
-    TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup, TeamNotifications,
-    TeamNotificationsEdit, TeamRole,
+    SettingsMeta, SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS,
+    TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK,
+    TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES,
+    TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup,
+    TeamNotifications, TeamNotificationsEdit, TeamRole,
 };
 use crate::presence::{
     ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, RelVersion, StopReason,
@@ -256,6 +255,8 @@ struct Core {
     /// SOC-ID: the ways the sign-in screen offers, as the service last said (empty: Discord
     /// alone, until it says). Kept across sign-outs; a new service forgets them.
     providers: Vec<Provider>,
+    /// Of those, the ways whose first sign-in opens a new account (Discord always).
+    sign_up_ways: Vec<Provider>,
     /// When the ways in were last asked (at most once a minute).
     providers_asked: Option<Instant>,
     /// SOC-ID: a link or a removal waiting for its browser step.
@@ -473,6 +474,7 @@ impl SocialService {
             reset(&mut core);
             // Another service may offer other ways in (SOC-ID).
             core.providers.clear();
+            core.sign_up_ways.clear();
             core.providers_asked = None;
             core.client = url.as_ref().map(|url| {
                 SocialClient::with_http_client(
@@ -2468,10 +2470,12 @@ impl SocialService {
             match answer {
                 Ok(list) => {
                     let ways = sign_in_ways(&list);
-                    if core.providers == ways {
+                    let open = sign_up_ways(&list);
+                    if core.providers == ways && core.sign_up_ways == open {
                         return;
                     }
                     core.providers = ways;
+                    core.sign_up_ways = open;
                 }
                 Err(error) => {
                     tracing::info!(%error, "could not ask the ways into an account");
@@ -2609,9 +2613,11 @@ impl SocialService {
         } else {
             NoticeKind::IdentityRemoved
         };
+        // The service lists these notes in `identityNotices` (an older build of it: `notices`).
         let ids: Vec<String> = me
-            .notices
+            .identity_notices
             .iter()
+            .chain(&me.notices)
             .filter(|notice| notice.kind == kind && notice.provider == Some(provider))
             .map(|notice| notice.id.clone())
             .collect();
@@ -2648,7 +2654,14 @@ impl SocialService {
             Ok(()) => NameResult::Saved,
             Err(error) => {
                 tracing::info!(%error, "the profile name did not change");
-                NameResult::of(&error)
+                let result = NameResult::of(&error);
+                if result == NameResult::ProviderOff {
+                    // An account with Discord names itself only while Microsoft signs in: the
+                    // ways in are asked again at once, and "Profil adı" goes with the answer.
+                    self.lock().providers_asked = None;
+                    self.refresh_providers().await;
+                }
+                result
             }
         }
     }
@@ -4765,19 +4778,22 @@ fn build_view(core: &mut Core) -> SocialView {
         } else {
             core.providers.clone()
         },
+        sign_up_ways: if core.sign_up_ways.is_empty() {
+            vec![Provider::Discord]
+        } else {
+            core.sign_up_ways.clone()
+        },
+        providers_known: !core.providers.is_empty(),
         signing_in_with: core
             .login
             .as_ref()
             .filter(|_| core.auth == AuthPhase::SigningIn)
             .map(LoginAttempt::provider),
-        identity_change: core
-            .identity
-            .as_ref()
-            .map(|change| IdentityChangeView {
-                provider: change.provider,
-                unlink: change.unlink,
-                url: change.url.to_string(),
-            }),
+        identity_change: core.identity.as_ref().map(|change| IdentityChangeView {
+            provider: change.provider,
+            unlink: change.unlink,
+            url: change.url.to_string(),
+        }),
     }
 }
 
@@ -6844,7 +6860,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(claims.load(Ordering::SeqCst), 0);
 
-        let browser = harness.service.begin_sign_in(Provider::Discord).await.unwrap();
+        let browser = harness
+            .service
+            .begin_sign_in(Provider::Discord)
+            .await
+            .unwrap();
         assert!(browser.as_str().contains("/auth/discord/start?challenge="));
         assert_eq!(harness.service.view().auth, AuthPhase::SigningIn);
         assert!(harness.service.complete_sign_in(&link));
@@ -6882,7 +6902,11 @@ mod tests {
         .await;
         let harness = Harness::new(Arc::new(MemoryTokenStore::new()));
         harness.service.configure(url(&server));
-        harness.service.begin_sign_in(Provider::Discord).await.unwrap();
+        harness
+            .service
+            .begin_sign_in(Provider::Discord)
+            .await
+            .unwrap();
         harness
             .service
             .complete_sign_in(&format!("projects://auth/done?c={}", "C".repeat(43)));
@@ -6915,7 +6939,13 @@ mod tests {
         assert_eq!(harness.service.view().auth, AuthPhase::SignedOut);
         // Not configured: nothing to sign in to.
         harness.service.configure(None);
-        assert!(harness.service.begin_sign_in(Provider::Discord).await.is_err());
+        assert!(
+            harness
+                .service
+                .begin_sign_in(Provider::Discord)
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -7404,11 +7434,16 @@ mod tests {
                                             r#""displayName":"Oyuncu4821""#,
                                             &format!(r#""displayName":"{name}""#),
                                         )
-                                        .replace(r#""nameSource":"unset""#, r#""nameSource":"own""#),
+                                        .replace(
+                                            r#""nameSource":"unset""#,
+                                            r#""nameSource":"own""#,
+                                        ),
                                 )
                             }
                         }
-                        _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
                     }
                 })
             }
@@ -7421,7 +7456,11 @@ mod tests {
             .begin_sign_in(Provider::Microsoft)
             .await
             .unwrap();
-        assert!(browser.as_str().contains("/auth/microsoft/start?challenge="));
+        assert!(
+            browser
+                .as_str()
+                .contains("/auth/microsoft/start?challenge=")
+        );
         assert_eq!(
             harness.service.view().signing_in_with,
             Some(Provider::Microsoft)
@@ -7507,8 +7546,8 @@ mod tests {
             r#""discordId":"123456789012345678","identities":[{"provider":"discord",
             "linkedOn":"2026-10-16","isNew":false,"hint":"ayse"},{"provider":"microsoft",
             "linkedOn":"2026-11-01","isNew":true,"hint":null}],"signInVia":"discord",
-            "nameSource":"discord","notices":[{"id":"n-link","kind":"identity_linked","at":5,
-            "provider":"microsoft"}]"#,
+            "nameSource":"discord","identityNotices":[{"id":"n-link","kind":"identity_linked",
+            "at":5,"provider":"microsoft"}]"#,
         );
         let server = MockServer::start({
             let challenge = challenge.clone();
@@ -7538,10 +7577,7 @@ mod tests {
                         ("POST", "/v1/me/identities/claim") => {
                             let body = req.json();
                             let verifier = body["verifier"].as_str().unwrap();
-                            assert_eq!(
-                                Some(challenge_for(verifier)),
-                                *challenge.lock().unwrap()
-                            );
+                            assert_eq!(Some(challenge_for(verifier)), *challenge.lock().unwrap());
                             assert_eq!(body["code"], "D".repeat(43));
                             MockReply::json(200, &format!(r#"{{"me":{both}}}"#))
                         }
@@ -7554,7 +7590,9 @@ mod tests {
                             seen.store(true, Ordering::SeqCst);
                             MockReply::empty(204)
                         }
-                        _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
                     }
                 })
             }
@@ -7602,7 +7640,10 @@ mod tests {
         };
         assert!(page.ends_with("/auth/link?t=abc"));
         let change = harness.service.view().identity_change.unwrap();
-        assert_eq!((change.provider, change.unlink), (Provider::Microsoft, false));
+        assert_eq!(
+            (change.provider, change.unlink),
+            (Provider::Microsoft, false)
+        );
         assert!(
             harness
                 .service
@@ -7667,21 +7708,29 @@ mod tests {
         let harness = Harness::new(Arc::new(MemoryTokenStore::new()));
         harness.service.configure(url(&server));
         assert_eq!(harness.service.view().providers, [Provider::Discord]);
+        assert!(!harness.service.view().providers_known);
         harness.service.refresh_providers().await;
         assert_eq!(
             harness.service.view().providers,
             [Provider::Discord, Provider::Microsoft]
         );
+        assert!(harness.service.view().providers_known);
+        // Microsoft signs in but opens no account yet: it stands under "Bağlı hesabınla gir".
+        assert_eq!(harness.service.view().sign_up_ways, [Provider::Discord]);
         harness.service.refresh_providers().await;
         assert_eq!(asked.load(Ordering::SeqCst), 1);
         // A service from before SOC-ID: Discord alone.
-        let older =
-            MockServer::start(|_| MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#))
-                .await;
+        let older = MockServer::start(|_| {
+            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+        })
+        .await;
         harness.service.configure(url(&older));
         assert_eq!(harness.service.view().providers, [Provider::Discord]);
+        assert!(!harness.service.view().providers_known);
         harness.service.refresh_providers().await;
         assert_eq!(harness.service.view().providers, [Provider::Discord]);
+        assert_eq!(harness.service.view().sign_up_ways, [Provider::Discord]);
+        assert!(harness.service.view().providers_known);
     }
 
     /// A new account's refusals say "Hesabın yeni olduğu için…", as its profile does.

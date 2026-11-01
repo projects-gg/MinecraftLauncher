@@ -64,8 +64,16 @@ export type IdentityStep =
   | { kind: "done" }
   | { kind: "refused"; reason: IdentityFailure };
 
-/** What became of a new profile name (SOC-ID). */
-export type NameResult = "saved" | "invalid" | "rejected" | "tooMany" | "offline" | "failed";
+/** What became of a new profile name (SOC-ID). `providerOff`: an account with Discord names itself
+ * only while Microsoft signs in; the ways in are asked again and "Profil adı" goes. */
+export type NameResult =
+  | "saved"
+  | "invalid"
+  | "rejected"
+  | "tooMany"
+  | "providerOff"
+  | "offline"
+  | "failed";
 
 export interface SocialGame {
   where: GameWhere;
@@ -906,6 +914,12 @@ export interface SocialSnapshot {
   crewJoins?: CrewJoin[];
   /** SOC-ID: the ways the sign-in screen offers now, Discord first (absent: Discord alone). */
   providers?: SocialProvider[];
+  /** SOC-ID: of `providers`, the ways whose first sign-in opens a new account (absent: Discord
+   * alone). A way that only signs in stands under "Bağlı hesabınla gir". */
+  signUpWays?: SocialProvider[];
+  /** SOC-ID: the service said its ways in during this run (until then the launcher shows how it
+   * offered Microsoft last time, kept on this computer). */
+  providersKnown?: boolean;
   /** SOC-ID: the way of the sign-in in progress (its waiting card). */
   signingInWith?: SocialProvider;
   /** SOC-ID: a link or a removal waiting for its browser step. */

@@ -277,6 +277,15 @@ pub struct Me {
     /// One-time notes from moderators that wait to be shown (MOD1).
     #[serde(default)]
     pub notices: Vec<ModNotice>,
+    /// SOC-ID: the one-time notes about the ways in (`identity_linked`, `identity_removed`). The
+    /// service lists them apart from `notices` (phone apps from before SOC-ID show a kind they do
+    /// not know as a moderator's warning); they are shown and seen as notices are.
+    #[serde(
+        default,
+        rename = "identityNotices",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub identity_notices: Vec<ModNotice>,
     /// SOC-ID: the ways into the account (`identities`); None from an older service. Read through
     /// [`Me::identities`].
     #[serde(

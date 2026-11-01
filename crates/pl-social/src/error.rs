@@ -598,10 +598,13 @@ mod tests {
                 item,
                 until,
                 retry_after,
+                reason,
             } => {
                 assert_eq!(item, LimitedKey::CrewInvites);
                 assert_eq!(until, Some(1_792_600_000));
                 assert_eq!(retry_after, Some(Duration::from_secs(3_600)));
+                // No `reason` (an older service): its Discord account is new.
+                assert_eq!(reason, LimitedReason::Discord);
             }
             other => panic!("unexpected {other:?}"),
         }

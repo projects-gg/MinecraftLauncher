@@ -79,7 +79,7 @@ export function NameStep() {
             maxLength={16}
             autoComplete="off"
             spellCheck={false}
-            // biome-ignore lint/a11y/noAutofocus: the step is this field; the panel opened on it.
+            // The step is this field; the panel opened on it.
             autoFocus
             invalid={Boolean(error)}
             disabled={busy}

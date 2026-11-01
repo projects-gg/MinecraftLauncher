@@ -1199,18 +1199,12 @@ export const mockSocial: SocialApi = {
     // The browser step, then the deep link.
     setTimeout(() => {
       const name = scenario();
-      if (
-        name === "restricted" ||
-        name === "banned" ||
-        name === "signupsClosed" ||
-        way.refused
-      ) {
+      if (name === "restricted" || name === "banned" || name === "signupsClosed" || way.refused) {
         // The service turns the sign-in down at the end of the browser step.
         commit((v) => ({ ...v, auth: "signedOut", signingInWith: undefined }));
         tell({
           kind: "signInFailed",
-          reason:
-            way.refused ?? (name === "signupsClosed" ? "signupsClosed" : "restricted"),
+          reason: way.refused ?? (name === "signupsClosed" ? "signupsClosed" : "restricted"),
         });
         return;
       }
@@ -1226,13 +1220,13 @@ export const mockSocial: SocialApi = {
         invites: [],
         enabled: true,
         providers: v.providers,
+        signUpWays: v.signUpWays,
+        providersKnown: v.providersKnown,
         signingInWith: undefined,
         me: way.microsoft && signed.me ? microsoftMe(signed.me) : signed.me,
       }));
       tell(
-        way.microsoft
-          ? { kind: "signedIn", askName: true }
-          : { kind: "signedIn", restore: backup },
+        way.microsoft ? { kind: "signedIn", askName: true } : { kind: "signedIn", restore: backup },
       );
       setTimeout(() => {
         const full = initial();

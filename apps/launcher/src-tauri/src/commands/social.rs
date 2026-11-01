@@ -15,9 +15,8 @@ use pl_social::{
     BadgeRequestResult, CallAnswer, CallOutcome, ChatCardView, ChatPage, ChatQuota, CrewMuteEdit,
     ErrorCode, FriendGroup, GroupMember, IdentityStep, InviteResult, JoinMode, JoinResult,
     LookupView, NameResult, PermissionsEdit, PlanAnswer, ProfileUpdate, Provider, ReportReason,
-    ReportTarget, SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService,
-    SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView,
-    TeamNotificationsEdit,
+    ReportTarget, SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService, SocialUpdate,
+    SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView, TeamNotificationsEdit,
 };
 use tauri::{AppHandle, Emitter, State};
 

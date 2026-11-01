@@ -1,12 +1,13 @@
 // SOC-ID in Arkadaşlar → Ayarlar: "Profil adı" (the name friends see, changed in place) and "Bağlı
-// hesaplar" right above "Oturumlar": each way into the account with its mark, the Discord name, when
-// it was linked ("25 Ekim'de bağlandı"), "Bu cihaz" on the way this session came in by and "Yeni"
-// for a week; "Kaldır" on all but the last one (asked first; a Discord removal says what goes with
-// it), "Hesap bağla" for a way the service offers that is not linked. A link, or a removal that
-// needs a proof, waits in a calm card while the browser is open; what went wrong is said under the
-// rows.
+// hesaplar" right above "Oturumlar": each way into the account with its mark, the Discord handle
+// beside Discord's name, when it was linked ("25 Ekim'de bağlandı") under it; "Kaldır" on all but
+// the last one (asked first; a Discord removal says what goes with it), "Discord hesabını bağla" or
+// "Microsoft hesabını bağla" for a way the service offers that is not linked. A link, or a removal
+// that needs a proof, waits in a calm card while the browser is open; what went wrong is said under
+// the rows. No "Yeni" or "Bu cihaz" chips (projects-taste): the date says when, and "Oturumlar"
+// says which way each session came in by.
 import { LockSimple, WarningCircle } from "@phosphor-icons/react";
-import { Button, Chip, Dialog, Field, Input } from "@pl/ui";
+import { Button, Dialog, Field, Input, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type FormEvent,
@@ -30,8 +31,16 @@ import type {
 } from "@/lib/api/social-types";
 import { currentLanguage } from "@/lib/i18n";
 import { DiscordMark } from "./discord-button";
-import { cleanName, failureKey, identitiesOf, linkableOf, linkedDate, proofProvider } from "./identity";
-import { useIdentityUi } from "./identity-store";
+import {
+  cleanName,
+  discordIsAccount,
+  failureKey,
+  identitiesOf,
+  linkableOf,
+  linkedDate,
+  proofProvider,
+} from "./identity";
+import { useIdentityUi, useMicrosoftOffer } from "./identity-store";
 import { rise, useSocialMotion } from "./motion";
 import { nameError } from "./name-step";
 import { ProviderTile } from "./provider-mark";
@@ -78,6 +87,12 @@ export function ProfileNameSection({ me }: { me: SocialMe }) {
     setBusy(true);
     const result = await api.social.setName(name).catch((): NameResult => "failed");
     setBusy(false);
+    if (result === "providerOff") {
+      // The section goes with the service's new answer: said once, outside it.
+      setEditing(false);
+      toast(t("identity.name.providerOff"));
+      return;
+    }
     const failure = nameError(result);
     if (failure) {
       setError(failure);
@@ -91,11 +106,7 @@ export function ProfileNameSection({ me }: { me: SocialMe }) {
     <Section title={t("identity.settings.name")}>
       <AnimatePresence mode="popLayout" initial={false}>
         {editing ? (
-          <motion.form
-            key="edit"
-            onSubmit={(event) => void save(event)}
-            {...rise(reduce, 4)}
-          >
+          <motion.form key="edit" onSubmit={(event) => void save(event)} {...rise(reduce, 4)}>
             <Field
               label={<span className="sr-only">{t("identity.name.label")}</span>}
               htmlFor={id}
@@ -108,7 +119,7 @@ export function ProfileNameSection({ me }: { me: SocialMe }) {
                 maxLength={16}
                 autoComplete="off"
                 spellCheck={false}
-                // biome-ignore lint/a11y/noAutofocus: the player just pressed "Değiştir" to type a name
+                // The player just pressed "Değiştir" to type a name.
                 autoFocus
                 invalid={Boolean(error)}
                 disabled={busy}
@@ -199,34 +210,34 @@ function WaitingCard({
 
 function IdentityRow({
   way,
-  thisDevice,
   removable,
   onRemove,
 }: {
   way: SocialIdentity;
-  thisDevice: boolean;
   removable: boolean;
   onRemove: () => void;
 }) {
   const { t } = useTranslation();
   const date = linkedDate(way.linkedOn, currentLanguage());
-  const details = [
-    way.provider === "discord" ? way.hint : undefined,
-    date ? t("identity.settings.linkedOn", { date }) : undefined,
-  ].filter(Boolean);
+  const handle = way.provider === "discord" && way.hint ? way.hint : null;
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div className="flex min-h-14 items-center gap-3 py-2">
       <ProviderTile provider={way.provider} />
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-[14px] font-medium text-bone-50">
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="shrink-0 text-[14px] font-medium text-bone-50">
             {t(`identity.providers.${way.provider}`)}
           </span>
-          {thisDevice ? <Chip>{t("identity.settings.thisDevice")}</Chip> : null}
-          {way.isNew ? <Chip>{t("identity.settings.new")}</Chip> : null}
+          {handle ? (
+            <span className="min-w-0 truncate text-[13px] text-ash-400" data-selectable>
+              @{handle}
+            </span>
+          ) : null}
         </span>
-        {details.length ? (
-          <span className="block truncate text-[12.5px] text-ash-400">{details.join(" · ")}</span>
+        {date ? (
+          <span className="block truncate text-[12.5px] text-ash-400">
+            {t("identity.settings.linkedOn", { date })}
+          </span>
         ) : null}
       </span>
       {removable ? (
@@ -241,7 +252,7 @@ function IdentityRow({
 /** "Bağlı hesaplar": the ways into the account, right above "Oturumlar". */
 export function LinkedAccountsSection({ me }: { me: SocialMe }) {
   const { t } = useTranslation();
-  const providers = useSocialUi((s) => s.view.providers);
+  const offer = useMicrosoftOffer();
   const change = useSocialUi((s) => s.view.identityChange);
   const failure = useIdentityUi((s) => s.failure);
   const setFailure = useIdentityUi((s) => s.setFailure);
@@ -255,8 +266,8 @@ export function LinkedAccountsSection({ me }: { me: SocialMe }) {
   const [busy, setBusy] = useState(false);
   const section = useRef<HTMLElement>(null);
   const ways = identitiesOf(me);
-  const linkable = linkableOf(me, providers);
-  const via = me.signInVia ?? "discord";
+  // Discord is always offered; Microsoft while the service signs in with it.
+  const linkable = linkableOf(me, offer === "none" ? ["discord"] : ["discord", "microsoft"]);
 
   // The panel asks which ways sign in now (at most once a minute).
   useEffect(() => {
@@ -286,7 +297,6 @@ export function LinkedAccountsSection({ me }: { me: SocialMe }) {
           <IdentityRow
             key={way.provider}
             way={way}
-            thisDevice={way.provider === via}
             removable={ways.length > 1 && !change}
             onRemove={() => setRemoval({ open: true, provider: way.provider })}
           />
@@ -304,12 +314,15 @@ export function LinkedAccountsSection({ me }: { me: SocialMe }) {
                 variant="secondary"
                 disabled={busy}
                 icon={
-                  provider === "microsoft" ? <MicrosoftMark size={13} /> : <DiscordMark height={11} />
+                  provider === "microsoft" ? (
+                    <MicrosoftMark size={13} />
+                  ) : (
+                    <DiscordMark height={11} />
+                  )
                 }
-                aria-label={`${t("identity.settings.link")}: ${t(`identity.providers.${provider}`)}`}
                 onClick={() => void step(() => api.social.linkIdentity(provider), provider)}
               >
-                {t("identity.settings.link")}
+                {t(`identity.settings.link.${provider}`)}
               </Button>
             ))}
           </motion.div>
@@ -358,7 +371,9 @@ export function LinkedAccountsSection({ me }: { me: SocialMe }) {
         }
       >
         {removal.provider === "discord" ? (
-          <p className="text-[14px] leading-relaxed text-bone-100">{t("identity.remove.discord")}</p>
+          <p className="text-[14px] leading-relaxed text-bone-100">
+            {t(discordIsAccount(me) ? "identity.remove.discordNumber" : "identity.remove.discord")}
+          </p>
         ) : null}
       </Dialog>
     </Section>

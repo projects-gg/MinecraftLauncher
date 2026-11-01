@@ -6,6 +6,8 @@ import {
   identitiesOf,
   linkableOf,
   linkedDate,
+  microsoftOffer,
+  ownNameOffered,
   proofProvider,
   suggestedName,
   yearIn,
@@ -53,6 +55,35 @@ describe("the player's ways in", () => {
     // Microsoft only while the service offers it.
     expect(linkableOf(old, undefined)).toEqual([]);
     expect(linkableOf(old, ["discord", "microsoft"])).toEqual(["microsoft"]);
+  });
+
+  it("offers Microsoft under the linked ways until it opens accounts", () => {
+    expect(microsoftOffer({})).toBe("none");
+    expect(microsoftOffer({ providers: ["discord"], signUpWays: ["discord"] })).toBe("none");
+    expect(microsoftOffer({ providers: ["discord", "microsoft"], signUpWays: ["discord"] })).toBe(
+      "linked",
+    );
+    expect(microsoftOffer({ providers: ["discord", "microsoft"] })).toBe("linked");
+    expect(
+      microsoftOffer({ providers: ["discord", "microsoft"], signUpWays: ["discord", "microsoft"] }),
+    ).toBe("open");
+    // New accounts without sign-in open nothing.
+    expect(microsoftOffer({ providers: ["discord"], signUpWays: ["discord", "microsoft"] })).toBe(
+      "none",
+    );
+  });
+
+  it("offers a name of one's own as the service takes it", () => {
+    const discord = { id: "123456789012345678", nameSource: "discord" as const, ownNames: true };
+    // An account with Discord: only while Microsoft signs in.
+    expect(ownNameOffered(discord, "none")).toBe(false);
+    expect(ownNameOffered(discord, "linked")).toBe(true);
+    expect(ownNameOffered(discord, "open")).toBe(true);
+    // Without Discord, or with the placeholder: always.
+    expect(ownNameOffered({ ...discord, discordId: null }, "none")).toBe(true);
+    expect(ownNameOffered({ ...discord, nameSource: "unset" as const }, "none")).toBe(true);
+    // An older service takes no name.
+    expect(ownNameOffered({ ...discord, ownNames: false, discordId: null }, "open")).toBe(false);
   });
 
   it("proves a removal with the other way", () => {

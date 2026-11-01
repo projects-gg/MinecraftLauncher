@@ -51,8 +51,8 @@ import { BadgedName, badgeRowLabel, focusFirstAction, useShownBadge } from "./cr
 import type { InviteState } from "./crews";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
-import { discordIdOf } from "./identity";
 import { REST } from "./groups";
+import { discordIdOf } from "./identity";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { isJoinable, notifiesOnline, presenceLine } from "./model";

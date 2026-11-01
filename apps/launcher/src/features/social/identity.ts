@@ -53,6 +53,37 @@ export function linkableOf(
   return (providers ?? ["discord"]).filter((provider) => !linked.has(provider));
 }
 
+/** The ways in as the service offers them (`providers`, `signUpWays`; absent: Discord alone). */
+export interface Ways {
+  providers?: readonly SocialProvider[];
+  signUpWays?: readonly SocialProvider[];
+}
+
+/**
+ * How the sign-in offers Microsoft: `none` (the service does not), `linked` (it signs in, but new
+ * accounts open with Discord only: it stands under "Bağlı hesabınla gir") or `open` (it opens
+ * accounts too: an equal of Discord, and the invitations say "Giriş yap" without Discord's mark).
+ */
+export type MicrosoftOffer = "none" | "linked" | "open";
+
+export function microsoftOffer(ways: Ways): MicrosoftOffer {
+  if (!ways.providers?.includes("microsoft")) return "none";
+  return ways.signUpWays?.includes("microsoft") ? "open" : "linked";
+}
+
+/**
+ * "Profil adı" is offered: the service takes a name of the player's own (`ownNames`), and an
+ * account with Discord picks one only while Microsoft signs in (`403 provider_off` otherwise); one
+ * without Discord, or still with its placeholder, always names itself.
+ */
+export function ownNameOffered(
+  me: Pick<SocialMe, "id" | "discordId" | "nameSource" | "ownNames">,
+  offer: MicrosoftOffer,
+): boolean {
+  if (!me.ownNames) return false;
+  return offer !== "none" || discordIdOf(me) === null || me.nameSource === "unset";
+}
+
 /** The way whose page proves a step: a link's own, a removal's the other (there are two). */
 export function proofProvider(change: { provider: SocialProvider; unlink: boolean }) {
   if (!change.unlink) return change.provider;
