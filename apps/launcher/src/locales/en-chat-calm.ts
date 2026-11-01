@@ -13,6 +13,7 @@ export const enChatCalm = {
     wait_one: "Wait {{count}} second to send",
     wait_other: "Wait {{count}} seconds to send",
     failure: "Slow mode is on. Wait a moment.",
+    on: "Slow mode is on.",
     onLine: "Members wait {{time}} between messages.",
     offLine: "Members write without waiting.",
     set: "Slow mode: {{time}}",

@@ -257,13 +257,19 @@
     {
       "name": "a reply to the player is heard in a crew muted for them",
       "event": { "kind": "crew", "conv": "c:t1", "crew": "t1", "toMe": true },
-      "situation": { "crewChat": true, "crews": [{ "id": "t1", "muted": true, "muteUntil": null }] },
+      "situation": {
+        "crewChat": true,
+        "crews": [{ "id": "t1", "muted": true, "muteUntil": null }]
+      },
       "heard": true
     },
     {
       "name": "a reply to the player is heard while every crew is muted",
       "event": { "kind": "crew", "conv": "c:t1", "crew": "t1", "toMe": true },
-      "situation": { "service": { "calls": true, "muted": true, "muteUntil": null }, "crews": [{ "id": "t1" }] },
+      "situation": {
+        "service": { "calls": true, "muted": true, "muteUntil": null },
+        "crews": [{ "id": "t1" }]
+      },
       "heard": true
     },
     {

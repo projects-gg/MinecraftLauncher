@@ -242,11 +242,12 @@ export function Composer({
     return () => window.clearTimeout(timer);
   }, [slowEnds]);
   const wait = editing ? 0 : slowLeft(slowEnds, clock);
-  // The slow mode's sentence (a sticker or Enter while waiting) goes once the wait is over.
-  const slowFailure = t("chatCalm.slow.failure");
+  // A send tried while the slow mode waits (a sticker or Enter) says "Yavaş mod açık." under the
+  // field in quiet words, never as an error (waiting is no failure); it goes once the wait is over.
+  const [slowNote, setSlowNote] = useState(false);
   useEffect(() => {
-    if (wait === 0) setError((current) => (current === slowFailure ? null : current));
-  }, [wait, slowFailure]);
+    if (wait === 0) setSlowNote(false);
+  }, [wait]);
 
   // An edit starts with the message's text, the caret at its end, however it started: the menu
   // that started it may close after this and must not take the focus away (focus.ts). An edit
@@ -363,7 +364,7 @@ export function Composer({
 
   const sendSticker = async (sticker: StickerData) => {
     if (wait > 0) {
-      setError(slowFailure);
+      setSlowNote(true);
       return;
     }
     setError(null);
@@ -419,7 +420,7 @@ export function Composer({
   // says why it waits (the text stays).
   const sendNow = () => {
     if (ready) void send(text);
-    else if (wait > 0 && hasText(text)) setError(slowFailure);
+    else if (wait > 0 && hasText(text)) setSlowNote(true);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -591,7 +592,9 @@ export function Composer({
           onBlur={remember}
           aria-label={t("chat.composer.label")}
           aria-invalid={reason ? true : undefined}
-          aria-describedby={reason || showCount || waitShown ? `composer-${conv}` : undefined}
+          aria-describedby={
+            reason || showCount || waitShown || slowNote ? `composer-${conv}` : undefined
+          }
           placeholder={
             wait > 0
               ? t("chatCalm.slow.wait", { count: wait })
@@ -661,7 +664,7 @@ export function Composer({
         className="flex min-h-[24px] items-start justify-between gap-3 px-1 pt-1.5 text-[12px]"
       >
         <span className="relative min-w-0 flex-1">
-          {reason ? null : <span className="absolute inset-x-0 top-0">{status}</span>}
+          {reason || slowNote ? null : <span className="absolute inset-x-0 top-0">{status}</span>}
           <AnimatePresence initial={false}>
             {reason ? (
               <motion.span
@@ -673,6 +676,17 @@ export function Composer({
                 exit={{ opacity: 0, transition: leave(0.12) }}
               >
                 {reason}
+              </motion.span>
+            ) : slowNote ? (
+              // CHAT-CALM: a send tried while the slow mode waits; quiet words, no alert colour.
+              <motion.span
+                key="slow"
+                className="block text-ash-300"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: enter(0.18) }}
+                exit={{ opacity: 0, transition: leave(0.12) }}
+              >
+                {t("chatCalm.slow.on")}
               </motion.span>
             ) : null}
           </AnimatePresence>

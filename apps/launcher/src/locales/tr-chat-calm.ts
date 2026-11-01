@@ -17,7 +17,9 @@ export const trChatCalm = {
     // Writing goes on meanwhile; only sending waits.
     wait_one: "Göndermek için {{count}} saniye bekle",
     wait_other: "Göndermek için {{count}} saniye bekle",
+    // A message the service held back (its bubble); the composer's own note is `on`.
     failure: "Yavaş mod açık. Biraz bekle.",
+    on: "Yavaş mod açık.",
     onLine: "Üyeler iki mesaj arasında {{time}} bekler.",
     offLine: "Üyeler beklemeden yazar.",
     set: "Yavaş mod: {{time}}",
