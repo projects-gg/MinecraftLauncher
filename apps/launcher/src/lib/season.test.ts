@@ -115,8 +115,11 @@ describe("season looks", () => {
     expect(particleFade("lights", 1)).toBe(0);
     expect(particleFade("snow", 0.5)).toBe(1);
     expect(particleFade("snow", 0.9)).toBeCloseTo(0.4);
-    // Embers flare up and die out: never at full strength for long.
+    // Embers flare up and die out: never at full strength for long; an event's glints stay lit
+    // through their first half.
     expect(particleFade("embers", 0.5)).toBeLessThan(0.4);
+    expect(particleFade("sparks", 0.5, "spark")).toBe(1);
+    expect(particleFade("sparks", 0.5, "ember")).toBe(particleFade("embers", 0.5));
     expect(snowTopFade(10, 34)).toBe(0);
     expect(snowTopFade(34 + 28, 34)).toBe(0.5);
     expect(snowTopFade(200, 34)).toBe(1);

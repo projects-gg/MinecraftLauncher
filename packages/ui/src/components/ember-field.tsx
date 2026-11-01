@@ -113,11 +113,13 @@ function emberSprite(hue: number, light = false): HTMLCanvasElement | null {
 /**
  * How strong a particle is at `t` of its life (0 to 1): embers flare up fast and die out slowly;
  * lights and snow hold their strength through most of their way (a flake that faded early read as
- * a sparse, peach-tinted snowfall over the fire).
+ * a sparse, peach-tinted snowfall over the fire); an event's glints flash up and fade over their
+ * second half.
  */
-export function particleFade(kind: ParticleKind, t: number): number {
+export function particleFade(kind: ParticleKind, t: number, palette?: EmberPalette): number {
   if (kind === "lights") return Math.min(1, t / 0.15) * Math.min(1, (1 - t) / 0.3);
   if (kind === "snow") return Math.min(1, t / 0.1) * Math.min(1, (1 - t) / 0.25);
+  if (palette === "spark") return Math.min(1, t / 0.08) * Math.min(1, (1 - t) / 0.5);
   return Math.min(1, t * 6) * (1 - t) ** 1.4;
 }
 
@@ -320,7 +322,7 @@ export function EmberField({
             ? 0.7 + Math.sin(p.phase * 1.4) * 0.3
             : 0.75 + Math.sin(p.phase * 3.1) * 0.25;
         const top = snow ? snowTopFade(p.y, clearTop) : 1;
-        const alpha = particleFade(kind, t) * flicker * top * strength;
+        const alpha = particleFade(kind, t, palette) * flicker * top * strength;
         if (snow) {
           ctx.fillStyle = `rgba(243, 235, 221, ${alpha * 0.9})`;
           ctx.beginPath();
