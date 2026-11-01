@@ -108,6 +108,12 @@ jobs:
       COMPAT: ${{ matrix.compat }}
       FABRIC_API: ${{ matrix.fabricApi }}
       RANGE: ${{ matrix.range }}
+      # Minecraft 26 opens its window with SDL3 and needs a true-colour GLX visual: Mesa's software OpenGL (llvmpipe) on
+      # a 24-bit virtual screen. Loom's own xvfb-run starts an 8-bit screen, where the game finds no visual and then waits
+      # on its error dialog (the runs of 30 Oct and 1 Nov held the job's 40 minutes), so the steps start xvfb-run
+      # themselves and tell Loom not to (-Povl.xvfb=false).
+      XVFB_SCREEN: -screen 0 1920x1080x24
+      LIBGL_ALWAYS_SOFTWARE: "1"
     defaults:
       run:
         working-directory: mods/projects-overlay
@@ -129,9 +135,16 @@ jobs:
         with:
           node-version: 24
 
-      # A stuck mirror fails fast and gets one more try.
+      # A stuck mirror fails fast and gets one more try. Mesa's software OpenGL, and glxinfo for the check below.
       - name: Virtual display for the game test
-        run: bash "$GITHUB_WORKSPACE/.github/scripts/apt-install.sh" xvfb
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/apt-install.sh" xvfb libgl1-mesa-dri libglx-mesa0 mesa-utils
+
+      # The display before the game: a runner without OpenGL is not the new version's fault (no compat issue).
+      - name: OpenGL on the virtual display
+        run: |
+          set -o pipefail
+          xvfb-run -a -s "$XVFB_SCREEN" glxinfo -B 2>&1 | tee "$RUNNER_TEMP/glxinfo.log"
+          grep -Eq 'OpenGL core profile version string: ([4-9]|3\.[3-9])' "$RUNNER_TEMP/glxinfo.log"
 
       # A target's own row by its key; a new version with the last compatibility class and the Fabric API found for it.
       - name: Gradle properties of the try
@@ -151,9 +164,12 @@ jobs:
 
       - id: gametest
         name: Client game test against the jar
+        # A game that cannot open its window waits on a dialog: the step fails here instead of holding the job.
+        timeout-minutes: 20
         run: |
           set -o pipefail
-          ./gradlew runProductionClientGameTest --no-daemon --console=plain $GRADLE_ARGS 2>&1 | tee "$RUNNER_TEMP/gametest.log"
+          xvfb-run -a -s "$XVFB_SCREEN" ./gradlew runProductionClientGameTest --no-daemon --console=plain $GRADLE_ARGS \
+            -Povl.xvfb=false 2>&1 | tee "$RUNNER_TEMP/gametest.log"
 
       - id: report
         name: Report
