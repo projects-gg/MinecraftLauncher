@@ -33,4 +33,5 @@ export const tauriImport: ImportApi = {
   async cancel(jobId) {
     await commands.contentCancel(jobId);
   },
+  undoSettings: (instanceId, backup) => ok(commands.importUndoSettings(instanceId, backup)),
 };

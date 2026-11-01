@@ -38,12 +38,13 @@ pub use official::{
 };
 pub use options::{
     GraphicsPreset, GraphicsState, GraphicsSwitch, apply_preset, detect_preset, graphics_state,
-    preset_for_machine, set_graphics_preset, supports_presets, switch_graphics_preset,
-    this_machine_preset, undo_graphics_switch,
+    picked_preset_file, preset_for_machine, set_graphics_preset, supports_presets,
+    switch_graphics_preset, this_machine_preset, undo_graphics_switch,
 };
 pub use packs::{
-    PackListChange, choose_shader_once, disable_resource_packs, enable_resource_packs,
+    IRIS_PROPERTIES, PackListChange, choose_shader_once, disable_resource_packs,
+    enable_resource_packs, with_shader_choice,
 };
-pub use shaders::{ShaderState, set_shaders, shader_state};
+pub use shaders::{ShaderState, read_shader_choice, set_shaders, shader_state};
 pub use store::{GAME_DIR_NAME, INSTANCE_FILE, InstanceStore, slugify};
 pub use usage::DiskUsage;
