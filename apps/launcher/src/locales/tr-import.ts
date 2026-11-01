@@ -132,8 +132,8 @@ export const trImport = {
      * a name that ends in a version ("Forge 1.20.1") a number read as part of it.
      */
     worldsIn: "{{count}} tanesi {{name}} kurulumunda",
-    /** Where worlds went, when they all went to one instance. */
-    worldsInOne: "{{name}} kurulumunda",
+    /** Where worlds went, when they all went to one instance (a sentence, never a fragment). */
+    worldsInOne: "{{name}} kurulumunda duruyor",
     resourcePacks: "{{from}} {{count}} kaynak paketi geldi.",
     /** "paket", as the picker counts them ("2 paket"). */
     shaderPacks: "{{from}} {{count}} shader paketi geldi.",
@@ -184,7 +184,8 @@ export const trImport = {
   settings: {
     title: "Başka launcher'dan aktar",
     help: "TLauncher, CurseForge, Modrinth, Prism ve resmî launcher'daki ayarların, dünyaların ve kurulumların buraya gelir.",
-    action: "İçe aktar",
+    /** The dialog it opens says "Aktar" too (IMPORT-POLISH). */
+    action: "Aktar",
     dialogBody: "Seçtiklerin buraya kopyalanır. Oradaki dosyaların olduğu gibi kalır.",
     notFound: "Bu bilgisayarda başka bir launcher'ın verisi bulunamadı.",
     later: "Vazgeç",
