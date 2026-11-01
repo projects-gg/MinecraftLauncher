@@ -130,9 +130,9 @@ export function PersonMark({
 }
 
 /**
- * Every badge of someone with its name, under their name on a person's card (a friend's card, a
- * crewmate's, the chat's header card, the player's own status menu): the same layout for one or
- * many, wrapping. Nothing without badges.
+ * Every badge of someone with its name, under the name block on a person's card (a friend's, a
+ * crewmate's): one per line, as the badge's tooltip lists them (a wrapped row read as a cloud of
+ * chips once a third badge broke onto its own line). Nothing without badges.
  */
 export function PersonMarkList({
   marks,
@@ -143,5 +143,5 @@ export function PersonMarkList({
 }) {
   const items = useMarks(marks);
   if (items.length === 0) return null;
-  return <ProfileMarkList marks={items} className={className} />;
+  return <ProfileMarkList marks={items} tone="inherit" className={cn("text-ash-300", className)} />;
 }

@@ -4,10 +4,10 @@
 // the old one back. The panel's menu changes it too. With crew tags (TEAM6) the tag the player
 // wears sits before the name (its card as on anyone's), and the picker's "Ekip etiketi ▸" puts one
 // on, switches or takes it off ("Etiket yok"). The player's profile badges (BADGES-UI) show as
-// others see them: the first beside the name, every one with its name at the picker's top (the
-// panel's header stays one row; "Rozetlerim" in the friends settings hides them).
+// others see them: the first beside the name, its tooltip naming them all (the picker is for the
+// status; friends settings' "Rozetler" lists them with their switches).
 import { CaretDown, CaretRight, Check, TagSimple } from "@phosphor-icons/react";
-import { cn, easeOutExpo, ProfileMark, returnFocusAfterKeys } from "@pl/ui";
+import { cn, easeOutExpo, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useState } from "react";
@@ -24,7 +24,6 @@ import { BadgedName } from "./crew-badge";
 import { LimitedChip } from "./limited-chip";
 import { dayMonth } from "./limits";
 import { swap, useSocialMotion } from "./motion";
-import { useMarks } from "./person-mark";
 import { PresenceDot, SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
@@ -66,7 +65,6 @@ export function MeCard({ me }: { me: SocialMe }) {
   const tags = useSocialUi((s) => s.view.crew.badges);
   const crews = useSocialUi((s) => s.view.crews);
   const choices = tags ? tagChoices(crews, Date.now()) : [];
-  const marks = useMarks(me.marks);
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -136,35 +134,6 @@ export function MeCard({ me }: { me: SocialMe }) {
                       })}
                       exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.12 } })}
                     >
-                      {marks.length > 0 ? (
-                        <>
-                          {/* Each badge in the status rows' columns: its drawing over their dots,
-                              its name where their words start. */}
-                          <DropdownMenu.Label asChild>
-                            <ul className="flex flex-col gap-1 px-2.5 pt-1.5 pb-1">
-                              {marks.map((mark) => (
-                                <li
-                                  key={mark.key}
-                                  className="flex min-w-0 items-center gap-3 text-[12.5px] leading-5 text-ash-300"
-                                >
-                                  <span aria-hidden className="flex w-5 shrink-0 justify-center">
-                                    <ProfileMark
-                                      color={mark.color}
-                                      glyph={mark.glyph}
-                                      shape={mark.shape}
-                                      size={14}
-                                      label={mark.label}
-                                      tooltip={false}
-                                    />
-                                  </span>
-                                  <span className="truncate">{mark.label}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </DropdownMenu.Label>
-                          <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
-                        </>
-                      ) : null}
                       <DropdownMenu.RadioGroup
                         value={status}
                         onValueChange={(value) => choose(value as StatusMode)}
