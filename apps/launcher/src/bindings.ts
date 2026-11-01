@@ -703,6 +703,13 @@ export const commands = {
 	 *  the others. `content_cancel(job_id)` stops it after the file being copied.
 	 */
 	importStart: (request: ImportRequest, jobId: string, onProgress: Channel<ImportProgress>) => typedError<ImportReport, CmdError>(__TAURI_INVOKE("import_start", { request, jobId, onProgress })),
+	/**
+	 *  "Geri al" for the game settings an import (or the v1 launcher's step) brought into an
+	 *  instance: every file goes back to exactly what it was (`pl_import::undo_settings`). `false`
+	 *  when that import's copies are gone or a newer one replaced it: nothing changes then. Refused
+	 *  while the instance's game runs (it writes its settings when it closes) or an import runs.
+	 */
+	importUndoSettings: (instanceId: string, backup: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("import_undo_settings", { instanceId, backup })),
 	updateCheck: (channel: string) => typedError<UpdateStatus, CmdError>(__TAURI_INVOKE("update_check", { channel })),
 	/**
 	 *  Download the update of `channel` in the background (signature verified by the updater) and
@@ -4980,6 +4987,11 @@ export type ImportProfile = {
 	ownFolder: boolean,
 	/**  Mod files in its mods folder, before they are checked. */
 	modFiles: number,
+	/**
+	 *  Its own folder has game settings (`options.txt`): they can go into the Projects instance
+	 *  ("Oyun ayarları", IMPORT-SET).
+	 */
+	hasOptions: boolean,
 	lastUsedMs: number | null,
 	/**  An earlier import made it into this instance, which still exists. */
 	importedAs: string | null,
@@ -5003,6 +5015,8 @@ export type ImportReport = {
 	created: CreatedInstance[],
 	/**  The Projects instance, when shared data went into it. */
 	officialId: string | null,
+	/**  The game settings it changed in the Projects instance, for "Geri al". */
+	settings: SettingsChange | null,
 };
 
 export type ImportRequest = {
@@ -5016,8 +5030,11 @@ export type ImportScanView = {
 	freeBytes: number | null,
 	/**  What the import leaves free (the games still download). */
 	reserveBytes: number,
-	/**  The Projects instance already has game settings of its own: they are kept. */
-	projectsHasOptions: boolean,
+	/**
+	 *  Where an earlier import brought the Projects instance's game settings from (not undone
+	 *  since): that "Oyun ayarları" starts unticked, so the player's later changes stay.
+	 */
+	projectsSettingsFrom: SettingsOrigin | null,
 	/**
 	 *  The player deleted the Projects instance (LIB1): what goes into it is not ticked by
 	 *  default, and ticking it installs the instance again.
@@ -5724,7 +5741,12 @@ export type LegacyImportReport = {
 	instanceId: string | null,
 	copiedFiles: number,
 	linkedFiles: number,
-	/**  Turkish notes for the summary screen (things skipped and why). */
+	/**
+	 *  The game settings it brought into the Projects instance, for "Geri al"
+	 *  (`import_undo_settings`).
+	 */
+	settings: SettingsChange | null,
+	/**  Notes for the summary screen in the launcher's language (things skipped and why). */
 	notes: string[],
 };
 
@@ -9402,6 +9424,16 @@ export type SetVariantView = {
 	downloadBytes: number,
 };
 
+/**
+ *  Game settings an import changed in an instance; "Geri al" ([`crate::undo_settings`]) puts
+ *  back exactly what was there.
+ */
+export type SettingsChange = {
+	instanceId: string,
+	/**  The copies "Geri al" restores (a folder name the import chose). */
+	backup: string,
+};
+
 /**  Settings backup metadata, enough for "Bu bilgisayara ayarlarını getireyim mi?". */
 export type SettingsMeta = {
 	version: number,
@@ -9411,6 +9443,15 @@ export type SettingsMeta = {
 	device: string,
 	/**  Bytes. */
 	size: number,
+};
+
+/**
+ *  Where an earlier import brought the Projects instance's game settings from (and nothing took
+ *  them back since): a source, and its profile when they came from an instance's own folder.
+ */
+export type SettingsOrigin = {
+	sourceId: string,
+	profileId: string | null,
 };
 
 /**
@@ -9925,6 +9966,12 @@ export type SourceRequest = {
 	shared?: ImportShared[],
 	/**  Profile ids, each becoming an instance. */
 	profiles?: string[],
+	/**
+	 *  With [`ImportShared::Options`]: the profile whose own folder the game settings come from
+	 *  (an instance of CurseForge, the Modrinth App, Prism...). `None`: the source's shared
+	 *  folder (`.minecraft`). The screens send settings from one place only.
+	 */
+	settingsFrom?: string | null,
 };
 
 export type StatusMode = "online" | 

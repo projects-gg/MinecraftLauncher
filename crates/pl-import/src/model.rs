@@ -86,6 +86,9 @@ pub struct ImportProfile {
     pub own_folder: bool,
     /// Mod files in its mods folder, before they are checked.
     pub mod_files: u32,
+    /// Its own folder has game settings (`options.txt`): they can go into the Projects instance
+    /// ("Oyun ayarları", IMPORT-SET).
+    pub has_options: bool,
     pub last_used_ms: Option<i64>,
     /// An earlier import made it into this instance, which still exists.
     pub imported_as: Option<String>,
@@ -185,6 +188,11 @@ pub struct SourceRequest {
     /// Profile ids, each becoming an instance.
     #[serde(default)]
     pub profiles: Vec<String>,
+    /// With [`ImportShared::Options`]: the profile whose own folder the game settings come from
+    /// (an instance of CurseForge, the Modrinth App, Prism...). `None`: the source's shared
+    /// folder (`.minecraft`). The screens send settings from one place only.
+    #[serde(default)]
+    pub settings_from: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -366,6 +374,25 @@ pub struct CreatedInstance {
     pub name: String,
 }
 
+/// Game settings an import changed in an instance; "Geri al" ([`crate::undo_settings`]) puts
+/// back exactly what was there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsChange {
+    pub instance_id: String,
+    /// The copies "Geri al" restores (a folder name the import chose).
+    pub backup: String,
+}
+
+/// Where an earlier import brought the Projects instance's game settings from (and nothing took
+/// them back since): a source, and its profile when they came from an instance's own folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsOrigin {
+    pub source_id: String,
+    pub profile_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportReport {
@@ -376,4 +403,6 @@ pub struct ImportReport {
     pub created: Vec<CreatedInstance>,
     /// The Projects instance, when shared data went into it.
     pub official_id: Option<String>,
+    /// The game settings it changed in the Projects instance, for "Geri al".
+    pub settings: Option<SettingsChange>,
 }

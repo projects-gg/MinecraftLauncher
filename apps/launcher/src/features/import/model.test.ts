@@ -16,6 +16,7 @@ import {
   fits,
   LARGE_BYTES,
   LAUNCHER_NAMES,
+  listCut,
   measureKeys,
   measuring,
   profileKey,
@@ -24,6 +25,7 @@ import {
   rowsKey,
   rowsOf,
   selectedBytes,
+  settingsRowOf,
   sharedKey,
   suggestedName,
   summaryLines,
@@ -45,6 +47,7 @@ function profile(id: string, extra: Partial<ImportProfile> = {}): ImportProfile 
     withoutOptifine: false,
     ownFolder: false,
     modFiles: 0,
+    hasOptions: false,
     lastUsedMs: null,
     importedAs: null,
     ...extra,
@@ -102,7 +105,7 @@ function scan(extra: Partial<ImportScanView> = {}): ImportScanView {
     sources: [minecraft, curseforge],
     freeBytes: 100 * GB,
     reserveBytes: 2 * GB,
-    projectsHasOptions: false,
+    projectsSettingsFrom: null,
     projectsRemoved: false,
     ...extra,
   };
@@ -134,18 +137,16 @@ describe("import rows", () => {
   it("list what each launcher has, and say which profiles cannot be ticked", () => {
     const rows = rowsOf(scan(), {});
     const [mc] = rows;
+    // The game settings have a row of their own above the launchers (`settingsRowOf`).
     expect(mc?.shared.map((r) => r.kind)).toEqual([
-      "options",
       "servers",
       "worlds",
       "resourcePacks",
       "screenshots",
     ]);
-    // Sizes are unknown until measured, except the settings and the server list.
-    expect(mc?.shared.map((r) => r.bytes)).toEqual([0, 0, undefined, undefined, undefined]);
+    // Sizes are unknown until measured, except the server list.
+    expect(mc?.shared.map((r) => r.bytes)).toEqual([0, undefined, undefined, undefined]);
     expect(mc?.profiles.map((r) => r.state)).toEqual(["ready", "ready", "unsupported", "imported"]);
-    const kept = rowsOf(scan({ projectsHasOptions: true }), {})[0]?.shared[0];
-    expect(kept?.state).toBe("kept");
   });
 
   it("start with everything that fits ticked, the big and the old ones left for the player", () => {
@@ -166,15 +167,16 @@ describe("import rows", () => {
   it("leave unticked what would bring back a Projects instance the player deleted (LIB1)", () => {
     const rows = rowsOf(scan({ projectsRemoved: true }), measures(1 * GB));
     const ticks = defaultTicks(rows, 100 * GB, 2 * GB);
-    for (const kind of ["options", "servers", "resourcePacks", "screenshots"] as const) {
+    for (const kind of ["servers", "resourcePacks", "screenshots"] as const) {
       expect(ticks.has(sharedKey("minecraft", kind))).toBe(false);
     }
+    expect(settingsRowOf(scan({ projectsRemoved: true }))?.ticked).toBe(false);
     // Worlds go to the instances of their versions, and profiles become new instances.
     expect(ticks.has(sharedKey("minecraft", "worlds"))).toBe(true);
     expect(ticks.has(profileKey("minecraft", "version:Fabric 1.21.4"))).toBe(true);
     // Ticked by the player, they come over (the import installs the instance again).
-    const choices = new Map([[sharedKey("minecraft", "options"), true]]);
-    expect(ticksOf(rows, ticks, choices).has(sharedKey("minecraft", "options"))).toBe(true);
+    const choices = new Map([[sharedKey("minecraft", "servers"), true]]);
+    expect(ticksOf(rows, ticks, choices).has(sharedKey("minecraft", "servers"))).toBe(true);
   });
 
   it("drop the biggest ticks until they fit the disk, never the settings", () => {
@@ -183,7 +185,6 @@ describe("import rows", () => {
     const total = selectedBytes(rows, ticks);
     expect(total).toBeLessThanOrEqual(4 * GB);
     expect(fits(total, 6 * GB, 2 * GB)).toBe(true);
-    expect(ticks.has(sharedKey("minecraft", "options"))).toBe(true);
     expect(ticks.has(sharedKey("minecraft", "servers"))).toBe(true);
     expect(ticks.has(sharedKey("minecraft", "worlds"))).toBe(false);
   });
@@ -201,11 +202,56 @@ describe("import rows", () => {
     expect(ticks.has(sharedKey("minecraft", "screenshots"))).toBe(false);
     expect(ticks.has(profileKey("curseforge", "instance:6"))).toBe(true);
     expect(ticks.has(profileKey("minecraft", "version:lite"))).toBe(false);
-    const request = requestOf(rows, ticks);
+    const settings = settingsRowOf(scan())?.candidates[0];
+    const request = requestOf(rows, ticks, settings);
     expect(request.sources.map((s) => s.sourceId)).toEqual(["minecraft", "curseforge"]);
     expect(request.sources[0]?.shared).toEqual(["options", "servers", "worlds", "resourcePacks"]);
     expect(request.sources[0]?.profiles).toEqual(["version:Fabric 1.21.4", "version:1.8.9"]);
+    expect(request.sources[0]?.settingsFrom).toBeUndefined();
+    expect(requestOf(rows, ticks).sources[0]?.shared).toEqual([
+      "servers",
+      "worlds",
+      "resourcePacks",
+    ]);
     expect(requestOf(rows, new Set()).sources).toEqual([]);
+  });
+
+  it("bring the game settings from one place, the most recently played by default", () => {
+    // TLauncher's shared folder and two instances of CurseForge have settings of their own.
+    const withInstances = scan({
+      sources: [
+        { ...minecraft, lastUsedMs: 1_000 },
+        {
+          ...curseforge,
+          profiles: curseforge.profiles.map((p, i) =>
+            i < 2 ? { ...p, ownFolder: true, hasOptions: true, lastUsedMs: 2_000 - i } : p,
+          ),
+        },
+      ],
+    });
+    const row = settingsRowOf(withInstances);
+    expect(row?.candidates.map((c) => [c.key, c.name])).toEqual([
+      ["minecraft", "TLauncher"],
+      ["curseforge|instance:0", "Paket 0"],
+      ["curseforge|instance:1", "Paket 1"],
+    ]);
+    expect([row?.first, row?.ticked]).toEqual(["curseforge|instance:0", true]);
+    // From an instance: its launcher's request carries it, with nothing else ticked there.
+    const rows = rowsOf(withInstances, measures(1 * GB));
+    const picked = row?.candidates.find((c) => c.key === "curseforge|instance:1");
+    const request = requestOf(rows, new Set(), picked);
+    expect(request.sources).toEqual([
+      { sourceId: "curseforge", shared: ["options"], profiles: [], settingsFrom: "instance:1" },
+    ]);
+    // An earlier import brought them from TLauncher: that place, unticked (later changes stay).
+    const again = settingsRowOf({
+      ...withInstances,
+      projectsSettingsFrom: { sourceId: "minecraft", profileId: null },
+    });
+    expect([again?.first, again?.ticked]).toEqual(["minecraft", false]);
+    expect(again?.candidates[0]?.imported).toBe(true);
+    // Nothing with settings: no row.
+    expect(settingsRowOf(scan({ sources: [curseforge] }))).toBeNull();
   });
 
   it("know when sizes are still coming and when nothing is known about the disk", () => {
@@ -250,6 +296,23 @@ describe("import rows", () => {
     expect(suggestedName(scan())).toBe("Ejder_42");
     expect(suggestedName(scan({ sources: [curseforge] }))).toBeUndefined();
     expect(suggestedName(undefined)).toBeUndefined();
+  });
+
+  it("end a list that does not fit half way into a row, never between two", () => {
+    // Two grid lines of 50 px, a heading, then the worlds row.
+    const rows = [
+      { top: 60, height: 50 },
+      { top: 60, height: 50 },
+      { top: 110, height: 50 },
+      { top: 110, height: 50 },
+      { top: 190, height: 46 },
+    ];
+    // The edge falls in the gap under the grid: the list ends half way into its last line.
+    expect(listCut(rows, 175, 400)).toBe(135);
+    // The edge already cuts a row, or everything fits: nothing changes.
+    expect(listCut(rows, 210, 400)).toBeUndefined();
+    expect(listCut(rows, 400, 380)).toBeUndefined();
+    expect(listCut([], 175, 400)).toBeUndefined();
   });
 });
 
@@ -314,8 +377,12 @@ function outcome(extra: Partial<ItemOutcome>): ItemOutcome {
   };
 }
 
-function report(outcomes: ItemOutcome[], cancelled = false): ImportReport {
-  return { outcomes, cancelled, created: [], officialId: "projects" };
+function report(
+  outcomes: ItemOutcome[],
+  cancelled = false,
+  settings: ImportReport["settings"] = null,
+): ImportReport {
+  return { outcomes, cancelled, created: [], officialId: "projects", settings };
 }
 
 describe("import summary", () => {
@@ -413,6 +480,33 @@ describe("import summary", () => {
     ]);
     const none = worlds({ status: "failed", copied: 0, left: 2, reason: "needsInstance" });
     expect([none?.tone, none?.key]).toEqual(["failed", "outcome.needsInstance"]);
+  });
+
+  it("name where the settings came from and offer to take them back", () => {
+    const change = { instanceId: "projects", backup: "20261101-120000" };
+    const [root, same] = summaryLines(
+      report(
+        [outcome({}), outcome({ status: "skipped", copied: 0, reason: "alreadyThere" })],
+        false,
+        change,
+      ),
+    );
+    expect([root?.key, root?.undo]).toEqual(["outcome.options", true]);
+    // Nothing changed: no "Geri al".
+    expect([same?.key, same?.undo]).toEqual(["outcome.optionsSame", undefined]);
+    const [instance] = summaryLines(
+      report(
+        [outcome({ sourceId: "prism", sourceKind: "prism", label: "Fabulously Optimized" })],
+        false,
+        change,
+      ),
+    );
+    expect([instance?.key, instance?.params]).toEqual([
+      "outcome.optionsFromInstance",
+      { name: "Fabulously Optimized" },
+    ]);
+    // A run whose settings did not change offers nothing to take back.
+    expect(summaryLines(report([outcome({})]))[0]?.undo).toBeUndefined();
   });
 
   it("keep two launchers' alike lines apart", () => {
@@ -520,7 +614,8 @@ describe("import words", () => {
         report(
           [
             outcome({}),
-            outcome({ status: "skipped", reason: "keptExisting" }),
+            outcome({ label: "Fabulously Optimized" }),
+            outcome({ status: "skipped", reason: "alreadyThere" }),
             outcome({ status: "failed", reason: "unreadable" }),
             outcome({ status: "failed", reason: "noTarget" }),
             outcome({ status: "failed", reason: "inUse" }),
