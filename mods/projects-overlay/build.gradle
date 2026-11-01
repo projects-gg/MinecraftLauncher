@@ -105,6 +105,12 @@ tasks.register('runProductionClientGameTest', net.fabricmc.loom.task.prod.Client
     jvmArgs.add('-Dprojects.overlay.port=47652')
     jvmArgs.add('-Dprojects.overlay.token=gametest-gametest-gametest-gametest')
     runDir = layout.buildDirectory.dir('run/productionClientGameTest').get().asFile
+    // CI starts its own 24-bit virtual display around Gradle (-Povl.xvfb=false): Loom's xvfb-run has an 8-bit screen,
+    // which offers the game's SDL3 window no OpenGL visual.
+    def xvfb = providers.gradleProperty('ovl.xvfb')
+    if (xvfb.isPresent()) {
+        useXVFB = xvfb.get().toBoolean()
+    }
 }
 
 loom {
