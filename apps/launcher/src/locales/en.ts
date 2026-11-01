@@ -7,6 +7,7 @@ import { enAfkPanelSize } from "./en-afk-panel-size";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enAfkPlus } from "./en-afkplus";
 import { enAutojoin } from "./en-autojoin";
+import { enBadges } from "./en-badges";
 import { enBetaGate } from "./en-beta-gate";
 import { enChat } from "./en-chat";
 import { enChatCalm } from "./en-chat-calm";
@@ -29,6 +30,7 @@ import { enGraphics } from "./en-graphics";
 import { enHelp } from "./en-help";
 import { enHomeLinks } from "./en-home-links";
 import { enHost } from "./en-host";
+import { enIdentity } from "./en-identity";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
 import { enLauncherReset } from "./en-launcher-reset";
@@ -326,6 +328,8 @@ export const en: DeepPartial<Strings> = {
   team6: enTeam6,
   chatCalm: enChatCalm,
   verify: enVerify,
+  identity: enIdentity,
+  badges: enBadges,
   cloudAfk: enCloudAfk,
   cloudAfkFeat: enCloudAfkFeat,
   cloudAfkMove: enCloudAfkMove,
@@ -822,14 +826,7 @@ export const en: DeepPartial<Strings> = {
     },
     legacy: {
       title: "We found your old launcher",
-      body: "You can bring your {{things}} to the new launcher. Your old files stay where they are.",
-      things: {
-        nickname: "username",
-        afk: "AFK accounts",
-        screenshots: "screenshots",
-        worlds: "worlds",
-        data: "data",
-      },
+      body: "You can bring what we found to the new launcher. Your old files stay as they are.",
       nickname: "Username: {{name}}",
       afk: "{{count}} AFK accounts",
       afk_one: "{{count}} AFK account",
@@ -837,7 +834,7 @@ export const en: DeepPartial<Strings> = {
       screenshots_one: "{{count}} screenshot",
       worlds: "{{count}} worlds",
       worlds_one: "{{count}} world",
-      import: "Import my data",
+      import: "Import",
       skip: "Continue without importing",
     },
     account: {
@@ -996,25 +993,15 @@ export const en: DeepPartial<Strings> = {
   migrate: {
     title: "Import from the old launcher",
     description:
-      "We found your data from the old Projects Launcher. What you pick comes over to the new launcher. The old launcher isn't touched.",
-    premium: "Your Microsoft account",
-    nickname: "Username: {{name}}",
-    afk: "{{count}} AFK accounts and the AFK client",
-    afk_one: "{{count}} AFK account and the AFK client",
-    gameData: "Game settings, server list, screenshots and packs",
-    worlds: "Worlds ({{count}} worlds, {{size}})",
-    worlds_one: "Worlds ({{count}} world, {{size}})",
+      "We found your data from the old Projects Launcher. What you pick is copied here. Your files there stay as they are.",
     worldsNoSpace: "Not enough disk space, so your worlds stay in the old launcher.",
     start: "Import",
     later: "Not now",
     working: "Importing",
-    doneTitle: "Import complete",
-    donePremium: "Your Microsoft account was imported.",
-    doneNickname: "{{name}} added.",
-    doneAfk: "{{count}} AFK accounts imported.",
-    doneAfk_one: "{{count}} AFK account imported.",
-    doneFiles: "{{count}} files imported.",
-    doneFiles_one: "{{count}} file imported.",
+    donePremium: "Your Microsoft account came over.",
+    doneNickname: "The account {{name}} was added.",
+    doneAfk: "{{count}} AFK accounts came over.",
+    doneAfk_one: "{{count}} AFK account came over.",
     close: "Done",
     notFound: "No old launcher data found on this computer.",
   },
@@ -1573,8 +1560,7 @@ export const en: DeepPartial<Strings> = {
     supportFailed: "Couldn't create the support bundle.",
     reveal: "Show in folder",
     legacy: "Import from the old launcher",
-    legacyHelp:
-      "Brings over worlds, settings, AFK accounts and the premium sign-in from the old launcher.",
+    legacyHelp: "Brings over your worlds, settings and accounts from the old launcher.",
     import: "Import",
     moveDialog: {
       title: "Move the data folder",

@@ -88,6 +88,7 @@ import { CrewRail } from "./crew-rail";
 import { CrewRequests, MyRequests } from "./crew-requests";
 import { CrewSlowMode } from "./crew-slow-mode";
 import { callableCrews, canAddCrew, NEW_CREW_TAB, shownCrew } from "./crews";
+import { newAccount } from "./identity";
 import { dayMonth, limitOf, opensIn } from "./limits";
 import { openMenuFromKey } from "./menu-key";
 import { type Leaving, leavingOf } from "./menus";
@@ -170,7 +171,9 @@ function CreateCrew() {
         <SectionTitle>{t("teams.create.title")}</SectionTitle>
         <p className="flex items-start gap-2.5 text-[13px] leading-snug text-ash-300">
           <LockSimple size={16} className="mt-px shrink-0 text-ash-400" aria-hidden />
-          {t("safety.limited.crewFound", { when: opensIn(t, limit.until, Date.now()) })}
+          {t(newAccount(me) ? "identity.limited.crewFound" : "safety.limited.crewFound", {
+            when: opensIn(t, limit.until, Date.now()),
+          })}
         </p>
       </section>
     );
@@ -896,7 +899,7 @@ function MeRow({ member }: { member: TeamMember }) {
         name={member.name}
         badge={badge}
         wearer={member.id}
-        mark={member.mark}
+        marks={member.marks}
         className="flex-1"
         nameClassName="text-[14px] font-semibold text-bone-50"
       >
@@ -1024,7 +1027,7 @@ function InviteFriends({ team }: { team: SocialTeam }) {
                   <span className="min-w-0 flex-1">
                     <NameWithMark
                       name={friend.name}
-                      mark={friend.mark}
+                      marks={friend.marks}
                       className="text-[13.5px] font-semibold text-bone-100"
                     />
                   </span>

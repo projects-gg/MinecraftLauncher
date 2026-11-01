@@ -225,8 +225,9 @@ export function ChatHeader() {
               <RadixDialog.Title className="flex min-w-0 items-center gap-1.5 truncate text-[15px] leading-tight font-semibold text-bone-50">
                 <span className="flex min-w-0 items-center gap-1">
                   <span className="truncate">{name}</span>
-                  {/* Their mark right of the name (SOC-VERIFY), in the title's words. */}
-                  <PersonMark mark={peer?.mark} />
+                  {/* Their first badge right of the name (BADGES-UI), in the title's words; its
+                      tooltip names them all (a title line, not a card: no list here). */}
+                  <PersonMark marks={peer?.marks} />
                 </span>
                 {muted ? (
                   <BellSlash
@@ -245,9 +246,9 @@ export function ChatHeader() {
           </div>
         </div>
       </PersonContextMenu>
-      {peer ? (
+      {peer?.discordUrl ? (
         // Discord's mark alone, its words the tooltip and the name (CHAT-UX: beside the presence
-        // line the words cut it, "Başka sunucuda 1…").
+        // line the words cut it, "Başka sunucuda 1…"); SOC-ID: only for a friend with Discord.
         <IconButton
           label={t("chat.actions.discord")}
           icon={<DiscordGlyph height={14} />}

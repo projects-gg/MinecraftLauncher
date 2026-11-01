@@ -622,7 +622,8 @@ mod tests {
             failure_of(&SocialError::Limited {
                 item: LimitedKey::ChatLinks,
                 until: Some(1),
-                retry_after: None
+                retry_after: None,
+                reason: crate::identity::LimitedReason::Discord,
             })
             .0,
             SendFailure::LimitedLinks

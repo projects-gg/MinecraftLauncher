@@ -259,6 +259,12 @@ pub const FEATURE_HOST: &str = "host";
 /// service offers them and Studio has them on).
 pub const FEATURE_TAGS: &str = "tags";
 
+/// The `hello` feature of a mod that draws profile badges (BADGES-UI): it hears the `marks` frame
+/// (the badge catalogue: each badge's key, look and names in both languages) and draws the first
+/// badge it knows of a friend's, a sender's or a toast's `marks` right of the name, its tooltip
+/// naming them all.
+pub const FEATURE_MARKS: &str = "marks";
+
 /// The `hello` feature of a mod that carries the launcher's codeless linking permit to a Projects
 /// server and draws its question (SKIN1-O, K1), and the `welcome` feature that says this launcher
 /// can vouch for the player now (K2: signed in to friends, the service offers codeless linking,
@@ -420,6 +426,13 @@ pub enum ToGame {
     Badges {
         all: bool,
         cards: BTreeMap<String, Option<BadgeView>>,
+    },
+    /// BADGES-UI: the profile badge catalogue, in order (the most important first): each badge's
+    /// key, colour, glyph, shape and name in both languages (the mod says it in its own). It
+    /// replaces what the mod holds; friends, messages and toasts name badges by key. Only to a mod
+    /// that said `marks`, before the snapshot, and again when Studio's owner changes it.
+    Marks {
+        defs: Vec<pl_social::MarkDef>,
     },
     /// TEAM6-O (T7): a quiet line in a crew's chat ("Ece ekibe katıldı"; the mod words it). Lines
     /// are not kept anywhere: whoever came in while this launcher ran. Only to a mod that said
@@ -663,6 +676,10 @@ pub struct FriendView {
     /// others may invite them, unless full).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub crews: BTreeMap<String, CrewPlace>,
+    /// BADGES-UI: their profile badges, keys of the `marks` frame's catalogue, the most important
+    /// first (the first shows right of the name).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<String>,
 }
 
 /// A friend in one of the crews the player may invite to (OVL-UX2, Q5).
@@ -843,6 +860,10 @@ pub struct MsgView {
     /// name opens their person menu).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub by: Option<String>,
+    /// BADGES-UI: its sender's profile badges, on someone else's message in a crew's chat (right
+    /// of the name over their group).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<String>,
 }
 
 /// The message a reply answers (CHAT2): the service keeps only the link, the words come from this
@@ -956,6 +977,10 @@ pub struct ToastView {
     /// TEAM6-O (T6): a message's sender wears this crew's tag (the chip before `title`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub badge: Option<String>,
+    /// BADGES-UI: the profile badges of the person `title` names (a message's sender, the friend
+    /// of an invite), right of the title.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1357,6 +1382,7 @@ mod tests {
             crew: None,
             sticker: None,
             badge: None,
+            marks: Vec::new(),
         }))
         .unwrap();
         assert_eq!(toast["kind"], "world");
@@ -1635,8 +1661,10 @@ mod tests {
             alert: true,
             group: Some("g1".into()),
             crews: BTreeMap::from([("t1".to_owned(), CrewPlace::Invited)]),
+            marks: vec!["admin".into(), "premium".into()],
         })
         .unwrap();
+        assert_eq!(marked["marks"], serde_json::json!(["admin", "premium"]));
         assert_eq!(
             (
                 marked["seen"].clone(),
@@ -1683,6 +1711,7 @@ mod tests {
             crew: None,
             sticker: None,
             badge: None,
+            marks: Vec::new(),
         });
         let json = serde_json::to_value(&toast).unwrap();
         assert_eq!(json["t"], "toast");
@@ -1714,13 +1743,34 @@ mod tests {
             alert: false,
             group: None,
             crews: BTreeMap::new(),
+            marks: Vec::new(),
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
         assert_eq!(friend["t"], "friend");
         assert!(friend.get("host").is_none() && friend.get("world").is_none());
-        assert!(friend.get("badge").is_none());
+        assert!(friend.get("badge").is_none() && friend.get("marks").is_none());
         assert!(friend.get("dm").is_none() && friend.get("discord").is_none());
+        // BADGES-UI: the badge catalogue, names in both languages.
+        let catalogue = serde_json::to_value(ToGame::Marks {
+            defs: vec![pl_social::MarkDef {
+                key: "admin".into(),
+                name: pl_social::MarkName {
+                    tr: "Projects yöneticisi".into(),
+                    en: "Projects admin".into(),
+                },
+                color: "red".into(),
+                glyph: "check".into(),
+                shape: "seal".into(),
+            }],
+        })
+        .unwrap();
+        assert_eq!(
+            catalogue,
+            serde_json::json!({"t":"marks","defs":[{"key":"admin",
+                "name":{"tr":"Projects yöneticisi","en":"Projects admin"},
+                "color":"red","glyph":"check","shape":"seal"}]})
+        );
         let inviting = serde_json::to_value(ToGame::Friend(FriendView {
             id: "f2".into(),
             name: "Mert".into(),
@@ -1736,6 +1786,7 @@ mod tests {
             alert: false,
             group: None,
             crews: BTreeMap::new(),
+            marks: Vec::new(),
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));

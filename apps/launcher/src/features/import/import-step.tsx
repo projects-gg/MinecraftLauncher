@@ -60,7 +60,8 @@ export function ImportStep({
         >
           {t("import.step.import")}
         </Button>
-        <Button variant="secondary" onClick={onNext}>
+        {/* One height for the whole row (the welcome flow's actions are all `lg`). */}
+        <Button variant="secondary" size="lg" onClick={onNext}>
           {t("import.step.skip")}
         </Button>
         {back}

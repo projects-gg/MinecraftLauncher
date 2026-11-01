@@ -8,6 +8,7 @@ import { trAfkPanelSize } from "./tr-afk-panel-size";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
 import { trAutojoin } from "./tr-autojoin";
+import { trBadges } from "./tr-badges";
 import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
 import { trChatCalm } from "./tr-chat-calm";
@@ -30,6 +31,7 @@ import { trGraphics } from "./tr-graphics";
 import { trHelp } from "./tr-help";
 import { trHomeLinks } from "./tr-home-links";
 import { trHost } from "./tr-host";
+import { trIdentity } from "./tr-identity";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
 import { trLauncherReset } from "./tr-launcher-reset";
@@ -119,6 +121,8 @@ export const tr = {
   team6: trTeam6,
   chatCalm: trChatCalm,
   verify: trVerify,
+  identity: trIdentity,
+  badges: trBadges,
   cloudAfk: trCloudAfk,
   cloudAfkFeat: trCloudAfkFeat,
   cloudAfkMove: trCloudAfkMove,
@@ -594,21 +598,13 @@ export const tr = {
     },
     legacy: {
       title: "Eski launcher'ını bulduk",
-      /** `things`: what the scan found, joined ("oyuncu adını, AFK hesaplarını ve dünyalarını"). */
-      body: "{{things}} yeni launcher'a taşıyabilirsin. Eski dosyaların yerinde kalır.",
-      things: {
-        nickname: "oyuncu adını",
-        afk: "AFK hesaplarını",
-        screenshots: "ekran görüntülerini",
-        worlds: "dünyalarını",
-        /** None of the above was found. */
-        data: "verilerini",
-      },
+      /** The list under it names what was found (IMPORT-POLISH: the sentence repeated it). */
+      body: "Bulduklarımızı yeni launcher'a aktarabilirsin. Eski dosyaların olduğu gibi kalır.",
       nickname: "Oyuncu adı: {{name}}",
       afk: "{{count}} AFK hesabı",
       screenshots: "{{count}} ekran görüntüsü",
       worlds: "{{count}} dünya",
-      import: "Verilerimi aktar",
+      import: "Aktar",
       skip: "Aktarmadan devam et",
     },
     account: {
@@ -762,23 +758,16 @@ export const tr = {
     whatsNew: "Yenilikler: {{version}}",
   },
   migrate: {
-    title: "Eski launcher'dan içe aktar",
+    title: "Eski launcher'dan aktar",
     description:
-      "Eski Projects Launcher'daki verilerin bulundu. Seçtiklerin yeni launcher'a taşınır. Eski launcher'a dokunulmaz.",
-    premium: "Microsoft hesabın",
-    nickname: "Oyuncu adı: {{name}}",
-    afk: "{{count}} AFK hesabı ve AFK istemcisi",
-    gameData: "Oyun ayarları, sunucu listesi, ekran görüntüleri ve paketler",
-    worlds: "Dünyalar ({{count}} dünya, {{size}})",
+      "Eski Projects Launcher'daki verilerin bulundu. Seçtiklerin buraya kopyalanır, eski launcher'daki dosyaların olduğu gibi kalır.",
     worldsNoSpace: "Diskte yeterli yer yok. Dünyalar eski launcher'da kalır.",
-    start: "İçe aktar",
+    start: "Aktar",
     later: "Şimdi değil",
     working: "Aktarılıyor",
-    doneTitle: "Aktarım tamamlandı",
-    donePremium: "Microsoft hesabın aktarıldı.",
+    donePremium: "Microsoft hesabın geldi.",
     doneNickname: "{{name}} hesabı eklendi.",
-    doneAfk: "{{count}} AFK hesabı aktarıldı.",
-    doneFiles: "{{count}} dosya aktarıldı.",
+    doneAfk: "{{count}} AFK hesabın geldi.",
     close: "Tamam",
     notFound: "Bu bilgisayarda eski launcher verisi bulunamadı.",
   },
@@ -1319,10 +1308,10 @@ export const tr = {
     },
     supportFailed: "Destek paketi oluşturulamadı.",
     reveal: "Klasörde göster",
-    legacy: "Eski launcher'dan içe aktar",
-    legacyHelp:
-      "Eski Projects Launcher'daki dünyalar, ayarlar, AFK hesapları ve premium oturum taşınır.",
-    import: "İçe aktar",
+    legacy: "Eski launcher'dan aktar",
+    legacyHelp: "Eski Projects Launcher'daki dünyaların, ayarların ve hesapların buraya gelir.",
+    /** The dialog it opens says "Aktar" too (IMPORT-POLISH). */
+    import: "Aktar",
     moveDialog: {
       title: "Veri klasörünü taşı",
       description:

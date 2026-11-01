@@ -72,7 +72,7 @@ function RequestRow({ team, request }: { team: SocialTeam; request: JoinRequest 
           <span className="min-w-0 flex-1">
             <NameWithMark
               name={request.name}
-              mark={request.mark}
+              marks={request.marks}
               className="text-[13.5px] font-semibold text-bone-50"
             />
             {/* Under the name, the member whose tag it came through (TEAM6), then when. */}

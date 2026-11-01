@@ -1,7 +1,9 @@
 // Moderators' one-time notes (MOD1): a warning, or a profile picture put back to the default; and
 // staff in game resetting the Projects skin (SKIN1), with how long skin changes stay off. Each
 // shows once, on whichever device sees it first ("Anladım" marks it seen with the service), with the
-// reason when the moderators gave one and a link to the community rules.
+// reason when the moderators gave one and a link to the community rules. SOC-ID: a way into the
+// account linked or removed on another device says what to do if it was not the player, with
+// "Bağlı hesapları aç".
 import { ShieldWarning } from "@phosphor-icons/react";
 import { Button, Dialog } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
@@ -9,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type { ModNotice } from "@/lib/api/social-types";
 import { openWebLink } from "@/lib/links";
+import { openLinkedAccounts } from "./identity-store";
 import { COMMUNITY_RULES_URL, dayMonth } from "./limits";
 import { useSocialUi } from "./store";
 
@@ -36,18 +39,29 @@ export function NoticeDialog() {
   };
 
   const kind = shown?.kind;
+  // SOC-ID: a way into the account was linked or removed on another device.
+  const identity = kind === "identityLinked" || kind === "identityRemoved";
+  const provider = t(`identity.providers.${shown?.provider ?? "microsoft"}`);
   const title =
     kind === "warning"
       ? t("safety.notice.warningTitle")
       : kind === "skinReset"
         ? t("projectsSkin.notice.title")
-        : t("safety.notice.profileResetTitle");
+        : kind === "identityLinked"
+          ? t("identity.notice.linkedTitle", { provider })
+          : kind === "identityRemoved"
+            ? t("identity.notice.removedTitle", { provider })
+            : t("safety.notice.profileResetTitle");
   const description =
     kind === "warning"
       ? t("safety.notice.warning")
       : kind === "skinReset"
         ? t("projectsSkin.notice.body")
-        : t("safety.notice.profileReset");
+        : kind === "identityLinked"
+          ? t("identity.notice.linked")
+          : kind === "identityRemoved"
+            ? t("identity.notice.removed")
+            : t("safety.notice.profileReset");
   const blocked = kind === "skinReset" ? shown?.blocked : undefined;
   return (
     <Dialog
@@ -66,14 +80,31 @@ export function NoticeDialog() {
       width={440}
       dismissOnOutsideClick={false}
       footer={
-        <>
-          <Button variant="ghost" onClick={() => openWebLink(COMMUNITY_RULES_URL)}>
-            {t("safety.restricted.rules")}
-          </Button>
-          <Button variant="primary" onClick={done}>
-            {t("safety.notice.ok")}
-          </Button>
-        </>
+        identity ? (
+          <>
+            <Button variant="ghost" onClick={done}>
+              {t("identity.notice.ok")}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                done();
+                openLinkedAccounts();
+              }}
+            >
+              {t("identity.notice.open")}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={() => openWebLink(COMMUNITY_RULES_URL)}>
+              {t("safety.restricted.rules")}
+            </Button>
+            <Button variant="primary" onClick={done}>
+              {t("safety.notice.ok")}
+            </Button>
+          </>
+        )
       }
     >
       {blocked ? (
