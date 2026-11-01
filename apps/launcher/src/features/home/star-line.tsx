@@ -1,7 +1,7 @@
 // Home's GitHub star line (STARS; the rules in stars.ts): one quiet glass pill under the friends
 // line, in its form (docs/design.md §6, "Home's friends line"): the GitHub mark, one sentence and
-// "Yıldız ver" drawn inside one button, then ×. Either answer closes it for good.
-import { GithubLogo, Star, X } from "@phosphor-icons/react";
+// "GitHub'da yıldız ver" drawn inside one button, then ×. Either answer closes it for good.
+import { ArrowSquareOut, GithubLogo, Star, X } from "@phosphor-icons/react";
 import { easeOutExpo, IconButton } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect } from "react";
@@ -79,7 +79,15 @@ export function StarLine() {
               {t("stars.line")}
             </span>
             <ActionLook icon={<Star size={13} weight="fill" aria-hidden />}>
-              {t("stars.action")}
+              {/* It opens GitHub: the external-link mark of Home's banners (design.md §6). */}
+              <span className="inline-flex items-center gap-1.5">
+                {t("stars.action")}
+                <ArrowSquareOut
+                  size={13}
+                  aria-hidden
+                  className="shrink-0 text-ash-300 transition-colors duration-150 group-hover:text-gold-300"
+                />
+              </span>
             </ActionLook>
           </button>
           <IconButton

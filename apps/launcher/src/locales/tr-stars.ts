@@ -1,12 +1,11 @@
 // GitHub stars (STARS): Home's one-time line and Settings → Hakkında's GitHub row. Short, "sen".
 export const trStars = {
   /** Home's line, shown once: it fits one line at Home's width. */
-  line: "Launcher'ı beğendiysen GitHub'da bir yıldızla destek olabilirsin.",
-  /** The line's action: opens the repository on GitHub. */
-  action: "Yıldız ver",
+  line: "Launcher'ı beğendiysen bir yıldızla destek olabilirsin.",
+  /** The action on Home and in Hakkında (the site's words too): opens the repository on GitHub. */
+  action: "GitHub'da yıldız ver",
   /** The line's ×: it closes for good. */
   close: "Kapat",
-  /** Hakkında: the words before the GitHub button (the only link to the source code). */
-  aboutLabel: "Kaynak kodu ve destek:",
-  aboutAction: "GitHub'da yıldız ver",
+  /** Hakkında: the sentence before the GitHub button (the only link to the source code). */
+  code: "Launcher'ın kodu herkese açık.",
 };
