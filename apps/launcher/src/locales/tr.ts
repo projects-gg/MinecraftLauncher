@@ -31,6 +31,7 @@ import { trHomeLinks } from "./tr-home-links";
 import { trHost } from "./tr-host";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
+import { trLauncherReset } from "./tr-launcher-reset";
 import { trLib1 } from "./tr-lib1";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
@@ -133,6 +134,7 @@ export const tr = {
   chatProd: trChatProd,
   setup: trSetup,
   motion: trMotion,
+  launcherReset: trLauncherReset,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",
