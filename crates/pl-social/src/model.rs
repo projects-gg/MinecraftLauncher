@@ -47,6 +47,15 @@ pub struct PublicProfile {
         skip_serializing_if = "Option::is_none"
     )]
     pub discord: Option<Option<String>>,
+    /// The keys of the profile badges the account shows, in the catalogue's order (BADGES; none
+    /// from a service from before badges, which sends only `mark`): read them with
+    /// [`PublicProfile::shown_marks`].
+    #[serde(
+        default,
+        deserialize_with = "crate::marks::readable_keys",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub marks: Vec<String>,
 }
 
 /// A mark Projects' staff give an account in Studio (SOC-VERIFY), shown right of the name wherever
@@ -111,6 +120,18 @@ impl PublicProfile {
     /// Display name, falling back to the username.
     pub fn name(&self) -> &str {
         self.display_name.as_deref().unwrap_or(&self.username)
+    }
+
+    /// The badges the account shows (BADGES), the most important first: `marks`, or SOC-VERIFY's
+    /// `mark` from a service from before badges.
+    pub fn shown_marks(&self) -> Vec<String> {
+        crate::marks::shown_keys(&self.marks, self.mark)
+    }
+
+    /// The account's badges are these now (a live change): both fields agree again.
+    pub(crate) fn set_marks(&mut self, marks: &[String], mark: Option<ProfileMark>) {
+        self.marks = marks.to_vec();
+        self.mark = mark;
     }
 
     /// The Discord account behind the profile, None without one (SOC-ID): the account number for
@@ -311,6 +332,15 @@ pub struct Me {
         skip_serializing_if = "Option::is_none"
     )]
     pub name_from: Option<NameSource>,
+    /// The badges the player holds and chose not to show (BADGES; the shown ones are the
+    /// profile's `marks`), in the catalogue's order. None from a service from before badges,
+    /// which keeps no such choice.
+    #[serde(
+        default,
+        deserialize_with = "crate::marks::readable_keys_opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub marks_hidden: Option<Vec<String>>,
 }
 
 impl Me {
@@ -460,6 +490,10 @@ pub struct FriendsOverview {
     /// lists again only when the two differ.
     #[serde(default)]
     pub rel: Option<String>,
+    /// BADGES: the badge catalogue's revision (none from an older service): the launcher reads
+    /// `GET /v1/marks` again when it is not the one it holds.
+    #[serde(default)]
+    pub marks_rev: Option<i64>,
 }
 
 /// `features`: crew chat and direct messages (CHAT1).
@@ -1303,6 +1337,10 @@ pub struct ProfileUpdate {
     /// away.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The badges the player keeps off their profile (BADGES: `marksHidden`, every key; `[]` shows
+    /// them all). Only to a service with badges: an older one turns the field away.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marks_hidden: Option<Vec<String>>,
 }
 
 impl ProfileUpdate {
@@ -1339,6 +1377,12 @@ impl ProfileUpdate {
     /// Puts on the tag of crew `team`, or takes the tag off (None; TEAM6).
     pub fn badge(mut self, team: Option<&str>) -> Self {
         self.badge = Some(team.map(str::to_owned));
+        self
+    }
+
+    /// The badges the player keeps off their profile, every one of them (BADGES).
+    pub fn marks_hidden(mut self, keys: Vec<String>) -> Self {
+        self.marks_hidden = Some(keys);
         self
     }
 }

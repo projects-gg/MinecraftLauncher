@@ -290,6 +290,35 @@ impl SocialClient {
         }
     }
 
+    /// BADGES (`GET /v1/marks`, no session, no database read on the service): the profile badge
+    /// catalogue with its `ETag`, or None when it is still the one `etag` names (`304`). Badges
+    /// this version cannot draw are left out. A service from before badges answers `404`, an
+    /// error: the launcher keeps the catalogue it holds.
+    pub async fn mark_catalog(
+        &self,
+        etag: Option<&str>,
+    ) -> Result<Option<(crate::MarkCatalog, Option<String>)>> {
+        let headers: Vec<(HeaderName, String)> = etag
+            .map(|etag| (IF_NONE_MATCH, etag.to_owned()))
+            .into_iter()
+            .collect();
+        let reply = self
+            .send(Method::GET, "v1/marks", None, None, &headers)
+            .await?;
+        match reply.status {
+            304 => Ok(None),
+            _ if !reply.is_success() => Err(reply.error()),
+            _ => crate::MarkCatalog::parse(&reply.body)
+                .map(|catalog| Some((catalog, reply.etag.clone())))
+                .ok_or_else(|| {
+                    SocialError::Protocol(format!(
+                        "invalid badge catalogue (HTTP {})",
+                        reply.status
+                    ))
+                }),
+        }
+    }
+
     pub(crate) fn presence_url(&self) -> Url {
         self.presence_url_with(false)
     }
@@ -1934,7 +1963,7 @@ mod tests {
         let client = SocialClient::new(SocialConfig::production("ProjectsLauncher/test")).unwrap();
         assert_eq!(
             client.presence_url().as_str(),
-            "wss://social.projects.gg/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile"
+            "wss://social.projects.gg/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,marks2"
         );
         assert_eq!(
             client.friend_share_link("abcdefgh").unwrap().as_str(),
@@ -1951,7 +1980,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             local.presence_url().as_str(),
-            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile"
+            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,marks2"
         );
     }
 }

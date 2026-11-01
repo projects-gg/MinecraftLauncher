@@ -60,6 +60,7 @@ mod history;
 mod identity;
 mod kept;
 mod links;
+mod marks;
 mod minecraft;
 mod model;
 mod presence;
@@ -105,6 +106,10 @@ pub use identity::{
     NameResult, NameSource, Provider, ProviderInfo, clean_name, sign_in_ways, sign_up_ways,
 };
 pub use links::{find_links, first_link, host_of};
+pub use marks::{
+    MARK_COLORS, MARK_GLYPHS, MARK_SHAPES, MAX_MARKS, MarkCatalog, MarkDef, MarkName, is_mark_key,
+    legacy_mark, shown_keys,
+};
 pub use minecraft::{
     AccountsFn, FEATURE_MC_CODELESS, FEATURE_MC_LINK, FEATURE_SKINS, KEPT_UNUSED, McBlocked,
     McCheck, McDeclined, McFailure, McHealth, McIntent, McJob, McJobKind, McJobResult, McJobState,
@@ -143,9 +148,9 @@ pub use presence::{
 };
 pub use protocol::{
     AFK_CAP, BADGES_CAP, CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall,
-    CrewPlan, Game, GameLocation, Invite, LocalStatus, MARKS_CAP, MC_CAP, OnlineStatus, PLANS_CAP,
-    PRESENCE_CAPS, PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP,
-    STICKERS_CAP, TYPING_CAP, is_projects_host, presence_caps,
+    CrewPlan, Game, GameLocation, Invite, LocalStatus, MARKS_CAP, MARKS2_CAP, MC_CAP, OnlineStatus,
+    PLANS_CAP, PRESENCE_CAPS, PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP,
+    REPLIES_CAP, STICKERS_CAP, TYPING_CAP, is_projects_host, presence_caps,
 };
 pub use qr::{QrPath, qr_path};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};

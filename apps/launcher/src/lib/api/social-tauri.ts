@@ -83,6 +83,9 @@ async function ok<T>(promise: Promise<Res<T>>): Promise<T> {
 
 const opt = <T>(value: T | null | undefined): T | undefined => value ?? undefined;
 
+/** Someone's badge keys (BADGES): none when they have none. */
+const marksOf = (keys: string[]): string[] | undefined => (keys.length > 0 ? keys : undefined);
+
 function game(
   value:
     | { where: SocialGame["where"]; host?: string | null; ver?: string | null }
@@ -99,7 +102,7 @@ function profile(v: ProfileView): SocialProfile {
     username: v.username,
     avatar: v.avatar,
     avatarUrl: opt(v.avatarUrl),
-    mark: opt(v.mark),
+    marks: marksOf(v.marks),
     // SOC-ID: resolved by the backend (null: no Discord).
     discordId: v.discordId,
   };
@@ -138,7 +141,7 @@ function friend(v: FriendView): Friend {
     discordUrl: v.discordUrl,
     discordId: v.discordId,
     badge: badge(v.badge),
-    mark: opt(v.mark),
+    marks: marksOf(v.marks),
   };
 }
 
@@ -153,7 +156,7 @@ function invite(v: InviteView): SocialInvite {
     name: opt(v.name),
     avatar: opt(v.avatar),
     avatarUrl: opt(v.avatarUrl),
-    mark: opt(v.mark),
+    marks: marksOf(v.marks),
     at: v.at,
     server: game(v.server),
     quiet: v.quiet,
@@ -201,7 +204,8 @@ function me(v: MeView): SocialMe {
         }
       : undefined,
     badge: badge(v.badge),
-    mark: opt(v.mark),
+    marks: marksOf(v.marks),
+    marksHidden: opt(v.marksHidden),
   };
 }
 
@@ -345,7 +349,7 @@ function teamMember(v: TeamMemberView): TeamMember {
     joinedAt: v.joinedAt,
     togetherMonth: v.togetherMonth,
     badge: badge(v.badge),
-    mark: opt(v.mark),
+    marks: marksOf(v.marks),
   };
 }
 
@@ -479,7 +483,7 @@ function call(v: CrewCallView): CrewCall {
     name: opt(v.name),
     avatar: opt(v.avatar),
     avatarUrl: opt(v.avatarUrl),
-    mark: opt(v.mark),
+    marks: marksOf(v.marks),
     kind: v.kind,
     server: game(v.server),
     crews: v.crews,
@@ -552,6 +556,7 @@ export function snapshot(v: SocialView): SocialSnapshot {
     restriction: v.restriction ? { until: opt(v.restriction.until) } : undefined,
     backupWaitsUntil: opt(v.backupWaitsUntil),
     crewJoins: v.crewJoins.map(crewJoin),
+    markDefs: v.markDefs,
     // SOC-ID: the ways in, the sign-in's way, a link or a removal waiting for the browser.
     providers: v.providers,
     signUpWays: v.signUpWays,
@@ -715,6 +720,9 @@ export const tauriSocial: SocialApi = {
   },
   async setAvatar(avatar) {
     await ok(commands.socialSetAvatar(avatar));
+  },
+  async setMarksHidden(hidden) {
+    await ok(commands.socialSetMarksHidden(hidden));
   },
   invite: (id) => ok(commands.socialInvite(id)),
   async dismissInvite(id) {

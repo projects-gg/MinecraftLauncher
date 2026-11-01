@@ -12,6 +12,8 @@ import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerMotion;
 import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.MarkTip;
+import gg.projects.overlay.ui.Marks;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -57,6 +59,10 @@ import org.joml.Matrix3x2fStack;
  * <p>Crew tags (TEAM6): in crew chat the name over someone's group carries the tag they wear ("[GK] Mert"); the
  * pointer resting on it opens the tag's bubble. Who came into the crew while the launcher ran shows as a quiet line
  * at its time among the messages ("Ece ekibe katıldı").
+ *
+ * <p>Profile badges (BADGES-UI): the name over someone's group carries their first badge right of it ({@link Marks}),
+ * the name giving way; the pointer resting on it names all of them ({@link MarkTip}), and the narrator says them after
+ * the sender's name.
  *
  * <p>Days and times (CHAT-UX, as the launcher; {@link ChatTime}): a quiet day line over the first message of each
  * local day ("Bugün", "Dün", "3 gün önce", "28 Ekim"); a group is one sender's messages up to five minutes apart on
@@ -153,6 +159,11 @@ public final class MessageList extends PanelWidget {
         float nameW;
         /** TEAM6: the tag the sender wears, before their name over a group in crew chat. */
         TagChip chip;
+        /**
+         * BADGES-UI: the sender's profile badges the catalogue knows (someone else's message in crew chat); the first
+         * is drawn right of their name over a group, every one is said with the message.
+         */
+        List<OverlayState.MarkDef> marks = List.of();
         /** TEAM6 §7: someone came into the crew; the words of its quiet line. */
         FormattedCharSequence arrival;
         float arrivalW;
@@ -217,6 +228,8 @@ public final class MessageList extends PanelWidget {
     private final float[] pose = new float[StickerMotion.SIZE];
     /** TEAM6: the bubble of the tag before a sender's name (the pointer only: messages take no focus one by one). */
     private final BadgeBubble bubble = new BadgeBubble();
+    /** BADGES-UI: the tooltip of the badge right of a sender's name (the pointer only, as the tag's bubble). */
+    private final MarkTip markTip = new MarkTip();
     private String conversation;
     private boolean crew;
     private int laidOutRevision = -1;
@@ -267,7 +280,10 @@ public final class MessageList extends PanelWidget {
     private int hoverChip = -1;
     private int hoverTool = -1;
     private int hoverQuick = -1;
-    /** The pointer rests on a sender's tag: its bubble is the one popover there (no toolbar beside the message). */
+    /**
+     * The pointer rests on a sender's tag or badge: its bubble or tooltip is the one popover there (no toolbar beside
+     * the message).
+     */
     private boolean hoverTag;
     private boolean hoverQuote;
     private boolean hoverLink;
@@ -304,9 +320,10 @@ public final class MessageList extends PanelWidget {
         bubble.setReducedMotion(value);
     }
 
-    /** Closes the tag's bubble (another conversation, another page). */
+    /** Closes the tag's bubble and a badge's tooltip (another conversation, another page). */
     public void dismissBubble() {
         bubble.dismiss(now());
+        markTip.track(null, null, 0f, 0f, now());
     }
 
     /** Esc: closes the tag's bubble if one is open; whether it was. */
@@ -622,10 +639,16 @@ public final class MessageList extends PanelWidget {
             if (row.divider) {
                 y += DIVIDER_H;
             }
+            if (crew && !line.mine) {
+                // BADGES-UI: their badges, drawn over a group and said with every message of theirs.
+                row.marks = state.marks(line.marks);
+            }
             if (crew && !line.mine && newGroup) {
-                // "[GK] Mert": the tag they wear before the name (TEAM6); the name gives way, the chip does not.
+                // "[GK] Mert": the tag they wear before the name (TEAM6), their first badge after it (BADGES-UI); the
+                // name gives way, the chip and the badge do not.
                 row.chip = TagChip.of(state.badge(line.badge), TagChip.CHAT);
-                String fitted = Texts.fit(small, line.from, Math.round(maxBubble - TagChip.room(row.chip)));
+                String fitted = Texts.fit(small, line.from, Math.round(maxBubble - TagChip.room(row.chip)
+                    - Marks.room(row.marks)));
                 row.name = Texts.visual(fitted);
                 row.nameW = small.width(fitted);
                 y += SMALL_H + 1;
@@ -910,13 +933,15 @@ public final class MessageList extends PanelWidget {
         if (line.deleted) {
             return Texts.tr("chat.deleted");
         }
+        // "Mert, Projects yöneticisi: …": a crewmate's badges after their name (BADGES-UI).
+        String from = Marks.spoken(line.from, row.marks, Texts.current());
         if (line.sticker != null) {
             String name = row.sticker == null ? Texts.str("chat.sticker") : row.sticker.name(turkish);
             return line.mine ? Texts.tr("narration.sticker.mine", name)
-                : Texts.tr("narration.sticker.theirs", line.from, name);
+                : Texts.tr("narration.sticker.theirs", from, name);
         }
         return line.mine ? Texts.tr("narration.mine", line.text)
-            : Texts.tr("narration.theirs", line.from, line.text);
+            : Texts.tr("narration.theirs", from, line.text);
     }
 
     /** Takes the list to its newest message. */
@@ -1097,8 +1122,9 @@ public final class MessageList extends PanelWidget {
     }
 
     /**
-     * A right click on a sender's name (or the tag before it) over a group in crew chat: their person menu at the
-     * pointer, as the launcher's name does (OVL-UX2). Anything else a right click lands on does nothing.
+     * A right click on a sender's name (or the tag before it, or the badge after it) over a group in crew chat: their
+     * person menu at the pointer, as the launcher's name does (OVL-UX2). Anything else a right click lands on does
+     * nothing.
      */
     private void rightClick(float mx, float my) {
         if (my >= visibleBottom) {
@@ -1110,7 +1136,7 @@ public final class MessageList extends PanelWidget {
                 continue;
             }
             float nameTop = row.y + (row.divider ? DIVIDER_H : 0);
-            float nameRight = getX() + 1 + TagChip.room(row.chip) + row.nameW;
+            float nameRight = getX() + 1 + TagChip.room(row.chip) + row.nameW + Marks.room(row.marks);
             if (cy >= nameTop && cy < nameTop + SMALL_H && mx >= getX() && mx < nameRight + 2) {
                 closeStrip();
                 actions.person(row.line.by, row.line.from, row.line.badge, PersonMenu.Anchor.at(mx, my), false);
@@ -1493,6 +1519,7 @@ public final class MessageList extends PanelWidget {
         drawToolbar(g, now);
         drawStrip(g, now, small);
         drawTooltip(g, now, small);
+        markTip.draw(g, now, x0, y0, x0 + w);
         if (newBelow) {
             float pw = pillWidth();
             float px = pillLeft();
@@ -1520,6 +1547,7 @@ public final class MessageList extends PanelWidget {
         if (!isHovered()) {
             updateTooltip(-1, -1);
             bubble.track(null, onBubble, now);
+            markTip.track(null, null, 0f, 0f, now);
             return;
         }
         if (stripRow >= 0) {
@@ -1529,8 +1557,10 @@ public final class MessageList extends PanelWidget {
             // Under the floating line: nothing of the list shows there.
             updateTooltip(-1, -1);
             bubble.track(null, onBubble, now);
+            markTip.track(null, null, 0f, 0f, now);
             return;
         }
+        boolean onMark = false;
         float cy = mouseY - getY() + top;
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
@@ -1554,9 +1584,24 @@ public final class MessageList extends PanelWidget {
                         groupTop + row.height, false);
                 }
             }
+            if (row.name != null && !row.marks.isEmpty() && stripRow < 0 && tag == null) {
+                // The badge right of the sender's name names all of theirs (BADGES-UI).
+                float nameMid = getY() + row.y - top + (row.divider ? DIVIDER_H : 0) + SMALL_H / 2f;
+                float markX = Marks.left(getX() + 1 + TagChip.room(row.chip) + row.nameW);
+                float markY = Marks.top(nameMid);
+                if (Marks.over(mouseX, mouseY, markX, markY)) {
+                    onMark = true;
+                    markTip.track(row.line.id != null ? row.line.id : row.line.clientId, row.marks, markX, markY,
+                        now);
+                }
+            }
             break;
         }
-        hoverTag = tag != null || onBubble;
+        if (!onMark) {
+            markTip.track(null, null, 0f, 0f, now);
+        }
+        // The tag's bubble or a badge's tooltip is the one popover there (no toolbar, no time).
+        hoverTag = tag != null || onBubble || onMark;
         if (hoverTag) {
             hoverTool = -1;
         }
@@ -1669,8 +1714,9 @@ public final class MessageList extends PanelWidget {
             if (row.chip != null) {
                 row.chip.draw(g, x0 + 1, ny + SMALL_H / 2f);
             }
-            Draw.text(g, small, row.name, x0 + 1 + TagChip.room(row.chip), Fonts.centeredY(Fonts.Face.SMALL,
-                ny + SMALL_H / 2f), Theme.ASH_300);
+            float nameX = x0 + 1 + TagChip.room(row.chip);
+            Draw.text(g, small, row.name, nameX, Fonts.centeredY(Fonts.Face.SMALL, ny + SMALL_H / 2f), Theme.ASH_300);
+            Marks.draw(g, row.marks, nameX + row.nameW, ny + SMALL_H / 2f);
         }
         if (row.quote) {
             drawQuote(g, index, row, rowTop + row.quoteTop, x0, right, small);

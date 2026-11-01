@@ -46,6 +46,7 @@ use crate::identity::{
 };
 use crate::kept::{KeptCopy, KeptLists};
 use crate::links::{find_links, first_link};
+use crate::marks::{MarkCatalog, legacy_mark};
 use crate::minecraft::{McSignal, McSink};
 use crate::model::{
     ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMute, CrewMuteEdit, EditFeatures,
@@ -83,6 +84,9 @@ const PROVIDERS_GAP: Duration = Duration::from_secs(60);
 const LOGOUT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// What the service tells the UI.
+// BADGES' badge lists and SOC-ID's Discord ids grew the cards a notice carries: one update at a
+// time is made and handed to the sink at once, so a box per notice would buy nothing.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum SocialUpdate {
     View(Box<SocialView>),
@@ -106,6 +110,9 @@ const TYPING_EVERY: Duration = Duration::from_secs(4);
 const MARK_EVERY: Duration = Duration::from_secs(2);
 /// A busy hub's wait for a card is honoured once, if it is at most this long (CHAT2).
 const CARD_RETRY_MAX: Duration = Duration::from_secs(10);
+/// BADGES: the badge catalogue is read again at most this often while its revision stays (a
+/// reconnect, a card naming a badge it does not know); a revision that moved reads it at once.
+const CATALOG_GAP: Duration = Duration::from_secs(600);
 
 pub type UpdateSink = Arc<dyn Fn(SocialUpdate) + Send + Sync>;
 
@@ -261,6 +268,20 @@ struct Core {
     providers_asked: Option<Instant>,
     /// SOC-ID: a link or a removal waiting for its browser step.
     identity: Option<PendingIdentity>,
+    /// BADGES: the badge catalogue every card's `marks` name (the built-in one until the
+    /// service's arrives) and its `ETag`. It is public: it survives sign-outs, not a new service.
+    catalog: MarkCatalog,
+    catalog_etag: Option<String>,
+    /// A catalogue read is on its way; `catalog_again`: one whose revision moved was asked for
+    /// meanwhile (it goes once this one is back).
+    catalog_reading: bool,
+    catalog_again: bool,
+    /// When the last catalogue read started ([`CATALOG_GAP`]).
+    catalog_read_at: Option<Instant>,
+    /// Bumped with every new service: an older read's answer is dropped.
+    catalog_epoch: u64,
+    /// The last view named a badge the catalogue does not know (it was made with a newer one).
+    catalog_unknown: bool,
 }
 
 /// A link or a removal that went to the browser (SOC-ID): its `projects://auth/done` is claimed
@@ -348,6 +369,20 @@ impl Core {
             if let Some(name) = &update.name {
                 me.profile.display_name = Some(name.clone());
             }
+            // BADGES: the badges the player holds, shown or kept off, in the catalogue's order.
+            if let Some(hidden) = &update.marks_hidden {
+                let held = self.catalog.order(
+                    me.profile
+                        .shown_marks()
+                        .into_iter()
+                        .chain(me.marks_hidden.iter().flatten().cloned()),
+                );
+                let (off, shown): (Vec<String>, Vec<String>) =
+                    held.into_iter().partition(|key| hidden.contains(key));
+                me.profile.mark = legacy_mark(&shown);
+                me.profile.marks = shown;
+                me.marks_hidden = Some(off);
+            }
         }
         Some(me)
     }
@@ -403,16 +438,103 @@ impl SocialService {
     }
 
     fn emit_view(&self) {
-        let (changes, view) = {
+        let (changes, view, unknown) = {
             let mut core = self.lock();
             core.seq += 1;
             let changes = std::mem::take(&mut core.chat_outbox);
-            (changes, build_view(&mut core))
+            let view = build_view(&mut core);
+            (changes, view, std::mem::take(&mut core.catalog_unknown))
         };
         for change in changes {
             (self.inner.sink)(SocialUpdate::Chat(change));
         }
         (self.inner.sink)(SocialUpdate::View(Box::new(view)));
+        // BADGES: a card was made with a newer catalogue than this one.
+        if unknown {
+            self.want_catalog(false);
+        }
+    }
+
+    /// BADGES: reads the badge catalogue (`GET /v1/marks`, by its `ETag`) unless a read is on its
+    /// way. `forced` when its revision moved (`marksRev`, `markdefs`); otherwise at most every
+    /// [`CATALOG_GAP`] (a connect, a card naming a badge this catalogue does not know).
+    fn want_catalog(&self, forced: bool) {
+        let (client, etag, epoch) = {
+            let mut core = self.lock();
+            let Some(client) = core.client.clone() else {
+                return;
+            };
+            if core.catalog_reading {
+                core.catalog_again |= forced;
+                return;
+            }
+            if !forced
+                && core
+                    .catalog_read_at
+                    .is_some_and(|at| at.elapsed() < CATALOG_GAP)
+            {
+                return;
+            }
+            core.catalog_reading = true;
+            core.catalog_read_at = Some(Instant::now());
+            (client, core.catalog_etag.clone(), core.catalog_epoch)
+        };
+        let service = self.clone();
+        self.spawn(async move { service.read_catalog(client, etag, epoch).await });
+    }
+
+    async fn read_catalog(&self, client: SocialClient, etag: Option<String>, epoch: u64) {
+        let answer = client.mark_catalog(etag.as_deref()).await;
+        let (changed, again) = {
+            let mut core = self.lock();
+            if core.catalog_epoch != epoch {
+                return;
+            }
+            core.catalog_reading = false;
+            let changed = match answer {
+                Ok(Some((catalog, etag))) => {
+                    core.catalog_etag = etag;
+                    let changed = core.catalog != catalog;
+                    core.catalog = catalog;
+                    changed
+                }
+                // `304`: still the one held.
+                Ok(None) => false,
+                Err(error) => {
+                    tracing::info!(%error, "the badge catalogue stays as it was");
+                    false
+                }
+            };
+            (changed, std::mem::take(&mut core.catalog_again))
+        };
+        if changed {
+            self.emit_view();
+        }
+        if again {
+            self.want_catalog(true);
+        }
+    }
+
+    /// The player's profile again (`GET /v1/me`), when a badge left their shown ones and they may
+    /// have kept it off on another device (BADGES: only `me` says which they keep off).
+    async fn reread_me(&self, generation: u64) {
+        let Some(session) = self.current_session(generation) else {
+            return;
+        };
+        match session.me().await {
+            Ok(me) => {
+                {
+                    let mut core = self.lock();
+                    if core.generation != generation {
+                        return;
+                    }
+                    core.settings_version = me.settings.as_ref().map(|s| s.version);
+                    core.state.set_me(me);
+                }
+                self.emit_view();
+            }
+            Err(error) => tracing::info!(%error, "the profile stays as it was"),
+        }
     }
 
     fn notify(&self, notice: SocialNotice) {
@@ -486,6 +608,13 @@ impl SocialService {
             core.providers.clear();
             core.sign_up_ways.clear();
             core.providers_asked = None;
+            // BADGES: another service has its own badge catalogue.
+            core.catalog = MarkCatalog::builtin();
+            core.catalog_etag = None;
+            core.catalog_reading = false;
+            core.catalog_again = false;
+            core.catalog_read_at = None;
+            core.catalog_epoch += 1;
             core.client = url.as_ref().map(|url| {
                 SocialClient::with_http_client(
                     self.inner.http.clone(),
@@ -670,6 +799,10 @@ impl SocialService {
         let mut ended = false;
         let mut quietly = false;
         let mut restricted = None;
+        // BADGES: read the catalogue (forced when its revision moved), and the player's profile
+        // when one of their own badges left the shown ones.
+        let mut catalog = None;
+        let mut reread = false;
         let deliver;
         let typing;
         let tag_off;
@@ -688,7 +821,34 @@ impl SocialService {
                 // This device's own save is on its way and wins; its echo arrives after it.
                 return;
             }
+            let own_before = match &event {
+                PresenceEvent::MarksChanged { id, .. } => core
+                    .state
+                    .me()
+                    .filter(|me| me.profile.id == *id)
+                    .map(|me| me.profile.shown_marks()),
+                _ => None,
+            };
             let mut notices = core.state.apply(&event, unix_now());
+            if let Some(before) = own_before {
+                let after = core
+                    .state
+                    .me()
+                    .map(|me| me.profile.shown_marks())
+                    .unwrap_or_default();
+                // A hide of this device's own still on its way brings `me` with its answer.
+                let hiding = core.profile_pending.iter().any(|pending| {
+                    pending.generation == core.generation && pending.update.marks_hidden.is_some()
+                });
+                reread = !hiding && before.iter().any(|key| !after.contains(key));
+            }
+            match &event {
+                PresenceEvent::Connected { .. } => catalog = Some(false),
+                PresenceEvent::MarkDefs { rev } if *rev != core.catalog.rev => {
+                    catalog = Some(true);
+                }
+                _ => {}
+            }
             if changes_relations(&event) {
                 core.forget_rel();
             }
@@ -772,6 +932,13 @@ impl SocialService {
             let service = self.clone();
             self.spawn(async move { service.refetch(generation).await });
         }
+        if let Some(forced) = catalog {
+            self.want_catalog(forced);
+        }
+        if reread {
+            let service = self.clone();
+            self.spawn(async move { service.reread_me(generation).await });
+        }
     }
 
     fn current_session(&self, generation: u64) -> Option<Session> {
@@ -790,7 +957,7 @@ impl SocialService {
         let epoch = self.lock().rel_epoch;
         match session.friends_answer().await {
             Ok((mut overview, answer)) => {
-                {
+                let behind = {
                     let mut core = self.lock();
                     if core.generation != generation {
                         return;
@@ -803,11 +970,16 @@ impl SocialService {
                         core.settings_version = me.settings.as_ref().map(|s| s.version);
                         core.state.set_me(me);
                     }
+                    let behind = catalog_behind(&core, overview.marks_rev);
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
                     observe_together(&mut core);
-                }
+                    behind
+                };
                 self.emit_view();
+                if behind {
+                    self.want_catalog(true);
+                }
             }
             Err(SocialError::Unauthorized) => self.end_session(generation, false),
             Err(SocialError::Restricted { until }) => self.end_restricted(generation, until),
@@ -843,6 +1015,7 @@ impl SocialService {
         };
         let mut ended = false;
         let mut restricted = None;
+        let mut behind = false;
         {
             let mut core = self.lock();
             if core.generation != generation {
@@ -875,6 +1048,7 @@ impl SocialService {
             }
             match overview {
                 Some(Ok((overview, _))) => {
+                    behind = catalog_behind(&core, overview.marks_rev);
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
                     observe_together(&mut core);
@@ -891,6 +1065,9 @@ impl SocialService {
             self.end_session(generation, false);
         } else {
             self.emit_view();
+            if behind {
+                self.want_catalog(true);
+            }
         }
     }
 
@@ -1436,6 +1613,29 @@ impl SocialService {
         drop(turn);
         self.emit_view();
         result.map(|_| ())
+    }
+
+    /// "Rozetler" (BADGES-UI): the badges the player keeps off their profile, every one of them
+    /// (`[]` shows all). Shown at once like the other profile changes (SOC-LAG). Keys this
+    /// launcher's catalogue does not know yet stay in the list (the service ignores keys it does
+    /// not know, and one it knows must not show because this copy is behind); malformed ones go.
+    /// Only with a service that keeps the choice.
+    pub async fn set_marks_hidden(&self, keys: Vec<String>) -> Result<()> {
+        let keys = {
+            let core = self.lock();
+            let offered = core.state.me().is_some_and(|me| me.marks_hidden.is_some());
+            if !offered {
+                return Err(SocialError::InvalidInput("badges are not offered"));
+            }
+            let mut keys = core.catalog.order(
+                keys.into_iter()
+                    .filter(|key| crate::marks::is_mark_key(key)),
+            );
+            keys.truncate(crate::marks::MAX_MARKS);
+            keys
+        };
+        self.update_profile(ProfileUpdate::default().marks_hidden(keys))
+            .await
     }
 
     // --- friend categories ----------------------------------------------------------------
@@ -3952,7 +4152,7 @@ fn changes_relations(event: &PresenceEvent) -> bool {
         PresenceEvent::TeamRequests { .. }
             | PresenceEvent::TeamChanged { .. }
             | PresenceEvent::BadgeChanged { .. }
-            | PresenceEvent::MarkChanged { .. }
+            | PresenceEvent::MarksChanged { .. }
             | PresenceEvent::TeamInvited(_)
             | PresenceEvent::GroupsChanged(_)
             | PresenceEvent::CrewNotifications(_)
@@ -4664,15 +4864,41 @@ fn unix_now_ms() -> i64 {
 }
 
 /// The switches a profile change sets, one bit each.
-fn profile_fields(update: &ProfileUpdate) -> u8 {
-    u8::from(update.avatar.is_some())
-        | (u8::from(update.status.is_some()) << 1)
-        | (u8::from(update.share_server.is_some()) << 2)
-        | (u8::from(update.share_last_seen.is_some()) << 3)
-        | (u8::from(update.share_read.is_some()) << 4)
-        | (u8::from(update.share_typing.is_some()) << 5)
-        | (u8::from(update.badge.is_some()) << 6)
-        | (u8::from(update.name.is_some()) << 7)
+fn profile_fields(update: &ProfileUpdate) -> u16 {
+    u16::from(update.avatar.is_some())
+        | (u16::from(update.status.is_some()) << 1)
+        | (u16::from(update.share_server.is_some()) << 2)
+        | (u16::from(update.share_last_seen.is_some()) << 3)
+        | (u16::from(update.share_read.is_some()) << 4)
+        | (u16::from(update.share_typing.is_some()) << 5)
+        | (u16::from(update.badge.is_some()) << 6)
+        | (u16::from(update.name.is_some()) << 7)
+        | (u16::from(update.marks_hidden.is_some()) << 8)
+}
+
+/// BADGES: a read's `marksRev` names another catalogue than the one held (read it again).
+fn catalog_behind(core: &Core, rev: Option<i64>) -> bool {
+    rev.is_some_and(|rev| rev != core.catalog.rev)
+}
+
+/// BADGES: whether a view names a badge the catalogue does not know (made with a newer one).
+fn names_unknown_marks(view: &SocialView, catalog: &MarkCatalog) -> bool {
+    let me = view
+        .me
+        .iter()
+        .flat_map(|me| me.marks.iter().chain(me.marks_hidden.iter().flatten()));
+    let friends = view.friends.iter().flat_map(|friend| friend.marks.iter());
+    let requests = view
+        .incoming
+        .iter()
+        .chain(view.outgoing.iter())
+        .flat_map(|request| request.marks.iter());
+    let members = view
+        .crews
+        .iter()
+        .flat_map(|crew| crew.members.iter())
+        .flat_map(|member| member.marks.iter());
+    !catalog.knows_all(me.chain(friends).chain(requests).chain(members))
 }
 
 /// Every switch the waiting change `id` sets is set again by newer changes of the same sign-in
@@ -4779,7 +5005,7 @@ fn build_view(core: &mut Core) -> SocialView {
             }
         }
     }
-    SocialView {
+    let view = SocialView {
         seq: core.seq,
         enabled: core.url.is_some(),
         auth: core.auth,
@@ -4867,7 +5093,10 @@ fn build_view(core: &mut Core) -> SocialView {
             unlink: change.unlink,
             url: change.url.to_string(),
         }),
-    }
+        mark_defs: core.catalog.marks.clone(),
+    };
+    core.catalog_unknown = names_unknown_marks(&view, &core.catalog);
+    view
 }
 
 fn unix_now() -> i64 {
@@ -5325,6 +5554,15 @@ mod tests {
         paths
     }
 
+    /// [`paths`] without the badge catalogue, which a launcher run reads at its first connect
+    /// (BADGES-UI): what a test about the lists cares for.
+    fn list_paths(asked: &[Recorded]) -> Vec<&str> {
+        paths(asked)
+            .into_iter()
+            .filter(|path| *path != "/v1/marks")
+            .collect()
+    }
+
     /// The relations version the presence connect named, if any.
     fn named_rel(asked: &[Recorded]) -> Option<String> {
         let connect = asked.iter().find(|r| r.path == "/v1/presence")?;
@@ -5401,7 +5639,10 @@ mod tests {
         let before = server.requests().len();
         hello(&second, Some(REL_1));
         tokio::time::sleep(Duration::from_millis(200)).await;
-        assert_eq!(server.requests().len(), before, "nothing read again");
+        assert!(
+            list_paths(&server.requests()[before..]).is_empty(),
+            "nothing read again"
+        );
         assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_1));
         second.service.configure(None);
 
@@ -5417,7 +5658,7 @@ mod tests {
             third.service.lock().rel.get().as_deref() == Some(REL_2)
         })
         .await;
-        assert_eq!(paths(&server.requests()[before..]), ["/v1/friends"]);
+        assert_eq!(list_paths(&server.requests()[before..]), ["/v1/friends"]);
         assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_2));
     }
 
@@ -7920,5 +8161,198 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// BADGES: the launcher draws with the built-in badge catalogue until the service's arrives;
+    /// it reads it (`GET /v1/marks`, by its `ETag` once it holds one) when a list's `marksRev` or
+    /// a `markdefs` frame names another revision, when a card names a badge it does not know, and
+    /// at a connect at most every ten minutes. "Rozetlerim" shows a hide at once and sends every
+    /// hidden key.
+    #[tokio::test]
+    async fn the_badge_catalogue_follows_the_service() {
+        const ME_BADGED: &str = r#"{"id":"123456789012345678","username":"ayse","displayName":"Ayşe",
+            "avatar":"discord","avatarHash":null,"discordAvatarHash":null,"friendCode":"PRJ-ABCD-EFGH",
+            "status":"online","privacy":{"shareServer":false,"shareLastSeen":true},
+            "createdOn":"2026-10-16","settings":null,"marks":["staff"],"marksHidden":["premium"]}"#;
+        let rev = Arc::new(AtomicUsize::new(1));
+        let server = MockServer::start({
+            let rev = rev.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                    "/v1/me" if req.method == "PATCH" => {
+                        assert_eq!(req.json(), serde_json::json!({"marksHidden": ["staff"]}));
+                        let mut me: serde_json::Value = serde_json::from_str(ME_BADGED).unwrap();
+                        me["marks"] = serde_json::json!(["premium"]);
+                        me["marksHidden"] = serde_json::json!(["staff"]);
+                        MockReply::json(200, &me.to_string())
+                    }
+                    "/v1/me" => MockReply::json(200, ME_BADGED),
+                    "/v1/friends" => {
+                        let mut list: serde_json::Value = serde_json::from_str(FRIENDS).unwrap();
+                        list["friends"][0]["marks"] = serde_json::json!(["m10", "verified"]);
+                        list["marksRev"] = rev.load(Ordering::SeqCst).into();
+                        MockReply::json(200, &list.to_string())
+                    }
+                    "/v1/marks" => {
+                        let now = rev.load(Ordering::SeqCst);
+                        let etag = format!("\"{now}\"");
+                        if req.header("if-none-match") == Some(etag.as_str()) {
+                            return MockReply::empty(304).with_header("ETag", &etag);
+                        }
+                        let name = if now == 1 { "Yeni" } else { "Yenilendi" };
+                        let body = serde_json::json!({"rev": now, "marks": [
+                            {"key": "verified", "name": {"tr": "Doğrulanmış hesap", "en": "Verified account"},
+                                "color": "blue", "glyph": "check", "shape": "seal"},
+                            {"key": "m10", "name": {"tr": name, "en": "New"},
+                                "color": "teal", "glyph": "bolt", "shape": "shield"},
+                        ]});
+                        MockReply::json(200, &body.to_string()).with_header("ETag", &etag)
+                    }
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        // Before any read: the built-in catalogue.
+        let builtin = harness.service.view().mark_defs;
+        assert_eq!(builtin.len(), 5);
+        assert_eq!(builtin[0].key, "admin");
+        harness.service.configure(url(&server));
+        // The list names `marksRev` 1 and a badge the built-in catalogue does not know.
+        let view = harness
+            .until("the service's catalogue", |view| {
+                view.loaded && view.mark_defs.iter().any(|def| def.key == "m10")
+            })
+            .await;
+        assert_eq!(view.friends[0].marks, ["m10", "verified"]);
+        assert_eq!(view.mark_defs.len(), 2);
+        let me = view.me.unwrap();
+        assert_eq!(me.marks, ["staff"]);
+        assert_eq!(
+            me.marks_hidden.as_deref(),
+            Some(&["premium".to_owned()][..])
+        );
+        let settle = || async {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while harness.service.lock().catalog_reading && Instant::now() < deadline {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+        settle().await;
+        let reads = || -> Vec<Option<String>> {
+            server
+                .requests()
+                .iter()
+                .filter(|r| r.path == "/v1/marks")
+                .map(|r| r.header("if-none-match").map(str::to_owned))
+                .collect()
+        };
+        let first = reads();
+        assert_eq!(first[0], None, "the first read has no ETag");
+        assert!(
+            first[1..].iter().all(|tag| tag.as_deref() == Some("\"1\"")),
+            "{first:?}"
+        );
+        assert_eq!(harness.service.lock().catalog.rev, 1);
+
+        let (generation, epoch) = {
+            let core = harness.service.lock();
+            (core.generation, core.epoch)
+        };
+        // The same revision: nothing is read.
+        harness
+            .service
+            .on_presence(generation, epoch, PresenceEvent::MarkDefs { rev: 1 });
+        settle().await;
+        assert_eq!(reads().len(), first.len());
+        // Studio's owner saved: read at once, the new names show.
+        rev.store(2, Ordering::SeqCst);
+        harness
+            .service
+            .on_presence(generation, epoch, PresenceEvent::MarkDefs { rev: 2 });
+        let view = harness
+            .until("the new catalogue", |view| {
+                view.mark_defs
+                    .iter()
+                    .any(|def| def.key == "m10" && def.name.tr == "Yenilendi")
+            })
+            .await;
+        assert_eq!(view.mark_defs[1].glyph, "bolt");
+        settle().await;
+        let after_defs = reads().len();
+        let connected = || PresenceEvent::Connected {
+            status: crate::model::StatusMode::Online,
+            friends: vec![],
+            invites: vec![],
+            calls: vec![],
+            clock: None,
+            rel: None,
+            chat: None,
+            plans: None,
+        };
+        // A connect within ten minutes of the last read reads nothing; a later one asks by the
+        // ETag and keeps the catalogue on a 304.
+        harness.service.on_presence(generation, epoch, connected());
+        settle().await;
+        assert_eq!(reads().len(), after_defs);
+        harness.service.lock().catalog_read_at = Some(Instant::now() - CATALOG_GAP);
+        harness.service.on_presence(generation, epoch, connected());
+        settle().await;
+        let last = reads();
+        assert_eq!(last.len(), after_defs + 1);
+        assert_eq!(last.last().unwrap().as_deref(), Some("\"2\""));
+        assert_eq!(harness.service.lock().catalog.rev, 2);
+
+        // "Rozetlerim": keep "Projects personeli" off the profile; shown at once, sent whole.
+        harness
+            .service
+            .set_marks_hidden(vec!["staff".into()])
+            .await
+            .unwrap();
+        let me = harness.service.view().me.unwrap();
+        assert_eq!(me.marks, ["premium"]);
+        assert_eq!(me.marks_hidden.as_deref(), Some(&["staff".to_owned()][..]));
+        assert!(
+            server
+                .requests()
+                .iter()
+                .any(|r| r.method == "PATCH" && r.path == "/v1/me")
+        );
+    }
+
+    /// BADGES: while the player's hide is on its way the view shows it already, in the
+    /// catalogue's order.
+    #[test]
+    fn a_hide_on_its_way_shows_at_once() {
+        let mut core = Core::default();
+        let me: Me = serde_json::from_str(
+            r#"{"id":"123456789012345678","username":"ayse","displayName":"Ayşe","avatar":"discord",
+            "avatarHash":null,"discordAvatarHash":null,"friendCode":"PRJ-ABCD-EFGH","status":"online",
+            "privacy":{"shareServer":false,"shareLastSeen":true},"createdOn":"2026-10-16",
+            "settings":null,"marks":["admin","premium"],"mark":"admin","marksHidden":["verified"]}"#,
+        )
+        .unwrap();
+        core.state.set_me(me);
+        core.profile_pending.push(PendingProfile {
+            id: 1,
+            generation: core.generation,
+            update: ProfileUpdate::default().marks_hidden(vec!["admin".into()]),
+        });
+        let shown = core.shown_me().unwrap();
+        assert_eq!(shown.profile.marks, ["verified", "premium"]);
+        assert_eq!(shown.profile.mark, Some(crate::ProfileMark::Verified));
+        assert_eq!(
+            shown.marks_hidden.as_deref(),
+            Some(&["admin".to_owned()][..])
+        );
+        // Showing them all again.
+        core.profile_pending[0].update = ProfileUpdate::default().marks_hidden(Vec::new());
+        let shown = core.shown_me().unwrap();
+        assert_eq!(shown.profile.marks, ["admin", "verified", "premium"]);
+        assert_eq!(shown.marks_hidden.as_deref(), Some(&[][..]));
     }
 }

@@ -19,6 +19,7 @@ import type { Conversation, SocialTeam } from "@/lib/api/social-types";
 import { BadgedName, badgeRowLabel, useShownBadge } from "../crew-badge";
 import { openMenuFromKey } from "../menu-key";
 import { enter, glide, leave, useSocialMotion } from "../motion";
+import { useMarks } from "../person-mark";
 import { PersonContextMenu, type PersonRef } from "../person-menu";
 import { SocialAvatar } from "../social-face";
 import { useSocialPrefs, useSocialUi } from "../store";
@@ -120,8 +121,9 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
     : t("chat.list.noMessages");
   const typingNow = extras.typing && writing && !conversation.failed;
   const badge = useShownBadge(face.person?.badge);
+  const marks = useMarks(face.person?.marks);
   const label = [
-    badgeRowLabel(name, badge, t, face.person?.mark),
+    badgeRowLabel(name, badge, t, marks),
     unread ? t("chat.list.unread", { count: conversation.unread }) : null,
     preview,
   ]
@@ -161,7 +163,7 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
             name={name}
             badge={face.person?.badge}
             wearer={face.person?.id ?? ""}
-            mark={face.person?.mark}
+            marks={face.person?.marks}
             nameClassName={cn(
               "text-[14px]",
               unread ? "font-semibold text-bone-50" : "font-medium text-bone-100",

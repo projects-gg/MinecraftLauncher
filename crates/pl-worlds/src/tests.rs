@@ -682,6 +682,7 @@ fn friends(online: bool) -> HashMap<String, Person> {
             avatar: Some("a3".into()),
             avatar_url: None,
             online,
+            marks: Vec::new(),
         },
     )]
     .into()

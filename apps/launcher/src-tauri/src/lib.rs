@@ -554,6 +554,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_set_status,
             commands::social::social_set_privacy,
             commands::social::social_set_avatar,
+            commands::social::social_set_marks_hidden,
             commands::social::social_invite,
             commands::social::social_dismiss_invite,
             commands::social::social_open_in_discord,

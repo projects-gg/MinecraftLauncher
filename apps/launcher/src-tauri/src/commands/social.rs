@@ -442,6 +442,17 @@ pub async fn social_set_avatar(state: State<'_, AppState>, avatar: String) -> Cm
         .await?)
 }
 
+/// "Rozetlerim" (BADGES): the badges the player keeps off their profile, every one of them
+/// (`[]` shows them all). Shown at once; a refusal takes it back and says why.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_set_marks_hidden(
+    state: State<'_, AppState>,
+    hidden: Vec<String>,
+) -> CmdResult<()> {
+    Ok(state.social.set_marks_hidden(hidden).await?)
+}
+
 /// "Birlikte oyna".
 #[tauri::command]
 #[specta::specta]

@@ -158,17 +158,18 @@ impl SocialState {
             self.add_notice(notice);
         }
         // The player's own entries in the crews' member lists wear what `me` says (TEAM6): a tag
-        // put on here shows on the crew pages at once; so do their mark (SOC-VERIFY) and a new
+        // put on here shows on the crew pages at once; so do their badges (BADGES) and a new
         // picture (SOC-LAG).
-        let (id, badge, mark) = (
+        let (id, badge, marks, mark) = (
             me.profile.id.clone(),
             me.profile.badge.clone(),
+            me.profile.marks.clone(),
             me.profile.mark,
         );
         let (avatar, hash) = (me.profile.avatar.clone(), me.profile.avatar_hash.clone());
         self.me = Some(me);
         self.set_badge_of(&id, badge.as_ref());
-        self.set_mark_of(&id, mark);
+        self.set_marks_of(&id, &marks, mark);
         self.set_picture_of(&id, &avatar, hash.as_deref());
     }
 
@@ -341,7 +342,7 @@ impl SocialState {
                 }
                 self.set_badge_of(id, badge.as_ref());
             }
-            PresenceEvent::MarkChanged { id, mark } => self.set_mark_of(id, *mark),
+            PresenceEvent::MarksChanged { id, marks, mark } => self.set_marks_of(id, marks, *mark),
             PresenceEvent::TeamRequests {
                 crew,
                 requests,
@@ -587,6 +588,8 @@ impl SocialState {
             | PresenceEvent::ChatRead { .. } => {}
             // World sessions belong to the launcher's host (HOST1, `crate::world`).
             PresenceEvent::World(_) => {}
+            // The badge catalogue lives in the service (`SocialService::read_catalog`).
+            PresenceEvent::MarkDefs { .. } => {}
         }
         notices
     }
@@ -1111,7 +1114,7 @@ impl SocialState {
             name: caller.map(|m| m.profile.name().to_owned()),
             avatar: caller.map(|m| m.profile.avatar.clone()),
             avatar_url: caller.and_then(|m| m.profile.discord_avatar_url(128)),
-            mark: caller.and_then(|m| m.profile.mark),
+            marks: caller.map(|m| m.profile.shown_marks()).unwrap_or_default(),
             kind: if open.call.server.is_some() {
                 CallKind::Join
             } else {
@@ -1260,11 +1263,12 @@ impl SocialState {
         }
     }
 
-    /// Someone's mark changed (SOC-VERIFY): it shows wherever they do, the player's own card too
-    /// (friends, crews' members, requests either way, crews' join requests and invites, blocks).
-    fn set_mark_of(&mut self, id: &str, mark: Option<ProfileMark>) {
+    /// Someone's badges changed (BADGES; SOC-VERIFY's mark before): they show wherever they do,
+    /// the player's own card too (friends, crews' members, requests either way, crews' join
+    /// requests and invites, blocks).
+    fn set_marks_of(&mut self, id: &str, marks: &[String], mark: Option<ProfileMark>) {
         if let Some(me) = self.me.as_mut().filter(|me| me.profile.id == id) {
-            me.profile.mark = mark;
+            me.profile.set_marks(marks, mark);
         }
         let Some(overview) = &mut self.overview else {
             return;
@@ -1278,28 +1282,34 @@ impl SocialState {
             .chain(overview.blocked.iter_mut().map(|b| &mut b.profile))
             .chain(overview.team_invites.iter_mut().map(|i| &mut i.from));
         for profile in profiles.filter(|p| p.id == id) {
-            profile.mark = mark;
+            profile.set_marks(marks, mark);
         }
         for entry in overview.crews.iter_mut().flatten() {
             for member in entry.team.members.iter_mut().filter(|m| m.profile.id == id) {
-                member.profile.mark = mark;
+                member.profile.set_marks(marks, mark);
             }
             for request in entry.requests.iter_mut().filter(|r| r.from.id == id) {
-                request.from.mark = mark;
+                request.from.set_marks(marks, mark);
             }
         }
     }
 
-    /// A crew as it is now carries its members' marks as they are now (SOC-VERIFY): those go
+    /// A crew as it is now carries its members' badges as they are now (BADGES): those go
     /// everywhere the members show.
     fn marks_from(&mut self, team: &Team) {
-        let marks: Vec<(String, Option<ProfileMark>)> = team
+        let marks: Vec<(String, Vec<String>, Option<ProfileMark>)> = team
             .members
             .iter()
-            .map(|member| (member.profile.id.clone(), member.profile.mark))
+            .map(|member| {
+                (
+                    member.profile.id.clone(),
+                    member.profile.marks.clone(),
+                    member.profile.mark,
+                )
+            })
             .collect();
-        for (id, mark) in marks {
-            self.set_mark_of(&id, mark);
+        for (id, keys, mark) in marks {
+            self.set_marks_of(&id, &keys, mark);
         }
     }
 
@@ -1721,7 +1731,7 @@ impl SocialState {
                     joined_at: member.joined_at,
                     together_month: 0,
                     badge: self.badge_view(&member.profile),
-                    mark: member.profile.mark,
+                    marks: member.profile.shown_marks(),
                 }
             })
             .collect();
@@ -2002,7 +2012,7 @@ impl SocialState {
             name: friend.map(|f| f.profile.name().to_owned()),
             avatar: friend.map(|f| f.profile.avatar.clone()),
             avatar_url: friend.and_then(|f| f.profile.discord_avatar_url(128)),
-            mark: friend.and_then(|f| f.profile.mark),
+            marks: friend.map(|f| f.profile.shown_marks()).unwrap_or_default(),
             at: invite.at,
             server: invite.server.clone(),
             quiet: invite.quiet,
@@ -2040,7 +2050,7 @@ fn friend_view(
         discord_url: profile.discord_profile_url().unwrap_or_default(),
         discord_id: profile.discord_id().map(str::to_owned),
         badge,
-        mark: profile.mark,
+        marks: profile.shown_marks(),
     }
 }
 
@@ -2079,7 +2089,7 @@ fn join_request_view(
         username: profile.username,
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
-        mark: profile.mark,
+        marks: profile.marks,
         discord_id: profile.discord_id,
         sent_at: request.sent_at,
         via: via.map(|m| m.profile.id.clone()),
@@ -2110,7 +2120,7 @@ fn request_view(request: &FriendRequest) -> RequestView {
         username: profile.username,
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
-        mark: profile.mark,
+        marks: profile.marks,
         discord_id: profile.discord_id,
         sent_at: request.sent_at,
     }
@@ -2136,6 +2146,7 @@ mod tests {
             badge: None,
             mark: None,
             discord: None,
+            marks: Vec::new(),
         }
     }
 
@@ -2167,6 +2178,7 @@ mod tests {
             linked: None,
             via: None,
             name_from: None,
+            marks_hidden: None,
         }
     }
 
@@ -2232,6 +2244,7 @@ mod tests {
             features: Vec::new(),
             me: None,
             rel: None,
+            marks_rev: None,
         });
         state
     }
@@ -2838,7 +2851,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mark_shows_wherever_its_player_does_and_follows_live_changes() {
+    fn badges_show_wherever_their_player_does_and_follow_live_changes() {
         let mut state = loaded();
         state.team_answer(TeamAnswer {
             team: Some(team(&[
@@ -2848,58 +2861,75 @@ mod tests {
             ])),
             invited: vec![],
         });
-        let mark_of = |state: &SocialState, id: &str| {
+        let marks_of = |state: &SocialState, id: &str| {
             state
                 .friends()
                 .iter()
                 .find(|f| f.id == id)
-                .and_then(|f| f.mark)
+                .map(|f| f.marks.clone())
+                .unwrap_or_default()
         };
-        assert_eq!(mark_of(&state, "1"), None);
-        // Ayşe (a friend and crewmate) is verified: her row, her crew entry.
+        let keys = |list: &[&str]| list.iter().map(|k| (*k).to_owned()).collect::<Vec<_>>();
+        assert!(marks_of(&state, "1").is_empty());
+        // Ayşe (a friend and crewmate) is verified by a service from before badges (SOC-VERIFY's
+        // mark alone): a list of one, on her row and her crew entry.
         state.apply(
-            &PresenceEvent::MarkChanged {
+            &PresenceEvent::MarksChanged {
                 id: "1".into(),
+                marks: Vec::new(),
                 mark: Some(ProfileMark::Verified),
             },
             NOW,
         );
-        assert_eq!(mark_of(&state, "1"), Some(ProfileMark::Verified));
+        assert_eq!(marks_of(&state, "1"), keys(&["verified"]));
         let ayse = crew_view(&state).unwrap().members[1].clone();
-        assert_eq!(ayse.mark, Some(ProfileMark::Verified));
-        // Requests either way carry it too.
+        assert_eq!(ayse.marks, keys(&["verified"]));
+        // BADGES: the whole set, the most important first.
         state.apply(
-            &PresenceEvent::MarkChanged {
+            &PresenceEvent::MarksChanged {
+                id: "1".into(),
+                marks: keys(&["moderator", "premium"]),
+                mark: None,
+            },
+            NOW,
+        );
+        assert_eq!(marks_of(&state, "1"), keys(&["moderator", "premium"]));
+        // Requests either way carry them too.
+        state.apply(
+            &PresenceEvent::MarksChanged {
                 id: "4".into(),
+                marks: keys(&["admin", "verified"]),
                 mark: Some(ProfileMark::Admin),
             },
             NOW,
         );
-        assert_eq!(state.incoming()[0].mark, Some(ProfileMark::Admin));
-        assert_eq!(state.outgoing()[0].mark, None);
-        // The player's own mark: their card and their own crew entry.
+        assert_eq!(state.incoming()[0].marks, keys(&["admin", "verified"]));
+        assert!(state.outgoing()[0].marks.is_empty());
+        // The player's own badges: their card and their own crew entry.
         state.apply(
-            &PresenceEvent::MarkChanged {
+            &PresenceEvent::MarksChanged {
                 id: "100000000000000000".into(),
-                mark: Some(ProfileMark::Admin),
+                marks: keys(&["staff"]),
+                mark: None,
             },
             NOW,
         );
-        assert_eq!(state.me().unwrap().profile.mark, Some(ProfileMark::Admin));
+        assert_eq!(state.me().unwrap().profile.shown_marks(), keys(&["staff"]));
         assert!(
             crew_view(&state)
                 .unwrap()
                 .members
                 .iter()
-                .any(|m| m.me && m.mark == Some(ProfileMark::Admin))
+                .any(|m| m.me && m.marks == keys(&["staff"]))
         );
-        // A crew's message carries its members' marks as they are now: they go everywhere.
+        // A crew's message carries its members' badges as they are now: they go everywhere.
         let mut now = team(&[
             ("100000000000000000", "Ben", TeamRole::Founder),
             ("1", "Ayşe", TeamRole::Member),
             ("9", "Zeki", TeamRole::Member),
         ]);
         now.members[2].profile.mark = Some(ProfileMark::Verified);
+        now.members[0].profile.marks = keys(&["staff"]);
         state.apply(
             &PresenceEvent::TeamChanged {
                 team: Some(now),
@@ -2910,11 +2940,21 @@ mod tests {
             },
             NOW,
         );
-        // Taken off: the mark goes from every place, Ayşe's too (the crew carries none for her).
-        assert_eq!(mark_of(&state, "1"), None);
+        // Taken off: the badges go from every place, Ayşe's too (the crew carries none for her).
+        assert!(marks_of(&state, "1").is_empty());
         let view = crew_view(&state).unwrap();
-        assert_eq!(view.members[2].mark, Some(ProfileMark::Verified));
-        assert_eq!(view.members[0].mark, None);
+        assert_eq!(view.members[2].marks, keys(&["verified"]));
+        assert_eq!(view.members[0].marks, keys(&["staff"]));
+        // None left: both fields agree on nothing.
+        state.apply(
+            &PresenceEvent::MarksChanged {
+                id: "9".into(),
+                marks: Vec::new(),
+                mark: None,
+            },
+            NOW,
+        );
+        assert!(crew_view(&state).unwrap().members[2].marks.is_empty());
     }
 
     fn crew_call(id: &str, from: &str, kind: CallKind, at: i64, until: i64) -> CrewCall {

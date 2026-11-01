@@ -81,7 +81,7 @@ function ReactorRow({
         name={self ? t("chat2.reactions.you") : person.name}
         badge={self ? undefined : person.badge}
         wearer={self ? undefined : id}
-        mark={self ? undefined : person.mark}
+        marks={self ? undefined : person.marks}
         className="flex-1"
       />
       {self ? null : (

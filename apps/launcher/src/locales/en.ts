@@ -7,6 +7,7 @@ import { enAfkPanelSize } from "./en-afk-panel-size";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enAfkPlus } from "./en-afkplus";
 import { enAutojoin } from "./en-autojoin";
+import { enBadges } from "./en-badges";
 import { enBetaGate } from "./en-beta-gate";
 import { enChat } from "./en-chat";
 import { enChatCalm } from "./en-chat-calm";
@@ -328,6 +329,7 @@ export const en: DeepPartial<Strings> = {
   chatCalm: enChatCalm,
   verify: enVerify,
   identity: enIdentity,
+  badges: enBadges,
   cloudAfk: enCloudAfk,
   cloudAfkFeat: enCloudAfkFeat,
   cloudAfkMove: enCloudAfkMove,

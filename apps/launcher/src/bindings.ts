@@ -1340,6 +1340,11 @@ export const commands = {
 	socialSetPrivacy: (shareServer: boolean | null, shareLastSeen: boolean | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_privacy", { shareServer, shareLastSeen })),
 	/**  `discord`, `preset:<slug>` or `minecraft:<texture hash>`. */
 	socialSetAvatar: (avatar: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_avatar", { avatar })),
+	/**
+	 *  "Rozetlerim" (BADGES): the badges the player keeps off their profile, every one of them
+	 *  (`[]` shows them all). Shown at once; a refusal takes it back and says why.
+	 */
+	socialSetMarksHidden: (hidden: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_marks_hidden", { hidden })),
 	/**  "Birlikte oyna". */
 	socialInvite: (id: string) => typedError<InviteResult, CmdError>(__TAURI_INVOKE("social_invite", { id })),
 	socialDismissInvite: (id: string) => __TAURI_INVOKE<void>("social_dismiss_invite", { id }),
@@ -4311,8 +4316,11 @@ export type CrewCallView_Deserialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
-	/**  The caller's mark (SOC-VERIFY), as the crew shows them. */
-	mark: ProfileMark | null,
+	/**
+	 *  The caller's badges (BADGES; keys of `markDefs`, the most important first), as the crew
+	 *  shows them.
+	 */
+	marks: string[],
 	/**
 	 *  `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
 	 *  call from before CALL1: an answer, nothing to join).
@@ -4347,8 +4355,11 @@ export type CrewCallView_Serialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
-	/**  The caller's mark (SOC-VERIFY), as the crew shows them. */
-	mark: ProfileMark | null,
+	/**
+	 *  The caller's badges (BADGES; keys of `markDefs`, the most important first), as the crew
+	 *  shows them.
+	 */
+	marks: string[],
 	/**
 	 *  `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
 	 *  call from before CALL1: an answer, nothing to join).
@@ -4723,8 +4734,8 @@ export type FriendView_Deserialize = {
 	discordId: string | null,
 	/**  The crew tag they wear before their name (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  Their mark right of the name (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges right of the name (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
 };
 
 export type FriendView_Serialize = {
@@ -4748,8 +4759,8 @@ export type FriendView_Serialize = {
 	discordId: string | null,
 	/**  The crew tag they wear before their name (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  Their mark right of the name (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges right of the name (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
 };
 
 export type Game = Game_Serialize | Game_Deserialize;
@@ -5273,8 +5284,8 @@ export type InviteView_Deserialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY), from the friend list. */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`), from the friend list. */
+	marks: string[],
 	/**  Unix seconds. */
 	at: number,
 	/**  Their server when it can be shared (`projects` = "Katıl"). */
@@ -5291,8 +5302,8 @@ export type InviteView_Serialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY), from the friend list. */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`), from the friend list. */
+	marks: string[],
 	/**  Unix seconds. */
 	at: number,
 	/**  Their server when it can be shared (`projects` = "Katıl"). */
@@ -5550,8 +5561,8 @@ export type JoinRequestView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
 	/**  Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle). */
 	discordId: string | null,
 	/**  Unix seconds. */
@@ -6033,6 +6044,24 @@ export type MaintenanceView = {
 	until: string | null,
 };
 
+/**  One badge of the catalogue: its key (what cards carry), its name and its look. */
+export type MarkDef = {
+	key: string,
+	name: MarkName,
+	/**  One of [`MARK_COLORS`]. */
+	color: string,
+	/**  One of [`MARK_GLYPHS`]. */
+	glyph: string,
+	/**  One of [`MARK_SHAPES`]. */
+	shape: string,
+};
+
+/**  A badge's name in both of the launcher's languages. */
+export type MarkName = {
+	tr: string,
+	en: string,
+};
+
 export type McVersionView = {
 	id: string,
 	/**  "release" | "snapshot" | "oldBeta" | "oldAlpha" */
@@ -6093,8 +6122,13 @@ export type MeView = {
 	limited: LimitedView | null,
 	/**  The crew tag the player wears (TEAM6; None when none, and while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  The player's own mark (SOC-VERIFY), as friends see it. */
-	mark: ProfileMark | null,
+	/**  The player's own badges (BADGES; keys of `markDefs`), as friends see them. */
+	marks: string[],
+	/**
+	 *  The badges the player holds and keeps off their profile ("Rozetlerim"), in the
+	 *  catalogue's order. None from a service from before badges: nothing to choose there.
+	 */
+	marksHidden: string[] | null,
 };
 
 /**  "Belleği artır/düşür ve tekrar dene". */
@@ -8685,13 +8719,6 @@ export type Privacy = {
 	shareTyping?: boolean | null,
 };
 
-/**
- *  A mark Projects' staff give an account in Studio (SOC-VERIFY), shown right of the name wherever
- *  the account shows: the verified mark (blue, "Doğrulanmış hesap") or the admin mark (red,
- *  "Projects yöneticisi").
- */
-export type ProfileMark = "verified" | "admin";
-
 /**  What one profile brings, read on demand. */
 export type ProfileMeasure = {
 	id: string,
@@ -8712,8 +8739,8 @@ export type ProfileView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
 	/**  Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle). */
 	discordId: string | null,
 };
@@ -9243,8 +9270,8 @@ export type RequestView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
 	/**  Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle). */
 	discordId: string | null,
 	/**  Unix seconds. */
@@ -10065,6 +10092,12 @@ export type SocialView_Deserialize = {
 	signingInWith: Provider | null,
 	/**  A link or a removal waiting for its browser step (SOC-ID). */
 	identityChange: IdentityChangeView | null,
+	/**
+	 *  The profile badges that show, in order, the most important first (BADGES): what the
+	 *  `marks` keys of every card name. The built-in catalogue until the service's arrives; a key
+	 *  missing here is not drawn.
+	 */
+	markDefs: MarkDef[],
 };
 
 export type SocialView_Serialize = {
@@ -10175,6 +10208,12 @@ export type SocialView_Serialize = {
 	signingInWith: Provider | null,
 	/**  A link or a removal waiting for its browser step (SOC-ID). */
 	identityChange: IdentityChangeView | null,
+	/**
+	 *  The profile badges that show, in order, the most important first (BADGES): what the
+	 *  `marks` keys of every card name. The built-in catalogue until the service's arrives; a key
+	 *  missing here is not drawn.
+	 */
+	markDefs: MarkDef[],
 };
 
 /**  The launcher a source belongs to. Names are brand names: the UI shows them as they are. */
@@ -10481,8 +10520,8 @@ export type TeamMemberView_Deserialize = {
 	togetherMonth: number,
 	/**  The crew tag they wear, of any crew (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  Their mark (SOC-VERIFY), the player's own too. */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first), the player's own too. */
+	marks: string[],
 };
 
 export type TeamMemberView_Serialize = {
@@ -10517,8 +10556,8 @@ export type TeamMemberView_Serialize = {
 	togetherMonth: number,
 	/**  The crew tag they wear, of any crew (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  Their mark (SOC-VERIFY), the player's own too. */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first), the player's own too. */
+	marks: string[],
 };
 
 /**

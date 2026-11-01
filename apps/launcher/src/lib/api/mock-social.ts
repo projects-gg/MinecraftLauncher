@@ -51,6 +51,7 @@
 //   geldin"): mock-crew-badges.ts (`badges`, `badgesLive`, `badgesHidden`, `badgesJoined`);
 // - the ways into the account (SOC-ID: Microsoft, "Bağlı hesaplar", the name step):
 //   mock-identity.ts (`signedOutMicrosoft`, `microsoftOnly`, `linkedBoth`…).
+import { BUILTIN_MARK_DEFS } from "@/features/social/marks";
 import { CHAT_SCENARIOS, mockChat } from "./mock-chat";
 import { CALM_SCENARIOS, calmApi, calmSnapshot, startCalm } from "./mock-chat-calm";
 import { BADGE_SCENARIOS, badgesApi, badgesSnapshot, startBadges } from "./mock-crew-badges";
@@ -74,7 +75,7 @@ import type {
   FriendGroups,
   FriendRequest,
   LimitedAccount,
-  ProfileMark,
+  MarkDef,
   SocialApi,
   SocialInvite,
   SocialNotice,
@@ -114,25 +115,63 @@ function searchParam(key: string): string | null {
 }
 
 /**
- * `&marks=1` (SOC-VERIFY): some people carry a mark, GeceKurdu_ and ZumrutKilic the verified one, KorAtesi the
- * admin one, the request from YildizTozu and two crewmates the verified one; `&marks=me` the player's own
- * admin mark too.
+ * `&marks=1` (BADGES-UI): some people carry profile badges: GeceKurdu_ verified, KorAtesi admin and
+ * Premium Club, ZumrutKilic moderator, verified and Premium Club (a card's list wraps), the request
+ * from YildizTozu verified, two crewmates staff and Premium Club. `&marks=me` the player too (staff
+ * and Premium Club shown, verified kept off in "Rozetlerim"); `&marks=all` also the extras Studio
+ * keeps off by default (Bulut AFK, AFK+, Ar-Ge, İçerik üreticisi: the round shapes), on.
  */
-const MARKS: Record<string, ProfileMark> = {
-  "301": "verified",
-  "302": "admin",
-  "307": "verified",
-  "401": "verified",
-  "703": "verified",
-  "802": "verified",
+const MARKS: Record<string, string[]> = {
+  "301": ["verified"],
+  "302": ["admin", "premium"],
+  "307": ["moderator", "verified", "premium"],
+  "401": ["verified"],
+  "703": ["staff"],
+  "802": ["premium"],
 };
+const EXTRA_MARKS: Record<string, string[]> = {
+  "301": ["verified", "cloud"],
+  "302": ["admin", "premium", "afkplus"],
+  "703": ["staff", "arge"],
+  "802": ["premium", "creator"],
+};
+const EXTRA_MARK_DEFS: MarkDef[] = [
+  extraMark("cloud", "Bulut AFK kullanıcısı", "Cloud AFK user", "teal", "cloud", "round"),
+  extraMark("afkplus", "AFK+ kullanıcısı", "AFK+ user", "indigo", "cloud", "seal"),
+  extraMark("arge", "Ar-Ge ekibi", "R&D team", "pink", "flask", "round"),
+  extraMark("creator", "İçerik üreticisi", "Content creator", "slate", "play", "round"),
+];
 
-function markOf(id: string): { mark?: ProfileMark } {
+function extraMark(
+  key: string,
+  tr: string,
+  en: string,
+  color: string,
+  glyph: string,
+  shape: string,
+): MarkDef {
+  return { key, name: { tr, en }, color, glyph, shape };
+}
+
+function markOf(id: string): { marks?: string[] } {
   const asked = searchParam("marks");
   if (asked === null) return {};
-  if (id === "100") return asked === "me" ? { mark: "admin" } : {};
-  const mark = MARKS[id];
-  return mark ? { mark } : {};
+  if (id === "100") return asked === "1" ? {} : { marks: ["staff", "premium"] };
+  const marks = (asked === "all" ? EXTRA_MARKS[id] : undefined) ?? MARKS[id];
+  return marks ? { marks } : {};
+}
+
+/** The player's badges kept off their profile: verified while they carry badges at all. */
+function marksHiddenOf(): string[] {
+  const asked = searchParam("marks");
+  return asked === "me" || asked === "all" ? ["verified"] : [];
+}
+
+/** The catalogue the preview's service sends: the built-in one, with `&marks=all` the extras too. */
+function markDefsOf(): MarkDef[] {
+  return searchParam("marks") === "all"
+    ? [...BUILTIN_MARK_DEFS, ...EXTRA_MARK_DEFS]
+    : [...BUILTIN_MARK_DEFS];
 }
 
 /** `&muted=`: until when the preview's crew is muted (Unix seconds; null: until unmuted), or
@@ -583,6 +622,7 @@ function initial(): SocialSnapshot {
       privacy: { shareServer: false, shareLastSeen: true },
       backup,
       ...markOf("100"),
+      marksHidden: marksHiddenOf(),
     },
     friends: friendsList(),
     incoming: [
@@ -633,6 +673,7 @@ function initial(): SocialSnapshot {
     teamRequests: [],
     plans: [],
     together: false,
+    markDefs: markDefsOf(),
   };
   // Crews on, with what the service offers of them.
   const keepsMutes = !OLD_CREWS && searchParam("noMute") === null;
@@ -1436,6 +1477,21 @@ export const mockSocial: SocialApi = {
   async setPrivacy(change) {
     commit((v) => (v.me ? { ...v, me: { ...v.me, privacy: { ...v.me.privacy, ...change } } } : v));
     await delay(200);
+  },
+  async setMarksHidden(hidden) {
+    commit((v) => {
+      if (!v.me) return v;
+      // Every badge the player holds, in the catalogue's order; the ones not kept off show.
+      const held = new Set([...(v.me.marks ?? []), ...(v.me.marksHidden ?? [])]);
+      const order = (v.markDefs ?? []).map((def) => def.key).filter((key) => held.has(key));
+      const off = order.filter((key) => hidden.includes(key));
+      const shown = order.filter((key) => !hidden.includes(key));
+      return {
+        ...v,
+        me: { ...v.me, marks: shown.length > 0 ? shown : undefined, marksHidden: off },
+      };
+    });
+    await delay(250);
   },
   async setAvatar(avatar) {
     commit((v) =>

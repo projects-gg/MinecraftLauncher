@@ -729,6 +729,7 @@ mod tests {
             crew: None,
             sticker: None,
             badge: None,
+            marks: Vec::new(),
         });
         h.control
             .send(Control::Send {

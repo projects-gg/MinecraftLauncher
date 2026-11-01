@@ -200,7 +200,7 @@ function RequestRow({ request }: { request: FriendRequest }) {
         <span className="min-w-0 flex-1">
           <NameWithMark
             name={request.name}
-            mark={request.mark}
+            marks={request.marks}
             className="text-[14px] font-semibold text-bone-50"
           />
           <span className="block truncate text-[12.5px] text-ash-400">
@@ -239,7 +239,7 @@ function SentRow({ request }: { request: FriendRequest }) {
         <span className="min-w-0 flex-1">
           <NameWithMark
             name={request.name}
-            mark={request.mark}
+            marks={request.marks}
             className="text-[14px] font-semibold text-bone-100"
           />
           <span className="block truncate text-[12.5px] text-ash-400">
@@ -307,7 +307,7 @@ function InviteRow({ invite }: { invite: SocialInvite }) {
         <span className="min-w-0 flex-1">
           <NameWithMark
             name={name}
-            mark={invite.name ? invite.mark : undefined}
+            marks={invite.name ? invite.marks : undefined}
             className="text-[14px] font-semibold text-bone-50"
           />
           <span className="block truncate text-[12.5px] text-ash-300">
@@ -436,7 +436,7 @@ function FriendGhost({ friend }: { friend: Friend }) {
           name={friend.name}
           badge={friend.badge}
           wearer={friend.id}
-          mark={friend.mark}
+          marks={friend.marks}
           chip="still"
           nameClassName="text-[14px] font-semibold text-bone-50"
         />

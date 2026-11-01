@@ -222,7 +222,7 @@ function ResultCard({
       <div className="min-w-0 flex-1">
         <NameWithMark
           name={lookup.profile.name}
-          mark={lookup.profile.mark}
+          marks={lookup.profile.marks}
           className="text-[15px] font-semibold text-bone-50"
         />
         {/* SOC-ID: a Discord handle only for someone with Discord. */}
