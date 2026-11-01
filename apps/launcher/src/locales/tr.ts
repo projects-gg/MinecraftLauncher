@@ -1236,7 +1236,7 @@ export const tr = {
       leftovers: {
         title: "Önbellek ve eski kayıtlar",
         caption: "{{count}} dosya",
-        cache: "Mod simgeleri ve haber görselleri",
+        cache: "Mod simgeleri ve ekran görüntüsü önizlemeleri",
         downloads: "Yarım kalan indirmeler",
         logs: "Eski oyun kayıtları",
         crashReports: "Eski çökme raporları",
