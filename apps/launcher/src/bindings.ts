@@ -77,6 +77,7 @@ export const commands = {
 	 */
 	contentHome: () => typedError<{
 	hero: HeroView,
+	season: SeasonView,
 	banners: BannerView[],
 	/**
 	 *  Studio's and the news feed's events that have not ended, in event card order (the card
@@ -4823,6 +4824,7 @@ export type HeroView = {
 
 export type HomeView = {
 	hero: HeroView,
+	season: SeasonView,
 	banners: BannerView[],
 	/**
 	 *  Studio's and the news feed's events that have not ended, in event card order (the card
@@ -9130,6 +9132,14 @@ export type ScreenshotView = {
 	/**  Local path; the UI converts it with `convertFileSrc`. */
 	path: string,
 	takenAt: string,
+};
+
+/**  The season theme on the player's date (SEASON-AUTO, `pl_content::Theme::season_at`). */
+export type SeasonView = {
+	/**  `none | halloween | winter | holiday | event`, or `unknown` for a newer Studio's look. */
+	season: string,
+	/**  When the look may change next (RFC 3339): the UI asks for the home content again then. */
+	until: string | null,
 };
 
 /**  Why one of the player's messages did not go. */

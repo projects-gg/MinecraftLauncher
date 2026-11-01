@@ -169,8 +169,20 @@ export interface ContentLinks {
   community: CommunityLink[];
 }
 
+/** A season look (SEASON-AUTO); a newer Studio's look reads as `none`. */
+export type SeasonKind = "none" | "halloween" | "winter" | "holiday" | "event";
+
+/** Studio's season calendar on the player's date. */
+export interface SeasonState {
+  kind: SeasonKind;
+  /** When the look may change next (ISO): the home content is asked for again then. */
+  until?: string;
+}
+
 export interface HomeContent {
   hero: HeroConfig;
+  /** Missing: no season (the welcome content, older previews). */
+  season?: SeasonState;
   banners: BannerItem[];
   events: EventItem[];
   news: NewsItem[];

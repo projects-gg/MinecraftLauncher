@@ -24,6 +24,8 @@
 //! - [`feed`]: the Discord bot's news feed ([`FeedClient`]: delegated-key verification,
 //!   rollback checks, cache, covers) and the home screen merge rules ([`merge_news`],
 //!   [`newest_patch_notes`], [`merge_events`], [`home_status`], [`merge_minecraft`]).
+//! - [`season`]: season themes by date (SEASON-AUTO): the calendar's look on the player's date
+//!   ([`Theme::season_at`]) and Turkey's lunar feasts ([`season::feast_first_days`]).
 
 pub mod client;
 pub mod error;
@@ -37,6 +39,7 @@ pub mod model;
 pub mod modsets;
 pub mod needs;
 pub mod path;
+pub mod season;
 pub mod sets;
 pub mod signing;
 pub mod studio;
@@ -188,6 +191,11 @@ mod doc_examples {
                     }
                 }
                 "NewsFeed" => check::<NewsFeed>(name, json),
+                "SeasonCalendar" => {
+                    check::<SeasonCalendar>(name, json);
+                    let calendar: SeasonCalendar = serde_json::from_str(json).unwrap();
+                    assert!(calendar.problems().is_empty(), "{name}");
+                }
                 "BotFeed" => {
                     check::<BotFeed>(name, json);
                     let (_, problems) =
