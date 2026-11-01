@@ -151,7 +151,7 @@ function BadgesSection({ me }: { me: SocialMe }) {
   };
   return (
     <Section title={t("badges.title")}>
-      <div className="space-y-3">
+      <div className="space-y-3.5">
         {shown.map((one) => {
           const id = `${baseId}-${one.item.key}`;
           return (

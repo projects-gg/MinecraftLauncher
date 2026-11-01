@@ -7,7 +7,7 @@
 // others see them: the first beside the name, every one with its name at the picker's top (the
 // panel's header stays one row; "Rozetlerim" in the friends settings hides them).
 import { CaretDown, CaretRight, Check, TagSimple } from "@phosphor-icons/react";
-import { cn, easeOutExpo, ProfileMarkList, returnFocusAfterKeys } from "@pl/ui";
+import { cn, easeOutExpo, ProfileMark, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useState } from "react";
@@ -138,8 +138,29 @@ export function MeCard({ me }: { me: SocialMe }) {
                     >
                       {marks.length > 0 ? (
                         <>
-                          <DropdownMenu.Label className="px-2.5 pt-1.5 pb-1">
-                            <ProfileMarkList marks={marks} />
+                          {/* Each badge in the status rows' columns: its drawing over their dots,
+                              its name where their words start. */}
+                          <DropdownMenu.Label asChild>
+                            <ul className="flex flex-col gap-1 px-2.5 pt-1.5 pb-1">
+                              {marks.map((mark) => (
+                                <li
+                                  key={mark.key}
+                                  className="flex min-w-0 items-center gap-3 text-[12.5px] leading-5 text-ash-300"
+                                >
+                                  <span aria-hidden className="flex w-5 shrink-0 justify-center">
+                                    <ProfileMark
+                                      color={mark.color}
+                                      glyph={mark.glyph}
+                                      shape={mark.shape}
+                                      size={14}
+                                      label={mark.label}
+                                      tooltip={false}
+                                    />
+                                  </span>
+                                  <span className="truncate">{mark.label}</span>
+                                </li>
+                              ))}
+                            </ul>
                           </DropdownMenu.Label>
                           <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
                         </>
