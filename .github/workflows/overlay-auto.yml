@@ -112,10 +112,10 @@ jobs:
       COMPAT: ${{ matrix.compat }}
       FABRIC_API: ${{ matrix.fabricApi }}
       RANGE: ${{ matrix.range }}
-      # Minecraft 26 opens its window with SDL3 and needs a true-colour GLX visual: Mesa's software OpenGL (llvmpipe) on
-      # a 24-bit virtual screen. Loom's own xvfb-run starts an 8-bit screen, where the game finds no visual and then waits
-      # on its error dialog (the runs of 30 Oct and 1 Nov held the job's 40 minutes), so the steps start xvfb-run
-      # themselves and tell Loom not to (-Povl.xvfb=false).
+      # Minecraft 26 opens its window with SDL3 on Mesa's software OpenGL (llvmpipe) over a 24-bit virtual screen. Loom's
+      # own xvfb-run starts an 8-bit screen and the game found no window there, then waited on its error dialog (the runs
+      # of 30 Oct and 1 Nov held the job's 40 minutes), so the steps start xvfb-run themselves and tell Loom not to
+      # (-Povl.xvfb=false); the game test's step also takes its context from EGL (see there).
       XVFB_SCREEN: -screen 0 1920x1080x24
       LIBGL_ALWAYS_SOFTWARE: "1"
     defaults:
@@ -178,8 +178,9 @@ jobs:
         # log says so (both backends tried), and the step's own limit catches any other hang.
         timeout-minutes: 20
         env:
-          # The game's window asks SDL3 for an sRGB-capable framebuffer, which Xvfb's GLX visuals don't offer ("Couldn't
-          # find matching GLX visual", run of 1 Nov 08:20): SDL takes its OpenGL context from Mesa's EGL instead.
+          # The game's window asks SDL3 for a core 3.3, forward-compatible, sRGB-capable context; SDL's GLX path finds no
+          # visual for it on Xvfb ("Couldn't find matching GLX visual", run of 1 Nov 08:20) although glxinfo lists sRGB
+          # ones. SDL takes the context from Mesa's EGL instead (green on 1 Nov 08:44: OpenGL backend, llvmpipe).
           SDL_VIDEO_FORCE_EGL: "1"
         run: |
           set -o pipefail
