@@ -1051,6 +1051,7 @@ impl Actor {
         match event {
             BridgeEvent::Connecting { caps, .. } => {
                 self.dialog_cap = caps.iter().any(|cap| cap == "dialog");
+                self.drop_dialog(true);
                 let connecting = matches!(
                     self.shared.lock().state,
                     SessionState::Starting
@@ -1062,6 +1063,8 @@ impl Actor {
                 }
             }
             BridgeEvent::Joined { .. } => {
+                // A join, a proxy's server switch too: no dialog of before it stays on the card.
+                self.drop_dialog(false);
                 if self.stop_requested {
                     return;
                 }
@@ -1101,6 +1104,7 @@ impl Actor {
                     .emit(&self.id, AfkEventKind::AutoRespond { user, sound });
             }
             BridgeEvent::Disconnected { reason, message } => {
+                self.drop_dialog(true);
                 self.on_disruption(reason, message.as_deref(), false);
             }
             BridgeEvent::Error {
@@ -1194,6 +1198,23 @@ impl Actor {
                 shared.dialog = shown.map(|open| (open, Timestamp::now()));
             }
             !same
+        };
+        if changed {
+            self.env.emit(&self.id, AfkEventKind::Dialog);
+        }
+    }
+
+    /// The card's dialog goes, and with `menus` the menus: at the client's join of a server (a
+    /// proxy's server switch ends in one, and the game's world loading screen closes a dialog;
+    /// client 4.2.6 reports that close itself, older clients do not), or when its connection begins
+    /// or ends (docs/agent-bridge.md: no dialog is kept across `connecting`, `joined` or
+    /// `disconnected`). The menus stay across a join: the client reported the new server's right
+    /// before it. A press that waits still gets the client's answer.
+    fn drop_dialog(&mut self, menus: bool) {
+        let changed = {
+            let mut shared = self.shared.lock();
+            let menus = menus && shared.menus.take().is_some();
+            shared.dialog.take().is_some() || menus
         };
         if changed {
             self.env.emit(&self.id, AfkEventKind::Dialog);
