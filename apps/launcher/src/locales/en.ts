@@ -28,6 +28,7 @@ import { enGraphics } from "./en-graphics";
 import { enHelp } from "./en-help";
 import { enHomeLinks } from "./en-home-links";
 import { enHost } from "./en-host";
+import { enIdentity } from "./en-identity";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
 import { enLib1 } from "./en-lib1";
@@ -322,6 +323,7 @@ export const en: DeepPartial<Strings> = {
   chat2: enChat2,
   team6: enTeam6,
   verify: enVerify,
+  identity: enIdentity,
   cloudAfk: enCloudAfk,
   cloudAfkFeat: enCloudAfkFeat,
   cloudAfkMove: enCloudAfkMove,

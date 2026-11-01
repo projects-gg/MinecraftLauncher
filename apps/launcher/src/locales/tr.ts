@@ -29,6 +29,7 @@ import { trGraphics } from "./tr-graphics";
 import { trHelp } from "./tr-help";
 import { trHomeLinks } from "./tr-home-links";
 import { trHost } from "./tr-host";
+import { trIdentity } from "./tr-identity";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
 import { trLib1 } from "./tr-lib1";
@@ -115,6 +116,7 @@ export const tr = {
   chat2: trChat2,
   team6: trTeam6,
   verify: trVerify,
+  identity: trIdentity,
   cloudAfk: trCloudAfk,
   cloudAfkFeat: trCloudAfkFeat,
   cloudAfkMove: trCloudAfkMove,
