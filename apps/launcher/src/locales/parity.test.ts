@@ -52,7 +52,7 @@ const placeholders = (text: string) =>
  */
 const OWN_PLACEHOLDERS = [
   /^import\.what\./,
-  /^import\.outcome\.(optionsKept|unreadable|failed)$/,
+  /^import\.outcome\.(unreadable|failed)$/,
   /^teams\.mute\.until(Today|Tomorrow|Later)$/,
   /^newsColumn\.starts\./,
   /^cloudStale\.last\./,

@@ -177,6 +177,7 @@ fn read_instance(dir: &Path) -> Option<ImportProfile> {
         without_optifine: false,
         own_folder: true,
         mod_files: count_mods(&dir.join("mods")),
+        has_options: false,
         last_used_ms: raw
             .last_played
             .as_deref()

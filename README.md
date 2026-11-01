@@ -9,7 +9,9 @@ The Minecraft launcher of [projects.gg](https://projects.gg) for Windows, macOS 
 [![License: GPL-3.0](https://img.shields.io/github/license/projects-gg/MinecraftLauncher)](LICENSE)
 [![Discord](https://img.shields.io/discord/480094926164590593?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://projects.gg/discord)
 
-<img src=".github/assets/readme/home.webp" width="880" alt="The launcher's home screen with news, events and the Play button">
+<img src=".github/assets/readme/home.webp" width="880" alt="The launcher's home screen: the server's news, patch notes, an event that is on, friends on Projects and the Play button">
+
+If you like the launcher, starring this repository helps other players find it.
 
 </div>
 
@@ -21,17 +23,26 @@ The Minecraft launcher of [projects.gg](https://projects.gg) for Windows, macOS 
 - **Mods from Modrinth.** Search, install and update mods, packs and shaders with their
   dependencies. Import `.mrpack`, Prism Launcher, MultiMC and CurseForge instances; export
   `.mrpack`.
+- **Mod check.** Missing, duplicate, wrong-version and clashing mods show up before the game
+  starts. Repair downloads what is missing and swaps the mods that don't fit for versions that do.
 - **The Projects modpack.** The official instance follows the pack the team publishes and syncs
   before each launch. Mods you add or turn off stay as you left them.
+- **Graphics and FPS.** Smooth, Balanced and Quality presets; Smooth gives the highest FPS.
+- **Friends and crews.** Sign in with Discord to see who is playing. Join opens the game and
+  connects you to the same server; a crew call reaches your crew in one click.
+- **In-game overlay.** Press F7 in the game to see your friends and answer invites or crew calls.
 - **Home.** Server news, patch notes and event countdowns, updated without a launcher update.
 - **Accounts.** Microsoft sign-in in your browser, or play with a username. Several accounts,
   one click to switch; skins and capes for Microsoft accounts. Tokens live in the OS keychain.
-- **AFK accounts.** Keep extra accounts on a server with the Projects Console Client.
+- **AFK accounts.** Keep extra accounts on a server with the Projects Console Client. One that
+  drops reconnects by itself.
 - **Works offline.** Installed games and cached content are enough to play.
 - **Desktop.** Tray icon, start with the computer, `projects://` links, a Ctrl+K command palette,
   Discord Rich Presence and help when the game crashes.
-- **Moving from v1.** Your username, Microsoft session, AFK accounts, worlds, screenshots and
-  packs come over on first start.
+- **Switching launchers.** Game settings, servers, worlds, resource packs, shaders and
+  screenshots come over from eight launchers: the official one, TLauncher, SKlauncher,
+  CurseForge, the Modrinth App, Prism Launcher, PolyMC and MultiMC. Players of our v1 launcher
+  also keep their username, Microsoft session and AFK accounts.
 
 The launcher is in Turkish and English and updates itself from signed stable and beta channels.
 

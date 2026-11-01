@@ -1,14 +1,16 @@
 import { CheckCircle, MinusCircle, WarningCircle } from "@phosphor-icons/react";
 import { Button, cn, Dialog, Progress, SwapLabel, toast } from "@pl/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { copyErrorDetails } from "@/features/content/jobs";
 import { swap } from "@/features/modcenter/motion";
-import type { ImportReport, ImportShared, SourceKind } from "@/lib/api";
+import type { ImportReport, ImportShared, SettingsChange, SourceKind } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { formatBytes, formatPercent, uiLocale } from "@/lib/format";
-import { importPercent, useImportJob } from "./import-job";
+import { importPercent, type SettingsUndo, undoSettingsChange, useImportJob } from "./import-job";
 import {
   failureDetails,
   PLACE_KEYS,
@@ -45,9 +47,102 @@ const TONE_ICON: Record<Tone, { icon: typeof CheckCircle; className: string }> =
   skipped: { icon: MinusCircle, className: "text-ash-400" },
 };
 
+/**
+ * "Geri al" for imported game settings: takes them back (`undo`), refreshes what showed them, and
+ * says why when it is refused (the game is open). The state lives with its summary.
+ */
+export function useSettingsUndo(
+  change: SettingsChange | null | undefined,
+  state: SettingsUndo,
+  setState: (state: SettingsUndo) => void,
+) {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+  return () => {
+    if (!change || state !== "idle") return;
+    setState("busy");
+    undoSettingsChange(change).then(
+      (result) => {
+        setState(result);
+        void queryClient.invalidateQueries();
+      },
+      (error: unknown) => {
+        setState("idle");
+        toast.error(
+          error instanceof Error && error.message ? error.message : t("import.done.titleFailed"),
+        );
+      },
+    );
+  };
+}
+
+/**
+ * A summary line that offers "Geri al" for imported game settings. Taken back, the sentence
+ * cross-fades in place to say so and the button fades from its slot (the slot keeps its width,
+ * so the text beside it never reflows); a change that can no longer be taken back says so under
+ * the line.
+ */
+export function SettingsUndoLine({
+  children,
+  icon,
+  state,
+  onUndo,
+  className,
+}: {
+  /** The line's sentence while the settings stand. */
+  children: ReactNode;
+  icon: ReactNode;
+  state: SettingsUndo;
+  onUndo: () => void;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const undone = state === "done";
+  return (
+    <li className={cn("flex gap-2.5 text-[13.5px] leading-snug text-bone-100", className)}>
+      <span className="relative mt-px size-[18px] shrink-0">
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.span key={undone ? "undone" : "came"} className="absolute inset-0" {...swap()}>
+            {undone ? (
+              <MinusCircle size={18} weight="fill" className="text-ash-400" aria-hidden />
+            ) : (
+              icon
+            )}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+      <span className="relative min-w-0 flex-1" aria-live="polite">
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.span key={undone ? "undone" : "came"} className="block" {...swap()}>
+            {undone ? t("import.undo.done") : children}
+          </motion.span>
+        </AnimatePresence>
+        {state === "gone" ? (
+          <span className="block text-[12.5px] text-ash-400">{t("import.undo.gone")}</span>
+        ) : null}
+      </span>
+      {/* A fixed slot (the button's height too): the line keeps its size when the button goes. */}
+      <span className="-my-1 flex h-7 w-[76px] shrink-0 items-center justify-end">
+        <AnimatePresence initial={false}>
+          {state === "idle" || state === "busy" ? (
+            <motion.span key="undo" {...swap()}>
+              <Button size="sm" variant="ghost" disabled={state === "busy"} onClick={onUndo}>
+                {t("import.undo.action")}
+              </Button>
+            </motion.span>
+          ) : null}
+        </AnimatePresence>
+      </span>
+    </li>
+  );
+}
+
 /** What came over, item by item: done in jade, missing pieces in flare, the rest quiet. */
 export function ImportSummary({ report }: { report: ImportReport }) {
   const { t } = useTranslation();
+  const settingsUndo = useImportJob((s) => s.settingsUndo);
+  const setSettingsUndo = useImportJob((s) => s.setSettingsUndo);
+  const undo = useSettingsUndo(report.settings, settingsUndo, setSettingsUndo);
   const lines = summaryLines(report);
   return (
     <ul className="space-y-2.5 pt-1">
@@ -62,13 +157,31 @@ export function ImportSummary({ report }: { report: ImportReport }) {
           .filter((m) => !PLACE_KEYS.includes(m.key))
           .map((m) => lineText(t, m.key, m.params, m.what));
         const more = [places && `${places}.`, ...sentences].filter(Boolean).join(" ");
+        const icon = (
+          <Icon size={18} weight="fill" className={cn("mt-px shrink-0", className)} aria-hidden />
+        );
+        const text = (
+          <>
+            {lineText(t, line.key, line.params, line.what, line.source)}
+            {more ? <span className="block text-[12.5px] text-ash-400">{more}</span> : null}
+          </>
+        );
+        if (line.undo) {
+          return (
+            <SettingsUndoLine
+              key={line.id}
+              icon={<Icon size={18} weight="fill" className={className} aria-hidden />}
+              state={settingsUndo}
+              onUndo={undo}
+            >
+              {text}
+            </SettingsUndoLine>
+          );
+        }
         return (
           <li key={line.id} className="flex gap-2.5 text-[13.5px] leading-snug text-bone-100">
-            <Icon size={18} weight="fill" className={cn("mt-px shrink-0", className)} aria-hidden />
-            <span className="min-w-0">
-              {lineText(t, line.key, line.params, line.what, line.source)}
-              {more ? <span className="block text-[12.5px] text-ash-400">{more}</span> : null}
-            </span>
+            {icon}
+            <span className="min-w-0">{text}</span>
           </li>
         );
       })}
