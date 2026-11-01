@@ -820,7 +820,7 @@ export const en: DeepPartial<Strings> = {
     },
     legacy: {
       title: "We found your old launcher",
-      body: "You can bring what we found to the new launcher. Your old files stay where they are.",
+      body: "You can bring what we found to the new launcher. Your old files stay as they are.",
       nickname: "Username: {{name}}",
       afk: "{{count}} AFK accounts",
       afk_one: "{{count}} AFK account",
@@ -992,10 +992,10 @@ export const en: DeepPartial<Strings> = {
     start: "Import",
     later: "Not now",
     working: "Importing",
-    donePremium: "Your Microsoft account was imported.",
+    donePremium: "Your Microsoft account came over.",
     doneNickname: "The account {{name}} was added.",
-    doneAfk: "{{count}} AFK accounts imported.",
-    doneAfk_one: "{{count}} AFK account imported.",
+    doneAfk: "{{count}} AFK accounts came over.",
+    doneAfk_one: "{{count}} AFK account came over.",
     close: "Done",
     notFound: "No old launcher data found on this computer.",
   },
@@ -1554,8 +1554,7 @@ export const en: DeepPartial<Strings> = {
     supportFailed: "Couldn't create the support bundle.",
     reveal: "Show in folder",
     legacy: "Import from the old launcher",
-    legacyHelp:
-      "Brings over your worlds, settings, AFK accounts and Microsoft account from the old launcher.",
+    legacyHelp: "Brings over your worlds, settings and accounts from the old launcher.",
     import: "Import",
     moveDialog: {
       title: "Move the data folder",

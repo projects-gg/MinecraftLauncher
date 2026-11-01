@@ -593,7 +593,7 @@ export const tr = {
     legacy: {
       title: "Eski launcher'ını bulduk",
       /** The list under it names what was found (IMPORT-POLISH: the sentence repeated it). */
-      body: "Bulduklarımızı yeni launcher'a aktarabilirsin. Eski dosyaların yerinde kalır.",
+      body: "Bulduklarımızı yeni launcher'a aktarabilirsin. Eski dosyaların olduğu gibi kalır.",
       nickname: "Oyuncu adı: {{name}}",
       afk: "{{count}} AFK hesabı",
       screenshots: "{{count}} ekran görüntüsü",
@@ -759,9 +759,9 @@ export const tr = {
     start: "Aktar",
     later: "Şimdi değil",
     working: "Aktarılıyor",
-    donePremium: "Microsoft hesabın aktarıldı.",
+    donePremium: "Microsoft hesabın geldi.",
     doneNickname: "{{name}} hesabı eklendi.",
-    doneAfk: "{{count}} AFK hesabı aktarıldı.",
+    doneAfk: "{{count}} AFK hesabın geldi.",
     close: "Tamam",
     notFound: "Bu bilgisayarda eski launcher verisi bulunamadı.",
   },
@@ -1303,9 +1303,9 @@ export const tr = {
     supportFailed: "Destek paketi oluşturulamadı.",
     reveal: "Klasörde göster",
     legacy: "Eski launcher'dan aktar",
-    legacyHelp:
-      "Eski Projects Launcher'daki dünyaların, ayarların, AFK hesapların ve Microsoft hesabın buraya gelir.",
-    import: "İçe aktar",
+    legacyHelp: "Eski Projects Launcher'daki dünyaların, ayarların ve hesapların buraya gelir.",
+    /** The dialog it opens says "Aktar" too (IMPORT-POLISH). */
+    import: "Aktar",
     moveDialog: {
       title: "Veri klasörünü taşı",
       description:
