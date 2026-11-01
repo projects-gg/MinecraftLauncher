@@ -1,34 +1,48 @@
-import type { EmberPalette } from "@pl/ui";
+import type { EmberPalette, ParticleKind as FieldKind } from "@pl/ui";
 import type { ParticleKind, SeasonKind } from "@/lib/api/types";
 import { isWindowAway, onWindowAwayChange } from "@/lib/window-away";
 
 /**
- * What a season changes on Home (SEASON-AUTO): the particles over the art, their colours and the
- * tint of the scrim behind the hero's words. Everything else stays: the art is Studio's, and the
- * particles keep every rule of the ember field (Performance mode, reduced motion, rest, a running
- * game, the tray).
+ * What a season changes on Home (SEASON-AUTO): the particles over the art, their colours, the
+ * tint of the scrim behind the hero's words and, for a season that changes the hour, a grade over
+ * the art. Everything else stays: the art is Studio's, and the particles keep every rule of the
+ * ember field (Performance mode, reduced motion, rest, a running game, the tray).
  */
 export interface SeasonLook {
   /** The season's particles; missing keeps Studio's choice for the hero. */
-  particles?: ParticleKind;
+  particles?: FieldKind;
   palette: EmberPalette;
   /** The scrim's colour as `R G B` (as dark as the brand's maroon, so the words keep AA). */
   scrim: string;
+  /**
+   * A gradient the art is multiplied by, top to bottom (white leaves it as it is): Halloween's
+   * night, a feast's evening sky. The brand's fiery art hid the seasons' particles and glow alone
+   * (the review of 1 November: Halloween and Bayram read as no season at all).
+   */
+  grade?: string;
 }
 
 /** The brand's maroon (`ember-900`'s glow): the scrim outside the seasons. */
 export const DEFAULT_SCRIM = "34 6 6";
 
+/** Halloween's night: the whole art darker and cooler, the fire still burning orange. */
+export const NIGHT_GRADE =
+  "linear-gradient(180deg, rgb(112 98 162) 0%, rgb(150 136 196) 55%, rgb(196 186 226) 100%)";
+
+/** A feast's evening: the sky above the art turns to dusk, the ground keeps its warmth. */
+export const EVENING_GRADE =
+  "linear-gradient(180deg, rgb(104 118 178) 0%, rgb(176 182 214) 38%, rgb(255 255 255) 68%)";
+
 export function seasonLook(kind: SeasonKind | undefined): SeasonLook {
   switch (kind) {
     case "halloween":
-      // Pumpkin embers with witch violet, over a night-violet scrim.
-      return { particles: "embers", palette: "halloween", scrim: "24 7 28" };
+      // Pumpkin embers with witch violet, in the night.
+      return { particles: "embers", palette: "halloween", scrim: "16 8 24", grade: NIGHT_GRADE };
     case "winter":
       return { particles: "snow", palette: "ember", scrim: "6 13 28" };
     case "holiday":
-      // Bayram: a slow rise of gold.
-      return { particles: "sparks", palette: "gold", scrim: DEFAULT_SCRIM };
+      // Bayram: warm lights rising slowly into the evening.
+      return { particles: "lights", palette: "gold", scrim: DEFAULT_SCRIM, grade: EVENING_GRADE };
     case "event":
       return { particles: "sparks", palette: "ember", scrim: DEFAULT_SCRIM };
     default:
@@ -40,11 +54,7 @@ export function seasonLook(kind: SeasonKind | undefined): SeasonLook {
  * Home's particles: none while the player turned them off (Ayarlar → Görünüm) or Studio's hero
  * has none; else the season's, else the hero's.
  */
-export function homeParticles(
-  playerOn: boolean,
-  hero: ParticleKind,
-  look: SeasonLook,
-): ParticleKind {
+export function homeParticles(playerOn: boolean, hero: ParticleKind, look: SeasonLook): FieldKind {
   if (!playerOn || hero === "none") return "none";
   return look.particles ?? hero;
 }

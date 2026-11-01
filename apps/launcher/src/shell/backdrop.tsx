@@ -14,8 +14,8 @@ import { DEFAULT_SCRIM } from "@/lib/season";
  * The season art behind every page: sharp with embers on Home, blurred and dimmed elsewhere.
  * Both layers stay mounted and cross-fade, so navigating never flashes black. It also hosts the
  * one-time Performance mode check, which measures Home's frames (features/perf). A season theme
- * (SEASON-AUTO, `lib/season.ts`) picks Home's particles and their colours and tints the glow
- * under the hero's words.
+ * (SEASON-AUTO, `lib/season.ts`) picks Home's particles and their colours, tints the glow under
+ * the hero's words and may grade Home's art (Halloween's night, a feast's evening).
  */
 export function Backdrop({
   imageUrl,
@@ -23,6 +23,7 @@ export function Backdrop({
   particles,
   palette = "ember",
   scrim = DEFAULT_SCRIM,
+  grade,
 }: {
   imageUrl: string;
   variant: "home" | "page";
@@ -30,6 +31,8 @@ export function Backdrop({
   palette?: EmberPalette;
   /** The glow's colour as `R G B`. */
   scrim?: string;
+  /** A gradient Home's art is multiplied by (`SeasonLook.grade`). */
+  grade?: string;
 }) {
   // The drift waits for the player (it rests with the embers); the parallax only ever follows
   // the pointer, so it needs no rest of its own and holds where it is when the player stops.
@@ -87,6 +90,22 @@ export function Backdrop({
             className="size-full animate-kenburns object-cover object-[88%_center]"
             style={{ animationPlayState: ambient && home ? "running" : "paused" }}
           />
+          {/* A season's grade multiplies the art inside this layer, so it blends with the art
+              alone and fades with it (a blend outside would meet a see-through group while
+              Home fades). A new season fades it in: one opacity fade, nothing runs between. */}
+          <AnimatePresence initial={false}>
+            {grade ? (
+              <motion.div
+                key={grade}
+                className="absolute inset-0 mix-blend-multiply"
+                style={{ backgroundImage: grade }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.45 }}
+              />
+            ) : null}
+          </AnimatePresence>
         </motion.div>
 
         {/* Blurred, dimmed art (other pages). A quarter-size copy is blurred and then scaled up

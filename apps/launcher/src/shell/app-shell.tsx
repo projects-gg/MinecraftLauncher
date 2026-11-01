@@ -165,6 +165,7 @@ export function AppShell() {
         particles={homeParticles(particlesOn, data?.hero.particles ?? "embers", season)}
         palette={season.palette}
         scrim={season.scrim}
+        grade={season.grade}
       />
       <NavRail />
       <div className="flex min-w-0 flex-1 flex-col">

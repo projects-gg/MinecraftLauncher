@@ -399,9 +399,10 @@ news feed, the launcher's built-in recommended Minecraft version.
   `none | halloween | winter | holiday | event`. Unknown values fall back to the defaults.
   `theme.calendar` makes the season start and end by itself ([Season calendar](#season-calendar));
   without it `theme.season` is a fixed pick. A season's look on Home (launchers after
-  SEASON-AUTO): `halloween` orange and violet embers over a violet glow, `winter` snow over a
-  night-blue glow, `holiday` rising gold sparks, `event` sparks; its particles replace the hero's
-  unless `hero.particles` is `none` or the player turned them off.
+  SEASON-AUTO): `halloween` orange and violet embers with the art graded to night, `winter` snow
+  over a night-blue glow, `holiday` slow warm lights rising into an evening sky graded over the
+  art, `event` sparks; its particles replace the hero's unless `hero.particles` is `none` or the
+  player turned them off.
 - `cta`: `{ label, url? , newsId? }` — `newsId` opens an article, `url` opens the browser.
 - `events[]`: countdown until `startsAt`, "live" until `endsAt`, hidden afterwards. `newsId`
   (optional): the article the event card opens while that item is on the home screen (else

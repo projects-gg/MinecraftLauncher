@@ -1,10 +1,12 @@
-import { emberHue } from "@pl/ui";
+import { emberHue, particleFade, snowTopFade } from "@pl/ui";
 import { describe, expect, it } from "vitest";
 import {
   type ClockEnv,
   DEFAULT_SCRIM,
+  EVENING_GRADE,
   homeParticles,
   MAX_TIMER_MS,
+  NIGHT_GRADE,
   seasonDue,
   seasonLook,
   seasonWait,
@@ -69,10 +71,39 @@ const MIDNIGHT = "2026-11-02T21:00:00Z"; // 3 November, 00:00 in Turkey
 describe("season looks", () => {
   it("dress Home by season and leave the rest to Studio", () => {
     expect(seasonLook("winter")).toEqual({ particles: "snow", palette: "ember", scrim: "6 13 28" });
-    expect(seasonLook("halloween").palette).toBe("halloween");
-    expect(seasonLook("holiday")).toMatchObject({ particles: "sparks", palette: "gold" });
+    expect(seasonLook("halloween")).toMatchObject({ palette: "halloween", grade: NIGHT_GRADE });
+    expect(seasonLook("holiday")).toMatchObject({
+      particles: "lights",
+      palette: "gold",
+      grade: EVENING_GRADE,
+    });
+    expect(seasonLook("event").grade).toBeUndefined();
     expect(seasonLook("none")).toEqual({ palette: "ember", scrim: DEFAULT_SCRIM });
     expect(seasonLook(undefined)).toEqual(seasonLook("none"));
+  });
+
+  it("grade the art only by multiplying it, darkest at the top", () => {
+    // A multiply grade never lightens: every stop is a colour, the last one of the evening white.
+    for (const grade of [NIGHT_GRADE, EVENING_GRADE]) {
+      const stops = [...grade.matchAll(/rgb\((\d+) (\d+) (\d+)\)/g)].map((m) =>
+        [m[1], m[2], m[3]].map(Number).reduce((sum, v) => sum + v, 0),
+      );
+      expect(stops.length).toBeGreaterThanOrEqual(3);
+      expect([...stops].sort((a, b) => a - b)).toEqual(stops);
+    }
+    expect(EVENING_GRADE).toMatch(/rgb\(255 255 255\) \d+%\)$/);
+  });
+
+  it("let lights hold their strength and snow come in under the title bar", () => {
+    expect(particleFade("lights", 0.5)).toBe(1);
+    expect(particleFade("lights", 0)).toBe(0);
+    expect(particleFade("lights", 1)).toBe(0);
+    // Embers flare up and die out: never at full strength for long.
+    expect(particleFade("embers", 0.5)).toBeLessThan(0.4);
+    expect(snowTopFade(10, 34)).toBe(0);
+    expect(snowTopFade(34 + 28, 34)).toBe(0.5);
+    expect(snowTopFade(200, 34)).toBe(1);
+    expect(snowTopFade(5, 0)).toBe(1);
   });
 
   it("never bring particles back that the player or Studio turned off", () => {
