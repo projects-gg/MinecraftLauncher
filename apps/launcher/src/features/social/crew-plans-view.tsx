@@ -70,6 +70,7 @@ import {
 } from "./crew-plans";
 import { leaveOnEscape } from "./edit-escape";
 import { JoinButton } from "./friend-row";
+import { newAccount } from "./identity";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { limitOf, opensIn } from "./limits";
 import { planMenu, rowsOf } from "./menus";
@@ -1062,7 +1063,9 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
       {may && limit ? (
         <p className="mb-2 flex items-start gap-2.5 px-1 text-[13px] leading-snug text-ash-300">
           <LockSimple size={16} className="mt-px shrink-0 text-ash-400" aria-hidden />
-          {t("crewWave2.plans.limited", { when: opensIn(t, limit.until, Date.now()) })}
+          {t(newAccount(me) ? "identity.limited.plans" : "crewWave2.plans.limited", {
+            when: opensIn(t, limit.until, Date.now()),
+          })}
         </p>
       ) : null}
       <ul className="flex flex-col gap-2">

@@ -34,6 +34,7 @@ import { useDropAnnouncement, useDropZone } from "@/features/drop/store";
 import { announcementOf, zoneTitle } from "@/features/drop/text";
 import { isSkinFile } from "@/features/drop/zones";
 import { inferVariant } from "@/features/skins/skin-art";
+import { discordIsAccount } from "@/features/social/identity";
 import { useSocialUi } from "@/features/social/store";
 import type { AccountSummary } from "@/lib/api";
 import { projectsSkinApi } from "@/lib/api/projects-skin-api";
@@ -97,6 +98,10 @@ function Editor({
   const live = useLiveMotion();
   const { data: accounts = [] } = useAccounts();
   const signedIn = useSocialUi((s) => s.view.auth === "signedIn");
+  // SOC-ID: an account not opened with Discord gets one line instead of the editor.
+  const discordOnly = useSocialUi(
+    (s) => s.view.auth === "signedIn" && !discordIsAccount(s.view.me),
+  );
   const told = useProjectsSkinUi((s) => s.told);
   const markTold = useProjectsSkinUi((s) => s.markTold);
 
@@ -121,6 +126,7 @@ function Editor({
   const panel = panelState({
     view,
     signedIn,
+    discordOnly,
     draft: draft !== null,
     sending,
     failure,
@@ -464,9 +470,11 @@ function Editor({
               </div>
             </LayoutGroup>
           </div>
-        ) : panel.body === "off" ? (
+        ) : panel.body === "off" || panel.body === "discord" ? (
           <div className="flex flex-1 items-center justify-center px-10 pb-10 text-center">
-            <p className="max-w-[36ch] text-[14px] text-ash-300">{t("projectsSkin.note.off")}</p>
+            <p className="max-w-[36ch] text-[14px] text-ash-300">
+              {panel.body === "discord" ? t("identity.discordOnly") : t("projectsSkin.note.off")}
+            </p>
           </div>
         ) : (
           <ConnectCard

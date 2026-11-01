@@ -24,6 +24,7 @@ import type { JoinMode, SocialTeam } from "@/lib/api/social-types";
 import { attempt, copyText } from "./actions";
 import { wearersOf } from "./badges";
 import { managesLink } from "./crew-joining";
+import { newAccount } from "./identity";
 import { limitOf, opensIn } from "./limits";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
 import { useSocialUi } from "./store";
@@ -120,7 +121,9 @@ function LinkRow({ team }: { team: SocialTeam }) {
           {limit ? (
             <p className="mb-1.5 flex items-start gap-2 text-[12.5px] leading-snug text-ash-300">
               <LockSimple size={14} className="mt-px shrink-0 text-ash-400" aria-hidden />
-              {t("crewWave2.link.limited", { when: opensIn(t, limit.until, Date.now()) })}
+              {t(newAccount(me) ? "identity.limited.link" : "crewWave2.link.limited", {
+                when: opensIn(t, limit.until, Date.now()),
+              })}
             </p>
           ) : null}
           {url ? (

@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::identity::{Identity, LimitedReason, NameSource, Provider};
+
 /// What other players may see about someone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +36,17 @@ pub struct PublicProfile {
         skip_serializing_if = "Option::is_none"
     )]
     pub mark: Option<ProfileMark>,
+    /// The Discord account behind the profile (SOC-ID; `discordId`), read through
+    /// [`PublicProfile::discord_id`]. Missing (`None`): `id` is the Discord id (every account
+    /// opened with Discord, and every profile from an older service); `Some(None)`: no Discord;
+    /// `Some(Some(id))`: that Discord account.
+    #[serde(
+        default,
+        rename = "discordId",
+        deserialize_with = "crate::identity::readable_discord",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub discord: Option<Option<String>>,
     /// The keys of the profile badges the account shows, in the catalogue's order (BADGES; none
     /// from a service from before badges, which sends only `mark`): read them with
     /// [`PublicProfile::shown_marks`].
@@ -121,22 +134,33 @@ impl PublicProfile {
         self.mark = mark;
     }
 
-    /// The Discord profile, for the "Discord'dan mesaj at" button.
-    pub fn discord_profile_url(&self) -> String {
-        format!("https://discord.com/users/{}", self.id)
+    /// The Discord account behind the profile, None without one (SOC-ID): the account number for
+    /// every account opened with Discord.
+    pub fn discord_id(&self) -> Option<&str> {
+        match &self.discord {
+            None => Some(&self.id),
+            Some(linked) => linked.as_deref(),
+        }
+    }
+
+    /// The Discord profile, for the "Discord'dan mesaj at" button; None without Discord.
+    pub fn discord_profile_url(&self) -> Option<String> {
+        self.discord_id()
+            .map(|id| format!("https://discord.com/users/{id}"))
     }
 
     pub fn avatar_choice(&self) -> Avatar {
         Avatar::parse(&self.avatar).unwrap_or(Avatar::Discord)
     }
 
-    /// Discord CDN URL of the avatar (or of Discord's default avatar) when `avatar` is `discord`.
+    /// Discord CDN URL of the avatar (or of Discord's default avatar) when `avatar` is `discord`
+    /// and the profile has a Discord account.
     pub fn discord_avatar_url(&self, size: u32) -> Option<String> {
         if self.avatar_choice() != Avatar::Discord {
             return None;
         }
         Some(discord_avatar_url(
-            &self.id,
+            self.discord_id()?,
             self.avatar_hash.as_deref(),
             size,
         ))
@@ -274,6 +298,40 @@ pub struct Me {
     /// One-time notes from moderators that wait to be shown (MOD1).
     #[serde(default)]
     pub notices: Vec<ModNotice>,
+    /// SOC-ID: the one-time notes about the ways in (`identity_linked`, `identity_removed`). The
+    /// service lists them apart from `notices` (phone apps from before SOC-ID show a kind they do
+    /// not know as a moderator's warning); they are shown and seen as notices are.
+    #[serde(
+        default,
+        rename = "identityNotices",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub identity_notices: Vec<ModNotice>,
+    /// SOC-ID: the ways into the account (`identities`); None from an older service. Read through
+    /// [`Me::identities`].
+    #[serde(
+        default,
+        rename = "identities",
+        deserialize_with = "crate::identity::readable_identities",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub linked: Option<Vec<Identity>>,
+    /// SOC-ID: how this session signed in (`signInVia`); read through [`Me::sign_in_via`].
+    #[serde(
+        default,
+        rename = "signInVia",
+        deserialize_with = "crate::identity::readable_provider",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub via: Option<Provider>,
+    /// SOC-ID: where the name comes from (`nameSource`); read through [`Me::name_source`].
+    #[serde(
+        default,
+        rename = "nameSource",
+        deserialize_with = "crate::identity::readable_name_source",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub name_from: Option<NameSource>,
     /// The badges the player holds and chose not to show (BADGES; the shown ones are the
     /// profile's `marks`), in the catalogue's order. None from a service from before badges,
     /// which keeps no such choice.
@@ -283,6 +341,49 @@ pub struct Me {
         skip_serializing_if = "Option::is_none"
     )]
     pub marks_hidden: Option<Vec<String>>,
+}
+
+impl Me {
+    /// The Discord account linked to the account, None without one (SOC-ID).
+    pub fn discord_id(&self) -> Option<&str> {
+        self.profile.discord_id()
+    }
+
+    /// The account's number is its Discord id: it was opened with Discord and keeps that Discord
+    /// account. SKIN1 and 7/24 Bulut work only for these for now (`discord_required`).
+    pub fn discord_is_account(&self) -> bool {
+        self.discord_id() == Some(self.profile.id.as_str())
+    }
+
+    /// The ways into the account. An older service's profile: Discord, since the account opened.
+    pub fn identities(&self) -> Vec<Identity> {
+        self.linked.clone().unwrap_or_else(|| {
+            vec![Identity {
+                provider: Provider::Discord,
+                linked_on: self.created_on.clone(),
+                is_new: false,
+                hint: Some(self.profile.username.clone()),
+            }]
+        })
+    }
+
+    /// How this session signed in (Discord from an older service).
+    pub fn sign_in_via(&self) -> Provider {
+        self.via.unwrap_or(Provider::Discord)
+    }
+
+    /// Where the profile name comes from (Discord from an older service).
+    pub fn name_source(&self) -> NameSource {
+        self.name_from.unwrap_or_default()
+    }
+
+    /// Why the account is limited, while it is (SOC-ID).
+    pub fn limited_reason(&self) -> LimitedReason {
+        self.limited
+            .as_ref()
+            .map(|limited| limited.reason)
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -1184,6 +1285,11 @@ pub struct SessionInfo {
     pub last_used_on: String,
     /// This device.
     pub current: bool,
+    /// How the session signed in (SOC-ID; None from an older service, and for a way this version
+    /// does not know).
+    #[serde(default, deserialize_with = "crate::identity::readable_provider")]
+    #[specta(type = Option<Provider>)]
+    pub via: Option<Provider>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1227,6 +1333,10 @@ pub struct ProfileUpdate {
     /// an older one turns the field away.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub badge: Option<Option<String>>,
+    /// The profile name (SOC-ID; [`crate::clean_name`] first). An older service turns the field
+    /// away.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// The badges the player keeps off their profile (BADGES: `marksHidden`, every key; `[]` shows
     /// them all). Only to a service with badges: an older one turns the field away.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1350,6 +1460,9 @@ pub struct Limited {
     pub until: i64,
     #[serde(default)]
     pub items: Vec<LimitedItem>,
+    /// Its Discord account is new, or the account itself (SOC-ID; Discord from an older service).
+    #[serde(default, deserialize_with = "crate::identity::readable_reason")]
+    pub reason: LimitedReason,
 }
 
 /// What a moderators' one-time note says. A kind this version does not know reads as `Other`
@@ -1364,7 +1477,19 @@ pub enum NoticeKind {
     /// Staff in game reset the player's Projects skin (SKIN1), perhaps keeping them from changing
     /// it for a while ([`ModNotice::until`]).
     SkinReset,
+    /// A way into the account was linked ([`ModNotice::provider`]; SOC-ID): "Sen yapmadıysan kaldır
+    /// ve öteki oturumları kapat."
+    IdentityLinked,
+    /// A way into the account was removed ([`ModNotice::provider`]; SOC-ID).
+    IdentityRemoved,
     Other,
+}
+
+impl NoticeKind {
+    /// A note about the ways into the account (SOC-ID): it names one.
+    pub fn is_identity(self) -> bool {
+        matches!(self, Self::IdentityLinked | Self::IdentityRemoved)
+    }
 }
 
 impl<'de> Deserialize<'de> for NoticeKind {
@@ -1373,6 +1498,8 @@ impl<'de> Deserialize<'de> for NoticeKind {
             "warning" => Self::Warning,
             "profile_reset" => Self::ProfileReset,
             "skin_reset" => Self::SkinReset,
+            "identity_linked" => Self::IdentityLinked,
+            "identity_removed" => Self::IdentityRemoved,
             _ => Self::Other,
         })
     }
@@ -1444,6 +1571,14 @@ pub struct ModNotice {
         skip_serializing_if = "Option::is_none"
     )]
     pub until: Option<Option<i64>>,
+    /// `identity_linked` / `identity_removed` (SOC-ID): the way in it names. Such a note without
+    /// one this version knows is not shown.
+    #[serde(
+        default,
+        deserialize_with = "crate::identity::readable_provider",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub provider: Option<Provider>,
 }
 
 /// A time that may be missing (`None`) or `null` (`Some(None)`). Anything else that is not a
@@ -1784,6 +1919,10 @@ pub enum ChatQuota {
     Unfurls,
     /// The crew chat's slow mode: the player's next message waits `retryAfter` (CHAT-CALM).
     Slow,
+    /// SOC-ID: the day's profile name changes (3), named by a REST answer's `item`.
+    NameChanges,
+    /// SOC-ID: the day's ways in linked or removed (5), named by a REST answer's `item`.
+    IdentityChanges,
     Other,
 }
 

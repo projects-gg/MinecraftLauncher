@@ -24,6 +24,7 @@ use crate::codes::{
     friend_share_link, normalize_crew_link, normalize_friend_code, normalize_team_code,
 };
 use crate::error::{ErrorCode, Result, SocialError, from_response};
+use crate::identity::{IdentityAnswer, Provider, ProviderInfo, providers_of};
 use crate::model::{
     CodeLookup, CrewLink, CrewMute, CrewMuteEdit, Friend, FriendGroups, FriendsOverview,
     JoinOutcome, Me, ProfileUpdate, ReportReason, RequestOutcome, SessionInfo, SettingsBackup,
@@ -152,9 +153,54 @@ impl SocialClient {
         &self.inner.user_agent
     }
 
-    /// Starts a sign-in: open [`LoginAttempt::browser_url`] in the browser.
+    /// Starts a Discord sign-in: open [`LoginAttempt::browser_url`] in the browser.
     pub fn begin_login(&self) -> LoginAttempt {
-        LoginAttempt::new(&self.inner.base)
+        self.begin_login_with(Provider::Discord)
+    }
+
+    /// Starts a sign-in with `provider` (SOC-ID): the same flow, its own page.
+    pub fn begin_login_with(&self, provider: Provider) -> LoginAttempt {
+        LoginAttempt::new(&self.inner.base, provider)
+    }
+
+    /// SOC-ID (`GET /v1/auth/providers`, no session): the ways into an account and whether each
+    /// signs in and opens new accounts now. A service from before SOC-ID answers `404`: Discord.
+    pub async fn providers(&self) -> Result<Vec<ProviderInfo>> {
+        let reply = self
+            .send(Method::GET, "v1/auth/providers", None, None, &[])
+            .await?;
+        match reply.status {
+            404 => Ok(vec![ProviderInfo {
+                provider: Provider::Discord,
+                sign_in: true,
+                sign_up: true,
+            }]),
+            _ if !reply.is_success() => Err(reply.error()),
+            _ => providers_of(&reply.body).map_err(|error| {
+                SocialError::Protocol(format!(
+                    "invalid providers (HTTP {}): {error}",
+                    reply.status
+                ))
+            }),
+        }
+    }
+
+    /// A page the service answered for the browser (SOC-ID): only one on the service's own origin
+    /// opens, without credentials in it.
+    pub(crate) fn service_page(&self, raw: &str) -> Result<Url> {
+        let url =
+            Url::parse(raw.trim()).map_err(|_| SocialError::Protocol("invalid page".into()))?;
+        let base = &self.inner.base;
+        if url.scheme() == base.scheme()
+            && url.host_str() == base.host_str()
+            && url.port_or_known_default() == base.port_or_known_default()
+            && url.username().is_empty()
+            && url.password().is_none()
+        {
+            Ok(url)
+        } else {
+            Err(SocialError::Protocol("a page of another site".into()))
+        }
     }
 
     /// Claims the sign-in with `code`, the one-time code of the `projects://auth/done?c=…` link
@@ -589,6 +635,65 @@ impl Session {
             .await?
             .json()?;
         Ok(revoked.revoked)
+    }
+
+    /// SOC-ID: starts linking `provider` to the account; `challenge` is of this launcher's own
+    /// verifier ([`Session::claim_identity`]). Answers the page to open in the browser.
+    pub async fn link_identity(&self, provider: Provider, challenge: &str) -> Result<Url> {
+        #[derive(Deserialize)]
+        struct Page {
+            url: String,
+        }
+        let body = serde_json::json!({ "provider": provider.as_wire(), "challenge": challenge });
+        let page: Page = self
+            .call(Method::POST, "v1/me/identities/link", Some(body))
+            .await?
+            .json()?;
+        self.client.service_page(&page.url)
+    }
+
+    /// SOC-ID: starts removing `provider`: the page that proves it with another linked way, or
+    /// the profile when the proof is fresh and it is done already.
+    pub async fn unlink_identity(
+        &self,
+        provider: Provider,
+        challenge: &str,
+    ) -> Result<IdentityAnswer> {
+        #[derive(Deserialize)]
+        struct Answer {
+            #[serde(default)]
+            url: Option<String>,
+            #[serde(default)]
+            me: Option<Me>,
+        }
+        let body = serde_json::json!({ "provider": provider.as_wire(), "challenge": challenge });
+        let answer: Answer = self
+            .call(Method::POST, "v1/me/identities/unlink", Some(body))
+            .await?
+            .json()?;
+        match (answer.url, answer.me) {
+            (Some(url), _) => Ok(IdentityAnswer::Browser(self.client.service_page(&url)?)),
+            (None, Some(me)) => Ok(IdentityAnswer::Done(Box::new(me))),
+            (None, None) => Err(SocialError::Protocol("unlink answer without a page".into())),
+        }
+    }
+
+    /// SOC-ID: finishes a link or a removal with the code of `projects://auth/done?c=…` and the
+    /// verifier whose challenge started it. Any failure uses the change up: start again.
+    pub async fn claim_identity(&self, verifier: &str, code: &str) -> Result<Me> {
+        #[derive(Deserialize)]
+        struct Claimed {
+            me: Me,
+        }
+        if !is_auth_code(code) {
+            return Err(SocialError::InvalidInput("not a sign-in code"));
+        }
+        let body = serde_json::json!({ "verifier": verifier, "code": code });
+        let claimed: Claimed = self
+            .call(Method::POST, "v1/me/identities/claim", Some(body))
+            .await?
+            .json()?;
+        Ok(claimed.me)
     }
 
     /// Friends, incoming and outgoing requests and blocked users. SCALE-SOC: with `rel=1` a

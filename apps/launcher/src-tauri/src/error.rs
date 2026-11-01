@@ -315,7 +315,12 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
                     .to_owned(),
             },
         ),
-        E::Limited { item, until, .. } => {
+        E::Limited {
+            item,
+            until,
+            reason,
+            ..
+        } => {
             let (tr, en, daily) = match item {
                 LimitedKey::CrewFound => (
                     "Discord hesabın yeni olduğu için ekip kuramazsın.",
@@ -378,7 +383,15 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
                     false,
                 ),
             };
-            let sentence = lang.pick(tr, en).to_owned();
+            // SOC-ID: an account that is new itself (opened with Microsoft) hears about its own age.
+            let sentence = if *reason == pl_social::LimitedReason::Account {
+                lang.pick(
+                    tr.replacen("Discord hesabın", "Hesabın", 1),
+                    en.replacen("Your Discord account", "Your account", 1),
+                )
+            } else {
+                lang.pick(tr, en).to_owned()
+            };
             // A daily cap opens tomorrow; the rest when the account is old enough.
             let when = if daily {
                 String::new()
@@ -966,6 +979,21 @@ impl From<pl_social::SocialError> for CmdError {
                     pick(
                         "Bu şu an yapılamıyor. Biraz sonra tekrar dene.",
                         "That can't be done right now. Try again in a bit.",
+                    ),
+                ),
+                // SOC-ID: SKIN1 and 7/24 Bulut, for an account not opened with Discord.
+                C::DiscordRequired => (
+                    "SOSYAL-DISCORD",
+                    pick(
+                        "Bu özellik şimdilik yalnız Discord ile açılmış hesaplarda var.",
+                        "For now this is only for accounts opened with Discord.",
+                    ),
+                ),
+                C::ProviderOff => (
+                    "SOSYAL-GIRIS-KAPALI",
+                    pick(
+                        "Şu an bu yolla giriş yapılamıyor. Başka bir yolla dene.",
+                        "You can't sign in this way right now. Try another way.",
                     ),
                 ),
                 _ => (
