@@ -118,30 +118,37 @@ export const trImport = {
     multiMc: "MultiMC'deki",
   },
   outcome: {
-    options: "Oyun ayarların {{from}} Projects'e geldi.",
+    /** "Projects kurulumu" everywhere, as the picker's heading says (IMPORT-POLISH). */
+    options: "Oyun ayarların {{from}} Projects kurulumuna geldi.",
     /** From one of the other launcher's instances ("Fabulously Optimized kurulumundan"). */
-    optionsFromInstance: "Oyun ayarların {{name}} kurulumundan Projects'e geldi.",
+    optionsFromInstance: "Oyun ayarların {{name}} kurulumundan Projects kurulumuna geldi.",
     /** Projects already had exactly these settings: nothing changed. */
     optionsSame: "{{What}} zaten aynı.",
     servers: "{{from}} {{count}} sunucu eklendi.",
     worlds: "{{from}} {{count}} dünya geldi.",
-    /** Where worlds went, when they went to more than one instance. */
-    worldsIn: "{{name}} kurulumunda {{count}}",
+    /**
+     * Where worlds went, when they went to more than one instance. The count comes first: after
+     * a name that ends in a version ("Forge 1.20.1") a number read as part of it.
+     */
+    worldsIn: "{{count}} tanesi {{name}} kurulumunda",
     /** Where worlds went, when they all went to one instance. */
     worldsInOne: "{{name}} kurulumunda",
     resourcePacks: "{{from}} {{count}} kaynak paketi geldi.",
     shaderPacks: "{{from}} {{count}} shader geldi.",
     screenshots: "{{from}} {{count}} ekran görüntüsü geldi.",
-    /** After a count line when some of them did not come over, with why. */
+    /**
+     * After a count line when some of them did not come over, with why. Never a number first: a
+     * sentence after "Forge 1.20.1 kurulumunda" read "1.20.1. 1".
+     */
     leftBecause: {
-      noSpace: "{{count}} tanesi için diskte yer kalmadı.",
-      inUse: "{{count}} tanesi açık bir oyunda kullanıldığı için gelmedi.",
-      unreadable: "{{count}} tanesi okunamadı.",
-      noTarget: "{{count}} tanesi için Projects kurulumu hazırlanamadı.",
-      failed: "{{count}} tanesi aktarılamadı.",
-      cancelled: "{{count}} tanesi iptal edildi.",
+      noSpace: "Kalan {{count}} tanesine diskte yer yetmedi.",
+      inUse: "Kalan {{count}} tanesi açık bir oyunda kullanıldığı için gelmedi.",
+      unreadable: "Kalan {{count}} tanesi okunamadı.",
+      noTarget: "Kalan {{count}} tanesi için Projects kurulumu hazırlanamadı.",
+      failed: "Kalan {{count}} tanesi aktarılamadı.",
+      cancelled: "Kalan {{count}} tanesi iptal edildi.",
       /** Worlds whose version and loader no instance here plays (their own was not picked). */
-      needsInstance: "{{count}} tanesi yalnız oynandığı kurulumla gelebilir.",
+      needsInstance: "Kalan {{count}} tanesi yalnız oynandığı kurulumla gelebilir.",
     },
     already: "{{What}} zaten burada.",
     profile: "{{name}} kütüphanene eklendi.",
@@ -181,6 +188,20 @@ export const trImport = {
     /** A newer import replaced it, or its copies are gone. */
     gone: "Artık geri alamazsın.",
     /** The v1 launcher's step says what came with its own words. */
-    v1: "Oyun ayarların eski launcher'dan Projects'e geldi.",
+    v1: "Oyun ayarların eski launcher'dan Projects kurulumuna geldi.",
+  },
+  /**
+   * The v1 launcher's summary (`features/migrate`): what its game data brought, by kind
+   * ("Dünyaların, ekran görüntülerin ve paketlerin …"), never as a count of files.
+   */
+  v1: {
+    files: "{{things}} Projects kurulumuna geldi.",
+    /** A note says something stayed behind (or no kind is known): no kind is named. */
+    filesSome: "Oyun dosyaların Projects kurulumuna geldi.",
+    things: {
+      worlds: "dünyaların",
+      screenshots: "ekran görüntülerin",
+      packs: "paketlerin",
+    },
   },
 };

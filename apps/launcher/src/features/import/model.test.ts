@@ -425,11 +425,12 @@ describe("import summary", () => {
         }),
       ]),
     );
+    // Honest marks: what left something behind is partial, mods made for another version too.
     expect(lines.map((l) => [l.tone, l.key])).toEqual([
       ["done", "outcome.options"],
       ["done", "outcome.servers"],
       ["partial", "outcome.worlds"],
-      ["done", "outcome.profileMods"],
+      ["partial", "outcome.profileMods"],
       ["failed", "outcome.profileUnsupported"],
       ["skipped", "outcome.already"],
     ]);
@@ -507,6 +508,11 @@ describe("import summary", () => {
     ]);
     // A run whose settings did not change offers nothing to take back.
     expect(summaryLines(report([outcome({})]))[0]?.undo).toBeUndefined();
+    // Settings that came only in part are marked so.
+    const [part] = summaryLines(
+      report([outcome({ status: "partial", left: 1, reason: "unreadable" })], false, change),
+    );
+    expect([part?.tone, part?.undo]).toEqual(["partial", true]);
   });
 
   it("keep two launchers' alike lines apart", () => {
@@ -677,6 +683,28 @@ describe("import words", () => {
       // "TLauncher'dan" → "TLauncher'daki", "Modrinth App'ten" → "Modrinth App'teki".
       expect(at).toBe(from.replace(/n$/, "ki"));
       expect(enImport.from[kind as keyof typeof enImport.from]).toContain(name);
+    }
+  });
+
+  it("never start a sentence with a number after a version", () => {
+    // "…Forge 1.20.1 kurulumunda 2. 1 tanesi…" read "2.1": follow-ups start with a word, and
+    // where worlds went puts its count before the instance's name.
+    const followUps = [
+      ...Object.values(trImport.outcome.leftBecause),
+      ...Object.values(enImport.outcome.leftBecause),
+    ];
+    for (const text of followUps) expect(text).not.toMatch(/^(\{\{count\}\}|\d)/);
+    expect(trImport.outcome.worldsIn).toMatch(/^\{\{count\}\} tanesi \{\{name\}\}/);
+    expect(trImport.outcome.worldsIn).not.toMatch(/\{\{count\}\}$/);
+  });
+
+  it("call the Projects instance the same way the picker does", () => {
+    const tr = [trImport.outcome.options, trImport.outcome.optionsFromInstance, trImport.undo.v1];
+    for (const text of [...tr, trImport.groups.projects]) {
+      expect(text).toContain("Projects kurulumu");
+    }
+    for (const text of [enImport.outcome.options, enImport.undo.v1, enImport.groups.projects]) {
+      expect(text).toContain("the Projects instance");
     }
   });
 

@@ -442,6 +442,11 @@ export function suggestedName(scan: ImportScanView | undefined): string | undefi
 
 // --- the summary -------------------------------------------------------------------------------
 
+/**
+ * A summary line's mark (IMPORT-POLISH): `done` all of it came (jade check), `partial` it came but
+ * something of it stayed behind (the gold warning triangle, design.md §2), `skipped` nothing to do
+ * (quiet minus), `failed` none of it came (flare).
+ */
 export type Tone = "done" | "partial" | "skipped" | "failed";
 
 /** One line of the summary: a locale key under `import.`, its values and the item it is about. */
@@ -515,8 +520,8 @@ function sharedLine(outcome: ItemOutcome, kind: ImportShared): SummaryLine | nul
       const done =
         kind === "options"
           ? outcome.label
-            ? line("done", "outcome.optionsFromInstance", { name: outcome.label })
-            : line("done", "outcome.options")
+            ? line(outcome.status, "outcome.optionsFromInstance", { name: outcome.label })
+            : line(outcome.status, "outcome.options")
           : line(outcome.status, `outcome.${kind}`, { count: outcome.copied });
       // Worlds go into the instances that play them: the line says which.
       if (kind === "worlds") {
@@ -563,12 +568,12 @@ function profileLine(outcome: ItemOutcome): SummaryLine | null {
     case "done":
     case "partial": {
       const mods = outcome.copied;
-      // Mods made for another version stay behind by design: that is no failure.
-      const tone: Tone = missingPart(outcome) ? "partial" : "done";
+      // Something of it stayed behind, mods made for another version too: the line's mark says so
+      // (the title still counts those mods as expected, `missingPart`).
       const added =
         mods > 0
-          ? line(tone, "outcome.profileMods", { count: mods })
-          : line(tone, "outcome.profile");
+          ? line(outcome.status, "outcome.profileMods", { count: mods })
+          : line(outcome.status, "outcome.profile");
       if (outcome.status === "partial") {
         added.more.push(
           outcome.reason === "incompatibleMods"

@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   Check,
   GlobeHemisphereWest,
   Image as ImageIcon,
@@ -262,7 +261,7 @@ export function Onboarding() {
                     <Button variant="primary" size="lg" onClick={() => go(1)}>
                       {t("onboarding.welcome.start")}
                     </Button>
-                    <Button variant="ghost" onClick={skip}>
+                    <Button variant="ghost" size="lg" onClick={skip}>
                       {t("onboarding.skip")}
                     </Button>
                   </div>
@@ -346,10 +345,14 @@ function StepFrame({
   );
 }
 
+/**
+ * The flow's "Geri": a plain ghost button as tall as the row's others (every action of the
+ * welcome flow is `lg`), with no arrow, like the multi-step dialogs' "Geri" (design.md §7).
+ */
 function BackButton({ onClick }: { onClick: () => void }) {
   const { t } = useTranslation();
   return (
-    <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={onClick}>
+    <Button variant="ghost" size="lg" onClick={onClick}>
       {t("onboarding.back")}
     </Button>
   );
@@ -421,7 +424,7 @@ function LegacyStep({
         <Button variant="primary" size="lg" onClick={() => setOpen(true)}>
           {t("onboarding.legacy.import")}
         </Button>
-        <Button variant="secondary" onClick={onNext}>
+        <Button variant="secondary" size="lg" onClick={onNext}>
           {t("onboarding.legacy.skip")}
         </Button>
         <BackButton onClick={onBack} />
@@ -616,12 +619,17 @@ function AccountStep({
             {t("onboarding.account.continue")}
           </Button>
         ) : (
-          <Button variant="secondary" onClick={onNext}>
+          <Button variant="secondary" size="lg" onClick={onNext}>
             {t("onboarding.skip")}
           </Button>
         )}
         {hasAccount && !adding ? (
-          <Button variant="ghost" icon={<UserPlus size={16} />} onClick={() => setAdding(true)}>
+          <Button
+            variant="ghost"
+            size="lg"
+            icon={<UserPlus size={16} />}
+            onClick={() => setAdding(true)}
+          >
             {t("onboarding.account.addAnother")}
           </Button>
         ) : null}
