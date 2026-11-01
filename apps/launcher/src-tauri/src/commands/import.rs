@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use pl_import::{
     ImportProgress, ImportReport, ImportRequest, ImportShared, ImportSource, Locations,
-    OfficialTarget, RunContext, SourceMeasure,
+    OfficialTarget, RunContext, SettingsOrigin, SourceMeasure,
 };
 use pl_lang::pick;
 use serde::Serialize;
@@ -16,6 +16,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 
 use crate::commands::modrinth::{instance_lock, start_job};
+use crate::commands::versions::refuse_while_running;
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 
@@ -44,8 +45,9 @@ pub struct ImportScanView {
     pub free_bytes: Option<u64>,
     /// What the import leaves free (the games still download).
     pub reserve_bytes: u64,
-    /// The Projects instance already has game settings of its own: they are kept.
-    pub projects_has_options: bool,
+    /// Where an earlier import brought the Projects instance's game settings from (not undone
+    /// since): that "Oyun ayarları" starts unticked, so the player's later changes stay.
+    pub projects_settings_from: Option<SettingsOrigin>,
     /// The player deleted the Projects instance (LIB1): what goes into it is not ticked by
     /// default, and ticking it installs the instance again.
     pub projects_removed: bool,
@@ -69,10 +71,10 @@ async fn projects_instance(state: &AppState) -> Option<String> {
 pub async fn import_scan(state: State<'_, AppState>) -> CmdResult<ImportScanView> {
     let instances_root = state.instances.root().to_path_buf();
     let data_root = state.root.clone();
-    let projects_game = projects_instance(&state)
+    let projects_dir = projects_instance(&state)
         .await
-        .and_then(|id| state.instances.game_dir(&id).ok());
-    let projects_removed = projects_game.is_none()
+        .and_then(|id| state.instances.instance_dir(&id).ok());
+    let projects_removed = projects_dir.is_none()
         && pl_mc::instance::OfficialChoice::load(&state.root)
             .await
             .removed();
@@ -83,11 +85,14 @@ pub async fn import_scan(state: State<'_, AppState>) -> CmdResult<ImportScanView
             sources = ?sources.iter().map(|s| (s.id.as_str(), s.profiles.len())).collect::<Vec<_>>(),
             "other launchers found"
         );
+        let projects_settings_from = projects_dir
+            .as_deref()
+            .and_then(|dir| pl_import::settings_came_from(&sources, dir));
         ImportScanView {
             sources,
             free_bytes: fs4::available_space(&data_root).ok(),
             reserve_bytes: RESERVE_BYTES,
-            projects_has_options: projects_game.is_some_and(|dir| dir.join("options.txt").is_file()),
+            projects_settings_from,
             projects_removed,
         }
     })
@@ -126,6 +131,19 @@ fn refused(code: &str, tr: &str, en: &str, detail: &str) -> CmdError {
     CmdError::new(code, pick(tr, en), detail)
 }
 
+/// One import at a time (the first-run step, Settings and the v1 launcher's step share it); an
+/// undo of imported settings waits for none and is refused while one runs.
+pub(crate) static RUNNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+pub(crate) fn already_running() -> CmdError {
+    refused(
+        "AKTAR-SURUYOR",
+        "Aktarım zaten sürüyor.",
+        "An import is already running.",
+        "import running",
+    )
+}
+
 /// Copies what the player picked. Each item reports how it went; one that fails does not stop
 /// the others. `content_cancel(job_id)` stops it after the file being copied.
 #[tauri::command]
@@ -137,15 +155,8 @@ pub async fn import_start(
     job_id: String,
     on_progress: Channel<ImportProgress>,
 ) -> CmdResult<ImportReport> {
-    // One import at a time (the first-run step and Settings share the job).
-    static RUNNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let Ok(_one) = RUNNING.try_lock() else {
-        return Err(refused(
-            "AKTAR-SURUYOR",
-            "Aktarım zaten sürüyor.",
-            "An import is already running.",
-            "import running",
-        ));
+        return Err(already_running());
     };
     // A running game writes its settings and server list when it closes, over the copies.
     if state.games.lock().any() || state.launch_cancel.lock().is_some() {
@@ -231,7 +242,56 @@ pub async fn import_start(
         outcomes = report.outcomes.len(),
         created = report.created.len(),
         cancelled = report.cancelled,
+        settings = report.settings.is_some(),
         "import finished"
     );
     Ok(report)
+}
+
+/// "Geri al" for the game settings an import (or the v1 launcher's step) brought into an
+/// instance: every file goes back to exactly what it was (`pl_import::undo_settings`). `false`
+/// when that import's copies are gone or a newer one replaced it: nothing changes then. Refused
+/// while the instance's game runs (it writes its settings when it closes) or an import runs.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_undo_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    backup: String,
+) -> CmdResult<bool> {
+    let Ok(_one) = RUNNING.try_lock() else {
+        return Err(already_running());
+    };
+    let running = || {
+        refuse_while_running(&state, &instance_id).map_err(|_| {
+            refused(
+                "AKTAR-GERI-OYUN",
+                "Oyun açıkken ayarlar geri alınamaz. Önce oyunu kapat.",
+                "You can't undo the settings while the game is open. Close the game first.",
+                "the game of this instance is running",
+            )
+        })
+    };
+    running()?;
+    let _guard = instance_lock(&app, &instance_id).lock_owned().await;
+    running()?;
+    let instance_dir = state
+        .instances
+        .instance_dir(&instance_id)
+        .map_err(CmdError::from)?;
+    let undone = tauri::async_runtime::spawn_blocking(move || {
+        pl_import::undo_settings(&instance_dir, &backup)
+    })
+    .await
+    .map_err(CmdError::internal)?
+    .map_err(|error| {
+        CmdError::new(
+            "AKTAR-GERI",
+            pick("Ayarlar geri alınamadı.", "Couldn't undo the settings."),
+            error.to_string(),
+        )
+    })?;
+    tracing::info!(instance = %instance_id, undone, "imported settings undo");
+    Ok(undone)
 }

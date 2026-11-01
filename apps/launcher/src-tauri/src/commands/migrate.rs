@@ -1,17 +1,21 @@
 //! Import from the v1 launcher (`%APPDATA%\.projects`, Windows only): premium session, offline
-//! nickname, AFK accounts + client, and game data into a new "Projects" instance. The legacy
+//! nickname, AFK accounts + client, and game data into the Projects instance. The game settings
+//! and the server list follow the other launchers' rules (IMPORT-SET, `pl_import`): the player's
+//! settings win and "Geri al" puts back what was there; the server list is merged. The legacy
 //! folder is only read, never modified, so the old launcher keeps working during the transition.
 //! Debug builds look under `PROJECTS_IMPORT_HOME` as the other launchers' import does
 //! (`commands::import::locations`), so an end-to-end run never reads the real player's v1 data.
 
 use std::path::{Path, PathBuf};
 
-use pl_mc::instance::{InstanceIcon, InstanceLoader, NewInstance};
+use pl_import::{OfficialTarget, SettingsChange};
+use pl_mc::instance::{Instance, InstanceIcon, InstanceLoader, NewInstance};
 use pl_mc::loaders::LoaderKind;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 
-use crate::commands::import::locations;
+use crate::commands::import::{RUNNING, already_running, locations};
+use crate::commands::modrinth::instance_lock;
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 use pl_lang::pick;
@@ -144,8 +148,50 @@ pub struct LegacyImportReport {
     pub instance_id: Option<String>,
     pub copied_files: u32,
     pub linked_files: u32,
-    /// Turkish notes for the summary screen (things skipped and why).
+    /// The game settings it brought into the Projects instance, for "Geri al"
+    /// (`import_undo_settings`).
+    pub settings: Option<SettingsChange>,
+    /// Notes for the summary screen in the launcher's language (things skipped and why).
     pub notes: Vec<String>,
+}
+
+/// The Projects instance the v1 launcher's game data goes into: the official one (made now when
+/// it is not there yet), else, when it cannot be prepared (offline at the first start), one named
+/// "Projects" as before.
+async fn projects_target(state: &AppState) -> CmdResult<Instance> {
+    match crate::commands::official::ensure_official(state, true).await {
+        Ok(Some(instance)) => return Ok(instance),
+        Ok(None) => {}
+        Err(error) => tracing::warn!(?error, "official instance unavailable for the v1 import"),
+    }
+    if let Some(existing) = state
+        .instances
+        .list()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|i| i.name == "Projects")
+    {
+        return Ok(existing);
+    }
+    state
+        .instances
+        .create(NewInstance {
+            name: "Projects".to_owned(),
+            mc_version: "26.1.2".to_owned(),
+            loader: InstanceLoader {
+                kind: LoaderKind::Fabric,
+                version: None,
+            },
+            icon: Some(InstanceIcon::Builtin {
+                key: "dragon-egg".to_owned(),
+            }),
+            group: None,
+            memory: None,
+            managed_pack: None,
+        })
+        .await
+        .map_err(CmdError::from)
 }
 
 fn copy_tree(from: &Path, to: &Path, copied: &mut u32) -> std::io::Result<()> {
@@ -195,6 +241,7 @@ fn link_tree(from: &Path, to: &Path, linked: &mut u32) {
 #[tauri::command]
 #[specta::specta]
 pub async fn legacy_import(
+    app: AppHandle,
     state: State<'_, AppState>,
     request: LegacyImportRequest,
 ) -> CmdResult<LegacyImportReport> {
@@ -208,6 +255,26 @@ pub async fn legacy_import(
             "no %APPDATA%\\.projects",
         )
     })?;
+    // Game data goes into the Projects instance like another launcher's: one import at a time,
+    // and never while a game runs (it writes its settings and server list when it closes).
+    let _one = if request.game_data {
+        let Ok(one) = RUNNING.try_lock() else {
+            return Err(already_running());
+        };
+        if state.games.lock().any() || state.launch_cancel.lock().is_some() {
+            return Err(CmdError::new(
+                "AKTAR-OYUN",
+                pick(
+                    "Oyun açıkken aktarılamaz. Oyunu kapatıp tekrar dene.",
+                    "Close the game first, then try again.",
+                ),
+                "a game is running or being prepared",
+            ));
+        }
+        Some(one)
+    } else {
+        None
+    };
     let mut report = LegacyImportReport::default();
 
     // Premium session (DPAPI-encrypted on Windows), from the folder the scan found. Never in an
@@ -321,75 +388,81 @@ pub async fn legacy_import(
         report.afk_client = adopted.is_ok();
     }
 
-    // Game data into a "Projects" instance.
+    // Game data into the Projects instance.
     if request.game_data {
-        let instance = match state
-            .instances
-            .list()
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .find(|i| i.name == "Projects")
-        {
-            Some(existing) => existing,
-            None => state
-                .instances
-                .create(NewInstance {
-                    name: "Projects".to_owned(),
-                    mc_version: "26.1.2".to_owned(),
-                    loader: InstanceLoader {
-                        kind: LoaderKind::Fabric,
-                        version: None,
-                    },
-                    icon: Some(InstanceIcon::Builtin {
-                        key: "dragon-egg".to_owned(),
-                    }),
-                    group: None,
-                    memory: None,
-                    managed_pack: None,
-                })
-                .await
-                .map_err(CmdError::from)?,
-        };
+        let instance = projects_target(&state).await?;
+        let _guard = instance_lock(&app, &instance.id).lock_owned().await;
         let game_dir = state
             .instances
             .game_dir(&instance.id)
             .map_err(CmdError::from)?;
+        let official = OfficialTarget {
+            id: instance.id.clone(),
+            name: instance.name.clone(),
+            minecraft: instance.mc_version.clone(),
+            official_pack: instance.managed_pack.is_some(),
+        };
+        let store = state.instances.clone();
         let data_root = state.root.clone();
         let copy_worlds = request.worlds;
-        let (copied, linked, skipped_worlds) = tauri::async_runtime::spawn_blocking(move || {
-            let mut copied = 0u32;
-            let mut linked = 0u32;
-            for item in [
-                "options.txt",
-                "optionsof.txt",
-                "servers.dat",
-                "resourcepacks",
-                "shaderpacks",
-                "screenshots",
-            ] {
-                let _ = copy_tree(&root.join(item), &game_dir.join(item), &mut copied);
-            }
-            let saves_bytes = tree_size(&root.join("saves"));
-            let free = fs4::available_space(&game_dir).unwrap_or(0);
-            let skipped = copy_worlds && saves_bytes > free.saturating_sub(2 * 1024 * 1024 * 1024);
-            if copy_worlds && !skipped {
-                let _ = copy_tree(&root.join("saves"), &game_dir.join("saves"), &mut copied);
-            }
-            // Shared files: link instead of downloading again.
-            link_tree(&root.join("assets"), &data_root.join("assets"), &mut linked);
-            link_tree(
-                &root.join("libraries"),
-                &data_root.join("libraries"),
-                &mut linked,
-            );
-            (copied, linked, skipped)
-        })
-        .await
-        .map_err(CmdError::internal)?;
+        let (copied, linked, skipped_worlds, settings, servers) =
+            tauri::async_runtime::spawn_blocking(move || {
+                let mut copied = 0u32;
+                let mut linked = 0u32;
+                for item in ["resourcepacks", "shaderpacks", "screenshots"] {
+                    let _ = copy_tree(&root.join(item), &game_dir.join(item), &mut copied);
+                }
+                // The game settings after the shader packs: the shader choice needs its pack.
+                // OptiFine's own settings (`optionsof.txt`) stay: no instance here runs OptiFine.
+                let settings = pl_import::bring_folder_settings(&store, &official, &root);
+                let servers = pl_import::merge_folder_servers(&store, &official, &root);
+                let saves_bytes = tree_size(&root.join("saves"));
+                let free = fs4::available_space(&game_dir).unwrap_or(0);
+                let skipped =
+                    copy_worlds && saves_bytes > free.saturating_sub(2 * 1024 * 1024 * 1024);
+                if copy_worlds && !skipped {
+                    let _ = copy_tree(&root.join("saves"), &game_dir.join("saves"), &mut copied);
+                }
+                // Shared files: link instead of downloading again.
+                link_tree(&root.join("assets"), &data_root.join("assets"), &mut linked);
+                link_tree(
+                    &root.join("libraries"),
+                    &data_root.join("libraries"),
+                    &mut linked,
+                );
+                (copied, linked, skipped, settings, servers)
+            })
+            .await
+            .map_err(CmdError::internal)?;
         report.copied_files = copied;
         report.linked_files = linked;
-        // The old launcher's server list wins; an empty one gets the Projects server.
+        match settings {
+            Ok(change) => report.settings = change,
+            Err(error) => {
+                tracing::warn!(%error, "v1 game settings not imported");
+                report.notes.push(
+                    pick(
+                        "Oyun ayarların aktarılamadı.",
+                        "Couldn't bring over your game settings.",
+                    )
+                    .into(),
+                );
+            }
+        }
+        match servers {
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(%error, "v1 server list not imported");
+                report.notes.push(
+                    pick(
+                        "Sunucu listen aktarılamadı.",
+                        "Couldn't bring over your server list.",
+                    )
+                    .into(),
+                );
+            }
+        }
+        // The merged list starts with the Projects server; an instance that had none gets it.
         let mut instance = instance;
         crate::commands::instances::seed_default_server_once(&state, &mut instance).await;
         report.instance_id = Some(instance.id);

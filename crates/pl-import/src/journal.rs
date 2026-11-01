@@ -39,6 +39,23 @@ pub(crate) struct Journal {
     /// Copied world (`saves/New World`) → where it came from and what identifies it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub worlds: BTreeMap<String, WorldRecord>,
+    /// The settings the last import brought into this instance ("Oyun ayarları"), with what
+    /// "Geri al" puts back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<SettingsRecord>,
+}
+
+/// The files a settings import changed in an instance (IMPORT-SET, `crate::settings`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SettingsRecord {
+    /// Its backup folder (`<instance>/.launcher/import-backups/<backup>/`).
+    pub backup: String,
+    /// The game folder the settings came from ([`path_key`]).
+    pub from: String,
+    /// Each file it changed, relative to the instance folder (`minecraft/options.txt`) → whether
+    /// it was there before (its copy is in the backup) or the import made it.
+    pub files: BTreeMap<String, bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -110,6 +127,7 @@ impl Journal {
             from: part(&value, "from"),
             items: part(&value, "items").unwrap_or_default(),
             worlds,
+            settings: part(&value, "settings"),
         }
     }
 
