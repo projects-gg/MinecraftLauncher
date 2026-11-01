@@ -461,14 +461,17 @@ function ProfileLine({
   );
 }
 
-/** The line under the panel: the selected size and the disk's free space, or why it waits. */
+/**
+ * The line under the panel: the selected size and the disk's free space, or why it waits. It
+ * starts on the panel's own edge, as the words above and the buttons below do.
+ */
 export function ImportTotals({ picker, className }: { picker: ImportPicker; className?: string }) {
   const { t } = useTranslation();
   const short = !picker.enough;
   // Until every ticked row is measured the line holds its place.
   if (picker.pending && !short) {
     return (
-      <div className={cn("flex min-h-[18px] items-center px-1", className)} aria-busy>
+      <div className={cn("flex min-h-[18px] items-center", className)} aria-busy>
         <Skeleton className="h-[11px] w-52" />
       </div>
     );
@@ -486,7 +489,7 @@ export function ImportTotals({ picker, className }: { picker: ImportPicker; clas
     <p
       aria-live="polite"
       className={cn(
-        "min-h-[18px] px-1 text-[12.5px] tabular-nums transition-colors duration-200",
+        "min-h-[18px] text-[12.5px] tabular-nums transition-colors duration-200",
         "animate-[fade-in_180ms_var(--ease-out-expo)]",
         short ? "text-flare-400" : "text-ash-400",
         className,

@@ -418,15 +418,17 @@ export function profileMeta(row: ProfileRow): MetaPart[] {
     parts.push({ key: "profile.version", params: { loader: p.loader, version: p.minecraft } });
   }
   if (p.loader !== "vanilla") {
-    const mods = row.measure?.mods ?? p.modFiles;
+    // Every mod file of it, and how many of them stay behind ("24 mod, 3 tanesi bu sürüme
+    // uymuyor"): the measurement counts the mods that come (`mods`) apart from those that stay
+    // (`leftMods`), and the summary then says "içinde 21 mod var" (IMPORT-POLISH: "21 mod, 3
+    // tanesi" read as 18 coming). Before the measurement, the files in its mods folder.
+    const taken = row.measure?.mods;
     const left = row.measure?.leftMods ?? 0;
-    if (mods > 0) parts.push({ key: "profile.mods", params: { count: mods } });
-    if (left > 0) {
-      parts.push(
-        mods > 0
-          ? { key: "profile.leftMods", params: { count: left } }
-          : { key: "profile.noModsFit" },
-      );
+    const all = taken === undefined ? p.modFiles : taken + left;
+    if (taken === 0 && left > 0) parts.push({ key: "profile.noModsFit" });
+    else {
+      if (all > 0) parts.push({ key: "profile.mods", params: { count: all } });
+      if (left > 0) parts.push({ key: "profile.leftMods", params: { count: left } });
     }
   }
   const worlds = row.measure?.worlds ?? 0;
@@ -442,6 +444,11 @@ export function suggestedName(scan: ImportScanView | undefined): string | undefi
 
 // --- the summary -------------------------------------------------------------------------------
 
+/**
+ * A summary line's mark (IMPORT-POLISH): `done` all of it came (jade check), `partial` it came but
+ * something of it stayed behind (the gold warning triangle, design.md §2), `skipped` nothing to do
+ * (quiet minus), `failed` none of it came (flare).
+ */
 export type Tone = "done" | "partial" | "skipped" | "failed";
 
 /** One line of the summary: a locale key under `import.`, its values and the item it is about. */
@@ -511,13 +518,21 @@ function sharedLine(outcome: ItemOutcome, kind: ImportShared): SummaryLine | nul
   switch (outcome.status) {
     case "done":
     case "partial": {
-      // Settings from an instance name it ("Fabulously Optimized kurulumundan").
+      // Settings from an instance name it ("Fabulously Optimized kurulumundan"). Things of which
+      // some stayed behind say so in the line itself ("TLauncher'dan 6 dünyanın 5 tanesi geldi."),
+      // so the follow-up's "Kalan 1 tanesi" has its total.
+      const some = outcome.status === "partial" && outcome.left > 0;
       const done =
         kind === "options"
           ? outcome.label
-            ? line("done", "outcome.optionsFromInstance", { name: outcome.label })
-            : line("done", "outcome.options")
-          : line(outcome.status, `outcome.${kind}`, { count: outcome.copied });
+            ? line(outcome.status, "outcome.optionsFromInstance", { name: outcome.label })
+            : line(outcome.status, "outcome.options")
+          : some
+            ? line(outcome.status, `outcome.${kind}Some`, {
+                count: outcome.copied,
+                total: outcome.copied + outcome.left,
+              })
+            : line(outcome.status, `outcome.${kind}`, { count: outcome.copied });
       // Worlds go into the instances that play them: the line says which.
       if (kind === "worlds") {
         const one = outcome.destinations.length === 1;
@@ -563,12 +578,12 @@ function profileLine(outcome: ItemOutcome): SummaryLine | null {
     case "done":
     case "partial": {
       const mods = outcome.copied;
-      // Mods made for another version stay behind by design: that is no failure.
-      const tone: Tone = missingPart(outcome) ? "partial" : "done";
+      // Something of it stayed behind, mods made for another version too: the line's mark says so
+      // (the title still counts those mods as expected, `missingPart`).
       const added =
         mods > 0
-          ? line(tone, "outcome.profileMods", { count: mods })
-          : line(tone, "outcome.profile");
+          ? line(outcome.status, "outcome.profileMods", { count: mods })
+          : line(outcome.status, "outcome.profile");
       if (outcome.status === "partial") {
         added.more.push(
           outcome.reason === "incompatibleMods"
