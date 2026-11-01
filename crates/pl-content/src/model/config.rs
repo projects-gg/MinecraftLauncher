@@ -2,8 +2,8 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Cta, FeedOverride, MediaRef, NewsFeedConfig, SubServer, check_schema, default_true,
-    is_valid_minecraft_version,
+    Cta, FeedOverride, MediaRef, NewsFeedConfig, SeasonCalendar, SubServer, check_schema,
+    default_true, is_valid_minecraft_version,
 };
 use crate::error::Result;
 
@@ -93,9 +93,13 @@ impl LauncherConfig {
     /// (Studio keeps it in its workspace so turning the feed back on loses nothing), an empty
     /// `recommendedMinecraftVersion` (launchers then use their built-in default) and community
     /// platforms emptied in Studio while another one has an address
-    /// ([`Links::drop_empty_platforms`]).
+    /// ([`Links::drop_empty_platforms`]). With a season calendar, `theme.season` becomes what
+    /// older readers should keep showing ([`SeasonCalendar::lasting_pick`]).
     pub fn normalize_for_publish(&mut self) {
         self.links.drop_empty_platforms();
+        if let Some(calendar) = &self.theme.calendar {
+            self.theme.season = calendar.lasting_pick();
+        }
         if self.news_feed.as_ref().is_some_and(|feed| !feed.enabled) {
             self.news_feed = None;
         }
@@ -251,9 +255,16 @@ pub enum Season {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Theme {
+    /// The look while there is no `calendar`: a fixed pick. Launchers before SEASON-AUTO read
+    /// only this; Studio writes the calendar's manual pick here, else `none` (a date-based look
+    /// written here would stay on those launchers until the next publish).
     pub season: Season,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub accent: Option<String>,
+    /// SEASON-AUTO: the looks follow the player's date ([`Theme::season_at`]). Written only when
+    /// Studio switches the calendar on, so configs without it keep their exact shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calendar: Option<SeasonCalendar>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -650,6 +661,61 @@ mod tests {
         assert_eq!(config.theme.season, Season::Unknown);
         assert!(!config.features.afk);
         assert!(config.features.modrinth_browser);
+    }
+
+    #[test]
+    fn the_season_calendar_is_left_out_until_studio_sets_it() {
+        let fixed: LauncherConfig =
+            serde_json::from_str(r#"{"theme":{"season":"winter"}}"#).unwrap();
+        assert!(fixed.theme.calendar.is_none());
+        assert_eq!(
+            serde_json::to_value(&fixed).unwrap()["theme"],
+            serde_json::json!({ "season": "winter" })
+        );
+        let automatic: LauncherConfig =
+            serde_json::from_str(r#"{"theme":{"season":"none","calendar":{}}}"#).unwrap();
+        assert_eq!(automatic.theme.calendar, Some(SeasonCalendar::default()));
+        assert_eq!(
+            serde_json::to_value(&automatic).unwrap()["theme"],
+            serde_json::json!({ "season": "none", "calendar": {} })
+        );
+        // A launcher from before SEASON-AUTO reads the same theme (unknown fields are skipped).
+        #[derive(Deserialize)]
+        struct Before {
+            season: Season,
+        }
+        let before: Before = serde_json::from_str(
+            r#"{"season":"halloween","calendar":{"halloween":{"from":"10-10","to":"11-09"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(before.season, Season::Halloween);
+    }
+
+    #[test]
+    fn publishing_writes_the_lasting_pick_for_older_readers() {
+        let mut config = LauncherConfig::default();
+        config.theme.season = Season::Winter;
+        config.normalize_for_publish();
+        assert_eq!(
+            config.theme.season,
+            Season::Winter,
+            "no calendar: a fixed pick"
+        );
+        config.theme.calendar = Some(SeasonCalendar::default());
+        config.normalize_for_publish();
+        assert_eq!(config.theme.season, Season::None, "the dates decide");
+        let calendar = config.theme.calendar.as_mut().unwrap();
+        calendar.pick = Some(Season::Halloween);
+        config.normalize_for_publish();
+        assert_eq!(
+            config.theme.season,
+            Season::Halloween,
+            "picked until changed"
+        );
+        let calendar = config.theme.calendar.as_mut().unwrap();
+        calendar.pick_until = Some("2026-11-09T21:00:00Z".parse().unwrap());
+        config.normalize_for_publish();
+        assert_eq!(config.theme.season, Season::None, "picked for a while");
     }
 
     #[test]

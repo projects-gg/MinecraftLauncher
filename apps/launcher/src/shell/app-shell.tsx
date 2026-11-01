@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { useEffect } from "react";
 import heroFallback from "@/assets/art/hero-dragon-1.webp";
@@ -23,6 +23,7 @@ import {
 } from "@/features/updates/update-ui";
 import { api } from "@/lib/api";
 import { detectOs } from "@/lib/platform";
+import { homeParticles, pageClock, seasonLook, startSeasonClock } from "@/lib/season";
 import {
   hasOpenOverlay,
   isBrowserKey,
@@ -65,6 +66,24 @@ function TrayInGame() {
 /** The selected account for the play rules outside React (PLAY-AGAIN: several games at once). */
 function SelectedAccountMirror() {
   useSelectedAccountMirror();
+  return null;
+}
+
+/**
+ * SEASON-AUTO: asks for the home content again when the season may change (one timer to that
+ * moment; nothing while the window is out of sight), so a season starts and ends on its own.
+ */
+function SeasonClock({ until }: { until: string | undefined }) {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      startSeasonClock(
+        until,
+        () => void queryClient.invalidateQueries({ queryKey: ["home-content"] }),
+        pageClock,
+      ),
+    [until, queryClient],
+  );
   return null;
 }
 
@@ -124,6 +143,7 @@ export function AppShell() {
   // First run (account, v1 import, Projects instance) happens in the welcome flow.
   const onboarding = shouldShowOnboarding(usePrefs((s) => s.onboarded));
   const particlesOn = usePrefs((s) => s.particles);
+  const season = seasonLook(data?.season?.kind);
   useUpdateChecks();
   useDesktopEvents();
   useCleanupReminder();
@@ -138,10 +158,13 @@ export function AppShell() {
       <SelectedAccountMirror />
       <GlobalShortcuts disabled={onboarding} />
       <EventReminders />
+      <SeasonClock until={data?.season?.until} />
       <Backdrop
         imageUrl={data?.hero.imageUrl ?? heroFallback}
         variant={home ? "home" : "page"}
-        particles={particlesOn ? (data?.hero.particles ?? "embers") : "none"}
+        particles={homeParticles(particlesOn, data?.hero.particles ?? "embers", season)}
+        palette={season.palette}
+        scrim={season.scrim}
       />
       <NavRail />
       <div className="flex min-w-0 flex-1 flex-col">

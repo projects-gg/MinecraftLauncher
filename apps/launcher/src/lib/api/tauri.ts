@@ -54,8 +54,12 @@ import type {
   MinecraftNewsItem,
   NewsCategory,
   ParticleKind,
+  SeasonKind,
 } from "./types";
 import { welcomeHome } from "./welcome";
+
+/** The season looks this launcher knows (SEASON-AUTO). */
+const SEASON_KINDS: SeasonKind[] = ["none", "halloween", "winter", "holiday", "event"];
 
 /** A command failed: carries the friendly message plus details for "copy details". */
 export class CommandError extends Error {
@@ -198,6 +202,13 @@ function home(v: HomeView): HomeContent {
       ctaLabel: v.hero.ctaLabel?.trim() || undefined,
       ctaUrl: v.hero.ctaUrl ?? undefined,
       particles: (v.hero.particles || "embers") as ParticleKind,
+    },
+    season: {
+      // A look added by a newer Studio shows no season.
+      kind: (SEASON_KINDS.includes(v.season.season as SeasonKind)
+        ? v.season.season
+        : "none") as SeasonKind,
+      until: v.season.until ?? undefined,
     },
     banners: v.banners.map((b) => ({
       id: b.id,
