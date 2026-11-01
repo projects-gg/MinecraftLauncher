@@ -774,6 +774,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_overlay_keys_stay_free_in_play() {
+        // F7-OPEN: the in-game overlay's keys (mods/projects-overlay: OverlayKey F7, EmojiKey F9)
+        // act in the world with nothing else on them, so a toast's "Açmak için F7 tuşuna bas" stays
+        // true: no binding of the official pack that acts in play has them, and the one-tap fix
+        // never moves a key onto them.
+        const OVERLAY_KEYS: [&str; 2] = ["key.keyboard.f7", "key.keyboard.f9"];
+        for binding in official_pack_bindings() {
+            assert!(!OVERLAY_KEYS.contains(&binding.key.as_str()), "{binding:?}");
+        }
+        for (version, text) in INVENTORIES {
+            for row in rows(text) {
+                assert!(
+                    row.context != "game" || !OVERLAY_KEYS.contains(&row.key),
+                    "{version}: {} has an overlay key",
+                    row.name
+                );
+            }
+        }
+    }
+
     /// An `options.txt` as the game writes it on Windows (CRLF) with every key of the pack on its
     /// default: a file from before the table.
     fn game_file() -> String {

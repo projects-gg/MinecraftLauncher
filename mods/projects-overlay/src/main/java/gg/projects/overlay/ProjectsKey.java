@@ -23,6 +23,26 @@ public abstract class ProjectsKey extends KeyMapping {
         return isUnbound() ? null : getTranslatedKeyMessage().getString();
     }
 
+    /** The bound keyboard key's code ({@code InputConstants.KEY_…}), or -1: none, a mouse button, a scancode. */
+    public int keyboardKey() {
+        return isUnbound() || key.getType() != Compat.KEYBOARD ? -1 : key.getValue();
+    }
+
+    /**
+     * Whether the key is one of F1 to F12, which many laptops and compact keyboards give the game only with Fn held
+     * (F7-OPEN: the toasts' Fn line).
+     */
+    public boolean functionKey() {
+        int code = keyboardKey();
+        return code >= InputConstants.KEY_F1 && code <= InputConstants.KEY_F12;
+    }
+
+    /** Whether the bound keyboard key is held down now (a look at the keyboard; a mouse button never counts). */
+    public boolean heldNow() {
+        int code = keyboardKey();
+        return code >= 0 && Compat.keyDown(Minecraft.getInstance(), code);
+    }
+
     /**
      * Binds the key {@code saved} names ({@code key.keyboard.f8}; null: the default) the way the game's Controls do, and
      * keeps it in {@code options.txt} at once.

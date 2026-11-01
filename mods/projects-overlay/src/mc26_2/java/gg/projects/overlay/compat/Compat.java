@@ -34,6 +34,11 @@ public final class Compat {
         return key >= 32 && key <= 162;
     }
 
+    /** Whether a keyboard key (a GLFW key code) is held down now. */
+    public static boolean keyDown(Minecraft mc, int key) {
+        return InputConstants.isKeyDown(mc.getWindow(), key);
+    }
+
     /**
      * Opens the chat the way T does (CHAT-EMOJI's key in the game), with the game's own refusal of a chat that is off.
      */

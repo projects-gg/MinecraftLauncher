@@ -37,6 +37,11 @@ public final class Compat {
         return (key >= 4 && key <= 39) || (key >= 44 && key <= 56) || key == 100;
     }
 
+    /** Whether a keyboard key (an SDL scancode) is held down now. */
+    public static boolean keyDown(Minecraft mc, int key) {
+        return InputConstants.isKeyDown(key);
+    }
+
     /**
      * Opens the chat the way T does (CHAT-EMOJI's key in the game), with the game's own refusal of a chat that is off.
      */
