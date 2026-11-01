@@ -720,6 +720,18 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         typedIn = null;
     }
 
+    /**
+     * The open panel left its chat page (for the friends, the settings or world sharing): no conversation is on
+     * screen any more, so the launcher must neither count new messages as read (nor tell the friend "Görüldü") nor
+     * keep their toasts back. Said the way the panel's closing is, which every launcher knows; back on the chat page
+     * {@link #openConversation} opens the conversation again (GAME-BATCH).
+     */
+    public void conversationHidden() {
+        bridge.send(Protocol.panel(false));
+        // No "yazıyor…" comes meanwhile: what was shown would only go stale.
+        state.clearTyping();
+    }
+
     // ---- The overlay's language (OVL-LANG) ----------------------------------------------------------------
 
     /** The panel is being built anew in another language: it neither closes nor opens for the launcher. */
