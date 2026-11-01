@@ -290,7 +290,14 @@ cache file extension.
     "particles": "embers",
     "accent": "#E8B040"
   },
-  "theme": { "season": "winter", "accent": "#7FB2E5" },
+  "theme": {
+    "season": "none",
+    "accent": "#7FB2E5",
+    "calendar": {
+      "halloween": { "from": "10-10", "to": "11-09" },
+      "sacrificeFeast": { "daysBefore": 1 }
+    }
+  },
   "events": [
     {
       "id": "bedwars-cup",
@@ -390,6 +397,12 @@ news feed, the launcher's built-in recommended Minecraft version.
   `startsAt <= now < endsAt` (missing bounds are open). `dismissible` defaults to `true`.
 - `hero.particles`: `embers | sparks | snow | none`. `theme.season`:
   `none | halloween | winter | holiday | event`. Unknown values fall back to the defaults.
+  `theme.calendar` makes the season start and end by itself ([Season calendar](#season-calendar));
+  without it `theme.season` is a fixed pick. A season's look on Home (launchers after
+  SEASON-AUTO): `halloween` orange and violet embers with the art's shadows deepened to night,
+  `winter` snow over a night-blue glow, `holiday` slow warm lights over a deep teal glow, `event`
+  more and brighter gold sparks over an amber glow; its particles replace the hero's unless
+  `hero.particles` is `none` or the player turned them off.
 - `cta`: `{ label, url? , newsId? }` — `newsId` opens an article, `url` opens the browser.
 - `events[]`: countdown until `startsAt`, "live" until `endsAt`, hidden afterwards. `newsId`
   (optional): the article the event card opens while that item is on the home screen (else
@@ -541,6 +554,65 @@ news feed, the launcher's built-in recommended Minecraft version.
   accept `{instance}`, `{version}`, `{loader}`, `{server}`, `{players}`, `{maxPlayers}`,
   `{percent}`, `{afkCount}`, `{player}`; unknown placeholders render empty, empty fields are
   dropped. Images are asset keys or `https://` URLs; at most two buttons.
+
+### Season calendar
+
+`theme.calendar` (SEASON-AUTO, 1 Nov 2026): the season looks start and end by themselves on the
+player's local date. Missing, `theme.season` is a fixed pick as before; Studio writes the
+calendar once its admin chooses "Takvime göre" or sets a rule, and leaves it out otherwise, so
+existing configs keep their exact shape.
+
+<!-- example: SeasonCalendar -->
+```json
+{
+  "pick": "event",
+  "pickFrom": "2026-11-20T15:00:00Z",
+  "pickUntil": "2026-11-23T21:00:00Z",
+  "halloween": { "from": "10-10", "to": "11-09" },
+  "winter": { "off": true },
+  "ramadanFeast": { "daysBefore": 1, "daysAfter": 0 }
+}
+```
+
+- **Occasions** (each an optional rule; missing means its automatic dates): `halloween` (look
+  `halloween`; automatically 20 October – 2 November), `winter` (look `winter`, the new year;
+  15 December – 6 January), `ramadanFeast` (Ramazan Bayramı) and `sacrificeFeast` (Kurban
+  Bayramı), both look `holiday`, and `event` (look `event`; no automatic dates, only a range).
+- **Rules:** `off: true` never shows the occasion. `from` and `to`: a yearly range of local
+  dates as `MM-DD`, both days included, repeating every year until changed; `to` before `from`
+  crosses the new year (`12-15` … `01-06`); `02-29` falls on 28 February in other years. Fixed-date
+  occasions only, both ends or neither. `daysBefore` and `daysAfter` (0–30): feasts only; the look
+  starts that many days before the feast's first day (default 3: two days before the eve, arife)
+  and ends that many days after its last day (default 0). Writers leave out a rule at its
+  automatic dates and fields at their defaults.
+- **Feast days** follow Diyanet: Ramazan Bayramı is 1–3 Şevval, Kurban Bayramı 10–13 Zilhicce.
+  A Hijri month begins on the day after the evening when, somewhere on Earth before 24:00 UT,
+  the Moon stands at least 5° above the horizon at sunset (topocentric, no refraction) and at
+  least 8° from the Sun (1978 Istanbul criterion, sunsets within 60° of the equator). From 1438
+  AH (the 2016 Istanbul congress's unified calendar), when that happens only after 24:00 UT on
+  the Americas' west coast, the month still begins the next day if the new moon came before dawn
+  (Sun at −18°) in Auckland. `pl_content::season::feast_first_days` computes it from Meeus' lunar
+  (chapter 47) and solar (chapter 25) theories; it gives Diyanet's published first days for every
+  year 2017–2035 and all but one of 1980–2016 (Kurban Bayramı 2012: Diyanet 25 October, the
+  criterion 26 October).
+- **Overlaps:** a feast wins; else the run that started last (a short range inside a long one
+  shows during its days, the long one comes back after); on the same first day `event`, then
+  `halloween`, then `winter`.
+- **`pick`:** a look shown instead of the dates (`none` shows no season) from `pickFrom` (missing:
+  at once) until `pickUntil` (missing: until changed); outside that window the dates decide. A
+  window that ends before it starts is ignored.
+- **Days and moments:** the player's local dates in the system time zone; a look changes at
+  local midnight, a pick at its moments. Launchers work it out offline (no request) and switch at
+  the next change with one timer, not polling; a launcher that was asleep or in the tray at the
+  moment catches up when its window shows.
+- **Unknown values:** an unknown occasion or field is ignored, an unknown look (a newer Studio's)
+  shows no season, an invalid range or margin falls back to the automatic dates. Studio refuses to
+  publish an invalid rule or pick window.
+- **Older readers:** launchers before SEASON-AUTO read only `theme.season` (and showed no season
+  look at all). With a calendar, writers put the pick there when it has no window, else `none`: a
+  look that only lasts a while, or one the dates chose at publish time, would stay on such readers
+  until the next publish. Studios older than STUDIO3 (`aa95309`) drop `theme.calendar` when they
+  publish; later ones carry it unchanged.
 
 ## News
 

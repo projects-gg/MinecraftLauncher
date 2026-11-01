@@ -31,6 +31,7 @@ import { enHomeLinks } from "./en-home-links";
 import { enHost } from "./en-host";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
+import { enLauncherReset } from "./en-launcher-reset";
 import { enLib1 } from "./en-lib1";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
@@ -57,6 +58,7 @@ import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
 import { enSmall9 } from "./en-small9";
 import { enSmall10 } from "./en-small10";
+import { enStars } from "./en-stars";
 import { enTeam6 } from "./en-team6";
 import { enTeams } from "./en-teams";
 import { enTray } from "./en-tray";
@@ -342,6 +344,8 @@ export const en: DeepPartial<Strings> = {
   chatProd: enChatProd,
   setup: enSetup,
   motion: enMotion,
+  launcherReset: enLauncherReset,
+  stars: enStars,
   nav: {
     home: "Home",
     library: "Library",
@@ -1307,8 +1311,8 @@ export const en: DeepPartial<Strings> = {
     appearance: {
       performance: "Performance mode",
       performanceHelp:
-        "Turns off video, ember and blur effects, and reduces animations. Recommended for slower computers.",
-      particles: "Ember effect on the home page",
+        "Turns off video, particle and blur effects, and reduces animations. Recommended for slower computers.",
+      particles: "Particles on the home page",
       sounds: "Interface sounds",
       volume: "Volume",
     },
@@ -1361,7 +1365,6 @@ export const en: DeepPartial<Strings> = {
       discord: "Discord server",
       store: "Store",
       support: "Support",
-      source: "Source code",
       bits: "{{bits}}-bit",
       credits: "Fonts: Tektur and Figtree (OFL). Icons: Phosphor (MIT).",
     },
@@ -1482,7 +1485,7 @@ export const en: DeepPartial<Strings> = {
         title: "Cache and old logs",
         caption: "{{count}} files",
         caption_one: "{{count}} file",
-        cache: "Mod icons and news images",
+        cache: "Mod icons and screenshot previews",
         downloads: "Unfinished downloads",
         logs: "Old game logs",
         crashReports: "Old crash reports",

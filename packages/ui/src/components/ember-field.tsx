@@ -15,14 +15,55 @@ interface Ember {
   phase: number;
 }
 
-export type ParticleKind = "embers" | "sparks" | "snow" | "none";
+/**
+ * `lights` (SEASON-AUTO, a feast): a calm few soft lights that rise slowly and twinkle, larger and
+ * paler than embers, so they read apart from the fire of the brand's art.
+ */
+export type ParticleKind = "embers" | "sparks" | "snow" | "lights" | "none";
 
-/** Hue range of the embers (`hue` below) and how finely their glow sprites are cut. */
-const HUE_MIN = 28;
-const HUE_SPAN = 18;
-const HUE_STEPS = 8;
+/**
+ * The colours of embers and sparks (snow stays bone): the brand's fire, a season's own (SEASON-AUTO:
+ * Halloween's pumpkin orange with witch violet, a feast's gold, an event's bright gold glints, drawn
+ * with the lights' pale core so they show on the fiery art).
+ */
+export type EmberPalette = "ember" | "halloween" | "gold" | "spark";
+
+/** Hue bands of a palette: each ember draws its hue from one band, chosen by weight. */
+const PALETTES: Record<EmberPalette, Array<{ min: number; span: number; weight: number }>> = {
+  ember: [{ min: 28, span: 18, weight: 1 }],
+  halloween: [
+    { min: 18, span: 16, weight: 0.62 },
+    { min: 268, span: 22, weight: 0.38 },
+  ],
+  gold: [{ min: 40, span: 12, weight: 1 }],
+  spark: [{ min: 44, span: 10, weight: 1 }],
+};
+
+/** A hue from `palette` for the random numbers `pick` and `spread` (both 0 to 1). */
+export function emberHue(palette: EmberPalette, pick: number, spread: number): number {
+  const bands = PALETTES[palette];
+  let left = pick;
+  for (const band of bands) {
+    if (left < band.weight) return band.min + spread * band.span;
+    left -= band.weight;
+  }
+  const last = bands[bands.length - 1] ?? { min: 28, span: 18 };
+  return last.min + spread * last.span;
+}
+
+/** Glow sprites are cut every 2° of hue. */
+const HUE_STEP = 2;
 const SPRITE_PX = 64;
 const sprites = new Map<number, HTMLCanvasElement>();
+const lightSprites = new Map<number, HTMLCanvasElement>();
+
+/** Lights are a calm few: this share of the embers' count. */
+const LIGHTS_SHARE = 0.6;
+/**
+ * Snow comes in under the title bar (`--spacing-titlebar`, 0 where there is none): no flake above
+ * it, full strength this far below it.
+ */
+const SNOW_FADE_PX = 56;
 
 /**
  * The embers draw at most 60 times a second: on a 120/144 Hz display every frame would double
@@ -34,33 +75,58 @@ const FRAME_MS = 1000 / 60;
 const FRAME_SLACK_MS = 2;
 
 /**
- * The glow of one ember, drawn once per hue step at full strength. Each frame then only scales
- * and fades a copy (`drawImage` + `globalAlpha`), the same picture as a radial gradient built
- * per ember per frame, at a fraction of the main-thread time (the home page draws up to 110
+ * The glow of one ember (or light), drawn once per hue step at full strength. Each frame then only
+ * scales and fades a copy (`drawImage` + `globalAlpha`), the same picture as a radial gradient
+ * built per ember per frame, at a fraction of the main-thread time (the home page draws up to 110
  * embers up to 60 times a second).
  */
-function emberSprite(hue: number): HTMLCanvasElement | null {
-  const step = Math.min(
-    HUE_STEPS - 1,
-    Math.max(0, Math.floor(((hue - HUE_MIN) / HUE_SPAN) * HUE_STEPS)),
-  );
-  const cached = sprites.get(step);
+function emberSprite(hue: number, light = false): HTMLCanvasElement | null {
+  const cache = light ? lightSprites : sprites;
+  const step = Math.floor(hue / HUE_STEP);
+  const cached = cache.get(step);
   if (cached) return cached;
   const sprite = document.createElement("canvas");
   sprite.width = SPRITE_PX;
   sprite.height = SPRITE_PX;
   const ctx = sprite.getContext("2d");
   if (!ctx) return null;
-  const h = HUE_MIN + ((step + 0.5) * HUE_SPAN) / HUE_STEPS;
+  const h = (step + 0.5) * HUE_STEP;
   const c = SPRITE_PX / 2;
   const g = ctx.createRadialGradient(c, c, 0, c, c, c);
-  g.addColorStop(0, `hsla(${h + 12}, 100%, 78%, 1)`);
-  g.addColorStop(0.35, `hsla(${h}, 95%, 56%, 0.55)`);
-  g.addColorStop(1, `hsla(${h - 10}, 90%, 40%, 0)`);
+  if (light) {
+    // A pale, bright core in a soft halo: a lantern's light rather than a coal.
+    g.addColorStop(0, `hsla(${h + 8}, 100%, 92%, 1)`);
+    g.addColorStop(0.2, `hsla(${h + 4}, 100%, 76%, 0.8)`);
+    g.addColorStop(0.5, `hsla(${h}, 95%, 58%, 0.22)`);
+    g.addColorStop(1, `hsla(${h - 6}, 90%, 45%, 0)`);
+  } else {
+    g.addColorStop(0, `hsla(${h + 12}, 100%, 78%, 1)`);
+    g.addColorStop(0.35, `hsla(${h}, 95%, 56%, 0.55)`);
+    g.addColorStop(1, `hsla(${h - 10}, 90%, 40%, 0)`);
+  }
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
-  sprites.set(step, sprite);
+  cache.set(step, sprite);
   return sprite;
+}
+
+/**
+ * How strong a particle is at `t` of its life (0 to 1): embers flare up fast and die out slowly;
+ * lights and snow hold their strength through most of their way (a flake that faded early read as
+ * a sparse, peach-tinted snowfall over the fire); an event's glints flash up and fade over their
+ * second half.
+ */
+export function particleFade(kind: ParticleKind, t: number, palette?: EmberPalette): number {
+  if (kind === "lights") return Math.min(1, t / 0.15) * Math.min(1, (1 - t) / 0.3);
+  if (kind === "snow") return Math.min(1, t / 0.1) * Math.min(1, (1 - t) / 0.25);
+  if (palette === "spark") return Math.min(1, t / 0.08) * Math.min(1, (1 - t) / 0.5);
+  return Math.min(1, t * 6) * (1 - t) ** 1.4;
+}
+
+/** How much of a flake at `y` shows under a title bar `clearTop` px tall (full strength below it). */
+export function snowTopFade(y: number, clearTop: number): number {
+  if (clearTop <= 0) return 1;
+  return Math.min(1, Math.max(0, (y - clearTop) / SNOW_FADE_PX));
 }
 
 /**
@@ -91,10 +157,12 @@ export function emberStrength(strength: number, dtMs: number, on: boolean, resti
  */
 export function EmberField({
   kind = "embers",
+  palette = "ember",
   density = 1,
   className,
 }: {
   kind?: ParticleKind;
+  palette?: EmberPalette;
   density?: number;
   className?: string;
 }) {
@@ -128,6 +196,11 @@ export function EmberField({
     let seeded = false;
     const particles: Ember[] = [];
     const snow = kind === "snow";
+    const lights = kind === "lights";
+    // Lights and an event's glints draw with the pale, bright core.
+    const pale = lights || palette === "spark";
+    // The title bar's height: snow comes in under it.
+    let clearTop = 0;
 
     const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -136,31 +209,48 @@ export function EmberField({
       canvas.width = Math.max(1, Math.floor(width * dpr));
       canvas.height = Math.max(1, Math.floor(height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      clearTop =
+        Number.parseFloat(getComputedStyle(canvas).getPropertyValue("--spacing-titlebar")) || 0;
     };
 
-    const target = () => Math.min(110, Math.round(((width * height) / 14000) * density));
+    const target = () =>
+      Math.min(110, Math.round(((width * height) / 14000) * density * (lights ? LIGHTS_SHARE : 1)));
 
     const spawn = (initial: boolean): Ember => {
-      const maxLife = snow ? 9 + Math.random() * 8 : 3.5 + Math.random() * 4.5;
+      const maxLife = snow
+        ? 9 + Math.random() * 8
+        : lights
+          ? 7 + Math.random() * 5
+          : 3.5 + Math.random() * 4.5;
       return {
         x: Math.random() * width,
+        // Snow falls in from the top and embers rise from below; a light is lit where it floats
+        // (it fades in over the lower two thirds), so the few of them fill the scene.
         y: snow
           ? initial
             ? Math.random() * height
             : -10
           : initial
             ? height * (0.35 + Math.random() * 0.65)
-            : height + 10,
-        vx: (Math.random() - 0.5) * (snow ? 14 : 10),
-        vy: snow ? 18 + Math.random() * 26 : -(18 + Math.random() * 46),
+            : lights
+              ? height * (0.3 + Math.random() * 0.7)
+              : height + 10,
+        vx: (Math.random() - 0.5) * (snow ? 14 : lights ? 6 : 10),
+        vy: snow
+          ? 18 + Math.random() * 26
+          : lights
+            ? -(8 + Math.random() * 14)
+            : -(18 + Math.random() * 46),
         size: snow
           ? 1 + Math.random() * 2.2
           : kind === "sparks"
             ? 0.6 + Math.random() * 1.2
-            : 0.8 + Math.random() * 1.9,
+            : lights
+              ? 1.8 + Math.random() * 1.6
+              : 0.8 + Math.random() * 1.9,
         life: initial ? Math.random() * maxLife : 0,
         maxLife,
-        hue: HUE_MIN + Math.random() * HUE_SPAN,
+        hue: emberHue(palette, Math.random(), Math.random()),
         phase: Math.random() * Math.PI * 2,
       };
     };
@@ -204,7 +294,9 @@ export function EmberField({
       if (want.on) {
         const count = target();
         while (particles.length < count) {
-          particles.push(spawn(!seeded && particles.length < count / 2));
+          // Snow starts over the whole scene (a band of new flakes along the top read as a
+          // glitch); half the embers or lights start in the air, the rest rise from below.
+          particles.push(spawn(!seeded && (snow || particles.length < count / 2)));
         }
         if (count > 0) seeded = true;
       }
@@ -214,7 +306,7 @@ export function EmberField({
         if (!p) continue;
         p.life += dt;
         p.phase += dt * 2.2;
-        p.x += (p.vx + Math.sin(p.phase) * (snow ? 10 : 8)) * dt;
+        p.x += (p.vx + Math.sin(p.phase) * (snow ? 10 : lights ? 5 : 8)) * dt;
         p.y += p.vy * dt;
         const t = p.life / p.maxLife;
         if (t >= 1 || p.y < -20 || p.y > height + 20) {
@@ -223,18 +315,22 @@ export function EmberField({
           else particles.splice(i, 1);
           continue;
         }
-        // Fade in fast, out slow; embers flicker.
-        const fade = Math.min(1, t * 6) * (1 - t) ** 1.4;
-        const flicker = snow ? 1 : 0.75 + Math.sin(p.phase * 3.1) * 0.25;
-        const alpha = fade * flicker * strength;
+        // Embers flicker and lights twinkle slowly; snow comes in under the title bar.
+        const flicker = snow
+          ? 1
+          : lights
+            ? 0.7 + Math.sin(p.phase * 1.4) * 0.3
+            : 0.75 + Math.sin(p.phase * 3.1) * 0.25;
+        const top = snow ? snowTopFade(p.y, clearTop) : 1;
+        const alpha = particleFade(kind, t, palette) * flicker * top * strength;
         if (snow) {
-          ctx.fillStyle = `rgba(243, 235, 221, ${alpha * 0.75})`;
+          ctx.fillStyle = `rgba(243, 235, 221, ${alpha * 0.9})`;
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          const r = p.size * 3.2;
-          const sprite = emberSprite(p.hue);
+          const r = p.size * (lights ? 4 : 3.2);
+          const sprite = emberSprite(p.hue, pale);
           if (!sprite) continue;
           ctx.globalAlpha = alpha;
           ctx.drawImage(sprite, p.x - r, p.y - r, r * 2, r * 2);
@@ -264,10 +360,10 @@ export function EmberField({
     return () => {
       wake.current = null;
       observer.disconnect();
-      // Gone with its page, or a new kind of particles: at once.
+      // Gone with its page, or a new kind of particles or palette (a season began): at once.
       if (running) stop();
     };
-  }, [kind, density]);
+  }, [kind, density, palette]);
 
   useEffect(() => {
     wish.current = { on, resting, reduce };

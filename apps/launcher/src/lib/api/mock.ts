@@ -52,6 +52,8 @@ import type {
   ModEntry,
   NewInstance,
   NewsItem,
+  SeasonKind,
+  SeasonState,
   ServerStatus,
 } from "./types";
 
@@ -299,7 +301,8 @@ function mockMinecraft(): MinecraftNewsItem[] {
  * `?banners=none|two`,
  * `?status=outage|major|degraded|notice|expiring`, `?maintenance=1`, `?projects=<count>` (keeps
  * the first Projects news), `?mc=<count>` (Minecraft updates, 3 by default), `?join=offline` (no
- * Projects instance and its pack cannot be fetched: "Katıl" fails).
+ * Projects instance and its pack cannot be fetched: "Katıl" fails),
+ * `?season=halloween|winter|holiday|event` (the season look; `&seasonFor=<seconds>` ends it then).
  */
 function mockFlag(key: string): string {
   try {
@@ -315,6 +318,19 @@ function mockFlag(key: string): string {
 
 /** When the preview loaded: the reminder previews start relative to it, refetch or not. */
 const previewLoadedAt = Date.now();
+
+/**
+ * The preview's season (`?season=`), none by default. With `&seasonFor=<seconds>` it ends that
+ * long after the preview loaded, so the backdrop's switch at the boundary can be watched.
+ */
+function mockSeason(): SeasonState | undefined {
+  const kind = mockFlag("season") as SeasonKind;
+  if (!["halloween", "winter", "holiday", "event"].includes(kind)) return undefined;
+  const seconds = Number.parseFloat(mockFlag("seasonFor"));
+  if (Number.isNaN(seconds)) return { kind };
+  const until = previewLoadedAt + seconds * 1000;
+  return Date.now() < until ? { kind, until: new Date(until).toISOString() } : { kind: "none" };
+}
 
 /** Events in event card order, relative to now: a live feed event leads by default. */
 function mockEvents(): HomeContent["events"] {
@@ -535,6 +551,7 @@ function mockHome(): HomeContent {
     : content.maintenance;
   return {
     ...content,
+    season: mockSeason(),
     maintenance,
     // Like the backend: Studio's maintenance notice wins over the status notice.
     status: maintenance ? undefined : mockStatus(),
@@ -1306,6 +1323,7 @@ export const mockApi: LauncherApi = {
       instanceId: "projects",
       copiedFiles: 214,
       linkedFiles: 3912,
+      settings: { instanceId: "projects", backup: "20261101-120000" },
       notes: [],
     };
   },

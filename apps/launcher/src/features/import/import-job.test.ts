@@ -32,7 +32,13 @@ const { importPercent, useImportJob } = await import("./import-job");
 const request: ImportRequest = {
   sources: [{ sourceId: "minecraft", shared: ["options", "worlds"], profiles: [] }],
 };
-const report: ImportReport = { outcomes: [], cancelled: false, created: [], officialId: null };
+const report: ImportReport = {
+  outcomes: [],
+  cancelled: false,
+  created: [],
+  officialId: null,
+  settings: null,
+};
 const progress = (doneBytes: number, stage: ImportProgress["stage"] = "copying") => ({
   stage,
   doneBytes,

@@ -414,6 +414,14 @@ fn pending_path(game_dir: &Path) -> Option<PathBuf> {
     Some(game_dir.parent()?.join(".launcher").join(PENDING_FILE))
 }
 
+/// The file that keeps a preset picked before the first launch, for an import that brings the
+/// player's own `options.txt` (IMPORT-SET): their video settings take the pick's place, so the
+/// import removes it (and keeps a copy for its "Geri al"); otherwise the first launch would apply
+/// the pick over them.
+pub fn picked_preset_file(game_dir: &Path) -> Option<PathBuf> {
+    pending_path(game_dir)
+}
+
 /// The preset the player picked while the instance had no `options.txt`, if any.
 pub(crate) async fn pending_preset(game_dir: &Path) -> Option<GraphicsPreset> {
     let text = tokio::fs::read_to_string(pending_path(game_dir)?)

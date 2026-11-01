@@ -133,7 +133,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private boolean panel = true;
     /** One toggle per press of the overlay key: its held repeats neither close nor reopen the panel (F7-OPEN). */
     private final PressLatch keyLatch = new PressLatch();
-    /** "Olmazsa [Fn] ile birlikte bas" under the first key hints of a game where Fn may be missing (F7-OPEN). */
+    /** "Açılmazsa [Fn] + [F7] tuşlarına bas" under the first key hints of a game where Fn may be missing (F7-OPEN). */
     private final FnTip fnTip = new FnTip();
     /** The keyboard may give F1 to F12 only with Fn (a laptop or a Mac; F7-OPEN): looked at once after the start. */
     private volatile boolean laptop;
@@ -1272,7 +1272,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         }
     }
 
-    /** Whether the next key hint gets "Olmazsa [Fn] ile birlikte bas" ({@link FnTip}; F7-OPEN). */
+    /** Whether the next key hint gets "Açılmazsa [Fn] + [F7] tuşlarına bas" ({@link FnTip}; F7-OPEN). */
     private boolean fnTipWanted() {
         return fnTip.wanted(key.functionKey(), laptop, settings.get().keyUsed());
     }

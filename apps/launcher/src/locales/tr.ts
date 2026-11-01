@@ -32,6 +32,7 @@ import { trHomeLinks } from "./tr-home-links";
 import { trHost } from "./tr-host";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
+import { trLauncherReset } from "./tr-launcher-reset";
 import { trLib1 } from "./tr-lib1";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
@@ -59,6 +60,7 @@ import { trSmall7 } from "./tr-small7";
 import { trSmall9 } from "./tr-small9";
 import { trSmall10 } from "./tr-small10";
 import { trSocial } from "./tr-social";
+import { trStars } from "./tr-stars";
 import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
 import { trTray } from "./tr-tray";
@@ -135,6 +137,8 @@ export const tr = {
   chatProd: trChatProd,
   setup: trSetup,
   motion: trMotion,
+  launcherReset: trLauncherReset,
+  stars: trStars,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",
@@ -1068,8 +1072,8 @@ export const tr = {
     appearance: {
       performance: "Performans modu",
       performanceHelp:
-        "Video, kıvılcım ve bulanıklık efektlerini kapatır, animasyonları azaltır. Zayıf bilgisayarlarda önerilir.",
-      particles: "Ana sayfada kıvılcım efekti",
+        "Video, parçacık ve bulanıklık efektlerini kapatır, animasyonları azaltır. Zayıf bilgisayarlarda önerilir.",
+      particles: "Ana sayfada parçacıklar",
       sounds: "Arayüz sesleri",
       volume: "Ses düzeyi",
     },
@@ -1122,7 +1126,6 @@ export const tr = {
       discord: "Discord sunucusu",
       store: "Mağaza",
       support: "Destek",
-      source: "Kaynak kodu",
       bits: "{{bits}} bit",
       credits: "Yazı tipleri: Tektur ve Figtree (OFL). Simgeler: Phosphor (MIT).",
     },
@@ -1236,7 +1239,7 @@ export const tr = {
       leftovers: {
         title: "Önbellek ve eski kayıtlar",
         caption: "{{count}} dosya",
-        cache: "Mod simgeleri ve haber görselleri",
+        cache: "Mod simgeleri ve ekran görüntüsü önizlemeleri",
         downloads: "Yarım kalan indirmeler",
         logs: "Eski oyun kayıtları",
         crashReports: "Eski çökme raporları",

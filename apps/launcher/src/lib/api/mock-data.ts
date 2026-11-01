@@ -2,6 +2,8 @@
 // `localStorage["pl.mock.pickFolder"]` overrides the folder the picker returns (screenshots):
 // a name with "Dolu" fails like a full folder, "Küçük" lacks space.
 // `localStorage["pl.mock.unreachable"]` pretends a moved folder on that path is missing.
+// `localStorage["pl.mock.resetBlocked"] = "game"` refuses "Launcher'ı sıfırla" as an open game does
+// (running AFK accounts the dialog shows itself, before any typing; `?afk=none` has none).
 import type { DataApi, DataOverview, MoveProgress } from "./data-types";
 import { pick } from "./mock-lang";
 
@@ -107,6 +109,15 @@ export function createMockData(): DataApi {
     },
     async cancelMove() {
       cancelled = true;
+    },
+    async reset() {
+      await delay(500);
+      if (localStorage.getItem("pl.mock.resetBlocked") === "game") {
+        throw new MockDataError(
+          "SIFIRLA-OYUN",
+          pick("Sıfırlamak için önce oyunu kapat.", "Close the game first, then reset."),
+        );
+      }
     },
   };
 }

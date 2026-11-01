@@ -30,7 +30,14 @@ export {
   type DropZoneState,
   type DropZoneVariant,
 } from "./components/drop-zone";
-export { EmberField, type ParticleKind } from "./components/ember-field";
+export {
+  EmberField,
+  type EmberPalette,
+  emberHue,
+  type ParticleKind,
+  particleFade,
+  snowTopFade,
+} from "./components/ember-field";
 export {
   Field,
   type FieldInfo,

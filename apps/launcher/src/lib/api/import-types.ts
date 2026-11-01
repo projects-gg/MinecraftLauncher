@@ -24,6 +24,8 @@ export type {
   OutcomeReason,
   OutcomeStatus,
   ProfileMeasure,
+  SettingsChange,
+  SettingsOrigin,
   SharedData,
   SharedSizes,
   SourceKind,
@@ -46,4 +48,10 @@ export interface ImportApi {
   ): Promise<ImportReport>;
   /** Stops after the file being copied; finished items stay. */
   cancel(jobId: string): Promise<void>;
+  /**
+   * "Geri al" for the game settings an import changed in an instance (`ImportReport.settings`,
+   * the v1 step's report too): every file back as it was. `false` when that change can no longer
+   * be taken back (a newer import replaced it). Refused while the game runs.
+   */
+  undoSettings(instanceId: string, backup: string): Promise<boolean>;
 }

@@ -1,5 +1,5 @@
 import { CheckCircle } from "@phosphor-icons/react";
-import { cn, Skeleton } from "@pl/ui";
+import { cn, Select, Skeleton } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { motion } from "motion/react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
@@ -9,10 +9,12 @@ import { Check } from "@/features/settings/cleanup/check";
 import { formatBytes } from "@/lib/format";
 import {
   LAUNCHER_NAMES,
+  listCut,
   type MetaPart,
   type ProfileRow,
   profileMeta,
   type RowKey,
+  SETTINGS_KEY,
   type SharedRow,
   type SourceRows,
 } from "./model";
@@ -28,11 +30,12 @@ function metaText(t: TFunction, part: MetaPart): string {
 }
 
 /**
- * The picked launchers' rows in one quiet panel: each launcher by its own name, what goes into
- * the Projects instance (a grid of small items), its worlds (each into the instance of the
- * version it was played on) and what becomes new instances (one row each, its size on the right). Rows rise in once, a few milliseconds apart; sizes fill in
- * where their skeletons held the place, so nothing moves. Long lists scroll inside the panel,
- * with a soft edge while more is below.
+ * The picked launchers' rows in one quiet panel: first the game settings (one row that stays in view
+ * over the list: they come from one place, with the place on the right), then each launcher by its own name, what goes into the
+ * Projects instance (a grid of small items), its worlds (each into the instance of the version it
+ * was played on) and what becomes new instances (one row each, its size on the right). Rows rise
+ * in once, a few milliseconds apart; sizes fill in where their skeletons held the place, so nothing
+ * moves. Long lists scroll inside the panel, with a soft edge while more is below.
  */
 export function ImportPanel({ picker, className }: { picker: ImportPicker; className?: string }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -43,14 +46,45 @@ export function ImportPanel({ picker, className }: { picker: ImportPicker; class
     if (!element) return;
     const update = () =>
       setMore(element.scrollTop + element.clientHeight < element.scrollHeight - 2);
-    update();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    // A list cut between two groups looks complete: it then ends half way into its last row
+    // (`listCut`; at the smallest window the settings row above takes a row's height). The room
+    // is the CSS limit, read again when the window changes.
+    let room = 0;
+    const readRoom = () => {
+      element.style.maxHeight = "";
+      room = Number.parseFloat(getComputedStyle(element).maxHeight) || 0;
+    };
+    const cut = () => {
+      const rows = Array.from(
+        element.querySelectorAll<HTMLElement>("[data-import-row]"),
+        (row) => ({
+          top: row.offsetTop,
+          height: row.offsetHeight,
+        }),
+      );
+      const at = listCut(rows, room, element.scrollHeight);
+      const next = at === undefined ? "" : `${at}px`;
+      if (element.style.maxHeight !== next) element.style.maxHeight = next;
+    };
+    const refresh = () => {
+      cut();
+      update();
+    };
+    const resize = () => {
+      readRoom();
+      refresh();
+    };
+    readRoom();
+    refresh();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(refresh);
     observer?.observe(element);
     for (const child of Array.from(element.children)) observer?.observe(child);
     element.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", resize);
     return () => {
       observer?.disconnect();
       element.removeEventListener("scroll", update);
+      window.removeEventListener("resize", resize);
     };
   }, []);
 
@@ -63,9 +97,20 @@ export function ImportPanel({ picker, className }: { picker: ImportPicker; class
         className,
       )}
     >
+      {/* The game settings stay in view over the launchers' list; the list gives up their height. */}
+      {picker.settings ? (
+        <div className="border-b border-white/6 px-2 py-1">
+          <SettingsLine picker={picker} order={order++} />
+        </div>
+      ) : null}
       <div
         ref={scroller}
-        className="max-h-[clamp(200px,calc(100dvh-400px),400px)] overflow-y-auto overscroll-contain px-2 py-2"
+        className={cn(
+          "relative overflow-y-auto overscroll-contain px-2 py-2",
+          picker.settings
+            ? "max-h-[clamp(160px,calc(100dvh-456px),344px)]"
+            : "max-h-[clamp(200px,calc(100dvh-400px),400px)]",
+        )}
       >
         <div>
           {rows.map((source) => (
@@ -110,7 +155,7 @@ function SourceGroups({
     <>
       {intoProjects.length > 0 ? (
         <Group heading={t("import.groups.projects")}>
-          <div className="grid grid-cols-3 gap-x-0.5">
+          <div className="grid grid-cols-2 gap-x-0.5">
             {intoProjects.map((row) => (
               <SharedCell
                 key={row.key}
@@ -159,11 +204,15 @@ function Group({ heading, children }: { heading: string; children: ReactNode }) 
   );
 }
 
-/** Rises 4 px into place, `order` beats after the first row (once, when the panel appears). */
+/**
+ * Rises 4 px into place, `order` beats after the first row (once, when the panel appears). It is a
+ * row of the list (`data-import-row`: where the list may end, `listCut`).
+ */
 function Entrance({ order, children }: { order: number; children: ReactNode }) {
   const prefs = useMotionPrefs();
   return (
     <motion.div
+      data-import-row
       initial={{ opacity: 0, transform: prefs.reduce ? "none" : "translateY(4px)" }}
       animate={{
         opacity: 1,
@@ -209,15 +258,9 @@ function SharedCell({
 }) {
   const { t } = useTranslation();
   const id = useId();
-  const counted = row.kind !== "options";
-  const meta =
-    row.state === "kept"
-      ? t("import.rows.optionsKept")
-      : counted
-        ? t(`import.rows.${row.kind}Meta`, { count: row.count })
-        : t("import.rows.optionsMeta");
-  // Settings and the server list weigh nothing worth showing.
-  const weighs = row.kind !== "options" && row.kind !== "servers";
+  const meta = t(`import.rows.${row.kind}Meta`, { count: row.count });
+  // The server list weighs nothing worth showing.
+  const weighs = row.kind !== "servers";
   return (
     <Entrance order={order}>
       <label htmlFor={id} className={cn(rowLabel, "gap-2.5")}>
@@ -247,6 +290,66 @@ function SharedCell({
           </span>
         </span>
       </label>
+    </Entrance>
+  );
+}
+
+/**
+ * The game settings: one row above the launchers, since the Projects instance takes them from one
+ * place. The place sits on the right: its name, or a select when there are several (picking one
+ * means bringing them). Its second line says what comes, or that they came before.
+ */
+function SettingsLine({ picker, order }: { picker: ImportPicker; order: number }) {
+  const { t } = useTranslation();
+  const id = useId();
+  const settings = picker.settings;
+  if (!settings) return null;
+  const { row, choice, on } = settings;
+  return (
+    <Entrance order={order}>
+      <div className={cn(rowLabel, "gap-3 pr-1.5")}>
+        <label htmlFor={id} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+          <Check
+            id={id}
+            checked={on}
+            onCheckedChange={(next) => picker.toggle(SETTINGS_KEY, next)}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] leading-tight text-bone-50">
+              {t("import.rows.options")}
+            </span>
+            <span className="mt-0.5 block truncate text-[12px] text-ash-400">
+              {choice.imported ? t("import.rows.optionsBefore") : t("import.rows.optionsMeta")}
+            </span>
+          </span>
+        </label>
+        {row.candidates.length > 1 ? (
+          // "Nereden": the select picks where the settings come from, nothing else.
+          <span className="flex min-w-0 shrink-0 items-center gap-2">
+            <span aria-hidden className="text-[12.5px] text-ash-400">
+              {t("import.rows.optionsFromLabel")}
+            </span>
+            <Select
+              value={choice.key}
+              onValueChange={picker.pickSettings}
+              label={t("import.rows.optionsFrom")}
+              options={row.candidates.map((c) => ({
+                value: c.key,
+                label: c.name,
+                // An instance says whose it is; a launcher's own folder is named by the launcher.
+                hint: c.profileId ? LAUNCHER_NAMES[c.kind] : undefined,
+              }))}
+              className="w-[176px]"
+            />
+          </span>
+        ) : (
+          <span className="max-w-[46%] shrink-0 truncate text-right text-[12.5px] text-ash-400">
+            {choice.profileId
+              ? t("import.rows.optionsFromInstance", { name: choice.name })
+              : t(`import.from.${choice.kind}`)}
+          </span>
+        )}
+      </div>
     </Entrance>
   );
 }

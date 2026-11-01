@@ -1,10 +1,31 @@
 import { create } from "zustand";
-import { api, type ImportProgress, type ImportReport, type ImportRequest } from "@/lib/api";
+import {
+  api,
+  type ImportProgress,
+  type ImportReport,
+  type ImportRequest,
+  type SettingsChange,
+} from "@/lib/api";
 import { notifyWhenAway } from "@/lib/attention";
 import i18n from "@/lib/i18n";
 import { trackTask } from "@/stores/progress";
 
 export type ImportStatus = "idle" | "running" | "done" | "failed";
+
+/**
+ * The game settings' "Geri al" (IMPORT-SET): `busy` while it runs, `done` once every file is back,
+ * `gone` when that change can no longer be taken back (a newer import, its copies gone).
+ */
+export type SettingsUndo = "idle" | "busy" | "done" | "gone";
+
+/**
+ * Takes back the game settings an import changed: resolves to `done` or `gone`; a refusal (the
+ * game is open) rejects with the backend's message. The summaries of both import steps use it.
+ */
+export async function undoSettingsChange(change: SettingsChange): Promise<"done" | "gone"> {
+  const undone = await api.importer.undoSettings(change.instanceId, change.backup);
+  return undone ? "done" : "gone";
+}
 
 const newJobId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -24,6 +45,9 @@ interface ImportJobState {
   summaryOpen: boolean;
   /** When the last run ended (screens refresh what it changed). */
   finishedAt?: number;
+  /** The last run's game settings, taken back or not. */
+  settingsUndo: SettingsUndo;
+  setSettingsUndo(state: SettingsUndo): void;
   start(request: ImportRequest): void;
   cancel(): void;
   setDialogOpen(open: boolean): void;
@@ -42,6 +66,8 @@ export const useImportJob = create<ImportJobState>((set, get) => ({
   stopping: false,
   dialogOpen: false,
   summaryOpen: false,
+  settingsUndo: "idle",
+  setSettingsUndo: (settingsUndo) => set({ settingsUndo }),
   start(request) {
     if (get().status === "running") return;
     const jobId = newJobId();
@@ -54,6 +80,7 @@ export const useImportJob = create<ImportJobState>((set, get) => ({
       error: undefined,
       stopping: false,
       summaryOpen: false,
+      settingsUndo: "idle",
     });
     api.importer
       .start(request, jobId, (progress) => {
@@ -94,6 +121,7 @@ export const useImportJob = create<ImportJobState>((set, get) => ({
       error: undefined,
       stopping: false,
       summaryOpen: false,
+      settingsUndo: "idle",
     });
   },
 }));

@@ -75,6 +75,13 @@ pub struct RestartInfo {
 /// launcher had been started minimized at login (the installer passes the old arguments on).
 static SHOW_AFTER_UPDATE: AtomicBool = AtomicBool::new(false);
 
+/// This start ran a reset the player asked for in the open window ("Launcher'ı sıfırla",
+/// `crate::reset`): the welcome opens even when the launcher had been started minimized at login
+/// (a restart passes the old arguments on).
+pub(crate) fn show_after_reset() {
+    SHOW_AFTER_UPDATE.store(true, Ordering::Relaxed);
+}
+
 /// The UI's part of the restart note, taken once.
 static AFTER_RESTART: Mutex<Option<RestartInfo>> = Mutex::new(None);
 

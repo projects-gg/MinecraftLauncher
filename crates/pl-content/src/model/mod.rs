@@ -15,6 +15,7 @@ mod news;
 mod overlay;
 mod pack;
 mod release;
+mod season;
 mod subserver;
 
 pub use chatemoji::{
@@ -77,6 +78,10 @@ pub use pack::{
 pub use release::{
     LocalizedNotes, ReleaseChannel, ReleasePlatform, UpdateDecision, release_bundle_allowed,
     release_channel_urls, release_notes, release_notes_in, rollout_bucket,
+};
+pub use season::{
+    FEAST_DAYS_AFTER, FEAST_DAYS_BEFORE, MAX_FEAST_MARGIN_DAYS, MonthDay, Occasion, SeasonCalendar,
+    SeasonProblem, SeasonRule,
 };
 pub use subserver::{
     MAX_SUB_SERVER_COMMAND_CHARS, MAX_SUB_SERVER_ID_CHARS, MAX_SUB_SERVER_NAME_CHARS,
