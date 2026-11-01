@@ -1488,6 +1488,11 @@ export const commands = {
 	 */
 	socialTeamBadgeRequests: (team: string, on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_badge_requests", { team, on })),
 	/**
+	 *  "Yavaş mod" of one of the player's crews (the leader or a moderator; CHAT-CALM): seconds
+	 *  between one member's messages in its chat, one of 0 (off), 5, 10 and 30.
+	 */
+	socialTeamSlow: (team: string, seconds: number) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_slow", { team, seconds })),
+	/**
 	 *  "Katılma isteği gönder" on the card of the tag `via` (a friend) wears: a join request to crew
 	 *  `team` that waits for its leaders. The crew's refusals and the player's own limits are answers
 	 *  (`refused`, why, and until when the button stays away on this computer); only what keeps the
@@ -9170,7 +9175,9 @@ export type SendFailure =
 /**  A limited account (a new Discord account) sends no links (CHAT2). */
 "limitedLinks" | 
 /**  Studio switched this extra off (CHAT2: stickers). */
-"featureOff";
+"featureOff" | 
+/**  The crew chat's slow mode: the player's last message was too recent (CHAT-CALM). */
+"slow";
 
 /**  Result of sending a request by code. */
 export type SendOutcome = 
@@ -9603,7 +9610,12 @@ crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: ne
  *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
  *  is muted).
  */
-({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  The player just joined a crowded crew and the service muted it for them (CHAT-CALM): said
+ *  once, with "Sesi aç".
+ */
+({ kind: "crowdedCrewMuted"; crew: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
 ({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
@@ -9668,7 +9680,12 @@ crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: ne
  *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
  *  is muted).
  */
-({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  The player just joined a crowded crew and the service muted it for them (CHAT-CALM): said
+ *  once, with "Sesi aç".
+ */
+({ kind: "crowdedCrewMuted"; crew: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
 ({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
@@ -10353,6 +10370,11 @@ export type TeamView_Deserialize = {
 	badgeRequests: boolean,
 	/**  How many members wear this crew's tag ("Etiketi takan 8 üyenin etiketi çıkarılacak."). */
 	wearers: number,
+	/**
+	 *  "Yavaş mod" (CHAT-CALM): seconds between one member's messages in the crew's chat, 0 when
+	 *  off (always 0 from a service without `slow`). The leader and moderators never wait.
+	 */
+	slow: number,
 };
 
 export type TeamView_Serialize = {
@@ -10423,6 +10445,11 @@ export type TeamView_Serialize = {
 	badgeRequests: boolean,
 	/**  How many members wear this crew's tag ("Etiketi takan 8 üyenin etiketi çıkarılacak."). */
 	wearers: number,
+	/**
+	 *  "Yavaş mod" (CHAT-CALM): seconds between one member's messages in the crew's chat, 0 when
+	 *  off (always 0 from a service without `slow`). The leader and moderators never wait.
+	 */
+	slow: number,
 };
 
 /**  Something in the launcher trash. */

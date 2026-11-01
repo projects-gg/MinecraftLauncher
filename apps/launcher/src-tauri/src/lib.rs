@@ -594,6 +594,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_set_badge,
             commands::social::social_team_hidden,
             commands::social::social_team_badge_requests,
+            commands::social::social_team_slow,
             commands::social::social_request_from_badge,
             commands::social::social_crew_greet,
             commands::social::social_report,

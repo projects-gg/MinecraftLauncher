@@ -86,6 +86,7 @@ import { CrewLinkRows } from "./crew-link";
 import { CrewPlans } from "./crew-plans-view";
 import { CrewRail } from "./crew-rail";
 import { CrewRequests, MyRequests } from "./crew-requests";
+import { CrewSlowMode } from "./crew-slow-mode";
 import { callableCrews, canAddCrew, NEW_CREW_TAB, shownCrew } from "./crews";
 import { dayMonth, limitOf, opensIn } from "./limits";
 import { openMenuFromKey } from "./menu-key";
@@ -481,6 +482,20 @@ function FoundOffer({
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/** "Sohbet" (CHAT-CALM): the crew chat's rules for its leader and moderators, in a box of their
+ * own under the code's ("Yavaş mod", crew-slow-mode.tsx). */
+function CrewChatRules({ team }: { team: SocialTeam }) {
+  const { t } = useTranslation();
+  return (
+    <section className="mt-5">
+      <SectionTitle>{t("chatCalm.chatTitle")}</SectionTitle>
+      <div className="rounded-[var(--radius-panel)] bg-obsidian-950/40 px-4 py-3 ring-1 ring-white/8">
+        <CrewSlowMode team={team} />
+      </div>
+    </section>
   );
 }
 
@@ -1261,6 +1276,12 @@ function CrewView({ team }: { team: SocialTeam }) {
         <motion.div {...glideBox}>
           <CodeRow team={team} />
         </motion.div>
+
+        {crew.slow && (team.role === "founder" || team.moderator) ? (
+          <motion.div {...glideBox}>
+            <CrewChatRules team={team} />
+          </motion.div>
+        ) : null}
 
         {rights.lead && crew.roles ? (
           <motion.div {...glideBox}>

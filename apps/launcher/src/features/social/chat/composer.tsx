@@ -17,6 +17,11 @@
 // CHAT-PROD: the words in the field grow with the chat's text size (never shrink below 100 %); the
 // send button leaves the focus in the field (the next message can be written at once); PageUp and
 // PageDown scroll the messages.
+//
+// CHAT-CALM: in a crew whose leader set "Yavaş mod" the empty field says so ("Ekibine yaz (yavaş
+// mod: 30 sn)"); after a message it says how long the next one waits ("Göndermek için 12 saniye
+// bekle"), and with words in the field the line under it counts the seconds down ("12 sn") while the
+// send button stays off; the text waits in the field.
 import { Check, Info, LockSimple, PaperPlaneRight, PencilSimple, X } from "@phosphor-icons/react";
 import type { Sticker as StickerData } from "@pl/stickers";
 import { cn, IconButton } from "@pl/ui";
@@ -45,6 +50,7 @@ import { useChatExtras, useChatHasExtras, useLinkRules, useStickerSets } from ".
 import { holdFocus } from "./focus";
 import { domainOf, ruleWords, SiteIcon, shapeOf } from "./link-ui";
 import { type Quoted, ReplyStrip } from "./reply";
+import { slowLeft, slowUntil, slowWords } from "./slow";
 import {
   CHAT_COUNT_FROM,
   CHAT_TEXT_MAX,
@@ -160,6 +166,7 @@ export function Composer({
   replyQuote = null,
   onCancelReply = () => {},
   othersOnline = true,
+  slow = 0,
 }: {
   conv: string;
   /** Crew chat: the quick replies show. */
@@ -187,6 +194,8 @@ export function Composer({
   replyTo?: ChatMessage | null;
   replyQuote?: Quoted | null;
   onCancelReply?: () => void;
+  /** CHAT-CALM: the crew's slow mode for the player (seconds; 0: none, or they lead it). */
+  slow?: number;
 }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
@@ -214,6 +223,30 @@ export function Composer({
   const writingZoom = useChatTextSize((s) => writingZoomOf(s.size));
   // A reply waits only while the player writes a new message (an edit keeps its own link).
   const reply = editing ? null : replyTo;
+  // CHAT-CALM: "Yavaş mod" counts from the player's newest message here; a clock ticks only while
+  // the wait lasts.
+  const messages = useChat((s) => (slow > 0 ? s.threads[conv]?.messages : undefined));
+  const slowEnds = slowUntil(messages, slow);
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (slowEnds === null) return;
+    let timer = 0;
+    const tick = () => {
+      const now = Date.now();
+      setClock(now);
+      // The next tick lands where the whole seconds shown change, the last one on the end itself.
+      const left = slowEnds - now;
+      if (left > 0) timer = window.setTimeout(tick, left % 1_000 || 1_000);
+    };
+    tick();
+    return () => window.clearTimeout(timer);
+  }, [slowEnds]);
+  const wait = editing ? 0 : slowLeft(slowEnds, clock);
+  // The slow mode's sentence (a sticker or Enter while waiting) goes once the wait is over.
+  const slowFailure = t("chatCalm.slow.failure");
+  useEffect(() => {
+    if (wait === 0) setError((current) => (current === slowFailure ? null : current));
+  }, [wait, slowFailure]);
 
   // An edit starts with the message's text, the caret at its end, however it started: the menu
   // that started it may close after this and must not take the focus away (focus.ts). An edit
@@ -267,8 +300,9 @@ export function Composer({
 
   const problem = problemOf(text, links, hasExtras, limitedLinks);
   const length = chatLength(text);
-  // An edit with its text unchanged has nothing to save.
-  const ready = hasText(text) && !problem && !busy && (!editing || text.trim() !== editing.text);
+  // An edit with its text unchanged has nothing to save; a new message waits out the slow mode.
+  const ready =
+    hasText(text) && !problem && !busy && wait === 0 && (!editing || text.trim() !== editing.text);
 
   // The card of the link being written, after a pause (only links that may go).
   const [card, setCard] = useState<ChatCard | null>(null);
@@ -328,6 +362,10 @@ export function Composer({
   };
 
   const sendSticker = async (sticker: StickerData) => {
+    if (wait > 0) {
+      setError(slowFailure);
+      return;
+    }
     setError(null);
     const answering = reply?.id;
     onCancelReply();
@@ -342,6 +380,7 @@ export function Composer({
 
   const send = async (value: string, fromChip = false) => {
     if (!hasText(value) || problemOf(value, links, hasExtras, limitedLinks)) return;
+    if (wait > 0 && !editing) return;
     setError(null);
     if (editing) {
       if (editing.id === undefined) return;
@@ -376,10 +415,17 @@ export function Composer({
     }
   };
 
+  // Enter or the button: the message goes, or while the slow mode lasts the line under the field
+  // says why it waits (the text stays).
+  const sendNow = () => {
+    if (ready) void send(text);
+    else if (wait > 0 && hasText(text)) setError(slowFailure);
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      if (ready) void send(text);
+      sendNow();
       return;
     }
     if (event.key === "ArrowUp" && !editing && !text) {
@@ -396,7 +442,7 @@ export function Composer({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (ready) void send(text);
+    sendNow();
     // Sent with the button: the field keeps the focus for the next message.
     field.current?.focus({ preventScroll: true });
   };
@@ -417,6 +463,8 @@ export function Composer({
                 ? t(`chat2.links.rules.${ruleWords(problem.link)}`)
                 : t("chat.composer.link"));
   const showCount = length >= CHAT_COUNT_FROM;
+  // CHAT-CALM: the empty field's hint says the wait; with words in it the line under the field does.
+  const waitShown = wait > 0 && hasText(text);
   const stickers = extras.stickers && stickerSets.includes("pl1") && !editing;
 
   if (state.kind === "closed") {
@@ -461,8 +509,9 @@ export function Composer({
           aria-label={t("chat.chips.label")}
           className={cn(
             "m-0 mb-2 flex min-w-0 flex-wrap gap-1.5 border-0 p-0 transition-opacity duration-150",
-            draft ? "pointer-events-none opacity-0" : "opacity-100",
+            draft ? "pointer-events-none opacity-0" : wait > 0 ? "opacity-40" : "opacity-100",
           )}
+          disabled={wait > 0}
           aria-hidden={draft ? true : undefined}
         >
           {CHIPS.map((chip) => (
@@ -542,8 +591,19 @@ export function Composer({
           onBlur={remember}
           aria-label={t("chat.composer.label")}
           aria-invalid={reason ? true : undefined}
-          aria-describedby={reason || showCount ? `composer-${conv}` : undefined}
-          placeholder={crew ? t("chat.composer.placeholderCrew") : t("chat.composer.placeholder")}
+          aria-describedby={reason || showCount || waitShown ? `composer-${conv}` : undefined}
+          placeholder={
+            wait > 0
+              ? t("chatCalm.slow.wait", { count: wait })
+              : slow > 0 && !editing
+                ? t("chatCalm.slow.placeholder", {
+                    text: t("chat.composer.placeholderCrew"),
+                    time: slowWords(t, slow),
+                  })
+                : crew
+                  ? t("chat.composer.placeholderCrew")
+                  : t("chat.composer.placeholder")
+          }
           maxLength={4_000}
           className="min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3.5 text-[13.5px] leading-5 text-bone-50 outline-none placeholder:text-ash-500 [scrollbar-width:thin]"
           style={{ height: LINE + PAD * 2, zoom: writingZoom }}
@@ -563,7 +623,13 @@ export function Composer({
           disabled={!ready}
           // A press leaves the focus (and the caret) in the field.
           onMouseDown={(event) => event.preventDefault()}
-          aria-label={editing ? t("chat.actions.save") : t("chat.actions.send")}
+          aria-label={
+            editing
+              ? t("chat.actions.save")
+              : wait > 0
+                ? t("chatCalm.slow.wait", { count: wait })
+                : t("chat.actions.send")
+          }
           className={cn(
             "group/send relative mb-[3px] inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md outline-none",
             "transition-[transform,scale,color] duration-150 ease-out active:scale-[0.94] focus-visible:ring-2 focus-visible:ring-gold-300",
@@ -588,8 +654,8 @@ export function Composer({
           </span>
         </button>
       </div>
-      {/* As tall as one line of words, empty or not: a reason or the text size coming and going
-          moves nothing. */}
+      {/* As tall as one line of words, empty or not: a reason, the text size or the slow mode's
+          seconds coming and going move nothing. */}
       <div
         id={`composer-${conv}`}
         className="flex min-h-[24px] items-start justify-between gap-3 px-1 pt-1.5 text-[12px]"
@@ -614,12 +680,16 @@ export function Composer({
         <span
           className={cn(
             "shrink-0 tabular-nums transition-opacity duration-150",
-            showCount ? "opacity-100" : "opacity-0",
-            length > CHAT_TEXT_MAX ? "text-flare-300" : "text-ash-400",
+            showCount || waitShown ? "opacity-100" : "opacity-0",
+            !waitShown && length > CHAT_TEXT_MAX ? "text-flare-300" : "text-ash-400",
           )}
-          aria-hidden={!showCount}
+          aria-hidden={!(showCount || waitShown)}
         >
-          {t("chat.composer.count", { count: length })}
+          {/* CHAT-CALM: with words in the field (the hint is gone) the slow mode's seconds stand
+              where the count would, under the send button. */}
+          {waitShown
+            ? t("units.seconds", { seconds: wait })
+            : t("chat.composer.count", { count: length })}
         </span>
       </div>
     </form>

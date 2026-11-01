@@ -71,6 +71,7 @@ import { quickReactions, REACTION_WINDOW_MS, reactVerdict, withMyReaction } from
 import { type Quoted, quotedOf } from "./reply";
 import { READ_AFTER_MS, seenKey } from "./seen";
 import type { ChatPerson } from "./sender-name";
+import { slowFor } from "./slow";
 import { useChatTextSize } from "./text-size";
 import {
   DEFAULT_TEXT_SIZE,
@@ -497,6 +498,8 @@ export function Conversation({
     const id = crewOf(conv);
     return id ? s.view.crews.find((c) => c.id === id) : undefined;
   });
+  // CHAT-CALM: the crew's "Yavaş mod" for the player (none for its leader and moderators).
+  const slow = slowFor(liveTeam);
 
   // Every snapshot of the friends service brings new objects: what the rows read of it stays the
   // same object while it says the same, so a presence change or a new unread count draws no row.
@@ -1225,6 +1228,7 @@ export function Conversation({
           replyQuote={replyQuote}
           onCancelReply={() => setReplying(conv, null)}
           othersOnline={othersOnline}
+          slow={slow}
         />
       </div>
     </div>

@@ -432,6 +432,7 @@ function team(v: TeamView): SocialTeam {
     hidden: v.hidden,
     badgeRequests: v.badgeRequests,
     wearers: v.wearers,
+    slow: v.slow,
   };
 }
 
@@ -486,6 +487,7 @@ export function crewFeatures(list: readonly string[]): CrewFeatures {
     badges: list.includes("badges"),
     // Requests from a tag only with the tags themselves.
     badgeRequests: list.includes("badges") && list.includes("badgeRequests"),
+    slow: list.includes("slow"),
   };
 }
 
@@ -567,6 +569,8 @@ function notice(v: NoticeBinding): SocialNotice {
       return { kind: "requestAccepted", crew: v.crew, name: v.name };
     case "crewPlan":
       return { kind: "crewPlan", plan: plan(v.plan) };
+    case "crowdedCrewMuted":
+      return { kind: "crowdedCrewMuted", crew: v.crew };
     case "chatMessage":
       return {
         kind: "chatMessage",
@@ -792,6 +796,9 @@ export const tauriSocial: SocialApi = {
   setTeamLink: (teamId, on) => ok(commands.socialTeamLink(teamId, on)),
   async setJoinMode(teamId, join) {
     await ok(commands.socialTeamJoinMode(teamId, join));
+  },
+  async setTeamSlow(teamId, seconds) {
+    await ok(commands.socialTeamSlow(teamId, seconds));
   },
   // TEAM6 (pl-social): sent only while `teamFeatures` lists them (the interface shows nothing of
   // them otherwise); "Geri al" is the same call with the old value.

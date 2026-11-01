@@ -5,15 +5,18 @@
 export const trChatCalm = {
   newMessages_one: "{{count}} yeni mesaj",
   newMessages_other: "{{count}} yeni mesaj",
-  crowded: "{{crew}} kalabalık olduğu için sessizde.",
+  crowded: "{{crew}} kalabalık, bu yüzden senin için sessize alındı.",
+  // The crew page's section of the chat's rules (the leader and moderators).
+  chatTitle: "Sohbet",
   slow: {
     title: "Yavaş mod",
     off: "Kapalı",
     spanSeconds_one: "{{count}} saniye",
     spanSeconds_other: "{{count}} saniye",
     placeholder: "{{text}} (yavaş mod: {{time}})",
-    wait_one: "{{count}} saniye sonra yazabilirsin",
-    wait_other: "{{count}} saniye sonra yazabilirsin",
+    // Writing goes on meanwhile; only sending waits.
+    wait_one: "Göndermek için {{count}} saniye bekle",
+    wait_other: "Göndermek için {{count}} saniye bekle",
     failure: "Yavaş mod açık. Biraz bekle.",
     onLine: "Üyeler iki mesaj arasında {{time}} bekler.",
     offLine: "Üyeler beklemeden yazar.",

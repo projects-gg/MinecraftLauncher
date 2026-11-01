@@ -248,6 +248,40 @@
       "event": { "kind": "invite", "quiet": false },
       "situation": { "status": "dnd" },
       "heard": false
+    },
+    {
+      "name": "a reply to the player is heard while crew chat notifications are off",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1", "toMe": true },
+      "heard": true
+    },
+    {
+      "name": "a reply to the player is heard in a crew muted for them",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1", "toMe": true },
+      "situation": { "crewChat": true, "crews": [{ "id": "t1", "muted": true, "muteUntil": null }] },
+      "heard": true
+    },
+    {
+      "name": "a reply to the player is heard while every crew is muted",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1", "toMe": true },
+      "situation": { "service": { "calls": true, "muted": true, "muteUntil": null }, "crews": [{ "id": "t1" }] },
+      "heard": true
+    },
+    {
+      "name": "a reply to the player stays quiet where that chat is muted here",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1", "toMe": true },
+      "situation": { "chatMutes": { "c:t1": null } },
+      "heard": false
+    },
+    {
+      "name": "do not disturb silences a reply to the player",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1", "toMe": true },
+      "situation": { "status": "dnd" },
+      "heard": false
+    },
+    {
+      "name": "the player's own reply on another device is never news",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1", "toMe": true, "mine": true },
+      "heard": false
     }
   ]
 }
