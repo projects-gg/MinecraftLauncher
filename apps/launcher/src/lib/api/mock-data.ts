@@ -2,6 +2,7 @@
 // `localStorage["pl.mock.pickFolder"]` overrides the folder the picker returns (screenshots):
 // a name with "Dolu" fails like a full folder, "Küçük" lacks space.
 // `localStorage["pl.mock.unreachable"]` pretends a moved folder on that path is missing.
+// `localStorage["pl.mock.resetBlocked"] = "afk"` refuses "Launcher'ı sıfırla" as AFK accounts do.
 import type { DataApi, DataOverview, MoveProgress } from "./data-types";
 import { pick } from "./mock-lang";
 
@@ -107,6 +108,18 @@ export function createMockData(): DataApi {
     },
     async cancelMove() {
       cancelled = true;
+    },
+    async reset() {
+      await delay(500);
+      if (localStorage.getItem("pl.mock.resetBlocked") === "afk") {
+        throw new MockDataError(
+          "SIFIRLA-AFK",
+          pick(
+            "AFK hesapların açıkken launcher sıfırlanamaz. Önce onları durdur.",
+            "You can't reset the launcher while AFK accounts are on. Stop them first.",
+          ),
+        );
+      }
     },
   };
 }
