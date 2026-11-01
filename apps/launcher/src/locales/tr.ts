@@ -8,6 +8,7 @@ import { trAfkPanelSize } from "./tr-afk-panel-size";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trAfkPlus } from "./tr-afkplus";
 import { trAutojoin } from "./tr-autojoin";
+import { trBadges } from "./tr-badges";
 import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
 import { trChatProd } from "./tr-chat-prod";
@@ -116,6 +117,7 @@ export const tr = {
   chat2: trChat2,
   team6: trTeam6,
   verify: trVerify,
+  badges: trBadges,
   cloudAfk: trCloudAfk,
   cloudAfkFeat: trCloudAfkFeat,
   cloudAfkMove: trCloudAfkMove,
