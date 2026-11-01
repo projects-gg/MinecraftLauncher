@@ -145,10 +145,19 @@ describe("profile names", () => {
   it("follows the service's rules", () => {
     expect(cleanName("  Gece   Kurdu ")).toBe("Gece Kurdu");
     expect(cleanName("ÇılgınÖğrenci_7")).toBe("ÇılgınÖğrenci_7");
-    expect(cleanName("Kâmil")).toBe("Kâmil");
     expect(cleanName("x1_")).toBe("x1_");
     expect(cleanName("abcdefghijklmnop")).toBe("abcdefghijklmnop");
-    for (const bad of ["ab", "a_ _", "_a_", "abcdefghijklmnopq", "Ayşe!", "tab\tname", "José"]) {
+    // The service takes no circumflexed letters ("Kâmil").
+    for (const bad of [
+      "ab",
+      "a_ _",
+      "_a_",
+      "abcdefghijklmnopq",
+      "Ayşe!",
+      "tab\tname",
+      "José",
+      "Kâmil",
+    ]) {
       expect(cleanName(bad), bad).toBeNull();
     }
   });

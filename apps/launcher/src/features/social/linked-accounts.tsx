@@ -278,8 +278,16 @@ export function LinkedAccountsSection({ me }: { me: SocialMe }) {
     if (!cue) return;
     section.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
   }, [cue, reduce]);
-  // Leaving the settings forgets what went wrong.
-  useEffect(() => () => setFailure(null), [setFailure]);
+  // Leaving the settings forgets what went wrong, also what an answer still on its way would say
+  // (after a sign-out it would show to the next account).
+  const shown = useRef(true);
+  useEffect(() => {
+    shown.current = true;
+    return () => {
+      shown.current = false;
+      setFailure(null);
+    };
+  }, [setFailure]);
   const closeRemoval = () => setRemoval((now) => ({ ...now, open: false }));
 
   const step = async (run: () => Promise<IdentityStep>, provider: SocialProvider) => {
@@ -287,7 +295,9 @@ export function LinkedAccountsSection({ me }: { me: SocialMe }) {
     setFailure(null);
     const answer = await run().catch((): IdentityStep => ({ kind: "refused", reason: "failed" }));
     setBusy(false);
-    if (answer.kind === "refused") setFailure({ provider, reason: answer.reason });
+    if (answer.kind === "refused" && shown.current) {
+      setFailure({ provider, reason: answer.reason });
+    }
   };
 
   return (

@@ -1875,6 +1875,10 @@ pub enum ChatQuota {
     Unfurls,
     /// The crew chat's slow mode: the player's next message waits `retryAfter` (CHAT-CALM).
     Slow,
+    /// SOC-ID: the day's profile name changes (3), named by a REST answer's `item`.
+    NameChanges,
+    /// SOC-ID: the day's ways in linked or removed (5), named by a REST answer's `item`.
+    IdentityChanges,
     Other,
 }
 

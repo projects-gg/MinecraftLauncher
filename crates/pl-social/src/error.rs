@@ -478,9 +478,15 @@ pub(crate) fn from_response(status: u16, retry_after: Option<&str>, body: &[u8])
     });
     match (status, envelope) {
         (401, _) => SocialError::Unauthorized,
-        (429, _) => SocialError::RateLimited {
+        (429, body) => SocialError::RateLimited {
             retry_after,
-            item: None,
+            // SOC-ID's daily quotas name themselves; a minute's flood limit answers 429 too, and
+            // every other answer keeps no item, as before.
+            item: match body.and_then(|body| body.item).as_deref() {
+                Some("name_changes") => Some(ChatQuota::NameChanges),
+                Some("identity_changes") => Some(ChatQuota::IdentityChanges),
+                _ => None,
+            },
         },
         (412, Some(body)) => SocialError::SettingsConflict {
             current: body.current,

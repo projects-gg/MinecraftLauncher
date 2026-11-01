@@ -271,6 +271,16 @@ struct PendingIdentity {
     verifier: String,
     /// The page the browser shows ("Tarayıcıyı yeniden aç").
     url: Url,
+    /// Its link came back and the claim is on its way: the change still waits (the settings
+    /// keep showing it until the answer), and another copy of the link changes nothing.
+    claiming: bool,
+}
+
+/// What a claim of a link or a removal needs ([`SocialService::claim_identity`]).
+struct ClaimedIdentity {
+    provider: Provider,
+    unlink: bool,
+    verifier: String,
 }
 
 /// A change of the player's picture, status or privacy switches the service has not answered yet.
@@ -962,14 +972,27 @@ impl SocialService {
         };
         enum Waiting {
             SignIn(LoginAttempt, SocialClient, u64),
-            Identity(PendingIdentity, u64),
+            Identity(ClaimedIdentity, u64),
         }
         let waiting = {
             let mut core = self.lock();
-            if core.identity.is_some() && core.auth == AuthPhase::SignedIn {
-                core.identity
-                    .take()
-                    .map(|change| Waiting::Identity(change, core.generation))
+            let generation = core.generation;
+            if core.auth == AuthPhase::SignedIn
+                && let Some(change) = core.identity.as_mut()
+            {
+                // The change keeps waiting until the claim answers, so the settings never show
+                // its buttons in between; the link's second copy has no claim of its own.
+                (!change.claiming).then(|| {
+                    change.claiming = true;
+                    Waiting::Identity(
+                        ClaimedIdentity {
+                            provider: change.provider,
+                            unlink: change.unlink,
+                            verifier: change.verifier.clone(),
+                        },
+                        generation,
+                    )
+                })
             } else {
                 match (core.login.take(), core.client.clone()) {
                     (Some(attempt), Some(client)) => {
@@ -985,7 +1008,6 @@ impl SocialService {
                 self.spawn(async move { service.claim(generation, client, attempt, code).await });
             }
             Some(Waiting::Identity(change, generation)) => {
-                self.emit_view();
                 let service = self.clone();
                 self.spawn(async move { service.claim_identity(generation, change, code).await });
             }
@@ -2564,12 +2586,14 @@ impl SocialService {
                             reason: IdentityFailure::Failed,
                         };
                     }
-                    // A newer change takes the place of one still waiting.
+                    // A newer change takes the place of one still waiting (a claim on its way
+                    // then leaves it be: [`Self::claim_identity`]).
                     core.identity = Some(PendingIdentity {
                         provider,
                         unlink,
                         verifier,
                         url: url.clone(),
+                        claiming: false,
                     });
                 }
                 self.emit_view();
@@ -2579,7 +2603,7 @@ impl SocialService {
             }
             Ok((IdentityAnswer::Done(me), generation)) => {
                 if self.lock().generation == generation {
-                    self.own_change(generation, *me, provider, false);
+                    self.own_change(generation, *me, provider, false, None);
                 }
                 IdentityStep::Done
             }
@@ -2601,23 +2625,36 @@ impl SocialService {
         }
     }
 
-    async fn claim_identity(&self, generation: u64, change: PendingIdentity, code: String) {
-        let PendingIdentity {
+    async fn claim_identity(&self, generation: u64, change: ClaimedIdentity, code: String) {
+        let ClaimedIdentity {
             provider,
             unlink,
             verifier,
-            ..
         } = change;
-        let answer = self
-            .call(|session| async move { session.claim_identity(&verifier, &code).await })
-            .await;
+        let claimed = verifier.clone();
+        // Only the sign-in that started the change sends its verifier.
         if self.lock().generation != generation {
             return;
         }
+        let answer = self
+            .call(|session| async move { session.claim_identity(&verifier, &code).await })
+            .await;
         match answer {
-            Ok((me, _)) => self.own_change(generation, me, provider, !unlink),
+            Ok((me, sent)) if sent == generation => {
+                self.own_change(generation, me, provider, !unlink, Some(claimed));
+            }
+            // Answered for another sign-in: nothing of it shows.
+            Ok(_) => {}
             Err(error) => {
                 tracing::info!(%error, "a link or a removal did not finish");
+                {
+                    let mut core = self.lock();
+                    if core.generation != generation {
+                        return;
+                    }
+                    finish_identity(&mut core, &claimed);
+                }
+                self.emit_view();
                 self.notify(SocialNotice::IdentityFailed {
                     provider,
                     unlink,
@@ -2628,8 +2665,18 @@ impl SocialService {
     }
 
     /// A link (`linked`) or a removal this launcher made went through: the profile it brought
-    /// shows, and its note about the change is seen here at once (other devices show it).
-    fn own_change(&self, generation: u64, me: Me, provider: Provider, linked: bool) {
+    /// shows, together with the end of the change that waited for it (`claimed`: its verifier).
+    /// Its note about the change is no news here and stays hidden in this run, but it is never
+    /// marked seen at the service: that would take it from the account's other devices, where it
+    /// is the warning about a way in someone else added or removed.
+    fn own_change(
+        &self,
+        generation: u64,
+        me: Me,
+        provider: Provider,
+        linked: bool,
+        claimed: Option<String>,
+    ) {
         let kind = if linked {
             NoticeKind::IdentityLinked
         } else {
@@ -2644,21 +2691,13 @@ impl SocialService {
             .map(|notice| notice.id.clone())
             .collect();
         self.update(generation, |core| {
+            if let Some(verifier) = &claimed {
+                finish_identity(core, verifier);
+            }
             core.state.set_me(me);
             core.state.notices_seen(&ids);
         });
         self.notify(SocialNotice::IdentityChanged { provider, linked });
-        if !ids.is_empty() {
-            let service = self.clone();
-            self.spawn(async move {
-                if let Err(error) = service
-                    .call(|session| async move { session.notices_seen(&ids).await })
-                    .await
-                {
-                    tracing::info!(%error, "the note's seen mark waits for the next start");
-                }
-            });
-        }
     }
 
     /// The profile name ("Profil adı", and the name step of a new account): checked here as the
@@ -3968,6 +4007,18 @@ fn lookup_view(lookup: TeamLookup, code: String, link: Option<String>) -> TeamLo
 
 /// The invites this account answered or closed in an earlier run stay closed (once the profile
 /// says whose they are).
+/// The claimed link or removal (by its verifier) waits no more (SOC-ID); a newer change that took
+/// its place meanwhile stays.
+fn finish_identity(core: &mut Core, verifier: &str) {
+    if core
+        .identity
+        .as_ref()
+        .is_some_and(|change| change.verifier == verifier)
+    {
+        core.identity = None;
+    }
+}
+
 fn remember_closed_invites(core: &mut Core) {
     let (Some(file), Some(me)) = (&core.closed_invites, core.state.me()) else {
         return;
@@ -7640,6 +7691,7 @@ mod tests {
     async fn links_and_removes_ways_in_through_the_browser() {
         let challenge = Arc::new(Mutex::new(None::<String>));
         let seen = Arc::new(AtomicBool::new(false));
+        let claims = Arc::new(AtomicUsize::new(0));
         let elsewhere = Arc::new(AtomicBool::new(true));
         let both = me_with(
             r#""discordId":"123456789012345678","identities":[{"provider":"discord",
@@ -7651,6 +7703,7 @@ mod tests {
         let server = MockServer::start({
             let challenge = challenge.clone();
             let seen = seen.clone();
+            let claims = claims.clone();
             let elsewhere = elsewhere.clone();
             move |req| {
                 presence_refused(&req.path).unwrap_or_else(|| {
@@ -7674,6 +7727,7 @@ mod tests {
                             )
                         }
                         ("POST", "/v1/me/identities/claim") => {
+                            claims.fetch_add(1, Ordering::SeqCst);
                             let body = req.json();
                             let verifier = body["verifier"].as_str().unwrap();
                             assert_eq!(Some(challenge_for(verifier)), *challenge.lock().unwrap());
@@ -7685,7 +7739,6 @@ mod tests {
                             MockReply::json(200, &format!(r#"{{"me":{ME}}}"#))
                         }
                         ("POST", "/v1/me/notices/seen") => {
-                            assert_eq!(req.json()["ids"][0], "n-link");
                             seen.store(true, Ordering::SeqCst);
                             MockReply::empty(204)
                         }
@@ -7743,18 +7796,20 @@ mod tests {
             (change.provider, change.unlink),
             (Provider::Microsoft, false)
         );
-        assert!(
-            harness
-                .service
-                .complete_sign_in(&format!("projects://auth/done?c={}", "D".repeat(43)))
-        );
+        let back = format!("projects://auth/done?c={}", "D".repeat(43));
+        assert!(harness.service.complete_sign_in(&back));
+        // The change waits until the claim answers (its buttons never come back in between),
+        // and the link's second copy claims nothing.
+        assert!(harness.service.view().identity_change.is_some());
+        assert!(harness.service.complete_sign_in(&back));
         let view = harness
             .until("linked", |view| {
                 view.me.as_ref().is_some_and(|me| me.identities.len() == 2)
             })
             .await;
         assert!(view.identity_change.is_none());
-        // This launcher made the change: its note never shows here, and the service hears so.
+        assert_eq!(claims.load(Ordering::SeqCst), 1);
+        // This launcher made the change: its note never shows here.
         assert!(view.notices.is_empty());
         noticed(&harness, "linked", |notice| {
             *notice
@@ -7764,11 +7819,6 @@ mod tests {
                 }
         })
         .await;
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !seen.load(Ordering::SeqCst) {
-            assert!(Instant::now() < deadline, "the note was not marked seen");
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
 
         // A removal with a fresh proof: done at once.
         assert_eq!(
@@ -7784,6 +7834,8 @@ mod tests {
                 }
         })
         .await;
+        // Its note stays at the service: the account's other devices still show it.
+        assert!(!seen.load(Ordering::SeqCst));
     }
 
     #[tokio::test]

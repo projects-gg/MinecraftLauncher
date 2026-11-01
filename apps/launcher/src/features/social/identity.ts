@@ -171,8 +171,8 @@ export function linkedDate(linkedOn: string, lang: "tr" | "en", nowMs = Date.now
     : `${day} ${TR_MONTHS[month - 1]} ${year}${yearIn(year)}`;
 }
 
-/** Turkish letters a name may hold besides `a`–`z` (and the circumflexed ones of Turkish words). */
-const TURKISH_LETTERS = "çğıöşüâîûÇĞİÖŞÜÂÎÛ";
+/** Turkish letters a name may hold besides `a`–`z`: the service's twelve (no circumflexed ones). */
+const TURKISH_LETTERS = "çğıöşüÇĞİÖŞÜ";
 
 function nameLetter(c: string): boolean {
   return /^[A-Za-z0-9]$/.test(c) || TURKISH_LETTERS.includes(c);

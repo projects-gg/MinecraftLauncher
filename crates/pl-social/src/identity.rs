@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::error::{ErrorCode, SocialError};
-use crate::model::Me;
+use crate::model::{ChatQuota, Me};
 
 /// A way into a Projects account.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, specta::Type)]
@@ -303,7 +303,11 @@ pub enum IdentityFailure {
 impl IdentityFailure {
     pub fn of(error: &SocialError) -> Self {
         match error {
-            SocialError::RateLimited { .. } => Self::TooMany,
+            // The day's changes ran out; a minute's flood limit answers 429 too and is no "today".
+            SocialError::RateLimited {
+                item: Some(ChatQuota::IdentityChanges),
+                ..
+            } => Self::TooMany,
             SocialError::Unavailable { .. } | SocialError::Network(_) => Self::Offline,
             _ => match error.code() {
                 Some(ErrorCode::ProviderOff) => Self::ProviderOff,
@@ -353,7 +357,11 @@ pub enum NameResult {
 impl NameResult {
     pub fn of(error: &SocialError) -> Self {
         match error {
-            SocialError::RateLimited { .. } => Self::TooMany,
+            // As for the ways in: only the day's own quota is "today".
+            SocialError::RateLimited {
+                item: Some(ChatQuota::NameChanges),
+                ..
+            } => Self::TooMany,
             SocialError::Unavailable { .. } | SocialError::Network(_) => Self::Offline,
             SocialError::InvalidInput("name") => Self::Invalid,
             _ => match error.code() {
@@ -366,8 +374,8 @@ impl NameResult {
     }
 }
 
-/// Turkish letters a name may hold besides `a`–`z` (and the circumflexed ones of Turkish words).
-const TURKISH_LETTERS: &str = "çğıöşüâîûÇĞİÖŞÜÂÎÛ";
+/// Turkish letters a name may hold besides `a`–`z`: the service's twelve (no circumflexed ones).
+const TURKISH_LETTERS: &str = "çğıöşüÇĞİÖŞÜ";
 
 fn name_letter(c: char) -> bool {
     c.is_ascii_alphanumeric() || TURKISH_LETTERS.contains(c)
@@ -598,7 +606,8 @@ mod tests {
             (403, "proof_failed", IdentityFailure::ProofFailed),
             (403, "identity_unavailable", IdentityFailure::Unavailable),
             (404, "auth_pending_not_found", IdentityFailure::Expired),
-            (429, "rate_limited", IdentityFailure::TooMany),
+            // A minute's flood limit is no "today" (the day's own quota names itself, below).
+            (429, "rate_limited", IdentityFailure::Failed),
             (503, "unavailable", IdentityFailure::Offline),
             (400, "bad_request", IdentityFailure::Failed),
         ] {
@@ -608,6 +617,27 @@ mod tests {
                 "{code}"
             );
         }
+        let quota = |item: &str| {
+            crate::error::from_response(
+                429,
+                Some("3600"),
+                format!(r#"{{"error":{{"code":"rate_limited","message":"x","item":"{item}"}}}}"#)
+                    .as_bytes(),
+            )
+        };
+        assert_eq!(
+            IdentityFailure::of(&quota("identity_changes")),
+            IdentityFailure::TooMany
+        );
+        assert_eq!(
+            IdentityFailure::of(&quota("name_changes")),
+            IdentityFailure::Failed
+        );
+        assert_eq!(NameResult::of(&quota("name_changes")), NameResult::TooMany);
+        assert_eq!(
+            NameResult::of(&quota("identity_changes")),
+            NameResult::Failed
+        );
         assert_eq!(
             IdentityFailure::of(&SocialError::Network("down".into())),
             IdentityFailure::Offline
@@ -630,7 +660,7 @@ mod tests {
                 retry_after: Some(Duration::from_secs(60)),
                 item: None,
             }),
-            NameResult::TooMany
+            NameResult::Failed
         );
         assert_eq!(
             NameResult::of(&refused(500, "internal")),
@@ -645,7 +675,8 @@ mod tests {
             clean_name("ÇılgınÖğrenci_7"),
             Some("ÇılgınÖğrenci_7".into())
         );
-        assert_eq!(clean_name("Kâmil"), Some("Kâmil".into()));
+        // The service takes no circumflexed letters.
+        assert_eq!(clean_name("Kâmil"), None);
         assert_eq!(clean_name("ab"), None);
         assert_eq!(clean_name("a_ _"), None);
         assert_eq!(clean_name("_a_"), None);
