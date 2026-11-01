@@ -12,8 +12,8 @@ use crate::model::{
     FriendRequest, FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinRequest, Limits, Me, ModNotice,
     NoticeKind, ProfileMark, PublicProfile, RequestOutcome, SettingsMeta,
     TEAM_FEATURE_BADGE_REQUESTS, TEAM_FEATURE_BADGES, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
-    TEAM_FEATURE_PLAN_NOTES, Team, TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications,
-    TeamRequest, TeamRole, TeamsOverview, crews_of,
+    TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_SLOW, Team, TeamAnswer, TeamExit, TeamInvite, TeamMember,
+    TeamNotifications, TeamRequest, TeamRole, TeamsOverview, crews_of,
 };
 use crate::presence::{PresenceEvent, StopReason};
 use crate::protocol::{
@@ -391,7 +391,15 @@ impl SocialState {
             PresenceEvent::CrewMuted {
                 crew,
                 notifications,
-            } => self.set_crew_mute(crew, *notifications),
+                crowded,
+            } => {
+                self.set_crew_mute(crew, *notifications);
+                // The service muted a crowded crew for the newcomer (CHAT-CALM): said once, with
+                // "Sesi aç".
+                if *crowded && notifications.muted {
+                    notices.push(SocialNotice::CrowdedCrewMuted { crew: crew.clone() });
+                }
+            }
             PresenceEvent::CrewOrder(order) => self.set_crew_order(order),
             PresenceEvent::Call { call, quiet, clock } => {
                 self.prune_calls(now);
@@ -1751,6 +1759,11 @@ impl SocialState {
             hidden: badges && team.hidden,
             badge_requests: team.badge_requests,
             wearers: u32::try_from(wearers).unwrap_or(u32::MAX),
+            slow: if self.offers(TEAM_FEATURE_SLOW) {
+                team.slow
+            } else {
+                0
+            },
         })
     }
 
@@ -2715,6 +2728,7 @@ mod tests {
             link: None,
             hidden: false,
             badge_requests: true,
+            slow: 0,
         }
     }
 
@@ -3403,20 +3417,41 @@ mod tests {
         // An order that names one crew only puts it first; the rest keep theirs.
         state.set_crew_order(&[CREW_A.into()]);
         assert_eq!(crew_ids(&state), vec![CREW_A, CREW_B]);
-        // One crew muted for an hour on another device; it ends by itself.
-        state.apply(
+        // One crew muted for an hour on another device; it ends by itself. Nothing to say.
+        let notices = state.apply(
             &PresenceEvent::CrewMuted {
                 crew: CREW_B.into(),
                 notifications: CrewMute {
                     muted: true,
                     mute_until: Some(NOW + 3_600),
                 },
+                crowded: false,
             },
             NOW,
         );
+        assert!(notices.is_empty());
         let views = state.crew_views(NOW);
         assert!(views[1].notifications.muted && !views[0].notifications.muted);
         assert!(!state.crew_views(NOW + 3_600)[1].notifications.muted);
+        // CHAT-CALM: the service muted a crowded crew for the newcomer: said once.
+        let notices = state.apply(
+            &PresenceEvent::CrewMuted {
+                crew: CREW_A.into(),
+                notifications: CrewMute {
+                    muted: true,
+                    mute_until: None,
+                },
+                crowded: true,
+            },
+            NOW,
+        );
+        assert_eq!(
+            notices,
+            vec![SocialNotice::CrowdedCrewMuted {
+                crew: CREW_A.into()
+            }]
+        );
+        assert!(state.crew_views(NOW)[0].notifications.muted);
         // Without `multi` a service has one crew: the limit is one, whatever it says.
         let single = crewed();
         assert_eq!(single.crew_limit(), 1);
