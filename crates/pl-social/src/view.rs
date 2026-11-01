@@ -1408,6 +1408,27 @@ pub(crate) fn me_view(
 mod tests {
     use super::*;
 
+    /// The launcher reads SOC-ID's notices by these names (social-tauri.ts).
+    #[test]
+    fn identity_notices_go_out_in_camel_case() {
+        let signed_in = serde_json::to_value(SocialNotice::SignedIn {
+            restore: None,
+            ask_name: true,
+        })
+        .unwrap();
+        assert_eq!(signed_in["kind"], "signedIn");
+        assert_eq!(signed_in["askName"], true);
+        let failed = serde_json::to_value(SocialNotice::IdentityFailed {
+            provider: Provider::Microsoft,
+            unlink: true,
+            reason: IdentityFailure::ProofFailed,
+        })
+        .unwrap();
+        assert_eq!(failed["kind"], "identityFailed");
+        assert_eq!(failed["provider"], "microsoft");
+        assert_eq!(failed["reason"], "proofFailed");
+    }
+
     #[test]
     fn a_call_starts_only_on_a_multiplayer_server() {
         let playing = |host: &str| LocalStatus::Playing {
