@@ -11,6 +11,7 @@ import { isWebLink, openLink } from "@/lib/links";
 import { HomeBanners } from "./banners";
 import { NewsColumn } from "./news-column";
 import { HomeNotice, NOTICE_ENTER, useActiveStatus } from "./notice";
+import { StarLine } from "./star-line";
 
 /** The hero and news column rise in once per start (the boot moment); later visits to Home
  * arrive with the page cross-fade only. */
@@ -177,6 +178,7 @@ export function HomePage() {
             <LayoutGroup>
               <HomeBanners banners={data?.banners} />
               <FriendsHomeStrip />
+              <StarLine />
               <ConnectionStrip />
             </LayoutGroup>
           </motion.div>
