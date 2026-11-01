@@ -217,10 +217,21 @@ pub struct PackNotesView {
     pub changelog: String,
 }
 
+/// The season theme on the player's date (SEASON-AUTO, `pl_content::Theme::season_at`).
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SeasonView {
+    /// `none | halloween | winter | holiday | event`, or `unknown` for a newer Studio's look.
+    pub season: String,
+    /// When the look may change next (RFC 3339): the UI asks for the home content again then.
+    pub until: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct HomeView {
     pub hero: HeroView,
+    pub season: SeasonView,
     pub banners: Vec<BannerView>,
     /// Studio's and the news feed's events that have not ended, in event card order (the card
     /// shows the first): live ones first, ending soonest leading, then the soonest upcoming.
@@ -455,7 +466,13 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
         Some(v) => v.poster.as_deref(),
         None => hero.media.as_ref(),
     };
+    // The player's own date and time zone decide the season's days.
+    let season = snapshot.config.theme.season_at(&jiff::Zoned::now());
     HomeView {
+        season: SeasonView {
+            season: enum_str(&season.season),
+            until: season.until.map(|t| t.to_string()),
+        },
         hero: HeroView {
             image_path: media_path(state, image).await,
             video_path: media_path(state, video).await,
