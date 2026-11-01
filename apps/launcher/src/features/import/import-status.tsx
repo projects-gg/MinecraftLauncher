@@ -1,4 +1,4 @@
-import { CheckCircle, MinusCircle, WarningCircle } from "@phosphor-icons/react";
+import { CheckCircle, MinusCircle, Warning, WarningCircle } from "@phosphor-icons/react";
 import { Button, cn, Dialog, Progress, SwapLabel, toast } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
@@ -40,12 +40,33 @@ function lineText(
   return tidy(t(`import.${key}`, { ...params, from, at, what: words, What: capitalize(words) }));
 }
 
+/**
+ * Each mark has its own shape as well as its colour (IMPORT-POLISH): a jade check for what all
+ * came, the gold warning triangle for what came with something left behind (a warning, never the
+ * error's flare: design.md §2), the flare mark for what did not come, a quiet minus for nothing to do.
+ */
 const TONE_ICON: Record<Tone, { icon: typeof CheckCircle; className: string }> = {
   done: { icon: CheckCircle, className: "text-jade-400" },
-  partial: { icon: WarningCircle, className: "text-flare-400" },
+  partial: { icon: Warning, className: "text-gold-300" },
   failed: { icon: WarningCircle, className: "text-flare-400" },
   skipped: { icon: MinusCircle, className: "text-ash-400" },
 };
+
+/** A summary line's mark (also the v1 launcher's summary and the status card). */
+export function ToneMark({
+  tone,
+  size = 18,
+  className,
+}: {
+  tone: Tone;
+  size?: number;
+  className?: string;
+}) {
+  const { icon: Icon, className: color } = TONE_ICON[tone];
+  return (
+    <Icon size={size} weight="fill" className={cn("shrink-0", color, className)} aria-hidden />
+  );
+}
 
 /**
  * "Geri al" for imported game settings: takes them back (`undo`), refreshes what showed them, and
@@ -103,11 +124,7 @@ export function SettingsUndoLine({
       <span className="relative mt-px size-[18px] shrink-0">
         <AnimatePresence initial={false} mode="popLayout">
           <motion.span key={undone ? "undone" : "came"} className="absolute inset-0" {...swap()}>
-            {undone ? (
-              <MinusCircle size={18} weight="fill" className="text-ash-400" aria-hidden />
-            ) : (
-              icon
-            )}
+            {undone ? <ToneMark tone="skipped" /> : icon}
           </motion.span>
         </AnimatePresence>
       </span>
@@ -137,7 +154,10 @@ export function SettingsUndoLine({
   );
 }
 
-/** What came over, item by item: done in jade, missing pieces in flare, the rest quiet. */
+/**
+ * What came over, item by item, each with its honest mark (`ToneMark`): all of it, some of it,
+ * none of it, or nothing to do.
+ */
 export function ImportSummary({ report }: { report: ImportReport }) {
   const { t } = useTranslation();
   const settingsUndo = useImportJob((s) => s.settingsUndo);
@@ -147,7 +167,6 @@ export function ImportSummary({ report }: { report: ImportReport }) {
   return (
     <ul className="space-y-2.5 pt-1">
       {lines.map((line: SummaryLine) => {
-        const { icon: Icon, className } = TONE_ICON[line.tone];
         // Where the worlds went reads as one list; the other follow-ups are sentences.
         const places = line.more
           .filter((m) => PLACE_KEYS.includes(m.key))
@@ -157,9 +176,6 @@ export function ImportSummary({ report }: { report: ImportReport }) {
           .filter((m) => !PLACE_KEYS.includes(m.key))
           .map((m) => lineText(t, m.key, m.params, m.what));
         const more = [places && `${places}.`, ...sentences].filter(Boolean).join(" ");
-        const icon = (
-          <Icon size={18} weight="fill" className={cn("mt-px shrink-0", className)} aria-hidden />
-        );
         const text = (
           <>
             {lineText(t, line.key, line.params, line.what, line.source)}
@@ -170,7 +186,7 @@ export function ImportSummary({ report }: { report: ImportReport }) {
           return (
             <SettingsUndoLine
               key={line.id}
-              icon={<Icon size={18} weight="fill" className={className} aria-hidden />}
+              icon={<ToneMark tone={line.tone} />}
               state={settingsUndo}
               onUndo={undo}
             >
@@ -180,7 +196,7 @@ export function ImportSummary({ report }: { report: ImportReport }) {
         }
         return (
           <li key={line.id} className="flex gap-2.5 text-[13.5px] leading-snug text-bone-100">
-            {icon}
+            <ToneMark tone={line.tone} className="mt-px" />
             <span className="min-w-0">{text}</span>
           </li>
         );
@@ -277,7 +293,6 @@ export function ImportStatusCard({ className }: { className?: string }) {
         : summaryTitle(report) === "titleCancelled"
           ? "skipped"
           : "partial";
-  const { icon: Icon, className: iconClass } = TONE_ICON[tone];
   return (
     <div
       role="status"
@@ -320,7 +335,7 @@ export function ImportStatusCard({ className }: { className?: string }) {
           </motion.div>
         ) : (
           <motion.div key="done" {...swap()} className="flex items-center gap-3">
-            <Icon size={20} weight="fill" className={cn("shrink-0", iconClass)} aria-hidden />
+            <ToneMark tone={tone} size={20} />
             <p className="min-w-0 flex-1 text-[13.5px] font-medium text-bone-50">{title}</p>
             <Button size="sm" variant="secondary" onClick={() => setSummaryOpen(true)}>
               {t("import.done.summary")}
