@@ -656,10 +656,13 @@ pub(crate) enum ServerMessage {
     TeamNotifications {
         notifications: TeamNotifications,
     },
-    /// The player's mute of one crew changed (on any of their devices).
+    /// The player's mute of one crew changed (on any of their devices). `crowded` (CHAT-CALM):
+    /// the service muted it because the player just joined it as one of many.
     CrewNotifications {
         crew: String,
         notifications: CrewMute,
+        #[serde(default)]
+        crowded: bool,
     },
     /// The player put their crews in another order on another device (the first is primary).
     CrewOrder {
@@ -1262,8 +1265,19 @@ mod tests {
         .unwrap();
         assert!(matches!(
             muted,
-            ServerMessage::CrewNotifications { crew, notifications }
+            ServerMessage::CrewNotifications { crew, notifications, crowded: false }
                 if crew == "0a1b2c3d4e5f6a7b" && notifications.mute_until == Some(1_792_600_000)
+        ));
+        // CHAT-CALM: a crowded crew muted for the newcomer says so.
+        let crowded: ServerMessage = serde_json::from_str(
+            r#"{"t":"crew_notifications","crew":"0a1b2c3d4e5f6a7b",
+                "notifications":{"muted":true,"muteUntil":null},"crowded":true}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            crowded,
+            ServerMessage::CrewNotifications { notifications, crowded: true, .. }
+                if notifications.muted && notifications.mute_until.is_none()
         ));
         let order: ServerMessage = serde_json::from_str(
             r#"{"t":"crew_order","order":["9f8e7d6c5b4a3f2e","0a1b2c3d4e5f6a7b"]}"#,

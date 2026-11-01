@@ -893,7 +893,7 @@ async fn several_crews_their_order_mutes_and_calls() {
     expect(
         &mut mate_presence,
         "the crew's mute on the socket",
-        |e| matches!(e, PresenceEvent::CrewMuted { crew, notifications } if *crew == first.id && notifications.muted),
+        |e| matches!(e, PresenceEvent::CrewMuted { crew, notifications, .. } if *crew == first.id && notifications.muted),
     )
     .await;
     let listed = mate.friends().await.unwrap().crews.unwrap();

@@ -114,6 +114,8 @@ pub fn failure_of(error: &SocialError) -> (SendFailure, Option<LinkRule>) {
         SocialError::RateLimited { retry_after, item } => match item {
             Some(ChatQuota::Stickers) => SendFailure::Stickers,
             Some(ChatQuota::Links) => SendFailure::Links,
+            // The crew chat's slow mode (CHAT-CALM): the composer counts the wait down.
+            Some(ChatQuota::Slow) => SendFailure::Slow,
             _ => match retry_after {
                 Some(wait) if *wait > Duration::from_secs(60) => SendFailure::DailyLimit,
                 _ => SendFailure::TooFast,
@@ -606,6 +608,16 @@ mod tests {
             .0,
             SendFailure::Links
         );
+        // CHAT-CALM: a crew's slow mode is its own failure, never the day's limit.
+        assert_eq!(
+            failure_of(&SocialError::RateLimited {
+                retry_after: Some(Duration::from_secs(60)),
+                item: Some(ChatQuota::Slow)
+            })
+            .0,
+            SendFailure::Slow
+        );
+        assert_eq!(ChatQuota::parse("slow"), ChatQuota::Slow);
         assert_eq!(
             failure_of(&SocialError::Limited {
                 item: LimitedKey::ChatLinks,
