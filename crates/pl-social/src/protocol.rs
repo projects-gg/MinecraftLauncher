@@ -16,9 +16,10 @@ use crate::model::{
 /// that carry their server and may end with `server` (`callServer`), several crews (`crews`),
 /// crew plans (`plans`, TEAM5), crew tag changes (`badges`, TEAM6), SKIN1's game account link
 /// and Projects skin news (`mc`), Cloud AFK's notices (`afk`, AFKPLUS), profile mark changes
-/// (`marks`, SOC-VERIFY) and the player's own privacy switches and picture from their other devices
-/// (`profile`, SOC-LAG). Older services ignore the query, and names they do not know.
-pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges,mc,afk,marks,profile";
+/// (`marks`, SOC-VERIFY), the player's own privacy switches and picture from their other devices
+/// (`profile`, SOC-LAG) and profile badge changes and new badge catalogues (`marks2`, BADGES).
+/// Older services ignore the query, and names they do not know.
+pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges,mc,afk,marks,profile,marks2";
 
 /// Crew plans (TEAM5): the capability the service names in `hello.caps` when it took it.
 pub const PLANS_CAP: &str = "plans";
@@ -36,6 +37,11 @@ pub const AFK_CAP: &str = "afk";
 /// SOC-VERIFY: `mark` messages (a friend's, a crewmate's or the player's own mark changed) flow
 /// only when the service named it in `hello.caps`.
 pub const MARKS_CAP: &str = "marks";
+
+/// BADGES: `marks` messages (someone's shown badges changed) and `markdefs` (Studio's owner saved
+/// a new badge catalogue) flow only when the service named it in `hello.caps`; such a service sends
+/// no SOC-VERIFY `mark` messages to this socket any more.
+pub const MARKS2_CAP: &str = "marks2";
 
 /// Crew chat and direct messages (CHAT1): asked for only while the signed content allows chat.
 pub const CHAT_CAP: &str = "chat";
@@ -618,6 +624,23 @@ pub(crate) enum ServerMessage {
         id: String,
         #[serde(default, deserialize_with = "crate::model::readable_mark")]
         mark: Option<ProfileMark>,
+    },
+    /// The badges a friend, a crewmate or the player shows changed (BADGES, with `marks2` in the
+    /// capabilities): replace them wherever they show (empty: none now). `mark` is SOC-VERIFY's
+    /// field of the same set.
+    Marks {
+        id: String,
+        #[serde(default, deserialize_with = "crate::marks::readable_keys")]
+        marks: Vec<String>,
+        #[serde(default, deserialize_with = "crate::model::readable_mark")]
+        mark: Option<ProfileMark>,
+    },
+    /// Studio's owner saved the badge catalogue (BADGES, with `marks2`): its new revision; the
+    /// launcher reads it again (`GET /v1/marks`).
+    #[serde(rename = "markdefs")]
+    MarkDefs {
+        #[serde(default)]
+        rev: i64,
     },
     TeamInvite {
         invite: TeamInvite,
@@ -1313,11 +1336,11 @@ mod tests {
     fn chat_frames_both_ways() {
         assert_eq!(
             presence_caps(false),
-            "callServer,crews,plans,badges,mc,afk,marks,profile"
+            "callServer,crews,plans,badges,mc,afk,marks,profile,marks2"
         );
         assert_eq!(
             presence_caps(true),
-            "callServer,crews,plans,badges,mc,afk,marks,profile,chat,replies,stickers,reactions,typing,reads"
+            "callServer,crews,plans,badges,mc,afk,marks,profile,marks2,chat,replies,stickers,reactions,typing,reads"
         );
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(
@@ -1505,6 +1528,38 @@ mod tests {
                 "{raw}"
             );
         }
+        // BADGES: someone's badges with SOC-VERIFY's field of the same set, none now, keys this
+        // version reads leniently, and a new catalogue.
+        let badged: ServerMessage = serde_json::from_str(
+            r#"{"t":"marks","id":"223456789012345678","marks":["admin","premium"],"mark":"admin"}"#,
+        )
+        .unwrap();
+        match badged {
+            ServerMessage::Marks { id, marks, mark } => {
+                assert_eq!(id, "223456789012345678");
+                assert_eq!(marks, ["admin", "premium"]);
+                assert_eq!(mark, Some(ProfileMark::Admin));
+            }
+            other => panic!("{other:?}"),
+        }
+        let unbadged: ServerMessage = serde_json::from_str(
+            r#"{"t":"marks","id":"223456789012345678","marks":[],"mark":null}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            unbadged,
+            ServerMessage::Marks { ref marks, mark: None, .. } if marks.is_empty()
+        ));
+        let odd: ServerMessage = serde_json::from_str(
+            r#"{"t":"marks","id":"223456789012345678","marks":["m4",3,"Bad Key"],"mark":"gold"}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            odd,
+            ServerMessage::Marks { ref marks, mark: None, .. } if marks == &["m4"]
+        ));
+        let catalogue: ServerMessage = serde_json::from_str(r#"{"t":"markdefs","rev":4}"#).unwrap();
+        assert!(matches!(catalogue, ServerMessage::MarkDefs { rev: 4 }));
         let joined: ServerMessage = serde_json::from_str(
             r#"{"t":"team","crew":"0a1b2c3d4e5f6a7b","by":"123456789012345678",
                 "joined":["223456789012345678"],"team":{"id":"0a1b2c3d4e5f6a7b","name":"Gece",

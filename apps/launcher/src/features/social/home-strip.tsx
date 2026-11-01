@@ -65,7 +65,7 @@ import {
   playingPeople,
 } from "./model";
 import { enter, leave, useSocialMotion } from "./motion";
-import { MarkedSentence, markedName } from "./person-mark";
+import { MarkedSentence, useMarkNamer } from "./person-mark";
 import { type PersonPlace, type PersonRef, usePeopleItems } from "./person-menu";
 import { type FaceSource, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -198,6 +198,7 @@ function LineMenu({
 
 function PlayingLine() {
   const { t } = useTranslation();
+  const nameOf = useMarkNamer();
   const view = useSocialUi((s) => s.view);
   const favorites = useSocialPrefs((s) => s.favorites);
   const openPanel = useSocialUi((s) => s.openPanel);
@@ -210,7 +211,7 @@ function PlayingLine() {
   if (!first) return null;
   const others = shown.length - 1;
   const where = onProjects.length ? "projects" : "playing";
-  const named = markedName(first.name, first.mark, t);
+  const named = nameOf(first.name, first.marks);
   const text = others
     ? t(`social.home.${where}With`, { name: named, count: others })
     : t(`social.home.${where}Alone`, { name: named });
@@ -252,7 +253,7 @@ function PlayingLine() {
                   : t(`social.home.${where}Alone`, { name })
               }
               name={first.name}
-              mark={first.mark}
+              marks={first.marks}
             />
           </span>
         </button>
@@ -265,6 +266,7 @@ function PlayingLine() {
 /** A crewmate's call the player has not answered: "Geliyorum" answers (and joins from Projects). */
 function CallLine() {
   const { t } = useTranslation();
+  const nameOf = useMarkNamer();
   const view = useSocialUi((s) => s.view);
   const closed = useSocialUi((s) => s.closedCalls);
   const closeCall = useSocialUi((s) => s.closeCall);
@@ -277,7 +279,7 @@ function CallLine() {
   const crew = crewsOfCall(call, view.crews)[0];
   const caller = callerIn(call, view.crews);
   const callerName = caller.name || t("teams.call.someone");
-  const text = callSentenceOf(call, view.crews, t, false, markedName(callerName, caller.mark, t));
+  const text = callSentenceOf(call, view.crews, t, false, nameOf(callerName, caller.marks));
   const open = (from?: HTMLElement | null) => {
     openPanel({ page: "team", from });
     setCrewTab(crew?.id ?? null);
@@ -322,7 +324,7 @@ function CallLine() {
             <MarkedSentence
               text={(name) => callSentenceOf(call, view.crews, t, false, name)}
               name={callerName}
-              mark={caller.mark}
+              marks={caller.marks}
             />
           </span>
         </button>

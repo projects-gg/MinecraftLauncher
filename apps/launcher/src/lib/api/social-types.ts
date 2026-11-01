@@ -30,10 +30,20 @@ export interface SocialGame {
 }
 
 /**
- * A mark Projects' staff gave someone in Studio (SOC-VERIFY): `verified` ("Doğrulanmış hesap",
- * blue) or `admin` ("Projects yöneticisi", red), right of the name wherever they show.
+ * A profile badge of the catalogue (BADGES; SOC-VERIFY's two marks grown into one): what Projects
+ * gives an account, right of its name. Studio's owner keeps the catalogue (names, looks, order,
+ * which show); the launcher gets it with every snapshot (`markDefs`) and draws a badge only when
+ * the catalogue knows its key and this version its look.
  */
-export type ProfileMark = "verified" | "admin";
+export interface MarkDef {
+  /** What cards carry (`admin`, `verified`, …; `m<id>` for those Studio adds). */
+  key: string;
+  name: { tr: string; en: string };
+  /** One of `@pl/ui`'s `MARK_COLORS`, `MARK_GLYPHS`, `MARK_SHAPES`. */
+  color: string;
+  glyph: string;
+  shape: string;
+}
 
 /** Someone shown with name and picture. */
 export interface SocialProfile {
@@ -44,8 +54,9 @@ export interface SocialProfile {
   avatar: string;
   /** Discord picture when `avatar` is `discord`. */
   avatarUrl?: string;
-  /** Their mark (SOC-VERIFY); none without one and from a service without marks. */
-  mark?: ProfileMark;
+  /** Their profile badges, keys of `markDefs`, the most important first (BADGES); none without
+   * any. A service from before badges sends SOC-VERIFY's mark, which arrives as a list of one. */
+  marks?: string[];
 }
 
 /**
@@ -96,8 +107,8 @@ export interface SocialInvite {
   name?: string;
   avatar?: string;
   avatarUrl?: string;
-  /** Their mark (SOC-VERIFY), from the friend list. */
-  mark?: ProfileMark;
+  /** Their profile badges (BADGES), from the friend list. */
+  marks?: string[];
   /** Unix seconds. */
   at: number;
   server?: SocialGame;
@@ -139,6 +150,9 @@ export interface SocialMe extends SocialProfile {
   limited?: LimitedAccount;
   /** The crew tag the player wears (TEAM6); none while they wear none. */
   badge?: CrewBadge;
+  /** The badges the player holds and keeps off their profile ("Rozetlerim", BADGES), in the
+   * catalogue's order; none from a service from before badges (nothing to choose there). */
+  marksHidden?: string[];
 }
 
 /** What a limited account may not do, or does less of. */
@@ -751,8 +765,8 @@ export interface CrewCall {
   name?: string;
   avatar?: string;
   avatarUrl?: string;
-  /** The caller's mark (SOC-VERIFY), from the crew list. */
-  mark?: ProfileMark;
+  /** The caller's profile badges (BADGES), from the crew list. */
+  marks?: string[];
   /** `join`: "Geliyorum" can join the caller on `server`; `ready`: "Hazır mısın?" (a call from
    * before CALL1: an answer, nothing to join). */
   kind: "join" | "ready";
@@ -844,6 +858,9 @@ export interface SocialSnapshot {
   backupWaitsUntil?: number;
   /** Who came into the player's crews while this launcher was connected (TEAM6 "Hoş geldin"). */
   crewJoins?: CrewJoin[];
+  /** The profile badge catalogue, in order (BADGES): what every `marks` key names. The launcher's
+   * built-in one until the service's arrives; absent before the first snapshot. */
+  markDefs?: MarkDef[];
 }
 
 export type SocialNotice =
@@ -986,6 +1003,9 @@ export interface SocialApi {
     shareTyping?: boolean;
   }): Promise<void>;
   setAvatar(avatar: string): Promise<void>;
+  /** "Rozetlerim" (BADGES): the badges the player keeps off their profile, every one of them (`[]`
+   * shows them all). The snapshot shows it at once; a refusal takes it back. */
+  setMarksHidden(hidden: string[]): Promise<void>;
   invite(id: string): Promise<"delivered" | "queued">;
   dismissInvite(id: string): Promise<void>;
   /**

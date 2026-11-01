@@ -48,10 +48,14 @@ public final class ShapeSet {
         return bake(k, paths, null);
     }
 
-    /** Everything, with the crews' marks: their frames always, their emblems when {@code emblems} has them. */
+    /**
+     * Everything, with the crews' marks (their frames always, their emblems when {@code emblems} has them) and the
+     * pieces of the profile badges (BADGES-UI).
+     */
     public static AtlasPacker.Atlas bake(int k, Map<Icon, String> paths, Map<String, String> emblems) {
         AtlasPacker packer = new AtlasPacker();
         Emblems.bake(packer, k, emblems);
+        MarkSprites.bake(packer, k);
         for (Frames f : Frames.values()) {
             packer.add(f.key(), ShapeBaker.frame(f.spec, k));
         }

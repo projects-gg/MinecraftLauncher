@@ -206,6 +206,8 @@ pub(crate) struct Person {
     pub(crate) avatar: Option<String>,
     pub(crate) avatar_url: Option<String>,
     pub(crate) online: bool,
+    /// Their profile badges the catalogue knows (BADGES-UI), for an invite's toast in the game.
+    pub(crate) marks: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -567,6 +569,12 @@ impl Worlds {
                         avatar: (!f.avatar.is_empty()).then(|| f.avatar.clone()),
                         avatar_url: f.avatar_url.clone(),
                         online: f.state != PresenceState::Offline,
+                        marks: f
+                            .marks
+                            .iter()
+                            .filter(|key| view.mark_defs.iter().any(|def| &def.key == *key))
+                            .cloned()
+                            .collect(),
                     },
                 )
             })
@@ -2106,15 +2114,17 @@ impl Worlds {
                 .find(|i| i.session == invite.session)
                 .map(|i| invite_view(&st, i));
             let toast = (!quiet && st.game.connected && st.game.hosts).then(|| {
+                let host = st.person(&invite.from);
                 ToGame::Toast(ToastView {
                     kind: ToastKind::World,
                     key: format!("world:{}", invite.session),
-                    title: st.person(&invite.from).name,
+                    title: host.name,
                     body: String::new(),
                     conv: None,
                     crew: None,
                     sticker: None,
                     badge: None,
+                    marks: host.marks,
                 })
             });
             (view, toast)

@@ -896,7 +896,7 @@ function MeRow({ member }: { member: TeamMember }) {
         name={member.name}
         badge={badge}
         wearer={member.id}
-        mark={member.mark}
+        marks={member.marks}
         className="flex-1"
         nameClassName="text-[14px] font-semibold text-bone-50"
       >
@@ -1024,7 +1024,7 @@ function InviteFriends({ team }: { team: SocialTeam }) {
                   <span className="min-w-0 flex-1">
                     <NameWithMark
                       name={friend.name}
-                      mark={friend.mark}
+                      marks={friend.marks}
                       className="text-[13.5px] font-semibold text-bone-100"
                     />
                   </span>

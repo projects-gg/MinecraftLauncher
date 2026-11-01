@@ -221,7 +221,7 @@ function ResultCard({
       <div className="min-w-0 flex-1">
         <NameWithMark
           name={lookup.profile.name}
-          mark={lookup.profile.mark}
+          marks={lookup.profile.marks}
           className="text-[15px] font-semibold text-bone-50"
         />
         <p className="truncate text-[12.5px] text-ash-400">@{lookup.profile.username}</p>

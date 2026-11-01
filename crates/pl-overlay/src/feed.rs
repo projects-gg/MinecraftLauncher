@@ -76,6 +76,8 @@ pub struct Scene {
     pub joins: Vec<JoinLine>,
     /// The crew whose tag the player wears (OVL-UX; its card is in `badges`; only while `tags`).
     pub me_badge: Option<String>,
+    /// The profile badge catalogue, in order (BADGES-UI): a mod that said `marks` hears it.
+    pub mark_defs: Vec<pl_social::MarkDef>,
     /// What the person menu's rows choose from (OVL-UX2, `lists`).
     pub lists: PeopleLists,
     /// The player's crewmates (not the player): the person menu of crew chat's senders may act
@@ -83,6 +85,9 @@ pub struct Scene {
     crewmates: HashSet<String>,
     /// User id → the crew whose tag they wear (friends and crewmates; only while `tags`).
     wears: HashMap<String, String>,
+    /// User id → their profile badges the catalogue knows, the most important first (friends,
+    /// crewmates and the player; BADGES-UI). Only those with any.
+    marks: HashMap<String, Vec<String>>,
     /// Friend id → their Discord web profile, for "Discord'dan mesaj at" from the game (OVL-UX).
     discord: HashMap<String, String>,
     /// User id → name (the player, friends, crewmates).
@@ -444,6 +449,25 @@ impl Scene {
                 }
             }
         }
+        // BADGES-UI: everyone's badges the catalogue knows (an unknown key draws nothing), the
+        // friend list's word winning as it does for names.
+        let known = |keys: &[String]| -> Vec<String> {
+            keys.iter()
+                .filter(|key| view.mark_defs.iter().any(|def| def.key == **key))
+                .cloned()
+                .collect()
+        };
+        let mut marks: HashMap<String, Vec<String>> = HashMap::new();
+        marks.insert(me.id.clone(), known(&me.marks));
+        for crew in &view.crews {
+            for member in crew.members.iter().filter(|member| !member.me) {
+                marks.insert(member.id.clone(), known(&member.marks));
+            }
+        }
+        for friend in &view.friends {
+            marks.insert(friend.id.clone(), known(&friend.marks));
+        }
+        marks.retain(|_, keys| !keys.is_empty());
         // The tag the player wears (OVL-UX): before their own name in the panel's header. A hidden
         // crew's never comes from the service.
         let me_badge = me
@@ -626,6 +650,7 @@ impl Scene {
                             Some((crew.id.clone(), place))
                         })
                         .collect(),
+                    marks: marks.get(&friend.id).cloned().unwrap_or_default(),
                 }
             })
             .collect();
@@ -788,9 +813,11 @@ impl Scene {
             badges,
             joins,
             me_badge,
+            mark_defs: view.mark_defs.clone(),
             lists,
             crewmates,
             wears,
+            marks,
             discord,
             names,
             crew_names,
@@ -821,6 +848,17 @@ impl Scene {
     /// old one (they carry it), so its conversation comes again.
     pub fn wears_differ(&self, other: &Self) -> bool {
         self.wears != other.wears
+    }
+
+    /// `id`'s profile badges the catalogue knows, the most important first (BADGES-UI).
+    pub fn marks_of(&self, id: &str) -> &[String] {
+        self.marks.get(id).map_or(&[], Vec::as_slice)
+    }
+
+    /// Someone's badges changed (BADGES-UI): messages the panel shows carry the old ones, so its
+    /// conversation comes again (as for tags).
+    pub fn marks_differ(&self, other: &Self) -> bool {
+        self.marks != other.marks
     }
 
     /// A crew's conversation (`c:` ids; a listed conversation says so itself).
@@ -933,6 +971,9 @@ pub struct Mirror {
     /// The mod has the crew rows (`people3` in its hello): its `lists` carry `roles` (OVL-UX3).
     people3: bool,
     lists: Option<PeopleLists>,
+    /// The mod draws profile badges (`marks` in its hello): it hears the catalogue (BADGES-UI).
+    marks: bool,
+    mark_defs: Option<Vec<pl_social::MarkDef>>,
 }
 
 impl Mirror {
@@ -949,6 +990,12 @@ impl Mirror {
     /// For a mod that also has OVL-UX3's crew rows (`people3` in its hello), or not.
     pub fn with_people3(mut self, people3: bool) -> Self {
         self.people3 = people3;
+        self
+    }
+
+    /// For a mod that also draws profile badges (`marks` in its hello, BADGES-UI), or not.
+    pub fn with_marks(mut self, marks: bool) -> Self {
+        self.marks = marks;
         self
     }
 
@@ -989,6 +1036,7 @@ impl Mirror {
         let tags = self.tags;
         let people2 = self.people2;
         let people3 = self.people3;
+        let marks = self.marks;
         let lang = self.lang;
         *self = Self {
             identity: Some(identity),
@@ -1003,6 +1051,8 @@ impl Mirror {
             people2,
             people3,
             lists: None,
+            marks,
+            mark_defs: None,
         };
         let snapshot = ToGame::Snapshot {
             friends,
@@ -1024,6 +1074,13 @@ impl Mirror {
         if people2 && scene.signed_in {
             self.lists = Some(scene.lists.clone());
             frames.push(scene.lists.frame(people3));
+        }
+        // The badge catalogue before the friends that name its badges (BADGES-UI).
+        if marks && scene.signed_in {
+            self.mark_defs = Some(scene.mark_defs.clone());
+            frames.push(ToGame::Marks {
+                defs: scene.mark_defs.clone(),
+            });
         }
         frames.push(snapshot);
         if tags {
@@ -1076,6 +1133,12 @@ impl Mirror {
         if self.people2 && scene.signed_in && self.lists.as_ref() != Some(&scene.lists) {
             self.lists = Some(scene.lists.clone());
             frames.push(scene.lists.frame(self.people3));
+        }
+        if self.marks && scene.signed_in && self.mark_defs.as_ref() != Some(&scene.mark_defs) {
+            self.mark_defs = Some(scene.mark_defs.clone());
+            frames.push(ToGame::Marks {
+                defs: scene.mark_defs.clone(),
+            });
         }
         diff(
             &mut self.friends,
@@ -1380,6 +1443,12 @@ pub fn msg_view(
         // Their name opens their person menu (OVL-UX2): only crew chat names its senders.
         by: (!message.mine && scene.is_crew_conv(conv) && !message.from.is_empty())
             .then(|| message.from.clone()),
+        // Their badges right of that name (BADGES-UI).
+        marks: if message.mine || !scene.is_crew_conv(conv) {
+            Vec::new()
+        } else {
+            scene.marks_of(&message.from).to_vec()
+        },
     }
 }
 
@@ -1626,6 +1695,8 @@ pub fn toast_of(
                 sticker: message.sticker.clone().filter(|_| listener.chat2),
                 // "[GK] Ayşe" in the card's title: a friend's or a crewmate's tag.
                 badge: scene.badge_of(&message.from).map(str::to_owned),
+                // Their badges right of it (BADGES-UI).
+                marks: scene.marks_of(&message.from).to_vec(),
                 ..toast
             })
         }
@@ -1670,6 +1741,11 @@ pub fn toast_of(
                 },
                 &situation,
             )
+            // The friend's badges right of their name (BADGES-UI).
+            .map(|toast| ToastView {
+                marks: scene.marks_of(&invite.from).to_vec(),
+                ..toast
+            })
         }
         // Cloud AFK's notices (AFKPLUS): Cloud AFK already chose them by the player's own switches;
         // do-not-disturb is a social status and does not apply.
@@ -1709,7 +1785,8 @@ pub(crate) mod tests {
             backup: None,
             limited: None,
             badge: None,
-            mark: None,
+            marks: Vec::new(),
+            marks_hidden: Some(Vec::new()),
         }
     }
 
@@ -1732,7 +1809,7 @@ pub(crate) mod tests {
             game,
             discord_url: String::new(),
             badge: None,
-            mark: None,
+            marks: Vec::new(),
         }
     }
 
@@ -1778,7 +1855,7 @@ pub(crate) mod tests {
                     joined_at: 0,
                     together_month: 0,
                     badge: None,
-                    mark: None,
+                    marks: Vec::new(),
                 })
                 .collect(),
             invited: Vec::new(),
@@ -1847,7 +1924,7 @@ pub(crate) mod tests {
                 username: "kotu".into(),
                 avatar: "discord".into(),
                 avatar_url: None,
-                mark: None,
+                marks: Vec::new(),
             }],
             invites: vec![InviteView {
                 id: "inv-1".into(),
@@ -1855,7 +1932,7 @@ pub(crate) mod tests {
                 name: Some("Ayşe".into()),
                 avatar: None,
                 avatar_url: None,
-                mark: None,
+                marks: Vec::new(),
                 at: 1,
                 server: projects(),
                 quiet: false,
@@ -1883,7 +1960,7 @@ pub(crate) mod tests {
                 name: None,
                 avatar: None,
                 avatar_url: None,
-                mark: None,
+                marks: Vec::new(),
                 kind: CallKind::Join,
                 server: projects(),
                 crews: vec!["t1".into()],
@@ -1924,6 +2001,7 @@ pub(crate) mod tests {
             notices: Vec::new(),
             restriction: None,
             backup_waits_until: None,
+            mark_defs: pl_social::MarkCatalog::builtin().marks,
         }
     }
 
@@ -3211,6 +3289,120 @@ pub(crate) mod tests {
         assert_eq!(joins, [("Ece", true), ("Deniz", false)]);
         assert_eq!(scene.joins[1].conv, "c:t1");
         assert_eq!(scene.joins[1].at, (NOW / 1000 - 60) * 1000);
+    }
+
+    /// The test view with profile badges (BADGES-UI): Ayşe (a friend) is a moderator with
+    /// Premium Club and a badge from a newer catalogue, Cem (a crewmate) is staff, the player
+    /// verified.
+    fn badged_view() -> SocialView {
+        let mut v = view();
+        v.friends[0].marks = vec!["moderator".into(), "m20".into(), "premium".into()];
+        v.crews[0].members[1].marks = vec!["staff".into()];
+        v.me.as_mut().unwrap().marks = vec!["verified".into()];
+        v
+    }
+
+    #[test]
+    fn badges_ride_on_friends_crew_messages_and_toasts() {
+        let prefs = NotifyPrefs::default();
+        let scene = Scene::from_view(&badged_view(), &prefs, NOW);
+        // Only badges the catalogue knows, in their order.
+        assert_eq!(
+            scene.friend("f-ayse").unwrap().marks,
+            ["moderator", "premium"]
+        );
+        assert!(scene.friend("f-can").unwrap().marks.is_empty());
+        assert_eq!(scene.marks_of("u-cem"), ["staff"]);
+        assert_eq!(scene.marks_of("me"), ["verified"]);
+        // Crew chat names its senders: a crewmate's badges ride on their message, never on the
+        // player's own, and a direct conversation names nobody.
+        let cem = msg_view(
+            "c:t1",
+            &message("i:1", "u-cem", false, MessageState::Sent),
+            &scene,
+            CHAT2,
+        );
+        assert_eq!(cem.marks, ["staff"]);
+        let json = serde_json::to_value(&cem).unwrap();
+        assert_eq!(json["marks"], serde_json::json!(["staff"]));
+        let mine = msg_view(
+            "c:t1",
+            &message("i:2", "me", true, MessageState::Sent),
+            &scene,
+            CHAT2,
+        );
+        assert!(mine.marks.is_empty());
+        assert!(serde_json::to_value(&mine).unwrap().get("marks").is_none());
+        let direct = msg_view(
+            "d:f-ayse:me",
+            &message("i:3", "f-ayse", false, MessageState::Sent),
+            &scene,
+            CHAT2,
+        );
+        assert!(direct.marks.is_empty());
+        // The toast's title carries them: a message, and an invite to play together.
+        let toast = toast_of(
+            &SocialNotice::ChatMessage {
+                conv: "d:f-ayse:me".into(),
+                message: Box::new(message("i:4", "f-ayse", false, MessageState::Sent)),
+                name: None,
+                crew: None,
+            },
+            &scene,
+            &prefs,
+            NOW,
+            CHAT2,
+        )
+        .unwrap();
+        assert_eq!(toast.marks, ["moderator", "premium"]);
+        let invite = toast_of(
+            &SocialNotice::Invite {
+                invite: badged_view().invites[0].clone(),
+            },
+            &scene,
+            &prefs,
+            NOW,
+            CHAT2,
+        )
+        .unwrap();
+        assert_eq!(invite.marks, ["moderator", "premium"]);
+    }
+
+    #[test]
+    fn a_mod_that_draws_badges_hears_the_catalogue_before_the_friends() {
+        let prefs = NotifyPrefs::default();
+        let scene = Scene::from_view(&badged_view(), &prefs, NOW);
+        // An older mod: no catalogue (the friends' `marks` it skips).
+        let old = Mirror::default().greet(&scene, "2.0.0", false);
+        assert_eq!(kinds(&old), ["welcome", "snapshot"]);
+
+        let mut mirror = Mirror::for_mod(false, false).with_marks(true);
+        let greeting = mirror.greet(&scene, "2.0.0", false);
+        assert_eq!(kinds(&greeting), ["welcome", "marks", "snapshot"]);
+        let ToGame::Marks { defs } = &greeting[1] else {
+            panic!("{greeting:?}");
+        };
+        let keys: Vec<&str> = defs.iter().map(|def| def.key.as_str()).collect();
+        assert_eq!(keys, ["admin", "moderator", "staff", "verified", "premium"]);
+        assert!(mirror.update(&scene, "2.0.0", false).is_empty());
+
+        // Studio's owner renames a badge: the catalogue again, then nothing else changed.
+        let mut renamed = badged_view();
+        renamed.mark_defs[1].name.tr = "Moderatör".into();
+        let next = Scene::from_view(&renamed, &prefs, NOW);
+        let frames = mirror.update(&next, "2.0.0", false);
+        assert_eq!(kinds(&frames), ["marks"]);
+        // Ayşe's badges change: her row comes again.
+        let mut fewer = renamed.clone();
+        fewer.friends[0].marks = vec!["premium".into()];
+        let after = Scene::from_view(&fewer, &prefs, NOW);
+        assert!(after.marks_differ(&next));
+        let frames = mirror.update(&after, "2.0.0", false);
+        assert_eq!(kinds(&frames), ["friend"]);
+        let ToGame::Friend(ayse) = &frames[0] else {
+            panic!("{frames:?}");
+        };
+        assert_eq!(ayse.marks, ["premium"]);
     }
 
     #[test]

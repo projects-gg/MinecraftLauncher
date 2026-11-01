@@ -406,7 +406,7 @@ export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
             <MarkedSentence
               text={(name) => t("teams.invitedBy", { name })}
               name={invite.from.name}
-              mark={invite.from.mark}
+              marks={invite.from.marks}
               size={12}
             />
           </span>
