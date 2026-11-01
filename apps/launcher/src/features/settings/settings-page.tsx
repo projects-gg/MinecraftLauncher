@@ -584,11 +584,12 @@ function About() {
           </Button>
         ))}
       </div>
-      {/* The only link to the repository: where the code is, and that a star helps (STARS). */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+      {/* The only link to the repository: where the code is, and that a star helps (STARS). A
+          secondary button: as a ghost beside its label it read as part of the sentence. */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <span className="text-[13px] text-ash-300">{t("stars.aboutLabel")}</span>
         <Button
-          variant="ghost"
+          variant="secondary"
           size="sm"
           icon={<GithubLogo size={15} weight="fill" aria-hidden />}
           onClick={() => openWebLink(SOURCE_URL)}
