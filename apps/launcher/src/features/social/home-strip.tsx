@@ -100,9 +100,9 @@ const SKIP_JOIN = ["join"] as const;
 
 /**
  * The line's action, drawn as a secondary button inside the line's own button: one control for
- * the keyboard, and the press squeezes where the player looks.
+ * the keyboard, and the press squeezes where the player looks. Home's star line draws its own.
  */
-function ActionLook({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+export function ActionLook({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <span className="relative isolate inline-flex h-8 shrink-0 items-center gap-1.5 px-3 text-[12.5px] font-medium whitespace-nowrap text-bone-100 transition-[transform,scale] duration-150 ease-out [--cut:6px] group-active:scale-[0.97]">
       <span

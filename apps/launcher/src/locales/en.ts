@@ -1363,7 +1363,6 @@ export const en: DeepPartial<Strings> = {
       discord: "Discord server",
       store: "Store",
       support: "Support",
-      source: "Source code",
       bits: "{{bits}}-bit",
       credits: "Fonts: Tektur and Figtree (OFL). Icons: Phosphor (MIT).",
     },

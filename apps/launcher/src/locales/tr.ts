@@ -1124,7 +1124,6 @@ export const tr = {
       discord: "Discord sunucusu",
       store: "Mağaza",
       support: "Destek",
-      source: "Kaynak kodu",
       bits: "{{bits}} bit",
       credits: "Yazı tipleri: Tektur ve Figtree (OFL). Simgeler: Phosphor (MIT).",
     },
