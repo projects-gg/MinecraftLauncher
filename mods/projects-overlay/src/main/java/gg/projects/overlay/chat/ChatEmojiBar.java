@@ -1,5 +1,6 @@
 package gg.projects.overlay.chat;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import gg.projects.overlay.EmojiKey;
 import gg.projects.overlay.OverlayClient;
 import gg.projects.overlay.emoji.Emoji;
@@ -126,6 +127,15 @@ public final class ChatEmojiBar {
     /** The bar the last chat screen got, or null (the scenario driver). */
     public static ChatEmojiBar last() {
         return last;
+    }
+
+    /**
+     * Whether the picker of {@code screen}'s bar is open over this point (GUI pixels): the toasts under it take no
+     * pointer there (F7-OPEN).
+     */
+    public static boolean pickerOver(Screen screen, double x, double y) {
+        ChatEmojiBar bar = last;
+        return bar != null && bar.screen == screen && bar.picker.isOpen() && bar.picker.contains(x, y);
     }
 
     /** Adds the bar to a chat screen (any screen of the game's chat, mods' subclasses too). */
@@ -277,8 +287,11 @@ public final class ChatEmojiBar {
     private boolean allowClick(MouseButtonEvent event) {
         double mx = event.x();
         double my = event.y();
+        // The game's own number for the left button: 0 through GLFW, 1 through SDL (26.3; F7-OPEN found the button and
+        // the emojis taking no left click there).
+        boolean left = event.button() == InputConstants.MOUSE_BUTTON_LEFT;
         if (shown && inButton(mx, my)) {
-            if (event.button() == 0) {
+            if (left) {
                 toggle(false);
             }
             return false;
@@ -288,7 +301,7 @@ public final class ChatEmojiBar {
         }
         if (picker.contains(mx, my)) {
             Emoji e = picker.emojiAt(mx, my);
-            if (e != null && event.button() == 0) {
+            if (e != null && left) {
                 write(e, event.hasShiftDown());
             }
             return false;

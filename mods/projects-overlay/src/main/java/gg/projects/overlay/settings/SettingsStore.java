@@ -146,7 +146,9 @@ public final class SettingsStore {
             number(sounds, "messageVolume", d.messageVolume()),
             bool(sounds, "call", d.callSound()),
             number(sounds, "callVolume", d.callVolume()),
-            bool(root, "hintSeen", d.hintSeen()),
+            // F7-OPEN: the overlay key opened the panel here once (the old "hintSeen", a first-time tip long gone, is
+            // not read: it never meant that).
+            bool(root, "keyUsed", d.keyUsed()),
             stickers(root, "recentStickers"),
             emojis(root, "recentEmojis"));
     }
@@ -170,7 +172,7 @@ public final class SettingsStore {
         sounds.addProperty("call", s.callSound());
         sounds.addProperty("callVolume", s.callVolume());
         root.add("sounds", sounds);
-        root.addProperty("hintSeen", s.hintSeen());
+        root.addProperty("keyUsed", s.keyUsed());
         JsonArray recent = new JsonArray();
         for (String sticker : s.recentStickers()) {
             recent.add(sticker);

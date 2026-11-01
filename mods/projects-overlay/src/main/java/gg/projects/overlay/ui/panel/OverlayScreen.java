@@ -1736,7 +1736,8 @@ public final class OverlayScreen extends Screen {
         // A name typed into the menu's "Yeni kategori…" field types too (OVL-UX3).
         boolean typing = field.isFocused() && field.visible || menu.naming();
         if (overlay.key().closes(event, typing)) {
-            close();
+            // Closes, unless this is the held press that opened the panel repeating (F7-OPEN).
+            overlay.keyInPanel(this);
             return true;
         }
         if (menu.isOpen()) {
@@ -1764,6 +1765,15 @@ public final class OverlayScreen extends Screen {
             draftChanged();
         }
         return handled;
+    }
+
+    @Override
+    public boolean keyReleased(KeyEvent event) {
+        if (overlay.key().released(event)) {
+            // Its next press closes the panel (F7-OPEN: the press that opened it held, repeats did nothing).
+            overlay.keyReleased();
+        }
+        return super.keyReleased(event);
     }
 
     /** Closes the innermost thing open over the panel; false when there is none. */

@@ -68,12 +68,12 @@ public final class Defaults {
     }
 
     /**
-     * "Geri al": the settings and keys as they were before the reset. What is not a display preference (the first-time
-     * hint, the recent stickers) stays as it is now.
+     * "Geri al": the settings and keys as they were before the reset. What is not a display preference (whether the
+     * overlay key was used, the recent stickers) stays as it is now.
      */
     public static void undo(Undo undo, Consumer<UnaryOperator<OverlaySettings>> apply, List<? extends Key> keys) {
         OverlaySettings back = undo.settings();
-        apply.accept(now -> back.withHintSeen(now.hintSeen()).withRecentStickers(now.recentStickers()));
+        apply.accept(now -> back.withKeyUsed(now.keyUsed()).withRecentStickers(now.recentStickers()));
         for (int i = 0; i < keys.size() && i < undo.keys().size(); i++) {
             String saved = undo.keys().get(i);
             if (saved != null) {

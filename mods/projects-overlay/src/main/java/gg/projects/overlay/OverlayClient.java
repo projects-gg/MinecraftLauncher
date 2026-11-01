@@ -1,6 +1,8 @@
 package gg.projects.overlay;
 
 import com.google.gson.JsonObject;
+import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.BridgeConfig;
 import gg.projects.overlay.bridge.Protocol;
@@ -16,6 +18,9 @@ import gg.projects.overlay.connect.WorldResume;
 import gg.projects.overlay.emoji.EmojiState;
 import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.host.HostGate;
+import gg.projects.overlay.keys.FnTip;
+import gg.projects.overlay.keys.Laptop;
+import gg.projects.overlay.keys.PressLatch;
 import gg.projects.overlay.lang.Language;
 import gg.projects.overlay.lang.LanguageChoice;
 import gg.projects.overlay.link.CodelessLink;
@@ -46,14 +51,20 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
@@ -120,6 +131,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private EmojiState emojis;
     /** The panel runs (else the emoji picker alone). */
     private boolean panel = true;
+    /** One toggle per press of the overlay key: its held repeats neither close nor reopen the panel (F7-OPEN). */
+    private final PressLatch keyLatch = new PressLatch();
+    /** "Olmazsa [Fn] ile birlikte bas" under the first key hints of a game where Fn may be missing (F7-OPEN). */
+    private final FnTip fnTip = new FnTip();
+    /** The keyboard may give F1 to F12 only with Fn (a laptop or a Mac; F7-OPEN): looked at once after the start. */
+    private volatile boolean laptop;
 
     @Override
     public void onInitializeClient() {
@@ -242,9 +259,11 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         });
         LinkPayload.register(this::onLinkMessage);
         // The pause menu's Projects button in its bottom right corner (OVL-UX; world sharing's "Arkadaşlarını çağır"
-        // takes the top right one).
-        ScreenEvents.AFTER_INIT.register((mc, screen, width, height) ->
-            gg.projects.overlay.ui.panel.PausePanelButton.attach(this, screen));
+        // takes the top right one); the overlay key and a press on a toast where the panel may open (F7-OPEN).
+        ScreenEvents.AFTER_INIT.register((mc, screen, width, height) -> {
+            gg.projects.overlay.ui.panel.PausePanelButton.attach(this, screen);
+            attachKey(screen);
+        });
         // A new connection (or the proxy moving the game to another of its servers) starts over; leaving ends the
         // question: its token means nothing anywhere else.
         ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) -> mc.execute(() -> {
@@ -256,6 +275,10 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         ClientLifecycleEvents.CLIENT_STARTED.register(mc -> {
             bridge.start();
             Shapes.prepare();
+            // F7-OPEN: whether F1 to F12 may need Fn here, off the game's thread (a system call or a file read).
+            Thread look = new Thread(() -> laptop = Laptop.detect(), "Projects Overlay keyboard");
+            look.setDaemon(true);
+            look.start();
         });
         ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> {
             bridge.stop();
@@ -537,8 +560,10 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             // The page shows it already.
             return;
         }
-        toasts.host(ToastCard.host(title, body, sprite, hintKey, key.keyName()), toastKey, settings.get(),
-            reducedMotion());
+        ToastCard card = ToastCard.host(title, body, sprite, hintKey, key.keyName(), hintKey != null && fnTipWanted());
+        if (toasts.host(card, toastKey, settings.get(), reducedMotion()) && card.fnTip()) {
+            fnTip.shown();
+        }
     }
 
     /**
@@ -590,8 +615,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     }
 
     private void tick(Minecraft mc) {
+        // One toggle per press (F7-OPEN): the press that last toggled stays held until the key is seen up.
+        if (keyLatch.held() && !key.heldNow()) {
+            keyLatch.released();
+        }
         while (key.consumeClick()) {
-            togglePanel();
+            keyInGame();
         }
         emojiKeyTick(mc);
         boolean hasLevel = mc.level != null;
@@ -694,12 +723,130 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         if (Compat.screen(mc) != null) {
             return;
         }
+        openPanel();
+    }
+
+    /** Opens the panel where it was last (over the game, or in the place of the screen that is open). */
+    private void openPanel() {
         // A background retry is pending: try now. After the launcher's goodbye only "Yeniden dene" retries,
         // so the panel keeps saying why it is offline.
         if (bridge.status() == BridgeClient.Status.OFFLINE) {
             bridge.retryNow();
         }
-        Compat.setScreen(mc, new OverlayScreen(this));
+        Compat.setScreen(Minecraft.getInstance(), new OverlayScreen(this));
+    }
+
+    // ---- The overlay key and the toasts' press (F7-OPEN) -----------------------------------------------------
+
+    /**
+     * The overlay key in the game (the game counts a press only while no screen is open): opens the panel, or closes
+     * it; a held press's repeats do neither.
+     */
+    private void keyInGame() {
+        if (!keyLatch.accepts()) {
+            return;
+        }
+        Screen on = Compat.screen(Minecraft.getInstance());
+        if (on instanceof OverlayScreen screen) {
+            screen.close();
+            keyLatch.toggled(key.heldNow());
+        } else if (on == null) {
+            openPanel();
+            keyOpenedPanel();
+        }
+    }
+
+    /**
+     * The overlay key pressed in the open panel: it closes, unless the press is the held one that opened it (its repeat
+     * comes here once the panel is open).
+     */
+    public void keyInPanel(OverlayScreen screen) {
+        if (keyLatch.accepts()) {
+            screen.close();
+            keyLatch.toggled(key.heldNow());
+        }
+    }
+
+    /** The overlay key was let go of on a screen: its next press toggles the panel again. */
+    public void keyReleased() {
+        keyLatch.released();
+    }
+
+    /** The key opened the panel: its press is held now, and the key reaches the game here (no Fn line any more). */
+    private void keyOpenedPanel() {
+        keyLatch.toggled(key.heldNow());
+        if (!settings.get().keyUsed()) {
+            updateSettings(s -> s.withKeyUsed(true));
+        }
+    }
+
+    /**
+     * The overlay key and the toasts on a screen that just opened. The game hands a key to the open screen and never to
+     * the key mappings, so F7 in the pause menu, the chat or an inventory did nothing while a toast there said to press
+     * it (and the old rule "only from the game" was Shift+Tab's, which those screens use to move the focus). There it
+     * opens the panel now; every other screen keeps its keys: the options, Controls while a key is being picked, a sign
+     * or a book, the death screen, a mod's own screen. In the chat, where the pointer is free, a toast is pressed too.
+     */
+    private void attachKey(Screen screen) {
+        if (screen instanceof PauseScreen || screen instanceof ChatScreen
+            || screen instanceof AbstractContainerScreen<?>) {
+            ScreenKeyboardEvents.allowKeyPress(screen).register((s, event) -> !keyOnScreen(s, event));
+        }
+        if (screen instanceof ChatScreen) {
+            ScreenMouseEvents.allowMouseClick(screen).register((s, event) -> !toastPressed(event));
+            ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> {
+                if (toasts.pointing(mouseX, mouseY)) {
+                    g.requestCursor(CursorTypes.POINTING_HAND);
+                }
+            });
+        }
+    }
+
+    /** The overlay key on the pause menu, the chat or an inventory: true when it opened the panel (or was its repeat). */
+    private boolean keyOnScreen(Screen screen, KeyEvent event) {
+        if (!key.opensFrom(event)) {
+            return false;
+        }
+        if (!keyLatch.accepts()) {
+            // The held press that closed the panel back to the pause menu, repeating.
+            return true;
+        }
+        if (screen instanceof PauseScreen) {
+            // Closing goes back to the pause menu, the game paused as it was: the menu's Projects button does the same.
+            openPanelFrom(screen);
+        } else {
+            if (screen instanceof AbstractContainerScreen<?>) {
+                // Closed the way E closes it, so the server hears the container closed.
+                screen.onClose();
+            }
+            // The chat gives way: the game keeps what was typed as the chat's draft.
+            openPanel();
+        }
+        keyOpenedPanel();
+        return true;
+    }
+
+    /**
+     * A left press in the chat on a toast: the panel opens as the key opens it, on that toast's conversation (a message,
+     * a call), in the chat's place. False when the press was not on a toast.
+     */
+    private boolean toastPressed(MouseButtonEvent event) {
+        if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
+            return false;
+        }
+        ToastCard card = toasts.cardAt(event.x(), event.y());
+        if (card == null) {
+            return false;
+        }
+        if (card.conversation() != null) {
+            lastToastConversation = card.conversation();
+            lastToastAt = System.currentTimeMillis();
+            if (card.kind() == ToastCard.Kind.MESSAGE || card.kind() == ToastCard.Kind.CALL) {
+                lastPage = OverlayScreen.Page.CHATS;
+            }
+        }
+        openPanel();
+        return true;
     }
 
     public void panelOpened() {
@@ -1118,8 +1265,21 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             lastToastConversation = t.conversation();
             lastToastAt = System.currentTimeMillis();
         }
-        toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(), panel != null,
-            settings.get(), key.keyName(), reducedMotion());
+        ToastCard card = toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(),
+            panel != null, settings.get(), key.keyName(), fnTipWanted(), reducedMotion());
+        if (card != null && card.fnTip()) {
+            fnTip.shown();
+        }
+    }
+
+    /** Whether the next key hint gets "Olmazsa [Fn] ile birlikte bas" ({@link FnTip}; F7-OPEN). */
+    private boolean fnTipWanted() {
+        return fnTip.wanted(key.functionKey(), laptop, settings.get().keyUsed());
+    }
+
+    /** The keyboard counts as one that may need Fn for F1 to F12, or not (the scenario driver shows the Fn line). */
+    public void laptopForDriver(boolean on) {
+        laptop = on;
     }
 
     private void refreshScreen() {

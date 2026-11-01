@@ -1,5 +1,6 @@
 package gg.projects.overlay.toast;
 
+import gg.projects.overlay.chat.ChatEmojiBar;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.Perf;
 import gg.projects.overlay.motion.Ease;
@@ -9,6 +10,7 @@ import gg.projects.overlay.settings.OverlaySettings;
 import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.ui.Sounds;
 import gg.projects.overlay.ui.draw.Draw;
+import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Shapes;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
 import net.minecraft.client.DeltaTracker;
@@ -24,6 +26,10 @@ import net.minecraft.client.gui.screens.TitleScreen;
  * video. Clears when the panel opens (the panel shows all of it), pauses its timers while the game window
  * is not in front. The travel toast ("Projects sunucusuna bağlanılıyor…") is the one exception to the HUD:
  * it stays through the saving, connecting and loading screens, drawn above them.
+ *
+ * <p>In the chat the pointer is free, and a toast is pressed there like a button (F7-OPEN: players clicked the card's
+ * key hint): under the pointer its edge lights gold over 120 ms and every toast's time stands still, and a press opens
+ * the panel ({@link #cardAt}). The emoji picker, when it is open over a toast, keeps the pointer.
  */
 public final class ToastLayer implements HudElement {
     /** Something drawn over the HUD for a short while (the panel fading out after it closed). */
@@ -43,6 +49,12 @@ public final class ToastLayer implements HudElement {
     private static final long MESSAGE_MS = 5_000;
     private static final long CALL_MS = 8_000;
     private static final long INFO_MS = 4_000;
+    /** A toast under the pointer lights over this long, and goes dark again as fast (opacity only). */
+    private static final long HOVER_MS = 120;
+    /** A press finds the toasts where the last frame drew them, if it drew them this recently. */
+    private static final long DRAWN_RECENTLY_MS = 250;
+    /** A toast takes a press once it is this visible (one fading in or out does not). */
+    private static final float PRESSABLE_ALPHA = 0.5f;
 
     /**
      * Toast time stands still while the game window is not in front (the player would miss them). The
@@ -60,6 +72,16 @@ public final class ToastLayer implements HudElement {
     private final Tween travelDrop = new Tween(0f);
     /** When a note in the travel toast's place ({@link #noteOverScreens}) fades by itself; 0: never. */
     private long travelEndsAt;
+    // Where the last frame drew the stack (the left edge, the anchor's line) and when: a press in the chat finds its
+    // toast there.
+    private float drawnX;
+    private float drawnBase;
+    private long drawnAt = Long.MIN_VALUE / 2;
+    /** The toast under the pointer in the chat (its key), or the one going dark; null: none. */
+    private String hoverKey;
+    private final Tween hover = new Tween(0f);
+    /** A point the scenario driver stands the pointer at (GUI pixels), or null: the real pointer. */
+    private float[] driverPointer;
 
     public ToastStack<ToastCard> stack() {
         return stack;
@@ -80,19 +102,21 @@ public final class ToastLayer implements HudElement {
      * @param crewChat the message is from a crew conversation
      * @param panelConversation the conversation the open panel shows, or null when it is closed
      * @param panelOpen the panel is open (it shows everything itself; only the sound tells of others)
+     * @param fnTip its key hint gets the Fn line (F7-OPEN)
+     * @return the card now on screen (new or updated in place), or null when none went up
      */
-    public void show(OverlayState.ToastRequest request, boolean crewChat, String panelConversation, boolean panelOpen,
-        OverlaySettings settings, String keyName, boolean reducedMotion) {
+    public ToastCard show(OverlayState.ToastRequest request, boolean crewChat, String panelConversation,
+        boolean panelOpen, OverlaySettings settings, String keyName, boolean fnTip, boolean reducedMotion) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || !settings.showsKind(request.kind())) {
-            return;
+            return null;
         }
         long now = now();
         boolean forOpenConversation = request.conversation() != null && request.conversation().equals(
             panelConversation);
         ToastCard.Kind kind = ToastCard.kindOf(request.kind());
         if (forOpenConversation) {
-            return;
+            return null;
         }
         Sounds.Cue cue = kind == ToastCard.Kind.CALL || kind == ToastCard.Kind.INVITE || kind == ToastCard.Kind.WORLD
             ? Sounds.Cue.CALL : kind == ToastCard.Kind.MESSAGE ? Sounds.Cue.MESSAGE : null;
@@ -101,16 +125,17 @@ public final class ToastLayer implements HudElement {
         }
         // The panel shows it; on the way to a server the travel toast has the corner (the panel will have it).
         if (panelOpen || (travel != null && travelAlpha.target() > 0f)) {
-            return;
+            return null;
         }
         Shapes.prepare();
         ToastStack.Entry<ToastCard> existing = find(request.key());
         int count = existing == null ? 1 : existing.count() + 1;
-        ToastCard card = ToastCard.of(request, crewChat, count, settings.showMessageText(), keyName);
+        ToastCard card = ToastCard.of(request, crewChat, count, settings.showMessageText(), keyName, fnTip);
         stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
         stack.setReducedMotion(reducedMotion);
         stack.push(request.key(), card, card.height(), duration(kind, settings, mc), now);
         mc.getNarrator().saySystemQueued(card.narration());
+        return card;
     }
 
     /**
@@ -160,29 +185,117 @@ public final class ToastLayer implements HudElement {
 
     /**
      * A note of world sharing for the host (HOST1: the world opened, a friend came in or left), under the player's
-     * "Diğer bildirimler". Notes about different friends stack; the same one replaces itself.
+     * "Diğer bildirimler". Notes about different friends stack; the same one replaces itself. Returns whether it went
+     * up.
      */
-    public void host(ToastCard card, String key, OverlaySettings settings, boolean reducedMotion) {
+    public boolean host(ToastCard card, String key, OverlaySettings settings, boolean reducedMotion) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || !settings.infoToasts() || (travel != null && travelAlpha.target() > 0f)) {
-            return;
+            return false;
         }
         Shapes.prepare();
         stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
         stack.setReducedMotion(reducedMotion);
         stack.push(key, card, card.height(), duration(ToastCard.Kind.HOST, settings, mc), now());
         mc.getNarrator().saySystemQueued(card.narration());
+        return true;
+    }
+
+    // ---- A toast pressed in the chat (F7-OPEN) ------------------------------------------------------------------
+
+    /**
+     * The toast at this point of the chat screen (GUI pixels) as the last frame drew it, or null: none there, the
+     * pointer is not free (no chat), or the emoji picker is open over the point.
+     */
+    public ToastCard cardAt(double x, double y) {
+        Minecraft mc = Minecraft.getInstance();
+        long now = now();
+        if (now - drawnAt > DRAWN_RECENTLY_MS || !pointerFree(mc, x, y)) {
+            return null;
+        }
+        ToastStack.Entry<ToastCard> e = entryAt(x, y, now);
+        return e == null ? null : e.content();
+    }
+
+    /** Whether the pointer at this point of the chat is on a toast (it shows the pointing hand there). */
+    public boolean pointing(double x, double y) {
+        return cardAt(x, y) != null;
+    }
+
+    /** Stands the pointer at a point for the hover as the player's would (the scenario driver; null: the real one). */
+    public void pointForDriver(float[] at) {
+        driverPointer = at;
+    }
+
+    /** Where the toast of {@code conversation} is ({x, y, w, h}, GUI pixels) as last drawn, or null (the driver). */
+    public float[] boxForDriver(String conversation) {
+        for (ToastStack.Entry<ToastCard> e : stack.entries()) {
+            if (!e.leaving() && conversation.equals(e.content().conversation())) {
+                return new float[] {drawnX, drawnBase + e.y(), ToastCard.WIDTH, e.content().height()};
+            }
+        }
+        return null;
+    }
+
+    private static boolean pointerFree(Minecraft mc, double x, double y) {
+        return Compat.screen(mc) instanceof ChatScreen chat && !ChatEmojiBar.pickerOver(chat, x, y);
+    }
+
+    private ToastStack.Entry<ToastCard> entryAt(double x, double y, long now) {
+        if (x < drawnX || x >= drawnX + ToastCard.WIDTH) {
+            return null;
+        }
+        for (ToastStack.Entry<ToastCard> e : stack.entries()) {
+            if (e.leaving() || e.alpha(now) < PRESSABLE_ALPHA) {
+                continue;
+            }
+            float top = drawnBase + e.y();
+            if (y >= top && y < top + e.content().height()) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    /** The toast the pointer is on in the chat this frame lights; the one it left goes dark. */
+    private void trackHover(Minecraft mc, long now) {
+        String under = null;
+        if (Compat.screen(mc) instanceof ChatScreen) {
+            double x;
+            double y;
+            if (driverPointer != null) {
+                x = driverPointer[0];
+                y = driverPointer[1];
+            } else {
+                x = mc.mouseHandler.getScaledXPos(mc.getWindow());
+                y = mc.mouseHandler.getScaledYPos(mc.getWindow());
+            }
+            ToastStack.Entry<ToastCard> e = pointerFree(mc, x, y) ? entryAt(x, y, now) : null;
+            under = e == null ? null : e.key;
+        }
+        if (under != null && !under.equals(hoverKey)) {
+            hoverKey = under;
+            hover.snap(0f);
+            hover.animateTo(1f, now, HOVER_MS, Ease.OUT);
+        } else if (under == null && hoverKey != null && hover.target() > 0f) {
+            hover.animateTo(0f, now, HOVER_MS, Ease.OUT);
+        }
+        if (hoverKey != null && hover.target() <= 0f && hover.done(now)) {
+            hoverKey = null;
+        }
     }
 
     /** The panel opened: every toast fades where it is. */
     public void clear() {
         stack.clear(now());
+        hoverKey = null;
     }
 
     /** The world closed or the launcher went away. */
     public void reset() {
         stack.reset();
         anchorPlaced = false;
+        hoverKey = null;
     }
 
     private ToastStack.Entry<ToastCard> find(String key) {
@@ -229,8 +342,11 @@ public final class ToastLayer implements HudElement {
         boolean reduced = gg.projects.overlay.OverlayClient.get().reducedMotion();
         boolean top = settings.corner() == OverlaySettings.Corner.TOP_RIGHT;
         stack.setAnchoredAtTop(top);
-        stack.update(now, pauseWhileAway && !mc.isWindowActive(), reduced);
+        // A toast under the pointer in the chat keeps every toast where it is: it does not go while it is reached for.
+        boolean held = hoverKey != null && hover.target() > 0f;
+        stack.update(now, (pauseWhileAway && !mc.isWindowActive()) || held, reduced);
         if (stack.isEmpty() || Compat.hudHidden(mc)) {
+            hoverKey = null;
             Perf.toast(started);
             return;
         }
@@ -248,6 +364,10 @@ public final class ToastLayer implements HudElement {
         }
         lastFrame = now;
         float base = anchor.value();
+        drawnX = x;
+        drawnBase = base;
+        drawnAt = now;
+        trackHover(mc, now);
         for (int i = stack.entries().size() - 1; i >= 0; i--) {
             ToastStack.Entry<ToastCard> e = stack.entries().get(i);
             float a = e.alpha(now);
@@ -256,6 +376,14 @@ public final class ToastLayer implements HudElement {
             }
             Draw.pushAlpha(a);
             e.content().draw(g, x, base + e.y(), e.refresh(now));
+            if (e.key.equals(hoverKey)) {
+                float lit = hover.value(now);
+                if (lit > 0.004f) {
+                    Draw.pushAlpha(lit);
+                    Draw.frame(g, Frames.TOAST_HOVER, x, base + e.y(), ToastCard.WIDTH, e.content().height());
+                    Draw.popAlpha();
+                }
+            }
             Draw.popAlpha();
         }
         Perf.toast(started);

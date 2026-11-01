@@ -26,4 +26,18 @@ public final class OverlayKey extends ProjectsKey {
         }
         return !typing || !Compat.typesCharacter(event.key());
     }
+
+    /**
+     * Whether a key press on a screen the panel opens from besides the game (the pause menu, the chat, an inventory;
+     * F7-OPEN) is the overlay key. Never a key that types a character: a letter bound to the overlay still writes in the
+     * chat and in an inventory's search field.
+     */
+    public boolean opensFrom(KeyEvent event) {
+        return !isUnbound() && matches(event) && !Compat.typesCharacter(event.key());
+    }
+
+    /** Whether a key let go of is the overlay key (its next press toggles the panel again). */
+    public boolean released(KeyEvent event) {
+        return !isUnbound() && matches(event);
+    }
 }
