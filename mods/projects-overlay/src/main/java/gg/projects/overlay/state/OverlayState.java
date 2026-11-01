@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.lang.Language;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -49,10 +50,11 @@ public final class OverlayState {
      * the launcher's list says it ({@code today}, {@code yesterday}, {@code week}, {@code long}), or null. OVL-UX2
      * (Q3-Q5): {@code fav}, one of the player's favourites (the list's star); {@code alert}, "Çevrimiçi olunca bildir"
      * is on for them; {@code group}, their category's id (null: "Arkadaşlar"); {@code crews}, where they stand in the
-     * crews the player may invite to ({@code member} or {@code invited}, by crew id).
+     * crews the player may invite to ({@code member} or {@code invited}, by crew id). {@code marks} (BADGES-UI): the
+     * keys of their profile badges as the launcher sent them ({@link #marks(List)} names those the catalogue knows).
      */
     public record Friend(String id, String name, String where, boolean joinable, String host, String badge,
-        String seen, boolean fav, boolean alert, String group, Map<String, String> crews) {
+        String seen, boolean fav, boolean alert, String group, Map<String, String> crews, List<String> marks) {
         public boolean onProjects() {
             return where.equals("projects");
         }
@@ -163,6 +165,18 @@ public final class OverlayState {
     }
 
     /**
+     * A profile badge of the catalogue (BADGES-UI, the launcher's {@code MarkDef}): its key (what friends, messages
+     * and toasts name), its name in both languages, and its look, one of each of {@link Protocol#MARK_COLORS},
+     * {@link Protocol#MARK_GLYPHS} and {@link Protocol#MARK_SHAPES}.
+     */
+    public record MarkDef(String key, String tr, String en, String color, String glyph, String shape) {
+        /** Its name in the overlay's language. */
+        public String name(Language language) {
+            return language == Language.ENGLISH ? en : tr;
+        }
+    }
+
+    /**
      * HOST1 (H8): a friend in the player's world session as the launcher mirrors it: the guest id once the friend's
      * launcher connected (else empty), the friend's id and shown name, the game name once known, and {@code invited},
      * {@code joining} or {@code in}.
@@ -234,6 +248,8 @@ public final class OverlayState {
         public String badge;
         /** OVL-UX2 (Q6): its sender's user id (someone else's message in crew chat; their name opens their menu). */
         public String by;
+        /** BADGES-UI: the keys of its sender's profile badges (someone else's message in crew chat), else none. */
+        public List<String> marks = List.of();
 
         ChatLine(String id, String clientId, String from, String text, boolean mine, Delivery delivery, long at,
             long createdAt) {
@@ -285,12 +301,14 @@ public final class OverlayState {
 
     /**
      * A toast the launcher asked for; the mod may still skip it (hidden GUI, conversation already open). {@code badge}
-     * (TEAM6): the card of the tag a message's sender wears, while tags are on.
+     * (TEAM6): the card of the tag a message's sender wears, while tags are on. {@code marks} (BADGES-UI): the profile
+     * badges of the person the title names (a message's sender, the friend of an invite or a world invite) that the
+     * catalogue knows, the most important first.
      */
     public record ToastRequest(String kind, String key, String title, String body, String conversation,
-        String crew, String sticker, Badge badge) {
+        String crew, String sticker, Badge badge, List<MarkDef> marks) {
         public ToastRequest(String kind, String key, String title, String body, String conversation, String crew) {
-            this(kind, key, title, body, conversation, crew, null, null);
+            this(kind, key, title, body, conversation, crew, null, null, List.of());
         }
     }
 
@@ -309,6 +327,8 @@ public final class OverlayState {
     private final Map<String, WorldMark> worlds = new HashMap<>();
     /** HOST1 (H8): the player's own world session as the launcher mirrors it, or null. */
     private HostView host;
+    /** BADGES-UI: the profile badge catalogue, the most important first (only badges this build can draw). */
+    private List<MarkDef> markDefs = List.of();
     private int badgeRevision;
 
     private BridgeClient.Status status = BridgeClient.Status.CONNECTING;
@@ -400,9 +420,35 @@ public final class OverlayState {
         return crew == null || !tagsOn() ? null : badges.get(crew);
     }
 
-    /** Bumps whenever a tag's card changes, comes or goes (what a laid-out line shows may change with it). */
+    /**
+     * Bumps whenever a tag's card changes, comes or goes, and whenever the profile badge catalogue comes (what a
+     * laid-out line shows may change with it).
+     */
     public int badgeRevision() {
         return badgeRevision;
+    }
+
+    /** BADGES-UI: the profile badge catalogue as the launcher last sent it, the most important first. */
+    public List<MarkDef> markDefs() {
+        return markDefs;
+    }
+
+    /**
+     * BADGES-UI: the badges of a person with these keys that the catalogue knows, in its order (the most important
+     * first: the one right of their name), each once. A key it does not know names a badge of a newer catalogue, or
+     * one with a look this build cannot draw: it is left out.
+     */
+    public List<MarkDef> marks(List<String> keys) {
+        if (keys == null || keys.isEmpty() || markDefs.isEmpty()) {
+            return List.of();
+        }
+        List<MarkDef> out = new ArrayList<>(Math.min(keys.size(), markDefs.size()));
+        for (MarkDef def : markDefs) {
+            if (keys.contains(def.key())) {
+                out.add(def);
+            }
+        }
+        return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
     /** Who came into {@code conversation} (a crew's chat) while the launcher ran, oldest first. */
@@ -1040,6 +1086,7 @@ public final class OverlayState {
             case "call" -> putCall(frame);
             case "call-end" -> calls.remove(Protocol.str(frame, "id", ""));
             case "badges" -> putBadges(frame);
+            case "marks" -> putMarks(frame);
             case "note" -> putArrival(frame);
             case "friend-result" -> onFriendResult(frame, now);
             case "lists" -> putLists(frame);
@@ -1055,7 +1102,12 @@ public final class OverlayState {
                     Protocol.plain(Protocol.str(frame, "crew", ""), Protocol.MAX_NAME_CHARS),
                     sticker == null || !stickerRef(sticker) ? null : sticker,
                     // "[GK] Ayşe": only a message's sender wears one.
-                    kind.equals("message") ? badge(Protocol.str(frame, "badge", null)) : null);
+                    kind.equals("message") ? badge(Protocol.str(frame, "badge", null)) : null,
+                    // BADGES-UI: only where the title names a person (a call's title is its crew).
+                    switch (kind) {
+                        case "message", "invite", "world" -> marks(markKeys(arr(frame, "marks")));
+                        default -> List.of();
+                    });
             }
             default -> {
                 return null;
@@ -1089,7 +1141,8 @@ public final class OverlayState {
         String host = Protocol.plain(Protocol.str(o, "host", ""), 255);
         friends.put(id, new Friend(id, name(o, "name"), Protocol.str(o, "where", "offline"),
             Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host, crewId(o), seenOf(o),
-            Protocol.bool(o, "fav", false), Protocol.bool(o, "alert", false), groupId(o), crewPlaces(o)));
+            Protocol.bool(o, "fav", false), Protocol.bool(o, "alert", false), groupId(o), crewPlaces(o),
+            markKeys(arr(o, "marks"))));
         // HOST1 (H13): only the launcher that got the invite sends it; gone with the next frame without it.
         JsonObject world = obj(o, "world");
         if (world == null) {
@@ -1268,6 +1321,59 @@ public final class OverlayState {
         badgeRevision++;
     }
 
+    /**
+     * BADGES-UI: the profile badge catalogue, whole and in order (it replaces what is here). A badge this build cannot
+     * draw (a colour, glyph or shape of a newer catalogue), without a readable key or name, or named twice is left out;
+     * a name missing in one language reads the other's.
+     */
+    private void putMarks(JsonObject frame) {
+        List<MarkDef> next = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
+        forEach(frame, "defs", d -> {
+            String key = Protocol.str(d, "key", "");
+            String color = Protocol.str(d, "color", "");
+            String glyph = Protocol.str(d, "glyph", "");
+            String shape = Protocol.str(d, "shape", "");
+            JsonObject names = obj(d, "name");
+            String tr = names == null ? "" : Protocol.plain(Protocol.str(names, "tr", ""), Protocol.MAX_MARK_NAME_CHARS);
+            String en = names == null ? "" : Protocol.plain(Protocol.str(names, "en", ""), Protocol.MAX_MARK_NAME_CHARS);
+            if (!markKey(key) || keys.contains(key) || next.size() >= Protocol.MAX_MARKS
+                || !Protocol.MARK_COLORS.contains(color) || !Protocol.MARK_GLYPHS.contains(glyph)
+                || !Protocol.MARK_SHAPES.contains(shape) || (tr.isEmpty() && en.isEmpty())) {
+                return;
+            }
+            keys.add(key);
+            next.add(new MarkDef(key, tr.isEmpty() ? en : tr, en.isEmpty() ? tr : en, color, glyph, shape));
+        });
+        markDefs = List.copyOf(next);
+        badgeRevision++;
+    }
+
+    /** A badge's key as the service makes them ({@code admin}, {@code m12}): lower-case letters, digits, - and _. */
+    static boolean markKey(String key) {
+        return key != null && key.matches("[a-z0-9_-]{1,24}");
+    }
+
+    /** The badge keys a frame lists ({@code marks}), each once, at most {@link Protocol#MAX_MARKS}; none for no list. */
+    static List<String> markKeys(JsonArray list) {
+        if (list == null || list.isEmpty()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>(Math.min(list.size(), Protocol.MAX_MARKS));
+        for (JsonElement e : list) {
+            if (out.size() >= Protocol.MAX_MARKS) {
+                break;
+            }
+            if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                String key = e.getAsString();
+                if (markKey(key) && !out.contains(key)) {
+                    out.add(key);
+                }
+            }
+        }
+        return out.isEmpty() ? List.of() : List.copyOf(out);
+    }
+
     /** A card as the panel shows it: plain text only, a tag of at most four characters; no tag, no card. */
     private static Badge badgeOf(String crew, JsonObject o) {
         String tag = Protocol.plain(Protocol.str(o, "tag", ""), 4);
@@ -1418,13 +1524,15 @@ public final class OverlayState {
         }
     }
 
-    /** CHAT2's fields of a message (absent from an older launcher: the line keeps none), and TEAM6's tag. */
+    /** CHAT2's fields of a message (absent from an older launcher: the line keeps none), TEAM6's tag, the badges. */
     private static void putExtras(ChatLine line, JsonObject o) {
         long sid = Protocol.id(o, "sid");
         line.sid = sid > 0 ? sid : line.sid;
         // The launcher's word on the sender's tag stands each time the message comes (it took it off: none).
         line.badge = line.mine ? null : crewId(o);
         line.by = line.mine ? null : senderId(o);
+        // BADGES-UI: so does its word on their badges.
+        line.marks = line.mine ? List.of() : markKeys(arr(o, "marks"));
         if (line.deleted) {
             line.sticker = null;
             line.reply = null;

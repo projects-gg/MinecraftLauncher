@@ -8,12 +8,15 @@ import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.MarkTip;
+import gg.projects.overlay.ui.Marks;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
+import gg.projects.overlay.ui.draw.MarkSprites;
 import gg.projects.overlay.ui.draw.ShapeSet;
 import java.text.Collator;
 import java.util.ArrayList;
@@ -46,6 +49,10 @@ import net.minecraft.util.FormattedCharSequence;
  * <p>A friend who wears a crew tag has its chip before the name ("[GK] Ayşe", TEAM6): the name gives way, the chip
  * never does. The pointer resting on a chip, or a row with one picked with the keys, opens the tag's bubble. How a menu
  * action went is said for a moment at the list's bottom.
+ *
+ * <p>A friend with profile badges has the first one right of the name (BADGES-UI, {@link Marks}): the name gives way,
+ * the badge never does, and it dims with an offline row. The pointer resting on it names all of them ({@link MarkTip});
+ * the row's narration says them after the name.
  *
  * <p>As the launcher's list (OVL-UX2, its {@code groupFriends}): favourites lead each section and carry a small gold
  * star after the name; then, in a game, the ones the player can join; offline, the ones seen most recently; then names
@@ -102,10 +109,13 @@ public final class FriendList extends PanelWidget {
         boolean message;
         /** TEAM6: the tag they wear, or null. */
         TagChip chip;
+        /** BADGES-UI: their profile badges the catalogue knows, the most important (the one drawn) first. */
+        List<OverlayState.MarkDef> marks = List.of();
     }
 
     private final Actions actions;
     private final BadgeBubble bubble = new BadgeBubble();
+    private final MarkTip markTip = new MarkTip();
     private final List<Row> rows = new ArrayList<>();
     private FormattedCharSequence joinLine = FormattedCharSequence.EMPTY;
     private FormattedCharSequence emptyLine = FormattedCharSequence.EMPTY;
@@ -146,9 +156,10 @@ public final class FriendList extends PanelWidget {
         bubble.setReducedMotion(value);
     }
 
-    /** Closes the tag's bubble (the panel shows another page). */
+    /** Closes the tag's bubble and a badge's tooltip (the panel shows another page). */
     public void dismissBubble() {
         bubble.dismiss(now());
+        markTip.track(null, null, 0f, 0f, now());
     }
 
     /** Esc: closes the tag's bubble if one is open; whether it was. */
@@ -242,8 +253,9 @@ public final class FriendList extends PanelWidget {
             OverlayState.Badge badge = state.badge(f.badge());
             row.chip = TagChip.of(badge, TagChip.ROW);
             row.fav = f.fav();
+            row.marks = state.marks(f.marks());
             String name = Texts.fit(strong, f.name().isEmpty() ? Texts.str("toast.someone") : f.name(),
-                Math.round(nameRoom - TagChip.room(row.chip) - (row.fav ? STAR_ROOM : 0)));
+                Math.round(nameRoom - TagChip.room(row.chip) - Marks.room(row.marks) - (row.fav ? STAR_ROOM : 0)));
             row.name = Texts.visual(name);
             row.nameW = strong.width(name);
             row.online = f.online();
@@ -270,8 +282,10 @@ public final class FriendList extends PanelWidget {
             row.face = Face.of(f.name());
             row.joinWidth = joinWidth;
             row.y = y;
-            // "Ayşe, etiket GK, Projects'te": the chip is drawn, the row says it (and the star: "Favori").
-            String said = badge == null ? name : Texts.str("row.badge", name, badge.tag());
+            // "Ayşe, Projects yöneticisi, etiket GK, Projects'te": the badge and the chip are drawn, the row says every
+            // badge and the tag (and the star: "Favori").
+            String marked = Marks.spoken(name, row.marks, Texts.current());
+            String said = badge == null ? marked : Texts.str("row.badge", marked, badge.tag());
             if (row.fav) {
                 said += ", " + Texts.str("people.list.star");
             }
@@ -540,12 +554,14 @@ public final class FriendList extends PanelWidget {
                     Fonts.centeredY(Fonts.Face.SMALL, y0 + h / 2f), Theme.ASH_400);
             }
             bubble.track(null, false, now);
+            markTip.track(null, null, 0f, 0f, now);
             drawNote(g, now);
             return;
         }
         float top = scroll.value();
         trackBubble(mouseX, mouseY, top, now);
         trackDots(mouseX, mouseY, top, now);
+        trackMarks(mouseX, mouseY, top, now);
         float dotsX = dotsX();
         g.enableScissor(x0 - 2, y0, x0 + w + 2, y0 + h);
         for (Row row : rows) {
@@ -593,12 +609,20 @@ public final class FriendList extends PanelWidget {
                 row.chip.draw(g, tx, y + nameMid);
                 Draw.popAlpha();
             }
-            Draw.text(g, strong, row.name, tx + TagChip.room(row.chip), Fonts.centeredY(Fonts.Face.STRONG, y + nameMid),
+            float nameX = tx + TagChip.room(row.chip);
+            Draw.text(g, strong, row.name, nameX, Fonts.centeredY(Fonts.Face.STRONG, y + nameMid),
                 row.online ? Theme.BONE_100 : Theme.ASH_400);
-            if (row.fav) {
-                // The launcher's star after a favourite's name: small, filled, gold (dimmer offline, as the name).
+            if (!row.marks.isEmpty()) {
+                // Their first badge right of the name, dimmer offline as the name is (the launcher's 70 %).
                 Draw.pushAlpha(row.online ? 1f : 0.7f);
-                Draw.icon(g, Icon.STAR_FILL, 8, Draw.snap(tx + TagChip.room(row.chip) + row.nameW + 3),
+                Marks.draw(g, row.marks, nameX + row.nameW, y + nameMid);
+                Draw.popAlpha();
+            }
+            if (row.fav) {
+                // The launcher's star after a favourite's name (and its badge): small, filled, gold (dimmer offline, as
+                // the name).
+                Draw.pushAlpha(row.online ? 1f : 0.7f);
+                Draw.icon(g, Icon.STAR_FILL, 8, Draw.snap(nameX + row.nameW + Marks.room(row.marks) + 3),
                     Draw.snap(y + nameMid - 4.5f), Theme.GOLD_300);
                 Draw.popAlpha();
             }
@@ -645,6 +669,34 @@ public final class FriendList extends PanelWidget {
         }
         g.disableScissor();
         drawNote(g, now);
+        if (markTip.active()) {
+            Draw.stratum(g);
+            markTip.draw(g, now, x0 - 2, y0, x0 + w + 2);
+        }
+    }
+
+    /**
+     * The badge under the pointer names every badge of its friend ({@link MarkTip}): only badges whose row is in view,
+     * and none while a friend's menu is open (one popover at a time).
+     */
+    private void trackMarks(int mouseX, int mouseY, float top, long now) {
+        if (isHovered() && menuFor == null) {
+            float tx = getX() + FACE + 8;
+            for (Row row : rows) {
+                if (row.header || row.marks.isEmpty()) {
+                    continue;
+                }
+                float y = getY() + row.y - top;
+                float mx = Marks.left(tx + TagChip.room(row.chip) + row.nameW);
+                float my = Marks.top(y + (row.lone ? ROW_H / 2f : NAME_MID));
+                if (Marks.over(mouseX, mouseY, mx, my) && my >= getY()
+                    && my + MarkSprites.SIZE <= getY() + getHeight()) {
+                    markTip.track(row.id, row.marks, mx, my, now);
+                    return;
+                }
+            }
+        }
+        markTip.track(null, null, 0f, 0f, now);
     }
 
     /** The "…" comes on the row under the pointer, the one picked with the keys and the one whose menu is open. */
