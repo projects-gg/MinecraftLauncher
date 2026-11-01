@@ -1068,8 +1068,8 @@ export const tr = {
     appearance: {
       performance: "Performans modu",
       performanceHelp:
-        "Video, kıvılcım ve bulanıklık efektlerini kapatır, animasyonları azaltır. Zayıf bilgisayarlarda önerilir.",
-      particles: "Ana sayfada kıvılcım efekti",
+        "Video, parçacık ve bulanıklık efektlerini kapatır, animasyonları azaltır. Zayıf bilgisayarlarda önerilir.",
+      particles: "Ana sayfada parçacıklar",
       sounds: "Arayüz sesleri",
       volume: "Ses düzeyi",
     },
