@@ -28,6 +28,7 @@ pub fn run() {
     init_logging();
     if let Some(done) = &reset_done {
         reset::log(done);
+        commands::updates::show_after_reset();
     }
     // Windows: windows and notifications under the identity's AppUserModelID, the one the
     // installer's shortcuts carry, before any window exists (notify).
