@@ -242,7 +242,9 @@ export type SendFailure =
   /** CHAT2: a limited account sends no links. */
   | "limitedLinks"
   /** CHAT2: Studio switched this extra off (replies, stickers, links). */
-  | "featureOff";
+  | "featureOff"
+  /** CHAT-CALM: the crew chat's slow mode; the composer counts the wait down. */
+  | "slow";
 
 /** One message of a conversation. */
 export interface ChatMessage {
@@ -513,6 +515,8 @@ export interface CrewFeatures {
   /** Join requests from a tag's card and the crews' "Etiketten istek" (TEAM6; only with
    * `badges`). */
   badgeRequests: boolean;
+  /** Crew chat's slow mode, set by the leader and the moderators (CHAT-CALM). */
+  slow: boolean;
 }
 
 /** How newcomers with the crew's code or invite link get in: at once, or once approved. */
@@ -679,6 +683,9 @@ export interface SocialTeam extends CrewLook {
   badgeRequests?: boolean;
   /** How many of its members wear its tag (TEAM6: "Etiketi takan 8 üyenin…"). */
   wearers?: number;
+  /** "Yavaş mod" (CHAT-CALM): seconds between one member's messages in its chat (0 or absent:
+   * off). Its leader and moderators never wait. */
+  slow?: number;
 }
 
 /** Why a join request from a tag's card did not go (TEAM6): the crew's refusals and the player's
@@ -880,6 +887,8 @@ export type SocialNotice =
   | { kind: "requestAccepted"; crew: string; name: string }
   /** A crewmate made a plan, live. */
   | { kind: "crewPlan"; plan: CrewPlan }
+  /** The player just joined a crowded crew and the service muted it for them (CHAT-CALM). */
+  | { kind: "crowdedCrewMuted"; crew: string }
   /** A new chat message from someone else, live (never a sync's). */
   | { kind: "chatMessage"; conv: string; message: ChatMessage; name?: string; crew?: string }
   /** Moderators suspended (`until`) or banned the account: every session ended. */
@@ -949,6 +958,7 @@ export const HIDDEN_SNAPSHOT: SocialSnapshot = {
     crewFriendRequests: false,
     badges: false,
     badgeRequests: false,
+    slow: false,
   },
   crews: [],
   crewLimit: 1,
@@ -1066,6 +1076,9 @@ export interface SocialApi {
   setTeamLink(teamId: string, on: boolean): Promise<string | null>;
   /** How newcomers with the code or the link get in (the leader). */
   setJoinMode(teamId: string, join: JoinMode): Promise<void>;
+  /** "Yavaş mod" of a crew (the leader or a moderator; CHAT-CALM): 0 (off), 5, 10 or 30 seconds
+   * between one member's messages. */
+  setTeamSlow(teamId: string, seconds: number): Promise<void>;
   /** Puts on the tag of one of the player's crews, in place of any worn before, or takes it off
    * (`null`; TEAM6). */
   setBadge(teamId: string | null): Promise<void>;

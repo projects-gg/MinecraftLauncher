@@ -453,9 +453,11 @@ function MessageRowView({
   const failureWords =
     failure === "link" && message.failureRule
       ? t(`chat2.links.rules.${ruleWords(message.failureRule)}`)
-      : CHAT2_FAILURES.has(failure)
-        ? t(`chat2.failure.${failure}`)
-        : t(`chat.failure.${failure}`);
+      : failure === "slow"
+        ? t("chatCalm.slow.failure")
+        : CHAT2_FAILURES.has(failure)
+          ? t(`chat2.failure.${failure}`)
+          : t(`chat.failure.${failure}`);
   const stickerData = sticker ? findSticker(sticker) : undefined;
   const speaker = mine ? "" : `${sender.name}: `;
 

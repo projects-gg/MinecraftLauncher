@@ -33,11 +33,12 @@ public final class Protocol {
      * "yazıyor…", "Görüldü", links; docs/tasks/ovl2-protocol.md, CHAT2-O), {@code tags} (crew tags and their
      * cards, the crews' "ekibe katıldı" lines; TEAM6-O), {@code link} (codeless Discord linking: the launcher's
      * permit to a Projects server that asks, and its question; SKIN1-O), {@code host} (opening a singleplayer world
-     * to friends: the gate, the screens, the pause menu's button; HOST1-M, rows H1–H16), {@code marks} (profile
-     * badges: the {@code marks} catalogue, and the first badge of a friend, a crew chat's sender or a toast's person
-     * right of their name; BADGES-UI).
+     * to friends: the gate, the screens, the pause menu's button; HOST1-M, rows H1–H16), {@code slow} (a crew chat's
+     * slow mode: {@code slow} on conversations, the wait in the composer, {@code slow} as a reason; CHAT-CALM),
+     * {@code marks} (profile badges: the {@code marks} catalogue, and the first badge of a friend, a crew chat's
+     * sender or a toast's person right of their name; BADGES-UI).
      */
-    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link", "host", "marks");
+    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link", "host", "slow", "marks");
     /**
      * BADGES-UI: the profile badges' looks this build draws ({@code pl_social}'s {@code MARK_COLORS}, {@code
      * MARK_GLYPHS}, {@code MARK_SHAPES}); a badge with any other comes from a newer catalogue and is not drawn.

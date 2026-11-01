@@ -1387,6 +1387,18 @@ pub async fn social_team_badge_requests(
     crew_settings(state.social.set_team_badge_requests(&team, on).await)
 }
 
+/// "Yavaş mod" of one of the player's crews (the leader or a moderator; CHAT-CALM): seconds
+/// between one member's messages in its chat, one of 0 (off), 5, 10 and 30.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_slow(
+    state: State<'_, AppState>,
+    team: String,
+    seconds: u32,
+) -> CmdResult<()> {
+    crew_settings(state.social.set_team_slow(&team, seconds).await)
+}
+
 /// "Katılma isteği gönder" on the card of the tag `via` (a friend) wears: a join request to crew
 /// `team` that waits for its leaders. The crew's refusals and the player's own limits are answers
 /// (`refused`, why, and until when the button stays away on this computer); only what keeps the

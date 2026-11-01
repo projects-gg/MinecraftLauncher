@@ -304,6 +304,11 @@ pub const FEATURE_EMOJI: &str = "emoji";
 /// count it as connected (its own notifications stay) and sends it only `welcome` and `emojis`.
 pub const FEATURE_PANEL_OFF: &str = "panel-off";
 
+/// The `hello` feature of a mod that knows crew chat's slow mode (CHAT-CALM): it reads `slow` on
+/// conversations, counts the wait down in its composer and hears `slow` as a reason a message
+/// did not go (an older mod hears `rate`).
+pub const FEATURE_SLOW: &str = "slow";
+
 impl FromGame {
     /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
     /// feature.
@@ -795,6 +800,11 @@ pub struct ConvView {
     /// only while both keep "Görüldü bilgisi" on).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seen: Option<i64>,
+    /// CHAT-CALM, crew conversations: the crew's slow mode in seconds, for a player who waits
+    /// between messages (never its leader or a moderator). The mod counts down from the player's
+    /// last message there; the service decides anyway.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slow: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1023,6 +1033,8 @@ pub enum SendFailure {
     LimitedLinks,
     /// CHAT2: Studio switched this extra (stickers, replies) off.
     FeatureOff,
+    /// CHAT-CALM: the crew chat's slow mode; only to a mod that said `slow`.
+    Slow,
 }
 
 /// Why a reaction did not go (CHAT2). The mod says something general for one it does not know.

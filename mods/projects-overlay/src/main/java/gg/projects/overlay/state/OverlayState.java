@@ -74,10 +74,11 @@ public final class OverlayState {
 
     /**
      * A conversation. {@code seen} (direct conversations, CHAT2): the friend has seen the player's messages up to
-     * this service id ("Görüldü"), 0 when not known or not shared.
+     * this service id ("Görüldü"), 0 when not known or not shared. {@code slow} (crew conversations, CHAT-CALM): the
+     * crew's slow mode in seconds for a player who waits between messages, 0 for none (or its leader).
      */
     public record Conversation(String id, String kind, String title, int unread, boolean muted, boolean writable,
-        long seen) {
+        long seen, int slow) {
         public boolean crew() {
             return kind.equals("crew");
         }
@@ -548,6 +549,26 @@ public final class OverlayState {
         return lines.computeIfAbsent(conversation, k -> new ArrayDeque<>());
     }
 
+    /**
+     * CHAT-CALM: when the player may write again in {@code conversation} (epoch ms), 0 when they may now or the crew
+     * has no slow mode for them: its slow mode after their newest message there that went or is on its way. The
+     * service decides anyway; this only shows the wait.
+     */
+    public long slowUntil(String conversation) {
+        Conversation c = conversation(conversation);
+        Deque<ChatLine> deque = conversation == null ? null : lines.get(conversation);
+        if (c == null || c.slow() <= 0 || deque == null) {
+            return 0;
+        }
+        long newest = 0;
+        for (ChatLine line : deque) {
+            if (line.mine && line.delivery != Delivery.FAILED && line.at > newest) {
+                newest = line.at;
+            }
+        }
+        return newest == 0 ? 0 : newest + c.slow() * 1000L;
+    }
+
     /** A line of {@code conversation} by its id, or null. */
     public ChatLine line(String conversation, String id) {
         Deque<ChatLine> deque = lines.get(conversation);
@@ -674,7 +695,7 @@ public final class OverlayState {
             return null;
         }
         if (!conversations.containsKey(id) && !drafts.containsKey(id)) {
-            drafts.put(id, new Conversation(id, "dm", friend.name(), 0, false, true, 0));
+            drafts.put(id, new Conversation(id, "dm", friend.name(), 0, false, true, 0, 0));
             draftFriends.put(id, friendId);
             revision++;
         }
@@ -1453,7 +1474,8 @@ public final class OverlayState {
         }
         return new Conversation(id, Protocol.str(o, "kind", "dm"), name(o, "title"),
             (int) Math.max(0, Math.min(9999, Protocol.num(o, "unread", 0))), Protocol.bool(o, "muted", false),
-            Protocol.bool(o, "writable", true), Protocol.id(o, "seen"));
+            Protocol.bool(o, "writable", true), Protocol.id(o, "seen"),
+            (int) Math.max(0, Math.min(3600, Protocol.num(o, "slow", 0))));
     }
 
     private void putCall(JsonObject o) {

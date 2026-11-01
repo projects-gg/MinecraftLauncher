@@ -317,6 +317,8 @@ pub enum SendFailure {
     LimitedLinks,
     /// Studio switched this extra off (CHAT2: stickers).
     FeatureOff,
+    /// The crew chat's slow mode: the player's last message was too recent (CHAT-CALM).
+    Slow,
 }
 
 /// One message of a conversation.
@@ -740,6 +742,9 @@ pub struct TeamView {
     pub badge_requests: bool,
     /// How many members wear this crew's tag ("Etiketi takan 8 üyenin etiketi çıkarılacak.").
     pub wearers: u32,
+    /// "Yavaş mod" (CHAT-CALM): seconds between one member's messages in the crew's chat, 0 when
+    /// off (always 0 from a service without `slow`). The leader and moderators never wait.
+    pub slow: u32,
 }
 
 /// Someone who asked to join one of the player's crews.
@@ -1295,6 +1300,11 @@ pub enum SocialNotice {
     /// is muted).
     CrewPlan {
         plan: Box<PlanView>,
+    },
+    /// The player just joined a crowded crew and the service muted it for them (CHAT-CALM): said
+    /// once, with "Sesi aç".
+    CrowdedCrewMuted {
+        crew: String,
     },
     SignInFailed {
         reason: SignInFailure,

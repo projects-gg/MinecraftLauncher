@@ -11,6 +11,7 @@ import { trAutojoin } from "./tr-autojoin";
 import { trBadges } from "./tr-badges";
 import { trBetaGate } from "./tr-beta-gate";
 import { trChat } from "./tr-chat";
+import { trChatCalm } from "./tr-chat-calm";
 import { trChatProd } from "./tr-chat-prod";
 import { trChat2 } from "./tr-chat2";
 import { trCloudAfk } from "./tr-cloud-afk";
@@ -117,6 +118,7 @@ export const tr = {
   fix2: trFix2,
   chat2: trChat2,
   team6: trTeam6,
+  chatCalm: trChatCalm,
   verify: trVerify,
   badges: trBadges,
   cloudAfk: trCloudAfk,

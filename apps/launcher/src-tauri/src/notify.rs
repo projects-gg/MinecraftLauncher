@@ -9,6 +9,11 @@
 //! Windows allows (`shell::focus_main_window`: the taskbar button flashes when it refuses) and
 //! tells the page which of its notifications it was, so the page opens what it was about.
 //! Elsewhere the notification plugin shows it, without clicks.
+//!
+//! CHAT-CALM: a chat's notification carries its conversation as a tag. One conversation has one
+//! notification: a new one takes the old one's place, `popup: false` changes the words of the one
+//! shown (on screen or in the notification center) in place without popping up, and
+//! `desktop_notify_clear` takes it away once the player read the conversation in the launcher.
 
 use tauri::AppHandle;
 
@@ -40,15 +45,46 @@ pub fn register(app: &AppHandle) {
 /// Shows a system notification; true when the system took it. On Windows a click comes back to
 /// the page as the `desktop-notification-click` event with `id`. False when the player turned the
 /// launcher's notifications off in Windows, so the page keeps its own toast.
+///
+/// `tag` (CHAT-CALM, Windows): the conversation it is about. With `popup` it takes the place of the
+/// conversation's notification and pops up; without, the one shown says the new words in place
+/// (none shown, the player closed it: nothing happens, and that is fine too).
 #[tauri::command]
 #[specta::specta]
-pub async fn desktop_notify(app: AppHandle, title: String, body: Option<String>, id: u32) -> bool {
-    show(&app, &title, body.as_deref(), id)
+pub async fn desktop_notify(
+    app: AppHandle,
+    title: String,
+    body: Option<String>,
+    id: u32,
+    tag: Option<String>,
+    popup: bool,
+) -> bool {
+    show(&app, &title, body.as_deref(), id, tag.as_deref(), popup)
+}
+
+/// Takes the conversation's notification (`tag`, CHAT-CALM) away from the notification center:
+/// the player read it in the launcher. Never fails.
+#[tauri::command]
+#[specta::specta]
+pub async fn desktop_notify_clear(tag: String) {
+    #[cfg(windows)]
+    if let Err(error) = windows_toast::clear(&tag) {
+        tracing::debug!(%error, "notification not taken away");
+    }
+    #[cfg(not(windows))]
+    let _ = tag;
 }
 
 #[cfg(windows)]
-fn show(app: &AppHandle, title: &str, body: Option<&str>, id: u32) -> bool {
-    match windows_toast::show(app, title, body, id) {
+fn show(
+    app: &AppHandle,
+    title: &str,
+    body: Option<&str>,
+    id: u32,
+    tag: Option<&str>,
+    popup: bool,
+) -> bool {
+    match windows_toast::show(app, title, body, id, tag, popup) {
         Ok(shown) => shown,
         Err(error) => {
             tracing::warn!(%error, "notification not shown");
@@ -58,9 +94,20 @@ fn show(app: &AppHandle, title: &str, body: Option<&str>, id: u32) -> bool {
 }
 
 #[cfg(not(windows))]
-fn show(app: &AppHandle, title: &str, body: Option<&str>, _id: u32) -> bool {
+fn show(
+    app: &AppHandle,
+    title: &str,
+    body: Option<&str>,
+    _id: u32,
+    tag: Option<&str>,
+    popup: bool,
+) -> bool {
     use tauri_plugin_notification::NotificationExt;
 
+    // Without tags elsewhere, a change in place would be a new notification: none.
+    if tag.is_some() && !popup {
+        return true;
+    }
     let mut notification = app.notification().builder().title(title);
     if let Some(body) = body {
         notification = notification.body(body);
@@ -72,12 +119,16 @@ fn show(app: &AppHandle, title: &str, body: Option<&str>, _id: u32) -> bool {
 mod windows_toast {
     use std::path::{Path, PathBuf};
 
-    use pl_desktop::toast::{APP_IDS_KEY, ICON_FILE, toast_xml};
+    use pl_desktop::toast::{
+        APP_IDS_KEY, BODY_CHARS, BOUND_TOAST_XML, CHAT_GROUP, ICON_FILE, TITLE_CHARS, toast_tag,
+        toast_value, toast_xml,
+    };
     use tauri::{AppHandle, Emitter};
     use windows::Data::Xml::Dom::XmlDocument;
     use windows::Foundation::TypedEventHandler;
     use windows::UI::Notifications::{
-        NotificationSetting, ToastNotification, ToastNotificationManager,
+        NotificationData, NotificationSetting, NotificationUpdateResult, ToastNotification,
+        ToastNotificationManager,
     };
     use windows::Win32::System::Registry::{
         HKEY, HKEY_CURRENT_USER, KEY_CREATE_SUB_KEY, KEY_SET_VALUE, REG_OPEN_CREATE_OPTIONS,
@@ -215,6 +266,8 @@ mod windows_toast {
         title: &str,
         body: Option<&str>,
         id: u32,
+        tag: Option<&str>,
+        popup: bool,
     ) -> windows::core::Result<bool> {
         let notifier =
             ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id()))?;
@@ -226,9 +279,44 @@ mod windows_toast {
         {
             return Ok(false);
         }
-        let xml = XmlDocument::new()?;
-        xml.LoadXml(&HSTRING::from(toast_xml(title, body)))?;
-        let toast = ToastNotification::CreateToastNotification(&xml)?;
+        let toast = match tag {
+            None => {
+                let xml = XmlDocument::new()?;
+                xml.LoadXml(&HSTRING::from(toast_xml(title, body)))?;
+                ToastNotification::CreateToastNotification(&xml)?
+            }
+            Some(key) => {
+                // One notification per conversation, its words bound to its data (CHAT-CALM).
+                let tag = HSTRING::from(toast_tag(key));
+                let group = HSTRING::from(CHAT_GROUP);
+                let data = NotificationData::new()?;
+                let values = data.Values()?;
+                values.Insert(
+                    &HSTRING::from("title"),
+                    &HSTRING::from(toast_value(title, TITLE_CHARS)),
+                )?;
+                values.Insert(
+                    &HSTRING::from("body"),
+                    &HSTRING::from(toast_value(body.unwrap_or_default(), BODY_CHARS)),
+                )?;
+                if !popup {
+                    // The one shown says the new words where it is; closed or gone: nothing until
+                    // the next pop-up.
+                    let changed = notifier.UpdateWithTagAndGroup(&data, &tag, &group)?;
+                    if changed != NotificationUpdateResult::Succeeded {
+                        tracing::debug!("chat notification closed: not changed");
+                    }
+                    return Ok(true);
+                }
+                let xml = XmlDocument::new()?;
+                xml.LoadXml(&HSTRING::from(BOUND_TOAST_XML))?;
+                let toast = ToastNotification::CreateToastNotification(&xml)?;
+                toast.SetTag(&tag)?;
+                toast.SetGroup(&group)?;
+                toast.SetData(&data)?;
+                toast
+            }
+        };
         let handle = app.clone();
         toast.Activated(&TypedEventHandler::<ToastNotification, IInspectable>::new(
             move |_, _| {
@@ -238,6 +326,15 @@ mod windows_toast {
         ))?;
         notifier.Show(&toast)?;
         Ok(true)
+    }
+
+    /// Takes a conversation's notification away from the notification center (CHAT-CALM).
+    pub fn clear(key: &str) -> windows::core::Result<()> {
+        ToastNotificationManager::History()?.RemoveGroupedTagWithId(
+            &HSTRING::from(toast_tag(key)),
+            &HSTRING::from(CHAT_GROUP),
+            &HSTRING::from(app_id()),
+        )
     }
 
     /// A click on a notification (on screen; Windows reports none once it moved to the

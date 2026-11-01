@@ -4,7 +4,9 @@
 // the crew picker of "Ekiplerini çağır"; chat changes (CHAT1) and how a new message is told,
 // "Rapor et" and moderators' one-time notes (MOD1); join requests, a request taken, crewmates'
 // new plans and the plan reminders (TEAM5); the toast when a hidden crew took the player's tag off
-// and "Etiketi tak" on the toast of a request taken (TEAM6).
+// and "Etiketi tak" on the toast of a request taken (TEAM6). CHAT-CALM: a conversation's messages
+// are told in one notice that changes in place (chat/notify.ts `ChatNotices`), gone once the player
+// read them; a crowded crew muted on joining says so once, with "Sesi aç".
 import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,6 +23,7 @@ import type {
   SocialNotice,
   TeamMember,
 } from "@/lib/api/social-types";
+import { clearNotification } from "@/lib/attention";
 import { formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
@@ -29,11 +32,18 @@ import { attempt, notifyOutside } from "./actions";
 import { sayJoined } from "./badge-actions";
 import { useChat } from "./chat/chat-store";
 import { chatMutedNow, crewOf } from "./chat/conversations";
-import { chatNoticeWay, preview } from "./chat/notify";
+import {
+  ChatNotices,
+  type ChatNoticeWay,
+  chatNoticeWay,
+  type GatheredChatNotice,
+  preview,
+} from "./chat/notify";
 import { messageLine } from "./chat/preview";
 import { useTypingFeed } from "./chat/typing";
 import { showCallToast } from "./crew-call";
 import { CrewCallDialog } from "./crew-call-picker";
+import { unmuteCrew } from "./crew-notify";
 import { planWhen, withPlanNote } from "./crew-plans";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
@@ -346,6 +356,16 @@ function handleNotice(notice: SocialNotice) {
       });
       break;
     }
+    case "crowdedCrewMuted": {
+      const crew = ui.view.crews.find((one) => one.id === notice.crew);
+      if (!crew) break;
+      const text = i18n.t("chatCalm.crowded", { crew: crew.name });
+      announce(text);
+      toast(text, {
+        action: { label: i18n.t("teams.mute.undo"), onClick: () => void unmuteCrew(crew.id) },
+      });
+      break;
+    }
     case "requestAccepted": {
       const text = i18n.t("teams.joined", { name: notice.name });
       void notifyOutside(text, { onClick: () => showCrew(notice.crew) });
@@ -406,12 +426,14 @@ function chatOnScreen(conv: string): boolean {
   return shown === team;
 }
 
-/** A new chat message from someone else: a toast, a system notification, or nothing (notify.ts). */
+/** A new chat message from someone else: a toast, a system notification, or nothing (notify.ts);
+ * a conversation's messages go together, a moment later, in one notice (CHAT-CALM). */
 function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>) {
   const ui = useSocialUi.getState();
   const prefs = useSocialPrefs.getState();
   const now = Date.now();
   const crew = notice.crew ? ui.view.crews.find((c) => c.id === notice.crew) : undefined;
+  const me = ui.view.me?.id;
   const way = chatNoticeWay({
     kind: notice.crew ? "crew" : "direct",
     status: ui.view.me?.status,
@@ -421,31 +443,98 @@ function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>)
     mutedHere: chatMutedNow(notice.conv, prefs.chatMutes, now),
     crewMuted: crew ? crewMutedNow(crew, ui.view.crewNotifications, now) : false,
     crewChatOn: prefs.notifyCrewChat,
+    toMe: Boolean(me && notice.message.reply?.from === me),
   });
   if (way === "none") return;
-  const name = notice.name ?? i18n.t("chat.list.someone");
-  // A sticker reads "Çıkartma: GG" (CHAT2).
-  const text = preview(messageLine(notice.message, i18n.t, i18n.language));
-  const line = crew
-    ? i18n.t("chat.notices.crew", { name, crew: crew.name, text })
-    : i18n.t("chat.notices.direct", { name, text });
-  const toastIt = () =>
-    toast(line, {
-      action: {
-        label: i18n.t("chat.notices.reply"),
-        onClick: () => useSocialUi.getState().openChat(notice.conv),
-      },
-    });
-  if (way === "toast") {
-    toastIt();
-    return;
-  }
-  void notifyOutside(crew ? crew.name : name, {
-    body: crew ? `${name}: ${text}` : text,
-    onClick: () => useSocialUi.getState().openChat(notice.conv),
-  }).then((sent) => {
-    if (!sent) toastIt();
+  chatNotices.add(notice.conv, {
+    name: notice.name ?? i18n.t("chat.list.someone"),
+    // A sticker reads "Çıkartma: GG" (CHAT2).
+    text: preview(messageLine(notice.message, i18n.t, i18n.language)),
+    crew: crew?.name,
   });
+}
+
+/** How a gathered notice goes now (each message passed the crew's rules when it came). */
+function chatWayNow(conv: string): ChatNoticeWay {
+  const ui = useSocialUi.getState();
+  const prefs = useSocialPrefs.getState();
+  if (
+    ui.view.me?.status === "dnd" ||
+    gameBusy(useLaunch.getState().phase.kind) ||
+    chatMutedNow(conv, prefs.chatMutes, Date.now())
+  ) {
+    return "none";
+  }
+  if (document.hasFocus()) return chatOnScreen(conv) ? "none" : "toast";
+  return "system";
+}
+
+/** "Kaan: selam", or "Kaan: 5 yeni mesaj" (in a crew's chat the crew's name says where). */
+function gatheredWords(notice: GatheredChatNotice) {
+  const { last, count } = notice;
+  const many = i18n.t("chatCalm.newMessages", { count });
+  const title = last.crew ?? last.name;
+  const body = count > 1 ? many : last.crew ? `${last.name}: ${last.text}` : last.text;
+  const line =
+    count > 1
+      ? i18n.t("chat.notices.direct", { name: title, text: many })
+      : last.crew
+        ? i18n.t("chat.notices.crew", { name: last.name, crew: last.crew, text: last.text })
+        : i18n.t("chat.notices.direct", { name: last.name, text: last.text });
+  return { title, body, line };
+}
+
+/** One in-app toast per conversation: a new burst changes the one shown. */
+function chatToast(conv: string, line: string) {
+  toast(line, {
+    id: `chat:${conv}`,
+    action: {
+      label: i18n.t("chat.notices.reply"),
+      onClick: () => useSocialUi.getState().openChat(conv),
+    },
+  });
+}
+
+const chatNotices = new ChatNotices({
+  way: chatWayNow,
+  show(notice, way) {
+    const { title, body, line } = gatheredWords(notice);
+    if (way === "toast") {
+      chatToast(notice.conv, line);
+      return;
+    }
+    void notifyOutside(title, {
+      body,
+      // Opens at "Yeni mesajlar": the first message the player has not read.
+      onClick: () => useSocialUi.getState().openChat(notice.conv),
+      place: { tag: notice.conv, popup: notice.popup },
+    }).then((sent) => {
+      if (!sent) chatToast(notice.conv, line);
+    });
+  },
+  clear(conv) {
+    toast.dismiss(`chat:${conv}`);
+    clearNotification(conv);
+  },
+});
+
+/** Unread counts of the conversations with a notice, as last seen. */
+const noticeUnread = new Map<string, number>();
+
+/** A conversation's notice goes once the player read it (here or on another device) or it is on
+ * screen in front of them. */
+function settleChatNotices() {
+  const ui = useSocialUi.getState();
+  for (const conv of chatNotices.open()) {
+    const unread = ui.view.chat?.conversations.find((c) => c.id === conv)?.unread ?? 0;
+    const before = noticeUnread.get(conv);
+    noticeUnread.set(conv, unread);
+    const read = before !== undefined && before > 0 && unread === 0;
+    if (read || (chatOnScreen(conv) && document.hasFocus())) {
+      noticeUnread.delete(conv);
+      chatNotices.seen(conv);
+    }
+  }
 }
 
 /** The friends list is on screen (the panel is open on it, on "Arkadaşlar" when chat is on). */
@@ -471,11 +560,18 @@ function useSocialSync() {
     let account: string | undefined;
     const stopView = api.social.onView((view) => {
       if (view.me?.id !== account) {
-        if (account !== undefined) useChat.getState().forget();
+        if (account !== undefined) {
+          useChat.getState().forget();
+          noticeUnread.clear();
+          chatNotices.forget();
+        }
         account = view.me?.id;
       }
       useSocialUi.getState().setView(view);
     });
+    // CHAT-CALM: a conversation read, or opened in front of the player, takes its notice away.
+    const stopSettle = useSocialUi.subscribe(settleChatNotices);
+    window.addEventListener("focus", settleChatNotices);
     const stopNotice = api.social.onNotice(handleNotice);
     // The leader hid the crew whose tag the player wore (TEAM6 §5.3): one toast.
     const stopTagOff = api.social.onTagOff(() => {
@@ -495,6 +591,8 @@ function useSocialSync() {
     return () => {
       alive = false;
       stopView();
+      stopSettle();
+      window.removeEventListener("focus", settleChatNotices);
       stopNotice();
       stopTagOff();
       stopChat();

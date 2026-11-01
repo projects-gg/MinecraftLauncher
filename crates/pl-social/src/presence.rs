@@ -333,6 +333,8 @@ pub enum PresenceEvent {
     CrewMuted {
         crew: String,
         notifications: CrewMute,
+        /// CHAT-CALM: the service muted a crowded crew the player just joined.
+        crowded: bool,
     },
     /// You put your crews in another order on another device (the first is the primary crew).
     CrewOrder(Vec<String>),
@@ -1808,9 +1810,11 @@ async fn on_text(
         ServerMessage::CrewNotifications {
             crew,
             notifications,
+            crowded,
         } => PresenceEvent::CrewMuted {
             crew,
             notifications,
+            crowded,
         },
         ServerMessage::CrewOrder { order } => PresenceEvent::CrewOrder(order),
         ServerMessage::Chat { msg } if state.chat_on => PresenceEvent::ChatMessage(msg),
@@ -2856,7 +2860,8 @@ mod tests {
                 notifications: CrewMute {
                     muted: true,
                     mute_until: Some(1_792_600_000)
-                }
+                },
+                crowded: false,
             }
         );
         send_json(

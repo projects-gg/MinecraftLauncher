@@ -2254,6 +2254,7 @@ mod tests {
         let chat2 = Listener {
             english: false,
             chat2: true,
+            slow: false,
         };
         assert_eq!(
             refusal_of(&SocialError::InvalidInput("chat sticker"), chat2),
