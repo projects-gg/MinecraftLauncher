@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePrefs } from "@/stores/prefs";
-import { notify, showNotification, windowAway } from "./attention";
+import { clearNotification, notify, showNotification, windowAway } from "./attention";
 import { type AwayWindow, refreshWindowAway, trackWindowAway } from "./window-away";
 
 const desktopNotify = vi.fn();
+const desktopNotifyClear = vi.fn();
 vi.mock("@/bindings", () => ({
-  commands: { desktopNotify: (...args: unknown[]) => desktopNotify(...args) },
+  commands: {
+    desktopNotify: (...args: unknown[]) => desktopNotify(...args),
+    desktopNotifyClear: (...args: unknown[]) => desktopNotifyClear(...args),
+  },
 }));
 type Click = (event: { payload: number }) => void;
 const clicks: { listener?: Click } = {};
@@ -63,14 +67,45 @@ describe("system notifications", () => {
     const crew = vi.fn();
     expect(await showNotification("Ayşe", "Akşam Bedwars?", chat)).toBe(true);
     expect(await showNotification("Ekibin seni çağırıyor", undefined, crew)).toBe(true);
-    expect(desktopNotify.mock.calls[0]).toEqual(["Ayşe", "Akşam Bedwars?", idOf(0)]);
-    expect(desktopNotify.mock.calls[1]).toEqual(["Ekibin seni çağırıyor", null, idOf(1)]);
+    expect(desktopNotify.mock.calls[0]).toEqual(["Ayşe", "Akşam Bedwars?", idOf(0), null, true]);
+    expect(desktopNotify.mock.calls[1]).toEqual([
+      "Ekibin seni çağırıyor",
+      null,
+      idOf(1),
+      null,
+      true,
+    ]);
     expect(idOf(0)).not.toBe(idOf(1));
 
     clicks.listener?.({ payload: idOf(1) });
     clicks.listener?.({ payload: idOf(1) });
     expect(crew).toHaveBeenCalledTimes(1);
     expect(chat).not.toHaveBeenCalled();
+  });
+
+  it("keeps one notification per conversation and its click through changes in place", async () => {
+    // CHAT-CALM: a conversation's notification pops up once and then says new words in place.
+    desktopNotify.mockResolvedValue(true);
+    desktopNotifyClear.mockResolvedValue(null);
+    const open = vi.fn();
+    const place = (popup: boolean) => ({ tag: "d:1:2", popup });
+    expect(await showNotification("Kaan_07", "selam", open, place(true))).toBe(true);
+    expect(await showNotification("Kaan_07", "3 yeni mesaj", open, place(false))).toBe(true);
+    expect(desktopNotify.mock.calls[0]).toEqual(["Kaan_07", "selam", idOf(0), "d:1:2", true]);
+    expect(desktopNotify.mock.calls[1]).toEqual([
+      "Kaan_07",
+      "3 yeni mesaj",
+      idOf(0),
+      "d:1:2",
+      false,
+    ]);
+    // A click on it (Windows names the shown one) opens the conversation once.
+    clicks.listener?.({ payload: idOf(0) });
+    expect(open).toHaveBeenCalledTimes(1);
+    // Read in the launcher: it leaves the notification center, and only once.
+    clearNotification("d:1:2");
+    clearNotification("d:1:2");
+    expect(desktopNotifyClear.mock.calls).toEqual([["d:1:2"]]);
   });
 
   it("keeps nothing for a notification the system did not take", async () => {

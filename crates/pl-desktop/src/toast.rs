@@ -13,6 +13,10 @@
 //!
 //! The toast's text is built here (tested); the Windows calls are in the launcher
 //! (`apps/launcher/src-tauri/src/notify.rs`).
+//!
+//! CHAT-CALM: a chat's notification carries a tag (its conversation) and a data-bound text, so one
+//! conversation has one notification: a new one takes the old one's place, and between pop-ups the
+//! one on screen or in the notification center changes its words in place ("Kaan: 5 yeni mesaj").
 
 /// Where the AppUserModelIDs of apps without a package are named, under `HKEY_CURRENT_USER`: one
 /// key per ID with its `DisplayName` and `IconUri`.
@@ -22,9 +26,41 @@ pub const APP_IDS_KEY: &str = r"Software\Classes\AppUserModelId";
 pub const ICON_FILE: &str = "notification-icon.png";
 
 /// Longest title kept, in characters: Windows shows two lines of it.
-const TITLE_CHARS: usize = 200;
+pub const TITLE_CHARS: usize = 200;
 /// Longest body kept, in characters: Windows shows about four lines, and a toast stays small.
-const BODY_CHARS: usize = 600;
+pub const BODY_CHARS: usize = 600;
+
+/// The group of the launcher's chat notifications (with a tag per conversation).
+pub const CHAT_GROUP: &str = "chat";
+
+/// A tagged toast's text, bound to the values `title` and `body` of its notification data: the
+/// words can change in place later, and nothing a player wrote is ever read as XML.
+pub const BOUND_TOAST_XML: &str = concat!(
+    r#"<toast><visual><binding template="ToastGeneric"><text>{title}</text><text>{body}</text>"#,
+    r#"</binding></visual><audio silent="true"/></toast>"#
+);
+
+/// The tag of a conversation's notification: 16 hexadecimal characters of the key's FNV-1a hash,
+/// within the 16 characters Windows took before version 1703 (a conversation id is longer).
+pub fn toast_tag(key: &str) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in key.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// A value of a tagged toast's data: the characters XML can carry, cut at `max` with "…".
+pub fn toast_value(text: &str, max: usize) -> String {
+    let kept: Vec<char> = text.chars().filter(|&c| xml_char(c)).collect();
+    if kept.len() <= max {
+        return kept.into_iter().collect();
+    }
+    let mut cut: String = kept.into_iter().take(max - 1).collect();
+    cut.push('…');
+    cut
+}
 
 /// An AppUserModelID Windows takes and a registry key can be named after: 1–128 printable ASCII
 /// characters, no spaces, no backslashes.
@@ -144,6 +180,30 @@ mod tests {
             )),
             "{xml}"
         );
+    }
+
+    #[test]
+    fn a_conversation_has_one_short_tag() {
+        let tag = toast_tag("d:123456789012345678:223456789012345678");
+        assert_eq!(tag.len(), 16);
+        assert!(tag.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_eq!(
+            tag,
+            toast_tag("d:123456789012345678:223456789012345678"),
+            "stable"
+        );
+        assert_ne!(tag, toast_tag("c:0123456789abcdef"));
+        assert_eq!(toast_tag(""), "cbf29ce484222325");
+    }
+
+    #[test]
+    fn a_bound_toast_says_its_values_and_nothing_else() {
+        assert!(BOUND_TOAST_XML.contains("<text>{title}</text><text>{body}</text>"));
+        assert!(BOUND_TOAST_XML.contains(r#"<audio silent="true"/>"#));
+        // A value is never read as XML: the characters XML cannot carry go, the rest stays.
+        assert_eq!(toast_value("<b>&</b>\u{0}", 50), "<b>&</b>");
+        assert_eq!(toast_value(&"ğ".repeat(10), 5), "ğğğğ…");
+        assert_eq!(toast_value("12 yeni mesaj", BODY_CHARS), "12 yeni mesaj");
     }
 
     #[test]
