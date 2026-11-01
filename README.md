@@ -50,7 +50,7 @@ Questions and feedback: [Discord](https://projects.gg/discord) (Turkish).
 
 ## Build from source
 
-You need Rust stable (`rust-toolchain.toml`), Node 22+, pnpm 10 and the
+You need the Rust version `rust-toolchain.toml` pins (rustup installs it), Node 22+, pnpm 10 and the
 [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
 
 ```sh
