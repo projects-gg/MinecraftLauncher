@@ -41,6 +41,8 @@ public final class ToastLayer implements HudElement {
     static final int MARGIN = 8;
     private static final int ABOVE_HOTBAR = 60;
     private static final int ABOVE_CHAT_INPUT = 18;
+    /** The chat's emoji button (CHAT-EMOJI) and the card above it. */
+    private static final int ABOVE_EMOJI_BUTTON = 4;
     /** Room for five subtitle lines (the game draws them at the bottom right, 10 pixels each from 35 up). */
     private static final int ABOVE_SUBTITLES = 35 + 4 * 10 + 7;
     private static final int BELOW_EFFECTS = 52;
@@ -51,8 +53,8 @@ public final class ToastLayer implements HudElement {
     private static final long INFO_MS = 4_000;
     /** A toast under the pointer lights over this long, and goes dark again as fast (opacity only). */
     private static final long HOVER_MS = 120;
-    /** A press finds the toasts where the last frame drew them, if it drew them this recently. */
-    private static final long DRAWN_RECENTLY_MS = 250;
+    /** A press finds the toasts where the last frame drew them, if it drew them this recently (a slow frame too). */
+    private static final long DRAWN_RECENTLY_MS = 1_000;
     /** A toast takes a press once it is this visible (one fading in or out does not). */
     private static final float PRESSABLE_ALPHA = 0.5f;
 
@@ -346,7 +348,9 @@ public final class ToastLayer implements HudElement {
         boolean held = hoverKey != null && hover.target() > 0f;
         stack.update(now, (pauseWhileAway && !mc.isWindowActive()) || held, reduced);
         if (stack.isEmpty() || Compat.hudHidden(mc)) {
+            // Nothing drawn: a press finds no toast where one was.
             hoverKey = null;
+            drawnAt = Long.MIN_VALUE / 2;
             Perf.toast(started);
             return;
         }
@@ -440,8 +444,13 @@ public final class ToastLayer implements HudElement {
         if (mc.options.showSubtitles().get()) {
             bottom = Math.min(bottom, height - ABOVE_SUBTITLES);
         }
-        if (Compat.screen(mc) instanceof ChatScreen) {
+        if (Compat.screen(mc) instanceof ChatScreen chat) {
             bottom = Math.min(bottom, height - ABOVE_CHAT_INPUT);
+            // And above the chat's emoji button at the line's right end, which sat on the card's corner (F7-OPEN).
+            int button = ChatEmojiBar.buttonTop(chat);
+            if (button > 0) {
+                bottom = Math.min(bottom, button - ABOVE_EMOJI_BUTTON);
+            }
         }
         return bottom;
     }

@@ -138,6 +138,15 @@ public final class ChatEmojiBar {
         return bar != null && bar.screen == screen && bar.picker.isOpen() && bar.picker.contains(x, y);
     }
 
+    /**
+     * The top of {@code screen}'s emoji button while it shows (GUI pixels), or -1: the toasts stand above it in the chat
+     * (it sat on their bottom right corner; F7-OPEN made the toasts pressable there).
+     */
+    public static int buttonTop(Screen screen) {
+        ChatEmojiBar bar = last;
+        return bar != null && bar.screen == screen && bar.shown ? bar.y : -1;
+    }
+
     /** Adds the bar to a chat screen (any screen of the game's chat, mods' subclasses too). */
     public static void attach(Host host, Screen screen) {
         if (!(screen instanceof ChatScreen chat)) {
