@@ -33,6 +33,10 @@ pub fn scan(locations: &Locations, imported: &[ImportedFrom]) -> Vec<ImportSourc
     others.sort_by_key(|s| std::cmp::Reverse(s.last_used_ms));
     folders.extend(others);
     folders.retain(has_anything);
+    // A profile with a folder of its own may give the Projects instance its game settings.
+    for profile in folders.iter_mut().flat_map(|s| s.profiles.iter_mut()) {
+        profile.has_options = profile.own_folder && profile.game_dir.join("options.txt").is_file();
+    }
     folders
 }
 

@@ -8,7 +8,8 @@
 //!   preset (the player's pick or the computer's, see [`super::options`]) and, for the official
 //!   pack, key bindings its mods do not share ([`super::keys`]). An existing `options.txt` (the
 //!   player's or a modpack's) is never touched, except for a preset the player picked before the
-//!   first launch.
+//!   first launch. An import that brings the player's own settings removes such a pick
+//!   ([`super::options::picked_preset_file`]): their video settings stay as they were.
 //!
 //! Files that cannot be read are left alone; the error is returned for logging.
 //!

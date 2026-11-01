@@ -14,8 +14,11 @@ export const enImport = {
   },
   rows: {
     options: "Game settings",
-    optionsMeta: "Language, controls, video",
-    optionsKept: "Already set",
+    optionsMeta: "Controls, video and sound",
+    optionsBefore: "Brought over before",
+    optionsFrom: "Bring settings from",
+    optionsFromLabel: "From",
+    optionsFromInstance: "from {{name}}",
     servers: "Server list",
     serversMeta: "{{count}} servers",
     serversMeta_one: "{{count}} server",
@@ -101,7 +104,8 @@ export const enImport = {
   },
   outcome: {
     options: "Your game settings came over {{from}} to Projects.",
-    optionsKept: "Kept the settings in Projects instead of {{what}}.",
+    optionsFromInstance: "Your game settings came over from {{name}} to Projects.",
+    optionsSame: "{{What}} are already the same.",
     servers: "{{count}} servers added {{from}}.",
     servers_one: "{{count}} server added {{from}}.",
     worlds: "{{count}} worlds came over {{from}}.",
@@ -159,5 +163,11 @@ export const enImport = {
   attention: {
     title: "Import finished",
     body: "What you brought over from the other launcher is ready.",
+  },
+  undo: {
+    action: "Undo",
+    done: "Your game settings are back to how they were before the import.",
+    gone: "You can't undo this any more.",
+    v1: "Your game settings came over from the old launcher to Projects.",
   },
 };

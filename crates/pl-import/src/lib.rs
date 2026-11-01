@@ -12,6 +12,10 @@
 //!   resource packs, shader packs and screenshots into the Projects instance, and every chosen
 //!   profile or instance into an instance of its own (its mods become "Kendi modların").
 //!   Installed versions are not copied: the instances download them through the launcher.
+//! - Game settings (IMPORT-SET, `settings`) come from one place, another launcher's shared
+//!   folder or one of its instances: the player's values win over the Projects instance's own,
+//!   and [`undo_settings`] puts back exactly what was there. The v1 launcher's go the same way
+//!   ([`bring_folder_settings`]).
 //! - [`Locations::projects_v1`] and [`projects_v1_nickname`] find the v1 Projects Launcher's data
 //!   for its own first-run step (the launcher's `commands::migrate` brings it over), under the same
 //!   pretend home as the rest in end-to-end runs.
@@ -21,7 +25,8 @@
 //! - Other launchers' folders are only read. Nothing there is written, renamed or locked.
 //! - Accounts and sign-in tokens never come over; only an offline player name may be suggested.
 //! - Every copy is atomic (a temporary file or folder next to the target, renamed at the end);
-//!   nothing the player already has is replaced. A cancelled or failed item leaves nothing
+//!   nothing the player already has is replaced, except the game settings the player chose to
+//!   bring, which are kept first for "Geri al". A cancelled or failed item leaves nothing
 //!   half-copied behind.
 //! - Running it again copies only what is not there yet ([`journal`] remembers what came from
 //!   where), so nothing is doubled.
@@ -36,6 +41,7 @@ pub mod model;
 pub mod options;
 mod run;
 pub mod servers;
+mod settings;
 mod sqlite;
 mod v1;
 mod version_json;
@@ -47,6 +53,10 @@ pub use journal::{ImportedFrom, imported_profiles};
 pub use locate::{Locations, Os};
 pub use measure::measure;
 pub use model::*;
-pub use run::{InstanceLocker, OfficialTarget, ProgressFn, RunContext, run_import};
+pub use run::{
+    InstanceLocker, OfficialTarget, ProgressFn, RunContext, bring_folder_settings,
+    merge_folder_servers, run_import,
+};
+pub use settings::{settings_came_from, undo_settings};
 pub use tokio_util::sync::CancellationToken;
 pub use v1::projects_v1_nickname;
