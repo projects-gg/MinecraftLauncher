@@ -29,6 +29,14 @@ export function discordIsAccount(me: Pick<SocialProfile, "id" | "discordId"> | u
 }
 
 /**
+ * The account has a Discord account linked, whether it was opened with Discord or linked one later
+ * (MS-REST): the Projects skin works with that Discord id.
+ */
+export function hasDiscord(me: Pick<SocialProfile, "id" | "discordId"> | undefined): boolean {
+  return me !== undefined && discordIdOf(me) !== null;
+}
+
+/**
  * A limited account that is new itself (opened with Microsoft): its lines say "Hesabın yeni
  * olduğu için…" instead of "Discord hesabın yeni olduğu için…".
  */

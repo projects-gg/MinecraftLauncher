@@ -42,6 +42,7 @@ export const trProjectsSkin = {
     unreachable: "Şu an bağlanılamıyor. Biraz sonra tekrar dene.",
     session: "Discord oturumun kapandı. Yeniden giriş yap.",
     off: "Projects skini şu an kapalı.",
+    needsDiscord: "Projects skini için hesabına bir Discord hesabı bağla.",
     linkFirst: "Önce hesabını eşle",
     otherAccount: "Discord hesabın {{name}} hesabına eşli.",
     quota: "Bugünlük skin değiştirme hakkın bitti. Yarın tekrar dene.",

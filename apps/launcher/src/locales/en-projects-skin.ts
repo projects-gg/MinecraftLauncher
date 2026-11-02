@@ -39,6 +39,7 @@ export const enProjectsSkin = {
     unreachable: "Can't connect right now. Try again in a moment.",
     session: "Your Discord session ended. Sign in again.",
     off: "Projects skins are off right now.",
+    needsDiscord: "Link a Discord account to your account to use the Projects skin.",
     linkFirst: "Link your account first",
     otherAccount: "Your Discord is linked to {{name}}.",
     quota: "You've used today's skin changes. Try again tomorrow.",
