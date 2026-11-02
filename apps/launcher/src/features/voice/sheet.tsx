@@ -11,14 +11,13 @@ import {
   ArrowsClockwise,
   CaretLeft,
   GearSix,
+  Headphones,
   Microphone,
   MicrophoneSlash,
   PencilSimple,
   PhoneDisconnect,
   Plus,
-  SpeakerHigh,
   SpeakerSimpleSlash,
-  SpeakerSlash,
   User,
   UserPlus,
   Warning,
@@ -66,6 +65,7 @@ import {
   toggleMute,
 } from "./actions";
 import { QualityBars, SpeakingFace } from "./faces";
+import { HeadphonesSlash } from "./icons";
 import {
   crewRoomName,
   invitables,
@@ -74,6 +74,7 @@ import {
   roomFull,
   roomTitle,
   type VoiceFace,
+  voiceMark,
 } from "./rules";
 import { useFace, useFaces, useVoiceUi } from "./store";
 
@@ -93,24 +94,28 @@ function marksOf(
   t: (key: string) => string,
 ): Mark[] {
   const marks: Mark[] = [];
+  // What is off, in one sign (voice.md §5.1; nothing while the microphone and the sound are on):
+  // a moderator's mute in flare (it holds whatever they do), then deafened alone (the microphone is
+  // off with it, as Discord shows it), else the microphone.
+  const voice = voiceMark(p);
   if (p.mutedByModerator) {
     marks.push({
       key: "sm",
       label: t("voice.person.mutedForAll"),
       look: <MicrophoneSlash weight="bold" className={cn(markIcon, "text-flare-400")} />,
     });
-  } else if (p.mute) {
+  }
+  if (voice === "deaf") {
+    marks.push({
+      key: "deaf",
+      label: t("voice.person.deafened"),
+      look: <HeadphonesSlash className={cn(markIcon, "text-ash-400")} />,
+    });
+  } else if (voice === "mute") {
     marks.push({
       key: "mute",
       label: t("voice.person.micOff"),
       look: <MicrophoneSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
-    });
-  }
-  if (p.deaf) {
-    marks.push({
-      key: "deaf",
-      label: t("voice.person.deafened"),
-      look: <SpeakerSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
     });
   }
   if (p.mutedForMe) {
@@ -659,9 +664,9 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
             className="w-full px-2"
             icon={
               me.deaf ? (
-                <SpeakerSlash size={17} weight="bold" className="text-flare-400" />
+                <HeadphonesSlash size={17} className="text-flare-400" />
               ) : (
-                <SpeakerHigh size={17} weight="bold" />
+                <Headphones size={17} weight="bold" />
               )
             }
             onClick={() => void toggleDeaf()}

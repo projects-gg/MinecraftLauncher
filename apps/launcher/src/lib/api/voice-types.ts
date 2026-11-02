@@ -310,13 +310,18 @@ export type VoiceTalkMode = "voice" | "pushToTalk";
 /** A mouse button a shortcut may use (never the left or right one). */
 export type VoiceMouseButton = "middle" | "back" | "forward";
 
+/** Held with a mute or deafen key ("Ctrl + Shift + M"); left and right alike. */
+export type VoiceModifier = "ctrl" | "shift" | "alt";
+
 /**
  * A shortcut's key: a keyboard key by its place on the keyboard (`KeyboardEvent.code`: the same key
- * whatever the layout) with the label the page showed when it was picked, or a mouse button.
+ * whatever the layout) with the label the page showed when it was picked, or a mouse button; with
+ * the modifiers held with it (mute and deafen only; none or absent: the key alone, which fires
+ * whatever else is held).
  */
 export type VoiceKey =
-  | { kind: "keyboard"; code: string; label: string }
-  | { kind: "mouse"; button: VoiceMouseButton };
+  | { kind: "keyboard"; code: string; label: string; mods?: VoiceModifier[] }
+  | { kind: "mouse"; button: VoiceMouseButton; mods?: VoiceModifier[] };
 
 /** Ayarlar → Sesli sohbet. */
 export interface VoiceSettings {
@@ -357,13 +362,36 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
 /** Which shortcut a key is for. */
 export type VoiceShortcut = "pushToTalk" | "mute" | "deafen";
 
-/** What a key would clash with: the key picker's single line. */
-export type VoiceKeyClash = "gameVoiceChat" | "overlay" | "game" | "languageSwitch" | "taken";
+/**
+ * What a key would clash with: the key picker's single line. `typing`: a mute or deafen key that
+ * writes (a letter, a digit, Space…) without Ctrl or Alt fires while the player types too.
+ */
+export type VoiceKeyClash =
+  | "gameVoiceChat"
+  | "overlay"
+  | "game"
+  | "languageSwitch"
+  | "taken"
+  | "typing";
 
 export interface VoiceKeyCheck {
   /** The launcher can watch it. */
   usable: boolean;
   clash: VoiceKeyClash | null;
+}
+
+/**
+ * Discord's push-to-talk, mute and deafen keys on this computer, as ours (VOICE-KEYS), offered once
+ * as the player first opens voice chat: "Discord kısayolların kopyalansın mı?".
+ */
+export interface VoiceDiscordOffer {
+  pushToTalk: VoiceKey | null;
+  mute: VoiceKey | null;
+  deafen: VoiceKey | null;
+  /** Discord's microphone works by push-to-talk: copying turns "Bas-konuş" on too. */
+  pushToTalkMode: boolean;
+  /** Shortcuts Discord has that cannot be used here: the card's one line names them. */
+  skipped: VoiceShortcut[];
 }
 
 /**
@@ -414,6 +442,10 @@ export interface VoiceApi {
   settings(): Promise<VoiceSettings>;
   saveSettings(settings: VoiceSettings): Promise<VoiceSettings>;
   checkKey(key: VoiceKey, shortcut: VoiceShortcut): Promise<VoiceKeyCheck>;
+  /** Discord's keys to offer, once per computer; null: answered before, or nothing to copy. */
+  discordOffer(): Promise<VoiceDiscordOffer | null>;
+  /** "Kopyala" (`copy`) or "Hayır": never asked again. The settings as kept. */
+  discordAnswer(copy: boolean): Promise<VoiceSettings>;
   /** "Mikrofonu dene". */
   testMic(on: boolean): Promise<void>;
   /** The settings page opened or closed (devices and the level bar run only meanwhile). */

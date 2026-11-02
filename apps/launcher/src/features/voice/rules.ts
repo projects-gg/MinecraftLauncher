@@ -9,10 +9,12 @@ import type {
   VoiceKey,
   VoiceKeyCheck,
   VoiceLeftReason,
+  VoiceModifier,
   VoicePerson,
   VoicePresence,
   VoiceRole,
   VoiceRoomView,
+  VoiceShortcut,
   VoiceState,
 } from "@/lib/api/voice-types";
 
@@ -113,6 +115,30 @@ export function roomTitle(
     );
   if (calling) return nameOf(calling);
   return t("voice.justYou");
+}
+
+/**
+ * What someone's own choice turned off, for the sign beside them (VOICE-KEYS; voice.md §5.1):
+ * `deaf` (the headphones off, which closes the microphone too: one sign, as Discord shows it),
+ * `mute` (the microphone), or null while both are on (no sign at all).
+ */
+export function voiceMark(p: Pick<VoicePerson, "mute" | "deaf">): "deaf" | "mute" | null {
+  if (p.deaf) return "deaf";
+  if (p.mute) return "mute";
+  return null;
+}
+
+/** A small face's sign: a moderator's mute, deafened, or the microphone off. */
+export type VoiceFaceMark = "moderator" | "deaf" | "mute";
+
+/**
+ * The one sign on a small face (the title bar's pill): a moderator's mute first (it holds whatever
+ * they choose), then theirs.
+ */
+export function faceMark(
+  p: Pick<VoicePerson, "mute" | "deaf" | "mutedByModerator">,
+): VoiceFaceMark | null {
+  return p.mutedByModerator ? "moderator" : voiceMark(p);
 }
 
 /** The faces the title bar's pill shows: up to three others, longest present first. */
@@ -276,12 +302,56 @@ const MOUSE_KEYS = {
   forward: "voice.key.mouseForward",
 } as const;
 
-/** A key's label as its cap shows it ("Caps Lock", "V", "F8", "Fare 4"). */
-export function keyLabel(key: VoiceKey, t: TFunction): string {
-  if (key.kind === "mouse") return t(MOUSE_KEYS[key.button]);
+/** Modifiers in the order they are written ("Ctrl + Shift + Alt + M"). */
+export const MODIFIERS: readonly VoiceModifier[] = ["ctrl", "shift", "alt"];
+
+/** The modifier a key is ("ShiftRight" → "shift"), if it is one. */
+export function modifierOf(code: string): VoiceModifier | null {
+  if (code === "ControlLeft" || code === "ControlRight") return "ctrl";
+  if (code === "ShiftLeft" || code === "ShiftRight") return "shift";
+  if (code === "AltLeft" || code === "AltRight") return "alt";
+  return null;
+}
+
+/** A modifier's name on its cap: the same word in both languages. */
+export function modifierLabel(mod: VoiceModifier, t: TFunction): string {
+  return t(`voice.key.mod.${mod}`);
+}
+
+/** A key's caps, modifiers first ("Ctrl", "Shift", "M"; "Fare 4"). */
+export function keyParts(key: VoiceKey, t: TFunction): string[] {
+  const mods = MODIFIERS.filter((m) => key.mods?.includes(m)).map((m) => modifierLabel(m, t));
+  if (key.kind === "mouse") return [...mods, t(MOUSE_KEYS[key.button])];
   const named = NAMED_KEYS[key.code];
-  if (named) return t(named);
-  return key.label || codeLabel(key.code);
+  const label = named ? t(named) : key.label || codeLabel(key.code);
+  // The number pad's keys say so ("Num *", "Num 1"): the main keys carry the same signs.
+  return [...mods, key.code.startsWith("Numpad") && label.length === 1 ? `Num ${label}` : label];
+}
+
+/** A key's label in words ("Caps Lock", "V", "Ctrl + Shift + M", "Fare 4"). */
+export function keyLabel(key: VoiceKey, t: TFunction): string {
+  return keyParts(key, t).join(" + ");
+}
+
+/** What a mute or deafen picker records with a key: the modifiers held (Ctrl/Shift/Alt). */
+export function heldModifiers(
+  event: Pick<KeyboardEvent, "ctrlKey" | "shiftKey" | "altKey"> & {
+    getModifierState?: (key: string) => boolean;
+  },
+): VoiceModifier[] {
+  // AltGr (Right Alt, with the Left Ctrl Windows adds) types a character ("@" on a Turkish Q):
+  // neither counts.
+  const altGr = event.getModifierState?.("AltGraph") ?? false;
+  const held: VoiceModifier[] = [];
+  if (event.ctrlKey && !altGr) held.push("ctrl");
+  if (event.shiftKey) held.push("shift");
+  if (event.altKey && !altGr) held.push("alt");
+  return held;
+}
+
+/** Whether a shortcut takes Ctrl, Shift or Alt with its key (push-to-talk is one key). */
+export function takesModifiers(shortcut: VoiceShortcut): boolean {
+  return shortcut !== "pushToTalk";
 }
 
 /** A readable name from a `KeyboardEvent.code` alone ("KeyV" → "V", "Numpad1" → "Num 1"). */
@@ -292,32 +362,69 @@ export function codeLabel(code: string): string {
   return code.replace(/(Left|Right)$/, "");
 }
 
+/** The keyboard layout's own character per key place (`navigator.keyboard.getLayoutMap()`). */
+export type LayoutMap = ReadonlyMap<string, string>;
+
+/** This keyboard's layout now, where the browser tells it (WebView2 does); null elsewhere. */
+export async function keyboardLayout(): Promise<LayoutMap | null> {
+  const keyboard = (
+    navigator as Navigator & { keyboard?: { getLayoutMap?: () => Promise<LayoutMap> } }
+  ).keyboard;
+  try {
+    return (await keyboard?.getLayoutMap?.()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The key a press picked, or null for one that cannot be a shortcut (Escape cancels the pick; the
  * Windows key opens the Start menu). The label is the layout's own letter ("Ş" on a Turkish Q),
- * upper-cased in the interface's language.
+ * upper-cased in the interface's language: from the layout itself when known (Shift or AltGr
+ * change what the press typed: "!" is still the 1 key), else from the press. `mods` are kept with
+ * it (a mute or deafen combination).
  */
 export function keyFromEvent(
   event: Pick<KeyboardEvent, "code" | "key">,
   lang: string,
+  mods: readonly VoiceModifier[] = [],
+  layout: LayoutMap | null = null,
 ): VoiceKey | null {
   const { code, key } = event;
   if (!code || code === "Escape" || code.startsWith("Meta") || code === "Unidentified") return null;
-  const label = key.length === 1 && key !== " " ? key.toLocaleUpperCase(lang) : codeLabel(code);
-  return { kind: "keyboard", code, label };
+  const typed = layout?.get(code) ?? (mods.length ? null : key);
+  const label =
+    typed && typed.length === 1 && typed !== " "
+      ? typed.toLocaleUpperCase(lang)
+      : /^Key[A-Z]$/.test(code) && key.length === 1 && /\p{L}/u.test(key)
+        ? key.toLocaleUpperCase(lang)
+        : codeLabel(code);
+  return mods.length
+    ? { kind: "keyboard", code, label, mods: [...mods] }
+    : { kind: "keyboard", code, label };
 }
 
 /** The mouse button a press picked (`MouseEvent.button`): the wheel or a side button. */
-export function keyFromMouse(button: number): VoiceKey | null {
-  if (button === 1) return { kind: "mouse", button: "middle" };
-  if (button === 3) return { kind: "mouse", button: "back" };
-  if (button === 4) return { kind: "mouse", button: "forward" };
+export function keyFromMouse(button: number, mods: readonly VoiceModifier[] = []): VoiceKey | null {
+  const withMods = (key: VoiceKey): VoiceKey => (mods.length ? { ...key, mods: [...mods] } : key);
+  if (button === 1) return withMods({ kind: "mouse", button: "middle" });
+  if (button === 3) return withMods({ kind: "mouse", button: "back" });
+  if (button === 4) return withMods({ kind: "mouse", button: "forward" });
   return null;
 }
 
-/** The key picker's one line about a key, or null when there is nothing to say. */
-export function clashText(check: VoiceKeyCheck, t: TFunction): string | null {
+/**
+ * The key picker's one line about a key, or null when there is nothing to say; a key that writes
+ * says what it would do while the player types (mute or deafen them).
+ */
+export function clashText(
+  check: VoiceKeyCheck,
+  t: TFunction,
+  shortcut?: VoiceShortcut,
+): string | null {
   if (!check.usable) return t("voice.key.clash.unusable");
+  if (check.clash === "typing" && shortcut === "mute") return t("voice.key.clash.typingMute");
+  if (check.clash === "typing" && shortcut === "deafen") return t("voice.key.clash.typingDeafen");
   return check.clash ? t(`voice.key.clash.${check.clash}`) : null;
 }
 

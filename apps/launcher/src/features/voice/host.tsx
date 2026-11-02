@@ -12,6 +12,7 @@ import type { VoiceNotice, VoiceState } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
 import { isWindowAway, onWindowAwayChange } from "@/lib/window-away";
 import { openMicSettings } from "./actions";
+import { askDiscord } from "./discord-offer";
 import { playTone } from "./ring-sound";
 import { dismissRingToast, showRingToast } from "./ring-toast";
 import { leftText, peopleChanges, toneNow } from "./rules";
@@ -187,9 +188,34 @@ function useMissedSeen() {
   }, []);
 }
 
+/**
+ * Discord's keys (VOICE-KEYS), offered the first time the player is in a room with the window in
+ * front (a room joined from the game waits until the window is back); the launcher answers only
+ * once per computer.
+ */
+function useDiscordOnRoom() {
+  useEffect(() => {
+    const check = () => {
+      if (useVoiceUi.getState().state.room && !isWindowAway()) void askDiscord("room");
+    };
+    check();
+    const stopStore = useVoiceUi.subscribe((now, before) => {
+      if (now.state.room && !before.state.room) check();
+    });
+    const stopAway = onWindowAwayChange((away) => {
+      if (!away) check();
+    });
+    return () => {
+      stopStore();
+      stopAway();
+    };
+  }, []);
+}
+
 export function VoiceHost() {
   useVoiceSync();
   useVoiceTones();
   useMissedSeen();
+  useDiscordOnRoom();
   return <RoomSheet />;
 }
