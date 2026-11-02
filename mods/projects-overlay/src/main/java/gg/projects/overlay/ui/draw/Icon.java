@@ -82,7 +82,26 @@ public enum Icon {
     /** "Liderliği devret". */
     CROWN("Crown"),
     /** "Yeni kategori…" at the end of "Kategoriye taşı"'s list. */
-    FOLDER_PLUS("FolderSimplePlus");
+    FOLDER_PLUS("FolderSimplePlus"),
+    // Voice chat (VOICE-O), with the launcher's signs.
+    /** A voice room (the panel's strip). */
+    HEADSET("Headset"),
+    /** The microphone open ("Mikrofon"; "Herkes için susturmayı kaldır"). */
+    MIC("Microphone"),
+    /** The microphone closed, and "Herkes için sustur". */
+    MIC_OFF("MicrophoneSlash"),
+    /** Deafened ("Sağırlaştır" on). */
+    DEAF("SpeakerSlash"),
+    /** "Benim için sustur". */
+    MUTE_FOR_ME("SpeakerSimpleSlash"),
+    /** "Ara", and a ring's "Katıl". */
+    PHONE("Phone"),
+    /** "Odaya davet et". */
+    PHONE_PLUS("PhonePlus"),
+    /** A ring's "Reddet". */
+    PHONE_X("PhoneX"),
+    /** "Ayrıl" ("İptal" while the player's call rings). */
+    PHONE_OFF("PhoneDisconnect");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};

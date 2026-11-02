@@ -348,6 +348,8 @@ public final class OverlayState {
     private final Map<String, String> directs = new HashMap<>();
     /** Friends whose Discord profile is known (P11). */
     private final Set<String> discords = new HashSet<>();
+    /** VOICE-O (V14): friends' voice chat, {@code ready} or {@code in}; absent: they cannot be called. */
+    private final Map<String, String> voices = new HashMap<>();
     /** Direct conversations the panel opened before they had a message, and whose they are. */
     private final LinkedHashMap<String, Conversation> drafts = new LinkedHashMap<>();
     private final Map<String, String> draftFriends = new HashMap<>();
@@ -825,10 +827,22 @@ public final class OverlayState {
         } else {
             discords.remove(id);
         }
+        String voice = Protocol.str(o, "voice", "");
+        if (voice.equals("ready") || voice.equals("in")) {
+            voices.put(id, voice);
+        } else {
+            voices.remove(id);
+        }
+    }
+
+    /** VOICE-O: a friend's voice chat ({@code ready}, {@code in}), or null: no "Ara" for them. */
+    public String voicePresence(String friendId) {
+        return friendId == null || !friends.containsKey(friendId) ? null : voices.get(friendId);
     }
 
     /** Another account signed in: nothing of the previous one's menu stays. */
     private void forgetPeople() {
+        voices.clear();
         drafts.clear();
         draftFriends.clear();
         invitedAt.clear();

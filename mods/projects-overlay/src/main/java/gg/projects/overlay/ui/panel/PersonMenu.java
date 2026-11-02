@@ -397,6 +397,15 @@ public final class PersonMenu {
             case UNFRIEND -> "people.unfriend";
             case BLOCK -> "people.block";
             case REPORT -> "people.report";
+            case VOLUME -> "voice.person.volume";
+            case MUTE_FOR_ME -> "voice.person.mute_for_me";
+            case VOICE_MUTE -> "voice.person.mute_for_all";
+            case VOICE_UNMUTE -> "voice.person.unmute_for_all";
+            case VOICE_KICK -> "voice.person.kick";
+            case VOICE_MOD -> "people.make_moderator";
+            case VOICE_UNMOD -> "people.unmake_moderator";
+            case CALL -> "voice.call";
+            case CALL_INVITE -> row.done() ? "voice.ringing" : "voice.invite";
         };
     }
 
@@ -419,14 +428,22 @@ public final class PersonMenu {
             case UNFRIEND -> Icon.UNFRIEND;
             case BLOCK -> Icon.BLOCK;
             case REPORT -> Icon.REPORT;
+            case VOLUME -> Icon.SOUND;
+            case MUTE_FOR_ME -> Icon.MUTE_FOR_ME;
+            case VOICE_MUTE -> Icon.MIC_OFF;
+            case VOICE_UNMUTE -> Icon.MIC;
+            case VOICE_KICK -> Icon.SEND_OFF;
+            case VOICE_MOD, VOICE_UNMOD -> Icon.SHIELD_STAR;
+            case CALL -> Icon.PHONE;
+            case CALL_INVITE -> Icon.PHONE_PLUS;
         };
     }
 
     /** The launcher's check: a set online notice, a world invite that went, a friend request that went. */
     private static boolean checked(FriendMenu.Row row) {
         return switch (row.action()) {
-            case ALERT -> row.on();
-            case WORLD_INVITE, ADD_FRIEND -> row.done();
+            case ALERT, MUTE_FOR_ME -> row.on();
+            case WORLD_INVITE, ADD_FRIEND, CALL_INVITE -> row.done();
             default -> false;
         };
     }
@@ -474,6 +491,7 @@ public final class PersonMenu {
             case REMOVE_FROM_WORLD -> "host.remove.ask";
             case MAKE_FOUNDER -> leadKeepsModerator ? "people.make_founder.ask_moderator" : "people.make_founder.ask";
             case REMOVE_MEMBER -> "people.remove_member.ask";
+            case VOICE_KICK -> "voice.person.kick.ask";
             default -> "people.unfriend.ask";
         };
         String bodyKey = switch (action) {
@@ -486,6 +504,7 @@ public final class PersonMenu {
             case REMOVE_FROM_WORLD -> "people.remove_from_world";
             case MAKE_FOUNDER -> "people.make_founder";
             case REMOVE_MEMBER -> "people.remove_member";
+            case VOICE_KICK -> "voice.person.kick";
             default -> "people.unfriend";
         });
         cancelW = ui.width(cancelLabel) + BUTTON_PAD * 2;

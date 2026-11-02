@@ -30,6 +30,8 @@ public class ActionButton extends PanelWidget {
     private String label;
     private int labelWidth;
     private boolean selected;
+    /** The icon's own colour (a voice ring's gold phone, a leave's flare one; VOICE-O), 0 for the words' colour. */
+    private int iconInk;
 
     public ActionButton(Style style, Component label, Icon icon, Runnable onPress) {
         super(0, 0, 10, HEIGHT, label);
@@ -56,6 +58,11 @@ public class ActionButton extends PanelWidget {
 
     public void setIcon(Icon next) {
         icon = next;
+    }
+
+    /** The icon in its own colour (0: the words' colour). */
+    public void setIconInk(int argb) {
+        iconInk = argb;
     }
 
     /** Chosen (a crew call's own answer): drawn as primary and narrated as selected. */
@@ -150,7 +157,7 @@ public class ActionButton extends PanelWidget {
         float cx = x + (getWidth() - content) / 2f;
         float dy = p * 0.5f;
         if (icon != null) {
-            Draw.icon(g, icon, 10, cx, y + (HEIGHT - 10) / 2f + dy, ink);
+            Draw.icon(g, icon, 10, cx, y + (HEIGHT - 10) / 2f + dy, iconInk != 0 ? iconInk : ink);
             cx += 10 + ICON_GAP;
         }
         if (!label.isEmpty()) {

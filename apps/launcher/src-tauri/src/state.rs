@@ -291,7 +291,8 @@ impl AppState {
         let projects_skin =
             crate::commands::projects_skin::create(app, &social, &http, &root, handle.clone());
         let worlds = crate::host::create(app, &root, version, social.clone(), overlay.clone());
-        let voice = crate::voice::create(app, &root, social.clone(), handle.clone());
+        let voice =
+            crate::voice::create(app, &root, social.clone(), handle.clone(), overlay.clone());
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
         // state changes to the tray's summary). A connect that finds no client installed and no

@@ -60,6 +60,13 @@
 // answered with "emojis". Dev commands "emojis-off" / "emojis-on" switch it as the launcher's Settings would, "emojis-list"
 // (with "count") sends a shorter list as a Studio publish would. A mod whose hello lists "panel-off" (the picker alone)
 // hears only "welcome" and "emojis", as the launcher's quiet session.
+// --voice plays voice chat (docs/tasks/ovl2-protocol.md, VOICE-O, V1-V16) to a mod whose hello lists "voice": the
+// player in a friend room they lead with PixelAvci (a friend) and GeceKurdu_ (someone the lists do not know), the online
+// friends' "voice": "ready", and the mod's presses answered as the launcher would ("voice" again, "voice-result" for
+// the ones with a result; a call to KorAtesi is refused as "unreachable"). Dev commands: "voice-ring" (NetherKral calls,
+// 30 s), "voice-speak" (with "ids", default PixelAvci, and "me"), "voice-quiet", "voice-notice" (with "kind", "reason",
+// "name"), "voice-phase" (with "phase"), "voice-sound" (with "on"), "voice-crew" (a crew room of six), "voice-out" (out
+// of the room).
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -529,7 +536,230 @@ function historyOf(convId) {
 
 /** What the friends' rows say now: their tags while tags are on. */
 function friendRows() {
-  return state.friends.map((f) => ({ ...f, badge: tagsOn ? f.badge : undefined }));
+  return state.friends.map((f) => ({
+    ...f,
+    badge: tagsOn ? f.badge : undefined,
+    // VOICE-O (V14): online friends may be called.
+    voice: args.voice && f.where !== "offline" ? "ready" : undefined,
+  }));
+}
+
+// VOICE-O: voice chat as the launcher shows it, and whether the connected mod shows it (its hello lists "voice").
+const voiceMock = { hears: false, view: null };
+
+function voicePerson(id, name, extra = {}) {
+  return { id, ...(name ? { name } : {}), role: "member", volume: 100, ...extra };
+}
+
+function voiceFriendRoom() {
+  return {
+    on: true,
+    sound: false,
+    room: {
+      id: "f0123456789abcdef",
+      kind: "friend",
+      phase: "live",
+      max: 10,
+      me: { role: "leader" },
+      people: [
+        voicePerson("f-ayse", "PixelAvci", { can: { mute: true, kick: true, mod: true } }),
+        voicePerson("u-gk", null, { mute: true, can: { mute: true, kick: true, mod: true } }),
+      ],
+    },
+  };
+}
+
+function voiceCrewRoom() {
+  const names = ["PixelAvci", "NetherKral", "MaviElmas", "Ruzgar_12", "KumSaati", "DemirYumruk"];
+  return {
+    on: true,
+    sound: false,
+    room: {
+      id: "c0123456789abcdef",
+      kind: "crew",
+      general: true,
+      crew: "Gece Kuşları",
+      phase: "live",
+      max: 15,
+      me: { role: "member", mute: true },
+      people: names.map((name, i) =>
+        voicePerson(
+          `u-${i}`,
+          name,
+          i === 0 ? { role: "leader" } : i === 2 ? { quality: "weak" } : {},
+        ),
+      ),
+    },
+  };
+}
+
+function sendVoice(socket) {
+  if (args.voice && voiceMock.hears) {
+    send(socket, { t: "voice", ...voiceMock.view });
+  }
+}
+
+function voiceResult(socket, act, ok, reason, who) {
+  send(socket, {
+    t: "voice-result",
+    act,
+    ok,
+    ...(reason ? { reason } : {}),
+    ...(who ? { who } : {}),
+  });
+}
+
+/** The mod's voice presses (V6-V13), answered as the launcher would. */
+function onVoice(socket, frame) {
+  const view = voiceMock.view;
+  const room = view.room;
+  const person = (id) => room?.people.find((p) => p.id === id);
+  switch (frame.t) {
+    case "voice-set":
+      if (room && typeof frame.mute === "boolean") {
+        room.me.mute = frame.mute;
+        if (!frame.mute) {
+          room.me.deaf = false;
+        }
+      } else if (room && typeof frame.deaf === "boolean") {
+        room.me.deaf = frame.deaf;
+      }
+      break;
+    case "voice-leave":
+      view.room = undefined;
+      view.calling = undefined;
+      break;
+    case "voice-answer": {
+      const ring = (view.rings ?? []).find((r) => r.room === frame.room);
+      view.rings = (view.rings ?? []).filter((r) => r.room !== frame.room);
+      if (frame.join) {
+        if (!ring) {
+          voiceResult(socket, "join", false, "room-gone");
+          return;
+        }
+        view.room = { ...voiceFriendRoom().room, id: ring.room, phase: "joining" };
+        voiceResult(socket, "join", true);
+        later(800, () => {
+          if (view.room?.id === ring.room) {
+            view.room.phase = "live";
+            sendVoice(socket);
+          }
+        });
+      }
+      break;
+    }
+    case "voice-vol":
+      if (person(frame.person)) {
+        person(frame.person).volume = Math.max(0, Math.min(200, Number(frame.percent) || 0));
+      }
+      break;
+    case "voice-lmute":
+      if (person(frame.person)) {
+        person(frame.person).mutedForMe = Boolean(frame.on);
+      }
+      break;
+    case "voice-mod": {
+      const p = person(frame.person);
+      if (!p) {
+        voiceResult(socket, frame.act, false, "not-found", frame.person);
+        return;
+      }
+      if (frame.act === "mute" || frame.act === "unmute") {
+        p.mutedByModerator = frame.act === "mute";
+      } else if (frame.act === "kick") {
+        room.people = room.people.filter((q) => q.id !== frame.person);
+      } else if (frame.act === "mod" || frame.act === "unmod") {
+        p.role = frame.act === "mod" ? "moderator" : "member";
+      }
+      voiceResult(socket, frame.act, true, null, frame.person);
+      break;
+    }
+    case "voice-call":
+      if (frame.friend === "f-can") {
+        voiceResult(socket, "call", false, "unreachable", frame.friend);
+        return;
+      }
+      view.room = { ...voiceFriendRoom().room, people: [] };
+      view.calling = {
+        id: frame.friend,
+        name: state.friends.find((f) => f.id === frame.friend)?.name,
+      };
+      voiceResult(socket, "call", true, null, frame.friend);
+      break;
+    case "voice-invite":
+      if (room) {
+        room.ringing = [
+          ...(room.ringing ?? []),
+          { id: frame.friend, name: state.friends.find((f) => f.id === frame.friend)?.name },
+        ];
+        voiceResult(socket, "invite", true, null, frame.friend);
+      } else {
+        voiceResult(socket, "invite", false, "nothing", frame.friend);
+        return;
+      }
+      break;
+    default:
+      return;
+  }
+  sendVoice(socket);
+}
+
+/** Dev commands of voice chat (the scenario driver's). */
+function onVoiceDev(socket, frame) {
+  const view = voiceMock.view;
+  switch (frame.cmd) {
+    case "voice-ring":
+      view.rings = [
+        {
+          room: "c1111111111111111",
+          from: "f-mert",
+          name: "NetherKral",
+          with: ["PixelAvci"],
+          until: Date.now() + 30_000,
+        },
+      ];
+      sendVoice(socket);
+      return true;
+    case "voice-speak":
+      send(socket, {
+        t: "voice-speaking",
+        ids: Array.isArray(frame.ids) ? frame.ids : ["f-ayse"],
+        me: Boolean(frame.me),
+      });
+      return true;
+    case "voice-quiet":
+      send(socket, { t: "voice-speaking", ids: [], me: false });
+      return true;
+    case "voice-notice":
+      send(socket, {
+        t: "voice-notice",
+        kind: frame.kind ?? "muted",
+        ...(frame.reason ? { reason: frame.reason } : {}),
+        ...(frame.name ? { name: frame.name } : {}),
+      });
+      return true;
+    case "voice-phase":
+      if (view.room) {
+        view.room.phase = frame.phase ?? "reconnecting";
+        sendVoice(socket);
+      }
+      return true;
+    case "voice-sound":
+      view.sound = frame.on !== false;
+      sendVoice(socket);
+      return true;
+    case "voice-crew":
+      voiceMock.view = { ...voiceCrewRoom(), rings: view.rings };
+      sendVoice(socket);
+      return true;
+    case "voice-out":
+      view.room = undefined;
+      view.calling = undefined;
+      sendVoice(socket);
+      return true;
+    default:
+      return false;
+  }
 }
 
 function cardsFrame() {
@@ -622,6 +852,8 @@ function onConnection(socket) {
         langs.follows = Array.isArray(frame.features) && frame.features.includes("lang");
         emojis.hears = Array.isArray(frame.features) && frame.features.includes("emoji");
         emojis.quiet = Array.isArray(frame.features) && frame.features.includes("panel-off");
+        voiceMock.hears = Array.isArray(frame.features) && frame.features.includes("voice");
+        voiceMock.view = voiceFriendRoom();
         startSession(socket);
         continue;
       }
@@ -700,6 +932,7 @@ function welcome(socket) {
     send(socket, { t: "note", ...note });
   }
   sendEmojis(socket);
+  sendVoice(socket);
 }
 
 function startSession(socket) {
@@ -962,7 +1195,22 @@ function onFrame(socket, frame) {
       // The player writes in the panel: a launcher passes it to the friends service; the mock only logs it.
       break;
     case "dev":
-      onDev(socket, frame);
+      if (!(args.voice && voiceMock.hears && onVoiceDev(socket, frame))) {
+        onDev(socket, frame);
+      }
+      break;
+    case "voice-set":
+    case "voice-leave":
+    case "voice-answer":
+    case "voice-vol":
+    case "voice-lmute":
+    case "voice-mod":
+    case "voice-call":
+    case "voice-invite":
+      // VOICE-O: only a launcher that plays voice chat, only from a mod that said "voice".
+      if (args.voice && voiceMock.hears) {
+        onVoice(socket, frame);
+      }
       break;
     case "emoji": {
       // CHAT-EMOJI (E4): the player's switch from the overlay's settings, kept and answered.

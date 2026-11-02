@@ -21,6 +21,7 @@ use std::time::Duration;
 use pl_content::ChatEmojis;
 use pl_lang::Lang;
 use pl_social::SocialUpdate;
+use pl_voice::view::{VoiceNotice, VoiceSpeaking, VoiceState};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 
@@ -30,8 +31,9 @@ use crate::protocol::{ByeReason, ToGame};
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
     CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, LangFn, Msg, PeopleChange,
-    PeopleFn, Session, SocialActions,
+    PeopleFn, Session, SocialActions, VoiceActFn, VoiceHooks,
 };
+use crate::voice::{VoiceAct, VoiceFuture};
 
 /// How long [`Overlay::stop`] waits for the goodbye to leave.
 const STOP_WAIT: Duration = Duration::from_secs(1);
@@ -115,6 +117,11 @@ type LangSink = Arc<dyn Fn(Lang) + Send + Sync>;
 /// keeps the switch (Settings → Genel shows the same one).
 type EmojiSink = Arc<dyn Fn(bool) + Send + Sync>;
 
+/// The launcher's voice chat as the game's presses reach it (VOICE-O): a press the app carries out
+/// right away (the microphone, deafening, leaving, a decline, volumes) is done before the call
+/// returns, so two quick ones never change places; the future answers how it went.
+type VoiceSink = Arc<dyn Fn(VoiceAct) -> VoiceFuture + Send + Sync>;
+
 struct Running {
     id: u64,
     /// The bridge's port: names the session for [`Overlay::stop_for`].
@@ -122,6 +129,8 @@ struct Running {
     msgs: mpsc::UnboundedSender<Msg>,
     /// Its mod is connected now.
     connected: bool,
+    /// Its mod shows voice chat now (VOICE-O: `voice` in its hello).
+    voice: bool,
     /// What its mod's hello told world sharing ([`HostSignal::Connected`]): told again when its
     /// game becomes the one world sharing follows ([`Overlay::set_host`]).
     hello: Option<HostSignal>,
@@ -142,6 +151,13 @@ struct Inner {
     launcher_lang: Lang,
     /// CHAT-EMOJI: the server's chat emojis for the picker (Studio's list, else the built-in one).
     emojis: Arc<ChatEmojis>,
+    /// VOICE-O: voice chat's newest state, and whether a ring rings in the game (the launcher's
+    /// window is away); none while voice chat never said anything. Kept for the games that start
+    /// later.
+    voice: Option<(Arc<VoiceState>, bool)>,
+    /// VOICE-O: who speaks now, when that changed after the newest state (kept for the games that
+    /// start later: the state's own flags are as of its change).
+    voice_speaking: Option<VoiceSpeaking>,
 }
 
 impl Inner {
@@ -187,6 +203,10 @@ struct Shared {
     lang: Mutex<Option<LangSink>>,
     /// The emoji picker switched in the game (CHAT-EMOJI).
     emoji: Mutex<Option<EmojiSink>>,
+    /// The launcher's voice chat, for the game's presses (VOICE-O).
+    voice: Mutex<Option<VoiceSink>>,
+    /// A game's mod shows voice chat now (VOICE-O).
+    voice_shown: AtomicBool,
 }
 
 /// Cheap to clone; the launcher keeps one.
@@ -215,6 +235,8 @@ impl Overlay {
                     lang_pick: None,
                     launcher_lang: Lang::default(),
                     emojis: Arc::new(ChatEmojis::builtin()),
+                    voice: None,
+                    voice_speaking: None,
                 }),
                 next: AtomicU64::new(1),
                 connected: AtomicBool::new(false),
@@ -224,6 +246,8 @@ impl Overlay {
                 people: Mutex::new(None),
                 lang: Mutex::new(None),
                 emoji: Mutex::new(None),
+                voice: Mutex::new(None),
+                voice_shown: AtomicBool::new(false),
             }),
         }
     }
@@ -398,6 +422,7 @@ impl Overlay {
         };
         if !ended.is_empty() {
             tracing::info!("the in-game overlay was turned off during the game");
+            self.recount_voice();
         }
         for running in ended {
             let _ = running.msgs.send(Msg::Stop {
@@ -484,7 +509,7 @@ impl Overlay {
         let (control, control_rx) = mpsc::unbounded_channel();
         let (events_tx, events) = mpsc::unbounded_channel();
         let (msgs, msgs_rx) = mpsc::unbounded_channel();
-        let (config, worlds, lang, emojis) = {
+        let (config, worlds, lang, emojis, voice, speaking) = {
             let mut inner = self.lock();
             // The first game's session is the one world sharing follows, until the launcher names
             // another (`set_host`); a game started beside others sees no world sharing.
@@ -496,6 +521,7 @@ impl Overlay {
                 port: endpoint.port(),
                 msgs: msgs.clone(),
                 connected: false,
+                voice: false,
                 hello: None,
             });
             (
@@ -503,6 +529,8 @@ impl Overlay {
                 inner.worlds_for(id),
                 inner.language(),
                 Arc::clone(&inner.emojis),
+                inner.voice.clone(),
+                inner.voice_speaking.clone(),
             )
         };
         // The game starts in the overlay's language (G2), with the panel and the emoji picker as
@@ -522,6 +550,10 @@ impl Overlay {
         let picked: LangFn = Arc::new(move |lang| hub.language_picked(id, lang));
         let hub = self.clone();
         let emoji: EmojiFn = Arc::new(move |on| hub.emoji_switched(id, on));
+        let hub = self.clone();
+        let act: VoiceActFn = Arc::new(move |press| hub.voice_act(press));
+        let hub = self.clone();
+        let shown: ConnectedFn = Arc::new(move |on| hub.voice_report(id, on));
         let session = Session::new(
             social,
             launcher,
@@ -535,6 +567,12 @@ impl Overlay {
             people,
             (lang, picked),
             (emojis, emoji),
+            VoiceHooks {
+                state: voice,
+                speaking,
+                act,
+                shown,
+            },
         );
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));
@@ -635,6 +673,9 @@ impl Overlay {
             inner.sessions = kept;
             ended
         };
+        if !ended.is_empty() {
+            self.recount_voice();
+        }
         let mut closing = Vec::new();
         for running in ended {
             self.report(running.id, false);
@@ -847,6 +888,89 @@ impl Overlay {
         if let Some(sink) = sink {
             sink(signal);
         }
+    }
+
+    // --- voice chat (VOICE-O) ----------------------------------------------------------------------
+
+    /// The launcher's voice chat, for the game's presses: `sink` carries a press out (one it does
+    /// at once before it returns, so two quick ones keep their order) and answers how it went.
+    pub fn on_voice(&self, sink: impl Fn(VoiceAct) -> VoiceFuture + Send + Sync + 'static) {
+        *self
+            .shared
+            .voice
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// Voice chat's state after a change (the app's `Platform::state`): kept for the games that
+    /// start later, and every running game's session hears it. `ring_in_game`: the launcher's
+    /// window is away, so nothing of the launcher's rings for a ring and the game's card does.
+    pub fn set_voice(&self, state: &VoiceState, ring_in_game: bool) {
+        let mut inner = self.lock();
+        let state = Arc::new(state.clone());
+        inner.voice = Some((Arc::clone(&state), ring_in_game));
+        // The state's own speaking flags are the newest now.
+        inner.voice_speaking = None;
+        inner.tell_others(None, || Msg::Voice(Arc::clone(&state), ring_in_game));
+    }
+
+    /// Who speaks now (the app's `Platform::speaking`; changes only, at most ten a second): kept
+    /// for the games that start later, and every running game's session hears it.
+    pub fn voice_speaking(&self, speaking: &VoiceSpeaking) {
+        let mut inner = self.lock();
+        inner.voice_speaking = Some(speaking.clone());
+        inner.tell_others(None, || Msg::Speaking(speaking.clone()));
+    }
+
+    /// A voice chat moment worth a note (the app's `Platform::notice`). Without a game it is
+    /// dropped at once.
+    pub fn voice_notice(&self, notice: &VoiceNotice) {
+        let inner = self.lock();
+        if !inner.sessions.is_empty() {
+            inner.tell_others(None, || Msg::VoiceNotice(notice.clone()));
+        }
+    }
+
+    /// A game's mod shows voice chat now: its cards stand in for the launcher's own notifications
+    /// of rings, removals and a moderator's mute.
+    pub fn shows_voice(&self) -> bool {
+        self.shared.voice_shown.load(Ordering::SeqCst)
+    }
+
+    /// Hands a press to the launcher's voice chat; none while the app did not wire it.
+    fn voice_act(&self, act: VoiceAct) -> Option<VoiceFuture> {
+        let sink = self
+            .shared
+            .voice
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        sink.map(|sink| sink(act))
+    }
+
+    /// A session says whether its mod shows voice chat (a session already gone cannot).
+    fn voice_report(&self, session: u64, shown: bool) {
+        {
+            let mut inner = self.lock();
+            match inner
+                .sessions
+                .iter_mut()
+                .find(|running| running.id == session)
+            {
+                Some(running) => running.voice = shown,
+                None if shown => return,
+                None => {}
+            }
+        }
+        self.recount_voice();
+    }
+
+    /// Whether any running game's mod shows voice chat, after sessions came or went.
+    fn recount_voice(&self) {
+        // Stored under the lock: two sessions reporting at once leave the last count standing.
+        let inner = self.lock();
+        let any = inner.sessions.iter().any(|running| running.voice);
+        self.shared.voice_shown.store(any, Ordering::SeqCst);
     }
 
     /// A session says whether its mod is connected (the hub itself, `false`, for a session it just
