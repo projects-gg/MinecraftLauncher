@@ -155,7 +155,7 @@
     }
   },
   "counts": {
-    "cases": 186,
+    "cases": 195,
     "v1": 4,
     "stored": 10
   },
@@ -26373,7 +26373,7 @@
       }
     },
     {
-      "name": "ads on the generic profile",
+      "name": "ads on the generic profile (buy-basic)",
       "input": {
         "v": 2,
         "enabled": true,
@@ -26478,6 +26478,1024 @@
         "pauseUntil": null
       },
       "ctx": {},
+      "result": {
+        "ok": true,
+        "same": true
+      }
+    },
+    {
+      "name": "ads on the generic profile (buy-want)",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "generic",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": null,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "buy-want",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": true,
+        "same": true
+      }
+    },
+    {
+      "name": "ads on the generic profile (buy-take)",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "generic",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": null,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "buy-take",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": true,
+        "same": true
+      }
+    },
+    {
+      "name": "ads on the generic profile (sell-basic)",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "generic",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": null,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "sell-basic",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": true,
+        "same": true
+      }
+    },
+    {
+      "name": "ads on the generic profile (sell-have)",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "generic",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": null,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "sell-have",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": true,
+        "same": true
+      }
+    },
+    {
+      "name": "ads on the generic profile (sell-stock)",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "generic",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": null,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "sell-stock",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": true,
+        "same": true
+      }
+    },
+    {
+      "name": "a text the generic profile lacks",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "generic",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": null,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "sell-all",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {},
+      "result": {
+        "ok": false,
+        "status": 400,
+        "code": "invalid_plus_config",
+        "field": "discovery.adTemplate",
+        "reason": "range"
+      }
+    },
+    {
+      "name": "a closed stored mode with no profile open advertises by the generic texts",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-skyblock",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "sell-have",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {
+        "modes": {},
+        "storedMode": "projects-skyblock",
+        "storedProfile": {
+          "maxDeal": 5000000
+        }
+      },
+      "result": {
+        "ok": true,
+        "same": true
+      }
+    },
+    {
+      "name": "a closed stored mode advertises by the open profile's texts",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-skyblock",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "sell-basic",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {
+        "storedMode": "projects-skyblock",
+        "storedProfile": {
+          "maxDeal": 5000000
+        }
+      },
+      "result": {
+        "ok": true,
+        "same": true
+      }
+    },
+    {
+      "name": "a closed stored mode with a profile open: not the generic texts",
+      "input": {
+        "v": 2,
+        "enabled": true,
+        "mode": "projects-skyblock",
+        "lang": "auto",
+        "persona": {
+          "preset": "polite",
+          "intro": "",
+          "status": "",
+          "statusPreset": null,
+          "smallTalk": false,
+          "playerTalk": true,
+          "prefix": {
+            "on": false,
+            "text": "[AFK+]"
+          }
+        },
+        "replies": {
+          "scope": "trade",
+          "away": true,
+          "saveAt": 80
+        },
+        "authority": "ask",
+        "allow": {
+          "buy": true,
+          "sell": true
+        },
+        "pay": "money",
+        "who": {
+          "mode": "all",
+          "friends": []
+        },
+        "orders": [
+          {
+            "id": "a1",
+            "on": true,
+            "side": "buy",
+            "item": "minecraft:elytra",
+            "qty": 1,
+            "req": {
+              "ench": {},
+              "dur": 90,
+              "named": false,
+              "cursed": false
+            },
+            "pay": "money",
+            "unit": "total",
+            "target": 32000,
+            "limit": 40000,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          },
+          {
+            "id": "s1",
+            "on": true,
+            "side": "sell",
+            "item": "minecraft:diamond",
+            "qty": 64,
+            "req": null,
+            "pay": "money",
+            "unit": "each",
+            "target": 120,
+            "limit": 100,
+            "style": "balanced",
+            "trade": "auto",
+            "until": 1794109600,
+            "note": "",
+            "src": "form",
+            "at": 1792813600
+          }
+        ],
+        "customItems": [],
+        "limits": {
+          "perDealMax": 50000,
+          "dailySpendMax": null,
+          "totalBudget": 300000,
+          "balanceFloor": 0,
+          "approvalAbove": 50000,
+          "newCounterpartApprovalAbove": null,
+          "approvalTimeoutMin": 10
+        },
+        "discovery": {
+          "scanChat": true,
+          "proactivePm": true,
+          "ads": true,
+          "adTemplate": "sell-have",
+          "adEveryMin": 60
+        },
+        "trade": {
+          "returnRow": null
+        },
+        "summaryAt": "21:00",
+        "blocked": [],
+        "schedule": {
+          "on": false,
+          "windows": []
+        },
+        "pauseUntil": null
+      },
+      "ctx": {
+        "storedMode": "projects-skyblock",
+        "storedProfile": {
+          "maxDeal": 5000000
+        }
+      },
       "result": {
         "ok": false,
         "status": 400,

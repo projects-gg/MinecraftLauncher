@@ -688,6 +688,8 @@ function mockAdPreview(config: PlusConfig): PlusAdPreview | null {
   const warned = adsScenario === "warned" || adsScenario === "stopped";
   const everyMin = warned ? minutes * 2 : minutes;
   const namesPending = adsScenario === "pending";
+  // AFKPLUS-DYN: `?ads=learning`, the bot still gets to know the server's chat (no time yet).
+  const learning = adsScenario === "learning";
   const orders = config.orders.some((o) => o.on && o.until > now);
   const active = orders && adsScenario !== "empty" && !namesPending;
   const lines = active
@@ -702,9 +704,10 @@ function mockAdPreview(config: PlusConfig): PlusAdPreview | null {
     everyMin,
     lines,
     namesPending,
-    nextAt: active && adsScenario !== "stopped" ? now + 25 * MIN : null,
+    nextAt: active && adsScenario !== "stopped" && !learning ? now + 25 * MIN : null,
     warning: warned ? { at: now - 2 * HOUR, everyMin } : null,
     stoppedToday: adsScenario === "stopped",
+    learning,
   };
 }
 

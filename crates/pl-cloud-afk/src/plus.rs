@@ -769,6 +769,9 @@ pub struct PlusAdPreview {
     pub warning: Option<PlusAdWarning>,
     /// A second warning stopped the ads until the day ends.
     pub stopped_today: bool,
+    /// ProBot AI still gets to know this server's chat before its first ad here (no Studio
+    /// profile for it; AFKPLUS-DYN). False from an older service.
+    pub learning: bool,
 }
 
 /// A spam warning: when it came (Unix seconds) and the minutes between ads since.
@@ -2664,6 +2667,12 @@ mod tests {
         let pending = json!({"floorMin": 30, "everyMin": 60, "lines": [], "namesPending": true});
         let pending: PlusAdPreview = serde_json::from_value(pending).unwrap();
         assert!(pending.names_pending && pending.lines.is_empty());
+        assert!(!pending.learning, "an older service says nothing of it");
+        // AFKPLUS-DYN: the bot still gets to know the server's chat (no time yet).
+        let learning = json!({"floorMin": 60, "everyMin": 60, "lines": ["Satılık: 1 Elytra, PM at"],
+                              "nextAt": null, "learning": true});
+        let learning: PlusAdPreview = serde_json::from_value(learning).unwrap();
+        assert!(learning.learning && learning.next_at.is_none());
         // An older service plans none: the switch alone shows as before.
         let settings: PlusSettings =
             serde_json::from_value(json!({"config": document(), "aiRev": 1})).unwrap();
