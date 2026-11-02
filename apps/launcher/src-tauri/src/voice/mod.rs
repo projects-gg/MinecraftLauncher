@@ -450,6 +450,22 @@ impl AppPlatform {
             })
     }
 
+    /// Someone in the room, for the tray: a friend's or crewmate's name, else the one their card
+    /// gave (a friend's friend, VOICE-S2), else the page's "Bir oyuncu".
+    #[cfg(desktop)]
+    fn person_name(&self, id: &str, profiles: &[pl_voice::view::VoiceProfile]) -> String {
+        if let Some(name) = lock(&self.names).get(id) {
+            return name.clone();
+        }
+        if let Some(profile) = profiles.iter().find(|profile| profile.id == id) {
+            return profile.name.clone();
+        }
+        match pl_lang::Lang::current() {
+            pl_lang::Lang::Tr => "Bir oyuncu".to_owned(),
+            pl_lang::Lang::En => "A player".to_owned(),
+        }
+    }
+
     fn system_notice(&self, notice: SystemNotice) {
         let tr = pl_lang::Lang::current() == pl_lang::Lang::Tr;
         match notice {
@@ -639,7 +655,7 @@ impl Platform for AppPlatform {
                 let label = room.name.clone().unwrap_or_else(|| {
                     room.people
                         .iter()
-                        .map(|person| self.name_of(&person.id))
+                        .map(|person| self.person_name(&person.id, &state.profiles))
                         .collect::<Vec<_>>()
                         .join(", ")
                 });
