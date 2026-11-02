@@ -1,7 +1,9 @@
 # Moves a published launcher release between update channels on R2 (beta -> stable), or changes
-# the rollout / mandatory / minVersion of a channel (stable -> stable).
+# the rollout / mandatory / minVersion of a channel (stable -> stable). Studio's "Kararlıyı
+# durdur" and "Herkese aç" start it (stable -> stable, rollout 0 or 100) and find the run by name.
 
 name: Release promote
+run-name: "Promote ${{ inputs.version }} (${{ inputs.from }} -> ${{ inputs.to }}${{ inputs.rollout != '' && format(', rollout {0}', inputs.rollout) || '' }})${{ inputs.dry_run && ' (dry run)' || '' }}"
 
 on:
   workflow_dispatch:

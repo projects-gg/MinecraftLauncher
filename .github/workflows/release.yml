@@ -1,9 +1,18 @@
 # Builds Projects Launcher for Windows, macOS (universal) and Linux, attaches the bundles and
 # latest.json to a DRAFT GitHub release, and (when the R2 secrets exist) publishes them to
 # https://cdn.projects.gg/v1/releases/<version>/ plus the beta channel file.
+#
+# Stable from a beta (Studio's "Betayı kararlıya al", docs/release.md): started on a beta's tag
+# with `from_beta` set to that tag, the run builds the beta's commit as the beta's own stable
+# version (v2.1.0-beta.2 -> 2.1.0) with exactly the jobs a tag push runs, then publishes it to the
+# beta channel, then to the stable one, tags the commit v2.1.0 with the notes and publishes the
+# GitHub release as Latest. Every check runs in Prepare, before anything builds. A tag made with
+# GITHUB_TOKEN starts no other run, so this run carries the promotion to its end.
 # Secrets: TAURI_SIGNING_PRIVATE_KEY (required), R2_* (CDN publish), SIGNPATH_* and APPLE_* (code signing).
 
 name: Release
+# Studio finds its runs by this name; other runs keep GitHub's own (an empty name falls back to it).
+run-name: "${{ inputs.from_beta && format('Stable {0} from {1}{2}', inputs.version, inputs.from_beta, inputs.dry_run && ' (dry run)' || '') || '' }}"
 
 on:
   push:
@@ -33,6 +42,16 @@ on:
         description: "Yalnız derle: GitHub Release oluşturma, R2'ye yükleme"
         type: boolean
         default: false
+      from_beta:
+        description: "Betayı kararlıya al: betanın etiketi (ör. v2.1.0-beta.2). 'Use workflow from'da aynı etiket seçilir, sürüm onun kararlısıdır (2.1.0). Notlar boşsa betanın etiket mesajı."
+        required: false
+        type: string
+        default: ""
+      rollout:
+        description: "Kararlı kanalda yayılım 0-100 (yalnız from_beta ile)"
+        required: false
+        type: string
+        default: "100"
 
 permissions:
   contents: read
@@ -59,6 +78,8 @@ jobs:
       tag: ${{ steps.meta.outputs.tag }}
       channel: ${{ steps.meta.outputs.channel }}
       dry_run: ${{ steps.meta.outputs.dry_run }}
+      from_beta: ${{ steps.meta.outputs.from_beta }}
+      rollout: ${{ steps.meta.outputs.rollout }}
       release_id: ${{ steps.release.outputs.id }}
       matrix: ${{ steps.plan.outputs.matrix }}
       signpath: ${{ steps.plan.outputs.signpath }}
@@ -80,6 +101,10 @@ jobs:
           INPUT_NOTES_EN: ${{ inputs.notes_en }}
           INPUT_CHANNEL: ${{ inputs.channel }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_FROM_BETA: ${{ inputs.from_beta }}
+          INPUT_ROLLOUT: ${{ inputs.rollout }}
+          GH_TOKEN: ${{ github.token }}
+          CDN_BASE_URL: ${{ vars.CDN_BASE_URL || 'https://cdn.projects.gg' }}
         run: |
           if [ "$EVENT" = "push" ]; then raw="$GITHUB_REF_NAME"; else raw="$INPUT_VERSION"; fi
           # Not piped (this shell has no pipefail): a version that is invalid, or that macOS
@@ -87,26 +112,49 @@ jobs:
           node scripts/release/version-info.mjs "$raw" > version.env
           cat version.env >> "$GITHUB_OUTPUT"
           . ./version.env
-          echo "channel=${INPUT_CHANNEL:-beta}" >> "$GITHUB_OUTPUT"
+          channel="${INPUT_CHANNEL:-beta}"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
           echo "dry_run=${INPUT_DRY_RUN:-false}" >> "$GITHUB_OUTPUT"
 
-          # Release notes: the dispatch inputs, else the annotated tag's message: the Turkish notes,
-          # then optionally a "--- en ---" line and the English ones (docs/release.md). notes.mjs
-          # stops the release here when they are malformed; the channel files carry both languages.
+          # Stable from a beta: started on the beta's tag (so every job builds its commit), the
+          # version is the beta's own stable one, the beta channel still announces that beta, the
+          # stable channel an older version, and the stable tag is free or on this commit already.
+          from_beta="$INPUT_FROM_BETA"
+          rollout=""
+          if [ -n "$from_beta" ]; then
+            rollout="$INPUT_ROLLOUT"
+            node scripts/release/stable-from-beta.mjs check --beta "$from_beta" \
+              --version "$version" --channel "$channel" --rollout "$rollout"
+          fi
+          echo "from_beta=$from_beta" >> "$GITHUB_OUTPUT"
+          echo "rollout=$rollout" >> "$GITHUB_OUTPUT"
+
+          # Release notes: the dispatch inputs, else the annotated tag's message (the beta's for a
+          # stable from a beta): the Turkish notes, then optionally a "--- en ---" line and the
+          # English ones (docs/release.md). notes.mjs stops the release here when they are
+          # malformed (a stable from a beta also needs the Turkish ones); the channel files carry
+          # both languages.
+          notes_tag=""
+          if [ "$EVENT" = "push" ]; then notes_tag="$tag"; elif [ -n "$from_beta" ]; then notes_tag="$from_beta"; fi
           : > notes.md
           if [ -n "$INPUT_NOTES" ] || [ -n "$INPUT_NOTES_EN" ]; then
             printf '%s\n' "$INPUT_NOTES" > notes.md
             if [ -n "$INPUT_NOTES_EN" ]; then
               printf '\n--- en ---\n\n%s\n' "$INPUT_NOTES_EN" >> notes.md
             fi
-          elif [ "$EVENT" = "push" ]; then
-            git fetch --no-tags --depth=1 origin "+refs/tags/$tag:refs/tags/$tag"
-            if [ "$(git cat-file -t "$tag")" = "tag" ]; then
-              git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$tag" > notes.md
+          elif [ -n "$notes_tag" ]; then
+            git fetch --no-tags --depth=1 origin "+refs/tags/$notes_tag:refs/tags/$notes_tag"
+            if [ "$(git cat-file -t "$notes_tag")" = "tag" ]; then
+              git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$notes_tag" > notes.md
             fi
           fi
-          node scripts/release/notes.mjs notes.md --body release-body.md
+          notes_args=(notes.md --body release-body.md)
+          if [ -n "$from_beta" ]; then notes_args+=(--require tr); fi
+          node scripts/release/notes.mjs "${notes_args[@]}"
           { echo "## Projects Launcher $version"; echo; cat release-body.md; } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$from_beta" ]; then
+            echo "Stable from $from_beta ($GITHUB_SHA), stable rollout $rollout%" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -156,7 +204,7 @@ jobs:
           if [ -n "$existing" ]; then
             read -r id draft <<< "$existing"
             if [ "$draft" != "true" ]; then
-              echo "::error::Release $TAG is already published. Published files never change; release a new version."
+              echo "::error title=release/released::Release $TAG is already published. Published files never change; release a new version."
               exit 1
             fi
             echo "Reusing draft release $id"
@@ -532,6 +580,7 @@ jobs:
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       CHANNEL: ${{ needs.prepare.outputs.channel }}
+      FROM_BETA: ${{ needs.prepare.outputs.from_beta }}
       CDN_BASE_URL: ${{ vars.CDN_BASE_URL || 'https://cdn.projects.gg' }}
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -543,6 +592,9 @@ jobs:
         run: |
           if [ -n "$R2_ACCOUNT_ID" ] && [ -n "$R2_ACCESS_KEY_ID" ] && [ -n "$R2_SECRET_ACCESS_KEY" ] && [ -n "$R2_BUCKET" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$FROM_BETA" ]; then
+            echo "::error title=release/no-r2::R2 secrets are not set; a stable cannot be published without them."
+            exit 1
           else
             echo "::notice::R2 secrets are not set; skipping the CDN publish (see the secrets list at the top of this file)."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -571,8 +623,97 @@ jobs:
           name: release-notes
           path: notes
 
+      # A stable from a beta goes to the beta channel only while it still announces that beta (or
+      # already this version: a run again), so a newer beta is never replaced by older code.
       - name: Upload to v1/releases/<version>/ and write the channel file
         if: steps.r2.outputs.enabled == 'true'
+        run: |
+          args=(publish --dir release-files --version "$VERSION" --channel "$CHANNEL"
+            --notes-file notes/notes.md --require "$REQUIRED_PLATFORMS")
+          if [ -n "$FROM_BETA" ]; then args+=(--expect-current "${FROM_BETA#v}"); fi
+          node scripts/release/publish-r2.mjs "${args[@]}"
+
+  # Stable from a beta, after the beta channel took it: the same files on the stable channel. A
+  # publish again, not a promote of beta.json: every file is already there and is only checked,
+  # and a beta that arrives meanwhile cannot change what goes to stable.
+  stable:
+    name: Stable channel
+    needs: [prepare, publish-r2]
+    if: always() && needs.prepare.outputs.from_beta != '' && needs.publish-r2.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: cdn
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      ROLLOUT: ${{ needs.prepare.outputs.rollout }}
+      CDN_BASE_URL: ${{ vars.CDN_BASE_URL || 'https://cdn.projects.gg' }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: launcher-*
+          path: release-files
+          merge-multiple: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: notes
+
+      - name: Write the stable channel file
         run: >-
           node scripts/release/publish-r2.mjs publish --dir release-files --version "$VERSION"
-          --channel "$CHANNEL" --notes-file notes/notes.md --require "$REQUIRED_PLATFORMS"
+          --channel stable --rollout "$ROLLOUT" --notes-file notes/notes.md
+          --require "$REQUIRED_PLATFORMS"
+
+  # Stable from a beta, last: the annotated stable tag on the beta's commit (the notes as its
+  # message), then the draft release published as GitHub's latest. A tag made with GITHUB_TOKEN
+  # starts no release run of its own.
+  github-release:
+    name: GitHub release (Latest)
+    needs: [prepare, stable]
+    if: always() && needs.stable.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: notes
+
+      - name: Tag the beta's commit
+        run: node scripts/release/stable-from-beta.mjs tag --tag "$TAG" --notes-file notes/notes.md
+
+      - name: Publish the release as Latest
+        run: |
+          node scripts/release/notes.mjs notes/notes.md --body release-body.md
+          url="$(gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F draft=false -F prerelease=false -f make_latest=true \
+            -f name="$PRODUCT_NAME $VERSION" -F body=@release-body.md --jq .html_url)"
+          echo "Published: $url" >> "$GITHUB_STEP_SUMMARY"

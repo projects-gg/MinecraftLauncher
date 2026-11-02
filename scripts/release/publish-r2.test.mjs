@@ -234,6 +234,55 @@ test("promote copies beta to stable with a staged rollout and keeps channels mon
   await assert.rejects(publishR2("promote", "--version", "2.2.0"), /announces 2\.1\.0/);
 });
 
+test("publish --expect-current writes only over the release it expects", async () => {
+  // A stable taken from a beta goes to the beta channel first: refused when the channel moved on
+  // (here it announces 2.1.0, not the beta), before anything is uploaded. In Actions the refusal is
+  // also an error annotation that Studio reads back.
+  const before = objects.get("v1/releases/beta.json").body;
+  await assert.rejects(
+    run(
+      process.execPath,
+      [
+        join(here, "publish-r2.mjs"),
+        "publish",
+        "--dir",
+        dir,
+        "--version",
+        "2.1.1",
+        "--expect-current",
+        "2.1.1-beta.1",
+      ],
+      { env: { ...env, GITHUB_ACTIONS: "true" } },
+    ),
+    (error) =>
+      /beta announces 2\.1\.0, not 2\.1\.1-beta\.1/.test(error.stderr) &&
+      /^::error title=release\/channel-moved::beta announces 2\.1\.0/m.test(error.stdout),
+  );
+  assert.equal(objects.get("v1/releases/beta.json").body, before);
+  assert.equal(
+    [...objects.keys()].some((key) => key.startsWith("v1/releases/2.1.1/")),
+    false,
+  );
+
+  // It goes on while the channel announces the beta, and again once it announces the version (a
+  // run again after a later step failed).
+  await publishR2("publish", "--dir", dir, "--version", "2.2.0-beta.1", "--channel", "beta");
+  for (let i = 0; i < 2; i++) {
+    await publishR2(
+      "publish",
+      "--dir",
+      dir,
+      "--version",
+      "2.2.0",
+      "--channel",
+      "beta",
+      "--expect-current",
+      "2.2.0-beta.1",
+    );
+    assert.equal(JSON.parse(objects.get("v1/releases/beta.json").body).version, "2.2.0");
+  }
+});
+
 test("channel.mjs writes latest.json for the GitHub release", async () => {
   const out = join(dir, "latest.json");
   await run(process.execPath, [
