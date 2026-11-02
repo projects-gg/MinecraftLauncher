@@ -60,6 +60,7 @@ import { useTranslation } from "react-i18next";
 import type { CloudBars, CloudInvItem } from "@/bindings";
 import { uiLocale } from "@/lib/format";
 import { openWebLink } from "@/lib/links";
+import { TEXT_LINK } from "@/lib/text-link";
 import { useWindowAway } from "@/lib/window-away";
 import { AfkHead } from "../afk-head";
 import { isFriendly } from "../errors";
@@ -162,7 +163,7 @@ function Banner({
             <button
               type="button"
               onClick={onReopen}
-              className="shrink-0 cursor-pointer rounded-sm font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+              className={cn(TEXT_LINK, "shrink-0 font-medium")}
             >
               {t("cloudAfk.console.reopen")}
             </button>

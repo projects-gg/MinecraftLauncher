@@ -33,6 +33,7 @@ import { Dialog as RadixDialog } from "radix-ui";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { looksLikeLink, looksLikePhone } from "@/features/social/chat/text";
+import { TEXT_LINK } from "@/lib/text-link";
 import { inputClass } from "../../settings/controls";
 import type { PlusIssue, PlusOrder, PlusSettings } from "./api";
 import { AmountField, type AmountValue, IntField } from "./fields";
@@ -360,11 +361,7 @@ function ItemSearch({
           {items.failed ? (
             <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-ash-300">
               {t("afkPlus.form.dataFailed")}
-              <button
-                type="button"
-                onClick={items.retry}
-                className="cursor-pointer rounded-sm font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
-              >
+              <button type="button" onClick={items.retry} className={cn(TEXT_LINK, "font-medium")}>
                 {t("afkPlus.form.retry")}
               </button>
             </p>
@@ -374,7 +371,7 @@ function ItemSearch({
               type="button"
               disabled={!canPick}
               onClick={onInventory}
-              className="cursor-pointer rounded-sm text-[12.5px] font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-not-allowed disabled:text-ash-500 disabled:no-underline"
+              className={cn(TEXT_LINK, "text-[12.5px] font-medium")}
             >
               {t("afkPlus.intake.pick")}
             </button>
@@ -497,7 +494,7 @@ function EnchantPicker({
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="self-start rounded-sm text-[12.5px] font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+          className={cn(TEXT_LINK, "self-start text-[12.5px] font-medium")}
         >
           {t("afkPlus.form.addEnchantment")}
         </button>

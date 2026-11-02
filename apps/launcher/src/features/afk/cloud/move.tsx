@@ -188,9 +188,16 @@ function Confirm({
           </span>
         </span>
       </div>
+      {/* A real-state warning: a small gold mark before a bone sentence, the words never gold; the
+          list's checks are ash marks (design.md §2: the dialog's one gold is its action). */}
       {replaces ? (
-        <p className="flex items-start gap-2 text-[12.5px] leading-snug text-gold-200">
-          <WarningCircle size={15} weight="fill" className="mt-px shrink-0" aria-hidden />
+        <p className="flex items-start gap-2 text-[12.5px] leading-snug text-bone-100">
+          <WarningCircle
+            size={15}
+            weight="fill"
+            className="mt-px shrink-0 text-gold-300"
+            aria-hidden
+          />
           <span>{t("cloudAfk.move.replaces", { target: target.name })}</span>
         </p>
       ) : null}
@@ -201,7 +208,7 @@ function Confirm({
         <ul className="flex flex-col gap-1 text-[13px] text-bone-100">
           {(moves.length ? moves : [t("cloudAfk.move.rows.nothing")]).map((line) => (
             <li key={line} className="flex items-center gap-2">
-              <CheckCircle size={15} weight="fill" className="shrink-0 text-gold-400" aria-hidden />
+              <CheckCircle size={15} weight="fill" className="shrink-0 text-ash-300" aria-hidden />
               {line}
             </li>
           ))}

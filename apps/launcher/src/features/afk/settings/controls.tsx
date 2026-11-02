@@ -6,12 +6,10 @@ import { CaretRight, Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  createContext,
   type InputHTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
-  useContext,
   useEffect,
   useId,
   useRef,
@@ -19,6 +17,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { formatCount } from "@/lib/format";
+import { TEXT_LINK } from "@/lib/text-link";
 import { joinAddress, shownAddress, splitAddress } from "../address";
 import { limitWords } from "../spans";
 import type { Issue, Limit } from "./model";
@@ -115,11 +114,7 @@ export function Fold({ open, children }: { open: boolean; children: ReactNode })
 export function FolderLink({ onOpen }: { onOpen: () => void }) {
   const { t } = useTranslation();
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="cursor-pointer rounded-sm font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-default disabled:no-underline"
-    >
+    <button type="button" onClick={onOpen} className={cn(TEXT_LINK, "font-medium")}>
       {t("afk.openFolder")}
     </button>
   );
@@ -192,23 +187,6 @@ export function WideRow({
       {children}
     </motion.div>
   );
-}
-
-const OneGoldScope = createContext(false);
-
-/**
- * A part of the window under the one-gold rule (design.md §2) for what has no bone default of its
- * own yet: its quiet text links are bone, so the screen's gold is its one action (the save,
- * "Devam"). The 7/24 Bulut question rows and setup steps (SETUP-UX-L). Switches are bone everywhere
- * already (@pl/ui's default, BETA-FB).
- */
-export function OneGold({ children }: { children: ReactNode }) {
-  return <OneGoldScope.Provider value={true}>{children}</OneGoldScope.Provider>;
-}
-
-/** Whether this part of the window is under the one-gold rule (`OneGold`). */
-export function useOneGold(): boolean {
-  return useContext(OneGoldScope);
 }
 
 /**

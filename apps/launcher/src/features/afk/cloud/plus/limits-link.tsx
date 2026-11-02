@@ -29,7 +29,7 @@ export function LimitLine({
   return (
     <p className={cn("flex flex-wrap items-baseline gap-x-2 gap-y-0.5", className)}>
       <span className="min-w-0">{children}</span>
-      <QuietLink tone="bone" onClick={onGo}>
+      <QuietLink onClick={onGo}>
         {t(approval ? "afkPlus.settings.goToApproval" : "afkPlus.settings.goToLimits")}
       </QuietLink>
     </p>

@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import { type AccountSummary, api } from "@/lib/api";
 import { playSound } from "@/lib/sound";
+import { TEXT_LINK } from "@/lib/text-link";
 import { useCalm } from "./calm";
 import { checkOfflineName } from "./name-rules";
 import { useAccountsUi } from "./store";
@@ -143,7 +144,7 @@ function OfflineForm({
             {" "}
             <button
               type="button"
-              className="cursor-pointer font-semibold text-gold-300 underline-offset-2 hover:underline focus-visible:underline"
+              className={cn(TEXT_LINK, "font-semibold")}
               onClick={() => {
                 setValue(check.suggestion ?? value);
                 setServerError(null);
@@ -159,7 +160,7 @@ function OfflineForm({
             {" "}
             <button
               type="button"
-              className="cursor-pointer font-semibold text-gold-300 underline-offset-2 hover:underline focus-visible:underline"
+              className={cn(TEXT_LINK, "font-semibold")}
               onClick={() => {
                 void switchAccount(queryClient, taken);
                 setValue("");

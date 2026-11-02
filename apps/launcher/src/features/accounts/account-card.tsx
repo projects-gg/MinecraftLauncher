@@ -28,6 +28,7 @@ import { useTranslation } from "react-i18next";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import type { AccountSummary, AfkAccount } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
+import { TEXT_LINK } from "@/lib/text-link";
 import { AccountAvatar } from "./account-avatar";
 import { AvatarChoiceButton } from "./avatar-choice";
 import { useCalm } from "./calm";
@@ -199,7 +200,7 @@ function RenameForm({
             {" "}
             <button
               type="button"
-              className="cursor-pointer font-semibold text-gold-300 underline-offset-2 hover:underline"
+              className={cn(TEXT_LINK, "font-semibold")}
               onClick={() => {
                 setValue(check.suggestion ?? value);
                 setServerError(null);

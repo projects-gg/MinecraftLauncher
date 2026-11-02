@@ -35,7 +35,10 @@ function PlanSkeleton({ label }: { label: string }) {
   );
 }
 
-/** A checkbox mark that swaps with a small scale, so choosing feels physical. */
+/**
+ * A checkbox mark that swaps with a small scale, so choosing feels physical. Ticked it is bone, as the
+ * app's checkboxes: the dialog's one gold is its action (design.md §2).
+ */
 function Mark({ checked, reduce }: { checked: boolean; reduce: boolean }) {
   return (
     <span className="relative grid size-[19px] shrink-0 place-items-center">
@@ -48,7 +51,7 @@ function Mark({ checked, reduce }: { checked: boolean; reduce: boolean }) {
           className="grid place-items-center"
         >
           {checked ? (
-            <CheckSquare size={19} weight="fill" className="text-gold-400" />
+            <CheckSquare size={19} weight="fill" className="text-bone-100" />
           ) : (
             <Square size={19} className="text-ash-400" />
           )}

@@ -1241,11 +1241,7 @@ function OrderIntake({
                       // words again as the game's money; the hard rules stay.
                       <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                         <span>{lineText}</span>
-                        <QuietLink
-                          tone="bone"
-                          disabled={checking}
-                          onClick={() => void check(undefined, true)}
-                        >
+                        <QuietLink disabled={checking} onClick={() => void check(undefined, true)}>
                           {t("afkPlus.intake.inGame")}
                         </QuietLink>
                       </span>

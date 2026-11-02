@@ -209,11 +209,8 @@ function OwnMods({
                         exit={{ opacity: 0, transition: { duration: 0.08 } }}
                         className="grid place-items-center"
                       >
-                        {on ? (
-                          <Check size={12} weight="bold" className="text-gold-300" />
-                        ) : (
-                          <Plus size={12} weight="bold" />
-                        )}
+                        {/* The chip's own bone: a check is never gold (design.md §2). */}
+                        {on ? <Check size={12} weight="bold" /> : <Plus size={12} weight="bold" />}
                       </motion.span>
                     </AnimatePresence>
                   </span>

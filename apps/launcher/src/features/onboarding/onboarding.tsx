@@ -48,6 +48,7 @@ import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import { api, type InstanceSummary, type LegacyScan } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
 import { isTauri } from "@/lib/platform";
+import { TEXT_LINK } from "@/lib/text-link";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { TitleBar } from "@/shell/title-bar";
 import { usePrefs } from "@/stores/prefs";
@@ -598,7 +599,7 @@ function AccountStep({
                     {" "}
                     <button
                       type="button"
-                      className="cursor-pointer font-semibold text-gold-300 underline-offset-2 hover:underline focus-visible:underline"
+                      className={cn(TEXT_LINK, "font-semibold")}
                       onClick={() => {
                         setName(check.suggestion ?? name);
                         nameInput.current?.focus();

@@ -130,7 +130,8 @@ function GroupHeader({
         <button
           type="button"
           onClick={onToggle}
-          className="relative inline-grid h-7 cursor-pointer items-center rounded-md px-2 text-[12.5px] font-medium text-gold-300 outline-none transition-colors duration-150 hover:bg-white/6 hover:text-gold-200 focus-visible:ring-2 focus-visible:ring-gold-300"
+          // Bone, a quiet text action: the dialog's one gold is its own button (design.md §2).
+          className="relative inline-grid h-7 cursor-pointer items-center rounded-md px-2 text-[12.5px] font-medium text-bone-100 outline-none transition-colors duration-150 hover:bg-white/6 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300"
         >
           {/* Both words share one cell: the button keeps its width when they swap. */}
           <span aria-hidden className="invisible [grid-area:1/1]">
