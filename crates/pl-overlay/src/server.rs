@@ -54,6 +54,19 @@ pub const EMOJI_ARG: &str = "-Dprojects.overlay.emoji=";
 /// place; never otherwise.
 pub const ROUTE_ARG: &str = "-Dprojects.overlay.route=";
 
+/// FASTPACK-LEAVE: `on` while "Hızlı kaynak paketi yükleme" is in effect for an official pack
+/// install ([`fast_packs_jvm_arg`]): a server pack pushed again unchanged within one connection
+/// (the same id and SHA-1, already applied: a network moving the player between its servers) is
+/// answered as applied, without reloading the game's resources. Everything else stays the game's
+/// own: a server's packs go when the player leaves. Never passed while off; a mod from before it
+/// ignores it and the game reloads the same pack, as without the mod.
+pub const FAST_PACKS_ARG: &str = "-Dprojects.overlay.fastpacks=";
+
+/// The JVM argument switching [`FAST_PACKS_ARG`] on.
+pub fn fast_packs_jvm_arg() -> String {
+    format!("{FAST_PACKS_ARG}on")
+}
+
 /// Whether a launch argument carries the session token and must be masked in logs.
 pub fn is_secret_jvm_arg(arg: &str) -> bool {
     arg.starts_with(TOKEN_ARG)
@@ -938,6 +951,13 @@ mod tests {
         );
         assert!(world_jvm_arg("Yeni Dünya").is_ascii());
         assert!(!is_secret_jvm_arg(&world_jvm_arg("w")));
+    }
+
+    #[test]
+    fn the_fast_packs_argument_is_the_one_the_mod_reads() {
+        // The mod's SamePack.PROPERTY, switched on by exactly this value (SamePackTest).
+        assert_eq!(fast_packs_jvm_arg(), "-Dprojects.overlay.fastpacks=on");
+        assert!(!is_secret_jvm_arg(&fast_packs_jvm_arg()));
     }
 
     #[test]
