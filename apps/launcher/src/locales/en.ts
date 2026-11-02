@@ -67,6 +67,7 @@ import { enTray } from "./en-tray";
 import { enTuning } from "./en-tuning";
 import { enUpdates } from "./en-updates";
 import { enVerify } from "./en-verify";
+import { enVoice } from "./en-voice";
 import { enWorldEntry } from "./en-world-entry";
 import type { Strings } from "./tr";
 
@@ -350,6 +351,7 @@ export const en: DeepPartial<Strings> = {
   motion: enMotion,
   launcherReset: enLauncherReset,
   stars: enStars,
+  voice: enVoice,
   nav: {
     home: "Home",
     library: "Library",

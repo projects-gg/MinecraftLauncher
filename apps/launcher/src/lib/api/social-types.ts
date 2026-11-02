@@ -153,6 +153,11 @@ export interface Friend extends SocialProfile {
   discordUrl: string;
   /** The crew tag they wear (TEAM6); none while they wear none. */
   badge?: CrewBadge;
+  /**
+   * VOICE (`presence.voice`, VOICE-L1's `FriendView.voice`): they may be called (`ready`) or are in
+   * a room (`in`); absent: they cannot be called (voice chat off, invisible, an older launcher).
+   */
+  voice?: "ready" | "in";
 }
 
 export interface FriendRequest extends SocialProfile {
@@ -289,6 +294,8 @@ export type ReportTarget =
       id: string;
       plan?: { crew: string; id: string };
       reaction?: { conv: string; id: number; e: string };
+      /** VOICE: reported from the player's voice room (its id; the room's events are the evidence). */
+      voice?: string;
     }
   /** `code`: the crew was looked up by code; `via`: reported from the tag a friend or crewmate wears
    * (TEAM6: that player's id, never kept by the service). */

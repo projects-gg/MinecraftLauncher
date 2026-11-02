@@ -69,6 +69,7 @@ import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
 import { trUpdates } from "./tr-updates";
 import { trVerify } from "./tr-verify";
+import { trVoice } from "./tr-voice";
 import { trWorldEntry } from "./tr-world-entry";
 
 export const tr = {
@@ -143,6 +144,7 @@ export const tr = {
   motion: trMotion,
   launcherReset: trLauncherReset,
   stars: trStars,
+  voice: trVoice,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",

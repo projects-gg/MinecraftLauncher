@@ -4,6 +4,7 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -11,6 +12,7 @@ import { returnFocusAfterKeys } from "../input-modality";
 import { cn } from "../lib/cn";
 import { fromPortal } from "../native-menu";
 import { Kbd } from "./bits";
+import { SliderValue } from "./forms";
 
 export interface MenuItem {
   label: string;
@@ -29,6 +31,26 @@ export interface MenuItem {
   items?: Array<MenuItem | null>;
   /** The keys that do the same outside the menu ("Alt ↑"), shown at the row's end. */
   shortcut?: string;
+  /**
+   * A value the row sets in place (a person's volume): the label and the value on one line, a
+   * track under them. The menu stays open while it changes; `onSelect` is not used then.
+   */
+  slider?: MenuSlider;
+}
+
+/** A row's value (`MenuItem.slider`). */
+export interface MenuSlider {
+  value: number;
+  min: number;
+  max: number;
+  /** ← and → move it this far; PageUp and PageDown ten times as far. */
+  step: number;
+  /** A mark on the track (a volume's 100 %): a drag that comes this close lands on it. */
+  notch?: number;
+  /** The value as shown and read out ("%140"). */
+  format: (value: number) => string;
+  /** Each change; `final` once a drag or a key press ends. */
+  onChange: (value: number, final: boolean) => void;
 }
 
 /**
@@ -122,6 +144,140 @@ function Icon({ item }: { item: MenuItem }) {
   ) : null;
 }
 
+/** How close (in the track's own units, of its whole range) a drag lands on the notch. */
+const NOTCH_PULL = 0.02;
+
+/** Keys a slider row takes for itself (the menu keeps ↑ and ↓ for its rows). */
+function keyStep(key: string, step: number, min: number, max: number, value: number) {
+  switch (key) {
+    case "ArrowRight":
+      return value + step;
+    case "ArrowLeft":
+      return value - step;
+    case "PageUp":
+      return value + step * 10;
+    case "PageDown":
+      return value - step * 10;
+    case "Home":
+      return min;
+    case "End":
+      return max;
+    default:
+      return null;
+  }
+}
+
+/**
+ * A row that sets a value: its label and value, and a track the pointer drags (it lands on the
+ * notch when close) or ← → change. Selecting it keeps the menu open. The value follows the pointer
+ * at once (no transition: it is the pointer's, not a motion), the fill drawn with `scaleX`.
+ */
+function SliderRow({
+  item,
+  Item,
+}: {
+  item: MenuItem & { slider: MenuSlider };
+  Item: MenuParts["Item"];
+}) {
+  const { slider } = item;
+  const { min, max, step, notch, format, onChange } = slider;
+  const [value, setValue] = useState(slider.value);
+  const dragging = useRef(false);
+  const track = useRef<HTMLSpanElement>(null);
+  // A value the owner changes (another device, a reset) shows unless a drag holds it.
+  useEffect(() => {
+    if (!dragging.current) setValue(slider.value);
+  }, [slider.value]);
+  const clamp = (v: number) => Math.max(min, Math.min(max, v));
+  const set = (next: number, final: boolean) => {
+    const v = clamp(next);
+    setValue(v);
+    onChange(v, final);
+  };
+  const fromPointer = (clientX: number, final: boolean) => {
+    const box = track.current?.getBoundingClientRect();
+    if (!box || box.width === 0) return;
+    let v = Math.round(min + ((clientX - box.left) / box.width) * (max - min));
+    if (notch !== undefined && Math.abs(v - notch) <= (max - min) * NOTCH_PULL) v = notch;
+    set(v, final);
+  };
+  const at = (v: number) => (v - min) / (max - min);
+  return (
+    <Item
+      key={item.label}
+      role="slider"
+      aria-label={item.label}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      aria-valuetext={format(value)}
+      onSelect={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        const next = keyStep(event.key, step, min, max, value);
+        if (next === null) return;
+        // Its own: the menu's Home/End jumps and a submenu's ← close stay away from it.
+        event.preventDefault();
+        event.stopPropagation();
+        set(next, true);
+      }}
+      className={cn(
+        rowClass,
+        "cursor-default flex-col items-stretch gap-1 py-2 text-bone-100 data-[highlighted]:bg-white/[0.06]",
+      )}
+    >
+      <span className="flex items-center gap-2.5">
+        <Icon item={item} />
+        <span className="min-w-0 flex-1">{item.label}</span>
+        <span className="font-display text-[13px] font-semibold text-bone-50 tabular-nums">
+          <SliderValue text={format(value)} />
+        </span>
+      </span>
+      <span
+        ref={track}
+        className="relative mx-[7px] h-4 cursor-pointer touch-none"
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          dragging.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          fromPointer(event.clientX, false);
+        }}
+        onPointerMove={(event) => {
+          if (dragging.current) fromPointer(event.clientX, false);
+        }}
+        onPointerUp={(event) => {
+          if (!dragging.current) return;
+          dragging.current = false;
+          fromPointer(event.clientX, true);
+        }}
+        onPointerCancel={() => {
+          if (!dragging.current) return;
+          dragging.current = false;
+          onChange(value, true);
+        }}
+      >
+        <span className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-white/10">
+          <span
+            className="absolute inset-0 origin-left bg-bone-100"
+            style={{ transform: `scaleX(${at(value)})` }}
+          />
+        </span>
+        {notch !== undefined ? (
+          <span
+            aria-hidden
+            className="absolute top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/40"
+            style={{ left: `${at(notch) * 100}%` }}
+          />
+        ) : null}
+        <span
+          aria-hidden
+          className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-bone-100 bg-obsidian-900 shadow-[0_2px_6px_rgb(34_6_6/0.6)]"
+          style={{ left: `${at(value) * 100}%` }}
+        />
+      </span>
+    </Item>
+  );
+}
+
 /** The rows of a menu; both menus share them (one look for "more" buttons and right clicks). */
 function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] {
   const { Item, Separator, Sub, SubTrigger, SubContent, Portal } = parts;
@@ -129,6 +285,9 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
     if (item === null) {
       // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
       return <Separator key={`sep-${i}`} className="my-1.5 h-px bg-white/8" />;
+    }
+    if (item.slider) {
+      return <SliderRow key={item.label} item={{ ...item, slider: item.slider }} Item={Item} />;
     }
     if (item.items) {
       return (
@@ -203,6 +362,8 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
 
 /** A row's height, a separator's and the panel's padding, as `rowClass` and `contentClass` draw them. */
 const ROW_PX = 33;
+/** A slider row (`SliderRow`): its line, the track and their padding. */
+const SLIDER_PX = 58;
 const SEPARATOR_PX = 13;
 const PANEL_PX = 10;
 /** The strip of small actions with the line under it. */
@@ -219,10 +380,12 @@ export function menuHeight(
   title?: string,
 ): number {
   const rows = items.filter((item) => item !== null).length;
+  const sliders = items.filter((item) => item?.slider).length;
   const separators = items.length - rows;
   return (
     PANEL_PX +
     rows * ROW_PX +
+    sliders * (SLIDER_PX - ROW_PX) +
     separators * SEPARATOR_PX +
     (strip?.length ? STRIP_PX : 0) +
     (title ? TITLE_PX : 0)

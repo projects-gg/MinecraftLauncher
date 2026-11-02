@@ -54,6 +54,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce, friendlyError } from "@/features/accounts/use-accounts";
+import { CrewVoice } from "@/features/voice/crew-voice";
 import { api } from "@/lib/api";
 import type {
   Friend,
@@ -1257,6 +1258,11 @@ function CrewView({ team }: { team: SocialTeam }) {
             )}
           </AnimatePresence>
         </section>
+
+        {/* "Sesli" (VOICE): the crew's voice rooms, right under its card. */}
+        <motion.div {...glideBox}>
+          <CrewVoice team={team} />
+        </motion.div>
 
         <motion.div {...glideBox}>
           <CrewRequests team={team} />

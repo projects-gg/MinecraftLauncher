@@ -753,8 +753,8 @@ function LabelContent<T extends string>({ option }: { option: SegmentedOption<T>
 }
 
 /** A slider's value with its "%" in the UI font: Tektur's sign reads like a slash (the launcher's
- * live percentages set it the same way). */
-function SliderValue({ text }: { text: string }) {
+ * live percentages set it the same way; a menu's slider row too). */
+export function SliderValue({ text }: { text: string }) {
   const at = text.indexOf("%");
   if (at < 0) return text;
   return (
