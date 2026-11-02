@@ -27,6 +27,10 @@
     {
       "config": "projects-overlay.connect.mixins.json",
       "environment": "client"
+    },
+    {
+      "config": "projects-overlay.packs.mixins.json",
+      "environment": "client"
     }
   ],
   "depends": {

@@ -36,16 +36,46 @@ export function parseArgs(argv, spec) {
 
 export class UsageError extends Error {}
 
-/** Runs `main`, printing errors without a stack for expected failures. */
+/**
+ * A refusal with a name (`release/<what>`). In GitHub Actions it also becomes an error annotation
+ * titled with that name: Studio reads a failed run's annotations back to say in Turkish what
+ * stopped it (docs/release.md, "Studio'dan kararlıya alma"). The message stays English.
+ */
+export class Refusal extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+/** A workflow command's data (`::error::<data>`): `%`, CR and LF escaped as GitHub reads them. */
+export function commandData(text) {
+  return String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+}
+
+/** A workflow command's property value (`title=<value>`): its data escaping, `:` and `,` too. */
+export function commandProperty(text) {
+  return commandData(text).replace(/:/g, "%3A").replace(/,/g, "%2C");
+}
+
+/**
+ * Runs `main`, printing errors without a stack for expected failures. The exit code is set, not
+ * forced: `process.exit()` right after a `fetch` aborts Node on Windows (a libuv assertion while
+ * the connection closes), and the process ends by itself once nothing is left to do.
+ */
 export function run(main, usage) {
   main().catch((err) => {
     if (err instanceof UsageError) {
       console.error(`error: ${err.message}\n\n${usage}`);
-      process.exit(2);
+      process.exitCode = 2;
+      return;
+    }
+    if (err instanceof Refusal && process.env.GITHUB_ACTIONS === "true") {
+      console.log(`::error title=${commandProperty(err.code)}::${commandData(err.message)}`);
     }
     console.error(`error: ${err.message}`);
     if (process.env.RELEASE_DEBUG) console.error(err.stack);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }
 
@@ -444,6 +474,101 @@ export function notesFields(notes) {
 export function releaseBody({ tr, en }) {
   const body = [tr, en].filter(Boolean).join("\n\n---\n\n");
   return body ? `${body}\n` : "";
+}
+
+// --- Stable from a beta ("Betayı kararlıya al") ----------------------------------------------
+
+/** The stable version a prerelease leads to (2.1.0 for 2.1.0-beta.2); null for a release. */
+export function stableOf(text) {
+  const version = parseVersion(text);
+  return version.pre.length ? version.core.join(".") : null;
+}
+
+/**
+ * Why a release run may not turn the beta tagged `beta` (v2.1.0-beta.2) into the stable `version`,
+ * as a Refusal, or null when it may. The run must have started on that tag (`ref`, as GITHUB_REF
+ * gives it): it builds the commit it starts on. `version` is the beta's stable version, the release
+ * goes to the beta channel first (`channel`) and `rollout` is the stable channel's share. The
+ * channel files are as players read them (null: none): the beta channel must still announce that
+ * beta (a newer beta is never replaced by older code) and the stable one an older version.
+ */
+export function stableFromBetaRefusal({
+  beta,
+  ref,
+  version,
+  channel,
+  rollout,
+  betaChannel,
+  stableChannel,
+}) {
+  const tag = String(beta ?? "");
+  let parsed = null;
+  try {
+    parsed = tag.startsWith("v") ? parseVersion(tag) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!parsed?.pre.length) {
+    return new Refusal(
+      "release/not-prerelease",
+      `"${tag}" is not a prerelease tag such as v2.1.0-beta.2`,
+    );
+  }
+  if (ref !== `refs/tags/${tag}`) {
+    return new Refusal(
+      "release/wrong-ref",
+      `start this run on ${tag} ("Use workflow from"), not on ${ref || "nothing"}: it builds the commit it starts on`,
+    );
+  }
+  const stable = stableOf(tag);
+  if (version !== stable) {
+    return new Refusal("release/wrong-version", `${tag} becomes ${stable}, not ${version}`);
+  }
+  if (channel !== "beta") {
+    return new Refusal(
+      "release/bad-channel",
+      `a stable from a beta goes to the beta channel first, not to "${channel}"`,
+    );
+  }
+  const share = String(rollout ?? "").trim();
+  if (!/^\d{1,3}$/.test(share) || Number(share) > 100) {
+    return new Refusal("release/bad-rollout", `rollout must be 0-100, not "${rollout}"`);
+  }
+  if (betaChannel?.version !== parsed.raw) {
+    return new Refusal(
+      "release/channel-moved",
+      `the beta channel announces ${betaChannel?.version ?? "nothing"}, not ${parsed.raw}`,
+    );
+  }
+  if (stableChannel && compareVersions(stableChannel.version, version) >= 0) {
+    return new Refusal(
+      "release/stable-ahead",
+      `the stable channel already announces ${stableChannel.version}`,
+    );
+  }
+  return null;
+}
+
+/**
+ * The bundles a stable release uploads, as collect-artifacts.mjs names them (GitHub's names):
+ * Prepare asks the CDN for each before a stable from a beta builds.
+ */
+export function releaseBundles(version) {
+  const v = parseVersion(version).raw;
+  return [
+    `Projects.Launcher-${v}-1.x86_64.rpm`,
+    `Projects.Launcher_${v}_amd64.AppImage`,
+    `Projects.Launcher_${v}_amd64.deb`,
+    `Projects.Launcher_${v}_universal.app.tar.gz`,
+    `Projects.Launcher_${v}_universal.dmg`,
+    `Projects.Launcher_${v}_x64-setup.exe`,
+  ];
+}
+
+/** A refusal when `tag` already names a commit (`commit`; null: no such tag) other than `sha`. */
+export function tagRefusal({ tag, commit, sha }) {
+  if (!commit || commit === sha) return null;
+  return new Refusal("release/tag-taken", `${tag} already names ${commit}, not this run's ${sha}`);
 }
 
 // --- R2 (S3 API, AWS Signature Version 4) ---------------------------------------------------

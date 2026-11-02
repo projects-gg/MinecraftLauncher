@@ -2958,10 +2958,7 @@ mod tests {
         let taken = SyncPolicy {
             items: LauncherItems {
                 fast_packs: true,
-                fast_packs_taken: FastPackTaken {
-                    loader: true,
-                    cache: false,
-                },
+                fast_packs_taken: FastPackTaken { loader: true },
                 ..LauncherItems::default()
             },
             ..SyncPolicy::default()
@@ -3008,6 +3005,72 @@ mod tests {
             .unwrap();
         assert_eq!(deleted(&off), [jar.as_str()]);
         assert!(off.adopted.is_empty());
+    }
+
+    /// FASTPACK-LEAVE: ResourcePackCached kept a server's pack applied after the player left, so
+    /// the setting never installs it, and the copy an older launcher installed goes.
+    #[tokio::test]
+    async fn resource_pack_cached_is_never_installed_and_an_older_copy_goes() {
+        use crate::items::{FAST_PACK_CACHE_ITEM, FAST_PACK_ITEM};
+
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        // Studio lists both, default-off, for the clients without the setting.
+        let m = item_manifest(
+            "mods/sodium.jar",
+            &[(FAST_PACK_ITEM, false), (FAST_PACK_CACHE_ITEM, false)],
+        );
+        let on = SyncPolicy {
+            items: LauncherItems {
+                fast_packs: true,
+                ..LauncherItems::default()
+            },
+            ..SyncPolicy::default()
+        };
+        let quick = format!("mods/{FAST_PACK_ITEM}.jar");
+        let cached = format!("mods/{FAST_PACK_CACHE_ITEM}.jar");
+
+        // A new install with the setting on gets quick-pack alone.
+        let first = plan_sync(&m, game, None, None, &on).await.unwrap();
+        assert!(first.downloads.iter().any(|d| d.path == quick));
+        assert!(!first.downloads.iter().any(|d| d.path == cached));
+        assert!(!status(&first, FAST_PACK_CACHE_ITEM).effectively_enabled);
+        let mut state = installed(
+            game,
+            &first,
+            &[
+                ("mods/fabric-api.jar", b"fabric"),
+                ("mods/sodium.jar", b"sodium"),
+                ("config/sodium.json", b"{}"),
+                (quick.as_str(), FAST_PACK_ITEM.as_bytes()),
+            ],
+        );
+
+        // An older launcher installed ResourcePackCached too: the next sync takes that copy away
+        // and keeps quick-pack, adopting nothing.
+        write(game, &cached, FAST_PACK_CACHE_ITEM.as_bytes());
+        let policy = state.files[&quick].policy;
+        state.files.insert(
+            cached.clone(),
+            InstalledFile::new(
+                sha1_hex(FAST_PACK_CACHE_ITEM.as_bytes()),
+                policy,
+                Some(FAST_PACK_CACHE_ITEM.to_owned()),
+            ),
+        );
+        let plan = plan_sync(&m, game, Some(&state), None, &on).await.unwrap();
+        assert_eq!(deleted(&plan), [cached.as_str()]);
+        assert!(plan.downloads.is_empty());
+        assert!(plan.adopted.is_empty());
+        assert!(
+            plan.next_state
+                .installed_item(FAST_PACK_CACHE_ITEM)
+                .is_none()
+        );
+        assert_eq!(
+            plan.next_state.installed_item(FAST_PACK_ITEM),
+            Some(quick.as_str())
+        );
     }
 
     /// The pack for one Minecraft version: sodium and its library, plus the overlay's jar built for

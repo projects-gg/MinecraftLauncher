@@ -1,8 +1,10 @@
 //! "Hızlı kaynak paketi yükleme" (FASTPACK): Settings → Genel's switch over the official pack's
-//! fast-pack items (quick-pack, and ResourcePackCached once Studio lists it), shown while the
-//! signed config's `features.fastPacks` is on. The page owns the choice and pushes it at its start
-//! and on every change; the data folder keeps a copy of it and of the last applied flag, so the
-//! syncs before the page asks or the content is read (background preparation) follow them too
+//! fast-pack item (quick-pack; its ResourcePackCached item is never installed, FASTPACK-LEAVE)
+//! and, in a game whose overlay mod is the launcher's own, the same server pack again within one
+//! connection without a reload (`pl_overlay::FAST_PACKS_ARG`, passed by the launch). Shown while
+//! the signed config's `features.fastPacks` is on. The page owns the choice and pushes it at its
+//! start and on every change; the data folder keeps a copy of it and of the last applied flag, so
+//! the syncs before the page asks or the content is read (background preparation) follow them too
 //! and never remove what the next sync would bring back. Which items install and when lives in
 //! `pl_content` (`LauncherItems`, `fast_pack_taken`; tested there): this module wires the switch,
 //! the flag and the instance's own mods to it.
@@ -62,11 +64,16 @@ pub fn apply_flag(root: &Path, on: bool) {
     }
 }
 
+/// Whether "Hızlı kaynak paketi yükleme" is in effect: the switch and the content flag both on.
+pub fn on() -> bool {
+    ENABLED.load(Ordering::Relaxed) && FLAG.load(Ordering::Relaxed)
+}
+
 /// The launcher settings that own pack items for a sync of `game_dir`: the overlay's, this switch
-/// (while the flag is on too) and the fast-pack items the folder's own mods already cover.
+/// (while the flag is on too) and the fast-pack item the folder's own mods already cover.
 pub async fn pack_items(game_dir: &Path, previous: Option<&PackState>) -> LauncherItems {
     let mut items = crate::overlay::pack_items();
-    items.fast_packs = ENABLED.load(Ordering::Relaxed) && FLAG.load(Ordering::Relaxed);
+    items.fast_packs = on();
     if items.fast_packs {
         items.fast_packs_taken = taken(game_dir.join("mods"), previous).await;
     }

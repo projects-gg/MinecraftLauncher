@@ -15,12 +15,12 @@
 //!   disabled copy renamed back as switched on) instead of undoing the change. Those adopted
 //!   choices rank below an explicit [`PackSelection`] and above the recorded choices;
 //! - an item a launcher setting owns ([`LauncherItems`]: the in-game overlay, [`OVERLAY_ITEM`];
-//!   "Hızlı kaynak paketi yükleme", [`FAST_PACK_ITEM`] and [`FAST_PACK_CACHE_ITEM`]) follows that
-//!   setting alone: never recorded, adopted or new, and the mod center does not list it. A
-//!   launcher that ships the overlay's mod itself never installs that item, and keeps the pack's
-//!   Fabric API installed while the overlay is on ([`LauncherItems::needs`]). A fast-pack item
-//!   also stays out while the game directory has a mod of its own for the same work
-//!   ([`fast_pack_taken`]).
+//!   "Hızlı kaynak paketi yükleme", [`FAST_PACK_ITEM`], and [`FAST_PACK_CACHE_ITEM`], which it
+//!   never installs) follows that setting alone: never recorded, adopted or new, and the mod
+//!   center does not list it. A launcher that ships the overlay's mod itself never installs that
+//!   item, and keeps the pack's Fabric API installed while the overlay is on
+//!   ([`LauncherItems::needs`]). The fast-pack item also stays out while the game directory has a
+//!   mod of its own for the same work ([`fast_pack_taken`]).
 //!
 //! [`resolve_items`] is pure; [`crate::plan_sync`] turns its result into downloads and
 //! deletions.
@@ -55,32 +55,29 @@ pub fn is_fabric_api(item: &PackItem) -> bool {
 /// Minecraft version; a member without the item has nothing to install.
 pub const FAST_PACK_ITEM: &str = "pSISfJ4O";
 
-/// ResourcePackCached's Modrinth project: the same setting owns it. Reserved until the FASTPACK
-/// measurement passes: Studio lists it only then, so until a manifest has it nothing installs it.
+/// ResourcePackCached's Modrinth project. The official pack lists it beside quick-pack, but the
+/// setting never installs it (FASTPACK-LEAVE): the mod keeps a server's pack applied after the
+/// player leaves and applies it again at the game's start. A copy an older launcher installed
+/// goes like an item switched off. What it was taken for, the same pack again within one
+/// connection, is the overlay mod's (`pl_overlay::FAST_PACKS_ARG`).
 pub const FAST_PACK_CACHE_ITEM: &str = "d4phKsx2";
 
 /// Mod ids that do [`FAST_PACK_ITEM`]'s work: quick-pack itself (the player's own copy),
 /// FastPackLoad and PackForge.
 pub const FAST_PACK_RIVALS: &[&str] = &["quick-pack", "fastpackload", "packforge"];
 
-/// Mod ids that do [`FAST_PACK_CACHE_ITEM`]'s work: ResourcePackCached itself and Server
-/// Resourcepack Checker.
-pub const FAST_PACK_CACHE_RIVALS: &[&str] = &["rpc", "resourcepackchecker"];
-
-/// The fast-pack items a game directory already covers with a mod of its own
-/// ([`fast_pack_taken`]): such an item stays out, and a copy the pack installed goes.
+/// The fast-pack item a game directory already covers with a mod of its own
+/// ([`fast_pack_taken`]): it stays out, and a copy the pack installed goes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct FastPackTaken {
     /// A jar declares one of [`FAST_PACK_RIVALS`].
     pub loader: bool,
-    /// A jar declares one of [`FAST_PACK_CACHE_RIVALS`].
-    pub cache: bool,
 }
 
-/// Which fast-pack items the game directory's mods already cover. `mods` lists its enabled jars
-/// as (path relative to the game directory, the mod ids the jar declares, nested ones too); the
-/// jar the pack state records for a fast-pack item is the pack's own copy and does not count.
+/// Whether the game directory's mods already cover the fast-pack item. `mods` lists its enabled
+/// jars as (path relative to the game directory, the mod ids the jar declares, nested ones too);
+/// the jar the pack state records for a fast-pack item is the pack's own copy and does not count.
 pub fn fast_pack_taken(mods: &[(String, Vec<String>)], state: Option<&PackState>) -> FastPackTaken {
     let packs_own = |path: &str| {
         state.is_some_and(|state| {
@@ -100,7 +97,6 @@ pub fn fast_pack_taken(mods: &[(String, Vec<String>)], state: Option<&PackState>
         }
         for id in ids {
             taken.loader |= FAST_PACK_RIVALS.contains(&id.as_str());
-            taken.cache |= FAST_PACK_CACHE_RIVALS.contains(&id.as_str());
         }
     }
     taken
@@ -123,12 +119,12 @@ pub struct LauncherItems {
     /// by default: older launchers and Studio's previews install the item.
     pub overlay_bundled: bool,
     /// "Hızlı kaynak paketi yükleme" (FASTPACK) while the signed config's `features.fastPacks` is on
-    /// too (the launcher passes the two together): the pack's [`FAST_PACK_ITEM`] and, once Studio
-    /// lists it, [`FAST_PACK_CACHE_ITEM`] are installed. Off by default, so callers without the
-    /// setting (Studio's previews) install neither.
+    /// too (the launcher passes the two together): the pack's [`FAST_PACK_ITEM`] is installed
+    /// ([`FAST_PACK_CACHE_ITEM`] never is). Off by default, so callers without the setting
+    /// (Studio's previews) install neither.
     pub fast_packs: bool,
-    /// The fast-pack items the game directory already covers ([`fast_pack_taken`]): they stay
-    /// out whatever the setting says.
+    /// The fast-pack item the game directory already covers ([`fast_pack_taken`]): it stays out
+    /// whatever the setting says.
     pub fast_packs_taken: FastPackTaken,
 }
 
@@ -154,7 +150,7 @@ impl LauncherItems {
         match id {
             OVERLAY_ITEM => Some(self.overlay && !self.overlay_bundled),
             FAST_PACK_ITEM => Some(self.fast_packs && !self.fast_packs_taken.loader),
-            FAST_PACK_CACHE_ITEM => Some(self.fast_packs && !self.fast_packs_taken.cache),
+            FAST_PACK_CACHE_ITEM => Some(false),
             _ => None,
         }
     }
@@ -778,10 +774,7 @@ mod tests {
         overlay: false,
         overlay_bundled: false,
         fast_packs: false,
-        fast_packs_taken: FastPackTaken {
-            loader: false,
-            cache: false,
-        },
+        fast_packs_taken: FastPackTaken { loader: false },
     };
 
     /// "Hızlı kaynak paketi yükleme" on with the content flag, nothing of the player's in the way.
@@ -810,18 +803,23 @@ mod tests {
         assert!(!none.is_enabled(FAST_PACK_ITEM) && !none.is_enabled(FAST_PACK_CACHE_ITEM));
         assert!(!none.choices.contains_key(FAST_PACK_ITEM));
 
-        // On: both installed in a set made before they came, never new, never a choice.
+        // On: quick-pack installed in a set made before it came; ResourcePackCached never
+        // (FASTPACK-LEAVE). Neither is new or a choice.
         let state = state_with(&resolve_items(&catalog(), None, None));
         let on = resolve_items_with(&m, Some(&state), None, &FAST);
-        for id in [FAST_PACK_ITEM, FAST_PACK_CACHE_ITEM] {
+        for (id, installed) in [(FAST_PACK_ITEM, true), (FAST_PACK_CACHE_ITEM, false)] {
             let status = on.status(id).unwrap();
-            assert!(
-                status.effectively_enabled && !status.selected && !status.is_new,
-                "{id}"
-            );
+            assert_eq!(status.effectively_enabled, installed, "{id}");
+            assert!(!status.selected && !status.is_new, "{id}");
             assert!(!on.choices.contains_key(id) && on.seen.contains(id), "{id}");
         }
         assert_eq!(on.new_items().count(), 0);
+        // Not even the mod center's selection brings ResourcePackCached in.
+        let picked = only(FAST_PACK_CACHE_ITEM, true);
+        assert!(
+            !resolve_items_with(&m, Some(&state), Some(&picked), &FAST)
+                .is_enabled(FAST_PACK_CACHE_ITEM)
+        );
 
         // The mod center's selection and what the mods folder shows do not move them.
         let named = only(FAST_PACK_ITEM, false);
@@ -842,24 +840,13 @@ mod tests {
     #[test]
     fn a_mod_of_the_players_keeps_its_fast_pack_item_out() {
         let m = with_fast_packs();
+        assert!(resolve_items_with(&m, None, None, &FAST).is_enabled(FAST_PACK_ITEM));
         let loader = LauncherItems {
-            fast_packs_taken: FastPackTaken {
-                loader: true,
-                cache: false,
-            },
+            fast_packs_taken: FastPackTaken { loader: true },
             ..FAST
         };
         let taken = resolve_items_with(&m, None, None, &loader);
-        assert!(!taken.is_enabled(FAST_PACK_ITEM) && taken.is_enabled(FAST_PACK_CACHE_ITEM));
-        let cache = LauncherItems {
-            fast_packs_taken: FastPackTaken {
-                loader: false,
-                cache: true,
-            },
-            ..FAST
-        };
-        let taken = resolve_items_with(&m, None, None, &cache);
-        assert!(taken.is_enabled(FAST_PACK_ITEM) && !taken.is_enabled(FAST_PACK_CACHE_ITEM));
+        assert!(!taken.is_enabled(FAST_PACK_ITEM) && !taken.is_enabled(FAST_PACK_CACHE_ITEM));
     }
 
     #[test]
@@ -899,12 +886,16 @@ mod tests {
         // The player's own copy (another file), FastPackLoad, PackForge, a nested declaration.
         for rival in ["quick-pack", "fastpackload", "packforge"] {
             let mods = [jar("mods/theirs.jar", &["bundle", rival])];
-            let taken = fast_pack_taken(&mods, Some(&state));
-            assert!(taken.loader && !taken.cache, "{rival}");
+            assert!(fast_pack_taken(&mods, Some(&state)).loader, "{rival}");
         }
-        for rival in ["rpc", "resourcepackchecker"] {
-            let taken = fast_pack_taken(&[jar("mods/theirs.jar", &[rival])], None);
-            assert!(taken.cache && !taken.loader, "{rival}");
+        // A ResourcePackCached of the player's takes nothing: the pack never installs its own.
+        for other in ["rpc", "resourcepackchecker"] {
+            let mods = [jar("mods/theirs.jar", &[other])];
+            assert_eq!(
+                fast_pack_taken(&mods, None),
+                FastPackTaken::default(),
+                "{other}"
+            );
         }
         // Without a pack state every copy is the player's.
         assert!(fast_pack_taken(&ours, None).loader);
@@ -1080,7 +1071,9 @@ mod tests {
         // The fast packs wait for the launcher to say both the setting and the flag are on.
         assert!(!LauncherItems::default().fast_packs);
         assert_eq!(LauncherItems::default().choice(FAST_PACK_ITEM), Some(false));
-        assert_eq!(FAST.choice(FAST_PACK_CACHE_ITEM), Some(true));
+        assert_eq!(FAST.choice(FAST_PACK_ITEM), Some(true));
+        // ResourcePackCached, never (FASTPACK-LEAVE).
+        assert_eq!(FAST.choice(FAST_PACK_CACHE_ITEM), Some(false));
         let read: LauncherItems = serde_json::from_str("{}").unwrap();
         assert_eq!(read, LauncherItems::default());
         assert!(is_fabric_api(&library(FABRIC_API_PROJECT)));
