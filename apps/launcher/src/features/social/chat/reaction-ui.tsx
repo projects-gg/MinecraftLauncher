@@ -1,5 +1,6 @@
 // Reactions under a bubble (CHAT2 §7): chamfered 22 px chips (an action: the two-shape rule), the
-// player's own with a gold edge, the count in tabular figures that rolls when it changes; a new
+// player's own on the quiet plate with a bone edge and a bone count (a chosen chip is never gold,
+// design.md §2; BETA2-FIX), the count in tabular figures that rolls when it changes; a new
 // chip springs in once (a fade under reduced motion). A press opens who reacted ("Sen" first, each
 // with their own menu) and one button: "Ben de 👍", or "Tepkimi kaldır" on the player's own. The
 // quick row (the toolbar's 😊+, the right click's top row) offers six emoji and "+", the whole
@@ -231,7 +232,7 @@ function Chip({
             "group/chip chamfer relative flex h-[22px] cursor-pointer items-center gap-1 px-[7px] outline-none [--cut:5px]",
             "transition-[background-color,transform,scale] duration-150 active:scale-[0.94]",
             reaction.mine
-              ? "bg-[color-mix(in_oklab,var(--color-gold-500)_20%,var(--color-obsidian-800))] hover:bg-[color-mix(in_oklab,var(--color-gold-500)_28%,var(--color-obsidian-800))]"
+              ? "bg-[color-mix(in_oklab,white_14%,var(--color-obsidian-800))] hover:bg-[color-mix(in_oklab,white_20%,var(--color-obsidian-800))]"
               : "bg-obsidian-800 hover:bg-obsidian-700",
           )}
           initial={fresh ? { opacity: 0, transform: reduce ? "none" : "scale(0.6)" } : false}
@@ -249,7 +250,7 @@ function Chip({
             className={cn(
               "chamfer pointer-events-none absolute inset-0 [--cut:5px]",
               reaction.mine
-                ? "shadow-[inset_0_0_0_1px_rgb(240_184_73/0.55)]"
+                ? "shadow-[inset_0_0_0_1px_rgb(243_235_221/0.42)]"
                 : "shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]",
               // The keyboard's ring follows the chamfer.
               "group-focus-visible/chip:shadow-[inset_0_0_0_2px_var(--color-gold-300)]",
@@ -262,7 +263,7 @@ function Chip({
             aria-hidden
             className={cn(
               "relative text-[12px] font-semibold",
-              reaction.mine ? "text-gold-200" : "text-ash-300",
+              reaction.mine ? "text-bone-50" : "text-ash-300",
             )}
           >
             <Count value={count} />
@@ -366,7 +367,7 @@ export function QuickReactions({
   onMore,
 }: {
   emoji: readonly string[];
-  /** The ones the player gave (a gold tint). */
+  /** The ones the player gave (the quiet plate, never gold). */
   given: (emoji: string) => boolean;
   onPick: (emoji: string) => void;
   /** "+" picked an emoji from the whole picker. */
@@ -388,7 +389,7 @@ export function QuickReactions({
           className={cn(
             "chamfer flex size-[34px] cursor-pointer items-center justify-center outline-none [--cut:6px]",
             "transition-[background-color,transform,scale] duration-150 hover:bg-white/10 focus-visible:bg-white/12 active:scale-[0.9]",
-            given(e) && "bg-gold-500/16 hover:bg-gold-500/24",
+            given(e) && "bg-white/16 hover:bg-white/22",
           )}
         >
           <span aria-hidden className="text-[20px] leading-none">
