@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createVoiceMock } from "@/lib/api/voice-mock";
 import { HIDDEN_VOICE_STATE } from "@/lib/api/voice-types";
-import { RECENT_MS, recentRoom, useVoiceUi } from "./store";
+import { RECENT_MS, recentRoom, unseenMissed, useVoiceUi } from "./store";
 
 afterEach(() => {
   useVoiceUi.setState({
@@ -11,6 +11,23 @@ afterEach(() => {
     panel: false,
     page: "room",
     ended: null,
+    seenMissed: [],
+  });
+});
+
+describe("missed calls on the Friends entry (VOICE-INT)", () => {
+  it("light its mark until the friends list was in front of the player", () => {
+    const missed = createVoiceMock({ scenario: "missed", timers: false }).current();
+    expect(missed.missed.length).toBeGreaterThan(0);
+    useVoiceUi.getState().setState(missed);
+    expect(unseenMissed(useVoiceUi.getState())).toBe(missed.missed.length);
+    useVoiceUi.getState().markMissedSeen();
+    expect(unseenMissed(useVoiceUi.getState())).toBe(0);
+    // A new one lights it again; nothing while voice chat is off.
+    const another = { room: "f00000000000000c3", from: "304", at: 0, joinable: false };
+    useVoiceUi.getState().setState({ ...missed, missed: [another, ...missed.missed] });
+    expect(unseenMissed(useVoiceUi.getState())).toBe(1);
+    expect(unseenMissed({ state: { ...missed, available: false }, seenMissed: [] })).toBe(0);
   });
 });
 

@@ -16,8 +16,9 @@ const SETTINGS_FILE: &str = "settings.json";
 const PEOPLE_FILE: &str = "people.json";
 /// People whose choices are kept at most (the oldest change goes first).
 pub const PEOPLE_MAX: usize = 500;
-/// People a backup carries at most.
-pub const BACKUP_PEOPLE_MAX: usize = 200;
+/// People a backup carries at most, the latest changed (VOICE-INT: the friends service keeps a
+/// backup of at most 16 KB, and its friends part alone reaches ~11 KB; 50 people are ~2.6 KB).
+pub const BACKUP_PEOPLE_MAX: usize = 50;
 /// A person's volume tops out here (percent; an `<audio>` engine stops at 100).
 pub const VOLUME_MAX: u16 = 200;
 /// The microphone's own volume (when automatic volume is off) tops out here.
@@ -245,6 +246,8 @@ pub struct Store {
     settings: VoiceSettings,
     /// Last changed last.
     people: Vec<(String, VoicePersonPrefs)>,
+    /// Grows with every change the backup carries (`VoiceState.backup_rev`).
+    revision: u32,
 }
 
 impl Store {
@@ -271,6 +274,7 @@ impl Store {
             folder,
             settings,
             people,
+            revision: 0,
         }
     }
 
@@ -280,6 +284,7 @@ impl Store {
             folder: PathBuf::new(),
             settings: VoiceSettings::default(),
             people: Vec::new(),
+            revision: 0,
         }
     }
 
@@ -287,9 +292,19 @@ impl Store {
         &self.settings
     }
 
+    /// Grows with every change the settings backup carries (a device choice too: cheap, and the
+    /// page's fingerprint skips an upload that would change nothing).
+    pub fn revision(&self) -> u32 {
+        self.revision
+    }
+
     /// Saves new settings (normalized); returns them as kept.
     pub fn set_settings(&mut self, settings: VoiceSettings) -> VoiceSettings {
-        self.settings = settings.normalized();
+        let settings = settings.normalized();
+        if settings != self.settings {
+            self.revision = self.revision.wrapping_add(1);
+        }
+        self.settings = settings;
         self.write_settings();
         self.settings.clone()
     }
@@ -322,6 +337,7 @@ impl Store {
             let extra = self.people.len() - PEOPLE_MAX;
             self.people.drain(..extra);
         }
+        self.revision = self.revision.wrapping_add(1);
         self.write_people();
         true
     }
@@ -361,6 +377,7 @@ impl Store {
             let extra = self.people.len() - PEOPLE_MAX;
             self.people.drain(..extra);
         }
+        self.revision = self.revision.wrapping_add(1);
         self.write_settings();
         self.write_people();
     }
@@ -550,6 +567,53 @@ mod tests {
         // The oldest changes went first.
         assert!(!store.person("0").muted);
         assert!(store.person(&(PEOPLE_MAX + 19).to_string()).muted);
-        assert_eq!(store.backup().people.len(), BACKUP_PEOPLE_MAX);
+        let backup = store.backup();
+        assert_eq!(backup.people.len(), BACKUP_PEOPLE_MAX);
+        // The latest changes travel.
+        assert!(backup.people.contains_key(&(PEOPLE_MAX + 19).to_string()));
+        assert!(!backup.people.contains_key("100"));
+    }
+
+    #[test]
+    fn the_backup_fits_the_services_share() {
+        // The longest ids the service gives, every choice away from the default, every key set:
+        // well under the ~5 KB the friends service's 16 KB backup leaves beside the friends part.
+        let mut store = Store::in_memory();
+        let long = |n: usize| format!("{:020}", 10_000_000_000_000_000_000_u128 + n as u128);
+        for n in 0..(BACKUP_PEOPLE_MAX + 10) {
+            store.set_person(&long(n), |prefs| {
+                prefs.volume = 150;
+                prefs.muted = true;
+            });
+        }
+        store.set_settings(VoiceSettings {
+            mode: VoiceTalkMode::PushToTalk,
+            push_to_talk_key: Some(key("CapsLock")),
+            mute_key: Some(key("KeyM")),
+            deafen_key: Some(key("KeyN")),
+            sensitivity: Some(40),
+            ..VoiceSettings::default()
+        });
+        let bytes = serde_json::to_vec(&store.backup()).unwrap().len();
+        assert!(bytes < 4_000, "{bytes} bytes");
+    }
+
+    #[test]
+    fn every_change_the_backup_carries_counts() {
+        let mut store = Store::in_memory();
+        let start = store.revision();
+        store.set_settings(VoiceSettings::default());
+        assert_eq!(store.revision(), start, "the same settings change nothing");
+        store.set_settings(VoiceSettings {
+            sounds: false,
+            ..VoiceSettings::default()
+        });
+        assert_eq!(store.revision(), start + 1);
+        assert!(store.set_person("1", |prefs| prefs.volume = 80));
+        assert_eq!(store.revision(), start + 2);
+        assert!(!store.set_person("1", |prefs| prefs.volume = 80));
+        assert_eq!(store.revision(), start + 2);
+        store.restore(VoiceBackup::default());
+        assert_eq!(store.revision(), start + 3);
     }
 }

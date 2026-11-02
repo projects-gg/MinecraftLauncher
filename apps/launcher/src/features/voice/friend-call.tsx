@@ -37,6 +37,7 @@ export function useCallOffer(friend: string, isFriend = true) {
       isFriend,
       (id) => crews.find((c) => c.id === id)?.members.map((m) => m.id) ?? [],
       friends,
+      (id) => crews.some((c) => c.members.some((m) => m.id === id && m.state !== "offline")),
     ),
   );
 }

@@ -4649,7 +4649,12 @@ export type EngineCommand =
  *  Whether the microphone may send now (not muted, not deafened, not muted for everyone, and
  *  push-to-talk held when it is on). The page's gate also needs speech in voice activity.
  */
-{ t: "talk"; open: boolean } | 
+{ t: "talk"; open: boolean; 
+/**
+ *  Push-to-talk was let go: a closing gate keeps its 200 ms tail (the end of a word). False:
+ *  a mute, a deafen or a moderator's mute closes it at once (a 5 ms fade).
+ */
+tail: boolean } | 
 /**  Deafened: nothing plays. */
 { t: "deaf"; on: boolean } | 
 /**  How each person plays, whole (after every change). */
@@ -7283,6 +7288,11 @@ export type PageReport =
 { t: "level"; level: number | null; open: boolean } | 
 /**  Answer to [`EngineCommand::Stats`]. */
 { t: "stats"; rttMs: number | null; loss: number | null; jitterMs: number | null } | 
+/**
+ *  How people play (once when the sound opens, and when the path changes): the volume
+ *  slider's top follows it ([`crate::gain`]).
+ */
+{ t: "playout"; playout: Playout } | 
 /**  Something failed that the launcher should know of (a short code, no detail). */
 { t: "failed"; code: string };
 
@@ -7416,6 +7426,12 @@ export type PlanView = {
 	/**  The player may clear its note (they made it, or lead or moderate the crew). */
 	canClearNote: boolean,
 };
+
+export type Playout = 
+/**  One `<audio>` element per person. */
+"element" | 
+/**  One WebAudio gain node per person, then a limiter. */
+"webAudio";
 
 /**
  *  What "control" does: `pause`/`resume` (the AI switch), `block`/`unblock` and `forget` (a
@@ -11502,6 +11518,19 @@ export type VoicePowers = {
 	moderator: boolean,
 };
 
+/**  Someone in the room as their card names them (VOICE-S2's `card`, the friends list's own). */
+export type VoiceProfile = {
+	id: string,
+	/**  `displayName`, else `username`. */
+	name: string,
+	/**  The picture choice, as the friends list's (`discord`, `preset:…`). */
+	avatar: string,
+	/**  Discord's picture when `avatar` is `discord`. */
+	avatarUrl: string | null,
+	/**  Their profile badges (BADGES), the most important first. */
+	marks: string[],
+};
+
 /**  A connection's quality; the page shows a mark only when it is not `good`. */
 export type VoiceQuality = "good" | "weak" | "bad";
 
@@ -11677,6 +11706,28 @@ export type VoiceState = {
 	devices: VoiceDevices,
 	/**  "Mikrofonu dene" runs: the player hears themselves. */
 	testing: boolean,
+	/**
+	 *  People in the room whom the room named with their card (VOICE-S2): the page names someone
+	 *  its friend list and crews do not know from here (a friend's friend), never "Bir oyuncu".
+	 */
+	profiles: VoiceProfile[],
+	/**
+	 *  Crewmates in a live room of the player's crews (`in`), from the crews' room lists, so a
+	 *  crewmate who is no friend shows "Sesli sohbette" too. Friends' own (`FriendView.voice`)
+	 *  come first; the player is never here.
+	 */
+	presence: { [key in string]: PresenceVoice },
+	/**
+	 *  The person volume slider's top (percent): 200 while the voice page plays through WebAudio
+	 *  (and before it said), 100 through `<audio>` elements (`pl_voice::gain`).
+	 */
+	volumeMax: number,
+	/**
+	 *  Grows whenever something the settings backup carries changes (the settings, a person's
+	 *  volume or "Benim için sustur", here or from the in-game overlay): the page uploads the
+	 *  backup again a while after it moves (`voice_backup`).
+	 */
+	backupRev: number,
 };
 
 /**  When the microphone sends. */

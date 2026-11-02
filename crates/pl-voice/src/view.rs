@@ -47,6 +47,20 @@ pub struct VoiceState {
     pub devices: VoiceDevices,
     /// "Mikrofonu dene" runs: the player hears themselves.
     pub testing: bool,
+    /// People in the room whom the room named with their card (VOICE-S2): the page names someone
+    /// its friend list and crews do not know from here (a friend's friend), never "Bir oyuncu".
+    pub profiles: Vec<VoiceProfile>,
+    /// Crewmates in a live room of the player's crews (`in`), from the crews' room lists, so a
+    /// crewmate who is no friend shows "Sesli sohbette" too. Friends' own (`FriendView.voice`)
+    /// come first; the player is never here.
+    pub presence: std::collections::BTreeMap<String, pl_social::PresenceVoice>,
+    /// The person volume slider's top (percent): 200 while the voice page plays through WebAudio
+    /// (and before it said), 100 through `<audio>` elements (`pl_voice::gain`).
+    pub volume_max: u16,
+    /// Grows whenever something the settings backup carries changes (the settings, a person's
+    /// volume or "Benim için sustur", here or from the in-game overlay): the page uploads the
+    /// backup again a while after it moves (`voice_backup`).
+    pub backup_rev: u32,
 }
 
 impl VoiceState {
@@ -64,6 +78,38 @@ impl VoiceState {
             mic: VoiceMic::Unknown,
             devices: VoiceDevices::default(),
             testing: false,
+            profiles: Vec::new(),
+            presence: std::collections::BTreeMap::new(),
+            volume_max: crate::gain::Playout::WebAudio.max_percent(),
+            backup_rev: 0,
+        }
+    }
+}
+
+/// Someone in the room as their card names them (VOICE-S2's `card`, the friends list's own).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceProfile {
+    pub id: String,
+    /// `displayName`, else `username`.
+    pub name: String,
+    /// The picture choice, as the friends list's (`discord`, `preset:…`).
+    pub avatar: String,
+    /// Discord's picture when `avatar` is `discord`.
+    pub avatar_url: Option<String>,
+    /// Their profile badges (BADGES), the most important first.
+    pub marks: Vec<String>,
+}
+
+impl VoiceProfile {
+    /// `id` is the room's (the card says the same).
+    pub fn of(id: &str, card: &pl_social::PublicProfile) -> Self {
+        Self {
+            id: id.to_owned(),
+            name: card.name().to_owned(),
+            avatar: card.avatar.clone(),
+            avatar_url: card.discord_avatar_url(128),
+            marks: card.shown_marks(),
         }
     }
 }

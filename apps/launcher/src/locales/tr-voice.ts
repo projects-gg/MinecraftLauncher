@@ -33,6 +33,8 @@ export const trVoice = {
     join: "Katıl",
     joinCall: "Aramaya katıl",
     dismiss: "Kapat",
+    waiting_one: "{{count}} cevapsız arama",
+    waiting_other: "{{count}} cevapsız arama",
   },
   presence: {
     inVoice: "Sesli sohbette",

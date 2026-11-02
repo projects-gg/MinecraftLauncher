@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::gain::Playout;
 use crate::view::{VoiceDevices, VoiceMic};
 
 /// How the page processes and sends the microphone, and plays people.
@@ -104,6 +105,9 @@ pub enum EngineCommand {
     /// push-to-talk held when it is on). The page's gate also needs speech in voice activity.
     Talk {
         open: bool,
+        /// Push-to-talk was let go: a closing gate keeps its 200 ms tail (the end of a word). False:
+        /// a mute, a deafen or a moderator's mute closes it at once (a 5 ms fade).
+        tail: bool,
     },
     /// Deafened: nothing plays.
     Deaf {
@@ -193,6 +197,9 @@ pub enum PageReport {
         loss: Option<f32>,
         jitter_ms: Option<f32>,
     },
+    /// How people play (once when the sound opens, and when the path changes): the volume
+    /// slider's top follows it ([`crate::gain`]).
+    Playout { playout: Playout },
     /// Something failed that the launcher should know of (a short code, no detail).
     Failed { code: String },
 }
@@ -213,6 +220,7 @@ impl std::fmt::Debug for PageReport {
             ),
             Self::Level { .. } => f.write_str("level"),
             Self::Stats { .. } => f.write_str("stats"),
+            Self::Playout { playout } => write!(f, "playout({playout:?})"),
             Self::Failed { code } => write!(f, "failed({code})"),
             Self::Ready => f.write_str("ready"),
             Self::NeedTurn => f.write_str("needTurn"),
@@ -260,8 +268,20 @@ mod tests {
     #[test]
     fn commands_as_the_page_reads_them() {
         assert_eq!(
-            serde_json::to_value(EngineCommand::Talk { open: true }).unwrap(),
-            json!({"t":"talk","open":true})
+            serde_json::to_value(EngineCommand::Talk {
+                open: true,
+                tail: false
+            })
+            .unwrap(),
+            json!({"t":"talk","open":true,"tail":false})
+        );
+        assert_eq!(
+            serde_json::to_value(EngineCommand::Talk {
+                open: false,
+                tail: true
+            })
+            .unwrap(),
+            json!({"t":"talk","open":false,"tail":true})
         );
         assert_eq!(
             serde_json::to_value(EngineCommand::Offer {
@@ -319,6 +339,19 @@ mod tests {
                 ..
             }
         ));
+        // L2's page sends the playout path as `pl_voice::gain::Playout` names it.
+        let playout: PageReport =
+            serde_json::from_value(json!({"t":"playout","playout":"element"})).unwrap();
+        assert_eq!(
+            playout,
+            PageReport::Playout {
+                playout: Playout::Element
+            }
+        );
+        assert_eq!(format!("{playout:?}"), "playout(Element)");
+        assert!(
+            serde_json::from_value::<PageReport>(json!({"t":"playout","playout":"loud"})).is_err()
+        );
         assert!(serde_json::from_value::<PageReport>(json!({"t":"whatever"})).is_err());
         let big = PageReport::Answer {
             sdp: "x".repeat(20_000),

@@ -32,6 +32,8 @@ export const enVoice = {
     join: "Join",
     joinCall: "Join the call",
     dismiss: "Close",
+    waiting_one: "{{count}} missed call",
+    waiting_other: "{{count}} missed calls",
   },
   presence: {
     inVoice: "In voice",

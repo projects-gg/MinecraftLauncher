@@ -36,6 +36,11 @@ interface VoiceUi {
    * "Rapor et" from their card carries that room for a day (voice.md §8.3). */
   recent: Record<string, { room: string; at: number }>;
   rememberRoom: (room: string, people: readonly string[], at: number) => void;
+  /** Missed calls (their rooms) the player has seen in the friends list: they no longer light the
+   * Friends entry's mark; the friend's row still says "Cevapsız arama" until it is answered. */
+  seenMissed: readonly string[];
+  /** The friends list is in front of the player: every missed call now is seen. */
+  markMissedSeen: () => void;
 }
 
 const same = (a: readonly string[], b: readonly string[]) =>
@@ -94,7 +99,26 @@ export const useVoiceUi = create<VoiceUi>()((set, get) => ({
       for (const id of people) kept[id] = { room, at };
       return { recent: kept };
     }),
+  seenMissed: [],
+  markMissedSeen: () => {
+    const s = get();
+    const rooms = s.state.missed.map((m) => m.room);
+    // Only the calls still listed: answered or dismissed ones leave the list too.
+    if (same(rooms, s.seenMissed)) return;
+    set({ seenMissed: rooms });
+  },
 }));
+
+/** Missed calls the player has not seen yet: they light the Friends entry's mark with the other
+ * things that wait (a request, an unread message). */
+export function unseenMissed(s: Pick<VoiceUi, "state" | "seenMissed">): number {
+  if (!voiceOn(s.state)) return 0;
+  return s.state.missed.filter((m) => !s.seenMissed.includes(m.room)).length;
+}
+
+export function useMissedWaiting(): number {
+  return useVoiceUi(unseenMissed);
+}
 
 /** How long after a call "Rapor et" on someone's card still carries the room (a day). */
 export const RECENT_MS = 24 * 60 * 60 * 1000;

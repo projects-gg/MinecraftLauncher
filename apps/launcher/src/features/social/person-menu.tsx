@@ -368,9 +368,12 @@ export function personItems(
   const inRoom = voiceRoom?.people.find((p) => p.id === person.id);
   const crewMembersOf = (id: string) =>
     view.crews.find((c) => c.id === id)?.members.map((m) => m.id) ?? [];
+  // A crewmate who is no friend may be invited to a crew room while online (voice.md §3.4).
+  const onlineCrewmate = (id: string) =>
+    view.crews.some((c) => c.members.some((m) => m.id === id && m.state !== "offline"));
   const offer = blocked
     ? null
-    : callOffer(env.voice, person.id, Boolean(friend), crewMembersOf, view.friends);
+    : callOffer(env.voice, person.id, Boolean(friend), crewMembersOf, view.friends, onlineCrewmate);
   const reportRoom = inRoom && voiceRoom ? voiceRoom.id : recentRoom(person.id);
   const full = personMenu({
     me: person.id === me,
@@ -432,21 +435,25 @@ export function personItems(
 
   return rowsOf(plan, (row): MenuItem | null => {
     switch (row.action) {
-      case "voiceVolume":
+      case "voiceVolume": {
+        // 0–200 % through WebAudio; an engine that plays through `<audio>` stops at 100 % (no
+        // notch then: it would sit on the end).
+        const max = env.voice.volumeMax ?? 200;
         return {
           label: t("voice.person.volume"),
           icon: <SpeakerHigh size={16} />,
           onSelect: () => {},
           slider: {
-            value: inRoom?.volume ?? 100,
+            value: Math.min(inRoom?.volume ?? 100, max),
             min: 0,
-            max: 200,
+            max,
             step: 5,
-            notch: 100,
+            notch: max > 100 ? 100 : undefined,
             format: formatPercent,
             onChange: (value, final) => setVoiceVolume(person.id, value, final),
           },
         };
+      }
       case "voiceMuteForMe":
         return {
           label: t("voice.person.muteForMe"),

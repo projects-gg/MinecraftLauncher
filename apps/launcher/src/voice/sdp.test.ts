@@ -44,4 +44,63 @@ describe("tuneOpus", () => {
     const g722 = "m=audio 9 RTP/AVP 9\r\na=rtpmap:9 G722/8000";
     expect(tuneOpus(g722, { bitrate: 24000, dtx: true, fec: true })).toBe(g722);
   });
+
+  // The SFU's offer after a pull: the page's own sending section first (the SFU receives it), then
+  // one section per person received. The encoder reads its section's parameters, wherever it is.
+  const SFU_OFFER = [
+    "v=0",
+    "o=- 1 2 IN IP4 127.0.0.1",
+    "s=-",
+    "t=0 0",
+    "a=group:BUNDLE 0 1 2",
+    "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+    "a=mid:0",
+    "a=recvonly",
+    "a=rtpmap:111 opus/48000/2",
+    "a=fmtp:111 minptime=10;useinbandfec=1",
+    "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+    "a=mid:1",
+    "a=sendonly",
+    "a=rtpmap:111 opus/48000/2",
+    "a=fmtp:111 minptime=10;useinbandfec=1",
+    "m=audio 9 UDP/TLS/RTP/SAVPF 100",
+    "a=mid:2",
+    "a=sendonly",
+    "a=rtpmap:100 opus/48000/2",
+    "",
+  ].join("\r\n");
+
+  it("tunes every section of an SFU offer and keeps its order", () => {
+    const tuned = tuneOpus(SFU_OFFER, { bitrate: 32000, dtx: true, fec: true });
+    const lines = tuned.split("\r\n");
+    const fmtp = lines.filter((line) => line.startsWith("a=fmtp:"));
+    expect(fmtp).toEqual([
+      "a=fmtp:111 minptime=10;useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=32000;usedtx=1",
+      "a=fmtp:111 minptime=10;useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=32000;usedtx=1",
+      "a=fmtp:100 stereo=0;sprop-stereo=0;maxaveragebitrate=32000;usedtx=1;useinbandfec=1",
+    ]);
+    // The added line sits under its own section's rtpmap, sections untouched otherwise.
+    expect(
+      lines.indexOf(
+        "a=fmtp:100 stereo=0;sprop-stereo=0;maxaveragebitrate=32000;usedtx=1;useinbandfec=1",
+      ),
+    ).toBe(lines.indexOf("a=rtpmap:100 opus/48000/2") + 1);
+    expect(lines.filter((line) => line.startsWith("m=")).length).toBe(3);
+    expect(lines.filter((line) => line.startsWith("a=mid:"))).toEqual([
+      "a=mid:0",
+      "a=mid:1",
+      "a=mid:2",
+    ]);
+    expect(lines).toHaveLength(SFU_OFFER.split("\r\n").length + 1);
+    expect(tuneOpus(tuned, { bitrate: 32000, dtx: true, fec: true })).toBe(tuned);
+  });
+
+  it("leaves the session part alone", () => {
+    const tuned = tuneOpus(SFU_OFFER, { bitrate: 24000, dtx: true, fec: true });
+    expect(
+      tuned.startsWith(
+        "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0 1 2\r\n",
+      ),
+    ).toBe(true);
+  });
 });

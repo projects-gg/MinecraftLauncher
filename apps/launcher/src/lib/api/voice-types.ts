@@ -156,12 +156,18 @@ export interface VoiceDevices {
   outputs: VoiceDevice[];
 }
 
-/** Someone the state names who is neither a friend nor a crewmate (voice.md "L3 → L1 istek"). */
+/**
+ * Someone in the room the state names with their card (VOICE-S2's `card`, the friends list's own):
+ * a friend's friend the lists do not know.
+ */
 export interface VoiceProfile {
   id: string;
   name: string;
   avatar: string;
-  avatarUrl?: string;
+  /** Discord's picture when `avatar` is `discord`. */
+  avatarUrl?: string | null;
+  /** Their profile badges (BADGES). */
+  marks?: string[];
 }
 
 /** A friend's or crewmate's voice chat: may be called (`ready`) or is in a room (`in`). */
@@ -189,10 +195,18 @@ export interface VoiceState {
   devices: VoiceDevices;
   /** "Mikrofonu dene" runs. */
   testing: boolean;
-  /** Names and pictures of people the lists do not know (requested of L1). */
+  /** Names and pictures of people in the room the lists do not know (their cards). */
   profiles?: VoiceProfile[];
-  /** Friends' and crewmates' voice chat (requested of L1); absent: cannot be called. */
+  /**
+   * Crewmates in a live room of the player's crews (`in`); a friend's own `Friend.voice` comes
+   * first. Absent: nothing known (a crewmate who is no friend may still be invited to a crew room
+   * while online, voice.md §3.4).
+   */
   presence?: Record<string, VoicePresence>;
+  /** The person volume slider's top: 200, or 100 while people play through `<audio>`. */
+  volumeMax?: number;
+  /** Grows when the settings or a person's choices change: the settings backup goes up again. */
+  backupRev?: number;
 }
 
 /** Nothing at all: before the service and the signed config said anything. */
@@ -352,6 +366,16 @@ export interface VoiceKeyCheck {
   clash: VoiceKeyClash | null;
 }
 
+/**
+ * What the settings backup carries of voice chat (`voice` in its document): the settings without
+ * this computer's devices, and the latest people's volumes and "Benim için sustur". The page only
+ * passes it on; the launcher reads, checks and bounds a downloaded one.
+ */
+export interface VoiceBackup {
+  settings?: unknown;
+  people?: unknown;
+}
+
 // --- the seam ------------------------------------------------------------------------------------
 
 /** Everything the page asks of voice chat. Listeners return their stop function. */
@@ -396,4 +420,8 @@ export interface VoiceApi {
   settingsOpen(open: boolean): Promise<void>;
   /** Windows' microphone privacy page ("Ayarları aç"). */
   openMicSettings(): Promise<void>;
+  /** The settings backup's voice part (`voice`). */
+  backup(): Promise<VoiceBackup>;
+  /** A downloaded backup's voice part (this computer's devices stay). */
+  restore(backup: VoiceBackup): Promise<void>;
 }

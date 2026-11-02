@@ -240,6 +240,61 @@ describe("Davet et", () => {
   });
 });
 
+describe("VOICE-INT: what the launcher now tells", () => {
+  // As the launcher sends it: a friend's own voice chat, nothing for crewmates out of a room.
+  const told = (extra: Partial<VoiceState> = {}) => on({ presence: { "301": "ready" }, ...extra });
+  const crewRoom = room({ kind: "crew", crew: "c1", name: "Genel", general: true });
+  const online = (id: string) =>
+    lists.crews.some((c) => c.members.some((m) => m.id === id && m.state !== "offline"));
+
+  it("names a friend's friend by the room's card, with their badges", () => {
+    const state = {
+      profiles: [
+        {
+          id: "909",
+          name: "KumFirtinasi",
+          avatar: "discord",
+          avatarUrl: null,
+          marks: ["verified"],
+        },
+      ],
+    };
+    expect(faceOf("909", lists, state, "Bir oyuncu")).toEqual({
+      id: "909",
+      name: "KumFirtinasi",
+      avatar: "discord",
+      marks: ["verified"],
+      friend: false,
+    });
+  });
+
+  it("invites an online crewmate who is no friend into the player's room of that crew", () => {
+    const offer = (state: VoiceState, isOnline: (id: string) => boolean) =>
+      callOffer(state, "701", false, crewMembers, lists.friends, isOnline);
+    expect(offer(told({ room: crewRoom }), online)).toBe("invite");
+    expect(offer(told({ room: crewRoom }), () => false)).toBeNull();
+    expect(offer(told(), online)).toBeNull();
+    expect(offer(told({ room: room() }), online)).toBeNull();
+    // A friend's own voice chat decides for them (off: no invite).
+    expect(callOffer(told({ room: crewRoom }), "302", true, crewMembers, [], online)).toBeNull();
+  });
+
+  it("lists online crewmates who are no friends in a crew room's Davet et", () => {
+    const state = told({ room: crewRoom });
+    expect(invitables(state, lists, "").map((p) => p.name)).toEqual(["GeceKurdu_", "MaviElmas"]);
+    const away = {
+      ...lists,
+      crews: [
+        crew("c1", [
+          member("100", "EjderAvcisi", { me: true }),
+          member("701", "MaviElmas", { state: "offline" }),
+        ]),
+      ],
+    };
+    expect(invitables(state, away, "")).toEqual([]);
+  });
+});
+
 describe("words", () => {
   it("says a refusal, nothing when it went through", () => {
     const answer = (refused: string | null, retryAfter: number | null = null) =>
