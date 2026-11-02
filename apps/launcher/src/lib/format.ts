@@ -112,21 +112,32 @@ export function formatMemory(mb: number): string {
 }
 
 /**
- * "az önce", "5 dakika önce", "3 saat önce", "dün", "2 gün önce", then the date ("3 Temmuz").
- * Under a minute it is "az önce" / "just now": Intl says "bu dakika" / "this minute", which read
- * oddly in "Son oynama …" and "… başladı".
+ * How far ahead of this computer's clock a moment that has passed may read and still be "az önce":
+ * a server's clock (Modrinth, the friends service, the news) runs a little ahead of the player's,
+ * and something just done read "1 dakika sonra" (STUDIO-TIME, the same 5 minutes in Studio).
+ */
+export const CLOCK_SKEW_MS = 5 * 60_000;
+
+/**
+ * A moment that has passed: "az önce", "5 dakika önce", "3 saat önce", "dün", "2 gün önce", then
+ * the date ("3 Temmuz"). Under a minute it is "az önce" / "just now": Intl says "bu dakika" /
+ * "this minute", which read oddly in "Son oynama …" and "… başladı". Never "… sonra": a moment
+ * up to `CLOCK_SKEW_MS` ahead of this clock is "az önce", one further ahead (a clock far off)
+ * its date.
  */
 export function formatRelative(iso: string, now = Date.now()): string {
   const diff = new Date(iso).getTime() - now;
-  const abs = Math.abs(diff);
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
-  if (abs < minute) return diff <= 0 ? i18n.t("units.justNow") : relativeWords(1, "minute");
-  if (abs < hour) return relativeWords(Math.round(diff / minute), "minute");
-  if (abs < day) return relativeWords(Math.round(diff / hour), "hour");
-  if (abs < 30 * day) return relativeWords(Math.round(diff / day), "day");
-  return dateTimeFormat({ day: "numeric", month: "long" }).format(new Date(iso));
+  const date = () => dateTimeFormat({ day: "numeric", month: "long" }).format(new Date(iso));
+  if (diff > 0) return diff <= CLOCK_SKEW_MS ? i18n.t("units.justNow") : date();
+  const ago = -diff;
+  if (ago < minute) return i18n.t("units.justNow");
+  if (ago < hour) return relativeWords(Math.round(diff / minute), "minute");
+  if (ago < day) return relativeWords(Math.round(diff / hour), "hour");
+  if (ago < 30 * day) return relativeWords(Math.round(diff / day), "day");
+  return date();
 }
 
 /** "2 sa 14 dk", "38 dk", "45 sn" / "2 h 14 min" (units from the strings, `units.*`). */

@@ -213,8 +213,9 @@ export function AccountSwitcher() {
                                   </span>
                                 ) : null}
                               </span>
+                              {/* Bone, as every menu's check (design.md §2: one gold per screen). */}
                               <DropdownMenu.ItemIndicator className="flex shrink-0 pr-1">
-                                <Check size={17} weight="bold" className="text-gold-300" />
+                                <Check size={17} weight="bold" className="text-bone-100" />
                               </DropdownMenu.ItemIndicator>
                             </DropdownMenu.RadioItem>
                           );

@@ -1886,15 +1886,22 @@ public final class MessageList extends PanelWidget {
                 case FAILED -> Icon.WARNING;
                 case SENT -> Icon.CHECK;
             };
-            int markColor = row.delivery == OverlayState.Delivery.FAILED ? Theme.FLARE_400
-                : row.delivery == OverlayState.Delivery.SENT ? Theme.GOLD_300 : Theme.ASH_400;
-            Draw.icon(g, mark, 8, mx, my + 0.5f, markColor);
+            Draw.icon(g, mark, 8, mx, my + 0.5f, deliveryMarkColor(row.delivery));
             mx += 11;
         }
         Draw.text(g, small, row.time, mx, textY, Theme.ASH_400);
         if (row.edited != null) {
             Draw.text(g, small, row.edited, mx + row.timeW + 4, textY, Theme.ASH_400);
         }
+    }
+
+    /**
+     * The mark before the player's own message's time: a failed one's warning is flare; the clock of one on its way
+     * and the tick of one sent are ash, as the time beside them and as in the launcher (BETA2-FIX: the tick was gold;
+     * a check mark is never gold, docs/design.md §2).
+     */
+    static int deliveryMarkColor(OverlayState.Delivery delivery) {
+        return delivery == OverlayState.Delivery.FAILED ? Theme.FLARE_400 : Theme.ASH_400;
     }
 
     /** "Tepki ver" and "Yanıtla" beside the message under the pointer (or picked with the keys). */

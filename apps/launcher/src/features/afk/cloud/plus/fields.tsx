@@ -5,7 +5,8 @@
 import { ContentIcon, type ContentIconKind, cn } from "@pl/ui";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { inputClass, useOneGold } from "../../settings/controls";
+import { TEXT_LINK } from "@/lib/text-link";
+import { inputClass } from "../../settings/controls";
 import { readTime } from "./model";
 import { amountWords, currentLang, formatAmount, parseAmount } from "./words";
 
@@ -139,37 +140,26 @@ export function AmountField({
 }
 
 /**
- * A quiet text action ("Elle ekle", "Envanterden seç", "Harcananı sıfırla"). `bone` where gold
- * would be a second loud thing beside the card's answer ("Sınırlara git" on an approval), and
- * always under the one-gold rule (`OneGold`: the setup steps and the question rows). Bone is the
- * text's own colour, so it is underlined like the site's and the phone's links ("Kalıbı kendim
- * yazacağım", `TextAction`); gold says it by its colour.
+ * A quiet text action ("Elle ekle", "Envanterden seç", "Harcananı sıfırla", "Sınırlara git"): the
+ * launcher's text link, bone and underlined like the site's and the phone's links ("Kalıbı kendim
+ * yazacağım", `TextAction`). Never gold, the card's answer or the screen's save keeps the gold
+ * (design.md §2; BETA2-FIX dropped its gold tone and the `OneGold` scope that turned it bone).
  */
 export function QuietLink({
   children,
   onClick,
   disabled = false,
-  tone: asked = "gold",
 }: {
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
-  tone?: "gold" | "bone";
 }) {
-  const tone = useOneGold() ? "bone" : asked;
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={cn(
-        "cursor-pointer rounded-sm text-[12.5px] font-medium outline-none",
-        tone === "gold"
-          ? "text-gold-300 underline-offset-2 hover:text-gold-200 hover:underline"
-          : "text-bone-100 underline decoration-white/30 underline-offset-[3px] hover:text-bone-50 hover:decoration-current",
-        "transition-[color,text-decoration-color,opacity] duration-150 focus-visible:ring-2 focus-visible:ring-gold-300",
-        "disabled:cursor-not-allowed disabled:text-ash-500 disabled:no-underline",
-      )}
+      className={cn(TEXT_LINK, "text-[12.5px] font-medium")}
     >
       {children}
     </button>

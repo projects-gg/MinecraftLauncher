@@ -92,7 +92,8 @@ export function AnswerButtons({
   const answered = call.myAnswer;
   const joinable = callWhere(call).kind !== "ready";
   /** Unanswered: "Geliyorum" leads (gold when it joins the caller), "Gelemem" stays quiet.
-   * Answered: the chosen one is checked and gold-edged, the others step back. */
+   * Answered: the chosen one is the quiet plate with a bone check, the others step back (a chosen
+   * answer is never gold, design.md §2; BETA2-FIX dropped its gold check and gold edge). */
   const variant = (answer: CallAnswer): "primary" | "secondary" | "ghost" => {
     if (answered) return answered === answer ? "secondary" : "ghost";
     if (quiet) return "secondary";
@@ -111,13 +112,10 @@ export function AnswerButtons({
             size={size}
             aria-pressed={chosen}
             variant={variant(answer)}
-            className={cn(
-              "flex-1 transition-[box-shadow,background-color,color]",
-              chosen && "ring-1 ring-gold-400/70",
-            )}
+            className="flex-1"
             icon={
               chosen ? (
-                <Check size={14} weight="bold" className="text-gold-300" />
+                <Check size={14} weight="bold" />
               ) : joins ? (
                 <Play size={13} weight="fill" className={quiet ? "text-gold-300" : undefined} />
               ) : undefined

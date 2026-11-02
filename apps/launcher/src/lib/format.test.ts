@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  CLOCK_SKEW_MS,
   dateTimeFormat,
   formatBytes,
   formatCount,
@@ -120,7 +121,8 @@ describe("dates", () => {
     expect(formatRelative(yesterday, now)).toBe("dün");
     // Numbers past one step: not Intl's dated "evvelsi gün" / "öbür gün".
     expect(formatRelative(twoDays, now)).toBe("2 gün önce");
-    expect(formatRelative(inTwoDays, now)).toBe("2 gün sonra");
+    // A moment that has passed, on a clock far behind: its date, never "2 gün sonra".
+    expect(formatRelative(inTwoDays, now)).toBe("20 Ekim");
     expect(formatRelative(earlier, now)).toBe("2 saat önce");
     // Not Intl's "bu dakika".
     expect(formatRelative(seconds, now)).toBe("az önce");
@@ -131,6 +133,25 @@ describe("dates", () => {
     expect(formatRelative(earlier, now)).toBe("2 hours ago");
     expect(formatRelative(seconds, now)).toBe("just now");
     expect(formatRelative(new Date(2026, 6, 3).toISOString(), now)).toBe("3 July");
+  });
+
+  // STUDIO-TIME in the launcher (BETA2-FIX): a server's clock a little ahead of this one made
+  // something just done read "1 dakika sonra".
+  it("say 'az önce' for a moment a little ahead of this clock", async () => {
+    const at = (ms: number) => new Date(now + ms).toISOString();
+    expect(formatRelative(at(20_000), now)).toBe("az önce");
+    expect(formatRelative(at(59_000), now)).toBe("az önce");
+    expect(formatRelative(at(4 * 60_000), now)).toBe("az önce");
+    expect(formatRelative(at(CLOCK_SKEW_MS), now)).toBe("az önce");
+    // Further ahead the clock is off: the day, never "… sonra".
+    expect(formatRelative(at(CLOCK_SKEW_MS + 60_000), now)).toBe("18 Ekim");
+    // The past reads as before.
+    expect(formatRelative(at(-59_000), now)).toBe("az önce");
+    expect(formatRelative(at(-61_000), now)).toBe("1 dakika önce");
+    expect(formatRelative(at(-5 * 60_000), now)).toBe("5 dakika önce");
+    await inEnglish();
+    expect(formatRelative(at(30_000), now)).toBe("just now");
+    expect(formatRelative(at(CLOCK_SKEW_MS + 60_000), now)).toBe("18 October");
   });
 });
 

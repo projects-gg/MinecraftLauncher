@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type ItemOverlay, itemArtOverlay, vanillaItemArt } from "@/lib/item-art";
+import { TEXT_LINK } from "@/lib/text-link";
 import { afkFailed } from "../../errors";
 import { type CloudAccount, cloudApi } from "../api";
 import { serverLabel } from "../status";
@@ -150,7 +151,7 @@ export function InventoryPanel({
                 <button
                   type="button"
                   onClick={onOpenSettings}
-                  className="cursor-pointer font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+                  className={cn(TEXT_LINK, "font-medium")}
                 >
                   {t("cloudAfkFeat.inventory.openSettings")}
                 </button>
