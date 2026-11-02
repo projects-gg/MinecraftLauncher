@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { PILOT_HZ, PILOT_LEVEL, PilotMeter, SpeechGate, toneAmplitude } from "./dsp";
+import {
+  dbOf,
+  GATE,
+  LEVEL_FLOOR_DB,
+  levelOf,
+  PILOT_HZ,
+  PILOT_LEVEL,
+  PilotMeter,
+  SpeechGate,
+  thresholdDb,
+  toneAmplitude,
+  VoiceGate,
+} from "./dsp";
 
 const RATE = 48000;
 
@@ -66,5 +78,89 @@ describe("SpeechGate", () => {
     const gate = new SpeechGate(RATE);
     for (let i = 0; i < 375; i++) gate.push(quantum(-90), 128);
     expect(gate.push(quantum(-60), 128)).toBe(false);
+  });
+});
+
+describe("the level bar and the threshold", () => {
+  it("maps -60 to 0 dBFS onto the bar", () => {
+    expect(levelOf(LEVEL_FLOOR_DB)).toBe(0);
+    expect(levelOf(-80)).toBe(0);
+    expect(levelOf(-30)).toBeCloseTo(0.5);
+    expect(levelOf(0)).toBe(1);
+    expect(levelOf(6)).toBe(1);
+    expect(dbOf(0)).toBe(-180);
+    expect(dbOf(1)).toBe(0);
+  });
+
+  it("puts the threshold where the bar is (0 lets everything through)", () => {
+    expect(thresholdDb(0)).toBe(Number.NEGATIVE_INFINITY);
+    expect(thresholdDb(30)).toBeCloseTo(-42);
+    expect(thresholdDb(100)).toBeCloseTo(0);
+    expect(thresholdDb(150)).toBeCloseTo(0);
+    for (const t of [10, 30, 55, 90]) expect(levelOf(thresholdDb(t))).toBeCloseTo(t / 100);
+  });
+});
+
+describe("VoiceGate", () => {
+  const FRAME = 0.01;
+  const run = (gate: VoiceGate, db: number, frames: number, vad: number | null = null) => {
+    let open = 0;
+    for (let i = 0; i < frames; i++) if (gate.push(db, vad)) open++;
+    return open;
+  };
+
+  it("learns the room from its first frames and opens on speech above it", () => {
+    const gate = new VoiceGate(FRAME);
+    // A fan at -45 dBFS from the first frame: never speech.
+    expect(run(gate, -45, 200)).toBe(0);
+    expect(gate.push(-25, null)).toBe(true);
+    // Held 400 ms after.
+    expect(run(gate, -45, 100)).toBe(40);
+  });
+
+  it("does not take a device's first digital silence for the room", () => {
+    const gate = new VoiceGate(FRAME);
+    run(gate, -180, 20);
+    expect(run(gate, -48, 100)).toBe(0);
+  });
+
+  it("asks the suppressor's opinion: loud but not speech stays out", () => {
+    const gate = new VoiceGate(FRAME);
+    run(gate, -60, 100);
+    expect(gate.push(-25, 0.2)).toBe(false);
+    expect(gate.push(-25, GATE.vadOpen)).toBe(true);
+    // Open: a weaker probability keeps it (unvoiced sounds inside words).
+    expect(gate.push(-25, GATE.vadStay)).toBe(true);
+  });
+
+  it("wakes the suppressor only near speech, and while open", () => {
+    const gate = new VoiceGate(FRAME);
+    run(gate, -60, 100);
+    expect(gate.wantsDenoise(-60)).toBe(false);
+    expect(gate.wantsDenoise(-58)).toBe(false);
+    expect(gate.wantsDenoise(-50)).toBe(true);
+    gate.push(-20, 0.9);
+    expect(gate.wantsDenoise(-80)).toBe(true);
+  });
+
+  it("follows a manual threshold alone", () => {
+    const gate = new VoiceGate(FRAME);
+    gate.threshold = 50;
+    expect(gate.push(-31, 0)).toBe(false);
+    expect(gate.push(-29, 0)).toBe(true);
+    expect(gate.wantsDenoise(-35)).toBe(true);
+    gate.close();
+    expect(gate.open).toBe(false);
+    expect(gate.wantsDenoise(-37)).toBe(false);
+  });
+
+  it("keeps the room across a close and forgets it on reset", () => {
+    const gate = new VoiceGate(FRAME);
+    run(gate, -45, 100);
+    gate.close();
+    expect(gate.push(-44, null)).toBe(false);
+    gate.reset();
+    // A new microphone: its first frame is its room.
+    expect(gate.push(-30, null)).toBe(false);
   });
 });

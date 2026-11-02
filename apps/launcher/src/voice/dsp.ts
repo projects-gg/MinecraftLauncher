@@ -72,10 +72,8 @@ export class PilotMeter {
 }
 
 /**
- * Lets speech through and silences the rest, so Opus sends almost nothing between words (design
- * §6.2). Speech is a quantum `marginDb` above a noise floor that follows the room (falls at once,
- * rises 3 dB a second) and above `minDb`; the gate stays open `holdMs` after the last one, so
- * the ends of words are kept.
+ * VOICE-0's energy gate (the probe's): speech is a quantum `marginDb` above a noise floor that
+ * follows the room (falls at once, rises 3 dB a second) and above `minDb`; open `holdMs` after it.
  */
 export class SpeechGate {
   open = false;
@@ -98,5 +96,123 @@ export class SpeechGate {
     this.holdLeft = speech ? this.holdMs / 1000 : Math.max(0, this.holdLeft - dt);
     this.open = speech || this.holdLeft > 0;
     return this.open;
+  }
+}
+
+/** dBFS of an RMS amplitude (digital silence reads -180). */
+export function dbOf(rms: number): number {
+  return 20 * Math.log10(Math.max(rms, 1e-9));
+}
+
+/** The settings page's level bar: -60 dBFS reads 0, 0 dBFS reads 1 (a dB scale, as ears hear). */
+export const LEVEL_FLOOR_DB = -60;
+
+/** A level in dBFS on the bar's 0–1 scale. */
+export function levelOf(db: number): number {
+  return Math.min(1, Math.max(0, 1 - db / LEVEL_FLOOR_DB));
+}
+
+/**
+ * The manual threshold ("Hassasiyet": 0 lets everything through, 100 nothing) in dBFS, on the
+ * bar's own scale: a level of `threshold / 100` is exactly the threshold, so what the slider says
+ * and when the bar turns green agree.
+ */
+export function thresholdDb(threshold: number): number {
+  if (threshold <= 0) return Number.NEGATIVE_INFINITY;
+  return LEVEL_FLOOR_DB * (1 - Math.min(100, threshold) / 100);
+}
+
+/** How the voice gate decides (design §6.2), in one place. */
+export const GATE = {
+  /** Speech keeps the gate open this long after it (the ends of words). */
+  holdS: 0.4,
+  /** Automatic: speech is this far above the room's noise floor... */
+  marginDb: 12,
+  /** ...and above this, whatever the room. */
+  minDb: -55,
+  /** The noise suppressor already runs this much below where speech starts (warm for the onset). */
+  warmDb: 6,
+  /** The suppressor's speech probability that opens the gate, and that keeps it open. */
+  vadOpen: 0.6,
+  vadStay: 0.3,
+  /** The noise floor rises this fast (dB a second) and never sits below `floorMinDb`. */
+  riseDbPerS: 3,
+  floorMinDb: -90,
+  /** Below this a frame is digital silence (a device starting, a muted input), not the room. */
+  silenceDb: -100,
+} as const;
+
+/**
+ * Voice activity, one 10 ms frame at a time. Automatic: a frame is speech when it stands
+ * `marginDb` above the room's noise floor (which falls at once and rises slowly, so it settles on
+ * the quiet between words) and above `minDb`, and, when the noise suppressor ran, when its speech
+ * probability agrees (keyboards, clicks and fans are loud but not speech). Manual: the frame's level
+ * against the threshold. The gate stays open `holdS` after the last speech.
+ */
+export class VoiceGate {
+  open = false;
+  /** null: automatic; else the threshold 0–100. */
+  threshold: number | null = null;
+  private wasOpen = false;
+  private floorDb = Number.POSITIVE_INFINITY;
+  /** Frames the gate stays open without speech. */
+  private holdLeft = 0;
+  private readonly holdFrames: number;
+
+  constructor(private readonly frameSeconds: number) {
+    this.holdFrames = Math.round(GATE.holdS / frameSeconds);
+  }
+
+  /**
+   * Whether the noise suppressor should hear a frame at `db`: it may be speech, or the gate is (or
+   * was a frame ago) open, so what is sent is always cleaned. Quiet frames never wake it.
+   */
+  wantsDenoise(db: number): boolean {
+    if (this.open || this.wasOpen) return true;
+    if (this.threshold !== null) return db >= thresholdDb(this.threshold) - GATE.warmDb;
+    const floor = Number.isFinite(this.floorDb) ? this.floorDb : db;
+    return db > Math.max(floor + GATE.marginDb, GATE.minDb) - GATE.warmDb;
+  }
+
+  /** A frame's level and the suppressor's speech probability (null: it did not run). */
+  push(db: number, vad: number | null): boolean {
+    this.wasOpen = this.open;
+    const dt = this.frameSeconds;
+    if (db > GATE.silenceDb) {
+      this.floorDb = Math.max(
+        GATE.floorMinDb,
+        db < this.floorDb ? db : Math.min(db, this.floorDb + GATE.riseDbPerS * dt),
+      );
+    }
+    let speech: boolean;
+    if (this.threshold !== null) {
+      speech = db >= thresholdDb(this.threshold);
+    } else {
+      const loud = db > Math.max(this.floorDb + GATE.marginDb, GATE.minDb);
+      speech = loud && (vad === null || vad >= (this.open ? GATE.vadStay : GATE.vadOpen));
+    }
+    if (speech) {
+      this.holdLeft = this.holdFrames;
+      this.open = true;
+    } else if (this.holdLeft > 0) {
+      this.holdLeft -= 1;
+      this.open = true;
+    } else {
+      this.open = false;
+    }
+    return this.open;
+  }
+
+  /** Shut, keeping what it learned of the room (the microphone was idle a while). */
+  close(): void {
+    this.open = false;
+    this.wasOpen = false;
+    this.holdLeft = 0;
+  }
+
+  /** Forgets the room too (another microphone). */
+  reset(): void {
+    this.close();
+    this.floorDb = Number.POSITIVE_INFINITY;
   }
 }
