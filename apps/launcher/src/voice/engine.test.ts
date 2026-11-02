@@ -196,7 +196,7 @@ describe("the voice engine", () => {
   it("leaves nothing running after the stay: no call, no sound, no timer", async () => {
     const r = await inRoom();
     r.call().up();
-    r.send({ t: "talk", open: true });
+    r.send({ t: "talk", open: true, tail: false });
     r.graph().events.speaking("1", true);
     r.send({ t: "leave" });
     // The microphone's way out shuts at once, without push-to-talk's tail.
@@ -270,7 +270,7 @@ describe("the voice engine", () => {
     try {
       r.send({ t: "join" });
       await settle();
-      r.send({ t: "selfTest", on: true }, { t: "talk", open: true });
+      r.send({ t: "selfTest", on: true }, { t: "talk", open: true, tail: false });
       // The queue is busy with the join; the test (nothing goes out) is already on.
       expect(r.graph().testOn).toBe(true);
       expect(r.of("offer")).toHaveLength(0);
@@ -297,9 +297,9 @@ describe("the voice engine", () => {
 
   it("passes push-to-talk's tail on, and closes at once when told", async () => {
     const r = await inRoom();
-    r.send({ t: "talk", open: true }, { t: "talk", open: false });
+    r.send({ t: "talk", open: true, tail: false }, { t: "talk", open: false, tail: true });
     expect(r.graph().talkTail).toBe(true);
-    r.send({ t: "talk", open: true }, { t: "talk", open: false, tail: false } as never);
+    r.send({ t: "talk", open: true, tail: false }, { t: "talk", open: false, tail: false });
     expect(r.graph().talkTail).toBe(false);
   });
 
@@ -342,11 +342,11 @@ describe("the voice engine", () => {
 
   it("applies mute and deafen at once, and before the sound opens", async () => {
     const r = rig();
-    r.send({ t: "talk", open: true }, { t: "deaf", on: true }, { t: "join" });
+    r.send({ t: "talk", open: true, tail: false }, { t: "deaf", on: true }, { t: "join" });
     await settle();
     expect(r.graph().talkOpen).toBe(true);
     expect(r.graph().deafOn).toBe(true);
-    r.send({ t: "talk", open: false });
+    r.send({ t: "talk", open: false, tail: false });
     expect(r.graph().talkOpen).toBe(false);
   });
 

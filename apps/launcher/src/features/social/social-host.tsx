@@ -16,6 +16,7 @@ import { WorldShareHost } from "@/features/host/host";
 import { shownInGame } from "@/features/overlay/store";
 import { useOverlaySync } from "@/features/overlay/use-overlay-sync";
 import { VoiceHost } from "@/features/voice/host";
+import { useVoiceUi } from "@/features/voice/store";
 import { api } from "@/lib/api";
 import type {
   BackupMeta,
@@ -24,6 +25,7 @@ import type {
   SocialNotice,
   TeamMember,
 } from "@/lib/api/social-types";
+import { voiceApi } from "@/lib/api/voice-api";
 import { clearNotification } from "@/lib/attention";
 import { formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
@@ -620,20 +622,26 @@ function useSocialSync() {
   }, []);
 }
 
-function currentBackup() {
+async function currentBackup() {
   const prefs = usePrefs.getState() as unknown as Record<BackupPrefKey, unknown>;
   const social = useSocialPrefs.getState();
-  return buildBackup(prefs, {
-    favorites: social.favorites,
-    notifyFavoriteOnline: social.notifyFavoriteOnline,
-    notifyFavoriteProjects: social.notifyFavoriteProjects,
-    onlineAlerts: social.onlineAlerts,
-    notifyCrewCalls: social.notifyCrewCalls,
-    notifyCrewProjects: social.notifyCrewProjects,
-    notifyCrewChat: social.notifyCrewChat,
-    notifyJoinRequests: social.notifyJoinRequests,
-    notifyPlans: social.notifyPlans,
-  });
+  // "Sesli sohbet" (VOICE): the launcher keeps it; without an answer the rest still goes.
+  const voice = await voiceApi.backup().catch(() => null);
+  return buildBackup(
+    prefs,
+    {
+      favorites: social.favorites,
+      notifyFavoriteOnline: social.notifyFavoriteOnline,
+      notifyFavoriteProjects: social.notifyFavoriteProjects,
+      onlineAlerts: social.onlineAlerts,
+      notifyCrewCalls: social.notifyCrewCalls,
+      notifyCrewProjects: social.notifyCrewProjects,
+      notifyCrewChat: social.notifyCrewChat,
+      notifyJoinRequests: social.notifyJoinRequests,
+      notifyPlans: social.notifyPlans,
+    },
+    voice,
+  );
 }
 
 /** Uploads launcher preferences a while after they change (signed in, backup on, and only once
@@ -655,7 +663,7 @@ function useBackupSync() {
     let timer: number | null = null;
     const upload = async () => {
       timer = null;
-      const document = currentBackup();
+      const document = await currentBackup();
       const fingerprint = backupFingerprint(document);
       const stored = useSocialUi.getState().view.me?.backup;
       if (stored && fingerprint === useSocialPrefs.getState().backupFingerprint) return;
@@ -690,10 +698,15 @@ function useBackupSync() {
         schedule(BACKUP_DEBOUNCE_MS);
       }
     });
+    // Voice chat's settings and per-person choices, changed here or in the game's overlay.
+    const stopVoice = useVoiceUi.subscribe((now, before) => {
+      if (now.state.backupRev !== before.state.backupRev) schedule(BACKUP_DEBOUNCE_MS);
+    });
     return () => {
       if (timer !== null) window.clearTimeout(timer);
       stopPrefs();
       stopSocial();
+      stopVoice();
     };
   }, [ready, enabled]);
 }
@@ -753,8 +766,11 @@ function RestoreDialog() {
       if (read.friends.notifyPlans !== undefined) {
         social.set("notifyPlans", read.friends.notifyPlans);
       }
+      // "Sesli sohbet": the launcher reads and bounds it (this computer's devices stay); a part it
+      // cannot read leaves the rest applied.
+      if (read.voice) await voiceApi.restore(read.voice).catch(() => undefined);
       // What came down is what is stored: no upload needed until something changes.
-      useSocialPrefs.getState().set("backupFingerprint", backupFingerprint(currentBackup()));
+      useSocialPrefs.getState().set("backupFingerprint", backupFingerprint(await currentBackup()));
       toast.success(t("social.restore.applied"));
     }
     finish();

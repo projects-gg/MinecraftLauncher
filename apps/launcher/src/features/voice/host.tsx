@@ -6,6 +6,7 @@
 import { toast } from "@pl/ui";
 import { useEffect } from "react";
 import { announce } from "@/features/accounts/use-accounts";
+import { friendListShown, useSocialUi } from "@/features/social/store";
 import { voiceApi } from "@/lib/api/voice-api";
 import type { VoiceNotice, VoiceState } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
@@ -159,8 +160,36 @@ function useVoiceTones() {
   }, []);
 }
 
+/**
+ * A missed call lights the Friends entry's mark (with the other things that wait) until the player
+ * has seen the friends list in front of them: the friend's row says "Cevapsız arama" there.
+ */
+function useMissedSeen() {
+  useEffect(() => {
+    const check = () => {
+      if (!isWindowAway() && friendListShown(useSocialUi.getState())) {
+        useVoiceUi.getState().markMissedSeen();
+      }
+    };
+    check();
+    const stopSocial = useSocialUi.subscribe(check);
+    const stopVoice = useVoiceUi.subscribe((now, before) => {
+      if (now.state.missed !== before.state.missed) check();
+    });
+    const stopAway = onWindowAwayChange((away) => {
+      if (!away) check();
+    });
+    return () => {
+      stopSocial();
+      stopVoice();
+      stopAway();
+    };
+  }, []);
+}
+
 export function VoiceHost() {
   useVoiceSync();
   useVoiceTones();
+  useMissedSeen();
   return <RoomSheet />;
 }

@@ -13,6 +13,8 @@ pub struct Person {
     pub deaf: bool,
     pub sm: bool,
     pub q: u8,
+    /// Their card (VOICE-S2), when the room sent one: names a friend's friend.
+    pub card: Option<Box<pl_social::PublicProfile>>,
 }
 
 impl From<PersonWire> for Person {
@@ -24,6 +26,7 @@ impl From<PersonWire> for Person {
             deaf: wire.deaf,
             sm: wire.sm,
             q: wire.q,
+            card: wire.card,
         }
     }
 }
@@ -228,6 +231,7 @@ mod tests {
             deaf: false,
             sm: false,
             q: 0,
+            card: None,
         }
     }
 

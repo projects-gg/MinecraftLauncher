@@ -16,8 +16,9 @@ import { enter, leave } from "./motion";
 /**
  * What the gold mark stands for, in words: "Seni bekleyen istek ya da davet var" for a request or
  * an invite, "Kaan ekibi çağırıyor" for a crewmate's call (a call is neither; E2E6), "2 okunmamış
- * mesaj" for direct messages (CHAT1), "2 katılma isteği bekliyor" for join requests the player
- * answers (TEAM5). Empty while nothing waits.
+ * mesaj" for direct messages (CHAT1), "1 cevapsız arama" for voice chat's missed calls not seen
+ * in the list yet (VOICE), "2 katılma isteği bekliyor" for join requests the player answers
+ * (TEAM5). Empty while nothing waits.
  */
 export function waitingWords(
   t: TFunction,
@@ -28,6 +29,7 @@ export function waitingWords(
   if (waiting.asks) words.push(t("social.pill.pending"));
   if (waiting.call) words.push(callSentenceOf(waiting.call, crews, t));
   if (waiting.messages > 0) words.push(t("chat.waiting", { count: waiting.messages }));
+  if (waiting.missed) words.push(t("voice.missed.waiting", { count: waiting.missed }));
   if (waiting.joins > 0) words.push(t("crewWave2.requests.waiting", { count: waiting.joins }));
   return words;
 }

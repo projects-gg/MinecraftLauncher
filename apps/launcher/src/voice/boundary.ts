@@ -10,23 +10,16 @@ export type {
   EngineSettings,
   EngineSound,
   PageReport,
+  /**
+   * How people play (pl_voice::gain::Playout): WebAudio gains reach 200 %, `<audio>` elements (an
+   * engine whose echo canceller cannot hear WebAudio) stop at 100 %. Sent as `{t: "playout"}` when
+   * the sound opens and whenever the path changes: the volume slider stops at the path's top.
+   */
+  Playout,
   VoiceDevice,
   VoiceDevices,
   VoiceMic,
 } from "../bindings";
 
-/**
- * How people play (pl_voice::gain::Playout, same names): WebAudio gains reach 200 %, `<audio>`
- * elements (an engine whose echo canceller cannot hear WebAudio) stop at 100 %.
- */
-export type Playout = "webAudio" | "element";
-
-/**
- * The playout path, sent when the sound opens and whenever the path changes, so the volume slider
- * can stop at the path's top. Not in `PageReport` yet (VOICE-INT adds `PageReport::Playout`): until
- * then the launcher refuses it and the page goes on.
- */
-export type PlayoutReport = { t: "playout"; playout: Playout };
-
 /** Everything the page reports. */
-export type EngineReport = PageReport | PlayoutReport;
+export type EngineReport = PageReport;

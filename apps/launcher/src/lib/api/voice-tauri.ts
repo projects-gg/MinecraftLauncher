@@ -6,6 +6,7 @@
 // and `details` for support); refusals are answers, never errors.
 import { listen } from "@tauri-apps/api/event";
 import {
+  type VoiceBackup as BindingBackup,
   type VoiceKey as BindingKey,
   type VoiceSettings as BindingSettings,
   type CmdError,
@@ -15,6 +16,7 @@ import {
   DEFAULT_VOICE_SETTINGS,
   VOICE_OK,
   type VoiceApi,
+  type VoiceBackup,
   type VoiceKey,
   type VoiceLevel,
   type VoiceNotice,
@@ -110,4 +112,8 @@ export const tauriVoice: VoiceApi = {
   testMic: (on) => done(commands.voiceSelfTest(on)),
   settingsOpen: (open) => done(commands.voiceSetup(open)),
   openMicSettings: () => done(commands.voiceOpenMicSettings()),
+  backup: (): Promise<VoiceBackup> => ok(commands.voiceBackup()),
+  // The launcher reads it (serde with its defaults) and bounds it; a part it cannot read fails
+  // alone, the rest of the backup still applies.
+  restore: (backup) => done(commands.voiceRestore(backup as BindingBackup)),
 };

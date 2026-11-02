@@ -22,7 +22,7 @@ export interface VoiceFace {
   name: string;
   avatar?: string;
   avatarUrl?: string;
-  /** Their profile badges (friends and crewmates only). */
+  /** Their profile badges (friends, crewmates, and people a room's card names). */
   marks?: string[];
   /** On the player's friend list. */
   friend: boolean;
@@ -65,13 +65,15 @@ export function faceOf(
       };
     }
   }
+  // A friend's friend, named by the card the room sent (VOICE-S2).
   const profile = state.profiles?.find((p) => p.id === id);
   if (profile) {
     return {
       id,
       name: profile.name,
       avatar: profile.avatar,
-      avatarUrl: profile.avatarUrl,
+      avatarUrl: profile.avatarUrl ?? undefined,
+      marks: profile.marks?.length ? profile.marks : undefined,
       friend: false,
     };
   }
@@ -139,7 +141,7 @@ export type CallOffer = "call" | "invite" | "ringing" | "full";
 
 /**
  * Someone's voice chat: the friend list's own (`Friend.voice`, from `presence.voice`), else what
- * the voice state knows (crewmates; the preview); undefined: they cannot be called.
+ * the voice state knows (crewmates in a crew room; the preview); undefined: not known.
  */
 export function presenceOf(
   id: string,
@@ -149,22 +151,29 @@ export function presenceOf(
   return friends.find((f) => f.id === id)?.voice ?? state.presence?.[id];
 }
 
+/**
+ * `online`: a crewmate is on Projects now (the crew's member list). The service tells no one's
+ * voice chat outside friends, so a crewmate who is no friend may be invited to the player's room of
+ * that crew while online (voice.md §3.4: "ekip odasında çevrimiçi ekip arkadaşların"); the ring
+ * itself says whether it reached them.
+ */
 export function callOffer(
   state: Pick<VoiceState, "available" | "enabled" | "room" | "calling" | "presence">,
   id: string,
   friend: boolean,
   crewMembers: (crew: string) => readonly string[],
   friends: ReadonlyArray<Pick<Friend, "id" | "voice">> = [],
+  online: (id: string) => boolean = () => false,
 ): CallOffer | null {
   if (!state.available || !state.enabled) return null;
-  if (!presenceOf(id, state, friends)) return null;
-  if (state.calling?.friend === id) return "ringing";
   const room = state.room;
+  const crewmate =
+    room?.kind === "crew" && room.crew !== null && crewMembers(room.crew).includes(id);
+  if (!presenceOf(id, state, friends) && !(crewmate && !friend && online(id))) return null;
+  if (state.calling?.friend === id) return "ringing";
   if (!room) return friend ? "call" : null;
   if (room.people.some((p) => p.id === id)) return null;
   if (room.ringing.some((r) => r.to === id)) return "ringing";
-  const crewmate =
-    room.kind === "crew" && room.crew !== null && crewMembers(room.crew).includes(id);
   if (room.kind === "crew" && !crewmate) return friend ? "call" : null;
   if (room.kind === "friend" && !friend) return null;
   return roomFull(room) ? "full" : "invite";
@@ -183,8 +192,9 @@ export interface Invitable extends VoiceFace {
 
 /**
  * Who "Davet et" lists: in a friend room the player's friends who may be called, in a crew room the
- * crew's members who may (voice.md §3.4); never someone in the room. Filtered by name as typed
- * (Turkish letters folded), in name order.
+ * crew's members who may, or who are online when they are no friends (their voice chat is not
+ * told; voice.md §3.4); never someone in the room. Filtered by name as typed (Turkish letters
+ * folded), in name order.
  */
 export function invitables(
   state: Pick<VoiceState, "room" | "presence" | "profiles">,
@@ -199,7 +209,14 @@ export function invitables(
   let ids: string[];
   if (room.kind === "crew") {
     const crew = lists.crews.find((c) => c.id === room.crew);
-    ids = (crew?.members ?? []).filter((m) => !m.me && !m.blocked && may(m.id)).map((m) => m.id);
+    ids = (crew?.members ?? [])
+      .filter(
+        (m) =>
+          !m.me &&
+          !m.blocked &&
+          (may(m.id) || (!m.friend && !inRoom.has(m.id) && m.state !== "offline")),
+      )
+      .map((m) => m.id);
   } else {
     ids = lists.friends.filter((f) => may(f.id)).map((f) => f.id);
   }

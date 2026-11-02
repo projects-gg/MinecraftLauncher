@@ -13,6 +13,11 @@ import type {
   StatusMode,
   TeamMember,
 } from "@/lib/api/social-types";
+import {
+  DEFAULT_VOICE_SETTINGS,
+  type VoiceBackup,
+  type VoiceSettings,
+} from "@/lib/api/voice-types";
 import { unansweredCall } from "./calls";
 import { type ChatMutes, unreadDirect } from "./chat/conversations";
 import { waitingRequests } from "./crew-joining";
@@ -171,6 +176,9 @@ export interface Waiting {
   /** Join requests waiting in crews whose requests the player answers, muted crews left out
    * (TEAM5). */
   joins: number;
+  /** Voice chat's missed calls the player has not seen in the list yet (VOICE; the voice store's,
+   * added by the entries). */
+  missed?: number;
 }
 
 type WaitingView = Pick<SocialSnapshot, "incoming" | "invites" | "calls"> &
@@ -507,9 +515,52 @@ export interface BackupDocument {
   v: 1;
   prefs: Partial<Record<BackupPrefKey, unknown>>;
   friends: BackupFriends;
+  /** "Sesli sohbet" (VOICE): the launcher's `voice_backup`, only once the player changed any of
+   * it (older backups and untouched ones have none: nothing to upload again for them). */
+  voice?: VoiceBackup;
+}
+
+/**
+ * The service keeps a backup of at most 16 KB (SPAM1); a document that would not fit drops the
+ * voice part's people first, then the voice part (the rest is at most ~11 KB).
+ */
+export const BACKUP_MAX_BYTES = 15_000;
+
+const backupBytes = (document: BackupDocument) =>
+  new TextEncoder().encode(JSON.stringify(document)).length;
+
+const plainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** The voice part says something the defaults do not (a setting, or anyone's volume or mute). */
+function voiceWorthKeeping(voice: VoiceBackup): boolean {
+  if (plainObject(voice.people) && Object.keys(voice.people).length > 0) return true;
+  const settings = voice.settings;
+  if (!plainObject(settings)) return false;
+  return (Object.keys(DEFAULT_VOICE_SETTINGS) as (keyof VoiceSettings)[]).some(
+    (key) =>
+      key !== "inputDevice" &&
+      key !== "outputDevice" &&
+      settings[key] !== undefined &&
+      JSON.stringify(settings[key]) !== JSON.stringify(DEFAULT_VOICE_SETTINGS[key]),
+  );
 }
 
 export function buildBackup(
+  prefs: Partial<Record<BackupPrefKey, unknown>>,
+  friends: BackupFriends,
+  voice?: VoiceBackup | null,
+): BackupDocument {
+  const document = buildBackupBase(prefs, friends);
+  if (!voice || !voiceWorthKeeping(voice)) return document;
+  const whole: BackupDocument = { ...document, voice };
+  if (backupBytes(whole) <= BACKUP_MAX_BYTES) return whole;
+  if (!plainObject(voice.settings)) return document;
+  const settingsOnly: BackupDocument = { ...document, voice: { settings: voice.settings } };
+  return backupBytes(settingsOnly) <= BACKUP_MAX_BYTES ? settingsOnly : document;
+}
+
+function buildBackupBase(
   prefs: Partial<Record<BackupPrefKey, unknown>>,
   friends: BackupFriends,
 ): BackupDocument {
@@ -561,13 +612,26 @@ function validPref(key: BackupPrefKey, value: unknown): boolean {
 export function readBackup(data: unknown): {
   prefs: Partial<Record<BackupPrefKey, unknown>>;
   friends: Partial<BackupFriends>;
+  /** The voice part as it came (objects only): the launcher reads, checks and bounds it. */
+  voice?: VoiceBackup;
 } {
-  const out = {
+  const out: {
+    prefs: Partial<Record<BackupPrefKey, unknown>>;
+    friends: Partial<BackupFriends>;
+    voice?: VoiceBackup;
+  } = {
     prefs: {} as Partial<Record<BackupPrefKey, unknown>>,
     friends: {} as Partial<BackupFriends>,
   };
   if (!data || typeof data !== "object") return out;
-  const document = data as { prefs?: unknown; friends?: unknown };
+  const document = data as { prefs?: unknown; friends?: unknown; voice?: unknown };
+  // The settings always come whole with it (the launcher restores them as they are).
+  if (plainObject(document.voice)) {
+    const { settings, people } = document.voice;
+    if (plainObject(settings) && (people === undefined || plainObject(people))) {
+      out.voice = { settings, ...(people === undefined ? {} : { people }) };
+    }
+  }
   if (document.prefs && typeof document.prefs === "object") {
     const prefs = document.prefs as Record<string, unknown>;
     for (const key of Object.keys(BACKUP_PREFS) as BackupPrefKey[]) {

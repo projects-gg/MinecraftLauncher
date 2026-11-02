@@ -239,6 +239,11 @@ pub struct PersonWire {
     pub sm: bool,
     #[serde(default, deserialize_with = "quality_value")]
     pub q: u8,
+    /// VOICE-S2: their card as the friends list shows one, as it was when they came in (no crew
+    /// tag), so a friend's friend is named; only people the player sees are ever sent. None from
+    /// an older room, and for a card this launcher cannot read (the person still counts).
+    #[serde(default, deserialize_with = "card_value")]
+    pub card: Option<Box<pl_social::PublicProfile>>,
 }
 
 /// `hello.room` (the `room` message carries the name and roles again).
@@ -483,6 +488,17 @@ fn quality_option<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u
     Ok(Option::<u8>::deserialize(deserializer)?.map(quality))
 }
 
+/// A card that does not read (a newer shape, a wrong type) is no card: it never costs the person
+/// or the whole `hello`.
+fn card_value<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Box<pl_social::PublicProfile>>, D::Error> {
+    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw
+        .and_then(|value| serde_json::from_value(value).ok())
+        .map(Box::new))
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};
@@ -644,7 +660,27 @@ mod tests {
         );
         assert!(matches!(
             FromRoom::parse(r#"{"t":"joined","person":{"u":"u4","j":9,"mute":false,"deaf":true,"sm":false,"q":1}}"#),
-            FromRoom::Joined { person } if person.u == "u4" && person.deaf && person.q == 1
+            FromRoom::Joined { person } if person.u == "u4" && person.deaf && person.q == 1 && person.card.is_none()
+        ));
+        // VOICE-S2's card, as the friends list's.
+        let FromRoom::Joined { person } = FromRoom::parse(
+            r#"{"t":"joined","person":{"u":"77","j":9,"mute":false,"deaf":false,"sm":false,"q":0,
+            "card":{"id":"77","username":"kumfirtinasi","displayName":"KumFirtinasi",
+            "avatar":"discord","avatarHash":"abc","discordId":"80351110224678912","marks":["verified"]}}}"#,
+        ) else {
+            panic!("not a joined");
+        };
+        let card = person.card.expect("a card");
+        assert_eq!(card.name(), "KumFirtinasi");
+        assert!(card.discord_avatar_url(128).is_some());
+        // A card this launcher cannot read costs nothing but the card.
+        assert!(matches!(
+            FromRoom::parse(r#"{"t":"joined","person":{"u":"u5","j":9,"card":{"id":7}}}"#),
+            FromRoom::Joined { person } if person.u == "u5" && person.card.is_none()
+        ));
+        assert!(matches!(
+            FromRoom::parse(r#"{"t":"joined","person":{"u":"u6","j":9,"card":"KumFirtinasi"}}"#),
+            FromRoom::Joined { person } if person.u == "u6" && person.card.is_none()
         ));
         assert_eq!(
             FromRoom::parse(r#"{"t":"left","u":"u4","why":"gone"}"#),

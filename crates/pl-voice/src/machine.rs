@@ -13,6 +13,7 @@ use pl_social::{Backoff, BackoffPolicy};
 use crate::engine::{
     EngineCommand, EngineIce, EnginePerson, EngineSettings, EngineSound, PageReport,
 };
+use crate::gain::{self, Playout};
 use crate::idle::Idle;
 use crate::lifecycle::{self, Lifecycle};
 use crate::room::Room;
@@ -20,8 +21,8 @@ use crate::settings::{Store, VoiceKey, VoicePersonPrefs, VoiceSettings};
 use crate::view::{
     VoiceAnswer, VoiceCalling, VoiceCrewRoom, VoiceCrewRooms, VoiceDevices, VoiceLeftReason,
     VoiceLevel, VoiceMe, VoiceMic, VoiceMissed, VoiceModAction, VoiceNotice, VoiceOutRing,
-    VoicePerson, VoicePhase, VoicePowers, VoiceQuality, VoiceRefusal, VoiceRing, VoiceRole,
-    VoiceRoomKind, VoiceRoomView, VoiceShortcut, VoiceSpeaking, VoiceState,
+    VoicePerson, VoicePhase, VoicePowers, VoiceProfile, VoiceQuality, VoiceRefusal, VoiceRing,
+    VoiceRole, VoiceRoomKind, VoiceRoomView, VoiceShortcut, VoiceSpeaking, VoiceState,
 };
 use crate::wire::{self, ClosedWhy, FromRoom, ModAct, Role, RoomKind, Sdp, Ticket, ToRoom};
 
@@ -33,6 +34,10 @@ pub const GIVE_UP_MS: u64 = 60_000;
 pub const RECONNECTING_SHOWN_MS: u64 = 2_000;
 /// After a 4008 close the socket waits this long (the seat holds 120 s).
 pub const RATE_LIMITED_WAIT_MS: u64 = 60_000;
+/// After an audio connection was lost the page joins anew at once; when that one is lost too
+/// (no connection again, TURN refused), the next waits 1, 2, 4, then at most this long: a page
+/// that cannot make a connection never spins (VOICE-INT).
+pub const REJOIN_MAX_MS: u64 = 8_000;
 /// Missed calls kept at most.
 pub const MISSED_MAX: usize = 10;
 /// Studio's defaults until `hello.voice` says otherwise.
@@ -227,6 +232,10 @@ struct Stay {
     offer_asked: bool,
     /// The audio connection works (the page said `connected`, or a `sync` kept it).
     audio_ok: bool,
+    /// Audio connections lost in a row since the last `connected` (the next rejoin waits longer).
+    losses: u32,
+    /// The page is asked for a new peer connection at this moment (a rejoin that waits).
+    rejoin_at: Option<u64>,
     calling: Option<(String, i64)>,
     opened_by_me: bool,
     speaking: BTreeSet<String>,
@@ -269,6 +278,9 @@ pub struct Machine {
     missed: Vec<Missed>,
     crews: BTreeMap<String, Vec<CrewRoom>>,
     page: Page,
+    /// How the voice page plays people, as it last said (none before the first sound opened: the
+    /// WebAudio path, the one VOICE-0 measured).
+    playout: Option<Playout>,
     window: Lifecycle,
     /// The window is wanted (a stay, the settings page, the self test).
     window_wanted: bool,
@@ -306,6 +318,7 @@ impl Machine {
             missed: Vec::new(),
             crews: BTreeMap::new(),
             page: Page::default(),
+            playout: None,
             window: Lifecycle::default(),
             window_wanted: false,
             input_on: false,
@@ -708,10 +721,13 @@ impl Machine {
         if self.stay.is_some() {
             self.end_stay(now, None, &mut out);
         }
-        // Joining ends its ring and its missed call.
+        // Joining ends its ring and its missed call; calling a friend back ("Geri ara") ends their
+        // missed calls too.
         let before = (self.rings.len(), self.missed.len());
         self.rings.retain(|(ring, _)| ring.room != start.room);
-        self.missed.retain(|missed| missed.room != start.room);
+        let called = start.calling.as_deref();
+        self.missed
+            .retain(|missed| missed.room != start.room && Some(missed.from.as_str()) != called);
         if (self.rings.len(), self.missed.len()) != before {
             out.push(Effect::System(SystemNotice::RingGone {
                 room: start.room.clone(),
@@ -741,6 +757,8 @@ impl Machine {
             join_sent: false,
             offer_asked: false,
             audio_ok: false,
+            losses: 0,
+            rejoin_at: None,
             calling,
             opened_by_me: start.opened_by_me,
             speaking: BTreeSet::new(),
@@ -1036,6 +1054,9 @@ impl Machine {
         };
         stay.give_up_at = Some(stay.give_up_at.map_or(limit, |old| old.max(limit)));
         stay.join_sent = false;
+        // A TURN answer can only come on the socket that asked (the page's own wait reports the
+        // connection lost, and the socket's return asks for a new one).
+        self.pending.retain(|_, pending| *pending != Pending::Turn);
         out.push(Effect::Changed);
     }
 
@@ -1071,9 +1092,14 @@ impl Machine {
                     stay.ticket = resume;
                 }
                 stay.welcomed = true;
-                stay.away_since = None;
-                stay.away_shown = false;
-                stay.give_up_at = None;
+                // The room is back. With an answer the audio is still on its way: a connection
+                // lost before stays away (and gives up after its minute) until the page says
+                // `connected`, so rejoins that never connect cannot hold the stay forever.
+                if sdp.is_none() {
+                    stay.away_since = None;
+                    stay.away_shown = false;
+                    stay.give_up_at = None;
+                }
                 stay.backoff.reset();
                 let mut joined = Vec::new();
                 if let Some(before) = had_room {
@@ -1182,10 +1208,8 @@ impl Machine {
                     return out;
                 };
                 match self.pending.remove(&rid) {
-                    Some(Pending::Turn) => {
-                        if let Some(ice) = ice
-                            && self.page.attached
-                        {
+                    Some(Pending::Turn) => match ice {
+                        Some(ice) if self.page.attached && !ice.urls.is_empty() => {
                             out.push(Effect::Engine(EngineCommand::Ice {
                                 ice: EngineIce {
                                     urls: ice.urls,
@@ -1194,7 +1218,9 @@ impl Machine {
                                 },
                             }));
                         }
-                    }
+                        // No credentials after all: as a lost connection (L2's P1).
+                        _ => self.audio_lost(now, &mut out),
+                    },
                     Some(_) => out.push(Effect::Answer {
                         rid,
                         answer: VoiceAnswer::OK,
@@ -1211,12 +1237,18 @@ impl Machine {
             } => {
                 if let Some(rid) = rid
                     && let Some(pending) = self.pending.remove(&rid)
-                    && pending != Pending::Turn
                 {
-                    out.push(Effect::Answer {
-                        rid,
-                        answer: VoiceAnswer::from_code(&code, retry_after, until),
-                    });
+                    if pending == Pending::Turn {
+                        // `turn_unavailable` (the budget guard, no TURN key) or `rate_limited`:
+                        // no stay without a connection, so as lost (L2's P1).
+                        tracing::debug!(code, "voice: no TURN for this connection");
+                        self.audio_lost(now, &mut out);
+                    } else {
+                        out.push(Effect::Answer {
+                            rid,
+                            answer: VoiceAnswer::from_code(&code, retry_after, until),
+                        });
+                    }
                 }
             }
             FromRoom::Unknown => {}
@@ -1418,10 +1450,17 @@ impl Machine {
         !self.mute && !self.deaf && !muted_for_all && (!push_to_talk || stay.ptt_down)
     }
 
+    /// The gate as it should be now; a close cuts at once (a mute, a deafen, a moderator's mute).
     fn talk(&self, out: &mut Vec<Effect>) {
+        self.talk_with(false, out);
+    }
+
+    /// `tail`: push-to-talk was let go, the page keeps the end of the word (200 ms).
+    fn talk_with(&self, tail: bool, out: &mut Vec<Effect>) {
         if self.page.attached && self.stay.is_some() {
             out.push(Effect::Engine(EngineCommand::Talk {
                 open: self.talk_open(),
+                tail,
             }));
         }
     }
@@ -1437,7 +1476,7 @@ impl Machine {
                 if let Some(stay) = &mut self.stay {
                     stay.ptt_down = change.down;
                 }
-                self.talk(&mut out);
+                self.talk_with(!change.down, &mut out);
             }
             VoiceShortcut::Mute if change.down => {
                 out.extend(self.set_mute(!self.mute));
@@ -1477,6 +1516,7 @@ impl Machine {
         if !self.page.attached {
             return Vec::new();
         }
+        let playout = self.playout();
         let people = room
             .people_in_order()
             .into_iter()
@@ -1484,12 +1524,17 @@ impl Machine {
                 let prefs = self.store.person(&person.u);
                 EnginePerson {
                     id: person.u.clone(),
-                    volume: prefs.volume,
+                    volume: gain::clamp(prefs.volume, playout),
                     silent: prefs.muted || person.sm,
                 }
             })
             .collect();
         vec![Effect::Engine(EngineCommand::People { people })]
+    }
+
+    /// How the page plays people (the WebAudio path until it said otherwise).
+    fn playout(&self) -> Playout {
+        self.playout.unwrap_or(Playout::WebAudio)
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1582,7 +1627,37 @@ impl Machine {
         {
             stay.offer_asked = true;
             stay.audio_ok = false;
+            stay.rejoin_at = None;
             out.push(Effect::Engine(EngineCommand::Join));
+        }
+    }
+
+    /// The audio connection is gone (the page said `lost`, or TURN could not be had): no stay
+    /// without a connection (L2's P1). "Yeniden bağlanıyor…" after 2 s, "Bağlanamadı." after a
+    /// minute unless the page says `connected` before; the page joins anew, at once the first
+    /// time, then after a growing wait ([`REJOIN_MAX_MS`]). A detached page asks for its own
+    /// connection when it attaches.
+    fn audio_lost(&mut self, now: u64, out: &mut Vec<Effect>) {
+        let attached = self.page.attached;
+        let Some(stay) = self.stay.as_mut() else {
+            return;
+        };
+        stay.audio_ok = false;
+        stay.away_since.get_or_insert(now);
+        stay.give_up_at.get_or_insert(now + GIVE_UP_MS);
+        // The page has no connection left to make an offer from, nor one it made before.
+        stay.offer_asked = false;
+        stay.offer = None;
+        let wait = rejoin_wait(stay.losses);
+        stay.losses = stay.losses.saturating_add(1);
+        out.push(Effect::Changed);
+        if !attached {
+            return;
+        }
+        if wait == 0 {
+            self.ask_offer(out);
+        } else {
+            stay.rejoin_at = Some(now + wait);
         }
     }
 
@@ -1698,29 +1773,38 @@ impl Machine {
                 }
             }
             PageReport::NeedTurn => {
-                if let Ok((_, effects)) = self.request(Pending::Turn, |rid| ToRoom::Turn { rid }) {
-                    out.extend(effects);
-                }
-            }
-            PageReport::Lost => {
+                // No audio meanwhile: "Yeniden bağlanıyor…" after 2 s (§7.10), and the minute
+                // runs, until the page connects through TURN.
                 if let Some(stay) = self.stay.as_mut() {
-                    stay.audio_ok = false;
                     stay.away_since.get_or_insert(now);
-                    if stay.give_up_at.is_none() {
-                        stay.give_up_at = Some(now + GIVE_UP_MS);
-                    }
+                    stay.give_up_at.get_or_insert(now + GIVE_UP_MS);
                     out.push(Effect::Changed);
                 }
-                self.ask_offer(&mut out);
+                match self.request(Pending::Turn, |rid| ToRoom::Turn { rid }) {
+                    Ok((_, effects)) => out.extend(effects),
+                    // No socket to ask on: as lost (the offer waits for the socket's return).
+                    Err(_) => self.audio_lost(now, &mut out),
+                }
             }
+            PageReport::Lost => self.audio_lost(now, &mut out),
             PageReport::Connected => {
                 if let Some(stay) = self.stay.as_mut() {
                     stay.audio_ok = true;
+                    stay.losses = 0;
+                    stay.rejoin_at = None;
                     if stay.link == Link::Open {
                         stay.away_since = None;
                         stay.away_shown = false;
                         stay.give_up_at = None;
                     }
+                    out.push(Effect::Changed);
+                }
+            }
+            PageReport::Playout { playout } => {
+                if self.playout != Some(playout) {
+                    self.playout = Some(playout);
+                    // Volumes held to the path's top, and the slider's top with them.
+                    out.extend(self.playback());
                     out.push(Effect::Changed);
                 }
             }
@@ -1780,6 +1864,9 @@ impl Machine {
             if let Some(give_up) = stay.give_up_at {
                 at(give_up);
             }
+            if let Some(rejoin) = stay.rejoin_at {
+                at(rejoin);
+            }
             if let Some(since) = stay.away_since
                 && !stay.away_shown
             {
@@ -1813,6 +1900,7 @@ impl Machine {
         }
         let mut end: Option<VoiceLeftReason> = None;
         let mut reconnect: Option<(u64, Ticket)> = None;
+        let mut rejoin = false;
         if let Some(stay) = &mut self.stay {
             if stay.give_up_at.is_some_and(|at| now >= at) {
                 end = Some(VoiceLeftReason::Failed);
@@ -1824,6 +1912,10 @@ impl Machine {
                 {
                     stay.link = Link::Connecting;
                     reconnect = Some((stay.generation, stay.ticket.clone()));
+                }
+                if stay.rejoin_at.is_some_and(|at| now >= at) {
+                    stay.rejoin_at = None;
+                    rejoin = true;
                 }
                 if !stay.away_shown
                     && stay
@@ -1845,6 +1937,9 @@ impl Machine {
         }
         if let Some((generation, ticket)) = reconnect {
             out.push(Effect::Connect { generation, ticket });
+        }
+        if rejoin && self.page.attached {
+            self.ask_offer(&mut out);
         }
         dedup_changed(&mut out);
         out
@@ -1912,6 +2007,32 @@ impl Machine {
             mic: self.page.mic.unwrap_or(VoiceMic::Unknown),
             devices: self.page.devices.clone(),
             testing: self.page.testing,
+            profiles: self
+                .stay
+                .as_ref()
+                .and_then(|stay| stay.room.as_ref())
+                .map(|room| {
+                    room.people_in_order()
+                        .into_iter()
+                        .filter_map(|person| {
+                            person
+                                .card
+                                .as_deref()
+                                .map(|card| VoiceProfile::of(&person.u, card))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            presence: self
+                .crews
+                .values()
+                .flatten()
+                .flat_map(|room| room.ids.iter())
+                .filter(|id| **id != self.me)
+                .map(|id| (id.clone(), pl_social::PresenceVoice::In))
+                .collect(),
+            volume_max: self.playout().max_percent(),
+            backup_rev: self.store.revision(),
         }
     }
 
@@ -1962,6 +2083,7 @@ impl Machine {
             .as_ref()
             .and_then(|crew| self.crews.get(crew))
             .is_some_and(|rooms| rooms.iter().any(|r| r.id != room.id));
+        let playout = self.playout();
         let people = room
             .people_in_order()
             .into_iter()
@@ -1981,7 +2103,8 @@ impl Machine {
                     muted_by_moderator: person.sm,
                     quality: VoiceQuality::from_wire(person.q),
                     speaking: stay.speaking.contains(&person.u),
-                    volume: prefs.volume,
+                    // On the slider's scale (`volume_max`); the kept value stays for the other path.
+                    volume: gain::clamp(prefs.volume, playout),
                     muted_for_me: prefs.muted,
                     joined_at: person.j,
                     can: VoicePowers {
@@ -2032,6 +2155,14 @@ fn role_view(role: Role) -> VoiceRole {
 
 fn joinable(missed: &Missed, unix: i64) -> bool {
     !missed.ended && unix < missed.at + INVITE_TICKET_SECONDS
+}
+
+/// How long the rejoin after `losses` lost connections in a row waits: none, then 1, 2, 4, 8 s.
+fn rejoin_wait(losses: u32) -> u64 {
+    match losses {
+        0 => 0,
+        n => (1_000_u64 << (n - 1).min(3)).min(REJOIN_MAX_MS),
+    }
 }
 
 fn secs_ms(seconds: i64) -> u64 {

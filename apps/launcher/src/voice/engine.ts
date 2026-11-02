@@ -134,13 +134,11 @@ class VoiceEngine implements Engine {
       case "offer":
         this.offer(command.sdp, command.mids);
         break;
-      case "talk": {
-        // `tail: false` (asked of VOICE-INT): the close is a mute, not push-to-talk's release.
-        const tail = (command as { tail?: unknown }).tail;
+      case "talk":
+        // `tail` only when push-to-talk was let go; a mute, a deafen or a moderator cuts at once.
         this.talkOpen = command.open;
-        this.graph?.talk(command.open, tail !== false);
+        this.graph?.talk(command.open, command.tail);
         break;
-      }
       case "deaf":
         this.deaf = command.on;
         this.graph?.deaf(command.on);

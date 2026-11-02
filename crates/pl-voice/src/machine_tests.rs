@@ -52,7 +52,35 @@ fn person(u: &str, j: i64) -> PersonWire {
         deaf: false,
         sm: false,
         q: 0,
+        card: None,
     }
+}
+
+/// Someone with VOICE-S2's card (a friend's friend).
+fn carded(u: &str, j: i64, name: &str) -> PersonWire {
+    let card = serde_json::from_value(serde_json::json!({
+        "id": u,
+        "username": name.to_lowercase(),
+        "displayName": name,
+        "avatar": "preset:wolf",
+        "avatarHash": null,
+        "marks": ["verified"],
+    }))
+    .unwrap();
+    PersonWire {
+        card: Some(Box::new(card)),
+        ..person(u, j)
+    }
+}
+
+fn talk(open: bool, tail: bool) -> EngineCommand {
+    EngineCommand::Talk { open, tail }
+}
+
+fn asks_join(effects: &[Effect]) -> bool {
+    engine(effects)
+        .iter()
+        .any(|c| matches!(c, EngineCommand::Join))
 }
 
 fn hello(people: Vec<PersonWire>, role: Role, sdp: bool) -> FromRoom {
@@ -610,13 +638,14 @@ fn mute_and_deafen() {
             deaf: false
         }
     }));
-    assert!(engine(&effects).contains(&&EngineCommand::Talk { open: false }));
+    // A mute cuts at once (no push-to-talk tail).
+    assert!(engine(&effects).contains(&&talk(false, false)));
     let effects = machine.set_deaf(true);
     assert!(engine(&effects).contains(&&EngineCommand::Deaf { on: true }));
     // Opening the microphone ends deafness too.
     let effects = machine.set_mute(false);
     assert!(engine(&effects).contains(&&EngineCommand::Deaf { on: false }));
-    assert!(engine(&effects).contains(&&EngineCommand::Talk { open: true }));
+    assert!(engine(&effects).contains(&&talk(true, false)));
     let view = machine.view(0, UNIX).room.unwrap();
     assert!(!view.me.mute && !view.me.deaf);
     // Muted for everyone by a moderator: closed whatever the player does.
@@ -633,7 +662,7 @@ fn mute_and_deafen() {
         UNIX,
     );
     assert!(notices(&effects).contains(&&VoiceNotice::MutedByModerator));
-    assert!(engine(&effects).contains(&&EngineCommand::Talk { open: false }));
+    assert!(engine(&effects).contains(&&talk(false, false)));
 }
 
 #[test]
@@ -673,17 +702,25 @@ fn input_is_registered_only_in_a_room_with_a_shortcut() {
         2,
         UNIX,
     );
-    // Push-to-talk opens and closes the gate.
+    // Push-to-talk opens and closes the gate; letting go keeps the end of the word.
     let effects = machine.key(KeyChange {
         shortcut: VoiceShortcut::PushToTalk,
         down: true,
     });
-    assert!(engine(&effects).contains(&&EngineCommand::Talk { open: true }));
+    assert!(engine(&effects).contains(&&talk(true, false)));
     let effects = machine.key(KeyChange {
         shortcut: VoiceShortcut::PushToTalk,
         down: false,
     });
-    assert!(engine(&effects).contains(&&EngineCommand::Talk { open: false }));
+    assert!(engine(&effects).contains(&&talk(false, true)));
+    // A mute while the key is held cuts at once (VOICE-INT: L2 asked for `tail`).
+    machine.key(KeyChange {
+        shortcut: VoiceShortcut::PushToTalk,
+        down: true,
+    });
+    let effects = machine.set_mute(true);
+    assert!(engine(&effects).contains(&&talk(false, false)));
+    machine.set_mute(false);
     // Back to "Konuşunca" mid-call: the watch stops.
     let (_, effects) = machine.save_settings(VoiceSettings::default(), 3);
     assert!(effects.contains(&Effect::Input(None)));
@@ -1124,4 +1161,329 @@ fn a_refused_first_connect_answers_the_join() {
     assert!(!machine.in_room());
     // No toast beyond the answer.
     assert!(notices(&effects).is_empty());
+}
+
+// --- VOICE-INT --------------------------------------------------------------------------------
+
+/// The page asked for TURN; its request's `rid`.
+fn ask_turn(machine: &mut Machine, now: u64) -> u32 {
+    let effects = machine.page_report(PageReport::NeedTurn, now);
+    match sent(&effects)[..] {
+        [ToRoom::Turn { rid }] => *rid,
+        _ => panic!("no turn request"),
+    }
+}
+
+#[test]
+fn a_refused_turn_request_is_a_lost_connection() {
+    let mut machine = ready();
+    let generation = live_call(&mut machine, vec![person("me", 1), person("x", 2)]);
+    let rid = ask_turn(&mut machine, 10_000);
+    // Waiting for TURN is no audio: "Yeniden bağlanıyor…" after 2 s.
+    assert_eq!(
+        machine.view(12_000, UNIX).room.unwrap().phase,
+        VoicePhase::Reconnecting
+    );
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Error {
+            rid: Some(rid),
+            code: "turn_unavailable".into(),
+            retry_after: None,
+            until: None,
+            item: None,
+        },
+        10_100,
+        UNIX,
+    );
+    // L2's P1: never a stay without a connection; the page joins anew at once.
+    assert!(asks_join(&effects));
+    // The room's next hello answers the new offer, but only `connected` brings the call back.
+    machine.page_report(
+        PageReport::Offer {
+            sdp: Some("v=0 again".into()),
+            mid: Some("0".into()),
+        },
+        10_200,
+    );
+    machine.socket_message(
+        generation,
+        hello(vec![person("me", 1), person("x", 2)], Role::Leader, true),
+        10_300,
+        UNIX,
+    );
+    assert_eq!(
+        machine.view(12_500, UNIX).room.unwrap().phase,
+        VoicePhase::Reconnecting
+    );
+    machine.page_report(PageReport::Connected, 13_000);
+    assert_eq!(
+        machine.view(13_000, UNIX).room.unwrap().phase,
+        VoicePhase::Live
+    );
+    // An `ack` without credentials, and a TURN request with no socket to go on, are lost too.
+    let rid = ask_turn(&mut machine, 20_000);
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Ack {
+            rid: Some(rid),
+            ice: None,
+            until: None,
+        },
+        20_100,
+        UNIX,
+    );
+    assert!(asks_join(&effects));
+    machine.page_report(
+        PageReport::Offer {
+            sdp: Some("v=0 third".into()),
+            mid: Some("0".into()),
+        },
+        20_200,
+    );
+    machine.page_report(PageReport::Connected, 20_300);
+    machine.socket_closed(generation, None, 30_000);
+    let effects = machine.page_report(PageReport::NeedTurn, 30_100);
+    assert!(sent(&effects).is_empty());
+    assert!(asks_join(&effects));
+}
+
+#[test]
+fn a_lost_connection_asks_again_even_without_an_offer() {
+    let mut machine = ready();
+    live_call(&mut machine, vec![person("me", 1), person("x", 2)]);
+    // The page could not even make its connection (`failed("offer")` + `lost`): the offer the
+    // launcher asked for never came, and still a new join goes out.
+    let effects = machine.page_report(PageReport::Lost, 10_000);
+    assert!(asks_join(&effects));
+    machine.page_report(
+        PageReport::Failed {
+            code: "offer".into(),
+        },
+        10_050,
+    );
+    let effects = machine.page_report(PageReport::Lost, 10_100);
+    assert!(!asks_join(&effects), "the second rejoin waits");
+    // 1 s later, by the one timer.
+    assert_eq!(machine.next_deadline(10_100), Some(11_100));
+    let effects = machine.tick(11_100, UNIX, 11_100);
+    assert!(asks_join(&effects));
+    // A working connection starts the waits over.
+    machine.page_report(
+        PageReport::Offer {
+            sdp: Some("v=0 ok".into()),
+            mid: Some("0".into()),
+        },
+        11_200,
+    );
+    machine.page_report(PageReport::Connected, 11_500);
+    let effects = machine.page_report(PageReport::Lost, 20_000);
+    assert!(asks_join(&effects));
+}
+
+#[test]
+fn rejoins_that_never_connect_give_up_without_spinning() {
+    let mut machine = ready();
+    let generation = live_call(&mut machine, vec![person("me", 1), person("x", 2)]);
+    let mut now = 10_000;
+    let mut joins = 0;
+    let mut ticks = 0;
+    // The page reports the connection lost: now, then 5 s after every join's answer (the room
+    // answers each new offer, the connection never comes, as through a network without UDP).
+    let mut lost_due = Some(now);
+    while machine.in_room() {
+        let next = match (machine.next_deadline(now), lost_due) {
+            (Some(a), Some(b)) => a.min(b),
+            (Some(a), None) => a,
+            (None, Some(b)) => b,
+            (None, None) => panic!("nothing to wait for while the audio is away"),
+        };
+        assert!(next >= now, "a moment in the past");
+        now = next;
+        let effects = if lost_due == Some(now) {
+            lost_due = None;
+            machine.page_report(PageReport::Lost, now)
+        } else {
+            ticks += 1;
+            assert!(ticks < 100, "the timer spins");
+            machine.tick(now, UNIX, now)
+        };
+        if asks_join(&effects) {
+            joins += 1;
+            machine.page_report(
+                PageReport::Offer {
+                    sdp: Some("v=0".into()),
+                    mid: Some("0".into()),
+                },
+                now,
+            );
+            machine.socket_message(
+                generation,
+                hello(vec![person("me", 1), person("x", 2)], Role::Leader, true),
+                now,
+                UNIX,
+            );
+            lost_due = Some(now + 5_000);
+        }
+    }
+    assert!(now <= 10_000 + GIVE_UP_MS, "gave up at {now}");
+    assert!((4..=10).contains(&joins), "{joins} joins in a minute");
+    assert!(machine.retry_ticket().is_some());
+}
+
+#[test]
+fn the_playout_path_holds_the_volume_slider() {
+    let mut machine = ready();
+    live_call(&mut machine, vec![person("me", 1), person("x", 2)]);
+    machine.set_volume("x", 150);
+    assert_eq!(machine.view(0, UNIX).volume_max, 200);
+    let effects = machine.page_report(
+        PageReport::Playout {
+            playout: crate::gain::Playout::Element,
+        },
+        10,
+    );
+    assert!(engine(&effects).iter().any(|c| matches!(
+        c,
+        EngineCommand::People { people } if people[0].volume == 100
+    )));
+    let view = machine.view(10, UNIX);
+    assert_eq!(view.volume_max, 100);
+    assert_eq!(view.room.unwrap().people[0].volume, 100);
+    // The same path again says nothing; the kept 150 comes back with WebAudio.
+    assert!(
+        machine
+            .page_report(
+                PageReport::Playout {
+                    playout: crate::gain::Playout::Element,
+                },
+                20,
+            )
+            .is_empty()
+    );
+    machine.page_report(
+        PageReport::Playout {
+            playout: crate::gain::Playout::WebAudio,
+        },
+        30,
+    );
+    let view = machine.view(30, UNIX);
+    assert_eq!(view.volume_max, 200);
+    assert_eq!(view.room.unwrap().people[0].volume, 150);
+}
+
+#[test]
+fn cards_name_a_friends_friend() {
+    let mut machine = ready();
+    let generation = live_call(
+        &mut machine,
+        vec![
+            person("me", 1),
+            person("x", 2),
+            carded("909", 3, "KumFirtinasi"),
+        ],
+    );
+    let view = machine.view(0, UNIX);
+    assert_eq!(view.profiles.len(), 1);
+    assert_eq!(view.profiles[0].id, "909");
+    assert_eq!(view.profiles[0].name, "KumFirtinasi");
+    assert_eq!(view.profiles[0].avatar, "preset:wolf");
+    assert_eq!(view.profiles[0].marks, vec!["verified".to_owned()]);
+    machine.socket_message(
+        generation,
+        FromRoom::Joined {
+            person: carded("910", 4, "GeceKusu_7"),
+        },
+        10,
+        UNIX,
+    );
+    assert_eq!(machine.view(10, UNIX).profiles.len(), 2);
+    machine.socket_message(
+        generation,
+        FromRoom::Left {
+            u: "909".into(),
+            why: crate::wire::LeftWhy::Left,
+        },
+        20,
+        UNIX,
+    );
+    let names: Vec<String> = machine
+        .view(20, UNIX)
+        .profiles
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
+    assert_eq!(names, ["GeceKusu_7"]);
+    machine.leave(30);
+    assert!(machine.view(30, UNIX).profiles.is_empty());
+}
+
+#[test]
+fn crewmates_in_a_crew_room_are_in_voice() {
+    let mut machine = ready();
+    machine.crew_rooms(
+        CREW,
+        vec![CrewRoom {
+            id: GENERAL.into(),
+            name: "Genel".into(),
+            ids: vec!["a".into(), "me".into()],
+        }],
+    );
+    let presence = machine.view(0, UNIX).presence;
+    assert_eq!(presence.len(), 1);
+    assert_eq!(presence.get("a"), Some(&pl_social::PresenceVoice::In));
+    machine.crew_rooms(CREW, Vec::new());
+    assert!(machine.view(0, UNIX).presence.is_empty());
+}
+
+#[test]
+fn calling_back_ends_the_missed_call() {
+    let mut machine = ready();
+    machine.ring(
+        IncomingRing {
+            room: "f00000000000000ff".into(),
+            from: "kaan".into(),
+            at: UNIX,
+            until: UNIX,
+            ticket: Ticket::new("t"),
+            with: Vec::new(),
+        },
+        false,
+        0,
+        UNIX,
+    );
+    assert_eq!(machine.view(0, UNIX).missed.len(), 1);
+    // "Geri ara": a new room that rings kaan.
+    machine.join(
+        StayStart {
+            room: ROOM.into(),
+            ticket: Ticket::new("v1.call.mac"),
+            calling: Some("kaan".into()),
+            opened_by_me: false,
+        },
+        10,
+        UNIX + 60,
+    );
+    assert!(machine.view(10, UNIX + 60).missed.is_empty());
+}
+
+#[test]
+fn the_backup_revision_follows_what_it_carries() {
+    let mut machine = ready();
+    live_call(&mut machine, vec![person("me", 1), person("x", 2)]);
+    let start = machine.view(0, UNIX).backup_rev;
+    machine.set_volume("x", 120);
+    assert_eq!(machine.view(0, UNIX).backup_rev, start + 1);
+    machine.set_muted_for_me("x", true);
+    machine.save_settings(
+        VoiceSettings {
+            sounds: false,
+            ..VoiceSettings::default()
+        },
+        0,
+    );
+    assert_eq!(machine.view(0, UNIX).backup_rev, start + 3);
+    // The same again changes nothing.
+    machine.set_volume("x", 120);
+    assert_eq!(machine.view(0, UNIX).backup_rev, start + 3);
 }

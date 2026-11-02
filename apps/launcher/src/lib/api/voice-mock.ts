@@ -716,6 +716,22 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
     },
     async settingsOpen() {},
     async openMicSettings() {},
+    async backup() {
+      // As the launcher's: the settings without this computer's devices, the people's choices.
+      const people: Record<string, { volume: number; muted: boolean }> = {};
+      for (const p of state.room?.people ?? []) {
+        if (p.volume !== 100 || p.mutedForMe)
+          people[p.id] = { volume: p.volume, muted: p.mutedForMe };
+      }
+      return { settings: { ...settings, inputDevice: null, outputDevice: null }, people };
+    },
+    async restore(backup) {
+      const saved = backup.settings;
+      if (saved && typeof saved === "object") {
+        settings = { ...settings, ...(saved as Partial<VoiceSettings>) };
+        commit({ ...state, enabled: settings.enabled, backupRev: (state.backupRev ?? 0) + 1 });
+      }
+    },
   };
 }
 
