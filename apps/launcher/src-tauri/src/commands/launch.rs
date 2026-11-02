@@ -1214,6 +1214,14 @@ async fn prepare_and_spawn(
         options.launcher_jvm_args.extend(endpoint.jvm_args());
         options.secrets.push(endpoint.secret().to_owned());
     }
+    // "Hızlı kaynak paketi yükleme" within one connection (FASTPACK-LEAVE): our overlay mod keeps
+    // a server pack that comes again unchanged instead of reloading it. Only for the official
+    // pack's installs, as the setting says; a server's pack still goes when the player leaves.
+    if overlay_mod.ours && instance.managed_pack.is_some() && crate::fastpack::on() {
+        options
+            .launcher_jvm_args
+            .push(pl_overlay::fast_packs_jvm_arg());
+    }
     options.launcher_version = launcher_version;
     // "Devam et" and an invite's "Katıl" first (a server on every version, a world only with
     // quick play), else the instance's server when auto-join is on.

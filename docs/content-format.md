@@ -502,12 +502,16 @@ news feed, the launcher's built-in recommended Minecraft version.
   `false`; launchers that do not know the field or `subServers` ignore them. Publishing either
   needs a Studio of `aa95309` or later (STUDIO3).
 - `features.fastPacks`: "Hızlı kaynak paketi yükleme" (FASTPACK): desktop launchers show the setting
-  (on by default) in Settings → Genel and install the official pack's fast-pack items while both
-  are on ([Modpacks](#modpacks): `pSISfJ4O`, `d4phKsx2`). Off by default, outside the friends
-  feature. While it is `false` (or missing) launchers show no switch and remove the copies a pack
-  sync installed. Turn it on only after the FASTPACK measurement passed and the pack's family
-  members list the item. Writers omit it while it is `false`; launchers that do not know the field
-  ignore it. Publishing it needs a Studio of `aa95309` or later (STUDIO3).
+  (on by default) in Settings → Genel and install the official pack's fast-pack item while both
+  are on ([Modpacks](#modpacks): `pSISfJ4O`; launchers before 2.0.4 `d4phKsx2` too). While both
+  are on, an official pack install whose in-game overlay mod is the launcher's own also gets
+  `-Dprojects.overlay.fastpacks=on`: the mod answers a server pack pushed again unchanged within
+  one connection (the same id and SHA-1, already applied) as applied, without reloading the
+  game's resources (FASTPACK-LEAVE). Off by default, outside the friends feature. While it is
+  `false` (or missing) launchers show no switch, pass nothing and remove the copies a pack sync
+  installed. Turn it on only after the FASTPACK measurement passed and the pack's family members
+  list the item. Writers omit it while it is `false`; launchers that do not know the field ignore
+  it. Publishing it needs a Studio of `aa95309` or later (STUDIO3).
 - `features.overlayJars`: the in-game overlay's jars from the index (OVL-AUTO,
   [In-game overlay jars](#in-game-overlay-jars)) for the Minecraft versions a launcher's own jars
   leave out. Off by default; while it is `false` (or missing) launchers never read `overlay` and
@@ -1307,16 +1311,18 @@ a top-level `projects` object that other launchers ignore; Studio can export a r
     (FASTPACK). Studio adds them as ordinary Modrinth items to each family member's manifest, the
     file built for that member's Minecraft version (pinned by `modrinth.versionId` and the file's
     SHA-512), with `defaultEnabled: false` and no `requires`; a member without the item gets
-    nothing, and the setting says "Bu sürümde yok" there. `d4phKsx2` stays out of every manifest
-    until the FASTPACK measurement passes. A launcher with the setting installs such an item
-    exactly while the setting and `features.fastPacks` are both on and the game directory has no
-    enabled jar of its own declaring (or providing) a mod for the same work: `quick-pack`,
-    `fastpackload` or `packforge` for `pSISfJ4O`, `rpc` or `resourcepackchecker` for `d4phKsx2`
-    (the jar the pack state records for the item is the pack's own copy and does not count). Like
-    the overlay it never lists them in the mod center or the instance's mods and never records,
-    adopts or flags a choice for them; turning the setting or the flag off, or such a jar of the
-    player's, removes only the file the pack installed. Clients without the setting (older
-    launchers, Android) treat them as ordinary items, off on a new install.
+    nothing, and the setting says "Bu sürümde yok" there. A launcher with the setting installs
+    `pSISfJ4O` exactly while the setting and `features.fastPacks` are both on and the game
+    directory has no enabled jar of its own declaring (or providing) a mod for the same work:
+    `quick-pack`, `fastpackload` or `packforge` (the jar the pack state records for the item is the
+    pack's own copy and does not count). It never installs `d4phKsx2` (2.0.4, FASTPACK-LEAVE):
+    ResourcePackCached keeps a server's pack applied after the player leaves and applies it again
+    at the game's start; the copy an older launcher installed is removed like an item switched off.
+    Studio may keep listing it for those older launchers or drop it. Like the overlay it never
+    lists them in the mod center or the instance's mods and never records, adopts or flags a choice
+    for them; turning the setting or the flag off, or such a jar of the player's, removes only the
+    file the pack installed. Clients without the setting (older launchers, Android) treat them as
+    ordinary items, off on a new install.
 - `optionalGroups` (legacy): switchable sets of `files[]` paths. A file in several groups is
   installed when any of them is enabled. The player's choice is remembered in the pack state;
   new groups start at `defaultEnabled`. Files covered by an item ignore groups; groups still
