@@ -18,6 +18,8 @@ const run = promisify(execFile);
 const here = fileURLToPath(new URL(".", import.meta.url));
 const KEYS = { accessKeyId: "test-key", secretAccessKey: "test-secret" };
 const objects = new Map();
+// Called after every PUT (a test's way to change a channel while a publish runs).
+let afterPut = null;
 let server;
 let env;
 let dir;
@@ -63,6 +65,7 @@ function startServer() {
             sha256: req.headers["x-amz-meta-sha256"],
             cacheControl: req.headers["cache-control"],
           });
+          afterPut?.(key);
           res.writeHead(200).end();
           return;
         }
@@ -232,6 +235,82 @@ test("promote copies beta to stable with a staged rollout and keeps channels mon
     /refusing to move it back/,
   );
   await assert.rejects(publishR2("promote", "--version", "2.2.0"), /announces 2\.1\.0/);
+});
+
+test("publish --expect-current writes only over the release it expects", async () => {
+  // A stable taken from a beta goes to the beta channel first: refused when the channel moved on
+  // (here it announces 2.1.0, not the beta), before anything is uploaded. In Actions the refusal is
+  // also an error annotation that Studio reads back.
+  const before = objects.get("v1/releases/beta.json").body;
+  await assert.rejects(
+    run(
+      process.execPath,
+      [
+        join(here, "publish-r2.mjs"),
+        "publish",
+        "--dir",
+        dir,
+        "--version",
+        "2.1.1",
+        "--expect-current",
+        "2.1.1-beta.1",
+      ],
+      { env: { ...env, GITHUB_ACTIONS: "true" } },
+    ),
+    (error) =>
+      /beta announces 2\.1\.0, not 2\.1\.1-beta\.1/.test(error.stderr) &&
+      /^::error title=release\/channel-moved::beta announces 2\.1\.0/m.test(error.stdout),
+  );
+  assert.equal(objects.get("v1/releases/beta.json").body, before);
+  assert.equal(
+    [...objects.keys()].some((key) => key.startsWith("v1/releases/2.1.1/")),
+    false,
+  );
+
+  // A newer beta that reaches the channel while the files upload is not replaced either: the
+  // channel is read again right before it is written.
+  await publishR2("publish", "--dir", dir, "--version", "2.1.5-beta.1", "--channel", "beta");
+  const newer = JSON.parse(objects.get("v1/releases/beta.json").body);
+  afterPut = (key) => {
+    if (key.startsWith("v1/releases/2.1.5/")) {
+      const body = Buffer.from(JSON.stringify({ ...newer, version: "2.1.5-beta.2" }));
+      objects.set("v1/releases/beta.json", { ...objects.get("v1/releases/beta.json"), body });
+      afterPut = null;
+    }
+  };
+  await assert.rejects(
+    publishR2(
+      "publish",
+      "--dir",
+      dir,
+      "--version",
+      "2.1.5",
+      "--channel",
+      "beta",
+      "--expect-current",
+      "2.1.5-beta.1",
+    ),
+    /beta announces 2\.1\.5-beta\.2, not 2\.1\.5-beta\.1/,
+  );
+  assert.equal(JSON.parse(objects.get("v1/releases/beta.json").body).version, "2.1.5-beta.2");
+
+  // It goes on while the channel announces the beta, and again once it announces the version (a
+  // run again after a later step failed).
+  await publishR2("publish", "--dir", dir, "--version", "2.2.0-beta.1", "--channel", "beta");
+  for (let i = 0; i < 2; i++) {
+    await publishR2(
+      "publish",
+      "--dir",
+      dir,
+      "--version",
+      "2.2.0",
+      "--channel",
+      "beta",
+      "--expect-current",
+      "2.2.0-beta.1",
+    );
+    assert.equal(JSON.parse(objects.get("v1/releases/beta.json").body).version, "2.2.0");
+  }
 });
 
 test("channel.mjs writes latest.json for the GitHub release", async () => {
