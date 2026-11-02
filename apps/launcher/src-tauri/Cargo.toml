@@ -83,8 +83,9 @@ tauri-plugin-updater = { workspace = true }
 # so nothing new is compiled. Voice chat (voice/, VOICE) names what it uses: process times and
 # memory for VOICE-0's probe (Threading, ProcessStatus: sysinfo's), Raw Input with its hidden
 # window and the last touch for the inactivity rule (UI_Input, UI_Input_KeyboardAndMouse,
-# System_SystemInformation, Gdi, LibraryLoader: tao's and wry's), so the shared `windows` build
-# stays the same.
+# System_SystemInformation, Gdi, LibraryLoader: tao's and wry's), and the keyboard layout for
+# Discord's keys (UI_TextServices, VOICE-KEYS: tao's), so the shared `windows` build stays the
+# same.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
 windows = { version = "0.62", features = [
@@ -103,5 +104,6 @@ windows = { version = "0.62", features = [
     "Win32_UI_Input",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
+    "Win32_UI_TextServices",
     "Win32_UI_WindowsAndMessaging",
 ] }

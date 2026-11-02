@@ -2,7 +2,9 @@
 //! hidden message window on a thread of its own gets keyboard (and, for a mouse button, mouse)
 //! reports with `RIDEV_INPUTSINK`, also while the game is in front; nothing is taken from the
 //! game, nothing is polled, and only the chosen keys are looked at (`pl_voice::input::Shortcuts`).
-//! It runs only while the player is in a room and a shortcut needs it (`pl_voice::input`'s rule).
+//! A combination ("Ctrl + Shift + M", VOICE-KEYS) asks Windows which modifiers are held only when
+//! its key goes down. It runs only while the player is in a room and a shortcut needs it
+//! (`pl_voice::input`'s rule).
 //!
 //! A process has one Raw Input target per device kind, and tao registered its own for device
 //! events: the watch reads what was registered before and puts it back when it stops.
@@ -20,6 +22,20 @@ pub fn idle_ms() -> u64 {
     #[cfg(not(windows))]
     {
         0
+    }
+}
+
+/// Discord's voice keys on this computer (VOICE-KEYS): `%APPDATA%`'s Discord folders, each key as
+/// this keyboard's layout has it. Reads only when the page asks (`voice_discord_offer`).
+pub fn discord_keys() -> Option<pl_voice::discord::VoiceDiscordOffer> {
+    #[cfg(windows)]
+    {
+        let roaming = std::env::var_os("APPDATA")?;
+        pl_voice::discord::read(std::path::Path::new(&roaming), &platform::vk_key)
+    }
+    #[cfg(not(windows))]
+    {
+        None
     }
 }
 
@@ -66,7 +82,8 @@ mod platform {
     use std::time::Duration;
 
     use pl_voice::Voice;
-    use pl_voice::input::{KeyChange, Shortcuts};
+    use pl_voice::input::{Held, KeyChange, Shortcuts};
+    use pl_voice::keys::ScanCode;
     use pl_voice::settings::VoiceKey;
     use pl_voice::view::VoiceShortcut;
     use windows::Win32::Foundation::{
@@ -74,16 +91,20 @@ mod platform {
     };
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::SystemInformation::GetTickCount;
-    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, GetKeyboardLayout, GetLastInputInfo, LASTINPUTINFO, MAPVK_VK_TO_CHAR,
+        MAPVK_VK_TO_VSC_EX, MapVirtualKeyExW, VIRTUAL_KEY, VK_LCONTROL, VK_LMENU, VK_LSHIFT,
+        VK_RCONTROL, VK_RMENU, VK_RSHIFT,
+    };
     use windows::Win32::UI::Input::{
         GetRawInputData, GetRegisteredRawInputDevices, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE,
         RAWINPUTHEADER, RID_INPUT, RIDEV_INPUTSINK, RIDEV_REMOVE, RIM_TYPEKEYBOARD, RIM_TYPEMOUSE,
         RegisterRawInputDevices,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-        HWND_MESSAGE, MSG, PostMessageW, PostQuitMessage, RegisterClassW, WINDOW_EX_STYLE,
-        WINDOW_STYLE, WM_CLOSE, WM_INPUT, WNDCLASSW,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetForegroundWindow,
+        GetMessageW, GetWindowThreadProcessId, HWND_MESSAGE, MSG, PostMessageW, PostQuitMessage,
+        RegisterClassW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLOSE, WM_INPUT, WNDCLASSW,
     };
     use windows::core::w;
 
@@ -95,6 +116,54 @@ mod platform {
     thread_local! {
         /// The watched keys and who hears their changes, on the input thread.
         static WATCH: RefCell<Option<(Shortcuts, Voice)>> = const { RefCell::new(None) };
+    }
+
+    /// The modifiers held now, from Windows' own key state (asked only when a combination's key
+    /// goes down: a modifier pressed before the watch began, or let go on another desktop, still
+    /// reads right). AltGr is Right Alt with a Left Ctrl Windows adds.
+    fn held() -> Held {
+        // SAFETY: a plain query of one key's state.
+        let down = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(i32::from(key.0)) } < 0;
+        Held {
+            ctrl: down(VK_LCONTROL) || down(VK_RCONTROL),
+            shift: down(VK_LSHIFT) || down(VK_RSHIFT),
+            alt: down(VK_LMENU),
+            alt_gr: down(VK_RMENU),
+        }
+    }
+
+    /// A virtual-key code as the player's keyboard has it (the layout of the window in front, the
+    /// launcher's while its page asks): the key's scan code, and the character on it, upper-cased
+    /// (a Turkish layout's "i" is "İ"); empty for keys that write none.
+    pub(super) fn vk_key(vk: u16) -> Option<(ScanCode, String)> {
+        // SAFETY: plain queries of a window's thread and its keyboard layout.
+        let layout = unsafe {
+            let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
+            GetKeyboardLayout(thread)
+        };
+        // SAFETY: as above.
+        let scan = unsafe { MapVirtualKeyExW(u32::from(vk), MAPVK_VK_TO_VSC_EX, Some(layout)) };
+        let make = u16::try_from(scan & 0xFF).ok().filter(|make| *make != 0)?;
+        let extended = match scan >> 8 {
+            0 => false,
+            0xE0 => true,
+            // E1 (Pause) and anything else: not a key a shortcut uses.
+            _ => return None,
+        };
+        // SAFETY: as above; dead keys carry the top bit.
+        let written = unsafe { MapVirtualKeyExW(u32::from(vk), MAPVK_VK_TO_CHAR, Some(layout)) };
+        let turkish = (layout.0 as usize & 0x3FF) == 0x1F;
+        let label = char::from_u32(written & 0x7FFF_FFFF)
+            .filter(|c| !c.is_control() && !c.is_whitespace())
+            .map(|c| {
+                if turkish && c == 'i' {
+                    "İ".to_owned()
+                } else {
+                    c.to_uppercase().collect()
+                }
+            })
+            .unwrap_or_default();
+        Some((ScanCode { make, extended }, label))
     }
 
     pub(super) fn idle_ms() -> u64 {
@@ -299,12 +368,12 @@ mod platform {
                         let changes = if kind == RIM_TYPEKEYBOARD.0 {
                             // SAFETY: a keyboard report.
                             let key = unsafe { input.data.keyboard };
-                            shortcuts.keyboard(key.MakeCode, key.Flags)
+                            shortcuts.keyboard(key.MakeCode, key.Flags, held)
                         } else if kind == RIM_TYPEMOUSE.0 {
                             // SAFETY: a mouse report.
                             let flags =
                                 unsafe { input.data.mouse.Anonymous.Anonymous.usButtonFlags };
-                            shortcuts.mouse(flags)
+                            shortcuts.mouse(flags, held)
                         } else {
                             Vec::new()
                         };

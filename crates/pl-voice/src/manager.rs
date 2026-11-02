@@ -18,6 +18,7 @@ use std::time::Duration;
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio::time::Instant;
 
+use crate::discord::VoiceDiscordOffer;
 use crate::engine::{EngineCommand, PageReport};
 use crate::input::KeyChange;
 use crate::lifecycle;
@@ -100,6 +101,8 @@ struct Inner {
     waiters: Mutex<HashMap<u32, oneshot::Sender<VoiceAnswer>>>,
     /// Effects in the machine's order, for the `voice-effects` thread.
     queue: Mutex<std::sync::mpsc::Sender<Batch>>,
+    /// Discord's keys as offered, until the player answers (VOICE-KEYS).
+    discord: Mutex<Option<VoiceDiscordOffer>>,
 }
 
 /// One step's effects, and the state to show after them.
@@ -146,6 +149,7 @@ impl Voice {
                 sockets: Mutex::new(HashMap::new()),
                 waiters: Mutex::new(HashMap::new()),
                 queue: Mutex::new(queue),
+                discord: Mutex::new(None),
             }),
         };
         let executor = voice.clone();
@@ -550,6 +554,52 @@ impl Voice {
     pub fn check_key(&self, ask: &VoiceKeyAsk) -> VoiceKeyCheck {
         let machine = lock(&self.inner.machine);
         crate::keys::check(&ask.key, ask.shortcut, machine.settings())
+    }
+
+    /// Discord's keys to offer, once per computer (VOICE-KEYS): None when the player answered
+    /// before, or when Discord had nothing to copy (then its files are never read again). `read`
+    /// reads Discord's files: the caller runs this off the main thread.
+    pub fn discord_offer(
+        &self,
+        read: impl FnOnce() -> Option<VoiceDiscordOffer>,
+    ) -> Option<VoiceDiscordOffer> {
+        if lock(&self.inner.machine).store().discord_asked() {
+            return None;
+        }
+        if let Some(offer) = lock(&self.inner.discord).clone() {
+            return Some(offer);
+        }
+        let offer = read();
+        match &offer {
+            Some(offer) => *lock(&self.inner.discord) = Some(offer.clone()),
+            None => lock(&self.inner.machine).store_mut().set_discord_asked(),
+        }
+        offer
+    }
+
+    /// The player's answer to Discord's keys: "Kopyala" fills the shortcuts Discord has (and
+    /// "Bas-konuş" when Discord talks by push-to-talk), "Hayır" leaves everything; either way it is
+    /// never asked again. Returns the settings as kept.
+    pub fn discord_answer(&self, copy: bool) -> VoiceSettings {
+        let offer = lock(&self.inner.discord).take();
+        lock(&self.inner.machine).store_mut().set_discord_asked();
+        let Some(offer) = offer.filter(|_| copy) else {
+            return self.settings();
+        };
+        let mut settings = self.settings();
+        if let Some(key) = offer.push_to_talk {
+            settings.push_to_talk_key = Some(key);
+            if offer.push_to_talk_mode {
+                settings.mode = crate::settings::VoiceTalkMode::PushToTalk;
+            }
+        }
+        if let Some(key) = offer.mute {
+            settings.mute_key = Some(key);
+        }
+        if let Some(key) = offer.deafen {
+            settings.deafen_key = Some(key);
+        }
+        self.save_settings(settings)
     }
 
     /// The settings page is open (`on`) or closed.

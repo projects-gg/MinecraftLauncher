@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 pub const FOLDER: &str = "voice";
 const SETTINGS_FILE: &str = "settings.json";
 const PEOPLE_FILE: &str = "people.json";
+/// Marks that Discord's keys were offered and answered, or found to be none (VOICE-KEYS): this
+/// computer only, never in the backup (Discord is on this computer).
+const DISCORD_FILE: &str = "discord-asked";
 /// People whose choices are kept at most (the oldest change goes first).
 pub const PEOPLE_MAX: usize = 500;
 /// People a backup carries at most, the latest changed (VOICE-INT: the friends service keeps a
@@ -46,10 +49,25 @@ pub enum VoiceMouseButton {
     Forward,
 }
 
+/// A key held with a shortcut's key (VOICE-KEYS: "Ctrl + Shift + M", so it does not fire while the
+/// player types). Left and right count alike; Right Alt is AltGr on most layouts and never counts
+/// as Alt ([`crate::input::Held`]).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum VoiceModifier {
+    Ctrl,
+    Shift,
+    Alt,
+}
+
 /// A shortcut's key: a keyboard key by its place on the keyboard (the page's
 /// `KeyboardEvent.code`, `KeyV`, `CapsLock`, `F8`: the same key whatever the layout), or a mouse
-/// button. `label` is what the page showed when it was picked (the layout's letter), kept to show
-/// it again.
+/// button, with the modifiers held with it (mute and deafen only; none is the single key, which
+/// fires whatever else is held). `label` is what the page showed when it was picked (the layout's
+/// letter), kept to show it again. An older file has no `mods` and reads as a single key (always
+/// written, so the page's type is the same both ways).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum VoiceKey {
@@ -57,20 +75,66 @@ pub enum VoiceKey {
         code: String,
         #[serde(default)]
         label: String,
+        #[serde(default)]
+        mods: Vec<VoiceModifier>,
     },
     Mouse {
         button: VoiceMouseButton,
+        #[serde(default)]
+        mods: Vec<VoiceModifier>,
     },
 }
 
 impl VoiceKey {
-    /// The same key, whatever its label says.
-    pub fn same_key(&self, other: &Self) -> bool {
+    /// A single keyboard key.
+    pub fn keyboard(code: impl Into<String>, label: impl Into<String>) -> Self {
+        Self::Keyboard {
+            code: code.into(),
+            label: label.into(),
+            mods: Vec::new(),
+        }
+    }
+
+    /// A single mouse button.
+    pub fn mouse(button: VoiceMouseButton) -> Self {
+        Self::Mouse {
+            button,
+            mods: Vec::new(),
+        }
+    }
+
+    /// The same key with `mods` held (kept in one order, each once).
+    pub fn with_mods(mut self, mods: &[VoiceModifier]) -> Self {
+        let mut wanted = mods.to_vec();
+        wanted.sort_unstable();
+        wanted.dedup();
+        match &mut self {
+            Self::Keyboard { mods, .. } | Self::Mouse { mods, .. } => *mods = wanted,
+        }
+        self
+    }
+
+    /// The modifiers held with it (empty: the key alone).
+    pub fn mods(&self) -> &[VoiceModifier] {
+        match self {
+            Self::Keyboard { mods, .. } | Self::Mouse { mods, .. } => mods,
+        }
+    }
+
+    /// The same key or button, whatever is held with it and whatever its label says.
+    pub fn same_input(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Keyboard { code: a, .. }, Self::Keyboard { code: b, .. }) => a == b,
-            (Self::Mouse { button: a }, Self::Mouse { button: b }) => a == b,
+            (Self::Mouse { button: a, .. }, Self::Mouse { button: b, .. }) => a == b,
             _ => false,
         }
+    }
+
+    /// Pressing one would fire the other too: the same key, and the same modifiers or a single key
+    /// (which fires whatever is held). "Ctrl + M" and "Ctrl + Shift + M" may live side by side.
+    pub fn overlaps(&self, other: &Self) -> bool {
+        self.same_input(other)
+            && (self.mods().is_empty() || other.mods().is_empty() || self.mods() == other.mods())
     }
 }
 
@@ -126,25 +190,34 @@ impl Default for VoiceSettings {
 }
 
 impl VoiceSettings {
-    /// Values held to their ranges; a key the launcher cannot watch is dropped, and a key used by
-    /// two shortcuts stays with the first (push-to-talk, then mute, then deafen).
+    /// Values held to their ranges; push-to-talk is a single key (modifiers dropped); a key the
+    /// launcher cannot watch is dropped, and a key two shortcuts would share stays with the first
+    /// (push-to-talk, then mute, then deafen).
     pub fn normalized(mut self) -> Self {
+        use crate::view::VoiceShortcut;
         self.sensitivity = self.sensitivity.map(|value| value.min(100));
         self.mic_volume = self.mic_volume.min(MIC_VOLUME_MAX);
         self.input_device = self.input_device.filter(|id| valid_device(id));
         self.output_device = self.output_device.filter(|id| valid_device(id));
-        let usable = |key: Option<VoiceKey>| key.filter(crate::keys::usable);
-        self.push_to_talk_key = usable(self.push_to_talk_key.take());
-        self.mute_key = usable(self.mute_key.take());
-        self.deafen_key = usable(self.deafen_key.take());
+        self.push_to_talk_key = self.push_to_talk_key.take().map(|key| key.with_mods(&[]));
+        let usable = |key: Option<VoiceKey>, shortcut| {
+            key.map(|key| {
+                let mods = key.mods().to_vec();
+                key.with_mods(&mods)
+            })
+            .filter(|key| crate::keys::usable(key, shortcut))
+        };
+        self.push_to_talk_key = usable(self.push_to_talk_key.take(), VoiceShortcut::PushToTalk);
+        self.mute_key = usable(self.mute_key.take(), VoiceShortcut::Mute);
+        self.deafen_key = usable(self.deafen_key.take(), VoiceShortcut::Deafen);
         if let (Some(ptt), Some(mute)) = (&self.push_to_talk_key, &self.mute_key)
-            && ptt.same_key(mute)
+            && ptt.overlaps(mute)
         {
             self.mute_key = None;
         }
         for earlier in [&self.push_to_talk_key, &self.mute_key] {
             if let (Some(earlier), Some(deafen)) = (earlier, &self.deafen_key)
-                && earlier.same_key(deafen)
+                && earlier.overlaps(deafen)
             {
                 self.deafen_key = None;
             }
@@ -248,6 +321,8 @@ pub struct Store {
     people: Vec<(String, VoicePersonPrefs)>,
     /// Grows with every change the backup carries (`VoiceState.backup_rev`).
     revision: u32,
+    /// Discord's keys were offered once already (or there were none).
+    discord_asked: bool,
 }
 
 impl Store {
@@ -270,11 +345,13 @@ impl Store {
                     .collect()
             })
             .unwrap_or_default();
+        let discord_asked = folder.join(DISCORD_FILE).is_file();
         Self {
             folder,
             settings,
             people,
             revision: 0,
+            discord_asked,
         }
     }
 
@@ -285,6 +362,20 @@ impl Store {
             settings: VoiceSettings::default(),
             people: Vec::new(),
             revision: 0,
+            discord_asked: false,
+        }
+    }
+
+    /// Discord's keys were offered once already, or there were none to offer.
+    pub fn discord_asked(&self) -> bool {
+        self.discord_asked
+    }
+
+    /// Never offer Discord's keys again on this computer.
+    pub fn set_discord_asked(&mut self) {
+        if !self.discord_asked {
+            self.discord_asked = true;
+            self.write(DISCORD_FILE, b"1");
         }
     }
 
@@ -432,10 +523,7 @@ mod tests {
     use super::*;
 
     fn key(code: &str) -> VoiceKey {
-        VoiceKey::Keyboard {
-            code: code.into(),
-            label: code.into(),
-        }
+        VoiceKey::keyboard(code, code)
     }
 
     #[test]
@@ -455,9 +543,7 @@ mod tests {
             mode: VoiceTalkMode::PushToTalk,
             push_to_talk_key: Some(key("KeyB")),
             mute_key: Some(key("KeyB")),
-            deafen_key: Some(VoiceKey::Mouse {
-                button: VoiceMouseButton::Back,
-            }),
+            deafen_key: Some(VoiceKey::mouse(VoiceMouseButton::Back)),
             sensitivity: Some(250),
             mic_volume: 900,
             ..VoiceSettings::default()
@@ -490,18 +576,68 @@ mod tests {
                 json!({"kind":"keyboard","code":"CapsLock","label":"Caps Lock"})
             )
             .unwrap(),
-            VoiceKey::Keyboard {
-                code: "CapsLock".into(),
-                label: "Caps Lock".into()
-            }
+            VoiceKey::keyboard("CapsLock", "Caps Lock")
         );
         assert_eq!(
-            serde_json::to_value(VoiceKey::Mouse {
-                button: VoiceMouseButton::Forward
-            })
-            .unwrap(),
-            json!({"kind":"mouse","button":"forward"})
+            serde_json::to_value(VoiceKey::mouse(VoiceMouseButton::Forward)).unwrap(),
+            json!({"kind":"mouse","button":"forward","mods":[]})
         );
+        // A file from before combinations reads as a single key.
+        assert_eq!(
+            serde_json::from_value::<VoiceKey>(json!({"kind":"mouse","button":"back"})).unwrap(),
+            VoiceKey::mouse(VoiceMouseButton::Back)
+        );
+        // A combination writes its modifiers in one order, each once.
+        let combo = VoiceKey::keyboard("KeyM", "M").with_mods(&[
+            VoiceModifier::Shift,
+            VoiceModifier::Ctrl,
+            VoiceModifier::Shift,
+        ]);
+        assert_eq!(combo.mods(), [VoiceModifier::Ctrl, VoiceModifier::Shift]);
+        let written = serde_json::to_value(&combo).unwrap();
+        assert_eq!(
+            written,
+            json!({"kind":"keyboard","code":"KeyM","label":"M","mods":["ctrl","shift"]})
+        );
+        assert_eq!(serde_json::from_value::<VoiceKey>(written).unwrap(), combo);
+    }
+
+    #[test]
+    fn combinations_share_a_key_only_when_they_differ() {
+        let ctrl_m = key("KeyM").with_mods(&[VoiceModifier::Ctrl]);
+        let ctrl_shift_m = key("KeyM").with_mods(&[VoiceModifier::Ctrl, VoiceModifier::Shift]);
+        // A single key fires whatever is held: it overlaps every combination on it.
+        assert!(key("KeyM").overlaps(&ctrl_m));
+        assert!(ctrl_m.overlaps(&ctrl_m.clone()));
+        assert!(!ctrl_m.overlaps(&ctrl_shift_m));
+        assert!(!ctrl_m.overlaps(&key("KeyN").with_mods(&[VoiceModifier::Ctrl])));
+        let kept = VoiceSettings {
+            mute_key: Some(ctrl_m.clone()),
+            deafen_key: Some(ctrl_shift_m.clone()),
+            ..VoiceSettings::default()
+        }
+        .normalized();
+        assert_eq!(kept.mute_key.as_ref(), Some(&ctrl_m));
+        assert_eq!(kept.deafen_key.as_ref(), Some(&ctrl_shift_m));
+        // The same combination twice stays with the first; push-to-talk is a single key.
+        let shared = VoiceSettings {
+            mode: VoiceTalkMode::PushToTalk,
+            push_to_talk_key: Some(key("KeyB").with_mods(&[VoiceModifier::Alt])),
+            mute_key: Some(ctrl_m.clone()),
+            deafen_key: Some(ctrl_m.clone()),
+            ..VoiceSettings::default()
+        }
+        .normalized();
+        assert_eq!(shared.push_to_talk_key, Some(key("KeyB")));
+        assert_eq!(shared.mute_key, Some(ctrl_m));
+        assert_eq!(shared.deafen_key, None);
+        // A combination whose key is itself a modifier is dropped.
+        let odd = VoiceSettings {
+            mute_key: Some(key("ShiftLeft").with_mods(&[VoiceModifier::Ctrl])),
+            ..VoiceSettings::default()
+        }
+        .normalized();
+        assert_eq!(odd.mute_key, None);
     }
 
     #[test]
@@ -586,16 +722,39 @@ mod tests {
                 prefs.muted = true;
             });
         }
+        let both = [
+            VoiceModifier::Ctrl,
+            VoiceModifier::Shift,
+            VoiceModifier::Alt,
+        ];
         store.set_settings(VoiceSettings {
             mode: VoiceTalkMode::PushToTalk,
             push_to_talk_key: Some(key("CapsLock")),
-            mute_key: Some(key("KeyM")),
-            deafen_key: Some(key("KeyN")),
+            mute_key: Some(key("KeyM").with_mods(&both)),
+            deafen_key: Some(VoiceKey::mouse(VoiceMouseButton::Forward).with_mods(&both)),
             sensitivity: Some(40),
             ..VoiceSettings::default()
         });
         let bytes = serde_json::to_vec(&store.backup()).unwrap().len();
         assert!(bytes < 4_000, "{bytes} bytes");
+    }
+
+    #[test]
+    fn discord_is_offered_once_per_computer() {
+        let root = tempfile::tempdir().unwrap();
+        let mut store = Store::open(root.path());
+        assert!(!store.discord_asked());
+        let revision = store.revision();
+        store.set_discord_asked();
+        assert!(store.discord_asked());
+        // Not a backup change: it stays on this computer.
+        assert_eq!(store.revision(), revision);
+        assert!(Store::open(root.path()).discord_asked());
+        assert!(
+            !serde_json::to_string(&store.backup())
+                .unwrap()
+                .contains("discord")
+        );
     }
 
     #[test]

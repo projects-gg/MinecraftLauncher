@@ -20,17 +20,21 @@
 //!   (the noise suppressor), the main page's policy stays; [`lifecycle`]: the window opens on
 //!   joining a room, closes a minute after leaving, comes back after a crash (a few times);
 //! - [`gain`]: a person's volume, whose top depends on how the page plays people;
+//! - [`discord`]: Discord's own push-to-talk, mute and deafen keys on this computer, offered once
+//!   as the player first opens voice chat (read with [`leveldb`], nothing leaves the computer);
 //! - [`probe`]: VOICE-0's measurement run (debug builds).
 //!
 //! Tickets, SDP, TURN credentials and session tokens never reach a log line.
 
 pub mod csp;
+pub mod discord;
 pub mod engine;
 pub mod gain;
 pub mod guard;
 pub mod idle;
 pub mod input;
 pub mod keys;
+pub mod leveldb;
 pub mod lifecycle;
 pub mod machine;
 pub mod manager;

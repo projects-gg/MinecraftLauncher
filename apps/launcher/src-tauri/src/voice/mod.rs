@@ -16,7 +16,7 @@
 //! While a game's mod shows voice chat, its cards stand in for the Windows notifications of rings,
 //! removals and a moderator's mute, as its toasts do for messages.
 
-mod input;
+pub(crate) mod input;
 mod probe;
 mod window;
 
@@ -659,7 +659,8 @@ impl Platform for AppPlatform {
                         .collect::<Vec<_>>()
                         .join(", ")
                 });
-                (label, room.me.mute)
+                // Deafened, the microphone is off too ("Mikrofonu aç" opens it and ends deafness).
+                (label, room.me.mute || room.me.deaf)
             });
             let changed = {
                 let mut last = lock(&self.tray);

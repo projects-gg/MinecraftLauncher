@@ -348,6 +348,11 @@ impl Machine {
         &self.store
     }
 
+    /// The store, for what changes no state the page or the room sees (Discord's one question).
+    pub fn store_mut(&mut self) -> &mut Store {
+        &mut self.store
+    }
+
     pub fn in_room(&self) -> bool {
         self.stay.is_some()
     }
@@ -1478,8 +1483,10 @@ impl Machine {
                 }
                 self.talk_with(!change.down, &mut out);
             }
+            // Deafened, the microphone shows as off: the mute key opens it and ends deafness
+            // (Discord's way; flipping `mute` alone would change nothing the player can see).
             VoiceShortcut::Mute if change.down => {
-                out.extend(self.set_mute(!self.mute));
+                out.extend(self.set_mute(!(self.mute || self.deaf)));
                 self.tick_sound(&mut out);
             }
             VoiceShortcut::Deafen if change.down => {

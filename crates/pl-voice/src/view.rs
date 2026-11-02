@@ -561,6 +561,9 @@ pub enum VoiceKeyClash {
     LanguageSwitch,
     /// Another voice shortcut has it already.
     Taken,
+    /// Mute or deafen on a key that writes (a letter, a digit, Space…) without Ctrl or Alt: it
+    /// fires while the player types too (VOICE-KEYS; never refused).
+    Typing,
 }
 
 /// The answer to `voice_check_key`.

@@ -5,7 +5,8 @@
 //! game). Only the chosen keys' states are kept: no other key is looked at, counted or stored.
 //!
 //! - [`Shortcuts`]: the product's watch (push-to-talk, mute, deafen), keys by scan code
-//!   ([`crate::keys`]);
+//!   ([`crate::keys`]); a combination ("Ctrl + Shift + M") asks which modifiers are held only when
+//!   its key goes down ([`Held`], the system's own key state: nothing is tracked or polled);
 //! - [`KeyWatch`]: VOICE-0's probe (one key by virtual-key code, debug builds).
 //!
 //! [`needs_input`] is the rule for whether anything is registered at all.
@@ -13,8 +14,30 @@
 use serde::{Deserialize, Serialize};
 
 use crate::keys::{E0, ScanCode, scan_code};
-use crate::settings::{VoiceKey, VoiceMouseButton};
+use crate::settings::{VoiceKey, VoiceModifier, VoiceMouseButton};
 use crate::view::VoiceShortcut;
+
+/// The modifier keys held at the moment a combination's key went down (left and right alike).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Held {
+    pub ctrl: bool,
+    pub shift: bool,
+    /// Left Alt.
+    pub alt: bool,
+    /// Right Alt: AltGr on most layouts (Windows adds a Left Ctrl to it), so the player is typing
+    /// a character ("@" on a Turkish Q): no combination fires.
+    pub alt_gr: bool,
+}
+
+impl Held {
+    /// Exactly `mods` are held (Ctrl+M does not fire on Ctrl+Shift+M).
+    fn exactly(self, mods: &[VoiceModifier]) -> bool {
+        !self.alt_gr
+            && self.ctrl == mods.contains(&VoiceModifier::Ctrl)
+            && self.shift == mods.contains(&VoiceModifier::Shift)
+            && self.alt == mods.contains(&VoiceModifier::Alt)
+    }
+}
 
 /// Raw Input is registered only while the player is in a room (or joining one) and at least one
 /// shortcut needs watching: without a call no input is ever looked at.
@@ -33,7 +56,7 @@ impl Watched {
     fn of(key: &VoiceKey) -> Option<Self> {
         match key {
             VoiceKey::Keyboard { code, .. } => scan_code(code).map(Self::Scan),
-            VoiceKey::Mouse { button } => Some(match button {
+            VoiceKey::Mouse { button, .. } => Some(match button {
                 VoiceMouseButton::Middle => Self::Mouse {
                     down: MIDDLE_DOWN,
                     up: MIDDLE_UP,
@@ -58,10 +81,20 @@ pub struct KeyChange {
     pub down: bool,
 }
 
+/// One watched shortcut: its key, the modifiers it wants (none: fires whatever is held) and
+/// whether it is down now.
+#[derive(Debug, Clone)]
+struct Entry {
+    shortcut: VoiceShortcut,
+    watched: Watched,
+    mods: Vec<VoiceModifier>,
+    down: bool,
+}
+
 /// The shortcuts' keys and their states.
 #[derive(Debug, Clone, Default)]
 pub struct Shortcuts {
-    keys: Vec<(VoiceShortcut, Watched, bool)>,
+    keys: Vec<Entry>,
 }
 
 impl Shortcuts {
@@ -70,7 +103,14 @@ impl Shortcuts {
         Self {
             keys: keys
                 .iter()
-                .filter_map(|(shortcut, key)| Watched::of(key).map(|w| (*shortcut, w, false)))
+                .filter_map(|(shortcut, key)| {
+                    Watched::of(key).map(|watched| Entry {
+                        shortcut: *shortcut,
+                        watched,
+                        mods: key.mods().to_vec(),
+                        down: false,
+                    })
+                })
                 .collect(),
         }
     }
@@ -87,44 +127,44 @@ impl Shortcuts {
     pub fn wants_mouse(&self) -> bool {
         self.keys
             .iter()
-            .any(|(_, watched, _)| matches!(watched, Watched::Mouse { .. }))
+            .any(|entry| matches!(entry.watched, Watched::Mouse { .. }))
     }
 
     /// A keyboard report: its make code and flags (`RI_KEY_BREAK` 1, `RI_KEY_E0` 2). Held keys'
-    /// repeats change nothing.
-    pub fn keyboard(&mut self, make: u16, flags: u16) -> Vec<KeyChange> {
-        let code = ScanCode {
+    /// repeats change nothing. `held` is asked at most once, only when a combination's key goes
+    /// down.
+    pub fn keyboard(
+        &mut self,
+        make: u16,
+        flags: u16,
+        held: impl FnOnce() -> Held,
+    ) -> Vec<KeyChange> {
+        let code = Watched::Scan(ScanCode {
             make,
             extended: flags & E0 != 0,
-        };
+        });
         let down = flags & 1 == 0;
+        let mut held = Lazy::new(held);
         let mut changes = Vec::new();
-        for (shortcut, watched, state) in &mut self.keys {
-            if *watched == Watched::Scan(code) && *state != down {
-                *state = down;
-                changes.push(KeyChange {
-                    shortcut: *shortcut,
-                    down,
-                });
+        for entry in &mut self.keys {
+            if entry.watched == code {
+                entry.press(down, &mut held, &mut changes);
             }
         }
         changes
     }
 
     /// A mouse report's button flags; a press and its release may come in one report.
-    pub fn mouse(&mut self, flags: u16) -> Vec<KeyChange> {
+    pub fn mouse(&mut self, flags: u16, held: impl FnOnce() -> Held) -> Vec<KeyChange> {
+        let mut held = Lazy::new(held);
         let mut changes = Vec::new();
-        for (shortcut, watched, state) in &mut self.keys {
-            let Watched::Mouse { down, up } = *watched else {
+        for entry in &mut self.keys {
+            let Watched::Mouse { down, up } = entry.watched else {
                 continue;
             };
             for (bit, pressed) in [(down, true), (up, false)] {
-                if flags & bit != 0 && *state != pressed {
-                    *state = pressed;
-                    changes.push(KeyChange {
-                        shortcut: *shortcut,
-                        down: pressed,
-                    });
+                if flags & bit != 0 {
+                    entry.press(pressed, &mut held, &mut changes);
                 }
             }
         }
@@ -134,16 +174,61 @@ impl Shortcuts {
     /// Every held key let go (the watch stops, or the window lost its input): ups for the held.
     pub fn release_all(&mut self) -> Vec<KeyChange> {
         let mut changes = Vec::new();
-        for (shortcut, _, state) in &mut self.keys {
-            if *state {
-                *state = false;
+        for entry in &mut self.keys {
+            if entry.down {
+                entry.down = false;
                 changes.push(KeyChange {
-                    shortcut: *shortcut,
+                    shortcut: entry.shortcut,
                     down: false,
                 });
             }
         }
         changes
+    }
+}
+
+impl Entry {
+    /// Its key went down or up. A combination goes down only with exactly its modifiers held; it
+    /// comes up with its key (a modifier let go first changes nothing).
+    fn press(
+        &mut self,
+        down: bool,
+        held: &mut Lazy<impl FnOnce() -> Held>,
+        changes: &mut Vec<KeyChange>,
+    ) {
+        if self.down == down {
+            return;
+        }
+        if down && !self.mods.is_empty() && !held.get().exactly(&self.mods) {
+            return;
+        }
+        self.down = down;
+        changes.push(KeyChange {
+            shortcut: self.shortcut,
+            down,
+        });
+    }
+}
+
+/// [`Held`] asked once, the first time it is needed.
+struct Lazy<F> {
+    ask: Option<F>,
+    known: Held,
+}
+
+impl<F: FnOnce() -> Held> Lazy<F> {
+    fn new(ask: F) -> Self {
+        Self {
+            ask: Some(ask),
+            known: Held::default(),
+        }
+    }
+
+    fn get(&mut self) -> Held {
+        if let Some(ask) = self.ask.take() {
+            self.known = ask();
+        }
+        self.known
     }
 }
 
@@ -270,10 +355,12 @@ mod tests {
     }
 
     fn keyboard(code: &str) -> VoiceKey {
-        VoiceKey::Keyboard {
-            code: code.into(),
-            label: String::new(),
-        }
+        VoiceKey::keyboard(code, "")
+    }
+
+    /// Nothing else held.
+    fn free() -> Held {
+        Held::default()
     }
 
     #[test]
@@ -297,25 +384,26 @@ mod tests {
         assert_eq!(keys.len(), 2);
         assert!(!keys.wants_mouse());
         // Left Ctrl (no E0) is not Right Ctrl.
-        assert!(keys.keyboard(0x1D, 0).is_empty());
+        assert!(keys.keyboard(0x1D, 0, free).is_empty());
         assert_eq!(
-            keys.keyboard(0x1D, E0),
+            keys.keyboard(0x1D, E0, free),
             vec![KeyChange {
                 shortcut: VoiceShortcut::PushToTalk,
                 down: true
             }]
         );
         // Repeats while held.
-        assert!(keys.keyboard(0x1D, E0).is_empty());
+        assert!(keys.keyboard(0x1D, E0, free).is_empty());
+        // A single key fires whatever is held (Ctrl here), and nobody asks what is.
         assert_eq!(
-            keys.keyboard(0x32, 0),
+            keys.keyboard(0x32, 0, || unreachable!("a single key never asks")),
             vec![KeyChange {
                 shortcut: VoiceShortcut::Mute,
                 down: true
             }]
         );
         assert_eq!(
-            keys.keyboard(0x1D, E0 | 1),
+            keys.keyboard(0x1D, E0 | 1, free),
             vec![KeyChange {
                 shortcut: VoiceShortcut::PushToTalk,
                 down: false
@@ -335,17 +423,91 @@ mod tests {
     fn mouse_shortcuts() {
         let mut keys = Shortcuts::new(&[(
             VoiceShortcut::PushToTalk,
-            VoiceKey::Mouse {
-                button: VoiceMouseButton::Back,
-            },
+            VoiceKey::mouse(VoiceMouseButton::Back),
         )]);
         assert!(keys.wants_mouse());
-        assert!(keys.mouse(X2_DOWN).is_empty());
-        assert!(keys.keyboard(0x2F, 0).is_empty());
+        assert!(keys.mouse(X2_DOWN, free).is_empty());
+        assert!(keys.keyboard(0x2F, 0, free).is_empty());
         // A very short click: down and up in one report.
-        let both = keys.mouse(X1_DOWN | X1_UP);
+        let both = keys.mouse(X1_DOWN | X1_UP, free);
         assert_eq!(both.len(), 2);
         assert!(both[0].down && !both[1].down);
+    }
+
+    #[test]
+    fn a_combination_fires_with_exactly_its_modifiers() {
+        use VoiceModifier::{Ctrl, Shift};
+        const M: u16 = 0x32;
+        let mut keys = Shortcuts::new(&[
+            (VoiceShortcut::Mute, keyboard("KeyM").with_mods(&[Ctrl])),
+            (
+                VoiceShortcut::Deafen,
+                keyboard("KeyM").with_mods(&[Ctrl, Shift]),
+            ),
+        ]);
+        let ctrl = || Held {
+            ctrl: true,
+            ..Held::default()
+        };
+        let ctrl_shift = || Held {
+            ctrl: true,
+            shift: true,
+            ..Held::default()
+        };
+        // M alone, or typing a capital M: nothing.
+        assert!(keys.keyboard(M, 0, free).is_empty());
+        assert!(keys.keyboard(M, 1, free).is_empty());
+        assert!(
+            keys.keyboard(M, 0, || Held {
+                shift: true,
+                ..Held::default()
+            })
+            .is_empty()
+        );
+        keys.keyboard(M, 1, free);
+        // Ctrl + M: mute only; its repeats and its release as one would expect.
+        let down = keys.keyboard(M, 0, ctrl);
+        assert_eq!(
+            down,
+            vec![KeyChange {
+                shortcut: VoiceShortcut::Mute,
+                down: true
+            }]
+        );
+        assert!(keys.keyboard(M, 0, ctrl).is_empty());
+        // Ctrl let go before M: M's release still lets the shortcut go.
+        assert_eq!(
+            keys.keyboard(M, 1, free),
+            vec![KeyChange {
+                shortcut: VoiceShortcut::Mute,
+                down: false
+            }]
+        );
+        // Ctrl + Shift + M: deafen only.
+        assert_eq!(
+            keys.keyboard(M, 0, ctrl_shift),
+            vec![KeyChange {
+                shortcut: VoiceShortcut::Deafen,
+                down: true
+            }]
+        );
+        keys.keyboard(M, 1, free);
+        // AltGr (a Left Ctrl Windows adds to Right Alt) types a character: nothing fires.
+        assert!(
+            keys.keyboard(M, 0, || Held {
+                ctrl: true,
+                alt_gr: true,
+                ..Held::default()
+            })
+            .is_empty()
+        );
+        // A mouse button with Ctrl.
+        let mut mouse = Shortcuts::new(&[(
+            VoiceShortcut::Mute,
+            VoiceKey::mouse(VoiceMouseButton::Forward).with_mods(&[Ctrl]),
+        )]);
+        assert!(mouse.mouse(X2_DOWN | X2_UP, free).is_empty());
+        assert_eq!(mouse.mouse(X2_DOWN | X2_UP, ctrl).len(), 2);
     }
 
     #[test]
