@@ -181,8 +181,8 @@ export const enTeams: typeof trTeams = {
   roster: {
     title: "Members",
     projects: "On Projects",
-    playing: "In game",
-    launcher: "In the launcher",
+    playing: "Playing now",
+    launcher: "Online now",
     offline: "Offline",
   },
   call: {
