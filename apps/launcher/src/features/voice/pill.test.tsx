@@ -42,7 +42,8 @@ afterEach(() => {
   useVoiceUi.setState({ state: HIDDEN_VOICE_STATE, ended: null, speaking: [], meTalking: false });
 });
 
-const scenario = (name: string): VoiceState => createVoiceMock({ scenario: name, timers: false }).current();
+const scenario = (name: string): VoiceState =>
+  createVoiceMock({ scenario: name, timers: false }).current();
 
 function show(state: VoiceState) {
   act(() => useVoiceUi.getState().setState(state));

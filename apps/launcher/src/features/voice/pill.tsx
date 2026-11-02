@@ -7,7 +7,6 @@
 // The pill glides to its new width (transform, on the drawer's spring; Performance mode: in place);
 // words that change cross-fade in place. Nothing moves while nothing changes.
 import {
-  CellSignalLow,
   Headset,
   Microphone,
   MicrophoneSlash,
@@ -20,7 +19,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enter, leave, swap } from "@/features/social/motion";
 import { callFriend, leaveRoom, retryRoom, toggleMute } from "./actions";
-import { SpeakingFace } from "./faces";
+import { QualityBars, SpeakingFace } from "./faces";
 import { pillPeople, roomTitle } from "./rules";
 import { useFace, useFaces, useVoiceUi, voiceOn } from "./store";
 
@@ -234,12 +233,9 @@ function Pill() {
         </span>
         {weak ? (
           <Tooltip content={t("voice.room.weak")}>
-            <CellSignalLow
-              size={14}
-              weight="bold"
-              aria-hidden
-              className={cn("shrink-0", quality === "bad" ? "text-flare-400" : "text-gold-300")}
-            />
+            <span className="flex shrink-0">
+              <QualityBars quality={quality} />
+            </span>
           </Tooltip>
         ) : null}
       </motion.button>

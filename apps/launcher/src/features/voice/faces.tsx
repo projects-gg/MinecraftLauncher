@@ -2,10 +2,23 @@
 // around it that fades in while they speak and out after (opacity only, never moving, nothing at
 // all while nobody speaks; the store holds no speaker while the window is away). Round inside a
 // pill, the list's rounded square elsewhere (design.md §4, "round inside round").
-import { cn } from "@pl/ui";
+import { cn, SignalBars } from "@pl/ui";
 import { SocialFace } from "@/features/social/social-face";
+import type { VoiceQuality } from "@/lib/api/voice-types";
 import type { VoiceFace } from "./rules";
 import { useSpeaking } from "./store";
+
+/**
+ * A connection that is not good, in the launcher's own connection look (design.md §6, the server
+ * bars): weak four amber bars, bad two red; nothing while it is good. Still: the bars' fill plays
+ * only when a server answers, never here.
+ */
+export function QualityBars({ quality, className }: { quality: VoiceQuality; className?: string }) {
+  if (quality === "good") return null;
+  return (
+    <SignalBars state="online" latencyMs={quality === "weak" ? 200 : 700} className={className} />
+  );
+}
 
 export function SpeakingFace({
   face,

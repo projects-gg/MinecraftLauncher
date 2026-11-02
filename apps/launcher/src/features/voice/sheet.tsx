@@ -8,8 +8,8 @@
 // "Sağırlaştır" and "Ayrıl", and for the leader "Odayı kapat" with its one sentence. "Davet et"
 // slides in over the room as the friends panel's pages do.
 import {
+  ArrowsClockwise,
   CaretLeft,
-  CellSignalLow,
   GearSix,
   Microphone,
   MicrophoneSlash,
@@ -45,7 +45,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
-import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enter, glide, leave, pageVariants, rise } from "@/features/social/motion";
 import { usePersonItems } from "@/features/social/person-menu";
@@ -64,23 +64,28 @@ import {
   toggleDeaf,
   toggleMute,
 } from "./actions";
-import { SpeakingFace } from "./faces";
-import { crewRoomName, invitables, roleWord, roomFull, roomTitle, type VoiceFace } from "./rules";
+import { QualityBars, SpeakingFace } from "./faces";
+import {
+  crewRoomName,
+  invitables,
+  presenceOf,
+  roleWord,
+  roomFull,
+  roomTitle,
+  type VoiceFace,
+} from "./rules";
 import { useFace, useFaces, useVoiceUi } from "./store";
 
 // --- marks beside a person --------------------------------------------------------------------
 
+/** A state beside a person: its words (tooltip, the row's name) and how it is drawn. */
 interface Mark {
   key: string;
-  Icon: ComponentType<{
-    size?: number;
-    weight?: "bold";
-    className?: string;
-    "aria-hidden"?: boolean;
-  }>;
   label: string;
-  tone: "ash" | "gold" | "flare";
+  look: ReactNode;
 }
+
+const markIcon = "size-[15px]";
 
 function marksOf(
   p: Pick<VoicePerson, "mute" | "deaf" | "mutedByModerator" | "quality"> & { mutedForMe?: boolean },
@@ -90,34 +95,35 @@ function marksOf(
   if (p.mutedByModerator) {
     marks.push({
       key: "sm",
-      Icon: MicrophoneSlash,
       label: t("voice.person.mutedForAll"),
-      tone: "flare",
+      look: <MicrophoneSlash weight="bold" className={cn(markIcon, "text-flare-400")} />,
     });
   } else if (p.mute) {
     marks.push({
       key: "mute",
-      Icon: MicrophoneSlash,
       label: t("voice.person.micOff"),
-      tone: "ash",
+      look: <MicrophoneSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
     });
   }
-  if (p.deaf)
-    marks.push({ key: "deaf", Icon: SpeakerSlash, label: t("voice.person.deafened"), tone: "ash" });
+  if (p.deaf) {
+    marks.push({
+      key: "deaf",
+      label: t("voice.person.deafened"),
+      look: <SpeakerSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
+    });
+  }
   if (p.mutedForMe) {
     marks.push({
       key: "me",
-      Icon: SpeakerSimpleSlash,
       label: t("voice.person.mutedForMe"),
-      tone: "ash",
+      look: <SpeakerSimpleSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
     });
   }
   if (p.quality !== "good") {
     marks.push({
       key: "q",
-      Icon: CellSignalLow,
       label: t("voice.person.weak"),
-      tone: p.quality === "bad" ? "flare" : "gold",
+      look: <QualityBars quality={p.quality} />,
     });
   }
   return marks;
@@ -126,19 +132,10 @@ function marksOf(
 function Marks({ marks }: { marks: Mark[] }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5">
-      {marks.map(({ key, Icon, label, tone }) => (
+      {marks.map(({ key, label, look }) => (
         <Tooltip key={key} content={label}>
-          <span className="flex">
-            <Icon
-              size={15}
-              weight="bold"
-              aria-hidden
-              className={cn(
-                tone === "ash" && "text-ash-400",
-                tone === "gold" && "text-gold-300",
-                tone === "flare" && "text-flare-400",
-              )}
-            />
+          <span aria-hidden className="flex">
+            {look}
           </span>
         </Tooltip>
       ))}
@@ -298,7 +295,7 @@ function Notices({ room }: { room: VoiceRoomView }) {
   if (room.phase === "joining" || room.phase === "reconnecting") {
     notices.push({
       key: "connection",
-      icon: <CellSignalLow size={16} weight="bold" className="text-gold-300" />,
+      icon: <ArrowsClockwise size={16} weight="bold" className="text-gold-300" />,
       text: room.phase === "joining" ? t("voice.room.joining") : t("voice.room.reconnecting"),
     });
   }
@@ -350,10 +347,20 @@ function Notices({ room }: { room: VoiceRoomView }) {
 
 // --- the header -------------------------------------------------------------------------------
 
-function RoomName({ room, title }: { room: VoiceRoomView; title: string }) {
+function RoomName({
+  room,
+  title,
+  editing,
+  setEditing,
+}: {
+  room: VoiceRoomView;
+  title: string;
+  /** The header gives the field its room while the name is typed. */
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
+}) {
   const { t } = useTranslation();
   const { reduce } = useMotionPrefs();
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -369,11 +376,11 @@ function RoomName({ room, title }: { room: VoiceRoomView; title: string }) {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [editing]);
+  }, [editing, setEditing]);
   // Rights taken away while typing (the leader left) close the field.
   useEffect(() => {
     if (!room.canRename) setEditing(false);
-  }, [room.canRename]);
+  }, [room.canRename, setEditing]);
 
   const save = async () => {
     setBusy(true);
@@ -511,39 +518,45 @@ function RoomHeader({ room, title }: { room: VoiceRoomView; title: string }) {
   const close = useVoiceUi((s) => s.closePanel);
   const navigate = useNavigate();
   const crew = useSocialUi((s) => s.view.crews.find((c) => c.id === room.crew));
+  // While the name is typed, the field takes the header's room ("Davet et" and the settings wait).
+  const [editing, setEditing] = useState(false);
   const full = roomFull(room);
   const count = room.people.length + 1;
   return (
     <header className="shrink-0 border-b border-white/8 pt-4 pr-3 pb-3 pl-5">
       <div className="flex items-start gap-1.5">
         <div className="min-w-0 flex-1 pt-0.5">
-          <RoomName room={room} title={title} />
+          <RoomName room={room} title={title} editing={editing} setEditing={setEditing} />
           <p className="mt-0.5 truncate text-[12.5px] text-ash-400">
             {room.kind === "crew" && crew
               ? t("voice.room.crewOf", { crew: crew.name })
               : t("voice.room.count", { count })}
           </p>
         </div>
-        <Tooltip content={t("voice.refused.roomFull")} disabled={!full}>
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<UserPlus size={15} />}
-            aria-disabled={full || undefined}
-            onClick={full ? undefined : () => goTo("invite")}
-            className={cn("mt-0.5", full && "opacity-45")}
-          >
-            {t("voice.room.invite")}
-          </Button>
-        </Tooltip>
-        <IconButton
-          label={t("voice.room.settings")}
-          icon={<GearSix size={18} />}
-          onClick={() => {
-            close();
-            void navigate({ to: "/settings", search: { section: "voice" } });
-          }}
-        />
+        {editing ? null : (
+          <>
+            <Tooltip content={t("voice.refused.roomFull")} disabled={!full}>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<UserPlus size={15} />}
+                aria-disabled={full || undefined}
+                onClick={full ? undefined : () => goTo("invite")}
+                className={cn("mt-0.5", full && "opacity-45")}
+              >
+                {t("voice.room.invite")}
+              </Button>
+            </Tooltip>
+            <IconButton
+              label={t("voice.room.settings")}
+              icon={<GearSix size={18} />}
+              onClick={() => {
+                close();
+                void navigate({ to: "/settings", search: { section: "voice" } });
+              }}
+            />
+          </>
+        )}
         <Dialog.Close asChild>
           <IconButton label={t("common.close")} icon={<X size={18} />} />
         </Dialog.Close>
@@ -587,13 +600,11 @@ function CloseRoom() {
           </motion.div>
         ) : (
           <motion.div key="idle" className="flex h-8 justify-center" {...rise(reduce, 4, 0.2)}>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-flare-400"
-              onClick={() => setAsking(true)}
-            >
-              {t("voice.room.close")}
+            <Button size="sm" variant="ghost" onClick={() => setAsking(true)}>
+              {/* The words carry the flare (a ghost button colours its own label). */}
+              <span className="text-flare-400 transition-colors group-hover:text-flare-300">
+                {t("voice.room.close")}
+              </span>
             </Button>
           </motion.div>
         )}
@@ -689,7 +700,8 @@ function RoomPage({ room }: { room: VoiceRoomView }) {
 
 function InviteRow({ person, full }: { person: VoiceFace & { ringing: boolean }; full: boolean }) {
   const { t } = useTranslation();
-  const presence = useVoiceUi((s) => s.state.presence?.[person.id]);
+  const friends = useSocialUi((s) => s.view.friends);
+  const presence = useVoiceUi((s) => presenceOf(person.id, s.state, friends));
   return (
     <li className="flex items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-1 pl-2 transition-colors duration-150 hover:bg-white/[0.045]">
       <SocialFace

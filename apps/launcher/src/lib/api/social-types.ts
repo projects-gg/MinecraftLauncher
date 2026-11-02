@@ -153,6 +153,11 @@ export interface Friend extends SocialProfile {
   discordUrl: string;
   /** The crew tag they wear (TEAM6); none while they wear none. */
   badge?: CrewBadge;
+  /**
+   * VOICE (`presence.voice`, VOICE-L1's `FriendView.voice`): they may be called (`ready`) or are in
+   * a room (`in`); absent: they cannot be called (voice chat off, invisible, an older launcher).
+   */
+  voice?: "ready" | "in";
 }
 
 export interface FriendRequest extends SocialProfile {

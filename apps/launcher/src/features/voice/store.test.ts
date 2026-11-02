@@ -39,7 +39,9 @@ describe("the voice store", () => {
     useVoiceUi.getState().setEnded({ kind: "noAnswer", friend: "302" });
     useVoiceUi.getState().setState(createVoiceMock({ scenario: "ready", timers: false }).current());
     expect(useVoiceUi.getState().ended).not.toBeNull();
-    useVoiceUi.getState().setState(createVoiceMock({ scenario: "calling", timers: false }).current());
+    useVoiceUi
+      .getState()
+      .setState(createVoiceMock({ scenario: "calling", timers: false }).current());
     expect(useVoiceUi.getState().ended).toBeNull();
   });
 });

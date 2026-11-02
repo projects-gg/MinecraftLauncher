@@ -10,12 +10,13 @@ import { useTranslation } from "react-i18next";
 import { useSocialUi } from "@/features/social/store";
 import type { Friend } from "@/lib/api/social-types";
 import { answerRing, callFriend, inviteToRoom } from "./actions";
-import { callOffer } from "./rules";
+import { callOffer, presenceOf } from "./rules";
 import { useVoiceUi, voiceOn } from "./store";
 
 /** Whether the friend is in a voice room now (and voice chat shows at all). */
 export function useInVoice(friend: string): boolean {
-  return useVoiceUi((s) => voiceOn(s.state) && s.state.presence?.[friend] === "in");
+  const friends = useSocialUi((s) => s.view.friends);
+  return useVoiceUi((s) => voiceOn(s.state) && presenceOf(friend, s.state, friends) === "in");
 }
 
 /** The friend's missed call, if one waits. */
@@ -28,12 +29,14 @@ function useMissed(friend: string) {
 /** What the friend's card and menu offer (`callOffer`, with the player's crews). */
 export function useCallOffer(friend: string, isFriend = true) {
   const crews = useSocialUi((s) => s.view.crews);
+  const friends = useSocialUi((s) => s.view.friends);
   return useVoiceUi((s) =>
     callOffer(
       s.state,
       friend,
       isFriend,
       (id) => crews.find((c) => c.id === id)?.members.map((m) => m.id) ?? [],
+      friends,
     ),
   );
 }

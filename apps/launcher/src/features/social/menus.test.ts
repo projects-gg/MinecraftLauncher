@@ -706,7 +706,13 @@ describe("messageMenu", () => {
 });
 
 describe("personMenu: voice chat (VOICE)", () => {
-  const friend: PersonInput = { friend: true, blocked: false, chat: true, discord: true, report: true };
+  const friend: PersonInput = {
+    friend: true,
+    blocked: false,
+    chat: true,
+    discord: true,
+    report: true,
+  };
   const member = { mutedForMe: false, mutedByModerator: false, moderator: false };
   const none = { mute: false, kick: false, moveTo: false, moderator: false };
   const all = { mute: true, kick: true, moveTo: true, moderator: true };
@@ -727,9 +733,9 @@ describe("personMenu: voice chat (VOICE)", () => {
     expect(words(personMenu({ ...friend, voice: { offer: "full" } }))).toContain(
       "voiceInvite(off)",
     );
-    expect(
-      words(personMenu({ ...friend, blocked: true, voice: { offer: "call" } })),
-    ).not.toContain("voiceCall");
+    expect(words(personMenu({ ...friend, blocked: true, voice: { offer: "call" } }))).not.toContain(
+      "voiceCall",
+    );
   });
 
   it('leads with the volume and "Sustur (yalnız sen)" for someone in the room', () => {

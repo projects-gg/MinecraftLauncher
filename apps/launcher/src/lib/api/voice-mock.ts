@@ -590,7 +590,11 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
       return VOICE_OK;
     },
     async setMute(mute) {
-      updateRoom((room) => ({ ...room, me: { ...room.me, mute: mute || room.me.deaf } }));
+      // Opening the microphone brings the sound back too (the launcher's rule, VOICE-L1).
+      updateRoom((room) => ({
+        ...room,
+        me: { ...room.me, mute, deaf: mute ? room.me.deaf : false },
+      }));
     },
     async setDeaf(deaf) {
       // Deafening closes the microphone too; undeafening leaves it as it was before.

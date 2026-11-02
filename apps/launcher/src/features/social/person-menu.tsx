@@ -368,7 +368,9 @@ export function personItems(
   const inRoom = voiceRoom?.people.find((p) => p.id === person.id);
   const crewMembersOf = (id: string) =>
     view.crews.find((c) => c.id === id)?.members.map((m) => m.id) ?? [];
-  const offer = blocked ? null : callOffer(env.voice, person.id, Boolean(friend), crewMembersOf);
+  const offer = blocked
+    ? null
+    : callOffer(env.voice, person.id, Boolean(friend), crewMembersOf, view.friends);
   const full = personMenu({
     me: person.id === me,
     friend: Boolean(friend),

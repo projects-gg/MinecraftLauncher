@@ -142,23 +142,30 @@ function DeviceRow({
 }) {
   const { t } = useTranslation();
   // A device that is gone (unplugged) plays through the default: the select says so.
-  const shown = value && devices.some((d) => d.id === value) ? value : "";
+  const shown = value && devices.some((d) => d.id === value) ? value : SYSTEM_DEVICE;
   return (
     <Row title={title}>
       <div className="w-64">
         <Select<string>
           value={shown}
-          onValueChange={(id) => onChange(id || null)}
+          onValueChange={(id) => onChange(id === SYSTEM_DEVICE ? null : id)}
           label={title}
           options={[
-            { value: "", label: t("voice.settings.defaultDevice") },
-            ...devices.map((d) => ({ value: d.id, label: d.label })),
+            { value: SYSTEM_DEVICE, label: t("voice.settings.defaultDevice") },
+            // WebRTC lists the system's own "default" and "communications" too: the first row
+            // says that, so they stay out.
+            ...devices
+              .filter((d) => d.id && d.id !== "default" && d.id !== "communications")
+              .map((d) => ({ value: d.id, label: d.label })),
           ]}
         />
       </div>
     </Row>
   );
 }
+
+/** The select's value for "the system's default" (a select cannot hold an empty value). */
+const SYSTEM_DEVICE = "system-default";
 
 function KeyRow({
   title,

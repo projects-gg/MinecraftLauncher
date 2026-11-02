@@ -3,13 +3,14 @@
 // who "Davet et" lists, the words for a refusal or an ended stay, and a shortcut key's label.
 import { matchesQuery } from "@pl/ui";
 import type { TFunction } from "i18next";
-import type { SocialSnapshot } from "@/lib/api/social-types";
+import type { Friend, SocialSnapshot } from "@/lib/api/social-types";
 import type {
   VoiceAnswer,
   VoiceKey,
   VoiceKeyCheck,
   VoiceLeftReason,
   VoicePerson,
+  VoicePresence,
   VoiceRole,
   VoiceRoomView,
   VoiceState,
@@ -136,14 +137,27 @@ export function roleWord(role: VoiceRole, t: TFunction): string | null {
  */
 export type CallOffer = "call" | "invite" | "ringing" | "full";
 
+/**
+ * Someone's voice chat: the friend list's own (`Friend.voice`, from `presence.voice`), else what
+ * the voice state knows (crewmates; the preview); undefined: they cannot be called.
+ */
+export function presenceOf(
+  id: string,
+  state: Pick<VoiceState, "presence">,
+  friends: ReadonlyArray<Pick<Friend, "id" | "voice">>,
+): VoicePresence | undefined {
+  return friends.find((f) => f.id === id)?.voice ?? state.presence?.[id];
+}
+
 export function callOffer(
   state: Pick<VoiceState, "available" | "enabled" | "room" | "calling" | "presence">,
   id: string,
   friend: boolean,
   crewMembers: (crew: string) => readonly string[],
+  friends: ReadonlyArray<Pick<Friend, "id" | "voice">> = [],
 ): CallOffer | null {
   if (!state.available || !state.enabled) return null;
-  if (!state.presence?.[id]) return null;
+  if (!presenceOf(id, state, friends)) return null;
   if (state.calling?.friend === id) return "ringing";
   const room = state.room;
   if (!room) return friend ? "call" : null;
@@ -181,7 +195,7 @@ export function invitables(
   if (!room) return [];
   const inRoom = new Set([room.me.id, ...room.people.map((p) => p.id)]);
   const ringing = new Set(room.ringing.map((r) => r.to));
-  const may = (id: string) => !inRoom.has(id) && Boolean(state.presence?.[id]);
+  const may = (id: string) => !inRoom.has(id) && Boolean(presenceOf(id, state, lists.friends));
   let ids: string[];
   if (room.kind === "crew") {
     const crew = lists.crews.find((c) => c.id === room.crew);
@@ -294,6 +308,21 @@ export function clashText(check: VoiceKeyCheck, t: TFunction): string | null {
 export function snapVolume(value: number): number {
   const v = Math.max(0, Math.min(200, Math.round(value)));
   return Math.abs(v - 100) <= 4 ? 100 : v;
+}
+
+/**
+ * The tone the page plays now: the ring while a call rings for the player, else the ringback while
+ * the player's call rings at a friend; none with the window away (Windows' notification rings
+ * then, VOICE-L1) or voice chat off.
+ */
+export function toneNow(
+  state: Pick<VoiceState, "available" | "enabled" | "rings" | "calling">,
+  away: boolean,
+): "ring" | "ringback" | null {
+  if (away || !state.available || !state.enabled) return null;
+  if (state.rings.length) return "ring";
+  if (state.calling) return "ringback";
+  return null;
 }
 
 /** Who came into and who left the room between two states (for the screen reader). */

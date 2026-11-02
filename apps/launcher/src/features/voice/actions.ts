@@ -88,17 +88,13 @@ export function retryRoom(): Promise<boolean> {
 
 /**
  * "Mikrofonu kapat" / "Mikrofonu aç". Opening the microphone while deafened brings the sound back
- * too (Discord's rule: a deafened player who wants to speak wants to hear).
+ * too (Discord's rule; the launcher does it, VOICE-L1): one command either way.
  */
 export async function toggleMute(): Promise<void> {
   const current = room();
   if (!current) return;
   const { mute, deaf } = current.me;
-  if (mute && deaf) {
-    if (await run(() => voiceApi.setDeaf(false))) await run(() => voiceApi.setMute(false));
-    return;
-  }
-  await run(() => voiceApi.setMute(!mute));
+  await run(() => voiceApi.setMute(!(mute || deaf)));
 }
 
 /** "Sağırlaştır" / "Sağırlaştırmayı kaldır". */

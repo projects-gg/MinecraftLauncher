@@ -1,8 +1,8 @@
 // What voice chat (VOICE-L3) keeps mounted with the friends feature (SocialHost): the backend's state
 // (event driven: nothing asks on a timer), who speaks (only while the window is on screen: hidden
 // in the tray or minimized the page takes no speaking frames, so nothing renders), its notices as
-// toasts with voice.md §7.10's words, the ring cards, and the room panel. Screen readers hear who
-// came into or left the room (voice.md §5.1).
+// toasts with voice.md §7.10's words, the ring cards and their tone (the ringback while the player's
+// call rings), and the room panel. Screen readers hear who came into or left the room (§5.1).
 import { toast } from "@pl/ui";
 import { useEffect } from "react";
 import { announce } from "@/features/accounts/use-accounts";
@@ -11,8 +11,9 @@ import type { VoiceNotice, VoiceState } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
 import { isWindowAway, onWindowAwayChange } from "@/lib/window-away";
 import { openMicSettings } from "./actions";
+import { playTone } from "./ring-sound";
 import { dismissRingToast, showRingToast } from "./ring-toast";
-import { leftText, peopleChanges } from "./rules";
+import { leftText, peopleChanges, toneNow } from "./rules";
 import { RoomSheet } from "./sheet";
 import { faceNow, useVoiceUi } from "./store";
 
@@ -131,7 +132,24 @@ function useVoiceSync() {
   }, []);
 }
 
+function useVoiceTones() {
+  useEffect(() => {
+    const decide = () => playTone(toneNow(useVoiceUi.getState().state, isWindowAway()));
+    decide();
+    const stopStore = useVoiceUi.subscribe((now, before) => {
+      if (now.state !== before.state) decide();
+    });
+    const stopAway = onWindowAwayChange(decide);
+    return () => {
+      stopStore();
+      stopAway();
+      playTone(null);
+    };
+  }, []);
+}
+
 export function VoiceHost() {
   useVoiceSync();
+  useVoiceTones();
   return <RoomSheet />;
 }

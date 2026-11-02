@@ -18,10 +18,12 @@ import {
   leftText,
   namesLine,
   peopleChanges,
+  presenceOf,
   refusalText,
   roomFull,
   roomTitle,
   snapVolume,
+  toneNow,
 } from "./rules";
 
 const t = i18n.getFixedT("tr") as TFunction;
@@ -144,7 +146,9 @@ describe("room titles", () => {
 
   it("says the name, the crew's Genel in the player's words, or who is in it", () => {
     expect(roomTitle(room({ name: "Gece Ekibi" }), nameOf, t)).toBe("Gece Ekibi");
-    expect(roomTitle(room({ kind: "crew", name: "Genel", general: true }), nameOf, t)).toBe("Genel");
+    expect(roomTitle(room({ kind: "crew", name: "Genel", general: true }), nameOf, t)).toBe(
+      "Genel",
+    );
     expect(roomTitle(room({ people: [person("a"), person("b")] }), nameOf, t)).toBe(
       "Kaan_07, Ece_x",
     );
@@ -180,7 +184,12 @@ describe("what a card offers", () => {
     expect(callOffer(on({ room: room() }), "302", true, crewMembers)).toBe("invite");
     expect(callOffer(on({ room: room() }), "701", false, crewMembers)).toBeNull();
     expect(
-      callOffer(on({ room: room({ ringing: [{ to: "302", until: 0 }] }) }), "302", true, crewMembers),
+      callOffer(
+        on({ room: room({ ringing: [{ to: "302", until: 0 }] }) }),
+        "302",
+        true,
+        crewMembers,
+      ),
     ).toBe("ringing");
     expect(callOffer(on({ calling: { friend: "302", until: 0 } }), "302", true, crewMembers)).toBe(
       "ringing",
@@ -199,14 +208,18 @@ describe("what a card offers", () => {
   });
 
   it("counts the player and the invites still ringing in a room's places", () => {
-    expect(roomFull({ people: [person("a")], ringing: [{ to: "b", until: 0 }], max: 3 })).toBe(true);
+    expect(roomFull({ people: [person("a")], ringing: [{ to: "b", until: 0 }], max: 3 })).toBe(
+      true,
+    );
     expect(roomFull({ people: [person("a")], ringing: [], max: 3 })).toBe(false);
   });
 });
 
 describe("Davet et", () => {
   it("lists the player's friends who may be called, never someone in the room", () => {
-    const state = on({ room: room({ people: [person("302")], ringing: [{ to: "305", until: 0 }] }) });
+    const state = on({
+      room: room({ people: [person("302")], ringing: [{ to: "305", until: 0 }] }),
+    });
     const list = invitables(state, lists, "");
     expect(list.map((p) => [p.name, p.ringing])).toEqual([
       ["GeceKurdu_", false],
@@ -264,7 +277,11 @@ describe("shortcut keys", () => {
       code: "Quote",
       label: "İ",
     });
-    expect(keyFromEvent({ code: "Space", key: " " }, "tr")?.label).toBe("Space");
+    expect(keyFromEvent({ code: "Space", key: " " }, "tr")).toEqual({
+      kind: "keyboard",
+      code: "Space",
+      label: "Space",
+    });
     expect(keyFromEvent({ code: "Escape", key: "Escape" }, "tr")).toBeNull();
     expect(keyFromEvent({ code: "MetaLeft", key: "Meta" }, "tr")).toBeNull();
   });
@@ -283,6 +300,27 @@ describe("shortcut keys", () => {
       "Bu tuşu oyundaki sesli sohbet de kullanıyor.",
     );
     expect(clashText({ usable: false, clash: null }, t)).toBe("Bu tuş seçilemez.");
+  });
+});
+
+describe("presence and tones", () => {
+  it("reads a friend's voice chat from the friend list first", () => {
+    const friends = [{ ...friend("306", "KizilEjder"), voice: "in" as const }];
+    expect(presenceOf("306", on(), friends)).toBe("in");
+    expect(presenceOf("301", on(), friends)).toBe("ready");
+    expect(presenceOf("999", on(), friends)).toBeUndefined();
+    expect(callOffer(on(), "306", true, crewMembers, friends)).toBe("call");
+  });
+
+  it("rings for a call, keeps the caller company, and is quiet away or off", () => {
+    const ring = { room: "f2", from: "301", with: [], until: 0 };
+    expect(toneNow(on({ rings: [ring], calling: { friend: "302", until: 0 } }), false)).toBe(
+      "ring",
+    );
+    expect(toneNow(on({ calling: { friend: "302", until: 0 } }), false)).toBe("ringback");
+    expect(toneNow(on({ rings: [ring] }), true)).toBeNull();
+    expect(toneNow({ ...on({ rings: [ring] }), enabled: false }, false)).toBeNull();
+    expect(toneNow(on(), false)).toBeNull();
   });
 });
 
