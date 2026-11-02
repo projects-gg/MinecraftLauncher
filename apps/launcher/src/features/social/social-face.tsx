@@ -97,7 +97,12 @@ function dotKind(state: PresenceState, dnd: boolean): DotKind | null {
   return state;
 }
 
-/** The presence dot alone (also used in status menus). */
+/**
+ * The presence dot alone (also used in status menus). Every state is a filled disc (the owner, 3 Nov:
+ * "çember yerine daire olsun"): bright jade in game, a solid softer jade in the launcher (mixed with
+ * obsidian, not see-through, since the dot sits on the face's corner), gold with a bar for
+ * do-not-disturb, ash for invisible.
+ */
 export function PresenceDot({
   kind,
   size,
@@ -113,9 +118,10 @@ export function PresenceDot({
       className={cn(
         "relative inline-flex shrink-0 items-center justify-center rounded-full",
         kind === "playing" && "bg-jade-400",
-        kind === "launcher" && "bg-transparent shadow-[inset_0_0_0_2px_var(--color-jade-400)]",
+        kind === "launcher" &&
+          "bg-[color-mix(in_oklab,var(--color-jade-400)_58%,var(--color-obsidian-950))]",
         kind === "dnd" && "bg-gold-400",
-        kind === "invisible" && "bg-transparent shadow-[inset_0_0_0_2px_var(--color-ash-500)]",
+        kind === "invisible" && "bg-ash-500",
         className,
       )}
       style={{ width: size, height: size }}
