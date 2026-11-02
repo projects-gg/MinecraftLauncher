@@ -99,6 +99,11 @@ export interface CloudApi {
    * language (`fresh`: "Tekrar dene"). Never repeated by itself: each answer of the model counts.
    */
   suggestPattern(id: string, text: string, fresh: boolean): Promise<PatternSuggestion>;
+  /**
+   * The same for a rule of this computer's AFK accounts, without a cloud account (PATTERN-L;
+   * offered while the overview's `desktopPatterns` is true): only the player's words go.
+   */
+  suggestPatternHere(text: string, fresh: boolean): Promise<PatternSuggestion>;
   /** "Buluta taşı": the desktop account in the cloud's form. */
   movePlan(desktopId: string): Promise<CloudMovePlan>;
   move(desktopId: string, cloudId: string, rev: number, run: boolean): Promise<CloudMoveData>;
@@ -169,6 +174,7 @@ const tauriCloudApi: CloudApi = {
   reveal: (id, rowId) => ok(commands.cloudAfkReveal(id, rowId)),
   reportRefusal: (id, text) => ok(commands.cloudAfkReportRefusal(id, text)),
   suggestPattern: (id, text, fresh) => ok(commands.cloudAfkSuggestPattern(id, text, fresh)),
+  suggestPatternHere: (text, fresh) => ok(commands.cloudAfkSuggestPatternHere(text, fresh)),
   movePlan: (desktopId) => ok(commands.cloudAfkMovePlan(desktopId)),
   move: (desktopId, cloudId, rev, run) => ok(commands.cloudAfkMove(desktopId, cloudId, rev, run)),
   connectHere: () => commands.cloudAfkConnectHere(),

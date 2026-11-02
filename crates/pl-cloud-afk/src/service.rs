@@ -84,6 +84,10 @@ pub struct CloudOverview {
     /// "ProBot AI ile kalıp kur" can answer now (`/offer` → `ai.patterns`); false hides the helper
     /// and a rule's pattern is written by hand, as before it.
     pub ai_patterns: bool,
+    /// The same helper in the rules of this computer's AFK accounts (PATTERN-L): signed in, the
+    /// service names this player for it (`/me` → `aiPatterns`: its model can answer, Studio's switch
+    /// is on, the Discord account is old enough, no ban); false hides the helper there.
+    pub desktop_patterns: bool,
 }
 
 impl CloudOverview {
@@ -107,6 +111,7 @@ impl CloudOverview {
             plus_me: None,
             features: None,
             ai_patterns: false,
+            desktop_patterns: false,
         }
     }
 }
@@ -411,6 +416,7 @@ impl CloudService {
                 overview.plus_me = me.plus;
                 overview.now = list.now;
                 overview.accounts = list.accounts;
+                overview.desktop_patterns = me.ai_patterns;
             }
             (Err(CloudError::Unauthorized), _) | (_, Err(CloudError::Unauthorized)) => {
                 overview.session = CloudSession::SignedOut;
@@ -499,6 +505,21 @@ impl CloudService {
         self.inner
             .client
             .suggest_pattern(token, id, text, lang, fresh)
+            .await
+    }
+
+    /// The same for a rule of this computer's AFK accounts (PATTERN-L): no cloud account, only the
+    /// player's words go.
+    pub async fn suggest_pattern_here(
+        &self,
+        token: &Bearer,
+        text: &str,
+        lang: &str,
+        fresh: bool,
+    ) -> Result<PatternSuggestion> {
+        self.inner
+            .client
+            .suggest_pattern_here(token, text, lang, fresh)
             .await
     }
 

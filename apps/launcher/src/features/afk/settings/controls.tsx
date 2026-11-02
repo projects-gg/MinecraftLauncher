@@ -565,9 +565,9 @@ export function PatternFold({ pattern }: { pattern: string }) {
 }
 
 /**
- * ProBot AI's part in a 7/24 Bulut rule's trigger (the desktop has none): a pattern it made reads
- * as its sentence, and "ProBot AI ile kalıp kur" opens its box under the rule, where "Kalıbı kendim
- * yazacağım" waits too (`cloud/rule-assist.tsx`).
+ * ProBot AI's part in a rule's trigger, 7/24 Bulut and desktop alike (PATTERN-L): a pattern it made
+ * reads as its sentence, and "ProBot AI ile kalıp kur" opens its box under the rule, where "Kalıbı
+ * kendim yazacağım" waits too (`cloud/rule-assist.tsx`).
  */
 export interface TriggerAssist {
   /** The sentence of the pattern ProBot AI made; null: the field (a phrase, or written by hand). */
@@ -582,7 +582,8 @@ export interface TriggerAssist {
  * default ("Mesajda geçen söz"). A pattern written by hand is the advanced way ("Kalıbı kendim
  * yazacağım"), monospace with its one line of help; "Düz söze dön" goes back. The owner, 25 Oct:
  * players have no technical knowledge, so a "Düzenli ifade" switch in every rule gave way to this,
- * and on 7/24 Bulut ProBot AI builds the pattern from the player's own words (`assist`).
+ * and ProBot AI builds the pattern from the player's own words (`assist`; 7/24 Bulut's helper, on
+ * the desktop too since PATTERN-L).
  */
 export function TriggerField({
   id,
@@ -604,7 +605,7 @@ export function TriggerField({
   error: string | null;
   maxLength: number;
   autoFocus?: boolean;
-  /** 7/24 Bulut while its ProBot AI can answer. */
+  /** While 7/24 Bulut's ProBot AI can answer (a cloud rule, or a desktop one signed in). */
   assist?: TriggerAssist;
 }) {
   const { t } = useTranslation();

@@ -5,6 +5,7 @@ import { Button, cn, Field, IconButton, Input, Segmented } from "@pl/ui";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { insertToken } from "../cloud/placeholders";
+import { useRuleAssist } from "../cloud/rule-assist";
 import { SecretField, SecretKept } from "../secret";
 import {
   Block,
@@ -519,22 +520,40 @@ export function CommandsSection(props: SectionProps) {
 /** A rule's three replies: to public chat, to private messages, to the server's own lines. */
 type ReplyField = "reply" | "privateReply" | "otherReply";
 
+/** Never asked: the helper's box shows only while `patterns` is there. */
+const NOT_OFFERED = () => Promise.reject(new Error("ProBot AI is not offered here"));
+
 function RuleCard({
   rule,
   index,
   onChange,
   onRemove,
   errorFor,
+  patterns,
 }: {
   rule: RuleRow;
   index: number;
   onChange: (rule: RuleRow) => void;
   onRemove: () => void;
   errorFor: SectionProps["errorFor"];
+  patterns: SectionProps["patterns"];
 }) {
   const { t } = useTranslation();
   const set = (patch: Partial<RuleRow>) => onChange({ ...rule, ...patch });
   const id = (field: string) => `rule-${rule.key}-${field}`;
+  // ProBot AI builds the trigger from the player's words, as in a 7/24 Bulut rule (PATTERN-L): the
+  // same box under the rule's first row. A desktop rule has no lasting id, so the sentence of a
+  // pattern it made is kept for the account and the pattern.
+  const { assist, box } = useRuleAssist({
+    accountId: patterns?.accountId ?? "",
+    ruleId: "rule",
+    fieldId: id("pattern"),
+    pattern: rule.pattern,
+    regex: rule.isRegex,
+    available: Boolean(patterns),
+    suggest: patterns?.suggest ?? NOT_OFFERED,
+    onChange: (pattern, isRegex) => set({ pattern, isRegex }),
+  });
   const patternError = errorFor(`rule.${rule.key}.pattern`);
   const replyError = errorFor(`rule.${rule.key}.reply`);
   const cooldownError = errorFor(`rule.${rule.key}.cooldown`);
@@ -615,6 +634,7 @@ function RuleCard({
           placeholder={t("afkSettings.respond.patternPlaceholder")}
           error={patternError}
           maxLength={MAX_PATTERN_CHARS}
+          assist={assist}
         />
         <div className="flex min-w-0 flex-col gap-3">
           {replyField("reply", t("afkSettings.respond.reply"))}
@@ -629,6 +649,7 @@ function RuleCard({
           </div>
         </div>
       </div>
+      {box}
       <div className="mt-3 flex items-center gap-2 pb-3">
         <span className="text-[13px] text-ash-300">{t("afkPanel.rule.cooldown")}</span>
         <NumberField
@@ -657,7 +678,7 @@ function RuleCard({
 }
 
 /** Otomatik yanıt: one block, so its switch says "use" rather than repeat the section's name. */
-export function RepliesSection({ draft, setDraft, errorFor }: SectionProps) {
+export function RepliesSection({ draft, setDraft, errorFor, patterns }: SectionProps) {
   const { t } = useTranslation();
   const page = usePage(setDraft);
   const r = draft.page.autoRespond;
@@ -699,6 +720,7 @@ export function RepliesSection({ draft, setDraft, errorFor }: SectionProps) {
                   rule={rule}
                   index={i}
                   errorFor={errorFor}
+                  patterns={patterns}
                   onChange={(next) =>
                     setRules((list) => list.map((x) => (x.key === rule.key ? next : x)))
                   }

@@ -109,6 +109,7 @@ function page(
       plusMe: null,
       features: null,
       aiPatterns: false,
+      desktopPatterns: false,
     },
     twins: [],
   };

@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { copyErrorDetails } from "@/features/content/jobs";
 import { useDebounced } from "@/features/content/use-content";
 import { type AfkAccount, type AfkSettingsView, api } from "@/lib/api";
+import { cloudApi } from "../cloud/api";
 import { PlusChangeDock } from "../cloud/plus/change-dock";
 import { useGuardedConnect } from "../cloud/use-cloud";
 import { afkFailed, isFriendly, runAfk } from "../errors";
@@ -42,7 +43,13 @@ import {
 } from "./model";
 import { PanelBody, PanelSkeleton, SettingsPanel } from "./panel";
 import { useReadBack } from "./read-back";
-import { ConnectionSection, GameSection, LogSection, type SectionProps } from "./sections";
+import {
+  ConnectionSection,
+  GameSection,
+  LogSection,
+  type RulePatterns,
+  type SectionProps,
+} from "./sections";
 
 const ICONS: Record<GroupId, Icon> = {
   connection: Globe,
@@ -186,16 +193,27 @@ function Editor({
   account,
   view,
   onSaved,
+  aiPatterns,
 }: {
   account: AfkAccount;
   view: AfkSettingsView;
   /** Saved: the stored settings are read again (the editor then starts from them). */
   onSaved: () => Promise<unknown>;
+  /** "ProBot AI ile kalıp kur" in the rules: the overview's `desktopPatterns` (PATTERN-L). */
+  aiPatterns: boolean;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const issueText = useIssueText();
   const slot = draftKey("desktop", account.id);
+  // The sentence of a pattern ProBot AI made is kept per account, apart from the cloud's ids.
+  const patterns = useMemo<RulePatterns | undefined>(
+    () =>
+      aiPatterns
+        ? { accountId: `desktop:${account.id}`, suggest: cloudApi.suggestPatternHere }
+        : undefined,
+    [aiPatterns, account.id],
+  );
   const hold = useAfkDrafts((s) => s.hold);
   const baseline = useMemo(() => toDraft(view.settings), [view.settings]);
   // Edits left when the panel last closed come back over what is stored now.
@@ -428,6 +446,7 @@ function Editor({
         view={view}
         onOpenFolder={openFolder}
         revision={revision}
+        patterns={patterns}
       />
     </PanelBody>
   );
@@ -437,11 +456,14 @@ function Editor({
 export function AfkSettingsSheet({
   account,
   twin = false,
+  aiPatterns = false,
   onClose,
 }: {
   account: AfkAccount | undefined;
   /** The same account is a 7/24 Bulut account too: the title says these are this computer's. */
   twin?: boolean;
+  /** "ProBot AI ile kalıp kur" in the rules: the overview's `desktopPatterns` (PATTERN-L). */
+  aiPatterns?: boolean;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -477,7 +499,13 @@ export function AfkSettingsSheet({
       server={account?.server ?? ""}
     >
       {account && view ? (
-        <Editor key={account.id} account={account} view={view} onSaved={() => refetch()} />
+        <Editor
+          key={account.id}
+          account={account}
+          view={view}
+          onSaved={() => refetch()}
+          aiPatterns={aiPatterns}
+        />
       ) : loadError ? (
         <LoadFailed
           failed={failure(loadError, t("afkSettings.loadFailedHint"))}
