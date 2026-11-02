@@ -41,6 +41,12 @@ import { announce } from "@/features/accounts/use-accounts";
 import { PeopleCount, WorldJoinButton } from "@/features/host/parts";
 import { inviteFrom, invitePeople } from "@/features/host/rules";
 import { useHostUi } from "@/features/host/store";
+import {
+  FriendCallButton,
+  InVoiceMark,
+  MissedMark,
+  useInVoice,
+} from "@/features/voice/friend-call";
 import { api } from "@/lib/api";
 import type { WorldInvite } from "@/lib/api/host-types";
 import type { Friend, FriendGroup, SocialTeam } from "@/lib/api/social-types";
@@ -282,6 +288,7 @@ function FriendCard({
                   : "text-ash-300",
             )}
           >
+            <InVoiceMark friend={friend.id} />
             {world ? (
               <WorldLine invite={world} />
             ) : (
@@ -329,6 +336,8 @@ function FriendCard({
             {t("chat.actions.message")}
           </Button>
         ) : null}
+        {/* "Ara" (VOICE): the main way to call a friend; "Odaya davet et" while in a room. */}
+        <FriendCallButton friend={friend} onDone={onDone} />
         {friend.discordUrl ? (
           <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
             {t("social.actions.message")}
@@ -574,7 +583,16 @@ export function FriendRow({
   const [intent, setIntent] = useState<Confirm | null>(null);
   const world = useWorldInvite(friend);
   const joinable = friend.state === "playing" && isJoinable(friend.game);
-  const line = world ? t("host.invite.inWorld") : presenceLine(friend, t);
+  // In voice (VOICE): "Sesli sohbette" says more than "Launcher'da"; in game the place stays and
+  // the headset tells it.
+  const inVoice = useInVoice(friend.id);
+  const voiceLine = inVoice && friend.state !== "playing";
+  const line = world
+    ? t("host.invite.inWorld")
+    : voiceLine
+      ? t("voice.presence.inVoice")
+      : presenceLine(friend, t);
+  const spokenLine = inVoice && !voiceLine ? `${line}, ${t("voice.presence.inVoice")}` : line;
   const badge = useShownBadge(friend.badge);
   const marks = useMarks(friend.marks);
 
@@ -617,7 +635,7 @@ export function FriendRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${badgeRowLabel(friend.name, badge, t, marks)}, ${line}`}
+              aria-label={`${badgeRowLabel(friend.name, badge, t, marks)}, ${spokenLine}`}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
             >
               <SocialAvatar source={friend} size={36} state={friend.state} dnd={friend.dnd} />
@@ -641,6 +659,7 @@ export function FriendRow({
                       aria-label={t("social.list.favorite")}
                     />
                   ) : null}
+                  <MissedMark friend={friend.id} />
                 </BadgedName>
                 <span className="relative block h-[18px] overflow-hidden">
                   <AnimatePresence mode="popLayout" initial={false}>
@@ -652,8 +671,11 @@ export function FriendRow({
                       )}
                       {...swap(reduce)}
                     >
+                      <InVoiceMark friend={friend.id} />
                       {world ? (
                         <WorldLine invite={world} />
+                      ) : voiceLine ? (
+                        line
                       ) : (
                         <PresenceText friend={friend} t={t} joinable={joinable} />
                       )}

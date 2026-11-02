@@ -704,3 +704,62 @@ describe("messageMenu", () => {
     ).toEqual([]);
   });
 });
+
+describe("personMenu: voice chat (VOICE)", () => {
+  const friend: PersonInput = { friend: true, blocked: false, chat: true, discord: true, report: true };
+  const member = { mutedForMe: false, mutedByModerator: false, moderator: false };
+  const none = { mute: false, kick: false, moveTo: false, moderator: false };
+  const all = { mute: true, kick: true, moveTo: true, moderator: true };
+
+  it('puts "Ara" beside "Mesaj gönder"', () => {
+    expect(words(personMenu({ ...friend, voice: { offer: "call" } })).slice(0, 3)).toEqual([
+      "chat",
+      "voiceCall",
+      "message",
+    ]);
+  });
+
+  it('offers "Odaya davet et", off while it rings or the room is full', () => {
+    expect(words(personMenu({ ...friend, voice: { offer: "invite" } }))).toContain("voiceInvite");
+    expect(words(personMenu({ ...friend, voice: { offer: "ringing" } }))).toContain(
+      "voiceInvite(off)✓",
+    );
+    expect(words(personMenu({ ...friend, voice: { offer: "full" } }))).toContain(
+      "voiceInvite(off)",
+    );
+    expect(
+      words(personMenu({ ...friend, blocked: true, voice: { offer: "call" } })),
+    ).not.toContain("voiceCall");
+  });
+
+  it('leads with the volume and "Sustur (yalnız sen)" for someone in the room', () => {
+    const plan = words(personMenu({ ...friend, voice: { room: { ...member, can: none } } }));
+    expect(plan.slice(0, 3)).toEqual(["voiceVolume", "voiceMuteForMe", "-"]);
+    expect(plan).not.toContain("voiceMute");
+    expect(plan[plan.length - 1]).toBe("report");
+  });
+
+  it("adds what the player's role may do, in one order", () => {
+    const plan = words(personMenu({ ...friend, voice: { room: { ...member, can: all } } }));
+    expect(plan.slice(0, 7)).toEqual([
+      "voiceVolume",
+      "voiceMuteForMe",
+      "-",
+      "voiceMute",
+      "voiceKick",
+      "voiceMove",
+      "voiceMod",
+    ]);
+    const muted = words(
+      personMenu({
+        ...friend,
+        voice: {
+          room: { mutedForMe: true, mutedByModerator: true, moderator: true, can: all },
+        },
+      }),
+    );
+    expect(muted).toContain("voiceMuteForMe✓");
+    expect(muted).toContain("voiceUnmute");
+    expect(muted).toContain("voiceUnmod");
+  });
+});

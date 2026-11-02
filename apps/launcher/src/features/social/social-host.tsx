@@ -15,6 +15,7 @@ import { handleAfkNotice } from "@/features/afk/cloud/plus/notices";
 import { WorldShareHost } from "@/features/host/host";
 import { shownInGame } from "@/features/overlay/store";
 import { useOverlaySync } from "@/features/overlay/use-overlay-sync";
+import { VoiceHost } from "@/features/voice/host";
 import { api } from "@/lib/api";
 import type {
   BackupMeta,
@@ -816,6 +817,8 @@ export function SocialHost() {
       <PlanReminders />
       {/* "Dünyanı arkadaşlarına aç" (HOST1): its view, notices and windows. */}
       <WorldShareHost />
+      {/* "Sesli sohbet" (VOICE): its state, rings, notices and the room panel. */}
+      <VoiceHost />
     </>
   );
 }

@@ -129,7 +129,27 @@ export type PersonAction =
   | "removeFriend"
   | "block"
   | "unblock"
-  | "report";
+  | "report"
+  // Voice chat (VOICE): in the player's room, then calling or inviting them.
+  | "voiceVolume"
+  | "voiceMuteForMe"
+  | "voiceMute"
+  | "voiceUnmute"
+  | "voiceKick"
+  | "voiceMove"
+  | "voiceMod"
+  | "voiceUnmod"
+  | "voiceCall"
+  | "voiceInvite";
+
+/** Someone in the player's voice room: the player's own choices, and what their role may do. */
+export interface PersonVoiceRoom {
+  mutedForMe: boolean;
+  mutedByModerator: boolean;
+  /** A moderator of a friend room ("Moderatörlükten al"). */
+  moderator: boolean;
+  can: { mute: boolean; kick: boolean; moveTo: boolean; moderator: boolean };
+}
 
 /** Their place in the crew a row shows them in, and what the player may do about it. */
 export interface PersonCrew {
@@ -198,6 +218,12 @@ export interface PersonInput {
    * or while every place is taken), and "Dünyadan çıkar" for a guest.
    */
   world?: { invite: "ready" | "invited" | "full"; guest: boolean };
+  /**
+   * VOICE (voice.md §5.1): `offer` is what their card offers ("Ara", or "Odaya davet et", off while
+   * it rings or the room is full); `room` while they are in the player's room: their volume and
+   * "Sustur (yalnız sen)" lead the menu, then what the player's role may do to them.
+   */
+  voice?: { offer?: "call" | "invite" | "ringing" | "full" | null; room?: PersonVoiceRoom };
 }
 
 /** The rows of one group that apply (a `null` in a plan is a separator, never a missing row). */
@@ -210,7 +236,28 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
   const { friend, blocked, request, crew } = input;
   const together = !blocked;
   const addFriend = input.addFriend ?? "hidden";
+  const voiceRoom = input.voice?.room;
+  const offer = input.voice?.offer ?? null;
   return tidy<PersonAction>([
+    // Voice chat: someone in the player's room (their volume first, as a slider).
+    ...(voiceRoom
+      ? only<PersonAction>(
+          { action: "voiceVolume" },
+          { action: "voiceMuteForMe", checked: voiceRoom.mutedForMe },
+        )
+      : []),
+    null,
+    ...(voiceRoom
+      ? only<PersonAction>(
+          voiceRoom.can.mute && {
+            action: voiceRoom.mutedByModerator ? "voiceUnmute" : "voiceMute",
+          },
+          voiceRoom.can.kick && { action: "voiceKick" },
+          voiceRoom.can.moveTo && { action: "voiceMove" },
+          voiceRoom.can.moderator && { action: voiceRoom.moderator ? "voiceUnmod" : "voiceMod" },
+        )
+      : []),
+    null,
     ...only<PersonAction>(
       (request === "incoming" || request === "join") && { action: "acceptRequest" },
       (request === "incoming" || request === "join") && { action: "declineRequest" },
@@ -238,6 +285,16 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
           checked: input.world.invite === "invited" ? true : undefined,
         },
       together && friend && Boolean(input.chat) && { action: "chat" },
+      // "Ara" beside "Mesaj gönder"; "Odaya davet et" while the player's room may take them.
+      together &&
+        offer !== null &&
+        (offer === "call"
+          ? { action: "voiceCall" }
+          : {
+              action: "voiceInvite",
+              disabled: offer !== "invite",
+              checked: offer === "ringing" ? true : undefined,
+            }),
       Boolean(input.discord) && { action: "message" },
       // On a request's own row its answers say it all.
       together &&
