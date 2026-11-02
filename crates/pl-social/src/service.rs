@@ -150,6 +150,8 @@ struct Inner {
     profile_turn: tokio::sync::Mutex<()>,
     /// World sessions (HOST1): who hears them, what the connection took.
     worlds: crate::world::WorldsHub,
+    /// Voice chat (VOICE): who hears it, whether the connection took it.
+    voice: crate::voice::VoiceHub,
     /// SKIN1's listener for `mc` messages and reconnects (`crate::minecraft`).
     mc: Mutex<Option<McSink>>,
 }
@@ -255,6 +257,10 @@ struct Core {
     together: TogetherLog,
     /// World sessions may run (signed config `features.worlds`, HOST1). Survives sign-outs.
     worlds_enabled: bool,
+    /// Voice chat may run (signed config `features.voice`, VOICE). Survives sign-outs.
+    voice_enabled: bool,
+    /// The player switched voice chat off ("Sesli sohbet", `status.voice`).
+    voice_off: bool,
     /// The player's own profile changes on their way to the service, oldest first (SOC-LAG): the
     /// view shows them until the service answers.
     profile_pending: Vec<PendingProfile>,
@@ -415,6 +421,7 @@ impl SocialService {
                 cards_turn: tokio::sync::Mutex::new(()),
                 profile_turn: tokio::sync::Mutex::new(()),
                 worlds: crate::world::WorldsHub::default(),
+                voice: crate::voice::VoiceHub::default(),
                 mc: Mutex::new(None),
             }),
         }
@@ -737,16 +744,18 @@ impl SocialService {
             let _runtime = self.inner.runtime.enter();
             let chat = core.chat_enabled.then(|| core.chat_setup.clone());
             session
-                .connect_presence_with(
+                .connect_presence_full(
                     self.inner.config.presence,
                     chat,
                     core.worlds_enabled,
+                    core.voice_enabled,
                     Some(core.rel.clone()),
                 )
                 .split()
         };
         control.set_status(core.activity.clone());
         control.set_game_version(core.game_version.clone());
+        control.set_voice_switch(!core.voice_off);
         // Replacing the control closes the previous connection cleanly.
         core.presence = Some(control);
         core.chat_status = None;
@@ -792,6 +801,26 @@ impl SocialService {
                 self.inner.worlds.deliver(world);
             }
             if matches!(event, PresenceEvent::World(_)) {
+                return;
+            }
+        }
+        // Voice chat (VOICE) the same way: straight to the launcher's voice chat.
+        let voice = match &event {
+            PresenceEvent::Voice(voice) => Some(voice.clone()),
+            PresenceEvent::Disconnected { .. } | PresenceEvent::Stopped(_) => {
+                Some(crate::voice::VoiceEvent::Down)
+            }
+            _ => None,
+        };
+        if let Some(voice) = voice {
+            let current = {
+                let core = self.lock();
+                core.generation == generation && core.epoch == epoch
+            };
+            if current {
+                self.inner.voice.deliver(voice);
+            }
+            if matches!(event, PresenceEvent::Voice(_)) {
                 return;
             }
         }
@@ -3107,6 +3136,98 @@ impl SocialService {
         if let Some(control) = control {
             control.world_send(frame);
         }
+    }
+
+    /// Voice chat may run (VOICE: signed config `features.voice`; friends must be on too). The
+    /// presence connection asks for it only while it may: a change reconnects it.
+    pub fn set_voice_enabled(&self, on: bool) {
+        let mut core = self.lock();
+        if core.voice_enabled == on {
+            return;
+        }
+        core.voice_enabled = on;
+        if core.auth == AuthPhase::SignedIn && core.presence.is_some() {
+            self.start_presence(&mut core);
+        }
+    }
+
+    /// Hears every voice message of the presence connection, whether a connection took voice
+    /// chat (after each connect) and its drops (VOICE, `crate::voice`). Called from the
+    /// connection's task: it must not block.
+    pub fn on_voice(&self, sink: impl Fn(crate::voice::VoiceEvent) + Send + Sync + 'static) {
+        self.inner.voice.set_sink(Arc::new(sink));
+    }
+
+    /// The player's "Sesli sohbet" switch (`status.voice`; kept across reconnects).
+    pub fn set_voice_switch(&self, on: bool) {
+        let mut core = self.lock();
+        core.voice_off = !on;
+        if let Some(control) = &core.presence {
+            control.set_voice_switch(on);
+        }
+    }
+
+    /// A voice frame the service answers (`voice_call`): its `ack`, or why not, within `wait`.
+    pub async fn voice_request(
+        &self,
+        frame: crate::voice::VoiceFrame,
+        wait: Duration,
+    ) -> std::result::Result<crate::voice::VoiceAck, crate::voice::VoiceError> {
+        let control = {
+            let core = self.lock();
+            if !core.voice_enabled || !self.inner.voice.taken() {
+                return Err(crate::voice::VoiceError::Off);
+            }
+            core.presence.clone()
+        };
+        let control = control.ok_or(crate::voice::VoiceError::Unavailable)?;
+        control.voice_request(frame, wait).await
+    }
+
+    /// A voice frame nobody answers (`voice_decline`); dropped without a connection.
+    pub fn voice_send(&self, frame: crate::voice::VoiceFrame) {
+        let control = self.lock().presence.clone();
+        if let Some(control) = control {
+            control.voice_send(frame);
+        }
+    }
+
+    /// A crew room's ticket (VOICE: `room`, its "Genel" without, or a new room with `new`).
+    pub async fn voice_crew_ticket(
+        &self,
+        crew: &str,
+        room: Option<&str>,
+        new: bool,
+    ) -> Result<crate::voice::VoiceCrewTicket> {
+        let session = self
+            .lock()
+            .session
+            .clone()
+            .ok_or(SocialError::Unauthorized)?;
+        if new {
+            session.voice_crew_new(crew).await
+        } else {
+            session.voice_crew(crew, room).await
+        }
+    }
+
+    /// Where the room socket goes and as whom (VOICE): the service's address, the session's
+    /// token, the user agent; None while signed out.
+    pub fn voice_socket(&self) -> Option<(Url, String, String)> {
+        let core = self.lock();
+        if core.auth != AuthPhase::SignedIn {
+            return None;
+        }
+        core.session.as_ref().map(Session::voice_socket)
+    }
+
+    /// The signed-in player's id (VOICE: the room tells people apart by it), or None.
+    pub fn my_id(&self) -> Option<String> {
+        let core = self.lock();
+        if core.auth != AuthPhase::SignedIn {
+            return None;
+        }
+        core.state.me().map(|me| me.profile.id.clone())
     }
 
     /// What the view's conversation `conv` may do now: chat on, not muted, still friends or still

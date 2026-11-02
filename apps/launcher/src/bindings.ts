@@ -322,6 +322,73 @@ export const commands = {
 	hostDismissInvite: (session: string) => typedError<null, CmdError>(__TAURI_INVOKE("host_dismiss_invite", { session })),
 	/**  "Bağlan" in game: the overlay moves the running game into the world, showing `label`. */
 	hostConnectInGame: (session: string, label: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("host_connect_in_game", { session, label })),
+	/**  The state now (the page's start; every change after comes as `voice-state`). */
+	voiceState: () => typedError<VoiceState, CmdError>(__TAURI_INVOKE("voice_state")),
+	/**  "Ara" on a friend: the player waits in the new room while it rings ("Aranıyor…"). */
+	voiceCall: (friend: string) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_call", { friend })),
+	/**  "Katıl" on a ring, or on a missed call that is still joinable. */
+	voiceAccept: (room: string) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_accept", { room })),
+	/**  "Reddet" on a ring. */
+	voiceDecline: (room: string) => typedError<null, CmdError>(__TAURI_INVOKE("voice_decline", { room })),
+	/**  Takes a missed call off the list. */
+	voiceDismissMissed: (room: string) => typedError<null, CmdError>(__TAURI_INVOKE("voice_dismiss_missed", { room })),
+	/**  "Katıl" on a crew room: `room` one of the crew's live rooms, none for its "Genel". */
+	voiceJoinCrew: (crew: string, room: string | null) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_join_crew", { crew, room })),
+	/**  "Yeni oda" in a crew: the player joins it at once. */
+	voiceNewCrewRoom: (crew: string) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_new_crew_room", { crew })),
+	/**  "Ayrıl"; also "İptal" on the "Aranıyor…" pill (the call ends with it). */
+	voiceLeave: () => typedError<null, CmdError>(__TAURI_INVOKE("voice_leave")),
+	/**  "Tekrar dene" after "Bağlanamadı.". */
+	voiceRetry: () => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_retry")),
+	/**  "Mikrofonu kapat" / "Mikrofonu aç" (opening it also ends "Sağırlaştır"). */
+	voiceSetMute: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("voice_set_mute", { on })),
+	/**  "Sağırlaştır" / "Sağırlaştırmayı kaldır". */
+	voiceSetDeaf: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("voice_set_deaf", { on })),
+	/**  A person's volume for the player (percent, 0–200), remembered on this computer. */
+	voiceSetVolume: (person: string, percent: number) => typedError<null, CmdError>(__TAURI_INVOKE("voice_set_volume", { person, percent })),
+	/**  "Sustur (yalnız sen)", remembered on this computer. */
+	voiceSetMutedForMe: (person: string, on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("voice_set_muted_for_me", { person, on })),
+	/**  "Davet et": a friend (friend rooms) or a crewmate (crew rooms). */
+	voiceInvite: (friend: string) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_invite", { friend })),
+	/**  "İptal" on the player's ringing invite. */
+	voiceCancelInvite: (friend: string) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_cancel_invite", { friend })),
+	/**
+	 *  A leader's or moderator's action ("Herkes için sustur", "Odadan çıkar" and its "Geri al",
+	 *  "Taşı", "Moderatör yap", the room's name, "Odayı kapat").
+	 */
+	voiceModerate: (action: VoiceModAction) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_moderate", { action })),
+	/**  Settings → Sesli sohbet. */
+	voiceSettings: () => typedError<VoiceSettings, CmdError>(__TAURI_INVOKE("voice_settings")),
+	/**
+	 *  Saves Settings → Sesli sohbet; answers them as kept (a key used twice stays with the first
+	 *  shortcut, values held to their ranges).
+	 */
+	voiceSaveSettings: (settings: VoiceSettings) => typedError<VoiceSettings, CmdError>(__TAURI_INVOKE("voice_save_settings", { settings })),
+	/**
+	 *  What the key picker says about a key (Simple Voice Chat's, the overlay's, the game's, Left
+	 *  Alt, another shortcut's).
+	 */
+	voiceCheckKey: (ask: VoiceKeyAsk) => typedError<VoiceKeyCheck, CmdError>(__TAURI_INVOKE("voice_check_key", { ask })),
+	/**
+	 *  The settings page opened (`open`) or closed: the voice engine runs meanwhile for the device
+	 *  lists and the microphone's level bar.
+	 */
+	voiceSetup: (open: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("voice_setup", { open })),
+	/**  "Mikrofonu dene": the player hears themselves; nothing goes anywhere. */
+	voiceSelfTest: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("voice_self_test", { on })),
+	/**  "Ayarları aç" under "Mikrofona izin verilmedi.": Windows' microphone privacy page. */
+	voiceOpenMicSettings: () => typedError<null, CmdError>(__TAURI_INVOKE("voice_open_mic_settings")),
+	/**  What the settings backup carries of voice chat (the page adds it as `voice`). */
+	voiceBackup: () => typedError<VoiceBackup, CmdError>(__TAURI_INVOKE("voice_backup")),
+	/**  A downloaded backup's voice part (this computer's devices stay). */
+	voiceRestore: (backup: VoiceBackup) => typedError<null, CmdError>(__TAURI_INVOKE("voice_restore", { backup })),
+	/**
+	 *  The voice page (the hidden `voice` window only): hands over its channel for the launcher's
+	 *  commands; the launcher configures it and, in a room, starts the call.
+	 */
+	voicePageAttach: (onCommand: Channel<EngineCommand>) => typedError<null, CmdError>(__TAURI_INVOKE("voice_page_attach", { onCommand })),
+	/**  The voice page (the hidden `voice` window only): what happened there. */
+	voicePageReport: (report: PageReport) => typedError<null, CmdError>(__TAURI_INVOKE("voice_page_report", { report })),
 	/**
 	 *  Server List Ping. Never fails: an unreachable server is reported as offline. Without a name
 	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
@@ -4562,6 +4629,89 @@ export type DroppedVersionView = {
 	recommended: string | null,
 };
 
+/**  Launcher → page. */
+export type EngineCommand = 
+/**  How to capture and play; again whenever the settings change. */
+{ t: "configure"; settings: EngineSettings } | 
+/**
+ *  Start a stay: open the microphone (if it can) and make a peer connection with one
+ *  send-only audio track; answer with [`PageReport::Offer`].
+ */
+{ t: "join" } | 
+/**  The room's answer to the offer (`hello.sdp`). */
+{ t: "answer"; sdp: string } | 
+/**
+ *  The room's offer (people to receive, or receivers closed; `mids`: mid → person): answer
+ *  with [`PageReport::Answer`].
+ */
+{ t: "offer"; sdp: string; mids: { [key in string]: string } } | 
+/**
+ *  Whether the microphone may send now (not muted, not deafened, not muted for everyone, and
+ *  push-to-talk held when it is on). The page's gate also needs speech in voice activity.
+ */
+{ t: "talk"; open: boolean } | 
+/**  Deafened: nothing plays. */
+{ t: "deaf"; on: boolean } | 
+/**  How each person plays, whole (after every change). */
+{ t: "people"; people: EnginePerson[] } | 
+/**  TURN credentials: restart ICE with them. */
+{ t: "ice"; ice: EngineIce } | { t: "sound"; sound: EngineSound } | 
+/**  Report [`PageReport::Stats`] once (the quality mark asks every 2 s only while shown). */
+{ t: "stats" } | 
+/**  The settings page: devices and the microphone's level without a call (`on`), or not. */
+{ t: "setup"; on: boolean } | 
+/**  "Mikrofonu dene": the player hears themselves (nothing goes anywhere), or not. */
+{ t: "selfTest"; on: boolean } | 
+/**  The stay ended: close the peer connection, stop the microphone. */
+{ t: "leave" };
+
+/**  TURN credentials for the peer connection (only after ICE failed; never logged). */
+export type EngineIce = {
+	urls: string[],
+	username: string,
+	credential: string,
+};
+
+/**  One person as the page plays them. */
+export type EnginePerson = {
+	id: string,
+	/**  Percent, held to the page's top (`pl_voice::gain`). */
+	volume: number,
+	/**  Not played: muted for the player, or muted for everyone. */
+	silent: boolean,
+};
+
+/**  How the page processes and sends the microphone, and plays people. */
+export type EngineSettings = {
+	/**  None: the system's default. */
+	inputDevice: string | null,
+	outputDevice: string | null,
+	noiseSuppression: boolean,
+	echoCancellation: boolean,
+	autoGain: boolean,
+	/**  None: automatic (RNNoise's speech probability and an adapting noise floor); else 0–100. */
+	sensitivity: number | null,
+	/**  Percent (auto gain off). */
+	micVolume: number,
+	/**  Push-to-talk: the gate follows [`EngineCommand::Talk`] only; voice activity is not used. */
+	pushToTalk: boolean,
+	/**  Opus bit rate (kbps, Studio's `voiceKbps`). */
+	kbps: number,
+	/**  Join and leave sounds. */
+	sounds: boolean,
+};
+
+/**  A short sound the page plays in its own output (the ring itself is the launcher's). */
+export type EngineSound = 
+/**  Someone came into the room. */
+"join" | 
+/**  Someone left. */
+"leave" | 
+/**  A shortcut muted or deafened (a short tick). */
+"tick" | 
+/**  The caller's waiting tone, until [`EngineSound::Stop`] or someone comes. */
+"waiting" | "stop";
+
 export type EventView = {
 	id: string,
 	title: string,
@@ -4736,6 +4886,11 @@ export type FriendView_Deserialize = {
 	badge: CrewBadgeView | null,
 	/**  Their badges right of the name (BADGES; keys of `markDefs`, the most important first). */
 	marks: string[],
+	/**
+	 *  Voice chat (VOICE): `ready` offers "Ara", `in` is in a room ("Sesli sohbette"; "Ara" still
+	 *  rings); None: no "Ara".
+	 */
+	voice: PresenceVoice | null,
 };
 
 export type FriendView_Serialize = {
@@ -4761,6 +4916,11 @@ export type FriendView_Serialize = {
 	badge: CrewBadgeView | null,
 	/**  Their badges right of the name (BADGES; keys of `markDefs`, the most important first). */
 	marks: string[],
+	/**
+	 *  Voice chat (VOICE): `ready` offers "Ara", `in` is in a room ("Sesli sohbette"; "Ara" still
+	 *  rings); None: no "Ara".
+	 */
+	voice: PresenceVoice | null,
 };
 
 export type Game = Game_Serialize | Game_Deserialize;
@@ -7094,6 +7254,38 @@ export type PackView = {
 	modSet: SetBadgeView | null,
 };
 
+/**  Page → launcher. */
+export type PageReport = 
+/**  The page runs and listens (once per load, after attaching). */
+{ t: "ready" } | 
+/**  The join offer (`sdp` none: no microphone, listen only); `mid` the audio m-line's. */
+{ t: "offer"; sdp: string | null; mid: string | null } | 
+/**  The answer to the room's offer. */
+{ t: "answer"; sdp: string } | 
+/**
+ *  Who speaks now (people's ids) and whether the player's microphone sends; at most ten a
+ *  second, only on change.
+ */
+{ t: "speaking"; ids: string[]; me: boolean } | 
+/**  The connection's quality changed: 0 good, 1 weak, 2 bad. */
+{ t: "quality"; q: number } | 
+/**  ICE did not connect within 5 s: the launcher asks the room for TURN. */
+{ t: "needTurn" } | 
+/**  ICE was lost and did not come back within 3 s: the launcher joins anew (a fresh offer). */
+{ t: "lost" } | 
+/**  The audio connection works (again). */
+{ t: "connected" } | 
+/**  The microphone's state (and `changed`: the chosen one went, the default took its place). */
+{ t: "mic"; mic: VoiceMic; changed: boolean } | 
+/**  The devices (on start, and when they change). */
+{ t: "devices"; devices: VoiceDevices } | 
+/**  The microphone's level for the settings page (0–1, at most ten a second, only in setup). */
+{ t: "level"; level: number | null; open: boolean } | 
+/**  Answer to [`EngineCommand::Stats`]. */
+{ t: "stats"; rttMs: number | null; loss: number | null; jitterMs: number | null } | 
+/**  Something failed that the launcher should know of (a short code, no detail). */
+{ t: "failed"; code: string };
+
 /**  Why an auto-respond pattern can not be used. */
 export type PatternProblem = 
 /**  Longer than [`MAX_PATTERN_CHARS`] characters. */
@@ -8701,6 +8893,12 @@ export type PresenceContext = {
 };
 
 export type PresenceState = "offline" | "launcher" | "playing";
+
+/**
+ *  `presence.voice`: `ready` may be called, `in` is in a room (a call still rings). Absent: "Ara"
+ *  is not offered.
+ */
+export type PresenceVoice = "ready" | "in";
 
 export type Privacy = {
 	/**  Show a server other than projects.gg to friends (default off: "başka sunucuda"). */
@@ -11028,6 +11226,460 @@ export type VersionOptionsView = {
 	partial: boolean,
 	gameRunning: boolean,
 };
+
+/**  What an action got: `refused` empty means it went through. */
+export type VoiceAnswer = {
+	refused: VoiceRefusal | null,
+	/**  Seconds to wait (`rateLimited`, `accountLimited`). */
+	retryAfter: number | null,
+	/**  Unix seconds (`accountLimited`, `staffMuted`). */
+	until: number | null,
+};
+
+/**
+ *  What the settings backup carries of voice chat (the page builds the backup): the settings
+ *  without devices, and the per-person choices.
+ */
+export type VoiceBackup = {
+	settings?: VoiceSettings,
+	/**  User id → choices (at most [`BACKUP_PEOPLE_MAX`]). */
+	people?: { [key in string]: VoicePersonPrefs },
+};
+
+/**  The call the player started. */
+export type VoiceCalling = {
+	friend: string,
+	/**  Unix seconds: the ring stops here ("Cevap yok"). */
+	until: number,
+};
+
+export type VoiceCrewRoom = {
+	id: string,
+	name: string,
+	general: boolean,
+	/**  Who is in it now (blocked people left out). */
+	people: string[],
+};
+
+/**  One crew's live rooms. */
+export type VoiceCrewRooms = {
+	crew: string,
+	rooms: VoiceCrewRoom[],
+	/**  "Yeni oda" may show (fewer rooms than the crew may have). */
+	canAdd: boolean,
+};
+
+/**  An audio device; `id` is what the settings keep (none there: the system's default). */
+export type VoiceDevice = {
+	id: string,
+	label: string,
+};
+
+export type VoiceDevices = {
+	inputs: VoiceDevice[],
+	outputs: VoiceDevice[],
+};
+
+/**
+ *  A shortcut's key: a keyboard key by its place on the keyboard (the page's
+ *  `KeyboardEvent.code`, `KeyV`, `CapsLock`, `F8`: the same key whatever the layout), or a mouse
+ *  button. `label` is what the page showed when it was picked (the layout's letter), kept to show
+ *  it again.
+ */
+export type VoiceKey = { kind: "keyboard"; code: string; label?: string } | { kind: "mouse"; button: VoiceMouseButton };
+
+/**  The input that a key check is about: the key and the shortcut it would be. */
+export type VoiceKeyAsk = {
+	key: VoiceKey,
+	shortcut: VoiceShortcut,
+};
+
+/**  The answer to `voice_check_key`. */
+export type VoiceKeyCheck = {
+	/**  The key can be watched (a keyboard key the launcher knows, or a mouse button). */
+	usable: boolean,
+	clash: VoiceKeyClash | null,
+};
+
+/**  What a key would clash with (`voice_check_key`), for the key picker's single line. */
+export type VoiceKeyClash = 
+/**
+ *  Simple Voice Chat in the game uses it (Caps Lock: its push-to-talk; V: its menu):
+ *  "Bu tuşu oyundaki sesli sohbet de kullanıyor."
+ */
+"gameVoiceChat" | 
+/**
+ *  The in-game overlay's keys (F7 panel, F9 emojis) and the pack's mods (F6 free look, C zoom,
+ *  X gamma).
+ */
+"overlay" | 
+/**
+ *  One of the game's own keys (moving, jumping, the inventory, the chat, the hotbar…). The
+ *  key still reaches the game.
+ */
+"game" | 
+/**  Left Alt: Alt+Shift switches the keyboard's language. */
+"languageSwitch" | 
+/**  Another voice shortcut has it already. */
+"taken";
+
+/**  Why the player's stay ended (in [`VoiceNotice::Left`]). */
+export type VoiceLeftReason = 
+/**  The leader closed the room. */
+"closed" | 
+/**  Nobody else was in it for a while: "Odada kimse kalmadı." */
+"alone" | 
+/**  The friend the player called did not join: "Cevap yok" with "Tekrar ara". */
+"noAnswer" | 
+/**  The player joined a room on another device: "Başka bir cihazda katıldın." */
+"elsewhere" | 
+/**  "Odadan çıkarıldın." */
+"kicked" | 
+/**  The player is no longer in that crew. */
+"crew" | 
+/**  No input and no speech for a long while: "Uzun süre hareketsiz kaldığın için ayrıldın." */
+"idle" | 
+/**
+ *  Voice chat was switched off, the month's share is used up, Projects' moderators closed the
+ *  room, or the account cannot use voice chat now: "Sesli sohbet şu an kullanılamıyor."
+ */
+"unavailable" | 
+/**  The connection did not come back: "Bağlanamadı." with "Tekrar dene" (`voice_retry`). */
+"failed";
+
+/**  The microphone's level for the settings page's bar (`voice-level`, while it is open). */
+export type VoiceLevel = {
+	/**  0 to 1. */
+	level: number | null,
+	/**  Above the sensitivity: this would be sent. */
+	open: boolean,
+};
+
+/**  The player in the room. */
+export type VoiceMe = {
+	id: string,
+	role: VoiceRole,
+	/**  "Mikrofonu kapat". */
+	mute: boolean,
+	/**  "Sağırlaştır" (also keeps the microphone closed). */
+	deaf: boolean,
+	/**
+	 *  A moderator (or Projects' staff) muted the player for everyone ("Bir moderatör seni
+	 *  susturdu.").
+	 */
+	mutedByModerator: boolean,
+	/**  The microphone sends now (push-to-talk held, or speech in "Konuşunca"; false while muted). */
+	talking: boolean,
+	quality: VoiceQuality,
+};
+
+/**  The microphone as the voice engine saw it last. */
+export type VoiceMic = 
+/**  The engine has not looked yet. */
+"unknown" | "ok" | 
+/**
+ *  Windows or the player refused it: "Mikrofona izin verilmedi." with "Ayarları aç"
+ *  (`voice_open_mic_settings`); the player listens only.
+ */
+"denied" | 
+/**  No microphone: "Mikrofon bulunamadı."; the player listens only. */
+"missing";
+
+/**  A missed call. */
+export type VoiceMissed = {
+	room: string,
+	from: string,
+	/**  Unix seconds. */
+	at: number,
+	/**  The room still lives and its ticket holds: "Katıl"; otherwise "Geri ara". */
+	joinable: boolean,
+};
+
+/**  A leader's or moderator's action (`voice_moderate`). */
+export type VoiceModAction = 
+/**  "Herkes için sustur". */
+{ act: "mute"; person: string } | { act: "unmute"; person: string } | 
+/**  "Odadan çıkar" (no question; the toast's "Geri al" is `unkick`). */
+{ act: "kick"; person: string } | { act: "unkick"; person: string } | 
+/**  "Taşı": to another live room of the crew. */
+{ act: "move"; person: string; room: string } | 
+/**  "Moderatör yap" (friend rooms, the leader). */
+{ act: "mod"; person: string } | { act: "unmod"; person: string } | 
+/**  The room's new name (3–24 characters). */
+{ act: "rename"; name: string } | 
+/**  "Odayı kapat" (the leader; the page asks first: "Herkes odadan çıkar."). */
+{ act: "close" };
+
+/**  A mouse button a shortcut may use (the left and right buttons never). */
+export type VoiceMouseButton = "middle" | 
+/**  The back side button. */
+"back" | 
+/**  The forward side button. */
+"forward";
+
+/**
+ *  A moment worth a toast (`voice-notice`). The launcher shows the Windows notification itself
+ *  for rings, missed calls and removals while its window is away; the page shows the rest.
+ */
+export type VoiceNotice = 
+/**  The stay ended for a reason the player did not choose. */
+{ kind: "left"; reason: VoiceLeftReason; 
+/**  `noAnswer`: the friend who did not join (for "Tekrar ara"). */
+friend: string | null } | 
+/**  A leader or moderator moved the player to another room of the crew. */
+{ kind: "moved"; room: string; name: string } | 
+/**  "Bir moderatör seni susturdu." */
+{ kind: "mutedByModerator" } | 
+/**  A missed call ("Cevapsız arama"). */
+{ kind: "missed"; from: string; room: string } | 
+/**  The microphone changed (unplugged): "Mikrofon değişti." */
+{ kind: "micChanged" } | 
+/**  The microphone cannot be used: "Mikrofona izin verilmedi." / "Mikrofon bulunamadı.". */
+{ kind: "mic"; mic: VoiceMic };
+
+/**  The player's invite that still rings. */
+export type VoiceOutRing = {
+	to: string,
+	/**  Unix seconds. */
+	until: number,
+};
+
+/**  Someone else in the room. */
+export type VoicePerson = {
+	id: string,
+	role: VoiceRole,
+	mute: boolean,
+	deaf: boolean,
+	/**  Muted for everyone by a leader or moderator: nobody hears them. */
+	mutedByModerator: boolean,
+	quality: VoiceQuality,
+	/**  Speaks now (as of this state; `voice-speaking` brings the changes). */
+	speaking: boolean,
+	/**
+	 *  Their volume for the player (percent, 0–200, 100 as they arrive; an engine that plays
+	 *  through `<audio>` stops at 100, `pl_voice::gain`); remembered on this computer.
+	 */
+	volume: number,
+	/**  "Sustur (yalnız sen)": the player does not hear them; remembered on this computer. */
+	mutedForMe: boolean,
+	/**  When they came in (Unix seconds). */
+	joinedAt: number,
+	/**  What the player may do to them (the person menu shows only these). */
+	can: VoicePowers,
+};
+
+/**  One person's choices. */
+export type VoicePersonPrefs = {
+	/**  Percent, 0–200. */
+	volume?: number,
+	/**  "Sustur (yalnız sen)". */
+	muted?: boolean,
+};
+
+/**  Where the player's stay is. */
+export type VoicePhase = 
+/**  Getting in (the room's answer, the audio connection). */
+"joining" | 
+/**  In the room, audio flowing. */
+"live" | 
+/**  The connection dropped for more than 2 seconds: "Yeniden bağlanıyor…". */
+"reconnecting";
+
+/**  A leader's or moderator's actions on one person. */
+export type VoicePowers = {
+	/**  "Herkes için sustur" / its undo. */
+	mute: boolean,
+	/**  "Odadan çıkar". */
+	kick: boolean,
+	/**  "Taşı" (crew rooms with another live room). */
+	moveTo: boolean,
+	/**  "Moderatör yap" / "Moderatörlüğü al" (friend rooms, the leader). */
+	moderator: boolean,
+};
+
+/**  A connection's quality; the page shows a mark only when it is not `good`. */
+export type VoiceQuality = "good" | "weak" | "bad";
+
+/**  Why an action was refused. The page maps each to its own words. */
+export type VoiceRefusal = 
+/**
+ *  Voice chat is off (Studio, the month's share, not signed in): "Sesli sohbet şu an
+ *  kullanılamıyor."
+ */
+"off" | 
+/**  The friend cannot be called now (offline, voice chat off, or anything they need not tell). */
+"unreachable" | 
+/**  Too many calls or invites (`retryAfter`, `until`). */
+"rateLimited" | 
+/**  A limited (new) account's smaller quota. */
+"accountLimited" | 
+/**  A staff mute runs (`until`): no calls, invites or renames. */
+"staffMuted" | 
+/**  "Oda dolu." */
+"roomFull" | 
+/**  The crew has as many rooms as it may. */
+"roomsFull" | 
+/**  That room ended, or the ring's ticket expired. */
+"roomGone" | 
+/**  Removed from that room and not allowed back yet. */
+"kicked" | 
+/**  Not a member of that crew (any more). */
+"notMember" | 
+/**  The player's role may not do that (or not to that person). */
+"notAllowed" | 
+/**  That person is not in the room. */
+"notFound" | 
+/**  A room name of 3–24 characters. */
+"invalidName" | 
+/**  The name filter refused it. */
+"nameRejected" | 
+/**  The voice service did not answer: "Bağlanamadı." with "Tekrar dene". */
+"failed" | 
+/**  Nothing to do that on (not in a room, no such ring). */
+"nothing";
+
+/**  A call or invite ringing for the player. */
+export type VoiceRing = {
+	room: string,
+	from: string,
+	/**  Others in the room (at most 4): the card's small faces. */
+	with: string[],
+	/**  Unix seconds. */
+	until: number,
+};
+
+/**  A role in a room. Crew rooms follow the crew's roles. */
+export type VoiceRole = "leader" | "moderator" | "member";
+
+/**  A friend room (`friend`: a call that grows with invites) or a crew room (`crew`). */
+export type VoiceRoomKind = "friend" | "crew";
+
+/**  The room the player is in. */
+export type VoiceRoomView = {
+	id: string,
+	kind: VoiceRoomKind,
+	/**  Crew rooms: the crew. */
+	crew: string | null,
+	/**
+	 *  Crew rooms: always. Friend rooms: none until the leader names it; show the people's names
+	 *  ("Kaan_07, Ece_x").
+	 */
+	name: string | null,
+	/**  The crew's "Genel": never renamed, never closed. */
+	general: boolean,
+	/**  People at most ("Oda dolu."). */
+	max: number,
+	phase: VoicePhase,
+	me: VoiceMe,
+	/**  Everyone else, longest present first. People the player is blocked with never show. */
+	people: VoicePerson[],
+	/**  The player's own invites still ringing (the panel shows them with "İptal"). */
+	ringing: VoiceOutRing[],
+	/**  What the player may do to the room itself. */
+	canRename: boolean,
+	canClose: boolean,
+};
+
+/**  Settings → Sesli sohbet. */
+export type VoiceSettings = {
+	/**  "Sesli sohbet": off, no "Ara", no ring, and nobody can call the player. */
+	enabled?: boolean,
+	/**  The microphone (none: the system's default). This computer only. */
+	inputDevice?: string | null,
+	/**  Where voices play (none: the system's default). This computer only. */
+	outputDevice?: string | null,
+	mode?: VoiceTalkMode,
+	/**  "Bas-konuş" key (needed for push-to-talk). */
+	pushToTalkKey?: VoiceKey | null,
+	/**  "Mikrofonu kapat/aç" shortcut (none by default). */
+	muteKey?: VoiceKey | null,
+	/**  "Sağırlaştır" shortcut (none by default). */
+	deafenKey?: VoiceKey | null,
+	/**  "Gürültü engelleme". */
+	noiseSuppression?: boolean,
+	/**  "Yankı önleme" (Gelişmiş). */
+	echoCancellation?: boolean,
+	/**  "Otomatik ses seviyesi" (Gelişmiş). */
+	autoGain?: boolean,
+	/**  "Hassasiyet": none is "Otomatik"; else the threshold, 0 (everything) to 100. */
+	sensitivity?: number | null,
+	/**  "Mikrofon sesi" while automatic volume is off (percent, 0–200). */
+	micVolume?: number,
+	/**  "Katılma ve ayrılma sesleri". */
+	sounds?: boolean,
+};
+
+/**  Which shortcut a key is for. */
+export type VoiceShortcut = 
+/**  "Bas-konuş". */
+"pushToTalk" | 
+/**  "Mikrofonu kapat/aç". */
+"mute" | 
+/**  "Sağırlaştır". */
+"deafen";
+
+/**  Who speaks now (`voice-speaking`; at most ten a second, only while the window is on screen). */
+export type VoiceSpeaking = {
+	/**  People in the room who speak now. */
+	ids: string[],
+	/**  The player's microphone sends now. */
+	me: boolean,
+};
+
+/**  Voice chat now, whole. */
+export type VoiceState = {
+	/**
+	 *  Voice chat may be offered at all: the signed config, Studio's switch and the friends
+	 *  service agree, and the player is signed in. False: no voice chat anywhere (not even the
+	 *  settings page).
+	 */
+	available: boolean,
+	/**
+	 *  The player's own "Sesli sohbet" switch (Settings → Sesli sohbet). Off: no "Ara", no ring,
+	 *  nobody can call them.
+	 */
+	enabled: boolean,
+	/**  The room the player is in, or is joining. */
+	room: VoiceRoomView | null,
+	/**
+	 *  A call the player started that still rings at the friend (the title bar's "Aranıyor…" pill
+	 *  with "İptal"); the player already waits in the room.
+	 */
+	calling: VoiceCalling | null,
+	/**
+	 *  Calls and invites ringing for the player now (the incoming card: "Katıl" / "Reddet"),
+	 *  oldest first. Do-not-disturb rings never show here: they are missed calls at once.
+	 */
+	rings: VoiceRing[],
+	/**
+	 *  Missed calls ("Cevapsız arama"): "Katıl" while `joinable`, else "Geri ara". Newest first,
+	 *  at most 10; gone after "Geri ara", "Katıl" or `voice_dismiss_missed`.
+	 */
+	missed: VoiceMissed[],
+	/**
+	 *  The live rooms of the player's crews (the crew page's "Sesli"); a crew without any has no
+	 *  entry (show only "Genel" with "Katıl").
+	 */
+	crews: VoiceCrewRooms[],
+	/**  How many rooms a crew may have, "Genel" included ("Yeni oda" hides when a crew has them). */
+	crewRoomsMax: number,
+	/**  The microphone as the voice engine last saw it. */
+	mic: VoiceMic,
+	/**
+	 *  Input and output devices (only known while the voice engine runs: in a room, or while the
+	 *  settings page is open).
+	 */
+	devices: VoiceDevices,
+	/**  "Mikrofonu dene" runs: the player hears themselves. */
+	testing: boolean,
+};
+
+/**  When the microphone sends. */
+export type VoiceTalkMode = 
+/**  "Konuşunca": when the player speaks (no setup). */
+"voice" | 
+/**  "Bas-konuş": while the chosen key is held. */
+"pushToTalk";
 
 export type WorldBackupView = {
 	fileName: string,

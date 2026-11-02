@@ -28,14 +28,19 @@ pub const WORLDS_CAP: &str = "worlds2";
 
 /// Adds [`WORLDS_CAP`] to a presence address's `caps` query.
 pub(crate) fn ask_for_worlds(url: &mut url::Url) {
+    ask_for_cap(url, WORLDS_CAP);
+}
+
+/// Adds `cap` to a presence address's `caps` query (once).
+pub(crate) fn ask_for_cap(url: &mut url::Url, cap: &str) {
     let caps = url
         .query_pairs()
         .find(|(name, _)| name == "caps")
         .map(|(_, value)| value.into_owned());
     let caps = match caps {
-        Some(caps) if caps.split(',').any(|cap| cap == WORLDS_CAP) => return,
-        Some(caps) if !caps.is_empty() => format!("{caps},{WORLDS_CAP}"),
-        _ => WORLDS_CAP.to_owned(),
+        Some(caps) if caps.split(',').any(|name| name == cap) => return,
+        Some(caps) if !caps.is_empty() => format!("{caps},{cap}"),
+        _ => cap.to_owned(),
     };
     // Commas stay as they are, as the service reads them (like `presence_url_with`).
     url.set_query(Some(&format!("caps={caps}")));
