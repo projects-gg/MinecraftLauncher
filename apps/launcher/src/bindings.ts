@@ -7511,6 +7511,11 @@ export type PlusAdPreview = {
 	warning?: PlusAdWarning | null,
 	/**  A second warning stopped the ads until the day ends. */
 	stoppedToday?: boolean,
+	/**
+	 *  ProBot AI still gets to know this server's chat before its first ad here (no Studio
+	 *  profile for it; AFKPLUS-DYN). False from an older service.
+	 */
+	learning?: boolean,
 };
 
 export type PlusAdTemplate = {

@@ -921,6 +921,8 @@ export const trAfkPlus = {
     adNoOrders: "Etkin sipariş yokken ilan verilmez.",
     // The item names not known yet: the machine has not been in game (`namesPending`).
     adNamesPending: "ProBot AI oyuna girince hazır olur.",
+    // AFKPLUS-DYN: still getting to know the server's chat before the first ad (`learning`).
+    adLearning: "Önce bu sunucunun sohbetini öğreniyor, ilk ilanı sonra verir.",
     // "Para birimi" (TRADE-ANY): the money's name after amounts, the player's or the profile's own.
     currency: "Para birimi",
     currencyHelp: "Sunucundaki paranın adı.",

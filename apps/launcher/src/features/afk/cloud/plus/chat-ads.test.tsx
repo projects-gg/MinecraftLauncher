@@ -23,6 +23,7 @@ function plan(parts: Partial<PlusAdPreview> = {}): PlusAdPreview {
     nextAt: null,
     warning: null,
     stoppedToday: false,
+    learning: false,
     ...parts,
   };
 }
@@ -128,5 +129,18 @@ describe("Sohbete ilan", () => {
     expect(screen.getByText("ProBot AI oyuna girince hazır olur.")).toBeTruthy();
     expect(screen.queryByText("Etkin sipariş yokken ilan verilmez.")).toBeNull();
     expect(said(container)).toBeNull();
+  });
+
+  it("says calmly that it first gets to know the server's chat, with the sample ad", () => {
+    // AFKPLUS-DYN: no Studio profile for the server; the first ad waits for the chat to be known.
+    const learning = "Önce bu sunucunun sohbetini öğreniyor, ilk ilanı sonra verir.";
+    const { container, rerender } = show(plan({ learning: true }));
+    expect(screen.getByText(learning)).toBeTruthy();
+    expect(said(container)).toBe("Örnek ilan: Neon_Drift: Alıyorum: 4 Elytra, PM at");
+    // A spam warning says its own thing instead.
+    const warning = { at: 1_792_900_000, everyMin: 120 };
+    const warned = plan({ learning: true, warning });
+    rerender(<ChatAds plan={warned} minutes={60} name="Neon_Drift" onMinutes={ignore} />);
+    expect(screen.queryByText(learning)).toBeNull();
   });
 });

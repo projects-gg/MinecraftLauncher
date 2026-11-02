@@ -91,6 +91,9 @@ export function ChatAds({
             <Hint tone="warn" className="pt-1.5">
               {t("afkPlus.settings.adWarned", { n: plan.warning.everyMin })}
             </Hint>
+          ) : plan.learning ? (
+            // AFKPLUS-DYN: the first ad waits until the bot knows the server's chat (calm, no fault).
+            <Hint className="pt-1.5">{t("afkPlus.settings.adLearning")}</Hint>
           ) : null}
           {line === null ? (
             <p className="pt-1.5 text-[12.5px] text-ash-400">{t(`afkPlus.settings.${quiet}`)}</p>
