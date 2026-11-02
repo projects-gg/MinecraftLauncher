@@ -180,6 +180,10 @@ pub struct Me {
     pub now: i64,
     /// Whether this player may buy AFK+, and AFK+'s own restriction of them.
     pub plus: Option<MePlus>,
+    /// "ProBot AI ile kalıp kur" answers this player's desktop rules (`POST /rules/pattern`,
+    /// PATTERN-L): its model can answer, Studio's switch is on, the Discord account is old enough
+    /// and the player is not banned. False from a service before that route.
+    pub ai_patterns: bool,
 }
 
 /// A server address as the service stores it: `host` normalized (lowercase ASCII, punycode),
@@ -904,6 +908,10 @@ mod tests {
         assert_eq!(offer.mode, ServiceMode::On);
         assert_eq!(offer.month_price().unwrap().price_tl, "60.00");
         assert_eq!(offer.limits, CloudLimits::default());
+        // A service before the desktop's pattern route (PATTERN-L) does not name the player for it.
+        let me = |json: &str| serde_json::from_str::<Me>(json).unwrap();
+        assert!(!me(r#"{"now": 1}"#).ai_patterns);
+        assert!(me(r#"{"now": 1, "aiPatterns": true}"#).ai_patterns);
     }
 
     #[test]

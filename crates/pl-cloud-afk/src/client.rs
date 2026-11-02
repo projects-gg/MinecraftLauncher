@@ -436,6 +436,39 @@ impl CloudClient {
         lang: &str,
         fresh: bool,
     ) -> Result<PatternSuggestion> {
+        self.pattern(
+            token,
+            &account_path(id, "/rules/pattern")?,
+            text,
+            lang,
+            fresh,
+        )
+        .await
+    }
+
+    /// The same helper for a rule of this computer's AFK accounts (`POST /rules/pattern`, no cloud
+    /// account; PATTERN-L): only the description goes, the service counts the calls per player. A
+    /// service before that route answers `404 not_found`: read as the helper being off there.
+    pub async fn suggest_pattern_here(
+        &self,
+        token: &Bearer,
+        text: &str,
+        lang: &str,
+        fresh: bool,
+    ) -> Result<PatternSuggestion> {
+        self.pattern(token, "rules/pattern", text, lang, fresh)
+            .await
+            .map_err(route_missing_is_off)
+    }
+
+    async fn pattern(
+        &self,
+        token: &Bearer,
+        path: &str,
+        text: &str,
+        lang: &str,
+        fresh: bool,
+    ) -> Result<PatternSuggestion> {
         #[derive(Deserialize)]
         struct Answer {
             suggestion: PatternSuggestion,
@@ -443,7 +476,7 @@ impl CloudClient {
         let reply = self
             .send(
                 Method::POST,
-                &account_path(id, "/rules/pattern")?,
+                path,
                 Some(token),
                 Some(pattern_body(text, lang, fresh)?),
                 &[],
@@ -605,6 +638,22 @@ fn pattern_body(text: &str, lang: &str, fresh: bool) -> Result<serde_json::Value
     Ok(body)
 }
 
+/// A service before `POST /rules/pattern` answers it `404 not_found`: for the player that is the
+/// helper being off there (its "ProBot AI şu an yardım edemiyor" words), not a missing account.
+fn route_missing_is_off(error: CloudError) -> CloudError {
+    match error {
+        CloudError::Refused { status: 404, .. } => CloudError::Refused {
+            status: 503,
+            code: "ai_unavailable".to_owned(),
+            extra: serde_json::Map::from_iter([(
+                "reason".to_owned(),
+                serde_json::Value::from("off"),
+            )]),
+        },
+        other => other,
+    }
+}
+
 /// `accounts/<id><rest>`, refusing ids that could leave the route.
 pub(crate) fn account_path(id: &str, rest: &str) -> Result<String> {
     let safe = !id.is_empty()
@@ -763,6 +812,34 @@ mod tests {
             account_path("a_7KQ2MZ3P9TW4XB1C", "/rules/pattern").unwrap(),
             "accounts/a_7KQ2MZ3P9TW4XB1C/rules/pattern"
         );
+    }
+
+    #[test]
+    fn a_service_without_the_desktop_route_reads_as_the_helper_off() {
+        let missing = from_response(
+            404,
+            None,
+            br#"{"error": {"code": "not_found", "message": "No such endpoint"}}"#,
+        );
+        let off = route_missing_is_off(missing);
+        assert_eq!(
+            crate::pattern::PatternTrouble::of(&off),
+            Some(crate::pattern::PatternTrouble::Off)
+        );
+        // Anything else stays what it was.
+        let busy = from_response(
+            503,
+            Some("30"),
+            br#"{"error": {"code": "ai_unavailable", "message": "x", "reason": "busy"}}"#,
+        );
+        assert_eq!(
+            crate::pattern::PatternTrouble::of(&route_missing_is_off(busy)),
+            Some(crate::pattern::PatternTrouble::Busy)
+        );
+        assert!(matches!(
+            route_missing_is_off(CloudError::Unauthorized),
+            CloudError::Unauthorized
+        ));
     }
 
     #[test]

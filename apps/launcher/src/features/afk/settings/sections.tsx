@@ -6,6 +6,7 @@ import { ArrowCounterClockwise } from "@phosphor-icons/react";
 import { Button, Input, Segmented, Select, Slider } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import type { AfkSettingsView, ChatLogFilter, SettingsPage } from "@/lib/api";
+import type { PatternSuggestion } from "../cloud/api";
 import {
   AddressField,
   Block,
@@ -21,6 +22,17 @@ import {
 } from "./controls";
 import { DEFAULT_RETRIES, type Draft, LIMITS } from "./model";
 
+/**
+ * "ProBot AI ile kalıp kur" in the rules (PATTERN-L): 7/24 Bulut's helper without a cloud account,
+ * offered while the service has it for this player (signed in to Friends, its model on).
+ */
+export interface RulePatterns {
+  /** Whose rules: a pattern it made reads as its sentence, kept on this computer per account. */
+  accountId: string;
+  /** The player's words in, a trigger out (only the words go to the service). */
+  suggest: (text: string, fresh: boolean) => Promise<PatternSuggestion>;
+}
+
 export interface SectionProps {
   draft: Draft;
   setDraft: (update: (draft: Draft) => Draft) => void;
@@ -31,6 +43,8 @@ export interface SectionProps {
   onOpenFolder: () => void;
   /** Changes when a save is taken or the edits are dropped (the address field's `revision`). */
   revision: number;
+  /** ProBot AI in the rules; undefined: not offered, a pattern is written by hand as before. */
+  patterns?: RulePatterns;
 }
 
 type Nested = {

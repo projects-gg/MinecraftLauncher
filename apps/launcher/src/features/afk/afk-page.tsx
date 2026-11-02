@@ -545,6 +545,8 @@ export function AfkPage() {
         account={settingsAccount}
         // An account in both places: the title says these are this computer's settings.
         twin={settingsAccount ? folded.has(settingsAccount.id) : false}
+        // "ProBot AI ile kalıp kur" in its rules, as in a 7/24 Bulut rule (PATTERN-L).
+        aiPatterns={Boolean(cloud?.overview.desktopPatterns)}
         onClose={() => setSettingsId(null)}
       />
       <Dialog

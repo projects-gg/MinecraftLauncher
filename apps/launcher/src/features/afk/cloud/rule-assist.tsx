@@ -5,7 +5,9 @@
 // rule's field ("Kalıbı değiştir" opens the box again);
 // the rule stores only the pattern, so this computer keeps the sentence (a per-viewer convenience:
 // elsewhere it reads as "Özel kalıp"). Offered only while the service says its model can answer
-// (`aiPatterns`); otherwise a rule is a plain phrase or a pattern written by hand, as before.
+// (`aiPatterns`); otherwise a rule is a plain phrase or a pattern written by hand, as before. The
+// desktop's rules have the same box (PATTERN-L: `desktopPatterns`, the service's route without a
+// cloud account, only the player's words sent).
 import { X } from "@phosphor-icons/react";
 import { Button, enter, IconButton, Input, leave, SwapLabel, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -251,8 +253,8 @@ export function PatternHelper({
 // ---- A rule's trigger with ProBot AI ------------------------------------------------------------
 
 /**
- * What a cloud rule's TriggerField takes (`assist`, undefined while ProBot AI cannot answer) and the
- * box to put under the rule's first row (as wide as the rule).
+ * What a rule's TriggerField takes (`assist`, undefined while ProBot AI cannot answer) and the box to
+ * put under the rule's first row (as wide as the rule): a 7/24 Bulut rule's, or a desktop one's.
  */
 export function useRuleAssist({
   accountId,
@@ -270,7 +272,7 @@ export function useRuleAssist({
   fieldId: string;
   pattern: string;
   regex: boolean;
-  /** The overview's `aiPatterns`: the service's model can answer now. */
+  /** The overview's `aiPatterns` (a desktop rule: `desktopPatterns`): its model can answer now. */
   available: boolean;
   suggest: (text: string, fresh: boolean) => Promise<PatternSuggestion>;
   onChange: (pattern: string, regex: boolean) => void;
