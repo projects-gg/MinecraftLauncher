@@ -183,8 +183,8 @@ export const trTeams = {
   roster: {
     title: "Üyeler",
     projects: "Projects'te",
-    playing: "Şu anda oynuyor",
-    launcher: "Şu anda çevrimiçi",
+    playing: "Oyunda",
+    launcher: "Launcher'da",
     offline: "Çevrimdışı",
   },
   call: {
