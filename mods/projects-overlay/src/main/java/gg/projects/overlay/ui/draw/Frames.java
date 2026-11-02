@@ -146,13 +146,16 @@ public enum Frames {
         .withShadow(Theme.withAlpha(0x0A0408, 0.55f), 5f, 2f)),
     TOOLTIP(FrameSpec.rounded(4, Theme.OBSIDIAN_950, Theme.withAlpha(0xFFFFFF, 0.12f))
         .withShadow(Theme.withAlpha(0x0A0408, 0.5f), 4f, 1.5f)),
-    /** A reaction under a message: an action, so chamfered; the player's own carries a gold edge. */
+    /**
+     * A reaction under a message: an action, so chamfered; the player's own sits on the quiet plate with a bone edge
+     * (a chosen chip is never gold, docs/design.md §2; BETA2-FIX, as the launcher's).
+     */
     REACTION(FrameSpec.rounded(2.5f, Theme.withAlpha(0xFFFFFF, 0.06f), Theme.withAlpha(0xFFFFFF, 0.10f))
         .chamfer().fixed(12)),
     REACTION_HOVER(FrameSpec.rounded(2.5f, Theme.withAlpha(0xFFFFFF, 0.11f), Theme.withAlpha(0xFFFFFF, 0.18f))
         .chamfer().fixed(12)),
-    REACTION_MINE(FrameSpec.rounded(2.5f, Theme.withAlpha(Theme.mix(Theme.OBSIDIAN_700, Theme.GOLD_500, 0.2f), 0.95f),
-        Theme.withAlpha(Theme.GOLD_400, 0.55f)).chamfer().fixed(12)),
+    REACTION_MINE(FrameSpec.rounded(2.5f, Theme.withAlpha(0xFFFFFF, 0.16f), Theme.withAlpha(Theme.BONE_100, 0.42f))
+        .chamfer().fixed(12)),
     FOCUS_12(FrameSpec.rounded(2.5f, 0, 0).withRing(Theme.GOLD_300, 1.5f).chamfer().fixed(12)),
     /** A message picked with the keyboard, and the moment a quote takes the player to its message. */
     FOCUS_BUBBLE(FrameSpec.rounded(5, 0, 0).withRing(Theme.GOLD_300, 1.5f)),

@@ -1864,9 +1864,9 @@ public final class MessageList extends PanelWidget {
                 Draw.frame(g, Frames.REACTION_HOVER, cx, cy, row.chipW[i], CHIP_H, 0x80FFFFFF);
             }
             float textY = Fonts.centeredY(Fonts.Face.UI, cy + CHIP_H / 2f);
-            Draw.text(g, ui, row.chipEmoji[i], cx + 4, textY, r.mine() ? Theme.GOLD_200 : Theme.BONE_100);
+            Draw.text(g, ui, row.chipEmoji[i], cx + 4, textY, Theme.BONE_100);
             Draw.text(g, small, row.chipCount[i], cx + 4 + row.chipEmojiW[i] + 3,
-                Fonts.centeredY(Fonts.Face.SMALL, cy + CHIP_H / 2f), r.mine() ? Theme.GOLD_200 : Theme.ASH_300);
+                Fonts.centeredY(Fonts.Face.SMALL, cy + CHIP_H / 2f), reactionCountColor(r.mine()));
             if (lit) {
                 g.requestCursor(CursorTypes.POINTING_HAND);
             }
@@ -1902,6 +1902,14 @@ public final class MessageList extends PanelWidget {
      */
     static int deliveryMarkColor(OverlayState.Delivery delivery) {
         return delivery == OverlayState.Delivery.FAILED ? Theme.FLARE_400 : Theme.ASH_400;
+    }
+
+    /**
+     * A reaction chip's count: the player's own is bone on its quiet plate ({@link Frames#REACTION_MINE}), the others
+     * ash; never gold (BETA2-FIX, as the launcher's chip). The emoji itself is drawn bone on both.
+     */
+    static int reactionCountColor(boolean mine) {
+        return mine ? Theme.BONE_50 : Theme.ASH_300;
     }
 
     /** "Tepki ver" and "Yanıtla" beside the message under the pointer (or picked with the keys). */
@@ -1983,8 +1991,8 @@ public final class MessageList extends PanelWidget {
             if (i < quick) {
                 OverlayState.Reaction given = row.line.reaction(QUICK_SHOWN[i]);
                 if (given != null && given.mine()) {
-                    // Already given: a gold dot under it (pressing it takes it back).
-                    Draw.disc(g, 3, cx + QUICK_CELL / 2f, cy + QUICK_CELL - 1f, Theme.GOLD_400);
+                    // Already given: a bone dot under it (pressing it takes it back; never gold, BETA2-FIX).
+                    Draw.disc(g, 3, cx + QUICK_CELL / 2f, cy + QUICK_CELL - 1f, Theme.BONE_100);
                 }
                 // The game's emoji glyphs are 16 texels: at twice the text size they stay whole pixels.
                 m.pushMatrix();
