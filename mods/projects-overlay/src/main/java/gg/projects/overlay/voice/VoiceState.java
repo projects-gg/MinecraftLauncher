@@ -141,6 +141,7 @@ public final class VoiceState {
     private Named calling;
     private List<Ring> rings = List.of();
     private boolean sound;
+    private int volumeMax = MAX_VOLUME;
     private int revision;
     private int speakingRevision;
     private final Deque<Notice> notices = new ArrayDeque<>();
@@ -190,6 +191,7 @@ public final class VoiceState {
         calling = null;
         rings = List.of();
         sound = false;
+        volumeMax = MAX_VOLUME;
         notices.clear();
         result = null;
         revision++;
@@ -315,12 +317,18 @@ public final class VoiceState {
         return room.full() ? Offer.FULL : Offer.INVITE;
     }
 
-    /** The volume steps to offer for someone at {@code current}: the steps, and their own value where it is none of them. */
-    public static List<Integer> volumeChoices(int current) {
+    /**
+     * The volume steps to offer for someone at {@code current}, up to {@code max} (the voice page's top): the steps, and
+     * their own value where it is none of them.
+     */
+    public static List<Integer> volumeChoices(int current, int max) {
         List<Integer> out = new ArrayList<>(VOLUME_STEPS.length + 1);
-        boolean placed = false;
+        boolean placed = current < 0 || current > max;
         for (int step : VOLUME_STEPS) {
-            if (!placed && current < step && current >= 0) {
+            if (step > max) {
+                break;
+            }
+            if (!placed && current < step) {
                 out.add(current);
                 placed = true;
             }
@@ -329,10 +337,15 @@ public final class VoiceState {
             }
             out.add(step);
         }
-        if (!placed && current > VOLUME_STEPS[VOLUME_STEPS.length - 1] && current <= MAX_VOLUME) {
+        if (!placed) {
             out.add(current);
         }
         return out;
+    }
+
+    /** A person's volume at most now (percent): 100 while the voice page plays through {@code <audio>}, else 200. */
+    public int volumeMax() {
+        return volumeMax;
     }
 
     /** The words a room's title needs, in the overlay's language. */
@@ -392,6 +405,8 @@ public final class VoiceState {
     private void putView(JsonObject frame) {
         on = Protocol.bool(frame, "on", false);
         sound = Protocol.bool(frame, "sound", false);
+        // At least "as they come" (100): a lower top would be no launcher's.
+        volumeMax = (int) Math.max(100, Math.min(MAX_VOLUME, Protocol.num(frame, "volumeMax", MAX_VOLUME)));
         JsonObject r = obj(frame, "room");
         room = r == null ? null : roomOf(r);
         JsonObject c = obj(frame, "calling");

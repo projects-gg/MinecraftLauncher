@@ -1183,6 +1183,10 @@ pub struct VoiceView {
     /// launcher's own page rings and the mod stays quiet).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub sound: bool,
+    /// A person's volume at most (percent) while the voice page cannot go past it (V20: 100 through
+    /// `<audio>` elements); absent: [`crate::voice::MAX_VOLUME`].
+    #[serde(rename = "volumeMax", skip_serializing_if = "Option::is_none")]
+    pub volume_max: Option<u16>,
 }
 
 impl VoiceView {

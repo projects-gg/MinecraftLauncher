@@ -161,7 +161,8 @@ pub fn check(
         }
         FromGame::VoiceVol { person, percent } if in_room(person) => Ok(VoiceAct::Volume {
             person: person.clone(),
-            percent: u16::try_from((*percent).clamp(0, i64::from(MAX_VOLUME))).unwrap_or(100),
+            percent: u16::try_from((*percent).clamp(0, i64::from(volume_top(state))))
+                .unwrap_or(100),
         }),
         FromGame::VoiceLmute { person, on } if in_room(person) => Ok(VoiceAct::MuteForMe {
             person: person.clone(),
@@ -253,10 +254,17 @@ pub fn refused_result(refused: &Refused) -> Option<ToGame> {
     })
 }
 
-/// The view of `state` for the mod: names from `name_of` (the friend lists; none: "Bir oyuncu"),
-/// crew names from `crew_name`. `sound`: the mod rings for a ring (the launcher's window is away).
-/// `speaking`: who speaks now, when that changed after `state` (the state's flags are as of its
-/// own change; a speaking change comes alone).
+/// A person's volume at most now: the voice page's top (100 through `<audio>` elements), never past
+/// [`MAX_VOLUME`]; [`MAX_VOLUME`] before voice chat said anything.
+fn volume_top(state: Option<&VoiceState>) -> u16 {
+    state.map_or(MAX_VOLUME, |state| state.volume_max.min(MAX_VOLUME))
+}
+
+/// The view of `state` for the mod: names from `name_of` (the friend lists), else from the room's
+/// cards (`profiles`: a friend's friend; none: "Bir oyuncu"), crew names from `crew_name`. `sound`:
+/// the mod rings for a ring (the launcher's window is away). `speaking`: who speaks now, when that
+/// changed after `state` (the state's flags are as of its own change; a speaking change comes
+/// alone).
 pub fn view_of(
     state: &VoiceState,
     sound: bool,
@@ -264,7 +272,18 @@ pub fn view_of(
     name_of: impl Fn(&str) -> Option<String>,
     crew_name: impl Fn(&str) -> Option<String>,
 ) -> VoiceView {
-    let name = |id: &str| name_of(id).unwrap_or_default();
+    let name = |id: &str| {
+        name_of(id)
+            .or_else(|| {
+                state
+                    .profiles
+                    .iter()
+                    .find(|card| card.id == id)
+                    .map(|card| card.name.clone())
+            })
+            .unwrap_or_default()
+    };
+    let top = volume_top(Some(state));
     let room = state.room.as_ref().map(|room| VoiceRoomShown {
         id: room.id.clone(),
         kind: room.kind,
@@ -297,7 +316,7 @@ pub fn view_of(
                 muted_by_moderator: person.muted_by_moderator,
                 quality: person.quality,
                 speaking: speaking.map_or(person.speaking, |now| now.ids.contains(&person.id)),
-                volume: person.volume.min(MAX_VOLUME),
+                volume: person.volume.min(top),
                 muted_for_me: person.muted_for_me,
                 can: VoiceCan {
                     mute: person.can.mute,
@@ -334,6 +353,7 @@ pub fn view_of(
             })
             .collect(),
         sound: sound && !state.rings.is_empty(),
+        volume_max: (top < MAX_VOLUME).then_some(top),
     }
 }
 
@@ -541,6 +561,48 @@ mod tests {
                            "with": ["Kaan_07", ""], "until": 1_800_000_020_000_i64}],
             })
         );
+    }
+
+    #[test]
+    fn a_friends_friend_is_named_from_the_rooms_cards_and_volumes_keep_to_the_pages_top() {
+        let card = |id: &str, name: &str| pl_voice::view::VoiceProfile {
+            id: id.into(),
+            name: name.into(),
+            avatar: "preset:fox".into(),
+            avatar_url: None,
+            marks: Vec::new(),
+        };
+        let mut state = in_room();
+        state.profiles = vec![card("u-x", "Zeyno_x"), card("u-kaan", "NotKaan")];
+        state.volume_max = 100;
+        let view = serde_json::to_value(ToGame::Voice(Box::new(view_of(
+            &state, false, None, names, crews,
+        ))))
+        .unwrap();
+        let people = &view["room"]["people"];
+        assert_eq!(
+            people[0]["name"], "Kaan_07",
+            "the friend list's own name first"
+        );
+        assert_eq!(people[1]["name"], "Zeyno_x");
+        assert_eq!(view["rings"][0]["with"], json!(["Kaan_07", "Zeyno_x"]));
+        assert_eq!(people[0]["volume"], 100, "held to the page's top");
+        assert_eq!(view["volumeMax"], 100);
+        // A press past it is held there too.
+        let press = FromGame::VoiceVol {
+            person: "u-x".into(),
+            percent: 150,
+        };
+        assert_eq!(
+            check(&press, Some(&state), |_| false).unwrap().unwrap(),
+            VoiceAct::Volume {
+                person: "u-x".into(),
+                percent: 100
+            }
+        );
+        // Through WebAudio the top is the slider's own: nothing is said of it.
+        state.volume_max = 200;
+        assert_eq!(view_of(&state, false, None, names, crews).volume_max, None);
     }
 
     #[test]

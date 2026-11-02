@@ -151,11 +151,21 @@ class VoiceStateTest {
     }
 
     @Test
-    void volumeStepsKeepTheOwnValue() {
-        assertEquals(List.of(25, 50, 75, 100, 125, 150, 200), VoiceState.volumeChoices(100));
-        assertEquals(List.of(25, 50, 63, 75, 100, 125, 150, 200), VoiceState.volumeChoices(63));
-        assertEquals(List.of(0, 25, 50, 75, 100, 125, 150, 200), VoiceState.volumeChoices(0));
-        assertEquals(List.of(25, 50, 75, 100, 125, 150, 180, 200), VoiceState.volumeChoices(180));
+    void volumeStepsKeepTheOwnValueAndThePagesTop() {
+        assertEquals(List.of(25, 50, 75, 100, 125, 150, 200), VoiceState.volumeChoices(100, 200));
+        assertEquals(List.of(25, 50, 63, 75, 100, 125, 150, 200), VoiceState.volumeChoices(63, 200));
+        assertEquals(List.of(0, 25, 50, 75, 100, 125, 150, 200), VoiceState.volumeChoices(0, 200));
+        assertEquals(List.of(25, 50, 75, 100, 125, 150, 180, 200), VoiceState.volumeChoices(180, 200));
+        // Through <audio> elements the page goes to 100 at most.
+        assertEquals(List.of(25, 50, 75, 90, 100), VoiceState.volumeChoices(90, 100));
+        assertEquals(List.of(25, 50, 75, 100), VoiceState.volumeChoices(150, 100));
+        assertEquals(200, state.volumeMax(), "before the launcher said");
+        apply("{\"t\":\"voice\",\"on\":true,\"volumeMax\":100}");
+        assertEquals(100, state.volumeMax());
+        apply("{\"t\":\"voice\",\"on\":true,\"volumeMax\":5}");
+        assertEquals(100, state.volumeMax(), "never below as they come");
+        apply("{\"t\":\"voice\",\"on\":true}");
+        assertEquals(200, state.volumeMax());
     }
 
     @Test

@@ -824,11 +824,12 @@ public final class OverlayScreen extends Screen {
         OverlayState.Friend f = state.friend(id);
         List<PersonMenu.Choice> out = new ArrayList<>();
         if (action == FriendMenu.Action.VOLUME) {
-            // VOICE-O: the steps, theirs checked (a value set in the launcher between two steps shows as its own row).
+            // VOICE-O: the steps up to the voice page's top, theirs checked (a value set in the launcher between two
+            // steps shows as its own row).
             VoiceState.Room room = overlay.voice().room();
             VoiceState.Person p = room == null ? null : room.person(id);
             if (p != null) {
-                for (int step : VoiceState.volumeChoices(p.volume())) {
+                for (int step : VoiceState.volumeChoices(p.volume(), overlay.voice().volumeMax())) {
                     out.add(new PersonMenu.Choice(Integer.toString(step), Texts.percent(step), false,
                         step == p.volume()));
                 }
