@@ -9455,7 +9455,12 @@ export type ReportTarget =
  *  A player; from a plan card (FIX2) its maker, with the plan as the moderators' evidence;
  *  from a reaction's list (CHAT2) who gave it, with the reaction.
  */
-{ kind: "player"; id: string; plan?: ReportPlan | null; reaction?: ReportReaction | null } | 
+{ kind: "player"; id: string; plan?: ReportPlan | null; reaction?: ReportReaction | null; 
+/**
+ *  VOICE: the voice room it is reported from (the room's person menu, or the person card
+ *  for 24 hours after the call): the room's events go along as the moderators' evidence.
+ */
+voice?: string | null } | 
 /**
  *  A crew; `code` when it was looked up by code, `via` (TEAM6) when it is reported from the
  *  card of the tag that friend or crewmate wears ("Ekibi rapor et").

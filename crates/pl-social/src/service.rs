@@ -4051,8 +4051,20 @@ impl SocialService {
             let mut core = self.lock();
             let extras = offered(&core).is_some();
             match &target {
-                ReportTarget::Player { id, plan, reaction } => {
+                ReportTarget::Player {
+                    id,
+                    plan,
+                    reaction,
+                    voice,
+                } => {
                     let mut wire = serde_json::json!({ "kind": "player", "id": id });
+                    // From a voice room (VOICE, S2): the room, which the service checks; only to a
+                    // service that speaks voice chat.
+                    if let Some(room) = voice.as_ref().filter(|room| crate::voice::is_room_id(room))
+                        && self.inner.voice.taken()
+                    {
+                        wire["voice"] = serde_json::json!({ "room": room });
+                    }
                     // From a plan card (FIX2): the plan goes along as the moderators' evidence.
                     if let Some(plan) = plan.as_ref()
                         && core.state.offers(TEAM_FEATURE_PLAN_NOTES)

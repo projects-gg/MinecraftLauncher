@@ -563,6 +563,10 @@ pub enum ReportTarget {
         plan: Option<ReportPlan>,
         #[serde(default)]
         reaction: Option<ReportReaction>,
+        /// VOICE: the voice room it is reported from (the room's person menu, or the person card
+        /// for 24 hours after the call): the room's events go along as the moderators' evidence.
+        #[serde(default)]
+        voice: Option<String>,
     },
     /// A crew; `code` when it was looked up by code, `via` (TEAM6) when it is reported from the
     /// card of the tag that friend or crewmate wears ("Ekibi rapor et").

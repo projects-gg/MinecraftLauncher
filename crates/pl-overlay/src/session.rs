@@ -332,6 +332,7 @@ impl SocialActions for SocialService {
             id: friend.to_owned(),
             plan: None,
             reaction: None,
+            voice: None,
         };
         async move { service.report(target, reason, note, block).await }
     }
