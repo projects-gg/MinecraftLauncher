@@ -12,10 +12,14 @@
 //
 // --notes-file: the release notes as the tag message gives them, Turkish, then optionally a
 // `--- en ---` line and the English notes (lib.mjs `parseNotes`, docs/release.md).
+// --expect-current: publish only while the channel still announces that version (or already this
+// one: a run again). A stable taken from a beta goes to the beta channel this way, so a newer beta
+// that came meanwhile is never replaced by the older beta's code.
 //
 //   node scripts/release/publish-r2.mjs publish --dir release-files --version 2.1.0 \
 //     [--channel beta|stable|none] [--notes-file notes.md] [--rollout 100] [--mandatory] \
-//     [--min-version 2.0.3|none] [--require windows-x86_64,...] [--allow-downgrade] [--dry-run]
+//     [--min-version 2.0.3|none] [--require windows-x86_64,...] [--expect-current 2.1.0-beta.2] \
+//     [--allow-downgrade] [--dry-run]
 //   node scripts/release/publish-r2.mjs promote --version 2.1.0 [--from beta] [--to stable] \
 //     [--rollout 25] [--mandatory[=false]] [--min-version 2.0.3|none] [--allow-downgrade] [--dry-run]
 //   node scripts/release/publish-r2.mjs show [--channel stable]
@@ -37,6 +41,7 @@ import {
   parseArgs,
   parseVersion,
   R2Client,
+  Refusal,
   readBundles,
   readNotes,
   requirePlatforms,
@@ -49,7 +54,7 @@ import {
 const USAGE = `usage: node scripts/release/publish-r2.mjs <publish|promote|show> [options]
   publish --dir <dir> --version <v> [--channel beta|stable|none] [--notes-file <md>]
           [--rollout 0-100] [--mandatory] [--min-version <v>|none] [--require <keys>]
-          [--allow-downgrade] [--dry-run]
+          [--expect-current <v>] [--allow-downgrade] [--dry-run]
   promote --version <v> [--from beta] [--to stable] [--rollout 0-100] [--mandatory[=false]]
           [--min-version <v>|none] [--allow-downgrade] [--dry-run]
   show    [--channel stable]`;
@@ -95,6 +100,17 @@ function guardDowngrade(channel, current, version, allow) {
   if (cmp === 0) console.log(`note: ${channel} already announces ${version}; rewriting it`);
 }
 
+/** `--expect-current`: the channel must still announce `expected`, or already `version`. */
+function guardExpected(channel, current, version, expected) {
+  if (expected === undefined) return;
+  const want = parseVersion(expected).raw;
+  if (current?.version === want || current?.version === version) return;
+  throw new Refusal(
+    "release/channel-moved",
+    `${channel} announces ${current?.version ?? "nothing"}, not ${want}; refusing to replace it with ${version}`,
+  );
+}
+
 async function writeChannel(r2, channel, doc, dryRun) {
   const json = canonicalJson(doc);
   const key = channelKey(channel);
@@ -131,6 +147,7 @@ async function publish(flags, r2) {
   let current = null;
   if (channel) {
     if (r2) current = await readChannel(r2, channel);
+    if (r2) guardExpected(channel, current, version, flags["expect-current"]);
     guardDowngrade(channel, current, version, flags["allow-downgrade"]);
     const minVersion = flags["min-version"] ?? current?.minVersion;
     manifest = buildManifest({
@@ -173,8 +190,18 @@ async function publish(flags, r2) {
     console.log(`uploaded ${key} (${body.length} bytes)`);
   }
 
-  // 2. The channel file, last.
-  if (manifest) await writeChannel(r2, channel, manifest, dryRun);
+  // 2. The channel file, last, after reading it again: uploading took minutes, and a release that
+  // reached the channel meanwhile (a newer beta) is not replaced.
+  if (manifest) {
+    if (r2) {
+      const now = await readChannel(r2, channel);
+      guardExpected(channel, now, version, flags["expect-current"]);
+      if (now?.version !== current?.version) {
+        guardDowngrade(channel, now, version, flags["allow-downgrade"]);
+      }
+    }
+    await writeChannel(r2, channel, manifest, dryRun);
+  }
 }
 
 async function promote(flags, r2) {
@@ -197,7 +224,11 @@ async function promote(flags, r2) {
       throw new Error(`${key}: ${entry.url} is missing from the bucket`);
     }
   }
-  const target = from === to ? source : await readChannel(r2, to);
+  // Read last, after the checks above: what the target announces right before it is written.
+  const target = await readChannel(r2, to);
+  if (from === to && target?.version !== version) {
+    throw new Error(`${to} announces ${target?.version ?? "nothing"} now, not ${version}`);
+  }
   if (from !== to) guardDowngrade(to, target, version, flags["allow-downgrade"]);
 
   const same = from === to;
@@ -239,6 +270,7 @@ run(async () => {
     mandatory: "boolean",
     "min-version": "string",
     require: "string",
+    "expect-current": "string",
     "allow-downgrade": "boolean",
     "dry-run": "boolean",
   });
