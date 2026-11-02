@@ -1,0 +1,866 @@
+// The room panel (VOICE-L3; voice.md §5.1): a sheet from the right, as the friends panel is. The
+// header names the room (its leader renames it in place) with "Davet et", the settings and close;
+// a crew room shows the crew's rooms under it as chips with their counts ("Genel 4", "Oda 2 1"),
+// another room's chip joins it and "+" opens a new one. Then what needs the player (the microphone,
+// a moderator's mute, the connection), the people (the player first, then the others as they came,
+// then invites that ring with "İptal"), each with their speaking ring, role word and state marks;
+// a press or a right click opens their menu (volume first). At the bottom "Mikrofon",
+// "Sağırlaştır" and "Ayrıl", and for the leader "Odayı kapat" with its one sentence. "Davet et"
+// slides in over the room as the friends panel's pages do.
+import {
+  ArrowsClockwise,
+  CaretLeft,
+  GearSix,
+  Microphone,
+  MicrophoneSlash,
+  PencilSimple,
+  PhoneDisconnect,
+  Plus,
+  SpeakerHigh,
+  SpeakerSimpleSlash,
+  SpeakerSlash,
+  User,
+  UserPlus,
+  Warning,
+  X,
+} from "@phosphor-icons/react";
+import {
+  Button,
+  cn,
+  EntranceGate,
+  focusPanel,
+  GatedMotion,
+  IconButton,
+  Input,
+  Menu,
+  ReducedMotionConfig,
+  SearchInput,
+  SwapLabel,
+  scrimMotion,
+  sheetMotion,
+  sheetOutside,
+  Tooltip,
+  useInteractionMotion,
+  useMotionPrefs,
+} from "@pl/ui";
+import { useNavigate } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "motion/react";
+import { Dialog } from "radix-ui";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { enter, glide, leave, pageVariants, rise } from "@/features/social/motion";
+import { usePersonItems } from "@/features/social/person-menu";
+import { SocialFace } from "@/features/social/social-face";
+import { useSocialUi } from "@/features/social/store";
+import type { VoicePerson, VoiceRoomView } from "@/lib/api/voice-types";
+import {
+  cancelInvite,
+  closeRoom,
+  inviteToRoom,
+  joinCrewRoom,
+  leaveRoom,
+  openCrewRoom,
+  openMicSettings,
+  renameRoom,
+  toggleDeaf,
+  toggleMute,
+} from "./actions";
+import { QualityBars, SpeakingFace } from "./faces";
+import {
+  crewRoomName,
+  invitables,
+  presenceOf,
+  roleWord,
+  roomFull,
+  roomTitle,
+  type VoiceFace,
+} from "./rules";
+import { useFace, useFaces, useVoiceUi } from "./store";
+
+// --- marks beside a person --------------------------------------------------------------------
+
+/** A state beside a person: its words (tooltip, the row's name) and how it is drawn. */
+interface Mark {
+  key: string;
+  label: string;
+  look: ReactNode;
+}
+
+const markIcon = "size-[15px]";
+
+function marksOf(
+  p: Pick<VoicePerson, "mute" | "deaf" | "mutedByModerator" | "quality"> & { mutedForMe?: boolean },
+  t: (key: string) => string,
+): Mark[] {
+  const marks: Mark[] = [];
+  if (p.mutedByModerator) {
+    marks.push({
+      key: "sm",
+      label: t("voice.person.mutedForAll"),
+      look: <MicrophoneSlash weight="bold" className={cn(markIcon, "text-flare-400")} />,
+    });
+  } else if (p.mute) {
+    marks.push({
+      key: "mute",
+      label: t("voice.person.micOff"),
+      look: <MicrophoneSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
+    });
+  }
+  if (p.deaf) {
+    marks.push({
+      key: "deaf",
+      label: t("voice.person.deafened"),
+      look: <SpeakerSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
+    });
+  }
+  if (p.mutedForMe) {
+    marks.push({
+      key: "me",
+      label: t("voice.person.mutedForMe"),
+      look: <SpeakerSimpleSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
+    });
+  }
+  if (p.quality !== "good") {
+    marks.push({
+      key: "q",
+      label: t("voice.person.weak"),
+      look: <QualityBars quality={p.quality} />,
+    });
+  }
+  return marks;
+}
+
+function Marks({ marks }: { marks: Mark[] }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1.5">
+      {marks.map(({ key, label, look }) => (
+        <Tooltip key={key} content={label}>
+          <span aria-hidden className="flex">
+            {look}
+          </span>
+        </Tooltip>
+      ))}
+    </span>
+  );
+}
+
+// --- rows -------------------------------------------------------------------------------------
+
+const rowShape =
+  "flex w-full items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-2 pl-2 text-left outline-none";
+
+function NameBlock({ name, second }: { name: string; second?: string | null }) {
+  return (
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-[14px] leading-[1.25] font-semibold text-bone-50">
+        {name}
+      </span>
+      {second ? (
+        <span className="block truncate text-[12px] leading-[1.35] text-ash-400">{second}</span>
+      ) : null}
+    </span>
+  );
+}
+
+function MeRow({ room }: { room: VoiceRoomView }) {
+  const { t } = useTranslation();
+  const me = useSocialUi((s) => s.view.me);
+  const face: VoiceFace = {
+    id: room.me.id,
+    name: me?.name ?? t("voice.room.you"),
+    avatar: me?.avatar,
+    avatarUrl: me?.avatarUrl,
+    friend: false,
+  };
+  // A role means something only with others in the room.
+  const role = room.people.length ? roleWord(room.me.role, t) : null;
+  const marks = marksOf(room.me, t);
+  return (
+    <div className={rowShape}>
+      <SpeakingFace face={face} size={36} />
+      <NameBlock name={face.name} second={role} />
+      <Marks marks={marks} />
+      {/* At the row's end, as the crew's member list marks the player. */}
+      <span className="shrink-0 text-[12.5px] text-ash-400">{t("voice.room.you")}</span>
+    </div>
+  );
+}
+
+function PersonRow({ person }: { person: VoicePerson }) {
+  const { t } = useTranslation();
+  const face = useFace(person.id);
+  const [open, setOpen] = useState(false);
+  const ref = { id: face.id, name: face.name, avatar: face.avatar, avatarUrl: face.avatarUrl };
+  const items = usePersonItems(ref, { from: "list" });
+  const role = roleWord(person.role, t);
+  const marks = marksOf(person, t);
+  const label = [face.name, role, ...marks.map((m) => m.label)].filter(Boolean).join(", ");
+  return (
+    <Menu
+      items={items}
+      align="start"
+      open={open}
+      onOpenChange={setOpen}
+      trigger={
+        <button
+          type="button"
+          aria-label={label}
+          // A right click, Shift+F10 or the menu key open the same menu (FIX2: one menu per person).
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
+          className={cn(
+            rowShape,
+            "cursor-pointer transition-[background-color,box-shadow] duration-150 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=open]:bg-white/[0.06]",
+          )}
+        >
+          <SpeakingFace face={face} size={36} />
+          <NameBlock name={face.name} second={role} />
+          <Marks marks={marks} />
+        </button>
+      }
+    />
+  );
+}
+
+function RingingRow({ id, onCancel }: { id: string; onCancel: () => void }) {
+  const { t } = useTranslation();
+  const face = useFace(id);
+  return (
+    <div className={rowShape}>
+      <SpeakingFace face={face} size={36} dim speaking={false} />
+      <NameBlock name={face.name} second={t("voice.room.ringing")} />
+      <Button size="sm" variant="secondary" onClick={onCancel}>
+        {t("voice.room.cancelRing")}
+      </Button>
+    </div>
+  );
+}
+
+function People({ room }: { room: VoiceRoomView }) {
+  const { reduce, layout } = useMotionPrefs();
+  const calling = useVoiceUi((s) => s.state.calling);
+  const rows: Array<{ key: string; node: ReactNode }> = [
+    { key: "me", node: <MeRow room={room} /> },
+    ...room.people.map((p) => ({ key: p.id, node: <PersonRow person={p} /> })),
+    ...(calling
+      ? [
+          {
+            key: `ring:${calling.friend}`,
+            node: <RingingRow id={calling.friend} onCancel={() => void leaveRoom()} />,
+          },
+        ]
+      : []),
+    ...room.ringing.map((r) => ({
+      key: `ring:${r.to}`,
+      node: <RingingRow id={r.to} onCancel={() => void cancelInvite(r.to)} />,
+    })),
+  ];
+  return (
+    <ul className="relative flex flex-col gap-0.5">
+      <AnimatePresence initial={false} mode="popLayout">
+        {rows.map((row) => (
+          <motion.li
+            key={row.key}
+            layout={layout ? "position" : false}
+            transition={{ layout: glide }}
+            // Layout glides compose with `y` (a transform string would fight them).
+            initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+            animate={{ opacity: 1, y: 0, transition: enter(0.26) }}
+            exit={{ opacity: 0, transition: leave(0.2) }}
+          >
+            {row.node}
+          </motion.li>
+        ))}
+      </AnimatePresence>
+    </ul>
+  );
+}
+
+// --- what needs the player --------------------------------------------------------------------
+
+function Notices({ room }: { room: VoiceRoomView }) {
+  const { t } = useTranslation();
+  const { reduce } = useMotionPrefs();
+  const mic = useVoiceUi((s) => s.state.mic);
+  const notices: Array<{
+    key: string;
+    icon: ReactNode;
+    text: string;
+    action?: { label: string; onClick: () => void };
+  }> = [];
+  if (room.phase === "joining" || room.phase === "reconnecting") {
+    notices.push({
+      key: "connection",
+      icon: <ArrowsClockwise size={16} weight="bold" className="text-gold-300" />,
+      text: room.phase === "joining" ? t("voice.room.joining") : t("voice.room.reconnecting"),
+    });
+  }
+  if (room.me.mutedByModerator) {
+    notices.push({
+      key: "sm",
+      icon: <MicrophoneSlash size={16} weight="bold" className="text-flare-400" />,
+      text: t("voice.mutedByMod"),
+    });
+  }
+  if (mic === "denied") {
+    notices.push({
+      key: "mic",
+      icon: <Warning size={16} weight="fill" className="text-gold-400" />,
+      text: t("voice.mic.denied"),
+      action: { label: t("voice.mic.openSettings"), onClick: () => void openMicSettings() },
+    });
+  } else if (mic === "missing") {
+    notices.push({
+      key: "mic",
+      icon: <Warning size={16} weight="fill" className="text-gold-400" />,
+      text: t("voice.mic.missing"),
+    });
+  }
+  return (
+    <AnimatePresence initial={false} mode="popLayout">
+      {notices.map((n) => (
+        <motion.div
+          key={n.key}
+          className="mb-2 flex items-center gap-2.5 rounded-[var(--radius-panel)] bg-obsidian-950/40 px-3 py-2 ring-1 ring-white/7"
+          {...rise(reduce, 4, 0.22)}
+        >
+          <span aria-hidden className="flex shrink-0">
+            {n.icon}
+          </span>
+          <p className="min-w-0 flex-1 text-[13px] leading-snug text-bone-100" role="status">
+            {n.text}
+          </p>
+          {n.action ? (
+            <Button size="sm" variant="secondary" onClick={n.action.onClick}>
+              {n.action.label}
+            </Button>
+          ) : null}
+        </motion.div>
+      ))}
+    </AnimatePresence>
+  );
+}
+
+// --- the header -------------------------------------------------------------------------------
+
+function RoomName({
+  room,
+  title,
+  editing,
+  setEditing,
+}: {
+  room: VoiceRoomView;
+  title: string;
+  /** The header gives the field its room while the name is typed. */
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const { reduce } = useMotionPrefs();
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Esc leaves the field, not the panel: the sheet listens on the document (capture), the field
+  // on the window, which comes first (as SearchInput does).
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEditing(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [editing, setEditing]);
+  // Rights taken away while typing (the leader left) close the field.
+  useEffect(() => {
+    if (!room.canRename) setEditing(false);
+  }, [room.canRename, setEditing]);
+
+  const save = async () => {
+    setBusy(true);
+    const refused = await renameRoom(draft);
+    setBusy(false);
+    if (refused) setError(refused);
+    else setEditing(false);
+  };
+
+  return (
+    <div className="relative min-w-0 flex-1">
+      <AnimatePresence initial={false} mode="popLayout">
+        {editing ? (
+          <motion.form
+            key="edit"
+            className="flex items-center gap-1.5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save();
+            }}
+            {...rise(reduce, 3, 0.2)}
+          >
+            <Dialog.Title className="sr-only">{title}</Dialog.Title>
+            <Input
+              autoFocus
+              value={draft}
+              maxLength={24}
+              invalid={Boolean(error)}
+              aria-label={t("voice.room.rename")}
+              placeholder={t("voice.room.namePlaceholder")}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setError(null);
+              }}
+              className="h-8 min-w-0 flex-1"
+            />
+            <Button size="sm" variant="ghost" type="button" onClick={() => setEditing(false)}>
+              {t("voice.room.cancel")}
+            </Button>
+            <Button size="sm" variant="primary" type="submit" disabled={busy || !draft.trim()}>
+              {t("voice.room.save")}
+            </Button>
+          </motion.form>
+        ) : (
+          <motion.div
+            key="name"
+            className="flex min-w-0 items-center gap-1"
+            {...rise(reduce, 3, 0.2)}
+          >
+            <Dialog.Title className="truncate font-display text-[19px] leading-[1.2] font-semibold text-bone-50">
+              {title}
+            </Dialog.Title>
+            {room.canRename ? (
+              <IconButton
+                size="sm"
+                label={t("voice.room.rename")}
+                icon={<PencilSimple size={15} />}
+                onClick={() => {
+                  setDraft(room.name ?? "");
+                  setError(null);
+                  setEditing(true);
+                }}
+              />
+            ) : null}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {editing && error ? (
+        <p role="alert" className="mt-1 text-[12px] text-flare-300">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CrewRooms({ room }: { room: VoiceRoomView }) {
+  const { t } = useTranslation();
+  const crewRooms = useVoiceUi((s) => s.state.crews.find((c) => c.crew === room.crew));
+  if (!room.crew) return null;
+  const crew = room.crew;
+  const listed = crewRooms?.rooms ?? [];
+  // The player's own room is always there, even before the crew's list says so.
+  const rooms = listed.some((r) => r.id === room.id)
+    ? listed
+    : [{ id: room.id, name: room.name ?? "", general: room.general, people: [] }, ...listed];
+  return (
+    <fieldset className="-mx-1 mt-3 flex min-w-0 gap-1.5 overflow-x-auto border-0 px-1 pb-0.5 [scrollbar-width:none]">
+      <legend className="sr-only">{t("voice.room.rooms")}</legend>
+      {rooms.map((r) => {
+        const here = r.id === room.id;
+        const count = here ? room.people.length + 1 : r.people.length;
+        return (
+          <Tooltip key={r.id} content={t("voice.crew.join")} disabled={here}>
+            <button
+              type="button"
+              aria-current={here ? "true" : undefined}
+              aria-label={`${crewRoomName(r, t)}, ${t("voice.crew.people", { count })}`}
+              onClick={here ? undefined : () => void joinCrewRoom(crew, r.id)}
+              className={cn(
+                "chamfer flex h-7 shrink-0 items-center gap-1.5 px-3 text-[12.5px] font-medium whitespace-nowrap outline-none [--cut:6px]",
+                "transition-[background-color,color,transform,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300",
+                here
+                  ? "cursor-default bg-white/14 text-bone-50"
+                  : "cursor-pointer bg-white/6 text-ash-300 hover:bg-white/10 hover:text-bone-50 active:scale-[0.97]",
+              )}
+            >
+              {crewRoomName(r, t)}
+              {/* A person's glyph before the count: "Oda 2 1" read as "Oda 21". */}
+              <span aria-hidden className="flex items-center gap-0.5 text-ash-300">
+                <User size={11} weight="bold" />
+                <span className="font-display text-[12px] font-semibold tabular-nums">{count}</span>
+              </span>
+            </button>
+          </Tooltip>
+        );
+      })}
+      {crewRooms?.canAdd ? (
+        <Tooltip content={t("voice.room.newRoom")}>
+          <button
+            type="button"
+            aria-label={t("voice.room.newRoom")}
+            onClick={() => void openCrewRoom(crew)}
+            className="chamfer flex size-7 shrink-0 cursor-pointer items-center justify-center bg-white/6 text-ash-300 outline-none transition-[background-color,color,transform,scale] duration-150 ease-out [--cut:6px] hover:bg-white/10 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.94]"
+          >
+            <Plus size={14} weight="bold" aria-hidden />
+          </button>
+        </Tooltip>
+      ) : null}
+    </fieldset>
+  );
+}
+
+function RoomHeader({ room, title }: { room: VoiceRoomView; title: string }) {
+  const { t } = useTranslation();
+  const goTo = useVoiceUi((s) => s.goTo);
+  const close = useVoiceUi((s) => s.closePanel);
+  const navigate = useNavigate();
+  const crew = useSocialUi((s) => s.view.crews.find((c) => c.id === room.crew));
+  // While the name is typed, the field takes the header's room ("Davet et" and the settings wait).
+  const [editing, setEditing] = useState(false);
+  const full = roomFull(room);
+  const count = room.people.length + 1;
+  return (
+    <header className="shrink-0 border-b border-white/8 pt-4 pr-3 pb-3 pl-5">
+      <div className="flex items-start gap-1.5">
+        <div className="min-w-0 flex-1 pt-0.5">
+          <RoomName room={room} title={title} editing={editing} setEditing={setEditing} />
+          <p className="mt-0.5 truncate text-[12.5px] text-ash-400">
+            {room.kind === "crew" && crew
+              ? t("voice.room.crewOf", { crew: crew.name })
+              : t("voice.room.count", { count })}
+          </p>
+        </div>
+        {editing ? null : (
+          <>
+            <Tooltip content={t("voice.refused.roomFull")} disabled={!full}>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<UserPlus size={15} />}
+                aria-disabled={full || undefined}
+                onClick={full ? undefined : () => goTo("invite")}
+                className={cn("mt-0.5", full && "opacity-45")}
+              >
+                {t("voice.room.invite")}
+              </Button>
+            </Tooltip>
+            <IconButton
+              label={t("voice.room.settings")}
+              icon={<GearSix size={18} />}
+              onClick={() => {
+                close();
+                void navigate({ to: "/settings", search: { section: "voice" } });
+              }}
+            />
+          </>
+        )}
+        <Dialog.Close asChild>
+          <IconButton label={t("common.close")} icon={<X size={18} />} />
+        </Dialog.Close>
+      </div>
+      {room.kind === "crew" ? <CrewRooms room={room} /> : null}
+    </header>
+  );
+}
+
+// --- the bottom -------------------------------------------------------------------------------
+
+function CloseRoom() {
+  const { t } = useTranslation();
+  const { reduce } = useMotionPrefs();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="relative mt-2 h-8">
+      <AnimatePresence initial={false} mode="popLayout">
+        {asking ? (
+          <motion.div key="ask" className="flex h-8 items-center gap-2" {...rise(reduce, 4, 0.2)}>
+            <p className="min-w-0 flex-1 truncate text-[13px] text-bone-100">
+              {t("voice.room.closeAsk")}
+            </p>
+            <Button size="sm" variant="ghost" onClick={() => setAsking(false)}>
+              {t("voice.room.cancel")}
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                await closeRoom();
+                setBusy(false);
+                setAsking(false);
+              }}
+            >
+              {t("voice.room.close")}
+            </Button>
+          </motion.div>
+        ) : (
+          <motion.div key="idle" className="flex h-8 justify-center" {...rise(reduce, 4, 0.2)}>
+            <Button size="sm" variant="ghost" onClick={() => setAsking(true)}>
+              {/* The words carry the flare (a ghost button colours its own label). */}
+              <span className="text-flare-400 transition-colors group-hover:text-flare-300">
+                {t("voice.room.close")}
+              </span>
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function RoomFooter({ room }: { room: VoiceRoomView }) {
+  const { t } = useTranslation();
+  const { me } = room;
+  const micOff = me.mute || me.deaf || me.mutedByModerator;
+  const micLabel = me.mutedByModerator
+    ? t("voice.mutedByMod")
+    : micOff
+      ? t("voice.room.unmuteMic")
+      : t("voice.room.muteMic");
+  const deafLabel = me.deaf ? t("voice.room.deafenOff") : t("voice.room.deafenOn");
+  return (
+    <footer className="shrink-0 border-t border-white/8 px-4 pt-3 pb-3.5">
+      <div className="grid grid-cols-3 gap-2">
+        <Tooltip content={micLabel}>
+          <Button
+            size="lg"
+            variant="secondary"
+            aria-label={micLabel}
+            aria-disabled={me.mutedByModerator || undefined}
+            className={cn("w-full px-2", me.mutedByModerator && "opacity-60")}
+            icon={
+              micOff ? (
+                <MicrophoneSlash size={17} weight="bold" className="text-flare-400" />
+              ) : (
+                <Microphone size={17} weight="bold" />
+              )
+            }
+            onClick={me.mutedByModerator ? undefined : () => void toggleMute()}
+          >
+            {t("voice.room.mic")}
+          </Button>
+        </Tooltip>
+        <Tooltip content={deafLabel}>
+          <Button
+            size="lg"
+            variant="secondary"
+            aria-label={deafLabel}
+            className="w-full px-2"
+            icon={
+              me.deaf ? (
+                <SpeakerSlash size={17} weight="bold" className="text-flare-400" />
+              ) : (
+                <SpeakerHigh size={17} weight="bold" />
+              )
+            }
+            onClick={() => void toggleDeaf()}
+          >
+            {t("voice.room.deafen")}
+          </Button>
+        </Tooltip>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="w-full px-2"
+          // Leaving ends nothing for the others: a plate with a red glyph; "Odayı kapat" alone is red.
+          icon={<PhoneDisconnect size={17} weight="bold" className="text-flare-400" />}
+          onClick={() => void leaveRoom()}
+        >
+          {t("voice.room.leave")}
+        </Button>
+      </div>
+      {/* Alone, closing is leaving: "Ayrıl" says it. */}
+      {room.canClose && room.people.length ? <CloseRoom /> : null}
+    </footer>
+  );
+}
+
+// --- the pages --------------------------------------------------------------------------------
+
+function RoomPage({ room }: { room: VoiceRoomView }) {
+  const { t } = useTranslation();
+  const calling = useVoiceUi((s) => s.state.calling);
+  const faces = useFaces([...room.people.map((p) => p.id), ...(calling ? [calling.friend] : [])]);
+  const nameOf = (id: string) => faces.find((f) => f.id === id)?.name ?? t("voice.someone");
+  const title = roomTitle(room, nameOf, t, calling?.friend);
+  return (
+    <>
+      <RoomHeader room={room} title={title} />
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-4">
+        <Notices room={room} />
+        <People room={room} />
+      </div>
+      <RoomFooter room={room} />
+    </>
+  );
+}
+
+function InviteRow({ person, full }: { person: VoiceFace & { ringing: boolean }; full: boolean }) {
+  const { t } = useTranslation();
+  const friends = useSocialUi((s) => s.view.friends);
+  const presence = useVoiceUi((s) => presenceOf(person.id, s.state, friends));
+  return (
+    <li className="flex items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-1 pl-2 transition-colors duration-150 hover:bg-white/[0.045]">
+      <SocialFace
+        source={person}
+        size={36}
+        className="overflow-hidden rounded-[var(--radius-head)]"
+      />
+      <NameBlock
+        name={person.name}
+        second={presence === "in" ? t("voice.presence.inVoice") : null}
+      />
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={person.ringing || full}
+        onClick={() => void inviteToRoom(person.id)}
+      >
+        <SwapLabel
+          labels={[t("voice.invite.action"), t("voice.invite.ringing")]}
+          active={person.ringing ? 1 : 0}
+        />
+      </Button>
+    </li>
+  );
+}
+
+function InvitePage({ room }: { room: VoiceRoomView }) {
+  const { t } = useTranslation();
+  const goTo = useVoiceUi((s) => s.goTo);
+  const state = useVoiceUi((s) => s.state);
+  const friends = useSocialUi((s) => s.view.friends);
+  const crews = useSocialUi((s) => s.view.crews);
+  const [query, setQuery] = useState("");
+  const list = invitables(state, { friends, crews }, query);
+  const full = roomFull(room);
+  const crewRoom = room.kind === "crew";
+  return (
+    <>
+      <header className="flex h-[60px] shrink-0 items-center gap-2 border-b border-white/8 pr-3 pl-3">
+        <IconButton
+          label={t("voice.invite.back")}
+          icon={<CaretLeft size={18} weight="bold" />}
+          onClick={() => goTo("room")}
+        />
+        <Dialog.Title className="min-w-0 flex-1 truncate font-display text-[19px] leading-tight font-semibold text-bone-50">
+          {t("voice.invite.title")}
+        </Dialog.Title>
+        <Dialog.Close asChild>
+          <IconButton label={t("common.close")} icon={<X size={18} />} />
+        </Dialog.Close>
+      </header>
+      <div className="shrink-0 px-4 pt-3">
+        <SearchInput
+          autoFocus
+          value={query}
+          onChange={setQuery}
+          label={crewRoom ? t("voice.invite.searchCrew") : t("voice.invite.searchFriends")}
+          placeholder={crewRoom ? t("voice.invite.searchCrew") : t("voice.invite.searchFriends")}
+        />
+      </div>
+      {list.length ? (
+        <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-2 pb-6">
+          {list.map((person) => (
+            <InviteRow key={person.id} person={person} full={full} />
+          ))}
+        </ul>
+      ) : (
+        <p className="px-5 pt-5 text-[13px] text-ash-400">
+          {query.trim() ? t("voice.invite.noMatch") : t("voice.invite.none")}
+        </p>
+      )}
+    </>
+  );
+}
+
+// --- the sheet --------------------------------------------------------------------------------
+
+export function RoomSheet() {
+  const panel = useVoiceUi((s) => s.panel);
+  const close = useVoiceUi((s) => s.closePanel);
+  const room = useVoiceUi((s) => s.state.room);
+  const page = useVoiceUi((s) => s.page);
+  const direction = useVoiceUi((s) => s.direction);
+  const returnFocus = useVoiceUi((s) => s.returnFocus);
+  const animate = useInteractionMotion();
+  const { reduce } = useMotionPrefs();
+  // The sheet keeps the last room while it slides away.
+  const last = useRef<VoiceRoomView | null>(null);
+  if (room) last.current = room;
+  const shown = room ?? last.current;
+  const open = panel && room !== null;
+  const variants = pageVariants(reduce);
+  return (
+    <Dialog.Root open={open} onOpenChange={(next) => !next && close()}>
+      <AnimatePresence>
+        {open && shown ? (
+          <EntranceGate key="sheet">
+            <Dialog.Portal forceMount>
+              <Dialog.Overlay asChild forceMount>
+                <GatedMotion.div
+                  className="fixed inset-0 z-30 bg-obsidian-950/55"
+                  {...scrimMotion(!animate)}
+                />
+              </Dialog.Overlay>
+              <Dialog.Content
+                asChild
+                forceMount
+                aria-describedby={undefined}
+                onOpenAutoFocus={(event) => {
+                  event.preventDefault();
+                  focusPanel(event.currentTarget as HTMLElement);
+                }}
+                onCloseAutoFocus={(event) => {
+                  if (returnFocus?.isConnected) {
+                    event.preventDefault();
+                    returnFocus.focus();
+                  }
+                }}
+                // A press outside closes it; answering a toast (a ring) does not.
+                {...sheetOutside}
+              >
+                <GatedMotion.aside
+                  tabIndex={-1}
+                  className="glass-strong fixed top-0 right-0 bottom-0 z-40 flex w-[min(440px,94vw)] flex-col overflow-hidden shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"
+                  {...sheetMotion(!animate)}
+                >
+                  <ReducedMotionConfig>
+                    <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+                      <motion.div
+                        key={page}
+                        custom={direction}
+                        variants={variants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        className="flex min-h-0 flex-1 flex-col"
+                      >
+                        {page === "invite" ? (
+                          <InvitePage room={shown} />
+                        ) : (
+                          <RoomPage room={shown} />
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  </ReducedMotionConfig>
+                </GatedMotion.aside>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </EntranceGate>
+        ) : null}
+      </AnimatePresence>
+    </Dialog.Root>
+  );
+}

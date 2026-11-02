@@ -73,6 +73,7 @@ mod store;
 mod tls;
 mod together;
 mod view;
+mod voice;
 mod world;
 
 #[cfg(test)]
@@ -170,7 +171,17 @@ pub use view::{
     SocialNotice, SocialView, TagOffView, TeamInviteView, TeamLookupView, TeamMemberView,
     TeamRequestView, TeamView,
 };
+pub use voice::{
+    PresenceVoice, VOICE_CAP, VoiceAck, VoiceCrewRoom, VoiceCrewRooms, VoiceCrewTicket, VoiceError,
+    VoiceEvent, VoiceFrame, VoiceRing, VoiceSink, VoiceStatus,
+};
 pub use world::{
     E4mcHint, Hidden, TurnIce, WORLDS_CAP, WorldAck, WorldAnswer, WorldError, WorldEvent,
     WorldFrame, WorldInvite, WorldRole, WorldSink, WorldsStatus,
 };
+
+/// The TLS client configuration of the service's sockets (the OS trust store), for other
+/// sockets to the same service (VOICE's room socket).
+pub fn socket_tls() -> std::result::Result<std::sync::Arc<rustls::ClientConfig>, String> {
+    tls::client_config()
+}

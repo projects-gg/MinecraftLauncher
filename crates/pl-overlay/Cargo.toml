@@ -20,6 +20,9 @@ pl-net = { workspace = true }
 # The chat's emoji picker (CHAT-EMOJI): Studio's list (or the built-in one) goes to the mod as the
 # content document has it.
 pl-content = { workspace = true }
+# Voice chat in the game (VOICE-O): the launcher's voice state and answers, shown to the mod; the
+# same WebSocket and TLS stack as pl-social, so nothing new is compiled.
+pl-voice = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

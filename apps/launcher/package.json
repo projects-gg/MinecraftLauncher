@@ -15,6 +15,7 @@
     "@pl/shared": "workspace:*",
     "@pl/stickers": "workspace:*",
     "@pl/ui": "workspace:*",
+    "@sapphi-red/web-noise-suppressor": "0.4.1",
     "@tanstack/react-query": "5.104.3",
     "@tanstack/react-router": "1.170.44",
     "@tanstack/react-virtual": "3.14.20",

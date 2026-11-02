@@ -8,6 +8,7 @@ import { Dialog as RadixDialog } from "radix-ui";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import discordSymbol from "@/assets/brand/discord-symbol-white.png";
+import { ChatCallButton } from "@/features/voice/friend-call";
 import { api } from "@/lib/api";
 import type { ChatMessage, Friend } from "@/lib/api/social-types";
 import { currentLanguage } from "@/lib/i18n";
@@ -246,6 +247,8 @@ export function ChatHeader() {
           </div>
         </div>
       </PersonContextMenu>
+      {/* "Ara" (VOICE), as an icon beside the conversation's other actions. */}
+      {peer ? <ChatCallButton friend={peer.id} /> : null}
       {peer?.discordUrl ? (
         // Discord's mark alone, its words the tooltip and the name (CHAT-UX: beside the presence
         // line the words cut it, "Başka sunucuda 1…"); SOC-ID: only for a friend with Discord.

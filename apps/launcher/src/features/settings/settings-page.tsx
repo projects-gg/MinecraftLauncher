@@ -8,6 +8,7 @@ import {
   Gear,
   GithubLogo,
   HardDrives,
+  Headset,
   Info,
   Lifebuoy,
   Mountains,
@@ -49,6 +50,8 @@ import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
 import { UpdateChannelRow } from "@/features/updates/channel-row";
 import { UpdateSettingsAction } from "@/features/updates/update-settings";
+import { VoiceSettingsSection } from "@/features/voice/settings";
+import { useVoiceUi } from "@/features/voice/store";
 import { api } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
 import { formatMemory, formatPercent } from "@/lib/format";
@@ -80,6 +83,8 @@ const sections = [
   { id: "accounts", icon: UserCircle },
   // Only while the friends feature is on.
   { id: "friends", icon: UsersThree },
+  // "Sesli sohbet" (VOICE): only while voice chat is offered (the room panel's gear leads here).
+  { id: "voice", icon: Headset },
   { id: "downloads", icon: DownloadSimple },
   { id: "updates", icon: ArrowsClockwise },
   { id: "discord", icon: ChatsCircle },
@@ -98,6 +103,7 @@ type SectionId = (typeof sections)[number]["id"];
 function sectionTitle(t: TFunction, id: SectionId): string {
   if (id === "graphics") return t("fps.title");
   if (id === "help") return t("help.title");
+  if (id === "voice") return t("voice.settings.title");
   return t(`settings.sections.${id}`);
 }
 
@@ -692,7 +698,10 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { section?: string; focus?: string };
   const friendsOn = useSocialUi((s) => s.view.enabled);
-  const shown = sections.filter((s) => s.id !== "friends" || friendsOn);
+  const voiceOffered = useVoiceUi((s) => s.state.available);
+  const shown = sections.filter(
+    (s) => (s.id !== "friends" || friendsOn) && (s.id !== "voice" || voiceOffered),
+  );
   const active = (shown.find((s) => s.id === search.section)?.id ?? "general") as SectionId;
   const glide = useMotionPrefs().layout;
   // A row asked for by name (the command palette's settings rows): the page lands on it.
@@ -708,6 +717,7 @@ export function SettingsPage() {
     java: <JavaSection />,
     accounts: <AccountsSection />,
     friends: <FriendsSettingsSection />,
+    voice: <VoiceSettingsSection />,
     downloads: <Downloads />,
     updates: <Updates />,
     discord: <Discord />,

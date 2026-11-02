@@ -563,6 +563,10 @@ pub enum ReportTarget {
         plan: Option<ReportPlan>,
         #[serde(default)]
         reaction: Option<ReportReaction>,
+        /// VOICE: the voice room it is reported from (the room's person menu, or the person card
+        /// for 24 hours after the call): the room's events go along as the moderators' evidence.
+        #[serde(default)]
+        voice: Option<String>,
     },
     /// A crew; `code` when it was looked up by code, `via` (TEAM6) when it is reported from the
     /// card of the tag that friend or crewmate wears ("Ekibi rapor et").
@@ -1155,6 +1159,9 @@ pub struct FriendView {
     pub badge: Option<Box<CrewBadgeView>>,
     /// Their badges right of the name (BADGES; keys of `markDefs`, the most important first).
     pub marks: Vec<String>,
+    /// Voice chat (VOICE): `ready` offers "Ara", `in` is in a room ("Sesli sohbette"; "Ara" still
+    /// rings); None: no "Ara".
+    pub voice: Option<crate::voice::PresenceVoice>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]

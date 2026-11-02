@@ -27,7 +27,9 @@ import net.minecraft.client.gui.screens.TitleScreen;
  * one emptiness check per frame. Hidden with F1, so a private message never lands in a screenshot or a
  * video. Clears when the panel opens (the panel shows all of it), pauses its timers while the game window
  * is not in front. The travel toast ("Projects sunucusuna bağlanılıyor…") is the one exception to the HUD:
- * it stays through the saving, connecting and loading screens, drawn above them.
+ * it stays through the saving, connecting and loading screens, drawn above them. A voice chat ring (VOICE-O) stands in
+ * the stack for as long as it rings, never waiting for the others; with no world open (the title screen, the server
+ * list) it is drawn above the screen, the HUD's own toasts being a world's.
  *
  * <p>In the chat the pointer is free, and a toast is pressed there like a button (F7-OPEN: players clicked the card's
  * key hint): under the pointer its edge lights gold over 120 ms and every toast's time stands still, and a press opens
@@ -181,6 +183,36 @@ public final class ToastLayer implements HudElement {
         }
     }
 
+    /**
+     * A voice chat ring's card (VOICE-O), for {@code ms} at most or until {@link #endRing}: pinned in the stack, never
+     * waiting for the others nor pushed out by them; the same {@code key} again updates it in place. Above any screen
+     * while no world is open. Returns whether it went up (not on the way to a server: the travel toast has the corner).
+     */
+    public boolean ring(ToastCard card, String key, long ms, OverlaySettings settings, boolean reducedMotion) {
+        if (ms <= 0 || (travel != null && travelAlpha.target() > 0f)) {
+            return false;
+        }
+        Shapes.prepare();
+        boolean fresh = find(key) == null;
+        stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
+        stack.setReducedMotion(reducedMotion);
+        stack.pin(key, card, card.height(), ms, now());
+        if (fresh) {
+            Minecraft.getInstance().getNarrator().saySystemQueued(card.narration());
+        }
+        return true;
+    }
+
+    /** A ring's card may go up now (not while the travel toast has the corner). */
+    public boolean ringable() {
+        return travel == null || travelAlpha.target() <= 0f;
+    }
+
+    /** The ring is over (answered, declined, taken elsewhere, its time up): its card fades out. */
+    public void endRing(String key) {
+        stack.dismiss(key, now());
+    }
+
     /** A short note from the overlay itself ("Zaten Projects sunucusundasın."), whatever the toast settings. */
     public void notice(ToastCard card, OverlaySettings settings, boolean reducedMotion) {
         Minecraft mc = Minecraft.getInstance();
@@ -191,6 +223,22 @@ public final class ToastLayer implements HudElement {
         stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
         stack.setReducedMotion(reducedMotion);
         stack.push("overlay-notice", card, card.height(), duration(ToastCard.Kind.INFO, settings, mc), now());
+        mc.getNarrator().saySystemQueued(card.narration());
+    }
+
+    /**
+     * A voice chat note (VOICE-O): as {@link #notice}, and above the screen while no world is open (voice chat goes on
+     * from the title screen); not while the travel toast has the corner.
+     */
+    public void voiceNote(ToastCard card, OverlaySettings settings, boolean reducedMotion) {
+        if (travel != null && travelAlpha.target() > 0f) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        Shapes.prepare();
+        stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
+        stack.setReducedMotion(reducedMotion);
+        stack.push("overlay-voice-note", card, card.height(), duration(ToastCard.Kind.INFO, settings, mc), now());
         mc.getNarrator().saySystemQueued(card.narration());
     }
 
@@ -344,7 +392,7 @@ public final class ToastLayer implements HudElement {
 
     private static long duration(ToastCard.Kind kind, OverlaySettings settings, Minecraft mc) {
         long base = switch (kind) {
-            case CALL, INVITE, WORLD -> CALL_MS;
+            case CALL, INVITE, WORLD, RING -> CALL_MS;
             case INFO, TRAVEL -> INFO_MS;
             case MESSAGE, HOST -> MESSAGE_MS;
         };
@@ -373,6 +421,15 @@ public final class ToastLayer implements HudElement {
             Perf.toast(started);
             return;
         }
+        drawStack(g, mc, now, false);
+        Perf.toast(started);
+    }
+
+    /**
+     * The stack: in the HUD, or above the screen while no world is open (only voice chat's ring and notes are there then:
+     * the world's toasts went with it).
+     */
+    private void drawStack(GuiGraphicsExtractor g, Minecraft mc, long now, boolean overScreen) {
         OverlaySettings settings = gg.projects.overlay.OverlayClient.get().settings();
         boolean reduced = gg.projects.overlay.OverlayClient.get().reducedMotion();
         boolean top = settings.corner() == OverlaySettings.Corner.TOP_RIGHT;
@@ -380,19 +437,19 @@ public final class ToastLayer implements HudElement {
         // A toast under the pointer in the chat keeps every toast where it is: it does not go while it is reached for.
         boolean held = hoverKey != null && hover.target() > 0f;
         stack.update(now, (pauseWhileAway && !mc.isWindowActive()) || held, reduced);
-        if (stack.isEmpty() || Compat.hudHidden(mc)) {
+        if (stack.isEmpty() || (!overScreen && Compat.hudHidden(mc))) {
             // Nothing drawn: a press finds no toast where one was.
             hoverKey = null;
             markTip.track(null, null, 0f, 0f, now);
             drawnAt = Long.MIN_VALUE / 2;
-            Perf.toast(started);
             return;
         }
         Shapes.prepare();
         int width = g.guiWidth();
         int height = g.guiHeight();
         float x = width - MARGIN - ToastCard.WIDTH;
-        float target = top ? topEdge(mc) : bottomEdge(mc, width, height, x);
+        float target = overScreen ? (top ? MARGIN : height - MARGIN)
+            : top ? topEdge(mc) : bottomEdge(mc, width, height, x);
         if (!anchorPlaced || reduced) {
             anchor.snap(target);
             anchorPlaced = true;
@@ -427,17 +484,25 @@ public final class ToastLayer implements HudElement {
         // A badge's tooltip over the cards, inside the screen.
         trackMark(now, x, base);
         markTip.draw(g, now, MARGIN, MARGIN, width - MARGIN);
-        Perf.toast(started);
     }
 
     /** Draws the travel toast above whatever screen is open (saving, connecting, loading, the pause menu). */
     public void extractOverScreen(GuiGraphicsExtractor g) {
-        if (travel == null) {
+        Minecraft mc = Minecraft.getInstance();
+        // With no world open the HUD draws nothing: a ring's card and voice chat's notes stand above the screen instead
+        // (VOICE-O).
+        boolean stackOver = mc.level == null && !stack.isEmpty();
+        if (travel == null && !stackOver) {
             return;
         }
         long started = Perf.start();
         Draw.stratum(g);
-        drawTravel(g, Minecraft.getInstance(), now(), true);
+        if (travel != null) {
+            drawTravel(g, mc, now(), true);
+        }
+        if (stackOver) {
+            drawStack(g, mc, now(), true);
+        }
         Perf.toast(started);
     }
 

@@ -31,7 +31,9 @@ import net.minecraft.util.FormattedCharSequence;
  * (HOST1) has the grass block for its face and "Katılmak için F7 tuşuna bas"; the host's own notes ("Dünyan
  * arkadaşlarına açık", "Mert dünyana katıldı") are the overlay's, under the player's "Diğer bildirimler". The person a
  * title names (a message's sender, the friend of an invite or a world invite) has their first profile badge right of
- * the name (BADGES-UI, {@link Marks}); the narrator says all of them with the name.
+ * the name (BADGES-UI, {@link Marks}); the narrator says all of them with the name. A voice chat ring (VOICE-O) is the
+ * caller's face, "Kaan_07 arıyor" (a long name gives way, never the verb), who else is in the room, and "Yanıtlamak
+ * için [F7] tuşuna bas"; it stands under the call's gold hairline for as long as it rings.
  *
  * <p>The hint says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked it), and where
  * the key may need Fn a second line says so ("Açılmazsa [Fn] + [F7] tuşlarına bas", {@link
@@ -63,7 +65,7 @@ public final class ToastCard {
     /** The key the Fn line names: the same word on every keyboard and in both languages. */
     static final String FN = "Fn";
 
-    public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL, WORLD, HOST }
+    public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL, WORLD, HOST, RING }
 
     final Kind kind;
     final String conversation;
@@ -322,7 +324,7 @@ public final class ToastCard {
             case CALL -> Texts.str("toast.call", request.body().isEmpty() ? someone : request.body());
             case INVITE -> Texts.str("toast.invite");
             case WORLD -> Texts.str("toast.world");
-            case INFO, TRAVEL, HOST -> request.body();
+            case INFO, TRAVEL, HOST, RING -> request.body();
             case MESSAGE -> showText && !request.body().isEmpty() ? request.body() : Texts.str("toast.new_message");
         };
         if (count > 1) {
@@ -367,7 +369,7 @@ public final class ToastCard {
         b.narration = switch (b.kind) {
             case CALL -> Texts.tr("toast.narration.notice", name, bodyText);
             case INVITE, WORLD -> Texts.tr("toast.narration.notice", marked, bodyText);
-            case INFO, TRAVEL, HOST -> Component.literal(name + ". " + bodyText);
+            case INFO, TRAVEL, HOST, RING -> Component.literal(name + ". " + bodyText);
             case MESSAGE -> crewName != null ? Texts.tr("toast.narration.crew", spokenName, crewName, bodyText)
                 : Texts.tr("toast.narration.message", spokenName, bodyText);
         };
@@ -411,6 +413,30 @@ public final class ToastCard {
             hint(b, hintKey, keyName, fnTip);
         }
         b.narration = Component.literal(body == null || body.isEmpty() ? title : title + ". " + body);
+        return new ToastCard(b);
+    }
+
+    /**
+     * A voice chat ring (VOICE-O): the caller's face, "{@code name} arıyor" in bold (the name gives way to the verb), who
+     * else is in the room under it ("Odada: Ece_x, Mert"; else "Sesli sohbet"), and the hint to answer in the panel
+     * ("Yanıtlamak için [F7] tuşuna bas", with {@code fnTip} the Fn line).
+     */
+    public static ToastCard ring(String name, String others, String keyName, boolean fnTip) {
+        Builder b = new Builder();
+        b.kind = Kind.RING;
+        Font strong = Fonts.strong();
+        String who = name == null || name.isEmpty() ? Texts.str("voice.someone") : name;
+        String verb = Texts.str("voice.ring.verb");
+        int verbRoom = strong.width(" " + verb);
+        String titleText = Texts.fit(strong, who, Math.max(24, TEXT_W - verbRoom)) + " " + verb;
+        b.title = Texts.visual(titleText);
+        b.titleWidth = strong.width(titleText);
+        b.initial = Texts.initial(who);
+        String line = others == null || others.isEmpty() ? Texts.str("voice.title")
+            : Texts.str("voice.ring.others", others);
+        b.body = Texts.wrap(Fonts.ui(), line, TEXT_W, 1);
+        hint(b, "toast.hint.call", keyName, fnTip);
+        b.narration = Component.literal(Texts.str("voice.ring.calling", who) + ". " + line);
         return new ToastCard(b);
     }
 
@@ -480,7 +506,7 @@ public final class ToastCard {
             drawTravel(g, x, y);
             return;
         }
-        Draw.frame(g, kind == Kind.CALL ? Frames.TOAST_CALL : Frames.TOAST, x, y, WIDTH, height);
+        Draw.frame(g, kind == Kind.CALL || kind == Kind.RING ? Frames.TOAST_CALL : Frames.TOAST, x, y, WIDTH, height);
         drawFace(g, x + PAD_X + FACE / 2f, y + PAD_Y + FACE / 2f);
         float tx = x + TEXT_X;
         float ty = y + PAD_Y;
@@ -570,7 +596,7 @@ public final class ToastCard {
                 Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_700);
                 Draw.icon(g, Icon.INFO, 10, cx - 5, cy - 5, Theme.ASH_300);
             }
-            case MESSAGE, HOST, WORLD -> {
+            case MESSAGE, HOST, WORLD, RING -> {
                 if (face != null) {
                     face.draw(g, FACE, cx, cy);
                 } else {

@@ -7,6 +7,7 @@
 // the row's own card where it has one, else in a small dialog here. World sharing (HOST1) adds
 // "Katıl" to a friend's world, "Dünyana çağır" and "Dünyadan çıkar" (asked in its own dialog).
 import {
+  ArrowsLeftRight,
   Bell,
   ChatCircle,
   Check,
@@ -17,11 +18,17 @@ import {
   Flag,
   FolderSimple,
   FolderSimplePlus,
+  Microphone,
+  MicrophoneSlash,
   PaperPlaneTilt,
+  Phone,
+  PhonePlus,
   Play,
   Prohibit,
   ShieldStar,
   SignOut,
+  SpeakerHigh,
+  SpeakerSimpleSlash,
   Star,
   UserCheck,
   UserMinus,
@@ -38,9 +45,20 @@ import { announce } from "@/features/accounts/use-accounts";
 import { inviteFriends, pressJoin } from "@/features/host/actions";
 import { hostMenuKey, inviteFrom, personWorld, retryWithCopy } from "@/features/host/rules";
 import { useHostUi } from "@/features/host/store";
+import {
+  callFriend,
+  inviteToRoom,
+  moderate,
+  setMutedForMe,
+  setVolume as setVoiceVolume,
+} from "@/features/voice/actions";
+import { callOffer, crewRoomName } from "@/features/voice/rules";
+import { recentRoom, useVoiceUi } from "@/features/voice/store";
 import { api } from "@/lib/api";
 import type { HostView } from "@/lib/api/host-types";
 import type { SocialProfile, SocialSnapshot, SocialTeam, TeamMember } from "@/lib/api/social-types";
+import type { VoiceState } from "@/lib/api/voice-types";
+import { formatPercent } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { directConversation } from "./chat/conversations";
@@ -246,6 +264,8 @@ export interface PersonEnv {
   here: boolean;
   /** World sharing (HOST1): the player's open world and friends' world invites. */
   host: HostView;
+  /** Voice chat (VOICE): the player's room, and who may be called. */
+  voice: VoiceState;
 }
 
 /**
@@ -268,7 +288,9 @@ function usePersonEnvWhile(live: boolean): PersonEnv | null {
   const hostKey = useHostUi((s) => (live ? hostMenuKey(s.view) : ""));
   // biome-ignore lint/correctness/useExhaustiveDependencies: the key says when it changed
   const host = useMemo(() => useHostUi.getState().view, [hostKey]);
-  if (!view || !cooldown || !favorites || !onlineAlerts) return null;
+  // Voice chat (VOICE): its state changes on joins and settings, never with who speaks.
+  const voice = useVoiceUi((s) => (live ? s.state : null));
+  if (!view || !cooldown || !favorites || !onlineAlerts || !voice) return null;
   const prefs = { favorites, onlineAlerts, notifyFavoriteOnline, notifyFavoriteProjects };
   return {
     t,
@@ -278,6 +300,7 @@ function usePersonEnvWhile(live: boolean): PersonEnv | null {
     notifies: (id) => notifiesOnline(prefs, id),
     here: gameOpen && onTarget(PROJECTS, view.activity),
     host,
+    voice,
   };
 }
 
@@ -340,6 +363,18 @@ export function personItems(
   const crewMember = crew?.members.find((m) => m.id === person.id);
   const roles = view.crew.roles;
   const world = personWorld(env.host, person.id, Boolean(friend));
+  // Voice chat (VOICE): in the player's room, or what their card offers ("Ara", "Odaya davet et").
+  const voiceRoom = env.voice.room;
+  const inRoom = voiceRoom?.people.find((p) => p.id === person.id);
+  const crewMembersOf = (id: string) =>
+    view.crews.find((c) => c.id === id)?.members.map((m) => m.id) ?? [];
+  // A crewmate who is no friend may be invited to a crew room while online (voice.md §3.4).
+  const onlineCrewmate = (id: string) =>
+    view.crews.some((c) => c.members.some((m) => m.id === id && m.state !== "offline"));
+  const offer = blocked
+    ? null
+    : callOffer(env.voice, person.id, Boolean(friend), crewMembersOf, view.friends, onlineCrewmate);
+  const reportRoom = inRoom && voiceRoom ? voiceRoom.id : recentRoom(person.id);
   const full = personMenu({
     me: person.id === me,
     friend: Boolean(friend),
@@ -368,15 +403,28 @@ export function personItems(
             removable: canRemove(crew, crewMember, roles),
           }
         : undefined,
-    // The service takes a report about a friend, a crewmate, or whoever asked the player.
+    // The service takes a report about a friend, a crewmate, whoever asked the player, or someone
+    // in the player's voice room (a friend's friend there too).
     report:
       Boolean(friend) ||
       crewmate ||
+      Boolean(inRoom) ||
       request === "incoming" ||
       request === "join" ||
       view.incoming.some((r) => r.id === person.id),
     worldJoin: world.join,
     world: world.host,
+    voice: {
+      offer,
+      room: inRoom
+        ? {
+            mutedForMe: inRoom.mutedForMe,
+            mutedByModerator: inRoom.mutedByModerator,
+            moderator: inRoom.role === "moderator",
+            can: inRoom.can,
+          }
+        : undefined,
+    },
   });
   const plan = place.skip?.length ? without(full, place.skip) : full;
 
@@ -387,6 +435,92 @@ export function personItems(
 
   return rowsOf(plan, (row): MenuItem | null => {
     switch (row.action) {
+      case "voiceVolume": {
+        // 0–200 % through WebAudio; an engine that plays through `<audio>` stops at 100 % (no
+        // notch then: it would sit on the end).
+        const max = env.voice.volumeMax ?? 200;
+        return {
+          label: t("voice.person.volume"),
+          icon: <SpeakerHigh size={16} />,
+          onSelect: () => {},
+          slider: {
+            value: Math.min(inRoom?.volume ?? 100, max),
+            min: 0,
+            max,
+            step: 5,
+            notch: max > 100 ? 100 : undefined,
+            format: formatPercent,
+            onChange: (value, final) => setVoiceVolume(person.id, value, final),
+          },
+        };
+      }
+      case "voiceMuteForMe":
+        return {
+          label: t("voice.person.muteForMe"),
+          icon: <SpeakerSimpleSlash size={16} />,
+          checked: Boolean(row.checked),
+          onSelect: () => void setMutedForMe(person.id, !row.checked),
+        };
+      case "voiceMute":
+      case "voiceUnmute":
+        return {
+          label:
+            row.action === "voiceMute"
+              ? t("voice.person.muteForAll")
+              : t("voice.person.unmuteForAll"),
+          icon:
+            row.action === "voiceMute" ? <MicrophoneSlash size={16} /> : <Microphone size={16} />,
+          onSelect: () =>
+            void moderate({
+              act: row.action === "voiceMute" ? "mute" : "unmute",
+              person: person.id,
+            }),
+        };
+      case "voiceKick":
+        return {
+          label: t("voice.person.kick"),
+          icon: <SignOut size={16} />,
+          onSelect: () => void moderate({ act: "kick", person: person.id }),
+        };
+      case "voiceMove": {
+        const rooms =
+          env.voice.crews
+            .find((c) => c.crew === voiceRoom?.crew)
+            ?.rooms.filter((r) => r.id !== voiceRoom?.id) ?? [];
+        return {
+          label: t("voice.person.move"),
+          icon: <ArrowsLeftRight size={16} />,
+          onSelect: () => {},
+          disabled: rooms.length === 0,
+          items: rooms.map((r) => ({
+            label: crewRoomName(r, t),
+            onSelect: () => void moderate({ act: "move", person: person.id, room: r.id }),
+          })),
+        };
+      }
+      case "voiceMod":
+      case "voiceUnmod":
+        return {
+          label:
+            row.action === "voiceMod" ? t("voice.person.makeMod") : t("voice.person.unmakeMod"),
+          icon: <ShieldStar size={16} />,
+          onSelect: () =>
+            void moderate({ act: row.action === "voiceMod" ? "mod" : "unmod", person: person.id }),
+        };
+      case "voiceCall":
+        return {
+          label: t("voice.call.action"),
+          icon: <Phone size={16} />,
+          onSelect: () => void callFriend(person.id),
+        };
+      case "voiceInvite":
+        return {
+          label: row.checked ? t("voice.call.ringing") : t("voice.call.inviteToRoom"),
+          icon: <PhonePlus size={16} />,
+          disabled: row.disabled,
+          checked: row.checked ? true : undefined,
+          onSelect: () => void inviteToRoom(person.id),
+        };
       case "acceptRequest":
         return {
           label: t("social.actions.accept"),
@@ -645,6 +779,9 @@ export function personItems(
                 kind: "player",
                 id: person.id,
                 ...(place.reaction ? { reaction: place.reaction } : {}),
+                // VOICE: someone in the player's room, or there within the day: the room's
+                // events are the evidence.
+                ...(reportRoom ? { voice: reportRoom } : {}),
               },
               ...(place.reaction ? { reaction: { e: place.reaction.e } } : {}),
               name: person.name,
