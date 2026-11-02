@@ -28,6 +28,16 @@ pub const FINISHED_KEEP_SECONDS: i64 = 7 * 86_400;
 /// A custom item no order shows is dropped by a save once it is this old.
 pub const CUSTOM_KEEP_SECONDS: i64 = 30 * 86_400;
 const GENERIC: &str = "generic";
+/// The generic profile's ad texts (the agent's `profiles/generic.json`; AFKPLUS-DYN, 2 Nov 2026:
+/// every server runs on it unless Studio adds a profile, so it advertises too).
+pub const GENERIC_AD_TEMPLATES: [&str; 6] = [
+    "buy-basic",
+    "buy-want",
+    "buy-take",
+    "sell-basic",
+    "sell-have",
+    "sell-stock",
+];
 const INT32: i64 = 1 << 31;
 
 const STATUS_PRESETS: [&str; 5] = [
@@ -634,6 +644,16 @@ pub fn check_persona(raw: &str, max: usize) -> Result<String, &'static str> {
     Ok(cleaned)
 }
 
+/// The profile a mode runs on, as the service and the machine choose it (the reference's
+/// `runsOn`): the open profile it names; for a stored mode whose profile closed, another open one
+/// (the first by id); else the generic profile.
+fn runs_on<'a>(ctx: &'a PlusCheckContext, mode: &'a str) -> &'a str {
+    if mode == GENERIC || ctx.modes.contains_key(mode) {
+        return mode;
+    }
+    ctx.modes.keys().next().map_or(GENERIC, String::as_str)
+}
+
 /// The money cap of a mode: its profile's `money.maxDeal`, the generic profile's 100,000,000.
 fn max_deal_of(ctx: &PlusCheckContext, mode: &str) -> u64 {
     if mode == GENERIC {
@@ -989,14 +1009,17 @@ pub fn check_config_value(input: &Value, ctx: &PlusCheckContext) -> Checked<Valu
     let proactive_pm = boolean(discovery_in.get("proactivePm"), "discovery.proactivePm")?;
     let ads = boolean(discovery_in.get("ads"), "discovery.ads")?;
     let ad_template = string(discovery_in.get("adTemplate"), "discovery.adTemplate")?;
-    let templates: &[String] = if mode == GENERIC {
-        &[]
+    // The ad texts of the profile the account runs on (AFKPLUS-DYN): a stored mode whose profile
+    // closed runs on another open one or the generic profile, whose own texts count.
+    let runs = runs_on(ctx, mode);
+    let known = if runs == GENERIC {
+        GENERIC_AD_TEMPLATES.contains(&ad_template)
     } else {
         ctx.modes
-            .get(mode)
-            .map_or(&[][..], |facts| facts.ad_templates.as_slice())
+            .get(runs)
+            .is_some_and(|facts| facts.ad_templates.iter().any(|t| t == ad_template))
     };
-    if !is_template_id(ad_template) || (ads && !templates.iter().any(|t| t == ad_template)) {
+    if !is_template_id(ad_template) || (ads && !known) {
         return Err(PlusRefusal::invalid("discovery.adTemplate", "range"));
     }
     let stored_discovery = stored.and_then(|doc| doc.get("discovery"));

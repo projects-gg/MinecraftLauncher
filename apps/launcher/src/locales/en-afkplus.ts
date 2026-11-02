@@ -821,6 +821,7 @@ export const enAfkPlus = {
     adStopped: "Ads stopped for today.",
     adNoOrders: "No ads while you have no active orders.",
     adNamesPending: "Ready once ProBot AI is in game.",
+    adLearning: "It's learning this server's chat first, then it posts the first ad.",
     currency: "Currency",
     currencyHelp: "Your server's money name.",
     currencyFixed: "The server sets this name.",

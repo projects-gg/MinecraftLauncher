@@ -117,6 +117,7 @@ function preview(parts: Partial<PlusAdPreview> = {}): PlusAdPreview {
     nextAt: null,
     warning: null,
     stoppedToday: false,
+    learning: false,
     ...parts,
   };
 }
