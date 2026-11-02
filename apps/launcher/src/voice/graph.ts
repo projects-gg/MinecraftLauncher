@@ -8,7 +8,14 @@
 // most. Who speaks is measured on arrival (the speakers worklet). Chromium only feeds a remote
 // track to WebAudio while a media element plays it, so each person has a muted element.
 import rnnoiseWasmUrl from "@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url";
-import type { EngineSettings, EngineSound, VoiceDevice, VoiceDevices, VoiceMic } from "./boundary";
+import type {
+  EngineSettings,
+  EngineSound,
+  Playout,
+  VoiceDevice,
+  VoiceDevices,
+  VoiceMic,
+} from "./boundary";
 import type { CaptureConfig } from "./capture-core";
 import { listDevices } from "./devices";
 import { loops, renderSound, type SoundName } from "./sounds";
@@ -28,6 +35,8 @@ export interface GraphEvents {
   /** The microphone's state; `changed`: the one in use went and another took its place. */
   mic(mic: VoiceMic, changed: boolean): void;
   devices(devices: VoiceDevices): void;
+  /** How people play now (once the sound is open, then on every change). */
+  playout(playout: Playout): void;
   /** Something the launcher should log (a short code). */
   failed(code: string): void;
 }
@@ -37,7 +46,8 @@ export interface Graph {
   /** What the peer connection sends (silence while the gate is shut, or without a microphone). */
   readonly sendTrack: MediaStreamTrack;
   configure(settings: EngineSettings): Promise<void>;
-  talk(open: boolean): void;
+  /** The way out opens or closes; `tail` false: close at once even in push-to-talk. */
+  talk(open: boolean, tail?: boolean): void;
   levels(on: boolean): void;
   test(on: boolean): void;
   deaf(on: boolean): void;
@@ -50,12 +60,11 @@ export interface Graph {
   close(): void;
 }
 
-type Path = "webAudio" | "element";
-
 interface Entry {
   track: MediaStreamTrack;
   stream: MediaStream;
-  element: HTMLAudioElement;
+  /** Only while played (Chromium feeds WebAudio a remote track only while an element plays it). */
+  element: HTMLAudioElement | null;
   source: MediaStreamAudioSourceNode | null;
   gain: GainNode | null;
   boost: DynamicsCompressorNode | null;
@@ -125,8 +134,10 @@ export class AudioGraph implements Graph {
   private readonly mix: GainNode;
   private readonly monitor: GainNode;
   private readonly speakers: AudioWorkletNode[] = [];
-  /** Which receiver each speakers input measures, and whether it is lit. */
+  /** Which receiver each speakers input measures, its generation, and whether it is lit. */
   private readonly slots: (string | null)[] = [];
+  private readonly slotGenerations: number[] = [];
+  private generations = 0;
   private readonly lit = new Set<number>();
   private readonly entries = new Map<string, Entry>();
   private readonly buffers = new Map<SoundName, AudioBuffer>();
@@ -134,7 +145,8 @@ export class AudioGraph implements Graph {
   private mic: Mic | null = null;
   private micState: VoiceMic = "unknown";
   private micWork: Promise<void> = Promise.resolve();
-  private path: Path = "webAudio";
+  private path: Playout = "webAudio";
+  private started = false;
   private ns: "loading" | "ready" | "failed" | "slow" = "loading";
   private deafOn = false;
   private testOn = false;
@@ -209,6 +221,8 @@ export class AudioGraph implements Graph {
     await this.applySink();
     await this.listDevices();
     navigator.mediaDevices.addEventListener("devicechange", this.onDeviceChange);
+    this.started = true;
+    this.events.playout(this.path);
   }
 
   private async resume(): Promise<void> {
@@ -292,8 +306,8 @@ export class AudioGraph implements Graph {
     if (before.outputDevice !== settings.outputDevice) await this.applySink();
   }
 
-  talk(open: boolean): void {
-    this.post({ t: "talk", open });
+  talk(open: boolean, tail = true): void {
+    this.post({ t: "talk", open, tail });
   }
 
   levels(on: boolean): void {
@@ -312,7 +326,9 @@ export class AudioGraph implements Graph {
     this.deafOn = on;
     this.mix.gain.setTargetAtTime(on ? 0 : 1, this.ctx.currentTime, GLIDE_S / 2);
     if (this.path === "element") {
-      for (const entry of this.entries.values()) entry.element.muted = on || entry.volume === null;
+      for (const entry of this.entries.values()) {
+        if (entry.element) entry.element.muted = on || entry.volume === null;
+      }
     }
   }
 
@@ -496,7 +512,7 @@ export class AudioGraph implements Graph {
       this.sinkId = "";
     }
     for (const entry of this.entries.values()) {
-      void setSink(entry.element, this.sinkId).catch(() => undefined);
+      if (entry.element) void setSink(entry.element, this.sinkId).catch(() => undefined);
     }
   }
 
@@ -507,16 +523,10 @@ export class AudioGraph implements Graph {
     const old = this.entries.get(mid);
     if (old?.track === track || this.closed) return;
     if (old) this.detach(mid);
-    const stream = new MediaStream([track]);
-    const element = new Audio();
-    element.srcObject = stream;
-    element.muted = true;
-    void setSink(element, this.sinkId).catch(() => undefined);
-    void element.play().catch(() => undefined);
     this.entries.set(mid, {
       track,
-      stream,
-      element,
+      stream: new MediaStream([track]),
+      element: null,
       source: null,
       gain: null,
       boost: null,
@@ -536,18 +546,14 @@ export class AudioGraph implements Graph {
     const entry = this.entries.get(mid);
     if (!entry) return;
     this.entries.delete(mid);
-    this.unmeter(mid, entry);
-    entry.gain?.disconnect();
-    entry.boost?.disconnect();
-    entry.source?.disconnect();
-    entry.element.pause();
-    entry.element.srcObject = null;
+    this.silence(mid, entry);
   }
 
-  private setPath(path: Path): void {
+  private setPath(path: Playout): void {
     if (path === this.path) return;
     this.path = path;
     for (const [mid, entry] of this.entries) this.wire(mid, entry);
+    if (this.started) this.events.playout(path);
   }
 
   private sourceOf(entry: Entry): MediaStreamAudioSourceNode {
@@ -555,20 +561,52 @@ export class AudioGraph implements Graph {
     return entry.source;
   }
 
+  /** The element that plays (or, muted, feeds WebAudio) a receiver, made when first needed. */
+  private elementOf(entry: Entry): HTMLAudioElement {
+    if (entry.element) return entry.element;
+    const element = new Audio();
+    element.srcObject = entry.stream;
+    element.muted = true;
+    void setSink(element, this.sinkId).catch(() => undefined);
+    void element.play().catch(() => undefined);
+    entry.element = element;
+    return element;
+  }
+
+  /** A receiver nobody plays (silenced, left, or dead): nothing of it stays connected or playing. */
+  private silence(mid: string, entry: Entry): void {
+    this.unmeter(mid, entry);
+    entry.gain?.disconnect();
+    entry.boost?.disconnect();
+    entry.source?.disconnect();
+    entry.gain = null;
+    entry.boost = null;
+    entry.source = null;
+    if (entry.element) {
+      entry.element.pause();
+      entry.element.srcObject = null;
+      entry.element = null;
+    }
+  }
+
   private wire(mid: string, entry: Entry): void {
     const volume = entry.volume;
-    if (volume === null) this.unmeter(mid, entry);
-    else this.meter(mid, entry);
-    if (this.path === "element" || volume === null) {
+    if (volume === null) {
+      this.silence(mid, entry);
+      return;
+    }
+    const element = this.elementOf(entry);
+    this.meter(mid, entry);
+    if (this.path === "element") {
       entry.gain?.disconnect();
       entry.boost?.disconnect();
       entry.gain = null;
       entry.boost = null;
-      entry.element.volume = volume === null ? 0 : Math.min(1, volume / 100);
-      entry.element.muted = this.path !== "element" || volume === null || this.deafOn;
+      element.volume = Math.min(1, volume / 100);
+      element.muted = this.deafOn;
       return;
     }
-    entry.element.muted = true;
+    element.muted = true;
     const level = Math.min(2, volume / 100);
     // Above 100 % a person's own limiter keeps their peaks from pressing everyone else down.
     const boosted = level > 1;
@@ -605,16 +643,25 @@ export class AudioGraph implements Graph {
       });
       const base = this.speakers.length * SPEAKER_SLOTS;
       node.port.onmessage = (event: MessageEvent<SpeakersPost>) =>
-        this.onSpeaker(base + event.data.slot, event.data.on);
+        this.onSpeaker(base + event.data.slot, event.data.on, event.data.generation);
       this.speakers.push(node);
       slot = this.slots.length;
-      for (let i = 0; i < SPEAKER_SLOTS; i++) this.slots.push(null);
+      for (let i = 0; i < SPEAKER_SLOTS; i++) {
+        this.slots.push(null);
+        this.slotGenerations.push(0);
+      }
     }
     const node = this.speakers[Math.floor(slot / SPEAKER_SLOTS)];
     if (!node) return;
+    this.generations += 1;
     this.slots[slot] = mid;
+    this.slotGenerations[slot] = this.generations;
     entry.slot = slot;
-    node.port.postMessage({ t: "reset", slot: slot % SPEAKER_SLOTS } satisfies SpeakersMessage);
+    node.port.postMessage({
+      t: "reset",
+      slot: slot % SPEAKER_SLOTS,
+      generation: this.generations,
+    } satisfies SpeakersMessage);
     this.sourceOf(entry).connect(node, 0, slot % SPEAKER_SLOTS);
   }
 
@@ -634,9 +681,10 @@ export class AudioGraph implements Graph {
     if (this.lit.delete(slot)) this.events.speaking(mid, false);
   }
 
-  private onSpeaker(slot: number, on: boolean): void {
+  private onSpeaker(slot: number, on: boolean, generation: number): void {
     const mid = this.slots[slot];
-    if (this.closed || !mid) return;
+    // A post for the slot's previous person, still on its way when the slot changed hands.
+    if (this.closed || !mid || generation !== this.slotGenerations[slot]) return;
     if (on) this.lit.add(slot);
     else this.lit.delete(slot);
     this.events.speaking(mid, on);

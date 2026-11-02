@@ -1,7 +1,8 @@
 // Who speaks (design §6.5), as the speakers worklet measures it: every person's arriving sound on
 // its own input, nothing sent to any server. Senders' gates turn the quiet between words into
 // silence, so anything above a low level is speech; 300 ms keeps a ring lit across syllables. Only
-// changes leave the audio thread: a quiet room posts nothing.
+// changes leave the audio thread: a quiet room posts nothing. Each post carries the slot's
+// generation, so one still on its way for the slot's previous person is known as stale.
 import { dbOf } from "./dsp";
 
 /** Inputs per speakers node (more people take another node). */
@@ -14,21 +15,24 @@ const HOLD_S = 0.3;
 export class SpeakersCore {
   private readonly on: Uint8Array;
   private readonly hold: Float32Array;
+  private readonly generation: Uint32Array;
 
   constructor(
     private readonly rate: number,
     slots: number,
-    private readonly post: (slot: number, on: boolean) => void,
+    private readonly post: (slot: number, on: boolean, generation: number) => void,
   ) {
     this.on = new Uint8Array(slots);
     this.hold = new Float32Array(slots);
+    this.generation = new Uint32Array(slots);
   }
 
-  /** A slot changes hands: its state starts over, unlit (the page dropped the old person's). */
-  reset(slot: number): void {
+  /** A slot changes hands: its state starts over, unlit, under the page's new generation. */
+  reset(slot: number, generation: number): void {
     if (slot < 0 || slot >= this.on.length) return;
     this.on[slot] = 0;
     this.hold[slot] = 0;
+    this.generation[slot] = generation;
   }
 
   /** One quantum of every input (an input with no channels is not connected). */
@@ -53,7 +57,7 @@ export class SpeakersCore {
       const on = speech || (this.hold[slot] ?? 0) > 0;
       if (on !== (this.on[slot] === 1)) {
         this.on[slot] = on ? 1 : 0;
-        this.post(slot, on);
+        this.post(slot, on, this.generation[slot] ?? 0);
       }
     }
   }

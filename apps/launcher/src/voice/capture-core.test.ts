@@ -33,10 +33,11 @@ class Rig {
   }
 
   /** `seconds` of a 300 Hz tone whose RMS is `db` dBFS; returns the RMS of what was sent. */
-  feed(db: number, seconds: number): { sent: number[]; monitored: number[] } {
+  feed(db: number, seconds: number): { sent: number[]; monitored: number[]; samples: number[] } {
     const amplitude = 10 ** (db / 20) * Math.SQRT2;
     const sent: number[] = [];
     const monitored: number[] = [];
+    const samples: number[] = [];
     for (let q = 0; q < Math.round(seconds * PER_S); q++) {
       const x = new Float32Array(BLOCK);
       for (let i = 0; i < BLOCK; i++) {
@@ -48,9 +49,19 @@ class Rig {
       this.core.process(x, send, monitor);
       sent.push(rms(send));
       monitored.push(rms(monitor));
+      samples.push(...send);
     }
-    return { sent, monitored };
+    return { sent, monitored, samples };
   }
+}
+
+/** The largest step between neighbouring samples (a cut is a step; a fade is not). */
+function largestStep(samples: number[]): number {
+  let largest = 0;
+  for (let i = 1; i < samples.length; i++) {
+    largest = Math.max(largest, Math.abs((samples[i] ?? 0) - (samples[i - 1] ?? 0)));
+  }
+  return largest;
 }
 
 function rms(x: Float32Array): number {
@@ -142,8 +153,9 @@ describe("CaptureCore", () => {
     rig.core.talk(false);
     const released = rig.feed(QUIET, 0.5);
     const tail = released.sent.filter((v) => v > 0).length / PER_S;
-    expect(tail).toBeGreaterThan(0.19);
-    expect(tail).toBeLessThan(0.24);
+    // 200 ms, what was on its way (13 ms) and a 5 ms fade.
+    expect(tail).toBeGreaterThan(0.2);
+    expect(tail).toBeLessThan(0.25);
     // Speech without the key goes nowhere.
     expect(rig.feed(SPEECH, 0.5).sent.every((v) => v === 0)).toBe(true);
   });
@@ -251,5 +263,64 @@ describe("CaptureCore", () => {
     rig.core.talk(true);
     // The fan the gate learned before the mute does not open it.
     expect(rig.feed(-50, 1).sent.every((v) => v === 0)).toBe(true);
+  });
+
+  it("fades a mute out in 5 ms instead of cutting it (no click)", () => {
+    const rig = new Rig({ ns: false });
+    rig.core.talk(true);
+    rig.feed(QUIET, 1);
+    const speaking = rig.feed(SPEECH, 0.5);
+    rig.core.talk(false);
+    const muted = rig.feed(SPEECH, 0.1);
+    // Not cut: the first quantum still carries the fading sound...
+    expect(muted.sent[0] ?? 0).toBeGreaterThan(0);
+    // ...gone within two quanta. A cut would step by the tone's amplitude (25 times its own
+    // largest step here); the fade adds a tenth at most.
+    expect(muted.sent.slice(2).every((v) => v === 0)).toBe(true);
+    const tone = largestStep(speaking.samples.slice(-BLOCK * 10));
+    expect(largestStep([...speaking.samples.slice(-BLOCK), ...muted.samples])).toBeLessThanOrEqual(
+      tone * 1.5,
+    );
+  });
+
+  it("closes push-to-talk at once when the close is a mute", () => {
+    const rig = new Rig({ ns: false, ptt: true });
+    rig.core.talk(true);
+    rig.feed(QUIET, 0.5);
+    rig.core.talk(false, false);
+    const muted = rig.feed(QUIET, 0.5);
+    expect(muted.sent.slice(2).every((v) => v === 0)).toBe(true);
+  });
+
+  it("cleans every frame push-to-talk sends, the quiet ones too", () => {
+    const denoiser = fakeDenoiser(0.1);
+    const rig = new Rig({ ptt: true }, denoiser);
+    rig.feed(QUIET, 0.5);
+    expect(denoiser.calls).toBe(0);
+    rig.core.talk(true);
+    rig.feed(QUIET, 1);
+    // A frame each 10 ms, and one more to start the run.
+    expect(denoiser.calls).toBeGreaterThanOrEqual(99);
+    expect(denoiser.calls).toBeLessThanOrEqual(102);
+  });
+
+  it("starts each run of the suppressor from the frame that came just before", () => {
+    const inputs: number[] = [];
+    const denoiser: Denoiser = {
+      process(frame) {
+        inputs.push(rms(frame));
+        return 0.9;
+      },
+    };
+    const rig = new Rig({}, denoiser);
+    rig.core.talk(true);
+    rig.feed(QUIET, 1);
+    expect(inputs).toEqual([]);
+    rig.feed(SPEECH, 0.02);
+    // The previous frame first (quiet, its output dropped), then the speech itself.
+    expect(inputs.length).toBeGreaterThanOrEqual(2);
+    const scale = 32768;
+    expect((inputs[0] ?? 0) / scale).toBeLessThan(10 ** (-60 / 20));
+    expect((inputs[1] ?? 0) / scale).toBeGreaterThan(10 ** (-40 / 20));
   });
 });

@@ -1,23 +1,26 @@
 // The voice engine behind the launcher's commands (pl_voice::engine; design §6). Nothing runs until
 // the launcher asks: the sound opens for a stay, the settings page or "Mikrofonu dene" and closes
-// when none of them needs it (no context, microphone, timer or listener left); the peer connection
-// lives from a join to the leave. Commands that touch the connection or open the sound run one at a
-// time in the launcher's order; mute, deafen and volumes apply at once.
+// when none of them needs it (no context, microphone, timer or listener left; after a stay it waits
+// 1.5 s, since a room move leaves and joins at once); the peer connection lives from a join to the
+// leave. Opening and closing the sound and every negotiation run one at a time in the launcher's
+// order; mute, deafen, volumes, settings, the level bar and the self-test apply at once.
 //
 // The SFU flow (§7.5) from here: `join` → a peer connection with the one track the capture worklet
 // sends (silence without a microphone: plugging one in later needs no new join) → `offer`; the
 // room's `answer`; its `offer`s name new receivers (mid → person) → `answer`; a receiver whose
 // person left, or came back on a new receiver, is dead: it stops playing at once and the room
 // closes such receivers in batches. TURN: no connection 5 s after the answer → `needTurn`, the
-// launcher fetches credentials (`ice`) and the page joins again through them; lost 3 s → `lost`,
-// the launcher sends a new `join` (or `sync` from its side when the connection held).
+// launcher fetches credentials (`ice`) and the page joins again through them (none within 8 s:
+// `lost`); lost 3 s → `lost`, the launcher sends a new `join` (or `sync` from its side when the
+// connection held).
 import type {
   EngineCommand,
   EngineIce,
   EnginePerson,
+  EngineReport,
   EngineSettings,
   EngineSound,
-  PageReport,
+  Playout,
 } from "./boundary";
 import { Call, type CallEvents, type CallLike, type CallOptions } from "./call";
 import { AudioGraph, type Graph, type GraphEvents } from "./graph";
@@ -59,9 +62,18 @@ export const DEFAULT_SETTINGS: EngineSettings = {
 /** The quality check's pace in a call with others: rare while good, close while not. */
 export const QUALITY_GOOD_MS = 10_000;
 export const QUALITY_POOR_MS = 2_000;
+/** After `needTurn`, no TURN credentials by then (refused, or none to give): the connection is lost. */
+export const TURN_WAIT_MS = 8_000;
+/** After a stay the sound waits this long for the next one before it closes. */
+export const RELEASE_GRACE_MS = 1_500;
+/**
+ * Descriptions grow with every receiver the SFU closed without a renegotiation; past this (the
+ * room takes 15,000 characters) the connection starts over with only the people in the room.
+ */
+export const SDP_MAX_CHARS = 14_000;
 
 export function createEngine(
-  report: (value: PageReport) => void,
+  report: (value: EngineReport) => void,
   deps: EngineDeps = realDeps,
 ): Engine {
   return new VoiceEngine(report, deps);
@@ -93,9 +105,13 @@ class VoiceEngine implements Engine {
   private qualityTimer: (() => void) | null = null;
   private qualityBefore: RawStats | null = null;
   private statsBefore: RawStats | null = null;
+  /** The playout path last told (once per sound, and on change). */
+  private toldPlayout: Playout | null = null;
+  private turnWait: (() => void) | null = null;
+  private releaseTimer: (() => void) | null = null;
 
   constructor(
-    private readonly report: (value: PageReport) => void,
+    private readonly report: (value: EngineReport) => void,
     private readonly deps: EngineDeps,
   ) {
     this.speaking = new SpeakingReporter(
@@ -118,10 +134,13 @@ class VoiceEngine implements Engine {
       case "offer":
         this.offer(command.sdp, command.mids);
         break;
-      case "talk":
+      case "talk": {
+        // `tail: false` (asked of VOICE-INT): the close is a mute, not push-to-talk's release.
+        const tail = (command as { tail?: unknown }).tail;
         this.talkOpen = command.open;
-        this.graph?.talk(command.open);
+        this.graph?.talk(command.open, tail !== false);
         break;
+      }
       case "deaf":
         this.deaf = command.on;
         this.graph?.deaf(command.on);
@@ -159,26 +178,28 @@ class VoiceEngine implements Engine {
   // -----------------------------------------------------------------------------------------
   // The sound
 
+  /** At once: the sound queues its own microphone work, so nothing waits behind a negotiation. */
   private configure(settings: EngineSettings): void {
     this.settings = settings;
     this.call?.setKbps(settings.kbps);
-    void this.queue.run(async () => {
-      await this.graph?.configure(settings);
-    });
+    void this.graph?.configure(settings).catch(() => undefined);
   }
 
   /** Opens the sound once (shared by whoever asks meanwhile); null if it cannot open. */
   private ensureGraph(): Promise<Graph | null> {
+    this.cancelRelease();
     if (this.graph) return Promise.resolve(this.graph);
     this.opening ??= this.deps
       .openGraph(this.settings, this.graphEvents())
       .then(
         (graph) => {
           this.graph = graph;
-          graph.talk(this.talkOpen);
-          graph.deaf(this.deaf);
+          // Settings that changed while it opened; the test before the way out opens.
+          void graph.configure(this.settings).catch(() => undefined);
           graph.levels(this.setup || this.testing);
           graph.test(this.testing);
+          graph.deaf(this.deaf);
+          graph.talk(this.talkOpen);
           for (const [mid, track] of this.receivers) graph.attach(mid, track);
           this.replay();
           return graph;
@@ -211,12 +232,20 @@ class VoiceEngine implements Engine {
       },
       mic: (mic, changed) => this.report({ t: "mic", mic, changed }),
       devices: (devices) => this.report({ t: "devices", devices }),
+      playout: (playout) => {
+        if (playout === this.toldPlayout) return;
+        this.toldPlayout = playout;
+        this.report({ t: "playout", playout });
+      },
       failed: (code) => this.report({ t: "failed", code }),
     };
   }
 
-  /** The settings page or the self-test changed: open, adjust or close the sound. */
+  /** The settings page or the self-test changed: adjust at once, open or close in turn. */
   private refresh(): void {
+    // A test never waits behind a negotiation: nothing may go out while it runs.
+    this.graph?.levels(this.setup || this.testing);
+    this.graph?.test(this.testing);
     void this.queue.run(async () => {
       if (this.stay || this.setup || this.testing) {
         const graph = await this.ensureGraph();
@@ -230,11 +259,28 @@ class VoiceEngine implements Engine {
 
   /** Nothing needs the sound: close it (no context, microphone or listener stays). */
   private release(): void {
+    this.cancelRelease();
     if (this.stay || this.setup || this.testing || !this.graph) return;
     this.graph.close();
     this.graph = null;
     this.lit.clear();
     this.me = false;
+    this.toldPlayout = null;
+  }
+
+  /** After a stay: closes the sound unless something needs it within the grace. */
+  private releaseSoon(): void {
+    this.cancelRelease();
+    if (this.setup || this.testing || !this.graph) return;
+    this.releaseTimer = this.deps.timers.later(() => {
+      this.releaseTimer = null;
+      void this.queue.run(async () => this.release());
+    }, RELEASE_GRACE_MS);
+  }
+
+  private cancelRelease(): void {
+    this.releaseTimer?.();
+    this.releaseTimer = null;
   }
 
   private sound(name: EngineSound): void {
@@ -254,18 +300,20 @@ class VoiceEngine implements Engine {
   /** A new peer connection (a join, a lost one, or TURN): offered to the launcher. */
   private connect(): void {
     const generation = ++this.generation;
+    this.cancelTurnWait();
+    this.cancelRelease();
     void this.queue.run(async () => {
       if (generation !== this.generation || !this.stay) return;
       const graph = await this.ensureGraph();
       if (generation !== this.generation || !this.stay) return;
       this.dropCall();
-      const call = this.deps.openCall(
-        graph?.sendTrack ?? null,
-        { ice: this.ice, kbps: this.settings.kbps, timers: this.deps.timers },
-        this.callEvents(generation),
-      );
-      this.call = call;
       try {
+        const call = this.deps.openCall(
+          graph?.sendTrack ?? null,
+          { ice: this.ice, kbps: this.settings.kbps, timers: this.deps.timers },
+          this.callEvents(generation),
+        );
+        this.call = call;
         const { sdp, mid } = await call.offer();
         if (generation !== this.generation) return;
         this.report({ t: "offer", sdp, mid });
@@ -310,6 +358,12 @@ class VoiceEngine implements Engine {
         if (!current()) return;
         this.dropCall();
         this.report({ t: "needTurn" });
+        // A refused TURN request gets no `ice`: then the connection is lost and the launcher
+        // joins anew (or gives up), never a stay without a connection.
+        this.turnWait = this.deps.timers.later(() => {
+          this.turnWait = null;
+          if (current() && this.stay && !this.call) this.report({ t: "lost" });
+        }, TURN_WAIT_MS);
       },
       track: (mid, track) => {
         if (!current()) return;
@@ -325,6 +379,11 @@ class VoiceEngine implements Engine {
         this.pushSpeaking();
       },
     };
+  }
+
+  private cancelTurnWait(): void {
+    this.turnWait?.();
+    this.turnWait = null;
   }
 
   /** A negotiation step on the current call, in order; a failure loses the call. */
@@ -352,12 +411,29 @@ class VoiceEngine implements Engine {
     if (!this.stay) return;
     this.step("remote_offer", async (call) => {
       if (!call.stable) return;
+      if (sdp.length > SDP_MAX_CHARS) {
+        this.restart(call);
+        return;
+      }
       // Who each new receiver plays is known before its track arrives.
       this.mids.assign(mids);
       const answer = await call.applyOffer(sdp);
-      if (answer !== null && call === this.call) this.report({ t: "answer", sdp: answer });
+      if (answer === null || call !== this.call) return;
+      if (answer.length > SDP_MAX_CHARS) {
+        this.restart(call);
+        return;
+      }
+      this.report({ t: "answer", sdp: answer });
       this.replay();
     });
+  }
+
+  /** The descriptions outgrew the room's limit: a new connection carries only the living. */
+  private restart(call: CallLike): void {
+    if (call !== this.call) return;
+    this.report({ t: "failed", code: "sdp_size" });
+    this.dropCall();
+    this.report({ t: "lost" });
   }
 
   private leave(): void {
@@ -365,12 +441,16 @@ class VoiceEngine implements Engine {
     this.generation += 1;
     this.ice = null;
     this.people = [];
+    this.talkOpen = false;
+    this.cancelTurnWait();
+    this.graph?.talk(false, false);
     void this.queue.run(async () => {
       this.dropCall();
       this.speaking.clear();
       this.quality.reset();
       this.graph?.sound("stop");
-      this.release();
+      // A room move leaves and joins at once: the sound waits a moment for the next stay.
+      if (!this.stay) this.releaseSoon();
     });
   }
 
@@ -401,7 +481,7 @@ class VoiceEngine implements Engine {
     return person && !person.silent ? person : null;
   }
 
-  /** Every receiver as the people say: played at its volume, or not at all (dead or silent). */
+  /** Every receiver as the people say: played at its volume, or released (dead or silent). */
   private replay(): void {
     const graph = this.graph;
     if (graph) {

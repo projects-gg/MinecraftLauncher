@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { EngineCommand, EnginePerson, PageReport } from "./boundary";
-import { createEngine, DEFAULT_SETTINGS, QUALITY_GOOD_MS, QUALITY_POOR_MS } from "./engine";
+import type { EngineCommand, EnginePerson, EngineReport } from "./boundary";
+import {
+  createEngine,
+  DEFAULT_SETTINGS,
+  QUALITY_GOOD_MS,
+  QUALITY_POOR_MS,
+  RELEASE_GRACE_MS,
+  SDP_MAX_CHARS,
+  TURN_WAIT_MS,
+} from "./engine";
 import type { RawStats } from "./quality";
 import { FakeCall, FakeGraph, FakeTimers } from "./testing";
 
 function rig(options: { graphFails?: boolean } = {}) {
-  const reports: PageReport[] = [];
+  const reports: EngineReport[] = [];
   const timers = new FakeTimers();
   const graphs: FakeGraph[] = [];
   const calls: FakeCall[] = [];
@@ -26,8 +34,8 @@ function rig(options: { graphFails?: boolean } = {}) {
   const send = (...commands: EngineCommand[]) => {
     for (const command of commands) engine.handle(command);
   };
-  const of = <T extends PageReport["t"]>(t: T) =>
-    reports.filter((report): report is Extract<PageReport, { t: T }> => report.t === t);
+  const of = <T extends EngineReport["t"]>(t: T) =>
+    reports.filter((report): report is Extract<EngineReport, { t: T }> => report.t === t);
   const graph = () => {
     const graph = graphs.at(-1);
     if (!graph) throw new Error("no graph");
@@ -188,17 +196,111 @@ describe("the voice engine", () => {
   it("leaves nothing running after the stay: no call, no sound, no timer", async () => {
     const r = await inRoom();
     r.call().up();
+    r.send({ t: "talk", open: true });
     r.graph().events.speaking("1", true);
     r.send({ t: "leave" });
+    // The microphone's way out shuts at once, without push-to-talk's tail.
+    expect(r.graph().talkOpen).toBe(false);
+    expect(r.graph().talkTail).toBe(false);
     await settle();
     expect(r.call().closed).toBe(true);
+    expect(r.of("speaking").at(-1)).toEqual({ t: "speaking", ids: [], me: false });
+    // The sound waits a moment for a next stay, then closes.
+    expect(r.graph().closed).toBe(false);
+    r.timers.advance(RELEASE_GRACE_MS);
+    await settle();
     expect(r.graph().closed).toBe(true);
     expect(r.timers.pending).toBe(0);
-    expect(r.of("speaking").at(-1)).toEqual({ t: "speaking", ids: [], me: false });
     const reported = r.reports.length;
     r.send({ t: "offer", sdp: "late", mids: { "2": "u3" } }, { t: "answer", sdp: "late" });
     await settle();
     expect(r.reports).toHaveLength(reported);
+  });
+
+  it("keeps the sound and the microphone through a room move (leave and join at once)", async () => {
+    const r = await inRoom();
+    r.send({ t: "leave" }, { t: "join" });
+    await settle();
+    expect(r.graphs).toHaveLength(1);
+    expect(r.graph().closed).toBe(false);
+    expect(r.calls).toHaveLength(2);
+    expect(r.of("offer")).toHaveLength(2);
+    // Joined a moment after the leave: the same.
+    r.send({ t: "leave" });
+    await settle();
+    r.timers.advance(RELEASE_GRACE_MS / 2);
+    r.send({ t: "join" });
+    await settle();
+    r.timers.advance(RELEASE_GRACE_MS * 2);
+    await settle();
+    expect(r.graphs).toHaveLength(1);
+    expect(r.graph().closed).toBe(false);
+  });
+
+  it("calls the connection lost when TURN never comes, and not when it does", async () => {
+    const r = rig();
+    r.send({ t: "join" });
+    await settle();
+    r.send({ t: "answer", sdp: "room-answer" });
+    await settle();
+    r.call().events.needTurn();
+    r.timers.advance(TURN_WAIT_MS - 1);
+    expect(r.of("lost")).toHaveLength(0);
+    r.timers.advance(1);
+    expect(r.of("lost")).toHaveLength(1);
+    // The next try gets its credentials in time: nothing more.
+    r.send({ t: "join" });
+    await settle();
+    r.call().events.needTurn();
+    r.send({ t: "ice", ice: { urls: ["turn:example"], username: "u", credential: "c" } });
+    await settle();
+    r.timers.advance(TURN_WAIT_MS * 2);
+    expect(r.of("lost")).toHaveLength(1);
+    expect(r.of("needTurn")).toHaveLength(2);
+  });
+
+  it("starts the self-test at once even while a join waits", async () => {
+    const r = rig();
+    r.send({ t: "setup", on: true });
+    await settle();
+    let release: () => void = () => undefined;
+    FakeCall.offerHold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      r.send({ t: "join" });
+      await settle();
+      r.send({ t: "selfTest", on: true }, { t: "talk", open: true });
+      // The queue is busy with the join; the test (nothing goes out) is already on.
+      expect(r.graph().testOn).toBe(true);
+      expect(r.of("offer")).toHaveLength(0);
+      r.send({ t: "configure", settings: { ...DEFAULT_SETTINGS, pushToTalk: true } });
+      expect(r.graph().configured.at(-1)?.pushToTalk).toBe(true);
+    } finally {
+      release();
+      FakeCall.offerHold = Promise.resolve();
+    }
+    await settle();
+    expect(r.of("offer")).toHaveLength(1);
+  });
+
+  it("starts over when the descriptions outgrow the room's limit", async () => {
+    const r = await inRoom();
+    r.call().answerText = () => `v=0${"a".repeat(SDP_MAX_CHARS)}`;
+    r.send({ t: "offer", sdp: "sfu-2", mids: { "2": "u3" } });
+    await settle();
+    expect(r.of("answer")).toHaveLength(1);
+    expect(r.of("failed")).toContainEqual({ t: "failed", code: "sdp_size" });
+    expect(r.of("lost")).toHaveLength(1);
+    expect(r.call().closed).toBe(true);
+  });
+
+  it("passes push-to-talk's tail on, and closes at once when told", async () => {
+    const r = await inRoom();
+    r.send({ t: "talk", open: true }, { t: "talk", open: false });
+    expect(r.graph().talkTail).toBe(true);
+    r.send({ t: "talk", open: true }, { t: "talk", open: false, tail: false } as never);
+    expect(r.graph().talkTail).toBe(false);
   });
 
   it("opens the sound for the settings page and closes it with the page", async () => {
@@ -345,5 +447,29 @@ describe("the voice engine", () => {
     room.send({ t: "stats" });
     await settle();
     expect(room.of("stats")).toEqual([{ t: "stats", rttMs: 40, loss: null, jitterMs: null }]);
+  });
+
+  it("tells the playout path once per sound and again when it changes", async () => {
+    const r = rig();
+    r.send({ t: "setup", on: true });
+    await settle();
+    r.graph().events.playout("webAudio");
+    r.graph().events.playout("webAudio");
+    r.graph().events.playout("element");
+    expect(r.of("playout")).toEqual([
+      { t: "playout", playout: "webAudio" },
+      { t: "playout", playout: "element" },
+    ]);
+    // Closed and opened again in one breath: the sound stays (nothing to tell anew).
+    r.send({ t: "setup", on: false }, { t: "setup", on: true });
+    await settle();
+    expect(r.graphs).toHaveLength(1);
+    r.send({ t: "setup", on: false });
+    await settle();
+    r.send({ t: "setup", on: true });
+    await settle();
+    expect(r.graphs).toHaveLength(2);
+    r.graph().events.playout("element");
+    expect(r.of("playout")).toHaveLength(3);
   });
 });

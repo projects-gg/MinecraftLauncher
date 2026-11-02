@@ -1,7 +1,8 @@
 // The microphone's way to the call (design §6.2), as the capture worklet runs it: the player's gain,
-// then 10 ms frames: the voice gate decides on each and RNNoise cleans only frames that may be
-// speech (silence costs nothing), then two outputs: what is sent (the gate, mute and push-to-talk)
-// and what the player hears of themselves in "Mikrofonu dene". Free of worklet globals: tests drive it.
+// then 10 ms frames: the voice gate decides on each and RNNoise cleans the frames that may be
+// speech or are sent anyway (silence costs nothing), then two outputs: what is sent (the gate, mute
+// and push-to-talk) and what the player hears of themselves in "Mikrofonu dene". Every close fades
+// over 5 ms (no click). Free of worklet globals: tests drive it. Nothing here allocates per quantum.
 import { dbOf, levelOf, VoiceGate } from "./dsp";
 import { type Denoiser, RNNOISE_FRAME } from "./rnnoise";
 
@@ -46,6 +47,10 @@ const SLOW_RUNS = 2;
 
 export class CaptureCore {
   private readonly ring = new Float32Array(RING);
+  /** The ring's four frames (views made once). */
+  private readonly frames: Float32Array[] = [];
+  /** RNNoise's warm-up frame at the start of a run. */
+  private readonly prime = new Float32Array(FRAME);
   /** The gate's word for each frame of the ring: send it, and play it back (self-test). */
   private readonly sendFrames = new Uint8Array(RING / FRAME);
   private readonly monitorFrames = new Uint8Array(RING / FRAME);
@@ -64,6 +69,8 @@ export class CaptureCore {
   private testing = false;
   private levels = false;
   private denoiser: Denoiser | null = null;
+  /** RNNoise cleaned the previous frame (its state follows the sound). */
+  private denoisedLast = false;
   private meOn = false;
   private levelPeak = Number.NEGATIVE_INFINITY;
   private levelOpen = false;
@@ -82,6 +89,9 @@ export class CaptureCore {
     this.gate = new VoiceGate(FRAME / rate);
     this.frameMs = (FRAME / rate) * 1000;
     this.step = 1 / (0.005 * rate);
+    for (let i = 0; i < RING / FRAME; i++) {
+      this.frames.push(this.ring.subarray(i * FRAME, (i + 1) * FRAME));
+    }
   }
 
   configure(config: CaptureConfig): void {
@@ -90,10 +100,20 @@ export class CaptureCore {
     this.gate.threshold = config.threshold;
   }
 
-  /** Mute, deafen, a moderator's mute and push-to-talk, as the launcher decides them. */
-  talk(open: boolean): void {
-    if (this.config.ptt && this.talkOpen && !open) this.tail = PTT_TAIL_FRAMES;
-    if (open) this.tail = 0;
+  /**
+   * Mute, deafen, a moderator's mute and push-to-talk, as the launcher decides them. A close fades
+   * at once, but push-to-talk's release (`tail`) keeps the end of the word 200 ms more.
+   */
+  talk(open: boolean, tail = true): void {
+    if (open) {
+      this.tail = 0;
+    } else if (this.config.ptt && this.talkOpen && tail) {
+      this.tail = PTT_TAIL_FRAMES;
+    } else {
+      this.tail = 0;
+      // What is still on its way fades now.
+      this.sendFrames.fill(0);
+    }
     this.talkOpen = open;
   }
 
@@ -108,11 +128,14 @@ export class CaptureCore {
   /** "Mikrofonu dene": the player hears what would be sent; nothing goes out meanwhile. */
   setTest(on: boolean): void {
     this.testing = on;
+    if (on) this.sendFrames.fill(0);
+    else this.monitorFrames.fill(0);
   }
 
   /** RNNoise once loaded; null: none (the built-in suppressor took over, or it failed). */
   setDenoiser(denoiser: Denoiser | null): void {
     this.denoiser = denoiser;
+    this.denoisedLast = false;
   }
 
   /** Another microphone: the gate learns its room anew. */
@@ -120,9 +143,16 @@ export class CaptureCore {
     this.gate.reset();
   }
 
-  /** Whether anything needs the microphone now; otherwise a quantum costs a fill. */
+  /** Whether anything needs the microphone now (or a fade is still under way). */
   private active(): boolean {
-    return this.talkOpen || this.tail > 0 || this.testing || this.levels;
+    return (
+      this.talkOpen ||
+      this.tail > 0 ||
+      this.testing ||
+      this.levels ||
+      this.sendGain > 0 ||
+      this.monitorGain > 0
+    );
   }
 
   /** One quantum: the microphone in (none: silence), what is sent and what plays back out. */
@@ -162,21 +192,37 @@ export class CaptureCore {
   }
 
   private frame(at: number): void {
-    const frame = this.ring.subarray(at, at + FRAME);
+    const slot = at / FRAME;
+    const frame = this.frames[slot];
+    if (!frame) return;
     let energy = 0;
     for (let i = 0; i < FRAME; i++) {
       const v = frame[i] ?? 0;
       energy += v * v;
     }
     const db = dbOf(Math.sqrt(energy / FRAME));
+    // Push-to-talk sends every frame while the key is down: all of them are cleaned.
+    const sendable = this.config.ptt && (this.talkOpen || this.tail > 0) && !this.testing;
     let vad: number | null = null;
     const denoiser = this.config.ns ? this.denoiser : null;
-    if (denoiser && this.gate.wantsDenoise(db)) {
-      for (let i = 0; i < FRAME; i++) frame[i] = (frame[i] ?? 0) * SCALE;
+    if (denoiser && (sendable || this.gate.wantsDenoise(db))) {
       const begin = this.clock();
+      if (!this.denoisedLast) {
+        // RNNoise answers each frame with the one before it: a run starts from the frame that
+        // really came before (its output is dropped), never from a frame of the last run.
+        const previous = this.frames[(slot + 3) % 4];
+        if (previous) {
+          for (let i = 0; i < FRAME; i++) this.prime[i] = (previous[i] ?? 0) * SCALE;
+          denoiser.process(this.prime);
+        }
+      }
+      for (let i = 0; i < FRAME; i++) frame[i] = (frame[i] ?? 0) * SCALE;
       vad = denoiser.process(frame);
-      this.measure(this.clock() - begin);
       for (let i = 0; i < FRAME; i++) frame[i] = (frame[i] ?? 0) / SCALE;
+      this.measure(this.clock() - begin);
+      this.denoisedLast = true;
+    } else {
+      this.denoisedLast = false;
     }
     const voice = this.gate.push(db, vad);
     let send = false;
@@ -184,7 +230,6 @@ export class CaptureCore {
       send = this.config.ptt ? this.talkOpen || this.tail > 0 : this.talkOpen && voice;
     }
     if (this.tail > 0 && !this.talkOpen) this.tail -= 1;
-    const slot = at / FRAME;
     this.sendFrames[slot] = send ? 1 : 0;
     this.monitorFrames[slot] = this.testing && voice ? 1 : 0;
     this.setMe(send && voice);
@@ -235,6 +280,7 @@ export class CaptureCore {
     this.monitorFrames.fill(0);
     this.sendGain = 0;
     this.monitorGain = 0;
+    this.denoisedLast = false;
     this.gate.close();
   }
 }

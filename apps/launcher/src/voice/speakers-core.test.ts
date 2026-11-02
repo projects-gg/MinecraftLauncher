@@ -37,19 +37,22 @@ describe("SpeakersCore", () => {
     expect(posts).toEqual([]);
   });
 
-  it("starts a slot over when it changes hands", () => {
-    const posts: [number, boolean][] = [];
-    const core = new SpeakersCore(RATE, 1, (slot, on) => posts.push([slot, on]));
+  it("starts a slot over when it changes hands, under the page's new generation", () => {
+    const posts: [number, boolean, number][] = [];
+    const core = new SpeakersCore(RATE, 1, (slot, on, generation) =>
+      posts.push([slot, on, generation]),
+    );
+    core.reset(0, 1);
     core.process([[tone(-20)]]);
-    core.reset(0);
-    core.reset(5);
+    core.reset(0, 2);
+    core.reset(5, 9);
     core.process([[new Float32Array(128)]]);
     // Reset unlit it without a post (the page dropped the old person's ring itself).
-    expect(posts).toEqual([[0, true]]);
+    expect(posts).toEqual([[0, true, 1]]);
     core.process([[tone(-20)]]);
     expect(posts).toEqual([
-      [0, true],
-      [0, true],
+      [0, true, 1],
+      [0, true, 2],
     ]);
   });
 });

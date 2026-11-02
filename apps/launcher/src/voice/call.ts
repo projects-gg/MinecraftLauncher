@@ -126,7 +126,8 @@ export class Call implements CallLike {
   async applyAnswer(sdp: string): Promise<void> {
     if (this.done || this.pc.signalingState !== "have-local-offer") return;
     await this.pc.setRemoteDescription({ type: "answer", sdp: this.tune(sdp) });
-    await this.capBitrate();
+    // The description's own cap holds even if the encoder's cannot be set: never a lost call.
+    await this.capBitrate().catch(() => undefined);
     this.watch();
   }
 

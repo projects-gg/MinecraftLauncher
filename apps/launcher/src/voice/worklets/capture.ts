@@ -22,7 +22,7 @@ export interface CaptureOptions {
 
 export type CaptureMessage =
   | { t: "config"; config: CaptureConfig }
-  | { t: "talk"; open: boolean }
+  | { t: "talk"; open: boolean; tail: boolean }
   | { t: "levels"; on: boolean }
   | { t: "test"; on: boolean }
   | { t: "mic" }
@@ -84,7 +84,7 @@ class Capture extends AudioWorkletProcessor {
         this.core.configure(message.config);
         break;
       case "talk":
-        this.core.talk(message.open);
+        this.core.talk(message.open, message.tail);
         break;
       case "levels":
         this.core.setLevels(message.on);

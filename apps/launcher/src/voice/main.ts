@@ -7,7 +7,7 @@
 // window use events (the probe grants them at run time), so a refused listener means the product.
 // Release builds never load the probe (the import below is gone from their bundle).
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { EngineCommand, PageReport } from "./boundary";
+import type { EngineCommand, EngineReport } from "./boundary";
 import { createEngine } from "./engine";
 
 async function probe(): Promise<boolean> {
@@ -16,7 +16,7 @@ async function probe(): Promise<boolean> {
   return startProbe();
 }
 
-function report(value: PageReport): void {
+function report(value: EngineReport): void {
   void invoke("voice_page_report", { report: value }).catch(() => {
     // The launcher closed the window meanwhile.
   });

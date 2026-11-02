@@ -59,15 +59,20 @@ export async function createRnnoise(binary: BufferSource): Promise<Rnnoise> {
   const input = exports.malloc(RNNOISE_FRAME * 4);
   const output = exports.malloc(RNNOISE_FRAME * 4);
   if (!state || !input || !output) throw new Error("rnnoise: out of memory");
-  let heap = new Float32Array(exports.memory.buffer);
+  // Views of the two frames in the module's memory, made once (the audio thread allocates nothing);
+  // a grown memory detaches them, and they are made again.
+  let inView = new Float32Array(exports.memory.buffer, input, RNNOISE_FRAME);
+  let outView = new Float32Array(exports.memory.buffer, output, RNNOISE_FRAME);
   let alive = true;
   return {
     process(frame: Float32Array): number {
-      // A grown memory detaches the old view.
-      if (heap.buffer !== exports.memory.buffer) heap = new Float32Array(exports.memory.buffer);
-      heap.set(frame.subarray(0, RNNOISE_FRAME), input >> 2);
+      if (inView.buffer !== exports.memory.buffer) {
+        inView = new Float32Array(exports.memory.buffer, input, RNNOISE_FRAME);
+        outView = new Float32Array(exports.memory.buffer, output, RNNOISE_FRAME);
+      }
+      inView.set(frame);
       const vad = exports.rnnoise_process_frame(state, output, input);
-      frame.set(heap.subarray(output >> 2, (output >> 2) + RNNOISE_FRAME));
+      frame.set(outView);
       return vad;
     },
     destroy(): void {
