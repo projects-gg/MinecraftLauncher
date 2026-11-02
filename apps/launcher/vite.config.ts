@@ -29,6 +29,13 @@ export default defineConfig({
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome120" : "safari16",
     // The CLI sets TAURI_ENV_DEBUG to "true" or "false"; Boolean("false") is true, so compare the text.
     sourcemap: process.env.TAURI_ENV_DEBUG === "true",
+    rolldownOptions: {
+      // The launcher's page and the hidden voice chat window's (src-tauri voice.rs).
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        voice: fileURLToPath(new URL("./voice.html", import.meta.url)),
+      },
+    },
   },
   test: {
     // Vitest's pool gives a worker 60 s to start (fixed, no setting); one worker per thread (15 on

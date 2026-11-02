@@ -54,6 +54,7 @@ export {
   ContextMenu,
   Menu,
   type MenuItem,
+  type MenuSlider,
   type MenuStripItem,
   menuHeight,
   placeBelowOrBeside,

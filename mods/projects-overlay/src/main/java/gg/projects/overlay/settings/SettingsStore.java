@@ -150,7 +150,9 @@ public final class SettingsStore {
             // not read: it never meant that).
             bool(root, "keyUsed", d.keyUsed()),
             stickers(root, "recentStickers"),
-            emojis(root, "recentEmojis"));
+            emojis(root, "recentEmojis"),
+            // VOICE-O: "Konuşanları göster" (a file from before voice chat has it on).
+            bool(root, "showSpeakers", d.showSpeakers()));
     }
 
     static String format(OverlaySettings s) {
@@ -173,6 +175,7 @@ public final class SettingsStore {
         sounds.addProperty("callVolume", s.callVolume());
         root.add("sounds", sounds);
         root.addProperty("keyUsed", s.keyUsed());
+        root.addProperty("showSpeakers", s.showSpeakers());
         JsonArray recent = new JsonArray();
         for (String sticker : s.recentStickers()) {
             recent.add(sticker);

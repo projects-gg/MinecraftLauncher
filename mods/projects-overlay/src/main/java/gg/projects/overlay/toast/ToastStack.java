@@ -21,6 +21,9 @@ import java.util.List;
  * at 0. Positions move on springs (interruptible: a toast pushed down while it still drops in carries
  * on from where it is); opacity on timed fades. Reduced motion keeps the fades and moves nothing.
  *
+ * <p>A pinned toast (a voice chat ring, VOICE-O) stays until its own time or {@link #dismiss}: it never waits for the
+ * ones below it, the others never wait for it, and it is never pushed out.
+ *
  * @param <T> what the drawing side keeps for a toast (its prepared text)
  */
 public final class ToastStack<T> {
@@ -51,6 +54,7 @@ public final class ToastStack<T> {
         private float height;
         private long deadline;
         private boolean leaving;
+        private boolean pinned;
         private boolean placed;
         private long enterAt;
         private final Spring y = Spring.snappy(0f);
@@ -97,6 +101,11 @@ public final class ToastStack<T> {
         public long deadline() {
             return deadline;
         }
+
+        /** It stays until its own time or a dismissal (a ring). */
+        public boolean pinned() {
+            return pinned;
+        }
     }
 
     /** What {@link #push} did. */
@@ -139,18 +148,42 @@ public final class ToastStack<T> {
      * @param durationMs how long it stays from now (after any update)
      */
     public Push push(String key, T content, float height, long durationMs, long now) {
+        return push(key, content, height, durationMs, now, false);
+    }
+
+    /**
+     * Shows a toast that stays for {@code durationMs} or until {@link #dismiss}, whatever the others do (a ring), or
+     * updates the one showing for {@code key}.
+     */
+    public Push pin(String key, T content, float height, long durationMs, long now) {
+        return push(key, content, height, durationMs, now, true);
+    }
+
+    /** The toast for {@code key} fades out now, sliding down as a leaving one does. */
+    public void dismiss(String key, long now) {
+        for (Entry<T> e : entries) {
+            if (!e.leaving && e.key.equals(key)) {
+                leave(e, now, FADE_OUT_MS, true);
+                return;
+            }
+        }
+    }
+
+    private Push push(String key, T content, float height, long durationMs, long now, boolean pinned) {
         for (Entry<T> e : entries) {
             if (!e.leaving && e.key.equals(key)) {
                 e.content = content;
                 e.count++;
                 e.height = height;
                 e.deadline = now + durationMs;
+                e.pinned = pinned;
                 e.refresh.snap(0f);
                 e.refresh.animateTo(1f, now, REFRESH_MS, Ease.OUT);
                 return Push.UPDATED;
             }
         }
         Entry<T> e = new Entry<>(key, content, height, now + durationMs);
+        e.pinned = pinned;
         long delay = visibleCount() > 0 && !reducedMotion ? ENTER_DELAY_MS : 0L;
         entries.add(0, e);
         e.enterAt = now + delay;
@@ -158,7 +191,7 @@ public final class ToastStack<T> {
         e.alpha.animateTo(1f, e.enterAt, FADE_IN_MS, Ease.OUT);
         int visible = visibleCount();
         while (visible > MAX_VISIBLE) {
-            Entry<T> oldest = bottomVisible();
+            Entry<T> oldest = bottomUnpinned();
             if (oldest == null) {
                 break;
             }
@@ -195,15 +228,21 @@ public final class ToastStack<T> {
         lastUpdate = now;
         if (paused && dtMs > 0) {
             for (Entry<T> e : entries) {
-                if (!e.leaving) {
+                // A ring ends on the launcher's clock, whoever looks.
+                if (!e.leaving && !e.pinned) {
                     e.deadline += dtMs;
                 }
             }
             lastLeave += dtMs;
         }
-        Entry<T> bottom = bottomVisible();
+        Entry<T> bottom = bottomUnpinned();
         if (bottom != null && now >= bottom.deadline && now - lastLeave >= STAGGER_MS) {
             leave(bottom, now, FADE_OUT_MS, true);
+        }
+        for (Entry<T> e : entries) {
+            if (e.pinned && !e.leaving && now >= e.deadline) {
+                leave(e, now, FADE_OUT_MS, true);
+            }
         }
         layout(reducedMotion);
         float dt = Math.min(MAX_STEP_S, dtMs / 1000f);
@@ -266,10 +305,11 @@ public final class ToastStack<T> {
         reducedMotion = reduced;
     }
 
-    private Entry<T> bottomVisible() {
+    /** The oldest toast that is neither leaving nor pinned: the conveyor's next to go. */
+    private Entry<T> bottomUnpinned() {
         for (int i = entries.size() - 1; i >= 0; i--) {
             Entry<T> e = entries.get(i);
-            if (!e.leaving) {
+            if (!e.leaving && !e.pinned) {
                 return e;
             }
         }

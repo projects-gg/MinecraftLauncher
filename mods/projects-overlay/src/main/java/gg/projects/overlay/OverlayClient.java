@@ -33,6 +33,7 @@ import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.toast.ToastCard;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.Sounds;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.draw.Shapes;
 import gg.projects.overlay.ui.panel.DiscordLinkScreen;
@@ -40,7 +41,15 @@ import gg.projects.overlay.ui.panel.HostPauseButton;
 import gg.projects.overlay.ui.panel.JoinScreen;
 import gg.projects.overlay.ui.panel.OverlayScreen;
 import gg.projects.overlay.ui.panel.SettingsList;
+import gg.projects.overlay.voice.VoiceHud;
+import gg.projects.overlay.voice.VoiceState;
+import gg.projects.overlay.voice.VoiceWords;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import net.fabricmc.api.ClientModInitializer;
@@ -137,6 +146,22 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private final FnTip fnTip = new FnTip();
     /** The keyboard may give F1 to F12 only with Fn (a laptop or a Mac; F7-OPEN): looked at once after the start. */
     private volatile boolean laptop;
+    // ---- Voice chat (VOICE-O) ----
+    /** Voice chat as the launcher shows it. */
+    private final VoiceState voice = new VoiceState();
+    /** The HUD's corner of who speaks. */
+    private VoiceHud voiceHud;
+    /** The ring whose card is up (its room), or null. */
+    private String ringShown;
+    /** Rings the open panel showed: their card does not come back when it closes, nor do they ring again. */
+    private final Set<String> ringsSeen = new HashSet<>();
+    /** When the ring's sound last played (monotonic ms; 0: at once). */
+    private long ringSoundAt;
+    /** The names of the people a voice press was about, for the note that says how it went. */
+    private final Map<String, String> voiceNames = new HashMap<>();
+    private static final String RING_KEY = "voice-ring:";
+    /** A ring sounds again this often while its card is up and nothing of the launcher's rings. */
+    private static final long RING_EVERY_MS = 4_000;
 
     @Override
     public void onInitializeClient() {
@@ -169,6 +194,9 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         KeyMappingHelper.registerKeyMapping(key);
         toasts = new ToastLayer();
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "toasts"), toasts);
+        // Voice chat's corner (VOICE-O): who speaks in the player's room, top left; nothing out of a room.
+        voiceHud = new VoiceHud(() -> voice, () -> settings.get().showSpeakers());
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "voice"), voiceHud);
         // While the panel is open the game's HUD draws only beside it: the aim mark and the hotbar showed through the
         // panel at a high GUI scale (CHAT2-O2 follow-up). Everything else of the HUD stays where it is.
         HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath(MOD_ID, "panel_clip"), (g, delta) -> {
@@ -627,6 +655,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         if (hadLevel && !hasLevel) {
             toasts.reset();
             StickerArt.releaseAll();
+            // The ring's card went with the world's toasts: it comes back above the menus.
+            ringShown = null;
         }
         if (!hadLevel && hasLevel) {
             warmIndex = 0;
@@ -640,6 +670,10 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         }
         connector.tick(monotonicMs());
         host.tick(mc);
+        // A ring's card and its sound (VOICE-O); nothing to do while nothing rings.
+        if (ringShown != null || !voice.rings(System.currentTimeMillis()).isEmpty()) {
+            syncRing();
+        }
         tickLink(mc);
         Shapes.prepare();
         StickerArt.tick(monotonicMs());
@@ -1197,6 +1231,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             }
             return;
         }
+        // Voice chat (VOICE-O): its state, who speaks, a notice, how a press went.
+        if (voice.apply(frame)) {
+            onVoice();
+            refreshScreen();
+            return;
+        }
         // World sharing's commands (HOST1): opening, closing, sending a guest off.
         if (host.onFrame(frame)) {
             return;
@@ -1251,6 +1291,11 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             // No launcher keeps a language pick until the next welcome.
             Texts.language().offline();
             toasts.clear();
+            // Nothing of voice chat stays without the launcher (it says it all again when it comes back).
+            voice.clear();
+            voiceHud.clear();
+            ringShown = null;
+            ringsSeen.clear();
             // No permit can come now: a server waiting for one hears there is none.
             link.onClear();
         }
@@ -1270,6 +1315,167 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         if (card != null && card.fnTip()) {
             fnTip.shown();
         }
+    }
+
+    // ---- Voice chat (VOICE-O) -------------------------------------------------------------------------------
+
+    /** Voice chat as the launcher shows it. */
+    public VoiceState voice() {
+        return voice;
+    }
+
+    /** After a voice chat frame: the HUD's corner, the notices and press results, the ring's card. */
+    private void onVoice() {
+        long now = monotonicMs();
+        VoiceState.Room room = voice.room();
+        voiceHud.speaking(room, voice.speakers(), now);
+        voiceHud.me(room == null ? null : room.me(), now);
+        if (room == null) {
+            voiceHud.clear();
+        }
+        for (VoiceState.Notice notice = voice.takeNotice(); notice != null; notice = voice.takeNotice()) {
+            String text = VoiceWords.notice(notice);
+            if (text != null) {
+                voiceNote(text, VoiceWords.noticeError(notice));
+            }
+        }
+        VoiceState.Result result = voice.takeResult();
+        if (result != null) {
+            String name = voiceNames.getOrDefault(result.who(), "");
+            if (result.ok() && result.act().equals("kick")) {
+                voiceNote(Texts.str("voice.person.kicked", VoiceState.shown(name, VoiceWords.WORDS)), false);
+            } else if (!result.ok()) {
+                String text = VoiceWords.refusal(result.reason(), name);
+                if (text != null) {
+                    voiceNote(text, true);
+                }
+            }
+        }
+        syncRing();
+    }
+
+    /**
+     * A voice chat sentence: under the panel's lists while it is open, else a short note in the toasts' corner (above
+     * the screen while no world is open: voice chat goes on from the title screen).
+     */
+    private void voiceNote(String text, boolean error) {
+        if (Compat.screen(Minecraft.getInstance()) instanceof OverlayScreen) {
+            state.personNoteText(text, error, System.currentTimeMillis());
+        } else {
+            toasts.voiceNote(ToastCard.note(text), settings.get(), reducedMotion());
+        }
+    }
+
+    /**
+     * The ring's card: up while a ring rings that the open panel has not shown (its card shows the oldest ring on every
+     * page; another one comes up here once the panel closes), down when it stops; while it is up and nothing of the
+     * launcher's rings (its window is away), the call's cue sounds every few seconds.
+     */
+    private void syncRing() {
+        long wall = System.currentTimeMillis();
+        List<VoiceState.Ring> rings = voice.rings(wall);
+        OverlayScreen panel = Compat.screen(Minecraft.getInstance()) instanceof OverlayScreen s ? s : null;
+        boolean panelOpen = panel != null;
+        String inPanel = panelOpen ? panel.shownRing() : null;
+        if (inPanel != null && ringsSeen.add(inPanel) && !inPanel.equals(ringShown) && voice.sound()) {
+            // A new ring on the panel's card: the call's cue once, as a message the panel shows still sounds.
+            Sounds.play(Sounds.Cue.CALL, settings.get(), monotonicMs());
+        }
+        ringsSeen.removeIf(room -> voice.ring(room) == null);
+        VoiceState.Ring want = null;
+        if (!panelOpen) {
+            for (VoiceState.Ring ring : rings) {
+                if (!ringsSeen.contains(ring.room())) {
+                    want = ring;
+                    break;
+                }
+            }
+        }
+        String wantRoom = want == null ? null : want.room();
+        if (!Objects.equals(wantRoom, ringShown)) {
+            if (ringShown != null) {
+                toasts.endRing(RING_KEY + ringShown);
+            }
+            ringShown = null;
+            if (want != null && toasts.ringable()) {
+                ToastCard card = ToastCard.ring(want.name(), want.with().isEmpty() ? null
+                    : VoiceWords.names(want.with()), key.keyName(), fnTipWanted());
+                if (toasts.ring(card, RING_KEY + want.room(), want.until() - wall, settings.get(), reducedMotion())) {
+                    ringShown = want.room();
+                    ringSoundAt = 0;
+                    if (card.fnTip()) {
+                        fnTip.shown();
+                    }
+                }
+            }
+        }
+        if (ringShown != null && voice.sound()) {
+            long now = monotonicMs();
+            if (ringSoundAt == 0 || now - ringSoundAt >= RING_EVERY_MS) {
+                ringSoundAt = now;
+                Sounds.play(Sounds.Cue.CALL, settings.get(), now);
+            }
+        }
+    }
+
+    /** "Mikrofon" in the panel: off ({@code true}) or on again (which ends deafening too). */
+    public void voiceMute(boolean on) {
+        voiceSend(Protocol.voiceMute(on));
+    }
+
+    /** "Sağırlaştır" in the panel. */
+    public void voiceDeaf(boolean on) {
+        voiceSend(Protocol.voiceDeaf(on));
+    }
+
+    /** "Ayrıl" (and "İptal" while the player's call rings). */
+    public void voiceLeave() {
+        voiceSend(Protocol.voiceLeave());
+    }
+
+    /** "Katıl" ({@code join}) or "Reddet" on a ring: it rings no more here either way. */
+    public void voiceAnswer(String room, boolean join) {
+        ringsSeen.add(room);
+        voiceSend(Protocol.voiceAnswer(room, join));
+        syncRing();
+    }
+
+    /** "Ses seviyesi" for someone in the room, in percent. */
+    public void voiceVolume(String id, String name, int percent) {
+        voiceNames.put(id, name);
+        voiceSend(Protocol.voiceVolume(id, percent));
+    }
+
+    /** "Benim için sustur" ({@code on}) or its undo. */
+    public void voiceMuteForMe(String id, String name, boolean on) {
+        voiceNames.put(id, name);
+        voiceSend(Protocol.voiceMuteForMe(id, on));
+    }
+
+    /** A leader's or moderator's row: {@code mute}, {@code unmute}, {@code kick}, {@code mod}, {@code unmod}. */
+    public void voiceModerate(String id, String name, String act) {
+        voiceNames.put(id, name);
+        voiceSend(Protocol.voiceModerate(id, act));
+    }
+
+    /** "Ara". */
+    public void voiceCall(String friendId, String name) {
+        voiceNames.put(friendId, name);
+        voiceSend(Protocol.voiceCall(friendId));
+    }
+
+    /** "Odaya davet et". */
+    public void voiceInvite(String friendId, String name) {
+        voiceNames.put(friendId, name);
+        voiceSend(Protocol.voiceInvite(friendId));
+    }
+
+    /** Sends a voice press; when it cannot go at all the panel says so at once. */
+    private void voiceSend(JsonObject frame) {
+        if (!bridge.send(frame)) {
+            state.personNoteText(Texts.str("voice.refused.failed"), true, System.currentTimeMillis());
+        }
+        refreshScreen();
     }
 
     /** Whether the next key hint gets "Açılmazsa [Fn] + [F7] tuşlarına bas" ({@link FnTip}; F7-OPEN). */

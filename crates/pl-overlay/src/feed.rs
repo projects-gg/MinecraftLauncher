@@ -651,6 +651,7 @@ impl Scene {
                         })
                         .collect(),
                     marks: marks.get(&friend.id).cloned().unwrap_or_default(),
+                    voice: friend.voice,
                 }
             })
             .collect();
@@ -1816,6 +1817,7 @@ pub(crate) mod tests {
             discord_id: None,
             badge: None,
             marks: Vec::new(),
+            voice: None,
         }
     }
 

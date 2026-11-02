@@ -69,6 +69,19 @@ fn trusted_content_keys() -> Vec<pl_content::VerifyingKey> {
     keys
 }
 
+/// Discord's Rich Presence. Debug builds started with `PROJECTS_E2E_NO_DISCORD=1` (end-to-end runs
+/// on a developer's computer) try no Discord endpoint at all, so a test launcher's presence never
+/// shows on the developer's Discord profile; release builds never read the variable.
+fn presence_config() -> PresenceConfig {
+    #[allow(unused_mut)]
+    let mut config = PresenceConfig::new(DISCORD_CLIENT_ID);
+    #[cfg(debug_assertions)]
+    if std::env::var_os("PROJECTS_E2E_NO_DISCORD").is_some_and(|value| value == "1") {
+        config.endpoints = Some(Vec::new());
+    }
+    config
+}
+
 /// A game the launcher runs (several may run at once, PLAY-AGAIN).
 pub struct RunningGame {
     /// The launcher's own number for it (the page names a game with it: closing, "Bağlan").
@@ -187,6 +200,9 @@ pub struct AppState {
     /// "Dünyanı arkadaşlarına aç" (HOST1, `crate::host`): off until the signed config and the
     /// service turn it on.
     pub worlds: pl_worlds::Worlds,
+    /// "Sesli sohbet" (VOICE, `crate::voice`): off until the signed config and the service turn
+    /// it on; nothing runs without a call.
+    pub voice: pl_voice::Voice,
     /// The Discord bot's news feed (`<data>/cache/feed/`); used only while the signed config
     /// enables it (`commands::feed`).
     pub feed: pl_content::FeedClient,
@@ -258,7 +274,7 @@ impl AppState {
 
         // Setup runs outside the async runtime, so hand the actor Tauri's tokio handle.
         let tauri::async_runtime::RuntimeHandle::Tokio(handle) = tauri::async_runtime::handle();
-        let presence = PresenceManager::start_on(&handle, PresenceConfig::new(DISCORD_CLIENT_ID));
+        let presence = PresenceManager::start_on(&handle, presence_config());
         // Before the friends feature: what it tells the page also feeds a running game's overlay.
         let overlay = crate::overlay::create(app, &root);
         // "Hızlı kaynak paketi yükleme": the kept choice, before any pack sync can run.
@@ -275,6 +291,8 @@ impl AppState {
         let projects_skin =
             crate::commands::projects_skin::create(app, &social, &http, &root, handle.clone());
         let worlds = crate::host::create(app, &root, version, social.clone(), overlay.clone());
+        let voice =
+            crate::voice::create(app, &root, social.clone(), handle.clone(), overlay.clone());
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
         // state changes to the tray's summary). A connect that finds no client installed and no
@@ -331,6 +349,7 @@ impl AppState {
             projects_skin,
             overlay,
             worlds,
+            voice,
             feed,
         })
     }

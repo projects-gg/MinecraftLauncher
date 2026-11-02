@@ -25,8 +25,10 @@ import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import gg.projects.overlay.ui.draw.ShapeSet;
 import gg.projects.overlay.ui.draw.Shapes;
+import gg.projects.overlay.voice.VoiceState;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -44,7 +46,8 @@ import net.minecraft.util.FormattedCharSequence;
  * ticking, the world stays visible under a light dim). Header with the connection and settings; notices
  * when there is something to say (the launcher is away, the first time, "Rahatsız etmeyin"); a crew call
  * with its answers; then chats (conversation chips, the conversation, the message field) or friends, or the
- * settings page.
+ * settings page. Voice chat (VOICE-O) puts a ring for the player and the room's strip at the top of the chats and
+ * friends pages, and its room page behind the strip.
  *
  * <p>Chat extras (CHAT2): a sticker button in the message field opens the sticker picker; "Yanıtla" puts a
  * strip over the field ("Yanıtlanıyor: Ayşe", Esc or ✕ takes it away); "Ayşe yazıyor…" floats at the bottom of
@@ -56,8 +59,11 @@ import net.minecraft.util.FormattedCharSequence;
  * closing hands the last picture to the HUD, which fades it out while the game already has the input.
  */
 public final class OverlayScreen extends Screen {
-    /** The panel's pages; {@code WORLD} is world sharing (HOST1), reached from its card or the pause menu. */
-    public enum Page { CHATS, FRIENDS, SETTINGS, WORLD }
+    /**
+     * The panel's pages; {@code WORLD} is world sharing (HOST1), reached from its card or the pause menu; {@code VOICE}
+     * is the voice room (VOICE-O), reached from its strip.
+     */
+    public enum Page { CHATS, FRIENDS, SETTINGS, WORLD, VOICE }
 
     private static final int P = 10;
     private static final int HEADER_H = 30;
@@ -99,6 +105,8 @@ public final class OverlayScreen extends Screen {
     private final StickerPicker picker;
     /** World sharing: its page and the card the other pages carry (HOST1). */
     private final HostPanel host;
+    /** Voice chat: the ring and the room's strip on the list pages, and the room page (VOICE-O). */
+    private final VoicePanel voice;
     /** The screen the panel came from (the pause menu), or null: closing goes back to it. */
     private final Screen parent;
     private final Tween lineAlpha = new Tween(0f);
@@ -130,6 +138,8 @@ public final class OverlayScreen extends Screen {
     private OverlayState.CrewRights menuCrew;
     /** The chip whose menu is open (OVL-UX2), or null. */
     private String menuChip;
+    /** VOICE-O: voice chat's rows of the open menu as it was planned (it closes once they would differ), or null. */
+    private FriendMenu.Voice menuVoice;
     private final BadgeBubble identityBubble = new BadgeBubble();
     private int identityRevision = -1;
     private int identityBadges = -1;
@@ -167,6 +177,7 @@ public final class OverlayScreen extends Screen {
     private String titleText = "";
     private String settingsTitle = "";
     private String worldTitle = "";
+    private String voiceTitle = "";
     private String dndText = "";
     /** The message the player answers (CHAT2), and the strip over the field that says so. */
     private OverlayState.Reply replyTo;
@@ -211,6 +222,7 @@ public final class OverlayScreen extends Screen {
         gear = new IconButton(Icon.GEAR, Texts.tr("settings.title"), () -> setPage(Page.SETTINGS));
         back = new IconButton(Icon.BACK, Texts.tr("panel.back"), this::goBack);
         host = new HostPanel(this, overlay);
+        voice = new VoicePanel(this, overlay);
         retry = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("retry"), null, overlay::retry);
         for (int i = 0; i < ANSWERS.length; i++) {
             String answer = ANSWERS[i];
@@ -310,14 +322,16 @@ public final class OverlayScreen extends Screen {
                 overlay.emojiKey().shortcut("settings.key.emoji", controls)),
             Texts.language().managed() ? overlay.languages() : null,
             // CHAT-EMOJI: the launcher's emoji picker switch, once the launcher has spoken of it.
-            overlay.emojis().heard() ? overlay.emojiSwitch() : null);
+            overlay.emojis().heard() ? overlay.emojiSwitch() : null,
+            // VOICE-O: "Konuşanları göster", once the launcher has spoken of voice chat.
+            overlay.voice().heard());
         lastListPage = state.has("chat") || !state.welcomed() ? Page.CHATS : Page.FRIENDS;
-        page = overlay.lastPage() == Page.SETTINGS || overlay.lastPage() == Page.WORLD ? lastListPage
-            : overlay.lastPage();
+        page = overlay.lastPage() == Page.SETTINGS || overlay.lastPage() == Page.WORLD
+            || (overlay.lastPage() == Page.VOICE && !overlay.voice().inRoom()) ? lastListPage : overlay.lastPage();
         if (page == Page.CHATS && state.welcomed() && !state.has("chat")) {
             page = Page.FRIENDS;
         }
-        if (page != Page.SETTINGS && page != Page.WORLD) {
+        if (page != Page.SETTINGS && page != Page.WORLD && page != Page.VOICE) {
             lastListPage = page;
         }
         if (start == Page.WORLD) {
@@ -636,12 +650,84 @@ public final class OverlayScreen extends Screen {
         boolean keys, String conv, OverlayState.CrewRights crew) {
         OverlayState.Friend f = state.friend(id);
         FriendMenu.Crew rows3 = crewRows(id, crew);
-        FriendMenu.Input input = f != null ? menuInput(f, conv, rows3) : crewmateInput(id, rows3);
+        FriendMenu.Input input = (f != null ? menuInput(f, conv, rows3) : crewmateInput(id, rows3))
+            .withVoice(voiceFor(id));
+        return openMenu(id, name, badge, anchor, keys, crew, rows3, input);
+    }
+
+    /**
+     * Someone's menu from the room page (VOICE-O): a friend's whole menu, a crewmate's in a crew room (everyone there is
+     * one), else only voice chat's rows (a friend's friend in a friend room: the lists do not know them, and the
+     * launcher takes no other action about them).
+     */
+    void openVoiceMenu(String id, String name, PersonMenu.Anchor anchor, boolean keys) {
+        OverlayState.Friend f = state.friend(id);
+        VoiceState.Room room = overlay.voice().room();
+        FriendMenu.Voice rows = voiceFor(id);
+        if (anchor == null || rows == null) {
+            return;
+        }
+        FriendMenu.Input input;
+        if (f != null) {
+            input = menuInput(f, null, null);
+        } else if (room != null && room.crewRoom()) {
+            input = crewmateInput(id, null);
+        } else {
+            input = new FriendMenu.Input(false, false, false, state.online(), false, false, WorldInvites.Offer.NONE,
+                false, false, false, false, false, false, false, FriendMenu.Team.NONE, 0, FriendMenu.AddFriend.HIDDEN,
+                null);
+        }
+        openMenu(id, f != null ? f.name() : name, f != null ? state.badge(f.badge()) : null, anchor, keys, null, null,
+            input.withVoice(rows));
+    }
+
+    /**
+     * The scenario driver: someone's menu on the room page, as Enter on their row opens it (VOICE-O); false when they
+     * have no row there.
+     */
+    public boolean voiceMenu(String id) {
+        PersonMenu.Anchor at = voice.anchorFor(id);
+        VoiceState.Room room = overlay.voice().room();
+        VoiceState.Person p = room == null ? null : room.person(id);
+        if (at == null || p == null) {
+            return false;
+        }
+        PanelInput.usedKeyboard();
+        openVoiceMenu(id, VoiceState.shown(p.name(), VoicePanel.WORDS), at, true);
+        return true;
+    }
+
+    /** VOICE-O: the room of the ring the panel's card shows now, or null (that ring is seen; another still toasts). */
+    public String shownRing() {
+        return voice.shownRing();
+    }
+
+    /**
+     * VOICE-O: voice chat about {@code id} for their menu: in the player's room (volume, "Benim için sustur", the role's
+     * rows), and for a friend what voice chat offers ("Ara", "Odaya davet et"); null when it has nothing about them.
+     */
+    private FriendMenu.Voice voiceFor(String id) {
+        VoiceState v = overlay.voice();
+        VoiceState.Room room = v.room();
+        VoiceState.Person p = room == null ? null : room.person(id);
+        VoiceState.Offer offer = state.friend(id) != null ? v.offer(id, state.voicePresence(id))
+            : VoiceState.Offer.NONE;
+        if (p == null && offer == VoiceState.Offer.NONE) {
+            return null;
+        }
+        return p == null ? new FriendMenu.Voice(offer, false, false, false, false, false, false, false)
+            : new FriendMenu.Voice(offer, true, p.mutedForMe(), p.mutedByModerator(), p.moderator(), p.canMute(),
+                p.canKick(), p.canMod());
+    }
+
+    private boolean openMenu(String id, String name, OverlayState.Badge badge, PersonMenu.Anchor anchor,
+        boolean keys, OverlayState.CrewRights crew, FriendMenu.Crew rows3, FriendMenu.Input input) {
         List<FriendMenu.Row> rows = FriendMenu.plan(input);
         if (rows.isEmpty()) {
             return false;
         }
         menuCrew = rows3 == null ? null : crew;
+        menuVoice = input.voice();
         menu.setLeadKeepsModerator(leadKeepsModerator(crew, id));
         long now = now();
         friends.dismissBubble();
@@ -737,6 +823,19 @@ public final class OverlayScreen extends Screen {
     private List<PersonMenu.Choice> choicesFor(String id, FriendMenu.Action action) {
         OverlayState.Friend f = state.friend(id);
         List<PersonMenu.Choice> out = new ArrayList<>();
+        if (action == FriendMenu.Action.VOLUME) {
+            // VOICE-O: the steps up to the voice page's top, theirs checked (a value set in the launcher between two
+            // steps shows as its own row).
+            VoiceState.Room room = overlay.voice().room();
+            VoiceState.Person p = room == null ? null : room.person(id);
+            if (p != null) {
+                for (int step : VoiceState.volumeChoices(p.volume(), overlay.voice().volumeMax())) {
+                    out.add(new PersonMenu.Choice(Integer.toString(step), Texts.percent(step), false,
+                        step == p.volume()));
+                }
+            }
+            return out;
+        }
         if (f == null) {
             return out;
         }
@@ -825,6 +924,23 @@ public final class OverlayScreen extends Screen {
                 }
             }
             case REMOVE_FROM_WORLD -> removeFromWorld(friendId);
+            // VOICE-O: voice chat's rows (the kick's question was asked already).
+            case VOLUME -> {
+                // Only from its list (onMenuChoice).
+            }
+            case MUTE_FOR_ME -> {
+                VoiceState.Person p = voicePerson(friendId);
+                if (p != null) {
+                    overlay.voiceMuteForMe(friendId, menuName, !p.mutedForMe());
+                }
+            }
+            case VOICE_MUTE -> overlay.voiceModerate(friendId, menuName, "mute");
+            case VOICE_UNMUTE -> overlay.voiceModerate(friendId, menuName, "unmute");
+            case VOICE_KICK -> overlay.voiceModerate(friendId, menuName, "kick");
+            case VOICE_MOD -> overlay.voiceModerate(friendId, menuName, "mod");
+            case VOICE_UNMOD -> overlay.voiceModerate(friendId, menuName, "unmod");
+            case CALL -> overlay.voiceCall(friendId, menuName);
+            case CALL_INVITE -> overlay.voiceInvite(friendId, menuName);
             case UNFRIEND -> overlay.unfriend(friendId);
             case BLOCK -> {
                 if (f != null) {
@@ -841,6 +957,19 @@ public final class OverlayScreen extends Screen {
     private void onMenuChoice(String friendId, FriendMenu.Action action, String choice) {
         friends.setMenuFor(null);
         clearChipMenu();
+        if (action == FriendMenu.Action.VOLUME) {
+            VoiceState.Person p = voicePerson(friendId);
+            int percent;
+            try {
+                percent = Integer.parseInt(choice);
+            } catch (NumberFormatException e) {
+                return;
+            }
+            if (p != null && percent != p.volume()) {
+                overlay.voiceVolume(friendId, menuName, percent);
+            }
+            return;
+        }
         if (action == FriendMenu.Action.MOVE) {
             OverlayState.Friend f = state.friend(friendId);
             if (f != null && choice.equals(f.group() == null ? "" : f.group())) {
@@ -866,6 +995,12 @@ public final class OverlayScreen extends Screen {
     private void clearChipMenu() {
         menuChip = null;
         chips.setMenuFor(null);
+    }
+
+    /** VOICE-O: someone in the player's room, or null. */
+    private VoiceState.Person voicePerson(String id) {
+        VoiceState.Room room = overlay.voice().room();
+        return room == null ? null : room.person(id);
     }
 
     /**
@@ -1148,6 +1283,9 @@ public final class OverlayScreen extends Screen {
         for (AbstractWidget w : host.widgets()) {
             addWidget(w);
         }
+        for (AbstractWidget w : voice.widgets()) {
+            addWidget(w);
+        }
         Shapes.prepare();
         if (conversation != null) {
             messages.open(conversation, isCrew(conversation), unreadOf(conversation));
@@ -1178,6 +1316,7 @@ public final class OverlayScreen extends Screen {
             case FRIENDS -> friends;
             case SETTINGS -> settingsList;
             case WORLD -> host.initialFocus();
+            case VOICE -> voice.initialFocus();
         };
     }
 
@@ -1207,10 +1346,14 @@ public final class OverlayScreen extends Screen {
         if (hostMoved && page == Page.WORLD) {
             pageChangedAt = now();
         }
-        if (!force && !hostMoved && state.revision() == seenRevision) {
+        if (!force && !hostMoved && state.revision() == seenRevision && !voice.stale()) {
             return;
         }
         seenRevision = state.revision();
+        if (page == Page.VOICE && !voice.inRoom()) {
+            // The room ended (left, closed, removed): its page goes with it.
+            setPage(lastListPage);
+        }
         if (conversation == null || state.conversation(conversation) == null) {
             String next = pickConversation();
             if (next != null && !next.equals(conversation)) {
@@ -1235,10 +1378,10 @@ public final class OverlayScreen extends Screen {
         // A tag's bubble belongs to the page it opened on.
         friends.dismissBubble();
         messages.dismissBubble();
-        if (page != Page.SETTINGS && page != Page.WORLD) {
+        if (page != Page.SETTINGS && page != Page.WORLD && page != Page.VOICE) {
             lastListPage = page;
         }
-        if (next != Page.SETTINGS && next != Page.WORLD) {
+        if (next != Page.SETTINGS && next != Page.WORLD && next != Page.VOICE) {
             lastListPage = next;
             tabs.select(next == Page.CHATS ? 0 : 1);
         }
@@ -1499,6 +1642,7 @@ public final class OverlayScreen extends Screen {
         titleText = getTitle().getString();
         settingsTitle = Texts.str("settings.title");
         worldTitle = host.title();
+        voiceTitle = voice.title();
         dndText = Texts.str("dnd");
         tabs.setReducedMotion(reduced);
         chips.setReducedMotion(reduced);
@@ -1506,6 +1650,7 @@ public final class OverlayScreen extends Screen {
         friends.setReducedMotion(reduced);
         settingsList.setReducedMotion(reduced);
         host.setReducedMotion(reduced);
+        voice.setReducedMotion(reduced);
         // 38 % of the screen between 220 and 300 GUI px, but never past the middle (GUI 3 at 720p and GUI 6 at 1440p
         // are 426 px wide): the aim point stays in the world, down to 200 px (CHAT2-O2 follow-up).
         panelW = Math.max(220, Math.min(300, Math.round(width * 0.38f)));
@@ -1517,8 +1662,9 @@ public final class OverlayScreen extends Screen {
         hideAll();
         boolean settingsPage = page == Page.SETTINGS;
         boolean worldPage = page == Page.WORLD;
-        gear.visible = !settingsPage && !worldPage;
-        back.visible = settingsPage || worldPage;
+        boolean voicePage = page == Page.VOICE;
+        gear.visible = !settingsPage && !worldPage && !voicePage;
+        back.visible = settingsPage || worldPage || voicePage;
         PanelWidget.place(gear, panelX + panelW - P - IconButton.SIZE + 3, (HEADER_H - IconButton.SIZE) / 2,
             IconButton.SIZE, IconButton.SIZE);
         PanelWidget.place(back, x0 - 4, (HEADER_H - IconButton.SIZE) / 2, IconButton.SIZE, IconButton.SIZE);
@@ -1530,8 +1676,16 @@ public final class OverlayScreen extends Screen {
         }
         notices.clear();
         y = layoutNotices(x0, cw, y);
-        call = settingsPage || worldPage ? null : state.activeCall(System.currentTimeMillis());
+        voice.seen();
+        // A ring for the player on every page, and the room's strip on the chats and friends pages (VOICE-O): what is
+        // live now comes first.
+        y = voice.layoutCard(x0, y, cw, now, !settingsPage && !worldPage && !voicePage);
+        call = settingsPage || worldPage || voicePage ? null : state.activeCall(System.currentTimeMillis());
         callY = -1;
+        if (voicePage) {
+            voice.layoutPage(x0, y, cw, height - P, now);
+            return;
+        }
         if (call != null && state.has("calls")) {
             y = layoutCall(x0, cw, y);
         }
@@ -1656,13 +1810,18 @@ public final class OverlayScreen extends Screen {
             w.visible = false;
         }
         host.hideAll();
+        voice.hideAll();
         if (page != Page.CHATS || conversation == null) {
             picker.close();
         }
 
         String menuFor = menu.friend();
-        if (menuFor != null && (page != Page.FRIENDS || state.friend(menuFor) == null)) {
-            // A friend's menu belongs to the friend list (and to a friend still on it).
+        boolean keep = menuFor != null && (page == Page.FRIENDS ? state.friend(menuFor) != null
+            : page == Page.VOICE && voice.has(menuFor)) && Objects.equals(menuVoice, voiceFor(menuFor));
+        if (menuFor != null && !keep) {
+            // A friend's menu belongs to the friend list (and to a friend still on it); a room's to its page (and to
+            // someone still in the room); neither outlives the voice chat rows it was planned with (VOICE-O: a
+            // moderator's "Herkes için sustur" is no row once someone else did it).
             closeMenu();
         }
     }
@@ -1873,7 +2032,8 @@ public final class OverlayScreen extends Screen {
             // A right click on someone else (a row, a chip, a sender's name) opens theirs.
             boolean onPeople = (friends.visible && friends.isMouseOver(event.x(), event.y()))
                 || (chips.visible && chips.isMouseOver(event.x(), event.y()))
-                || (messages.visible && messages.isMouseOver(event.x(), event.y()));
+                || (messages.visible && messages.isMouseOver(event.x(), event.y()))
+                || (voice.list.visible && voice.list.isMouseOver(event.x(), event.y()));
             if (onMenu || event.button() != InputConstants.MOUSE_BUTTON_RIGHT || !onPeople) {
                 return true;
             }
@@ -1973,6 +2133,9 @@ public final class OverlayScreen extends Screen {
         if (call != null && !call.liveAt(System.currentTimeMillis())) {
             layout();
         }
+        if (voice.ringOver(System.currentTimeMillis())) {
+            layout();
+        }
     }
 
     // ---- Drawing ------------------------------------------------------------------------------------
@@ -2051,10 +2214,13 @@ public final class OverlayScreen extends Screen {
             Draw.icon(g, Icon.BELL, 8, x0, dndY + 2, Theme.GOLD_300);
             Draw.text(g, Fonts.small(), dndText, x0 + 12, Fonts.centeredY(Fonts.Face.SMALL, dndY + 6), Theme.ASH_300);
         }
+        voice.followSpeakers(now);
+        // On every page: the card draws what the layout placed (a ring anywhere, the strip on the list pages).
+        voice.drawCard(g, mouseX, mouseY);
         if (callY >= 0 && call != null) {
             drawCall(g, mouseX, mouseY);
         }
-        if (page != Page.WORLD && page != Page.SETTINGS) {
+        if (page != Page.WORLD && page != Page.SETTINGS && page != Page.VOICE) {
             host.drawCard(g, mouseX, mouseY);
         }
         if (messages.visible) {
@@ -2094,6 +2260,10 @@ public final class OverlayScreen extends Screen {
         if (page == Page.WORLD) {
             Draw.stratum(g);
             host.drawPage(g, mouseX, mouseY);
+        }
+        if (page == Page.VOICE) {
+            Draw.stratum(g);
+            voice.drawPage(g, mouseX, mouseY, now);
         }
         // A crew tag's bubble over everything in the panel (TEAM6), inside it.
         Draw.stratum(g);
@@ -2140,9 +2310,9 @@ public final class OverlayScreen extends Screen {
     private void drawHeader(GuiGraphicsExtractor g, int mouseX, int mouseY, long now) {
         int x0 = panelX + P;
         float mid = HEADER_H / 2f;
-        if (page == Page.SETTINGS || page == Page.WORLD) {
+        if (page == Page.SETTINGS || page == Page.WORLD || page == Page.VOICE) {
             render(g, back, mouseX, mouseY);
-            String title = page == Page.WORLD ? worldTitle : settingsTitle;
+            String title = page == Page.WORLD ? worldTitle : page == Page.VOICE ? voiceTitle : settingsTitle;
             Draw.text(g, Fonts.display(), title, x0 + 15, Fonts.centeredY(Fonts.Face.DISPLAY, mid), Theme.BONE_50);
         } else {
             Draw.text(g, Fonts.display(), titleText, x0, Fonts.centeredY(Fonts.Face.DISPLAY, mid), Theme.BONE_50);

@@ -174,6 +174,10 @@ pub struct Presence {
     /// (SOC-LAG); None (absent): keep the friend list's.
     #[serde(default, deserialize_with = "present")]
     pub last_seen: Option<Option<LastSeen>>,
+    /// Voice chat (VOICE, only to a connection that took `voice1`): `ready` may be called, `in`
+    /// is in a room; None: "Ara" is not offered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voice: Option<crate::voice::PresenceVoice>,
 }
 
 /// A field that may be absent (None), `null` (`Some(None)`) or a value: the outer `Option` says
@@ -402,6 +406,19 @@ pub(crate) enum ClientMessage {
         /// SOC9: the Minecraft version the game plays, only while playing.
         #[serde(skip_serializing_if = "Option::is_none")]
         ver: Option<String>,
+        /// VOICE: the player's "Sesli sohbet" switch (`on`/`off`), only on a connection that
+        /// took `voice1`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        voice: Option<&'static str>,
+    },
+    /// VOICE: calls a friend (a new friend room led by the player); answered by `rid`.
+    VoiceCall {
+        to: String,
+        rid: u32,
+    },
+    /// VOICE: "Reddet" on a ring (never answered).
+    VoiceDecline {
+        room: String,
     },
     Invite {
         to: String,
@@ -520,20 +537,31 @@ impl ClientMessage {
                 host: None,
                 singleplayer: false,
                 ver: None,
+                voice: None,
             },
             LocalStatus::Playing { host } => Self::Status {
                 state: "playing",
                 host: host.clone(),
                 singleplayer: false,
                 ver,
+                voice: None,
             },
             LocalStatus::Singleplayer => Self::Status {
                 state: "playing",
                 host: None,
                 singleplayer: true,
                 ver,
+                voice: None,
             },
         }
+    }
+
+    /// The status message with the player's voice switch (VOICE: on a `voice1` connection).
+    pub(crate) fn with_voice(mut self, on: Option<bool>) -> Self {
+        if let Self::Status { voice, .. } = &mut self {
+            *voice = on.map(|on| if on { "on" } else { "off" });
+        }
+        self
     }
 }
 
@@ -574,6 +602,12 @@ pub(crate) enum ServerMessage {
         /// the launcher holds (`rel=`; none from an older service).
         #[serde(default)]
         rel: Option<String>,
+        /// VOICE (only with `voice1` in the capabilities, while voice chat is on): Studio's
+        /// switch and limits, and the live rooms of the player's crews.
+        #[serde(default)]
+        voice: Option<crate::voice::VoiceStatus>,
+        #[serde(default, rename = "voiceRooms")]
+        voice_rooms: Option<Vec<crate::voice::VoiceCrewRooms>>,
     },
     /// A crew call, new or changed (its server or kind, its crews, or answers that went away):
     /// replaces the one with the same id. `quiet`: show it, never announce it.
@@ -858,6 +892,29 @@ pub(crate) enum ServerMessage {
     WorldState {
         worlds: crate::world::WorldsStatus,
     },
+    /// VOICE (`crate::voice`; only with `voice1` in the capabilities): a call or invite rings
+    /// for the player, `quiet` on do-not-disturb.
+    VoiceRing {
+        ring: crate::voice::VoiceRing,
+        #[serde(default)]
+        quiet: bool,
+    },
+    /// The ring stopped: `joined` or `declined` on another device, or `ended`.
+    VoiceRingEnd {
+        room: String,
+        #[serde(default)]
+        reason: String,
+    },
+    /// One crew's live rooms changed.
+    VoiceRooms {
+        crew: String,
+        #[serde(default)]
+        rooms: Vec<crate::voice::VoiceCrewRoom>,
+    },
+    /// Studio's voice settings changed.
+    VoiceState {
+        voice: crate::voice::VoiceStatus,
+    },
     /// SKIN1 (with `mc` in the capabilities): a job of the player's closed, or ProBot reported a
     /// link change or a staff reset of the Projects skin.
     Mc(Box<McMessage>),
@@ -892,6 +949,11 @@ pub(crate) enum ServerMessage {
         ice: Option<crate::world::TurnIce>,
         #[serde(default)]
         e4mc: Option<crate::world::E4mcHint>,
+        /// A `voice_call` answer (VOICE): the new room and the caller's ticket.
+        #[serde(default)]
+        room: Option<String>,
+        #[serde(default)]
+        ticket: Option<crate::world::Hidden<String>>,
     },
     Error {
         #[serde(default)]

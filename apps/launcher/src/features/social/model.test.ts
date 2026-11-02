@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Friend, FriendRequest, SocialInvite, SocialNotice } from "@/lib/api/social-types";
+import { DEFAULT_VOICE_SETTINGS } from "@/lib/api/voice-types";
 import {
+  BACKUP_MAX_BYTES,
   BACKUP_PREFS,
   backupFingerprint,
   buildBackup,
@@ -387,5 +389,60 @@ describe("settings backup", () => {
     expect(backupFingerprint(a)).not.toBe(
       backupFingerprint(buildBackup({ sounds: false, particles: false }, friends)),
     );
+  });
+
+  // VOICE-INT: "Sesli sohbet" in the backup (voice.md §5.2), as the launcher's `voice_backup`.
+  const pushToTalk = {
+    ...DEFAULT_VOICE_SETTINGS,
+    mode: "pushToTalk",
+    pushToTalkKey: { kind: "keyboard", code: "KeyB", label: "B" },
+    muteKey: { kind: "mouse", button: "back" },
+  };
+
+  it("carries voice chat only once the player changed some of it, with names the service takes", () => {
+    const untouched = { settings: { ...DEFAULT_VOICE_SETTINGS }, people: {} };
+    expect(buildBackup(prefs, friends, untouched)).not.toHaveProperty("voice");
+    expect(buildBackup(prefs, friends, null)).not.toHaveProperty("voice");
+    // This computer's devices alone are no reason.
+    const devices = { settings: { ...DEFAULT_VOICE_SETTINGS, inputDevice: "mic-1" }, people: {} };
+    expect(buildBackup(prefs, friends, devices)).not.toHaveProperty("voice");
+    const changed = { settings: pushToTalk, people: {} };
+    const document = buildBackup(prefs, friends, changed);
+    expect(document.voice).toEqual(changed);
+    for (const key of allKeys(document)) {
+      expect(
+        keyWords(key).some((word) => DENY.has(word)),
+        key,
+      ).toBe(false);
+    }
+    const people = {
+      settings: { ...DEFAULT_VOICE_SETTINGS },
+      people: { "123456789012345678": { volume: 150, muted: false } },
+    };
+    expect(buildBackup(prefs, friends, people).voice).toEqual(people);
+  });
+
+  it("never lets voice chat push the backup past the service's 16 KB", () => {
+    const crowd = Object.fromEntries(
+      Array.from({ length: 400 }, (_, i) => [
+        `1${String(i).padStart(17, "0")}`,
+        { volume: 150, muted: true },
+      ]),
+    );
+    const big = buildBackup(prefs, friends, { settings: pushToTalk, people: crowd });
+    expect(big.voice).toEqual({ settings: pushToTalk });
+    expect(new TextEncoder().encode(JSON.stringify(big)).length).toBeLessThanOrEqual(
+      BACKUP_MAX_BYTES,
+    );
+  });
+
+  it("reads voice chat back as objects only, the settings always with it", () => {
+    const voice = { settings: { mode: "pushToTalk" }, people: { "1": { volume: 50 } } };
+    expect(readBackup({ v: 1, voice }).voice).toEqual(voice);
+    expect(readBackup({ v: 1, voice: { settings: {} } }).voice).toEqual({ settings: {} });
+    expect(readBackup({ v: 1, voice: { people: {} } }).voice).toBeUndefined();
+    expect(readBackup({ v: 1, voice: { settings: [] } }).voice).toBeUndefined();
+    expect(readBackup({ v: 1, voice: { settings: {}, people: "x" } }).voice).toBeUndefined();
+    expect(readBackup({ v: 1, voice: "x" }).voice).toBeUndefined();
   });
 });

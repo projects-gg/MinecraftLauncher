@@ -59,10 +59,13 @@ use crate::protocol::{
     chat_caps,
 };
 use crate::tls;
+use crate::voice::{VOICE_CAP, VoiceAck, VoiceError, VoiceEvent, VoiceFrame};
 use crate::world::{WORLDS_CAP, WorldAnswer, WorldError, WorldEvent, WorldFrame};
 
 /// What a world request (HOST1) gets back.
 type WorldResult = std::result::Result<WorldAnswer, WorldError>;
+/// What a voice request (VOICE) gets back.
+type VoiceResult = std::result::Result<VoiceAck, VoiceError>;
 
 /// Chat on the presence socket (CHAT1). `since` is where the next sync starts (ms on the hub's
 /// clock: the device's newest message minus a minute); the owner keeps it up to date.
@@ -375,6 +378,9 @@ pub enum PresenceEvent {
     /// World sessions (HOST1): after every connect whether the service took them, then their
     /// frames (only on a connection that took `worlds2`).
     World(WorldEvent),
+    /// Voice chat (VOICE): after every connect whether the service took it, then its messages
+    /// (only on a connection that took `voice1`).
+    Voice(VoiceEvent),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -523,6 +529,11 @@ enum Command {
         frame: WorldFrame,
         reply: Option<oneshot::Sender<WorldResult>>,
     },
+    /// A voice frame (VOICE); `reply` for one the service answers by `rid` (`voice_call`).
+    Voice {
+        frame: VoiceFrame,
+        reply: Option<oneshot::Sender<VoiceResult>>,
+    },
     Shutdown,
 }
 
@@ -538,17 +549,22 @@ impl Command {
             Self::World {
                 reply: Some(reply), ..
             } => drop(reply.send(Err(WorldError::Unavailable))),
-            Self::Signal(_) | Self::World { .. } | Self::Shutdown => {}
+            Self::Voice {
+                reply: Some(reply), ..
+            } => drop(reply.send(Err(VoiceError::Unavailable))),
+            Self::Signal(_) | Self::World { .. } | Self::Voice { .. } | Self::Shutdown => {}
         }
     }
 }
 
 /// What this launcher tells the service it is doing: the status and (SOC9) the Minecraft version
-/// the game plays, which goes along only while playing.
+/// the game plays, which goes along only while playing; and (VOICE) whether the player switched
+/// voice chat off.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Outgoing {
     status: LocalStatus,
     version: Option<String>,
+    voice_off: bool,
 }
 
 impl Outgoing {
@@ -558,6 +574,7 @@ impl Outgoing {
         Self {
             status: self.status.clone(),
             version: self.version.clone().filter(|_| playing),
+            voice_off: self.voice_off,
         }
     }
 }
@@ -791,6 +808,46 @@ impl PresenceControl {
             Ok(Ok(result)) => result,
             Ok(Err(_)) | Err(_) => Err(WorldError::Unavailable),
         }
+    }
+
+    /// A voice frame (VOICE, `crate::voice`) the service answers by `rid` (`voice_call`): its
+    /// `ack` with the room and ticket, or its `error` as [`VoiceError::Refused`]. Fails at once
+    /// with [`VoiceError::Off`] on a connection that did not take `voice1`, with
+    /// [`VoiceError::Unavailable`] while disconnected or when no answer came within `wait`.
+    pub async fn voice_request(&self, frame: VoiceFrame, wait: Duration) -> VoiceResult {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Voice {
+                frame,
+                reply: Some(reply),
+            })
+            .await
+            .map_err(|_| VoiceError::Unavailable)?;
+        match timeout(wait, answer).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) | Err(_) => Err(VoiceError::Unavailable),
+        }
+    }
+
+    /// A voice frame nobody answers (`voice_decline`): dropped while disconnected or on a
+    /// connection that did not take `voice1`.
+    pub fn voice_send(&self, frame: VoiceFrame) {
+        let _ = self
+            .commands
+            .try_send(Command::Voice { frame, reply: None });
+    }
+
+    /// VOICE: the player's "Sesli sohbet" switch, sent with the status (`status.voice`) when it
+    /// changes and after a reconnect while it is off; returns whether it changed.
+    pub fn set_voice_switch(&self, on: bool) -> bool {
+        self.status.send_if_modified(|current| {
+            if current.voice_off == !on {
+                false
+            } else {
+                current.voice_off = !on;
+                true
+            }
+        })
     }
 
     /// A world frame nobody answers (HOST1: counts, path answers, credentials let go, telemetry):
@@ -1237,6 +1294,8 @@ enum Reply {
     Plan(oneshot::Sender<Result<Option<CrewPlan>>>),
     /// HOST1.
     World(oneshot::Sender<WorldResult>),
+    /// VOICE.
+    Voice(oneshot::Sender<VoiceResult>),
 }
 
 impl Reply {
@@ -1247,6 +1306,7 @@ impl Reply {
             Self::Chat(reply) => drop(reply.send(Err(error))),
             Self::Plan(reply) => drop(reply.send(Err(error))),
             Self::World(reply) => drop(reply.send(Err(WorldError::Unavailable))),
+            Self::Voice(reply) => drop(reply.send(Err(VoiceError::Unavailable))),
         }
     }
 }
@@ -1277,6 +1337,7 @@ async fn session(
         marks_on: false,
         marks2_on: false,
         worlds_on: false,
+        voice_on: false,
         afk_on: false,
         sync: None,
         sync_again: None,
@@ -1402,6 +1463,29 @@ async fn session(
                             }
                             if let Some(reply) = reply {
                                 pending.insert(rid, Reply::World(reply));
+                            }
+                            continue;
+                        }
+                        Command::Voice { frame, reply } => {
+                            if !state.voice_on {
+                                // An older service would refuse the frame (VOICE).
+                                if let Some(reply) = reply {
+                                    let _ = reply.send(Err(VoiceError::Off));
+                                }
+                                continue;
+                            }
+                            let message = match frame {
+                                VoiceFrame::Call { to } => ClientMessage::VoiceCall { to, rid },
+                                VoiceFrame::Decline { room } => ClientMessage::VoiceDecline { room },
+                            };
+                            if send(&mut sink, &message).await.is_err() {
+                                if let Some(reply) = reply {
+                                    let _ = reply.send(Err(VoiceError::Unavailable));
+                                }
+                                break RETRY_NOW;
+                            }
+                            if let Some(reply) = reply {
+                                pending.insert(rid, Reply::Voice(reply));
                             }
                             continue;
                         }
@@ -1559,6 +1643,8 @@ struct SessionState {
     marks2_on: bool,
     /// The service took world sessions on this connection (HOST1).
     worlds_on: bool,
+    /// The service took voice chat on this connection (VOICE).
+    voice_on: bool,
     /// The service took Cloud AFK's notices on this connection (AFKPLUS).
     afk_on: bool,
     /// The sync under way: its `rid`, where it started (ms) and whether it is the week-long one
@@ -1594,9 +1680,12 @@ async fn send_status(
     if state.sent.as_ref() == Some(&desired) {
         return Ok(());
     }
+    // VOICE: the switch goes along on a connection that took `voice1` (which counts as "on"
+    // until told otherwise).
+    let voice = state.voice_on.then_some(!desired.voice_off);
     send(
         sink,
-        &ClientMessage::status(&desired.status, desired.version.as_deref()),
+        &ClientMessage::status(&desired.status, desired.version.as_deref()).with_voice(voice),
     )
     .await?;
     state.sent = Some(desired);
@@ -1664,6 +1753,8 @@ async fn on_text(
             plans,
             worlds,
             rel,
+            voice,
+            voice_rooms,
         } => {
             tracing::debug!(?caps, "presence connected");
             state.greeted = true;
@@ -1717,6 +1808,16 @@ async fn on_text(
                 let _ = events.send(PresenceEvent::World(WorldEvent::Hello {
                     taken: true,
                     status: worlds.unwrap_or_default(),
+                }));
+            }
+            // Voice chat flows only when the service took it (VOICE); `voice` is there only while
+            // Studio's switch is on.
+            state.voice_on = caps.iter().any(|cap| cap == VOICE_CAP);
+            if state.voice_on {
+                let _ = events.send(PresenceEvent::Voice(VoiceEvent::Hello {
+                    taken: true,
+                    status: voice,
+                    rooms: voice_rooms.unwrap_or_default(),
                 }));
             }
             send_status(state, sink, status)
@@ -1953,6 +2054,21 @@ async fn on_text(
         ServerMessage::WorldState { worlds } if state.worlds_on => {
             PresenceEvent::World(WorldEvent::Status(worlds))
         }
+        ServerMessage::VoiceRing { ring, quiet } if state.voice_on => {
+            PresenceEvent::Voice(VoiceEvent::Ring { ring, quiet })
+        }
+        ServerMessage::VoiceRingEnd { room, reason } if state.voice_on => {
+            PresenceEvent::Voice(VoiceEvent::RingEnd { room, reason })
+        }
+        ServerMessage::VoiceRooms { crew, rooms } if state.voice_on => {
+            PresenceEvent::Voice(VoiceEvent::Rooms(crate::voice::VoiceCrewRooms {
+                crew,
+                rooms,
+            }))
+        }
+        ServerMessage::VoiceState { voice } if state.voice_on => {
+            PresenceEvent::Voice(VoiceEvent::Status(voice))
+        }
         ServerMessage::Mc(message) => PresenceEvent::Mc(message),
         // A service sends these only to a socket that took `afk`.
         ServerMessage::AfkNotice { notice } => PresenceEvent::AfkNotice(notice),
@@ -1967,8 +2083,20 @@ async fn on_text(
             order,
             ice,
             e4mc,
+            room,
+            ticket,
         } => {
             match rid.and_then(|rid| pending.remove(&rid)) {
+                Some(Reply::Voice(reply)) => {
+                    let _ = reply.send(match (room, ticket) {
+                        (Some(room), Some(ticket)) => Ok(VoiceAck { room, ticket }),
+                        _ => Err(VoiceError::Refused {
+                            code: "bad_answer".into(),
+                            retry_after: None,
+                            until: None,
+                        }),
+                    });
+                }
                 Some(Reply::World(reply)) => {
                     let _ = reply.send(Ok(WorldAnswer {
                         delivered,
@@ -2049,6 +2177,14 @@ async fn on_text(
                                 retry_after,
                             }));
                         }
+                        // So does a voice request (VOICE).
+                        Reply::Voice(reply) => {
+                            let _ = reply.send(Err(VoiceError::Refused {
+                                code,
+                                retry_after,
+                                until,
+                            }));
+                        }
                         reply => reply.fail(socket_error(&SocketRefusal {
                             code: &code,
                             retry_after,
@@ -2094,7 +2230,11 @@ async fn on_text(
         | ServerMessage::WorldPeer { .. }
         | ServerMessage::WorldPeerOk { .. }
         | ServerMessage::TurnMove { .. }
-        | ServerMessage::WorldState { .. } => return Ok(()),
+        | ServerMessage::WorldState { .. }
+        | ServerMessage::VoiceRing { .. }
+        | ServerMessage::VoiceRingEnd { .. }
+        | ServerMessage::VoiceRooms { .. }
+        | ServerMessage::VoiceState { .. } => return Ok(()),
     };
     events.send(event).map_err(gone)
 }
@@ -3788,6 +3928,179 @@ mod tests {
             other => panic!("unexpected {other:?}"),
         }
         handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn voice_frames_go_out_by_rid_and_come_back_as_voice_events() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle =
+            client
+                .session(token())
+                .connect_presence_full(fast(), None, false, true, None);
+        // The player switched voice chat off: it goes with the first status.
+        handle.control().set_voice_switch(false);
+        let mut server = accept(&listener, None, seen.clone()).await.unwrap();
+        assert!(seen.lock().unwrap().iter().any(|(name, value)| {
+            name == ":uri" && value.contains("caps=") && value.ends_with(",voice1")
+        }));
+        let mut hello = hello();
+        hello["caps"] = serde_json::json!(["voice1"]);
+        hello["voice"] = serde_json::json!({"on": true, "friendMax": 10, "crewMax": 15,
+            "crewRooms": 3, "ringSeconds": 30, "idleMinutes": 30, "kbps": 24});
+        hello["voiceRooms"] = serde_json::json!([{"crew": "c1",
+            "rooms": [{"id": "gc1", "name": "Genel", "ids": ["7"]}]}]);
+        send_json(&mut server, hello).await;
+        assert!(matches!(
+            handle.next_event().await,
+            Some(PresenceEvent::Connected { .. })
+        ));
+        let Some(PresenceEvent::Voice(VoiceEvent::Hello {
+            taken,
+            status,
+            rooms,
+        })) = handle.next_event().await
+        else {
+            panic!("no voice hello");
+        };
+        assert!(taken && status.is_some_and(|status| status.on && status.crew_rooms == 3));
+        assert_eq!(rooms[0].rooms[0].name, "Genel");
+        let status = next_json(&mut server).await;
+        assert_eq!(status["t"], "status");
+        assert_eq!(status["voice"], "off");
+
+        // A call goes out with its rid; the ack carries the room and the ticket.
+        let control = handle.control();
+        let asking = tokio::spawn(async move {
+            control
+                .voice_request(VoiceFrame::Call { to: "8".into() }, Duration::from_secs(5))
+                .await
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "voice_call");
+        assert_eq!(sent["to"], "8");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": sent["rid"], "room": "f0123456789abcdef",
+                "ticket": "v1.payload.mac"}),
+        )
+        .await;
+        let ack = asking.await.unwrap().unwrap();
+        assert_eq!(ack.room, "f0123456789abcdef");
+        assert_eq!(ack.ticket.expose(), "v1.payload.mac");
+        assert!(!format!("{ack:?}").contains("payload"));
+
+        // A refusal comes back as the service said it.
+        let control = handle.control();
+        let asking = tokio::spawn(async move {
+            control
+                .voice_request(VoiceFrame::Call { to: "9".into() }, Duration::from_secs(5))
+                .await
+        });
+        let sent = next_json(&mut server).await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": sent["rid"], "code": "rate_limited",
+                "retryAfter": 20}),
+        )
+        .await;
+        assert_eq!(
+            asking.await.unwrap(),
+            Err(VoiceError::Refused {
+                code: "rate_limited".into(),
+                retry_after: Some(20),
+                until: None,
+            })
+        );
+
+        // "Reddet" goes without a rid.
+        handle.control().voice_send(VoiceFrame::Decline {
+            room: "f0123456789abcdef".into(),
+        });
+        assert_eq!(
+            next_json(&mut server).await,
+            serde_json::json!({"t": "voice_decline", "room": "f0123456789abcdef"})
+        );
+
+        // The hub's messages become voice events.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "voice_ring", "quiet": true, "ring": {"room": "f00000000000000aa",
+                "from": "7", "at": 100, "until": 130, "ticket": "v1.r.m", "with": []}}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await,
+            Some(PresenceEvent::Voice(VoiceEvent::Ring { ring, quiet: true }))
+                if ring.from == "7" && ring.until == 130
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "voice_ring_end", "room": "f00000000000000aa",
+                "reason": "declined"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await,
+            Some(PresenceEvent::Voice(VoiceEvent::RingEnd {
+                room: "f00000000000000aa".into(),
+                reason: "declined".into()
+            }))
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "voice_rooms", "crew": "c1", "rooms": []}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await,
+            Some(PresenceEvent::Voice(VoiceEvent::Rooms(rooms))) if rooms.crew == "c1"
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "voice_state", "voice": {"on": false}}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await,
+            Some(PresenceEvent::Voice(VoiceEvent::Status(status))) if !status.on
+        ));
+
+        // Switched on again: the status says so.
+        handle.control().set_voice_switch(true);
+        let status = next_json(&mut server).await;
+        assert_eq!(status["voice"], "on");
+    }
+
+    #[tokio::test]
+    async fn without_voice1_no_voice_frame_goes_out() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let handle = client
+            .session(token())
+            .connect_presence_with(fast(), None, false, None);
+        let mut server = accept(&listener, None, seen.clone()).await.unwrap();
+        assert!(
+            !seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(name, value)| name == ":uri" && value.contains("voice1"))
+        );
+        send_json(&mut server, hello()).await;
+        let control = handle.control();
+        // A hub that did not take `voice1` never hears a voice frame.
+        let mut answer = Err(VoiceError::Unavailable);
+        for _ in 0..50 {
+            answer = control
+                .voice_request(VoiceFrame::Call { to: "8".into() }, Duration::from_secs(1))
+                .await;
+            if answer != Err(VoiceError::Unavailable) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(answer, Err(VoiceError::Off));
     }
 
     #[tokio::test]

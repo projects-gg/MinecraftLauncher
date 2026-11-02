@@ -18,6 +18,7 @@ use pl_social::{
     ReportTarget, SendOutcome, SocialError, SocialNotice, SocialService, SocialView,
     TEAM_FEATURE_ROLES, TeamRole,
 };
+use pl_voice::view::{VoiceAnswer, VoiceNotice, VoiceRefusal, VoiceSpeaking, VoiceState};
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 
@@ -27,10 +28,11 @@ use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
     ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST, FEATURE_LANG,
     FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
-    FEATURE_PEOPLE3, FEATURE_TAGS, FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS,
-    ReactFailure, Secret, SendFailure, ToGame,
+    FEATURE_PEOPLE3, FEATURE_TAGS, FEATURE_VOICE, FriendAction, FriendRefusal, FromGame,
+    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
+use crate::voice::{self, VoiceAct, VoiceFuture, VoiceMirror};
 
 /// How long "Bağlan" waits for the game to say whether it switches servers.
 pub const CONNECT_WAIT: Duration = Duration::from_secs(5);
@@ -150,12 +152,15 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
     fn block(&self, friend: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
     /// OVL-UX: "Rapor et" about a friend: a reason, a note for moderators, and whether to block
     /// them too.
+    /// `voice`: the voice room the player shares with them now (VOICE-O: the report carries it, as
+    /// the launcher's room menu does).
     fn report_player(
         &self,
         friend: &str,
         reason: ReportReason,
         note: Option<String>,
         block: bool,
+        voice: Option<String>,
     ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
     /// OVL-UX2: "Kategoriye taşı": the player's friend categories, saved whole as the launcher's
     /// list saves them.
@@ -326,12 +331,14 @@ impl SocialActions for SocialService {
         reason: ReportReason,
         note: Option<String>,
         block: bool,
+        voice: Option<String>,
     ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
         let service = self.clone();
         let target = ReportTarget::Player {
             id: friend.to_owned(),
             plan: None,
             reaction: None,
+            voice,
         };
         async move { service.report(target, reason, note, block).await }
     }
@@ -435,6 +442,12 @@ pub(crate) enum Msg {
     Language(Lang),
     /// CHAT-EMOJI: the server's chat emojis now (Studio's list, else the built-in one).
     Emojis(Arc<ChatEmojis>),
+    /// VOICE-O: voice chat's newest state, and whether a ring rings in the game.
+    Voice(Arc<VoiceState>, bool),
+    /// VOICE-O: who speaks now.
+    Speaking(VoiceSpeaking),
+    /// VOICE-O: a voice chat moment worth a note.
+    VoiceNotice(VoiceNotice),
 }
 
 /// The panel sends at most this many messages ...
@@ -467,6 +480,10 @@ fn sticker_ref_ok(sticker: &str) -> bool {
 
 /// The friend menu sends at most this many actions ... (OVL-UX)
 const PEOPLE_BURST: usize = 6;
+/// VOICE-O: the game's voice presses the launcher takes at most ...
+const VOICE_BURST: usize = 12;
+/// ... within this long (a press a second is a busy player; more is a stuck key or a bad mod).
+const VOICE_WINDOW: Duration = Duration::from_secs(10);
 /// ... within this long (a person picks slower; anything faster is a stuck key or a bad mod).
 const PEOPLE_WINDOW: Duration = Duration::from_secs(10);
 /// "Discord'dan mesaj at" for the same friend again within this long opens nothing more (a double
@@ -547,6 +564,22 @@ pub(crate) type LangFn = Arc<dyn Fn(Lang) + Send + Sync>;
 /// The player switched the chat's emoji picker in the overlay's settings (CHAT-EMOJI): the
 /// launcher keeps it.
 pub(crate) type EmojiFn = Arc<dyn Fn(bool) + Send + Sync>;
+
+/// VOICE-O: hands a press to the launcher's voice chat (none: the app did not wire it).
+pub(crate) type VoiceActFn = Arc<dyn Fn(VoiceAct) -> Option<VoiceFuture> + Send + Sync>;
+
+/// VOICE-O: a session's ties to the launcher's voice chat.
+pub(crate) struct VoiceHooks {
+    /// Voice chat's newest state and whether a ring rings in the game; none while voice chat
+    /// never said anything.
+    pub(crate) state: Option<(Arc<VoiceState>, bool)>,
+    /// Who speaks now, when that changed after the state.
+    pub(crate) speaking: Option<VoiceSpeaking>,
+    /// Where the game's presses go.
+    pub(crate) act: VoiceActFn,
+    /// Tells the hub whether this session's mod shows voice chat now.
+    pub(crate) shown: ConnectedFn,
+}
 
 /// Whom a person menu frame may be about (OVL-UX2): the friend list's people for most rows; crew
 /// chat's senders (a crewmate who is not a friend) for "Engelle", "Rapor et" and "Arkadaş ekle".
@@ -635,6 +668,9 @@ struct Live {
     /// The mod runs the emoji picker alone (`panel-off` in its hello): no panel, no toasts. It is
     /// not counted as connected and hears only `welcome` and `emojis`.
     quiet: bool,
+    /// The mod shows voice chat (VOICE-O: `voice` in its hello), and what it was told of it.
+    voice: bool,
+    voice_mirror: VoiceMirror,
 }
 
 /// The codeless linking permit this session holds (SKIN1-O). It never goes to a log.
@@ -708,6 +744,14 @@ pub(crate) struct Session<S> {
     /// CHAT-EMOJI: the server's chat emojis, and where the player's switch from the game goes.
     emojis: Arc<ChatEmojis>,
     emoji_switched: EmojiFn,
+    /// VOICE-O: voice chat's newest state (and whether a ring rings in the game), where the game's
+    /// presses go, whether the hub hears this mod shows voice chat, the presses that came lately.
+    voice: Option<(Arc<VoiceState>, bool)>,
+    /// Who speaks now, when that changed after the newest state (its flags are as of its change).
+    voice_speaking: Option<VoiceSpeaking>,
+    voice_act: VoiceActFn,
+    voice_shown: ConnectedFn,
+    recent_voice: VecDeque<Instant>,
 }
 
 fn now_ms() -> i64 {
@@ -812,6 +856,7 @@ impl<S: SocialActions> Session<S> {
         people: PeopleFn,
         (lang, lang_picked): (Lang, LangFn),
         (emojis, emoji_switched): (Arc<ChatEmojis>, EmojiFn),
+        voice: VoiceHooks,
     ) -> Self {
         // The friends feature as it is now; every change after comes as a message.
         let view = Arc::new(social.view());
@@ -850,6 +895,11 @@ impl<S: SocialActions> Session<S> {
             lang_picked,
             emojis,
             emoji_switched,
+            voice: voice.state,
+            voice_speaking: voice.speaking,
+            voice_act: voice.act,
+            voice_shown: voice.shown,
+            recent_voice: VecDeque::new(),
         }
     }
 
@@ -906,6 +956,7 @@ impl<S: SocialActions> Session<S> {
         // A mod that runs the emoji picker alone shows nothing of the friends feature: the page
         // keeps its own notifications for it (CHAT-EMOJI).
         let was = self.live.as_ref().is_some_and(|live| !live.quiet);
+        let voice_was = self.live.as_ref().is_some_and(|live| live.voice);
         self.live = live;
         if self.live.is_none()
             && let Some(pending) = self.pending_connect.take()
@@ -918,6 +969,10 @@ impl<S: SocialActions> Session<S> {
         let now = self.live.as_ref().is_some_and(|live| !live.quiet);
         if was != now {
             (self.connected)(now);
+        }
+        let voice_now = self.live.as_ref().is_some_and(|live| live.voice);
+        if voice_was != voice_now {
+            (self.voice_shown)(voice_now);
         }
         if was && self.live.is_none() {
             (self.host)(HostSignal::Gone);
@@ -998,6 +1053,8 @@ impl<S: SocialActions> Session<S> {
                     self.reshow_open_conversation();
                 }
                 self.drop_stale_permit();
+                // A name may have changed (a new friend, a renamed crew).
+                self.refresh_voice();
             }
             Msg::Chat(change) => self.on_chat(&change),
             Msg::Notice(notice) => self.on_notice(&notice),
@@ -1035,7 +1092,138 @@ impl<S: SocialActions> Session<S> {
                 self.emojis = emojis;
                 self.send_emojis();
             }
+            Msg::Voice(state, ring_in_game) => {
+                self.voice = Some((state, ring_in_game));
+                // Its own speaking flags are the newest now.
+                self.voice_speaking = None;
+                self.refresh_voice();
+            }
+            Msg::Speaking(speaking) => {
+                self.on_speaking(&speaking);
+                self.voice_speaking = Some(speaking);
+            }
+            Msg::VoiceNotice(notice) => self.on_voice_notice(&notice),
         }
+    }
+
+    // --- voice chat (VOICE-O) ----------------------------------------------------------------------
+
+    /// `voice` to a mod that shows voice chat, when what it shows changed (the state, or a name).
+    fn refresh_voice(&mut self) {
+        if !self.live.as_ref().is_some_and(|live| live.voice) {
+            return;
+        }
+        let Some((state, ring_in_game)) = &self.voice else {
+            return;
+        };
+        let scene = &self.scene;
+        let view = voice::view_of(
+            state,
+            *ring_in_game,
+            self.voice_speaking.as_ref(),
+            |id| scene.name_of(id).map(str::to_owned),
+            |id| scene.crew_name(id).map(str::to_owned),
+        );
+        let frame = self
+            .live
+            .as_mut()
+            .and_then(|live| live.voice_mirror.update(view));
+        if let Some(frame) = frame {
+            self.send(vec![frame]);
+        }
+    }
+
+    /// `voice-speaking` to a mod that shows voice chat, when the speakers changed while the player
+    /// is in a room.
+    fn on_speaking(&mut self, speaking: &VoiceSpeaking) {
+        let frame = self
+            .live
+            .as_mut()
+            .filter(|live| live.voice)
+            .and_then(|live| live.voice_mirror.speaking(speaking));
+        if let Some(frame) = frame {
+            self.send(vec![frame]);
+        }
+    }
+
+    /// `voice-notice` to a mod that shows voice chat (the ones the game says at all).
+    fn on_voice_notice(&self, notice: &VoiceNotice) {
+        if !self.live.as_ref().is_some_and(|live| live.voice) {
+            return;
+        }
+        let scene = &self.scene;
+        if let Some(view) = voice::notice_of(notice, |id| scene.name_of(id).map(str::to_owned)) {
+            self.send(vec![ToGame::VoiceNotice(view)]);
+        }
+    }
+
+    /// A press in the game's voice chat: checked against the newest state, at most
+    /// [`VOICE_BURST`] in [`VOICE_WINDOW`], then the launcher's voice chat carries it out; the mod
+    /// hears how one with a result of its own went (`voice-result`). Only from a mod that shows
+    /// voice chat.
+    fn on_voice_press(&mut self, frame: &FromGame) {
+        let Some(conn) = self
+            .live
+            .as_ref()
+            .filter(|live| live.voice)
+            .map(|live| live.conn)
+        else {
+            return;
+        };
+        let scene = &self.scene;
+        let state = self.voice.as_ref().map(|(state, _)| state.as_ref());
+        let Some(checked) = voice::check(frame, state, |id| scene.friend(id).is_some()) else {
+            return;
+        };
+        let act = match checked {
+            Ok(act) => act,
+            Err(refused) => {
+                tracing::debug!(act = ?refused.act, why = ?refused.why, "a voice press from the game names nothing now");
+                if let Some(frame) = voice::refused_result(&refused) {
+                    self.send(vec![frame]);
+                }
+                return;
+            }
+        };
+        let now = Instant::now();
+        // A press that only closes (the microphone off, deafened, leaving, a decline) is never held
+        // back: a flood of them can do no harm, and the player must always be able to go quiet.
+        let closes = matches!(
+            act,
+            VoiceAct::Mute(true)
+                | VoiceAct::Deaf(true)
+                | VoiceAct::Leave
+                | VoiceAct::Decline { .. }
+        );
+        let doing = if !closes && full(&mut self.recent_voice, now, VOICE_WINDOW, VOICE_BURST) {
+            Err(VoiceRefusal::RateLimited)
+        } else {
+            if !closes {
+                self.recent_voice.push_back(now);
+            }
+            (self.voice_act)(act.clone()).ok_or(VoiceRefusal::Off)
+        };
+        let doing = match doing {
+            Ok(doing) => doing,
+            Err(why) => {
+                tracing::debug!(?why, "a voice press from the game did not go");
+                if let Some(frame) = voice::result_of(&act, &VoiceAnswer::refused(why)) {
+                    self.send(vec![frame]);
+                }
+                return;
+            }
+        };
+        tracing::debug!(act = ?act.result_name(), "a voice press from the in-game overlay");
+        let control = self.control.clone();
+        tokio::spawn(async move {
+            let answer = doing.await;
+            if let Some(frame) = voice::result_of(&act, &answer) {
+                let _ = control.send(Control::Send {
+                    conn,
+                    frames: vec![frame],
+                });
+            }
+        });
     }
 
     /// CHAT-EMOJI (E3): the emoji picker's switch and the server's emojis, to a mod that has the
@@ -1397,6 +1585,7 @@ impl<S: SocialActions> Session<S> {
                 }
                 let hosts = features.iter().any(|f| f == FEATURE_HOST);
                 let emojis = features.iter().any(|f| f == FEATURE_EMOJI);
+                let quiet = features.iter().any(|f| f == FEATURE_PANEL_OFF);
                 self.set_live(Some(Live {
                     conn,
                     mirror,
@@ -1415,10 +1604,14 @@ impl<S: SocialActions> Session<S> {
                     people3,
                     langs,
                     emojis,
-                    quiet: features.iter().any(|f| f == FEATURE_PANEL_OFF),
+                    quiet,
+                    // A mod with the emoji picker alone shows nothing of voice chat.
+                    voice: !quiet && features.iter().any(|f| f == FEATURE_VOICE),
+                    voice_mirror: VoiceMirror::default(),
                 }));
                 self.send(frames);
                 self.send_emojis();
+                self.refresh_voice();
                 (self.host)(HostSignal::Connected { hosts });
             }
             BridgeEvent::Frame { conn, frame } => {
@@ -1593,6 +1786,15 @@ impl<S: SocialActions> Session<S> {
             }
             FromGame::Lang { lang } => self.on_lang_pick(&lang),
             FromGame::Emoji { on } => self.on_emoji_switch(on),
+            // VOICE-O: the player's presses in the game's voice chat.
+            frame @ (FromGame::VoiceSet { .. }
+            | FromGame::VoiceLeave {}
+            | FromGame::VoiceAnswer { .. }
+            | FromGame::VoiceVol { .. }
+            | FromGame::VoiceLmute { .. }
+            | FromGame::VoiceMod { .. }
+            | FromGame::VoiceCall { .. }
+            | FromGame::VoiceInvite { .. }) => self.on_voice_press(&frame),
             FromGame::Hello { .. } | FromGame::Unknown => {}
         }
     }
@@ -1810,9 +2012,16 @@ impl<S: SocialActions> Session<S> {
             return;
         };
         if self.person_allowed(&friend, FriendAction::Report, Who::FriendOrCrewmate, true) {
+            // VOICE-O: someone in the player's voice room is reported with the room (its evidence).
+            let room = self
+                .voice
+                .as_ref()
+                .and_then(|(state, _)| state.room.as_ref())
+                .filter(|room| room.people.iter().any(|p| p.id == friend))
+                .map(|room| room.id.clone());
             let doing = self
                 .social
-                .report_player(&friend, reason, report_note(note), block);
+                .report_player(&friend, reason, report_note(note), block, room);
             self.settle(friend, FriendAction::Report, doing);
         }
     }

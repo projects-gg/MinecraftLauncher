@@ -1,5 +1,6 @@
 package gg.projects.overlay.people;
 
+import gg.projects.overlay.voice.VoiceState;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -11,7 +12,10 @@ import java.util.List;
  * sender's name in crew chat). The groups: being together (join, play together, message, Discord, add as a friend),
  * the friend list (favourite, online notice, category, crew invite), the crew the menu opened from (moderator,
  * leadership, remove from the crew; OVL-UX3, a sender in crew chat), the player's open world (send off), the
- * relationship (unfriend, block, report). A row shows only where the rules allow it. Pure, so it is tested on its own.
+ * relationship (unfriend, block, report). Someone in the player's voice room (VOICE-O) gets their volume and "Benim için
+ * sustur" first, then what the player's role may do to them in the room, as the launcher's menu leads with them; "Ara"
+ * or "Odaya davet et" stands beside "Mesaj gönder". A row shows only where the rules allow it. Pure, so it is tested on
+ * its own.
  */
 public final class FriendMenu {
     /** A row's action. */
@@ -57,12 +61,33 @@ public final class FriendMenu {
         /** "Engelle", asked first. */
         BLOCK,
         /** "Rapor et": the report dialog. */
-        REPORT;
+        REPORT,
+        /** VOICE-O: "Ses seviyesi" of someone in the player's room: a list of steps, theirs checked. */
+        VOLUME,
+        /** VOICE-O: "Benim için sustur", a check. */
+        MUTE_FOR_ME,
+        /** VOICE-O: "Herkes için sustur" (a leader's or moderator's). */
+        VOICE_MUTE,
+        /** VOICE-O: "Herkes için susturmayı kaldır". */
+        VOICE_UNMUTE,
+        /**
+         * VOICE-O: "Odadan çıkar", asked first (the launcher's 5 s "Geri al" has no place in the game; one sentence keeps a
+         * slip of the hand from throwing someone out).
+         */
+        VOICE_KICK,
+        /** VOICE-O: "Moderatör yap" in a friend room the player leads. */
+        VOICE_MOD,
+        /** VOICE-O: "Moderatörlükten al". */
+        VOICE_UNMOD,
+        /** VOICE-O: "Ara". */
+        CALL,
+        /** VOICE-O: "Odaya davet et"; soft while it rings ("Aranıyor…", done) or the room is full. */
+        CALL_INVITE;
 
         /** One sentence is asked before it goes. */
         public boolean asks() {
             return this == MAKE_FOUNDER || this == REMOVE_MEMBER || this == REMOVE_FROM_WORLD || this == UNFRIEND
-                || this == BLOCK;
+                || this == BLOCK || this == VOICE_KICK;
         }
 
         /** Drawn in the error colour (the launcher's danger row). */
@@ -122,6 +147,23 @@ public final class FriendMenu {
     }
 
     /**
+     * Voice chat about them (VOICE-O; the launcher's {@code PersonInput.voice}).
+     *
+     * @param offer       what voice chat offers them: "Ara" ({@code CALL}), "Odaya davet et" ({@code INVITE}; soft while
+     *                    it rings or the room is full), or nothing
+     * @param inRoom      they are in the player's room: their volume and "Benim için sustur" lead the menu
+     * @param mutedForMe  "Benim için sustur" is on for them
+     * @param mutedForAll a moderator muted them for everyone ("Herkes için susturmayı kaldır")
+     * @param moderator   they moderate the friend room ("Moderatörlükten al")
+     * @param canMute     the player's role may mute them for everyone
+     * @param canKick     ... take them out of the room
+     * @param canMod      ... make them a moderator or take it back (friend rooms, the leader)
+     */
+    public record Voice(VoiceState.Offer offer, boolean inRoom, boolean mutedForMe, boolean mutedForAll,
+        boolean moderator, boolean canMute, boolean canKick, boolean canMod) {
+    }
+
+    /**
      * Everything a person's menu depends on.
      *
      * @param friend        they are on the player's friend list (else a crewmate from crew chat)
@@ -142,16 +184,32 @@ public final class FriendMenu {
      * @param teams         how many crews could be shown ("Ekibe davet et" opens a list with more than one)
      * @param addFriend     a crewmate who is not a friend: "Arkadaş ekle" and its state
      * @param crew          the crew rows of the crew chat the menu opened from (OVL-UX3), or null
+     * @param voice         voice chat about them (VOICE-O), or null where the launcher says nothing of it
      */
     public record Input(boolean friend, boolean joinable, boolean people, boolean online, boolean invite,
         boolean inviteWaiting, WorldInvites.Offer world, boolean guest, boolean message, boolean discord,
         boolean people2, boolean fav, boolean alert, boolean categories, Team team, int teams, AddFriend addFriend,
-        Crew crew) {
+        Crew crew, Voice voice) {
+        /** OVL-UX3's menu (the rows before VOICE-O). */
+        public Input(boolean friend, boolean joinable, boolean people, boolean online, boolean invite,
+            boolean inviteWaiting, WorldInvites.Offer world, boolean guest, boolean message, boolean discord,
+            boolean people2, boolean fav, boolean alert, boolean categories, Team team, int teams,
+            AddFriend addFriend, Crew crew) {
+            this(friend, joinable, people, online, invite, inviteWaiting, world, guest, message, discord, people2, fav,
+                alert, categories, team, teams, addFriend, crew, null);
+        }
+
+        /** The same, with voice chat's rows about them (VOICE-O). */
+        public Input withVoice(Voice next) {
+            return new Input(friend, joinable, people, online, invite, inviteWaiting, world, guest, message, discord,
+                people2, fav, alert, categories, team, teams, addFriend, crew, next);
+        }
+
         /** OVL-UX's friend row (the rows before OVL-UX2). */
         public Input(boolean joinable, boolean people, boolean online, boolean invite, boolean inviteWaiting,
             WorldInvites.Offer world, boolean guest, boolean message, boolean discord) {
             this(true, joinable, people, online, invite, inviteWaiting, world, guest, message, discord, false, false,
-                false, false, Team.NONE, 0, AddFriend.HIDDEN, null);
+                false, false, Team.NONE, 0, AddFriend.HIDDEN, null, null);
         }
 
         /** OVL-UX2's menu (the rows before OVL-UX3's crew rows). */
@@ -160,7 +218,7 @@ public final class FriendMenu {
             boolean people2, boolean fav, boolean alert, boolean categories, Team team, int teams,
             AddFriend addFriend) {
             this(friend, joinable, people, online, invite, inviteWaiting, world, guest, message, discord, people2, fav,
-                alert, categories, team, teams, addFriend, null);
+                alert, categories, team, teams, addFriend, null, null);
         }
     }
 
@@ -187,6 +245,23 @@ public final class FriendMenu {
         boolean live = launcher && in.online();
         boolean more = in.people2() && launcher;
         WorldInvites.Offer world = in.world() == null ? WorldInvites.Offer.NONE : in.world();
+        Voice voice = in.voice();
+        // Voice chat: someone in the player's room (their volume first, then what the player's role may do there).
+        if (voice != null && voice.inRoom()) {
+            out.add(new Row(Action.VOLUME, !in.online(), false, false, true, false));
+            out.add(new Row(Action.MUTE_FOR_ME, !in.online(), false, voice.mutedForMe(), false, false));
+            out.add(null);
+            if (voice.canMute()) {
+                out.add(new Row(voice.mutedForAll() ? Action.VOICE_UNMUTE : Action.VOICE_MUTE, !in.online(), false));
+            }
+            if (voice.canKick()) {
+                out.add(new Row(Action.VOICE_KICK, !in.online(), false));
+            }
+            if (voice.canMod()) {
+                out.add(new Row(voice.moderator() ? Action.VOICE_UNMOD : Action.VOICE_MOD, !in.online(), false));
+            }
+            out.add(null);
+        }
         // Being together.
         if (in.joinable()) {
             out.add(new Row(Action.JOIN, false, false));
@@ -202,6 +277,16 @@ public final class FriendMenu {
             if (in.message()) {
                 // Opens even while the launcher is away: the conversation says why it cannot be written to.
                 out.add(new Row(Action.MESSAGE, false, false));
+            }
+            // "Ara" beside "Mesaj gönder"; "Odaya davet et" while the player's room may take them (VOICE-O).
+            VoiceState.Offer offer = voice == null || voice.offer() == null ? VoiceState.Offer.NONE : voice.offer();
+            switch (offer) {
+                case CALL -> out.add(new Row(Action.CALL, !in.online(), false));
+                case INVITE -> out.add(new Row(Action.CALL_INVITE, !in.online(), false));
+                case RINGING -> out.add(new Row(Action.CALL_INVITE, true, true));
+                case FULL -> out.add(new Row(Action.CALL_INVITE, true, false));
+                case NONE -> {
+                }
             }
         }
         if (launcher && in.discord()) {
