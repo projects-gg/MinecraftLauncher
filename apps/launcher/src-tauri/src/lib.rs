@@ -77,6 +77,13 @@ pub fn run() {
                     api.prevent_close();
                     shell::close_requested(window.app_handle());
                 }
+                // The hidden voice window went without the launcher closing it: as a crash
+                // (VOICE: a call opens it again).
+                if let tauri::WindowEvent::Destroyed = event
+                    && window.label() == pl_voice::VOICE_WINDOW
+                {
+                    voice::window_destroyed(window.app_handle());
+                }
             });
     }
     // ...and the page clears its own storage on its first load.
@@ -84,6 +91,9 @@ pub fn run() {
         builder = builder.plugin(reset::page_storage(done.id));
     }
 
+    // Every command passes one check first (VOICE-0's L1 decision, `pl_voice::guard`): the hidden
+    // voice window may call only its own two, and no other window may call those.
+    let handler = specta.invoke_handler();
     builder
         .plugin(language_plugin(&signals))
         .plugin(tauri_plugin_deep_link::init())
@@ -93,7 +103,19 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .invoke_handler(specta.invoke_handler())
+        .invoke_handler(move |invoke| {
+            let window = invoke.message.webview_ref().label().to_owned();
+            if !pl_voice::guard::allowed(&window, invoke.message.command()) {
+                tracing::warn!(
+                    window,
+                    command = invoke.message.command(),
+                    "a window called a command it may not"
+                );
+                invoke.resolver.reject("not allowed");
+                return true;
+            }
+            handler(invoke)
+        })
         .setup(move |app| {
             // A second copy on macOS hands over to the running launcher now that AppKit has
             // finished launching it, without touching the data folder (single_instance_macos).
@@ -129,6 +151,9 @@ pub fn run() {
             // While the window is out of sight the page rests: hidden for WebView2, little
             // memory, suspended when it has nothing to do (webview_rest).
             webview_rest::install(app);
+            // The main page never gets the microphone or the camera; only the hidden voice
+            // window asks, for the launcher's own page (VOICE).
+            voice::guard_main(app);
             // Windows shows the launcher's notifications with its name and picture (notify).
             notify::register(app.handle());
             // After an update restart, the AFK accounts it stopped come back (commands::updates).
@@ -142,7 +167,8 @@ pub fn run() {
             commands::java::start_java_updates(app.handle());
             // The chosen instance's files, downloaded gently while the launcher is idle (prepare).
             prepare::start(app.handle());
-            // Voice chat's hidden window: for now VOICE-0's probe, in debug builds asked for it.
+            // VOICE-0's probe of the voice window (debug builds asked for it); voice chat itself
+            // opens its window only for a call (`voice`).
             voice::install(app);
             // Started at login: stay in the tray until the user opens the launcher (not after an
             // update the player installed from the open window).
@@ -221,6 +247,11 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         // "host-changed" / "host-notice" (world sharing, HOST1).
         .typ::<pl_worlds::HostView>()
         .typ::<pl_worlds::HostNotice>()
+        // "voice-state", "voice-notice", "voice-speaking", "voice-level" (voice chat, VOICE).
+        .typ::<pl_voice::view::VoiceState>()
+        .typ::<pl_voice::view::VoiceNotice>()
+        .typ::<pl_voice::view::VoiceSpeaking>()
+        .typ::<pl_voice::view::VoiceLevel>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
@@ -299,6 +330,34 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::host::host_cancel_join,
             commands::host::host_dismiss_invite,
             commands::host::host_connect_in_game,
+            // voice chat (VOICE; shown only while the signed config and the service offer it)
+            commands::voice::voice_state,
+            commands::voice::voice_call,
+            commands::voice::voice_accept,
+            commands::voice::voice_decline,
+            commands::voice::voice_dismiss_missed,
+            commands::voice::voice_join_crew,
+            commands::voice::voice_new_crew_room,
+            commands::voice::voice_leave,
+            commands::voice::voice_retry,
+            commands::voice::voice_set_mute,
+            commands::voice::voice_set_deaf,
+            commands::voice::voice_set_volume,
+            commands::voice::voice_set_muted_for_me,
+            commands::voice::voice_invite,
+            commands::voice::voice_cancel_invite,
+            commands::voice::voice_moderate,
+            commands::voice::voice_settings,
+            commands::voice::voice_save_settings,
+            commands::voice::voice_check_key,
+            commands::voice::voice_setup,
+            commands::voice::voice_self_test,
+            commands::voice::voice_open_mic_settings,
+            commands::voice::voice_backup,
+            commands::voice::voice_restore,
+            // the hidden voice window's page only (`pl_voice::guard`)
+            commands::voice::voice_page_attach,
+            commands::voice::voice_page_report,
             commands::server::server_status,
             commands::troubleshoot::troubleshoot_run,
             commands::troubleshoot::troubleshoot_crash,
@@ -667,6 +726,12 @@ fn init_logging() {
 
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,projects_launcher_lib=debug,pl_=debug"));
+    // The WebSocket library logs whole handshakes at trace level: the session's token and the
+    // voice room's ticket would reach the log (and support bundles) under RUST_LOG=trace.
+    let filter = ["tungstenite=info", "tokio_tungstenite=info"]
+        .into_iter()
+        .filter_map(|directive| directive.parse().ok())
+        .fold(filter, EnvFilter::add_directive);
     // Written synchronously: the last lines before a crash are the ones support needs.
     let file = pl_data::logfile::DailyLog::new(state::default_root().join("logs"))
         .map_err(|error| eprintln!("launcher log file unavailable: {error}"))

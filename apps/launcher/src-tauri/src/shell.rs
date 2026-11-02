@@ -320,10 +320,13 @@ pub fn launcher_leave_for_game(app: AppHandle) {
     let action = close::leave_for_game(activity);
     // The player's world open to friends (or opening), or a friend's world the player joined,
     // keeps the launcher in the tray: the way to it lives here (HOST1, host1.md §6.1).
+    // So does a voice room (VOICE, design §5.4: "Kapansın" hides to the tray during a call).
     let action = match app.try_state::<AppState>() {
-        Some(state) if state.worlds.keeps_launcher() => CloseAction::Hide {
-            hint: Some(close::TrayHint::Tray),
-        },
+        Some(state) if state.worlds.keeps_launcher() || state.voice.in_room() => {
+            CloseAction::Hide {
+                hint: Some(close::TrayHint::Tray),
+            }
+        }
         _ => action,
     };
     tracing::info!(
@@ -397,7 +400,8 @@ fn close_activity(app: &AppHandle) -> close::Activity {
     close::Activity {
         game: game || state.launch_cancel.lock().is_some(),
         afk: state.afk.any_active(),
-        jobs: player_jobs_running(app),
+        // A voice room keeps the launcher in the tray like a long job (VOICE, design §5.4).
+        jobs: player_jobs_running(app) || state.voice.in_room(),
     }
 }
 
@@ -520,13 +524,18 @@ fn tray_tooltip(activity: pl_afk::AfkActivity, lang: pl_lang::Lang) -> String {
 #[cfg(desktop)]
 static TRAY_IN_GAME: AtomicBool = AtomicBool::new(false);
 
+/// Voice chat's room while the player is in one (VOICE): its name for the tooltip and whether the
+/// microphone is off, for the menu's "Mikrofonu kapat"/"Mikrofonu aç" and "Ayrıl".
+#[cfg(desktop)]
+static TRAY_VOICE: Mutex<Option<(String, bool)>> = Mutex::new(None);
+
 /// The tray menu in the interface's language (rebuilt when it changes, [`retitle_tray`]).
 #[cfg(desktop)]
 fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
     manager: &M,
     lang: pl_lang::Lang,
 ) -> tauri::Result<tauri::menu::Menu<R>> {
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 
     let open = lang.pick("Projects Launcher'ı aç", "Open Projects Launcher");
     let open = MenuItem::with_id(manager, "open", open, true, None::<&str>)?;
@@ -547,7 +556,59 @@ fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
     let quit = lang.pick("Çıkış", "Quit");
     let quit_item = MenuItem::with_id(manager, "quit", quit, true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(manager)?;
-    Menu::with_items(manager, &[&open, &play, &afk, &separator, &quit_item])
+    let voice = TRAY_VOICE.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let Some((_, muted)) = voice else {
+        return Menu::with_items(manager, &[&open, &play, &afk, &separator, &quit_item]);
+    };
+    let mute = MenuItem::with_id(
+        manager,
+        "voice-mute",
+        if muted {
+            lang.pick("Mikrofonu aç", "Unmute")
+        } else {
+            lang.pick("Mikrofonu kapat", "Mute")
+        },
+        true,
+        None::<&str>,
+    )?;
+    let leave = MenuItem::with_id(
+        manager,
+        "voice-leave",
+        lang.pick("Ayrıl", "Leave"),
+        true,
+        None::<&str>,
+    )?;
+    let voice_separator = PredefinedMenuItem::separator(manager)?;
+    let items: [&dyn IsMenuItem<R>; 8] = [
+        &open,
+        &play,
+        &afk,
+        &voice_separator,
+        &mute,
+        &leave,
+        &separator,
+        &quit_item,
+    ];
+    Menu::with_items(manager, &items)
+}
+
+/// Voice chat's room changed (VOICE, `crate::voice`): the tray's mute and leave items and its
+/// tooltip follow. Waits for the main thread, so it must not run on it.
+#[cfg(desktop)]
+pub fn set_tray_voice(app: &AppHandle, room: Option<(String, bool)>) {
+    let changed = {
+        let mut held = TRAY_VOICE.lock().unwrap_or_else(|e| e.into_inner());
+        if *held == room {
+            false
+        } else {
+            *held = room;
+            true
+        }
+    };
+    if changed {
+        rebuild_tray_menu(app);
+        refresh_afk_tray(app);
+    }
 }
 
 /// The interface's language changed (`commands::app::app_set_language`): the tray menu and its
@@ -615,7 +676,24 @@ pub fn refresh_afk_tray(app: &AppHandle) {
         return;
     };
     let mut shown = SHOWN.lock().unwrap_or_else(|e| e.into_inner());
-    let text = tray_tooltip(state.afk.activity(), pl_lang::Lang::current());
+    let lang = pl_lang::Lang::current();
+    let mut text = tray_tooltip(state.afk.activity(), lang);
+    // In a voice room (VOICE): its name.
+    if let Some((room, _)) = TRAY_VOICE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+    {
+        text.push('\n');
+        text.push_str(&if room.is_empty() {
+            lang.pick("Sesli sohbette", "In voice chat").to_owned()
+        } else {
+            lang.pick(
+                format!("Sesli sohbet: {room}"),
+                format!("Voice chat: {room}"),
+            )
+        });
+    }
     if *shown == text {
         return;
     }
@@ -643,6 +721,17 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             "play" => open_link(app, DeepLink::Play),
             "afk" => open_link(app, DeepLink::Afk),
             "quit" => quit_from_tray(app),
+            // Voice chat (VOICE): only while the player is in a room.
+            "voice-mute" | "voice-leave" => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    if event.id.as_ref() == "voice-leave" {
+                        state.voice.leave();
+                    } else {
+                        let muted = state.voice.state().room.is_some_and(|room| room.me.mute);
+                        state.voice.set_mute(!muted);
+                    }
+                }
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

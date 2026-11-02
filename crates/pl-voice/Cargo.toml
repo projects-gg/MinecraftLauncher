@@ -1,6 +1,6 @@
 [package]
 name = "pl-voice"
-description = "Voice chat's rules on the launcher side: the voice window's microphone, policy and life, volumes, push-to-talk's key, and VOICE-0's measurement run"
+description = "Voice chat on the launcher side: the call state machine, the room socket, settings and shortcuts, and the voice window's rules (microphone, policy, life)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,21 @@ license.workspace = true
 publish = false
 
 [dependencies]
+# Backoff with jitter and the TLS of the friends service's sockets.
+pl-social = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 url = { workspace = true }
+# The page's types are exported to TypeScript by the launcher (tauri-specta).
+specta = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+# The room socket: the same WebSocket and TLS stack as the presence socket (pl-social), so nothing
+# new is compiled.
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

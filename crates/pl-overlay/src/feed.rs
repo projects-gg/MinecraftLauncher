@@ -1816,6 +1816,7 @@ pub(crate) mod tests {
             discord_id: None,
             badge: None,
             marks: Vec::new(),
+            voice: None,
         }
     }
 

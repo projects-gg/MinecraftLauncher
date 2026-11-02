@@ -75,6 +75,44 @@ pub async fn desktop_notify_clear(tag: String) {
     let _ = tag;
 }
 
+/// A voice chat notification (VOICE, `crate::voice`): a ring with "Katıl" and "Reddet" and the
+/// call sound (`actions`, their labels and arguments), or a plain one; `tag` (a ring's room) lets
+/// [`voice_clear`] take it away. A press comes back through `on_action` (`""` for the body). True
+/// when Windows took it.
+pub fn voice_show(
+    tag: &str,
+    title: &str,
+    body: Option<&str>,
+    actions: Option<[(&str, &str); 2]>,
+    on_action: Box<dyn Fn(String) + Send + Sync>,
+) -> bool {
+    #[cfg(windows)]
+    {
+        match windows_toast::show_voice(tag, title, body, actions, on_action) {
+            Ok(shown) => shown,
+            Err(error) => {
+                tracing::warn!(%error, "voice notification not shown");
+                false
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (tag, title, body, actions, on_action);
+        false
+    }
+}
+
+/// Takes a voice notification away (a ring that ended). Never fails.
+pub fn voice_clear(tag: &str) {
+    #[cfg(windows)]
+    if let Err(error) = windows_toast::clear_voice(tag) {
+        tracing::debug!(%error, "voice notification not taken away");
+    }
+    #[cfg(not(windows))]
+    let _ = tag;
+}
+
 #[cfg(windows)]
 fn show(
     app: &AppHandle,
@@ -326,6 +364,105 @@ mod windows_toast {
         ))?;
         notifier.Show(&toast)?;
         Ok(true)
+    }
+
+    /// Voice chat's notifications (VOICE) are one group; a ring's tag is its room.
+    const VOICE_GROUP: &str = "voice";
+
+    /// A voice chat notification: a ring (`actions`: "Katıl" and "Reddet", with the looping call
+    /// sound until it is answered or taken away) or a plain one. A button's press comes back
+    /// through `on_action` with its argument (`join`, `decline`), a click on the body with `""`.
+    pub fn show_voice(
+        tag: &str,
+        title: &str,
+        body: Option<&str>,
+        actions: Option<[(&str, &str); 2]>,
+        on_action: Box<dyn Fn(String) + Send + Sync>,
+    ) -> windows::core::Result<bool> {
+        let notifier =
+            ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id()))?;
+        if notifier
+            .Setting()
+            .is_ok_and(|setting| setting != NotificationSetting::Enabled)
+        {
+            return Ok(false);
+        }
+        let xml = XmlDocument::new()?;
+        xml.LoadXml(&HSTRING::from(voice_xml(title, body, actions)))?;
+        let toast = ToastNotification::CreateToastNotification(&xml)?;
+        toast.SetTag(&HSTRING::from(toast_tag(tag)))?;
+        toast.SetGroup(&HSTRING::from(VOICE_GROUP))?;
+        toast.Activated(&TypedEventHandler::<ToastNotification, IInspectable>::new(
+            move |_, args| {
+                let argument = args
+                    .as_ref()
+                    .and_then(|args| {
+                        windows::core::Interface::cast::<
+                            windows::UI::Notifications::ToastActivatedEventArgs,
+                        >(args)
+                        .ok()
+                    })
+                    .and_then(|args| args.Arguments().ok())
+                    .map(|text| text.to_string_lossy())
+                    .unwrap_or_default();
+                on_action(argument);
+                Ok(())
+            },
+        ))?;
+        notifier.Show(&toast)?;
+        Ok(true)
+    }
+
+    /// Takes a voice notification away (a ring that ended).
+    pub fn clear_voice(tag: &str) -> windows::core::Result<()> {
+        ToastNotificationManager::History()?.RemoveGroupedTagWithId(
+            &HSTRING::from(toast_tag(tag)),
+            &HSTRING::from(VOICE_GROUP),
+            &HSTRING::from(app_id()),
+        )
+    }
+
+    fn voice_xml(title: &str, body: Option<&str>, actions: Option<[(&str, &str); 2]>) -> String {
+        let mut xml = String::new();
+        if actions.is_some() {
+            // Stays on screen with the call sound until answered (Windows' incoming call).
+            xml.push_str(r#"<toast scenario="incomingCall" launch="">"#);
+        } else {
+            xml.push_str(r#"<toast launch="">"#);
+        }
+        xml.push_str(r#"<visual><binding template="ToastGeneric"><text>"#);
+        xml.push_str(&escape(&toast_value(title, TITLE_CHARS)));
+        xml.push_str("</text>");
+        if let Some(body) = body {
+            xml.push_str("<text>");
+            xml.push_str(&escape(&toast_value(body, BODY_CHARS)));
+            xml.push_str("</text>");
+        }
+        xml.push_str("</binding></visual>");
+        if let Some(actions) = actions {
+            xml.push_str("<actions>");
+            for (label, argument) in actions {
+                xml.push_str(r#"<action activationType="foreground" content=""#);
+                xml.push_str(&escape(label));
+                xml.push_str(r#"" arguments=""#);
+                xml.push_str(&escape(argument));
+                xml.push_str(r#""/>"#);
+            }
+            xml.push_str("</actions>");
+            xml.push_str(
+                r#"<audio src="ms-winsoundevent:Notification.Looping.Call" loop="true"/>"#,
+            );
+        }
+        xml.push_str("</toast>");
+        xml
+    }
+
+    fn escape(text: &str) -> String {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&apos;")
     }
 
     /// Takes a conversation's notification away from the notification center (CHAT-CALM).
