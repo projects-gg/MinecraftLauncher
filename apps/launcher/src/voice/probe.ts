@@ -3,6 +3,8 @@
 // echo canceller and gain control, a noise suppressor, a speech gate), Opus to a second peer
 // connection in the same page, played like a person in a room. Every few seconds the counters go
 // to the launcher, which records them with the processes' CPU time and memory.
+//
+// Only debug builds load this module (main.ts imports it behind the build's debug flag).
 import {
   GtcrnWorkletNode,
   loadGtcrn,
@@ -14,6 +16,7 @@ import gtcrnWorklet from "@sapphi-red/web-noise-suppressor/gtcrnWorklet.js?url";
 import rnnoiseWasm from "@sapphi-red/web-noise-suppressor/rnnoise.wasm?url";
 import rnnoiseSimdWasm from "@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url";
 import rnnoiseWorklet from "@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url";
+import { emit, listen } from "@tauri-apps/api/event";
 import { PILOT_HZ, PILOT_LEVEL, type PilotCounts } from "./dsp";
 import { tuneOpus } from "./sdp";
 import gateWorklet from "./worklets/gate?worker&url";
@@ -287,5 +290,30 @@ export async function runProbe(go: ProbeGo, report: (report: Report) => void): P
         // Already gone.
       }
     }
+  }
+}
+
+/**
+ * Waits for the launcher's probe (a debug launcher started with PROJECTS_VOICE_PROBE grants this
+ * window events for it). False when events are refused: the product engine runs instead.
+ */
+export async function startProbe(): Promise<boolean> {
+  try {
+    // How long an event takes to reach this page and come back.
+    await listen<number>("voice-probe-ping", (event) => {
+      void emit("voice-probe-pong", event.payload);
+    });
+    const stop = await listen<ProbeGo>("voice-probe-go", (event) => {
+      stop();
+      void runProbe(event.payload, (report) => {
+        void emit("voice-probe-report", report);
+      }).finally(() => {
+        void emit("voice-probe-done");
+      });
+    });
+    await emit("voice-probe-ready");
+    return true;
+  } catch {
+    return false;
   }
 }
