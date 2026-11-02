@@ -45,3 +45,22 @@ test("notes.mjs stops on malformed notes", async () => {
   );
   await assert.rejects(run(process.execPath, [script]), (error) => error.code === 2);
 });
+
+test("notes.mjs --require stops when a language is missing", async () => {
+  const english = notesFile("en.md", "--- en ---\n\nNew screen\n");
+  const env = { ...process.env, GITHUB_ACTIONS: "true" };
+  await assert.rejects(
+    run(process.execPath, [script, english, "--require", "tr"], { env }),
+    (error) =>
+      error.code === 1 &&
+      /the tr notes are missing/.test(error.stderr) &&
+      /^::error title=release\/notes::release notes: the tr notes are missing$/m.test(error.stdout),
+  );
+  const both = notesFile("both-required.md", "Yeni ekran\n\n--- en ---\n\nNew screen\n");
+  const { stdout } = await run(process.execPath, [script, both, "--require", "tr"]);
+  assert.equal(stdout, "notes: tr 10 characters, en 10 characters\n");
+  await assert.rejects(
+    run(process.execPath, [script, both, "--require", "de"]),
+    (error) => error.code === 2,
+  );
+});
