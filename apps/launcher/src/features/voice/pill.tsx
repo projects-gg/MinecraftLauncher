@@ -1,6 +1,8 @@
 // The room in the title bar (VOICE-L3; voice.md §5.1), left of the friends pill, only while the
-// player is in a room or calling: up to three faces with their speaking rings, the room's name, and
-// "Mikrofon" and "Ayrıl" as round buttons inside the pill (round inside round). A click on the faces
+// player is in a room or calling: up to three faces with their speaking rings (and, on a face, what
+// that person turned off), the room's name, and "Mikrofon" and "Ayrıl" as round buttons inside the
+// pill (round inside round), the headphones off before them while the player is deafened
+// (VOICE-KEYS). A click on the faces
 // or the name opens the room panel. While the player's call rings it says "Aranıyor…" with "İptal";
 // a call nobody took stays a moment as "Cevap yok" with "Tekrar ara", a connection that did not
 // come back as "Bağlanamadı" with "Tekrar dene" (8 s, held while the pointer or the focus is on it).
@@ -19,9 +21,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enter, leave, swap } from "@/features/social/motion";
-import { callFriend, leaveRoom, retryRoom, toggleMute } from "./actions";
+import { callFriend, leaveRoom, retryRoom, toggleDeaf, toggleMute } from "./actions";
 import { QualityBars, SpeakingFace } from "./faces";
-import { pillPeople, roomTitle } from "./rules";
+import { HeadphonesSlash } from "./icons";
+import { faceMark, pillPeople, roomTitle } from "./rules";
 import { useFace, useFaces, useVoiceUi, voiceOn } from "./store";
 
 /** How long the pill keeps an ended stay ("Cevap yok", "Bağlanamadı"). */
@@ -213,7 +216,19 @@ function Pill() {
               speaking={false}
             />
           ) : faces.length ? (
-            faces.map((face) => <SpeakingFace key={face.id} face={face} size={20} round />)
+            faces.map((face) => {
+              // What they turned off, on their face (nothing while both are on).
+              const person = people.find((p) => p.id === face.id);
+              return (
+                <SpeakingFace
+                  key={face.id}
+                  face={face}
+                  size={20}
+                  round
+                  mark={person ? faceMark(person) : null}
+                />
+              );
+            })
           ) : (
             // Alone in the room: the feature's mark, no stand-in face.
             <span className="flex size-5 items-center justify-center rounded-full bg-white/8">
@@ -266,6 +281,27 @@ function Pill() {
           <WordButton onClick={() => void retryRoom()}>{t("voice.room.retry")}</WordButton>
         ) : me ? (
           <>
+            {/* Deafened, both are off and both say so (Discord's way): the headphones undeafen, the
+                microphone comes back as it was. */}
+            <AnimatePresence initial={false}>
+              {me.deaf ? (
+                <motion.span
+                  key="deaf"
+                  className="flex"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: enter(0.18) }}
+                  exit={{ opacity: 0, transition: leave(0.12) }}
+                >
+                  <RoundButton
+                    label={t("voice.room.deafenOff")}
+                    tone="off"
+                    onClick={() => void toggleDeaf()}
+                  >
+                    <HeadphonesSlash size={15} />
+                  </RoundButton>
+                </motion.span>
+              ) : null}
+            </AnimatePresence>
             <RoundButton
               label={micLabel}
               tone={micOff ? "off" : "quiet"}

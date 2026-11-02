@@ -727,7 +727,12 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                     if event.id.as_ref() == "voice-leave" {
                         state.voice.leave();
                     } else {
-                        let muted = state.voice.state().room.is_some_and(|room| room.me.mute);
+                        // Deafened counts as off: "Mikrofonu aç" opens it and ends deafness.
+                        let muted = state
+                            .voice
+                            .state()
+                            .room
+                            .is_some_and(|room| room.me.mute || room.me.deaf);
                         state.voice.set_mute(!muted);
                     }
                 }

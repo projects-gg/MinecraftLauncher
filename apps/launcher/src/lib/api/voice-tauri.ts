@@ -109,6 +109,19 @@ export const tauriVoice: VoiceApi = {
   settings: async () => asSettings(await ok(commands.voiceSettings())),
   saveSettings: async (settings) => asSettings(await ok(commands.voiceSaveSettings(settings))),
   checkKey: (key, shortcut) => ok(commands.voiceCheckKey({ key, shortcut })),
+  discordOffer: async () => {
+    const offer = await ok(commands.voiceDiscordOffer());
+    return offer
+      ? {
+          pushToTalk: asKey(offer.pushToTalk ?? null),
+          mute: asKey(offer.mute ?? null),
+          deafen: asKey(offer.deafen ?? null),
+          pushToTalkMode: offer.pushToTalkMode,
+          skipped: offer.skipped,
+        }
+      : null;
+  },
+  discordAnswer: async (copy) => asSettings(await ok(commands.voiceDiscordAnswer(copy))),
   testMic: (on) => done(commands.voiceSelfTest(on)),
   settingsOpen: (open) => done(commands.voiceSetup(open)),
   openMicSettings: () => done(commands.voiceOpenMicSettings()),

@@ -103,10 +103,21 @@ describe("the preview's voice chat", () => {
     expect(mock.current().room?.people.map((p) => p.id)).toEqual(["301", "909", "303"]);
   });
 
-  it("deafening closes the microphone; a rename keeps 3 to 24 characters", async () => {
+  it("deafening keeps the microphone's choice for after; a rename keeps 3 to 24 characters", async () => {
     const mock = createVoiceMock({ scenario: "room", timers: false });
+    // The microphone is off with deafness (the pages read `mute || deaf`), and comes back as it was.
     await mock.setDeaf(true);
-    expect(mock.current().room?.me).toMatchObject({ deaf: true, mute: true });
+    expect(mock.current().room?.me).toMatchObject({ deaf: true, mute: false });
+    await mock.setDeaf(false);
+    expect(mock.current().room?.me).toMatchObject({ deaf: false, mute: false });
+    await mock.setMute(true);
+    await mock.setDeaf(true);
+    await mock.setDeaf(false);
+    expect(mock.current().room?.me).toMatchObject({ deaf: false, mute: true });
+    // Opening the microphone ends deafness too.
+    await mock.setDeaf(true);
+    await mock.setMute(false);
+    expect(mock.current().room?.me).toMatchObject({ deaf: false, mute: false });
     expect((await mock.moderate({ act: "rename", name: "ab" })).refused).toBe("invalidName");
     expect((await mock.moderate({ act: "rename", name: "Gece Ekibi" })).refused).toBeNull();
     expect(mock.current().room?.name).toBe("Gece Ekibi");
@@ -122,5 +133,36 @@ describe("the preview's voice chat", () => {
     expect((await check("AltLeft")).clash).toBe("languageSwitch");
     expect((await check("KeyB")).clash).toBeNull();
     expect((await check("Escape")).usable).toBe(false);
+  });
+
+  it("warns about a typing key for mute and deafen, never with Ctrl, and keeps combinations apart", async () => {
+    const mock = createVoiceMock({ timers: false, keys: "combo" });
+    const key = (code: string, mods?: ("ctrl" | "shift" | "alt")[]) => ({
+      kind: "keyboard" as const,
+      code,
+      label: code.slice(3),
+      mods,
+    });
+    // "combo": mute is Ctrl + Shift + M, deafen N alone.
+    expect((await mock.checkKey(key("KeyB"), "deafen")).clash).toBe("typing");
+    expect((await mock.checkKey(key("KeyB", ["shift"]), "deafen")).clash).toBe("typing");
+    expect((await mock.checkKey(key("KeyB", ["ctrl"]), "deafen")).clash).toBeNull();
+    expect((await mock.checkKey(key("KeyB"), "pushToTalk")).clash).toBeNull();
+    expect((await mock.checkKey(key("KeyM", ["ctrl", "shift"]), "deafen")).clash).toBe("taken");
+    expect((await mock.checkKey(key("KeyM", ["ctrl"]), "deafen")).clash).toBeNull();
+    expect((await mock.checkKey(key("KeyM", ["ctrl"]), "pushToTalk")).usable).toBe(false);
+  });
+
+  it("offers Discord's keys once and copies them", async () => {
+    const mock = createVoiceMock({ timers: false, discord: "1" });
+    const offer = await mock.discordOffer();
+    expect(offer?.mute).toMatchObject({ code: "KeyM", mods: ["ctrl", "shift"] });
+    const kept = await mock.discordAnswer(true);
+    expect(kept).toMatchObject({
+      mode: "pushToTalk",
+      pushToTalkKey: { kind: "mouse", button: "back" },
+      deafenKey: { code: "NumpadMultiply" },
+    });
+    expect(await mock.discordOffer()).toBeNull();
   });
 });

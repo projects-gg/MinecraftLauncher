@@ -91,6 +91,21 @@ describe("the voice pill", () => {
     expect(screen.getByRole("button", { name: "Mikrofonu aç" })).toBeTruthy();
   });
 
+  it("shows deafened as both off, and the headphones undeafen (VOICE-KEYS)", async () => {
+    const deaf = vi.spyOn(voiceApi, "setDeaf").mockResolvedValue();
+    show(scenario("deaf"));
+    // The microphone is off with it.
+    expect(screen.getByRole("button", { name: "Mikrofonu aç" })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sağırlaştırmayı kaldır" }));
+    });
+    expect(deaf).toHaveBeenCalledWith(false);
+    cleanup();
+    // Hearing: no headphones sign at all.
+    show(scenario("room"));
+    expect(screen.queryByRole("button", { name: "Sağırlaştırmayı kaldır" })).toBeNull();
+  });
+
   it("holds the microphone while a moderator's mute runs", () => {
     const mute = vi.spyOn(voiceApi, "setMute").mockResolvedValue();
     show(scenario("modMuted"));

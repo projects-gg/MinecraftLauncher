@@ -350,6 +350,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::voice::voice_settings,
             commands::voice::voice_save_settings,
             commands::voice::voice_check_key,
+            commands::voice::voice_discord_offer,
+            commands::voice::voice_discord_answer,
             commands::voice::voice_setup,
             commands::voice::voice_self_test,
             commands::voice::voice_open_mic_settings,

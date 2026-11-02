@@ -666,12 +666,47 @@ fn mute_and_deafen() {
 }
 
 #[test]
+fn the_shortcuts_deafen_and_undeafen_as_discord_does() {
+    let mut machine = ready();
+    live_call(&mut machine, vec![person("me", 1)]);
+    let press = |machine: &mut Machine, shortcut| {
+        machine.key(KeyChange {
+            shortcut,
+            down: true,
+        })
+    };
+    let me = |machine: &Machine| machine.view(0, UNIX).room.unwrap().me;
+    // Deafened, the gate closes with a tick; the microphone choice itself is kept.
+    let effects = press(&mut machine, VoiceShortcut::Deafen);
+    assert!(engine(&effects).contains(&&talk(false, false)));
+    assert!(engine(&effects).contains(&&EngineCommand::Sound {
+        sound: EngineSound::Tick
+    }));
+    assert!(me(&machine).deaf && !me(&machine).mute);
+    // Undeafened, the microphone is back as it was before (open).
+    let effects = press(&mut machine, VoiceShortcut::Deafen);
+    assert!(engine(&effects).contains(&&talk(true, false)));
+    // Muted first, deafened, undeafened: still muted.
+    press(&mut machine, VoiceShortcut::Mute);
+    press(&mut machine, VoiceShortcut::Deafen);
+    let effects = press(&mut machine, VoiceShortcut::Deafen);
+    assert!(engine(&effects).contains(&&talk(false, false)));
+    assert!(me(&machine).mute && !me(&machine).deaf);
+    // While deafened, the mute key opens the microphone and ends deafness at once (it shows as
+    // off, so one press must turn it on).
+    press(&mut machine, VoiceShortcut::Mute);
+    press(&mut machine, VoiceShortcut::Deafen);
+    assert!(me(&machine).deaf && !me(&machine).mute);
+    let effects = press(&mut machine, VoiceShortcut::Mute);
+    assert!(engine(&effects).contains(&&EngineCommand::Deaf { on: false }));
+    assert!(engine(&effects).contains(&&talk(true, false)));
+    assert!(!me(&machine).deaf && !me(&machine).mute);
+}
+
+#[test]
 fn input_is_registered_only_in_a_room_with_a_shortcut() {
     let mut machine = ready();
-    let ptt = VoiceKey::Keyboard {
-        code: "KeyB".into(),
-        label: "B".into(),
-    };
+    let ptt = VoiceKey::keyboard("KeyB", "B");
     let (_, effects) = machine.save_settings(
         VoiceSettings {
             mode: VoiceTalkMode::PushToTalk,
@@ -725,9 +760,7 @@ fn input_is_registered_only_in_a_room_with_a_shortcut() {
     let (_, effects) = machine.save_settings(VoiceSettings::default(), 3);
     assert!(effects.contains(&Effect::Input(None)));
     // A mute shortcut mid-call: watched again.
-    let mute = VoiceKey::Mouse {
-        button: crate::settings::VoiceMouseButton::Back,
-    };
+    let mute = VoiceKey::mouse(crate::settings::VoiceMouseButton::Back);
     let (_, effects) = machine.save_settings(
         VoiceSettings {
             mute_key: Some(mute.clone()),

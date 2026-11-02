@@ -5,17 +5,22 @@ import type { Friend, SocialTeam, TeamMember } from "@/lib/api/social-types";
 import type { VoicePerson, VoiceRoomView, VoiceState } from "@/lib/api/voice-types";
 import { HIDDEN_VOICE_STATE } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
+import { skippedLine } from "./discord-offer";
 import {
   callOffer,
   clashText,
   codeLabel,
   crewRoomName,
+  faceMark,
   faceOf,
+  heldModifiers,
   invitables,
   keyFromEvent,
   keyFromMouse,
   keyLabel,
+  keyParts,
   leftText,
+  modifierOf,
   namesLine,
   peopleChanges,
   presenceOf,
@@ -24,6 +29,7 @@ import {
   roomTitle,
   snapVolume,
   toneNow,
+  voiceMark,
 } from "./rules";
 
 const t = i18n.getFixedT("tr") as TFunction;
@@ -355,6 +361,89 @@ describe("shortcut keys", () => {
       "Bu tuşu oyundaki sesli sohbet de kullanıyor.",
     );
     expect(clashText({ usable: false, clash: null }, t)).toBe("Bu tuş seçilemez.");
+    expect(clashText({ usable: true, clash: "typing" }, t)).toBe(
+      "Yazı yazarken de çalışır. Ctrl ile birlikte seçebilirsin.",
+    );
+    // What it would do while typing, by shortcut.
+    expect(clashText({ usable: true, clash: "typing" }, t, "deafen")).toBe(
+      "Yazı yazarken de seni sağırlaştırır. Ctrl ile birlikte seçebilirsin.",
+    );
+    expect(clashText({ usable: true, clash: "typing" }, t, "mute")).toBe(
+      "Yazı yazarken de mikrofonunu kapatıp açar. Ctrl ile birlikte seçebilirsin.",
+    );
+  });
+
+  it("writes a combination's caps modifiers first", () => {
+    const combo = {
+      kind: "keyboard" as const,
+      code: "KeyM",
+      label: "M",
+      mods: ["shift", "ctrl"] as ("ctrl" | "shift" | "alt")[],
+    };
+    expect(keyParts(combo, t)).toEqual(["Ctrl", "Shift", "M"]);
+    expect(keyLabel(combo, t)).toBe("Ctrl + Shift + M");
+    expect(keyLabel({ kind: "mouse", button: "forward", mods: ["alt"] }, t)).toBe("Alt + Fare 5");
+    expect(keyLabel({ kind: "keyboard", code: "ControlRight", label: "Control" }, t)).toBe(
+      "Sağ Ctrl",
+    );
+    // The number pad says so.
+    expect(keyLabel({ kind: "keyboard", code: "NumpadMultiply", label: "*" }, t)).toBe("Num *");
+    expect(keyLabel({ kind: "keyboard", code: "Numpad1", label: "1" }, t)).toBe("Num 1");
+  });
+
+  it("records what is held, AltGr not as Ctrl and Alt", () => {
+    const held = (ctrl: boolean, shift: boolean, alt: boolean, altGr = false) =>
+      heldModifiers({
+        ctrlKey: ctrl,
+        shiftKey: shift,
+        altKey: alt,
+        getModifierState: (key: string) => key === "AltGraph" && altGr,
+      });
+    expect(held(true, true, false)).toEqual(["ctrl", "shift"]);
+    expect(held(true, false, true, true)).toEqual([]);
+    expect(held(true, true, true, true)).toEqual(["shift"]);
+    expect(modifierOf("ShiftRight")).toBe("shift");
+    expect(modifierOf("KeyM")).toBeNull();
+  });
+
+  it("names a combination's key from the layout, whatever Shift or AltGr typed", () => {
+    const layout = new Map([
+      ["Digit1", "1"],
+      ["Quote", "i"],
+    ]);
+    // Shift + 1 typed "!": the cap still says 1.
+    expect(keyFromEvent({ code: "Digit1", key: "!" }, "tr", ["ctrl", "shift"], layout)).toEqual({
+      kind: "keyboard",
+      code: "Digit1",
+      label: "1",
+      mods: ["ctrl", "shift"],
+    });
+    // Without the layout, Shift's symbol never names a digit; a letter is upper-cased.
+    expect(keyFromEvent({ code: "Digit1", key: "!" }, "tr", ["shift"])).toMatchObject({
+      label: "1",
+    });
+    expect(keyFromEvent({ code: "KeyM", key: "m" }, "tr", ["ctrl"])).toMatchObject({ label: "M" });
+    expect(keyFromEvent({ code: "Quote", key: "i" }, "tr", [], layout)).toMatchObject({
+      label: "İ",
+    });
+    expect(keyFromMouse(3, ["ctrl"])).toEqual({ kind: "mouse", button: "back", mods: ["ctrl"] });
+  });
+
+  it("marks what someone turned off: deafened alone, nothing while both are on", () => {
+    expect(voiceMark({ mute: false, deaf: false })).toBeNull();
+    expect(voiceMark({ mute: true, deaf: false })).toBe("mute");
+    expect(voiceMark({ mute: true, deaf: true })).toBe("deaf");
+    expect(voiceMark({ mute: false, deaf: true })).toBe("deaf");
+    expect(faceMark({ mute: false, deaf: true, mutedByModerator: true })).toBe("moderator");
+    expect(faceMark({ mute: false, deaf: false, mutedByModerator: false })).toBeNull();
+  });
+
+  it("names Discord's keys that cannot be copied in one line", () => {
+    expect(skippedLine([], t)).toBeNull();
+    expect(skippedLine(["deafen"], t)).toBe("Discord'daki Sağırlaştır tuşu burada çalışmaz.");
+    expect(skippedLine(["pushToTalk", "deafen"], t)).toBe(
+      "Discord'daki Bas-konuş ve Sağırlaştır tuşları burada çalışmaz.",
+    );
   });
 });
 

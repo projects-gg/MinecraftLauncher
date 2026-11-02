@@ -2,9 +2,11 @@
 //! Raw Input reports a key by its scan code; [`scan_code`] joins them, so a key picked on the
 //! settings page is the same physical key in the game whatever the keyboard's layout. [`check`]
 //! tells the key picker's single line: Simple Voice Chat's keys, the overlay's and the pack's mod
-//! keys, the game's own keys, and Left Alt (Alt+Shift switches the keyboard's language).
+//! keys, the game's own keys, Left Alt (Alt+Shift switches the keyboard's language), and a mute or
+//! deafen key that also fires while the player types (VOICE-KEYS). Mute and deafen may hold Ctrl,
+//! Shift or Alt with their key ("Ctrl + Shift + M"); push-to-talk is one key or mouse button.
 
-use crate::settings::{VoiceKey, VoiceMouseButton, VoiceSettings};
+use crate::settings::{VoiceKey, VoiceModifier, VoiceMouseButton, VoiceSettings};
 use crate::view::{VoiceKeyCheck, VoiceKeyClash, VoiceShortcut};
 
 /// Raw Input's flag for an extended (`E0`) scan code (`RI_KEY_E0`).
@@ -142,11 +144,176 @@ pub fn scan_code(code: &str) -> Option<ScanCode> {
     }
 }
 
-/// Whether a shortcut can use `key` (a keyboard key [`scan_code`] knows, or a mouse button).
-pub fn usable(key: &VoiceKey) -> bool {
+/// The page's name of a key by its scan code (the reverse of [`scan_code`]).
+pub fn code_of(scan: ScanCode) -> Option<String> {
+    let ScanCode { make, extended } = scan;
+    if !extended {
+        match make {
+            0x02..=0x0A => return Some(format!("Digit{}", make - 1)),
+            0x0B => return Some("Digit0".to_owned()),
+            0x3B..=0x44 => return Some(format!("F{}", make - 0x3A)),
+            0x57 => return Some("F11".to_owned()),
+            0x58 => return Some("F12".to_owned()),
+            0x64..=0x6E => return Some(format!("F{}", make - 0x64 + 13)),
+            0x76 => return Some("F24".to_owned()),
+            _ => {}
+        }
+    }
+    NAMED
+        .iter()
+        .find(|name| scan_code(name) == Some(scan))
+        .map(|name| (*name).to_owned())
+}
+
+/// Every key [`scan_code`] knows by name (digits and F keys are counted, not listed).
+const NAMED: &[&str] = &[
+    "Escape",
+    "Minus",
+    "Equal",
+    "Backspace",
+    "Tab",
+    "KeyQ",
+    "KeyW",
+    "KeyE",
+    "KeyR",
+    "KeyT",
+    "KeyY",
+    "KeyU",
+    "KeyI",
+    "KeyO",
+    "KeyP",
+    "BracketLeft",
+    "BracketRight",
+    "Enter",
+    "ControlLeft",
+    "KeyA",
+    "KeyS",
+    "KeyD",
+    "KeyF",
+    "KeyG",
+    "KeyH",
+    "KeyJ",
+    "KeyK",
+    "KeyL",
+    "Semicolon",
+    "Quote",
+    "Backquote",
+    "ShiftLeft",
+    "Backslash",
+    "KeyZ",
+    "KeyX",
+    "KeyC",
+    "KeyV",
+    "KeyB",
+    "KeyN",
+    "KeyM",
+    "Comma",
+    "Period",
+    "Slash",
+    "ShiftRight",
+    "NumpadMultiply",
+    "AltLeft",
+    "Space",
+    "CapsLock",
+    "NumLock",
+    "ScrollLock",
+    "Numpad7",
+    "Numpad8",
+    "Numpad9",
+    "NumpadSubtract",
+    "Numpad4",
+    "Numpad5",
+    "Numpad6",
+    "NumpadAdd",
+    "Numpad1",
+    "Numpad2",
+    "Numpad3",
+    "Numpad0",
+    "NumpadDecimal",
+    "IntlBackslash",
+    "IntlRo",
+    "IntlYen",
+    "NumpadEnter",
+    "ControlRight",
+    "NumpadDivide",
+    "AltRight",
+    "Home",
+    "ArrowUp",
+    "PageUp",
+    "ArrowLeft",
+    "ArrowRight",
+    "End",
+    "ArrowDown",
+    "PageDown",
+    "Insert",
+    "Delete",
+    "ContextMenu",
+];
+
+/// Ctrl, Shift and Alt themselves: a single key may be one, a combination's key may not.
+pub fn is_modifier(code: &str) -> bool {
+    matches!(
+        code,
+        "ControlLeft" | "ControlRight" | "ShiftLeft" | "ShiftRight" | "AltLeft" | "AltRight"
+    )
+}
+
+/// Combinations Windows acts on whatever else hears them: Alt+Tab, Alt+F4 (closes the game),
+/// Alt+Space, Alt+Esc, Ctrl+Esc, Ctrl+Shift+Esc and Ctrl+Alt+Delete.
+fn windows_takes(code: &str, mods: &[VoiceModifier]) -> bool {
+    let has = |m| mods.contains(&m);
+    match code {
+        "Tab" | "F4" | "Space" => has(VoiceModifier::Alt),
+        "Escape" => has(VoiceModifier::Alt) || has(VoiceModifier::Ctrl),
+        "Delete" => has(VoiceModifier::Ctrl) && has(VoiceModifier::Alt),
+        _ => false,
+    }
+}
+
+/// Keys that write something while the player types: letters, digits, punctuation, Space, Enter
+/// and Backspace (the number pad is left out: players bind it because it is not typed with).
+fn types(code: &str) -> bool {
+    code.strip_prefix("Key")
+        .is_some_and(|letter| letter.len() == 1)
+        || code
+            .strip_prefix("Digit")
+            .is_some_and(|digit| digit.len() == 1)
+        || matches!(
+            code,
+            "Space"
+                | "Enter"
+                | "Backspace"
+                | "Minus"
+                | "Equal"
+                | "BracketLeft"
+                | "BracketRight"
+                | "Semicolon"
+                | "Quote"
+                | "Backquote"
+                | "Backslash"
+                | "Comma"
+                | "Period"
+                | "Slash"
+                | "IntlBackslash"
+                | "IntlRo"
+                | "IntlYen"
+        )
+}
+
+/// Whether `shortcut` can use `key`: a keyboard key [`scan_code`] knows, or a mouse button. Held
+/// modifiers only for mute and deafen (push-to-talk is one key), never on Ctrl, Shift or Alt
+/// itself, and never a combination Windows keeps for itself.
+pub fn usable(key: &VoiceKey, shortcut: VoiceShortcut) -> bool {
+    let mods = key.mods();
     match key {
-        VoiceKey::Keyboard { code, .. } => scan_code(code).is_some(),
-        VoiceKey::Mouse { .. } => true,
+        VoiceKey::Keyboard { code, .. } => {
+            scan_code(code).is_some()
+                && (mods.is_empty()
+                    || (shortcut != VoiceShortcut::PushToTalk
+                        && !is_modifier(code)
+                        && !windows_takes(code, mods)))
+        }
+        VoiceKey::Mouse { .. } => mods.is_empty() || shortcut != VoiceShortcut::PushToTalk,
     }
 }
 
@@ -190,9 +357,13 @@ const GAME: &[&str] = &[
     "F11",
 ];
 
-/// What `key` would clash with as `shortcut`, next to the other shortcuts in `settings`.
+/// What `key` would clash with as `shortcut`, next to the other shortcuts in `settings`. The game
+/// hears a combination's key whatever is held with it (Ctrl+E still opens the inventory), so the
+/// game's keys clash with modifiers too. One line: another shortcut's key first, then the game's
+/// voice chat, the overlay, the game, Left Alt, and last a mute or deafen key that fires while the
+/// player types (alone or with Shift alone: Shift+M is a capital M).
 pub fn check(key: &VoiceKey, shortcut: VoiceShortcut, settings: &VoiceSettings) -> VoiceKeyCheck {
-    if !usable(key) {
+    if !usable(key, shortcut) {
         return VoiceKeyCheck {
             usable: false,
             clash: None,
@@ -208,7 +379,8 @@ pub fn check(key: &VoiceKey, shortcut: VoiceShortcut, settings: &VoiceSettings) 
     ];
     let taken = others
         .iter()
-        .any(|(which, other)| *which != shortcut && other.is_some_and(|other| other.same_key(key)));
+        .any(|(which, other)| *which != shortcut && other.is_some_and(|other| other.overlaps(key)));
+    let mods = key.mods();
     let clash = if taken {
         Some(VoiceKeyClash::Taken)
     } else {
@@ -223,6 +395,12 @@ pub fn check(key: &VoiceKey, shortcut: VoiceShortcut, settings: &VoiceSettings) 
                     Some(VoiceKeyClash::Game)
                 } else if code == "AltLeft" {
                     Some(VoiceKeyClash::LanguageSwitch)
+                } else if shortcut != VoiceShortcut::PushToTalk
+                    && types(code)
+                    && !mods.contains(&VoiceModifier::Ctrl)
+                    && !mods.contains(&VoiceModifier::Alt)
+                {
+                    Some(VoiceKeyClash::Typing)
                 } else {
                     None
                 }
@@ -230,6 +408,7 @@ pub fn check(key: &VoiceKey, shortcut: VoiceShortcut, settings: &VoiceSettings) 
             // The middle button picks a block in the game.
             VoiceKey::Mouse {
                 button: VoiceMouseButton::Middle,
+                ..
             } => Some(VoiceKeyClash::Game),
             VoiceKey::Mouse { .. } => None,
         }
@@ -245,10 +424,129 @@ mod tests {
     use super::*;
 
     fn keyboard(code: &str) -> VoiceKey {
-        VoiceKey::Keyboard {
-            code: code.into(),
-            label: String::new(),
+        VoiceKey::keyboard(code, "")
+    }
+
+    #[test]
+    fn scan_codes_name_their_keys_back() {
+        for code in NAMED
+            .iter()
+            .copied()
+            .chain(["Digit0", "Digit5", "F1", "F12", "F13", "F24"])
+        {
+            let scan = scan_code(code).unwrap();
+            assert_eq!(code_of(scan).as_deref(), Some(code));
         }
+        assert_eq!(
+            code_of(ScanCode {
+                make: 0x7F,
+                extended: true
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn combinations_are_for_mute_and_deafen() {
+        use VoiceModifier::{Alt, Ctrl, Shift};
+        let ctrl_shift_m = keyboard("KeyM").with_mods(&[Ctrl, Shift]);
+        assert!(usable(&ctrl_shift_m, VoiceShortcut::Mute));
+        assert!(usable(&ctrl_shift_m, VoiceShortcut::Deafen));
+        assert!(!usable(&ctrl_shift_m, VoiceShortcut::PushToTalk));
+        assert!(usable(
+            &VoiceKey::mouse(VoiceMouseButton::Back).with_mods(&[Ctrl]),
+            VoiceShortcut::Mute
+        ));
+        // Not on a modifier itself, nor what Windows keeps.
+        assert!(!usable(
+            &keyboard("ShiftLeft").with_mods(&[Ctrl]),
+            VoiceShortcut::Mute
+        ));
+        for (code, mods) in [
+            ("F4", &[Alt][..]),
+            ("Tab", &[Alt, Shift][..]),
+            ("Escape", &[Ctrl, Shift][..]),
+            ("Delete", &[Ctrl, Alt][..]),
+            ("Space", &[Alt][..]),
+        ] {
+            assert!(
+                !usable(&keyboard(code).with_mods(mods), VoiceShortcut::Deafen),
+                "{code}"
+            );
+        }
+        assert!(usable(
+            &keyboard("F4").with_mods(&[Ctrl]),
+            VoiceShortcut::Deafen
+        ));
+    }
+
+    #[test]
+    fn a_typing_key_warns_unless_ctrl_or_alt_is_held() {
+        use VoiceModifier::{Alt, Ctrl, Shift};
+        let settings = VoiceSettings::default();
+        let clash = |key: VoiceKey, shortcut| check(&key, shortcut, &settings).clash;
+        for code in [
+            "KeyM",
+            "Digit0",
+            "Comma",
+            "Space",
+            "Enter",
+            "Backspace",
+            "Quote",
+        ] {
+            let warned = if GAME.contains(&code) {
+                VoiceKeyClash::Game
+            } else {
+                VoiceKeyClash::Typing
+            };
+            assert_eq!(
+                clash(keyboard(code), VoiceShortcut::Mute),
+                Some(warned),
+                "{code}"
+            );
+        }
+        // Shift alone still types (a capital letter); Ctrl or Alt do not.
+        assert_eq!(
+            clash(keyboard("KeyM").with_mods(&[Shift]), VoiceShortcut::Deafen),
+            Some(VoiceKeyClash::Typing)
+        );
+        assert_eq!(
+            clash(
+                keyboard("KeyM").with_mods(&[Ctrl, Shift]),
+                VoiceShortcut::Mute
+            ),
+            None
+        );
+        assert_eq!(
+            clash(keyboard("KeyM").with_mods(&[Alt]), VoiceShortcut::Mute),
+            None
+        );
+        // Push-to-talk is held while speaking, never toggled: no warning there.
+        assert_eq!(clash(keyboard("KeyM"), VoiceShortcut::PushToTalk), None);
+        // Keys that do not type stay quiet.
+        assert_eq!(clash(keyboard("F8"), VoiceShortcut::Mute), None);
+        assert_eq!(clash(keyboard("Numpad5"), VoiceShortcut::Mute), None);
+        // The game hears a combination's key all the same.
+        assert_eq!(
+            clash(keyboard("KeyE").with_mods(&[Ctrl]), VoiceShortcut::Mute),
+            Some(VoiceKeyClash::Game)
+        );
+    }
+
+    #[test]
+    fn a_combination_is_taken_only_when_it_would_fire_with_another() {
+        use VoiceModifier::{Ctrl, Shift};
+        let settings = VoiceSettings {
+            mute_key: Some(keyboard("KeyM").with_mods(&[Ctrl])),
+            ..VoiceSettings::default()
+        };
+        let clash = |key: VoiceKey| check(&key, VoiceShortcut::Deafen, &settings).clash;
+        assert_eq!(
+            clash(keyboard("KeyM").with_mods(&[Ctrl])),
+            Some(VoiceKeyClash::Taken)
+        );
+        assert_eq!(clash(keyboard("KeyM")), Some(VoiceKeyClash::Taken));
+        assert_eq!(clash(keyboard("KeyM").with_mods(&[Ctrl, Shift])), None);
     }
 
     #[test]
@@ -307,16 +605,12 @@ mod tests {
         assert_eq!(clash("AltLeft"), Some(VoiceKeyClash::LanguageSwitch));
         assert_eq!(clash("KeyB"), None);
         assert_eq!(clash("F8"), None);
-        let middle = VoiceKey::Mouse {
-            button: VoiceMouseButton::Middle,
-        };
+        let middle = VoiceKey::mouse(VoiceMouseButton::Middle);
         assert_eq!(
             check(&middle, ptt, &settings).clash,
             Some(VoiceKeyClash::Game)
         );
-        let back = VoiceKey::Mouse {
-            button: VoiceMouseButton::Back,
-        };
+        let back = VoiceKey::mouse(VoiceMouseButton::Back);
         assert_eq!(
             check(&back, ptt, &settings),
             VoiceKeyCheck {
@@ -330,16 +624,16 @@ mod tests {
     #[test]
     fn another_shortcuts_key_is_taken() {
         let settings = VoiceSettings {
-            mute_key: Some(keyboard("KeyB")),
+            mute_key: Some(keyboard("F8")),
             ..VoiceSettings::default()
         };
         assert_eq!(
-            check(&keyboard("KeyB"), VoiceShortcut::PushToTalk, &settings).clash,
+            check(&keyboard("F8"), VoiceShortcut::PushToTalk, &settings).clash,
             Some(VoiceKeyClash::Taken)
         );
         // Its own key is not taken.
         assert_eq!(
-            check(&keyboard("KeyB"), VoiceShortcut::Mute, &settings).clash,
+            check(&keyboard("F8"), VoiceShortcut::Mute, &settings).clash,
             None
         );
     }

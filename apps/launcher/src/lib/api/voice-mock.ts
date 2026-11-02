@@ -19,6 +19,8 @@
 // - `speaking=<ids>|none`: who speaks (the scenario's own otherwise); `talking=1`: the player too.
 // - `call=answer|noAnswer|<refusal>`: what "Ara" gets (answered after 2.5 s by default).
 // - `join=ok|<refusal>`: what "Katıl" gets.
+// - `voiceKeys=combo`: shortcuts already set (VOICE-KEYS); `discord=1|skip`: Discord's keys to
+//   offer once (VOICE-KEYS).
 import {
   DEFAULT_VOICE_SETTINGS,
   HIDDEN_VOICE_STATE,
@@ -26,6 +28,7 @@ import {
   type VoiceAnswer,
   type VoiceApi,
   type VoiceCrewRooms,
+  type VoiceDiscordOffer,
   type VoiceKey,
   type VoiceKeyCheck,
   type VoiceLevel,
@@ -137,7 +140,7 @@ function friendRoom(extra: Partial<VoiceRoomView> = {}): VoiceRoomView {
     people: [
       person("301", { joinedAt: start + 10, speaking: true }),
       person("303", { joinedAt: start + 40, mute: true, role: "moderator" }),
-      person("909", { joinedAt: start + 300, volume: 140 }),
+      person("909", { joinedAt: start + 300, volume: 140, deaf: true }),
     ],
     ringing: [{ to: "305", until: nowSec() + 24 }],
     canRename: true,
@@ -300,7 +303,7 @@ function stateFor(scenario: string): VoiceState {
     case "muted":
       return { ...base, room: withMe(friendRoom(), { mute: true }) };
     case "deaf":
-      return { ...base, room: withMe(friendRoom(), { mute: true, deaf: true }) };
+      return { ...base, room: withMe(friendRoom(), { deaf: true }) };
     default:
       return base;
   }
@@ -341,22 +344,54 @@ const GAME_KEYS = new Set([
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `Digit${n}`),
 ]);
 const OVERLAY_KEYS = new Set(["F6", "F7", "F9", "KeyC", "KeyX"]);
+/** Keys that write while the player types (pl_voice::keys `types`). */
+const TYPING_KEYS =
+  /^(Key[A-Z]|Digit\d|Space|Enter|Backspace|Minus|Equal|Bracket(Left|Right)|Semicolon|Quote|Backquote|Backslash|Comma|Period|Slash|Intl(Backslash|Ro|Yen))$/;
+const MODIFIER_KEYS = /^(Control|Shift|Alt)(Left|Right)$/;
 
-function clashOf(key: VoiceKey, others: Array<VoiceKey | null>): VoiceKeyCheck {
-  const same = (a: VoiceKey, b: VoiceKey) =>
-    a.kind === "keyboard" && b.kind === "keyboard"
+/** As the launcher's `pl_voice::keys::check` (in short). */
+function clashOf(
+  key: VoiceKey,
+  shortcut: VoiceShortcut,
+  others: Array<VoiceKey | null>,
+): VoiceKeyCheck {
+  const mods = key.mods ?? [];
+  const sameMods = (a: VoiceKey, b: VoiceKey) =>
+    (a.mods ?? []).slice().sort().join() === (b.mods ?? []).slice().sort().join();
+  const overlaps = (a: VoiceKey, b: VoiceKey) =>
+    (a.kind === "keyboard" && b.kind === "keyboard"
       ? a.code === b.code
-      : a.kind === "mouse" && b.kind === "mouse" && a.button === b.button;
-  if (others.some((other) => other && same(other, key))) return { usable: true, clash: "taken" };
-  if (key.kind === "mouse") return { usable: true, clash: null };
-  const { code } = key;
-  if (code === "Escape" || code === "MetaLeft" || code === "MetaRight") {
-    return { usable: false, clash: null };
+      : a.kind === "mouse" && b.kind === "mouse" && a.button === b.button) &&
+    (!a.mods?.length || !b.mods?.length || sameMods(a, b));
+  if (mods.length && shortcut === "pushToTalk") return { usable: false, clash: null };
+  if (key.kind === "keyboard") {
+    const { code } = key;
+    if (code === "Escape" || code === "MetaLeft" || code === "MetaRight") {
+      return { usable: false, clash: null };
+    }
+    if (mods.length && MODIFIER_KEYS.test(code)) return { usable: false, clash: null };
+    if (mods.includes("alt") && (code === "F4" || code === "Tab" || code === "Space")) {
+      return { usable: false, clash: null };
+    }
   }
+  if (others.some((other) => other && overlaps(other, key)))
+    return { usable: true, clash: "taken" };
+  if (key.kind === "mouse") {
+    return { usable: true, clash: key.button === "middle" ? "game" : null };
+  }
+  const { code } = key;
   if (code === "CapsLock" || code === "KeyV") return { usable: true, clash: "gameVoiceChat" };
   if (OVERLAY_KEYS.has(code)) return { usable: true, clash: "overlay" };
   if (GAME_KEYS.has(code)) return { usable: true, clash: "game" };
   if (code === "AltLeft") return { usable: true, clash: "languageSwitch" };
+  if (
+    shortcut !== "pushToTalk" &&
+    TYPING_KEYS.test(code) &&
+    !mods.includes("ctrl") &&
+    !mods.includes("alt")
+  ) {
+    return { usable: true, clash: "typing" };
+  }
   return { usable: true, clash: null };
 }
 
@@ -371,6 +406,35 @@ export interface VoiceMockOptions {
   join?: string | null;
   /** Timed changes (an answered call, a noAnswer, an invite that joins); off in most tests. */
   timers?: boolean;
+  /** Shortcuts already set (`voiceKeys=combo`: push-to-talk on Fare 4, "Ctrl + Shift + M" to
+   * mute, N alone to deafen, which brings the typing line). */
+  keys?: string | null;
+  /** Discord's keys on this computer (`discord=1`: push-to-talk on Fare 4 with Discord in
+   * push-to-talk, "Ctrl + Shift + M", "Num *"; `discord=skip`: its deafen is a gamepad button). */
+  discord?: string | null;
+}
+
+/** What a `discord=` preview's Discord has. */
+function discordFor(preset: string | null | undefined): VoiceDiscordOffer | null {
+  if (preset !== "1" && preset !== "skip") return null;
+  return {
+    pushToTalk: { kind: "mouse", button: "back" },
+    mute: { kind: "keyboard", code: "KeyM", label: "M", mods: ["ctrl", "shift"] },
+    deafen: preset === "skip" ? null : { kind: "keyboard", code: "NumpadMultiply", label: "*" },
+    pushToTalkMode: true,
+    skipped: preset === "skip" ? ["deafen"] : [],
+  };
+}
+
+/** The settings a `voiceKeys=` preview starts with. */
+function keysFor(preset: string | null | undefined): Partial<VoiceSettings> {
+  if (preset !== "combo") return {};
+  return {
+    mode: "pushToTalk",
+    pushToTalkKey: { kind: "mouse", button: "back" },
+    muteKey: { kind: "keyboard", code: "KeyM", label: "M", mods: ["ctrl", "shift"] },
+    deafenKey: { kind: "keyboard", code: "KeyN", label: "N" },
+  };
 }
 
 export interface VoiceMock extends VoiceApi {
@@ -384,7 +448,13 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
   const scenario = options.scenario ?? "ready";
   const timers = options.timers ?? true;
   let state = stateFor(scenario);
-  let settings: VoiceSettings = { ...DEFAULT_VOICE_SETTINGS, enabled: state.enabled };
+  let settings: VoiceSettings = {
+    ...DEFAULT_VOICE_SETTINGS,
+    enabled: state.enabled,
+    ...keysFor(options.keys),
+  };
+  /** Discord's keys until the player answers (then never again, as the launcher keeps it). */
+  let discord = discordFor(options.discord);
   const stateListeners = new Set<(s: VoiceState) => void>();
   const speakingListeners = new Set<(s: VoiceSpeaking) => void>();
   const noticeListeners = new Set<(n: VoiceNotice) => void>();
@@ -608,11 +678,9 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
       }));
     },
     async setDeaf(deaf) {
-      // Deafening closes the microphone too; undeafening leaves it as it was before.
-      updateRoom((room) => ({
-        ...room,
-        me: { ...room.me, deaf, mute: deaf ? true : room.me.mute },
-      }));
+      // Deafening closes the microphone too (the gate, not the choice): undeafening leaves it as
+      // it was before (the launcher's rule, VOICE-L1).
+      updateRoom((room) => ({ ...room, me: { ...room.me, deaf } }));
     },
     async invite(friend) {
       const room = state.room;
@@ -710,7 +778,24 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
         shortcut === "mute" ? null : settings.muteKey,
         shortcut === "deafen" ? null : settings.deafenKey,
       ];
-      return clashOf(key, others);
+      return clashOf(key, shortcut, others);
+    },
+    async discordOffer() {
+      return discord;
+    },
+    async discordAnswer(copy) {
+      const offer = discord;
+      discord = null;
+      if (copy && offer) {
+        settings = {
+          ...settings,
+          ...(offer.pushToTalk ? { pushToTalkKey: offer.pushToTalk } : {}),
+          ...(offer.pushToTalk && offer.pushToTalkMode ? { mode: "pushToTalk" as const } : {}),
+          ...(offer.mute ? { muteKey: offer.mute } : {}),
+          ...(offer.deafen ? { deafenKey: offer.deafen } : {}),
+        };
+      }
+      return settings;
     },
     async testMic(on) {
       clearInterval(levelTimer);
@@ -753,4 +838,6 @@ export const mockVoice: VoiceMock = createVoiceMock({
   talking: param("talking") === "1",
   call: param("call"),
   join: param("join"),
+  keys: param("voiceKeys"),
+  discord: param("discord"),
 });

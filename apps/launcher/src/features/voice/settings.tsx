@@ -1,13 +1,25 @@
 // Ayarlar → Sesli sohbet (VOICE-L3; voice.md §5.2): the one switch first ("Kapalıyken kimse seni
 // arayamaz."), then what most players touch: the microphone and its test (a live level bar while
 // it runs: the player hears themselves, nothing goes anywhere), the output, when the microphone is
-// on ("Konuşunca" / "Bas-konuş" with its key), noise suppression, the two shortcuts and the join
-// sounds; the rest one level down under "Gelişmiş". Everything under the switch fades away while it
+// on ("Konuşunca" / "Bas-konuş" with its key), noise suppression, the join sounds and the two
+// shortcuts (with Discord's keys offered once at the top, VOICE-KEYS); the rest one level down
+// under "Gelişmiş". Everything under the switch fades away while it
 // is off. A change is saved at once (a slider after its drag settles); the launcher's answer is
 // what stays (it holds values to their ranges and a key to one shortcut). The voice engine runs
 // for the devices and the level bar only while this page is open.
 import { CaretDown, Warning } from "@phosphor-icons/react";
-import { Button, cn, Segmented, Select, Skeleton, Slider, SwapLabel, Switch, toast } from "@pl/ui";
+import {
+  Button,
+  cn,
+  Segmented,
+  Select,
+  Skeleton,
+  Slider,
+  SwapLabel,
+  Switch,
+  toast,
+  useMotionPrefs,
+} from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -24,6 +36,7 @@ import {
 } from "@/lib/api/voice-types";
 import { formatPercent } from "@/lib/format";
 import i18n from "@/lib/i18n";
+import { askDiscord, DiscordInline, useDiscordAsk } from "./discord-offer";
 import { KeyPicker, useKeyLine } from "./key-picker";
 import { useVoiceUi } from "./store";
 
@@ -33,6 +46,8 @@ const SAVE_AFTER_MS = 250;
 const REFUSED_MS = 4000;
 /** "Hassasiyet" when the player first turns "Otomatik" off. */
 const MANUAL_SENSITIVITY = 30;
+/** The rows' glide under Discord's card (the drawer's spring, as the room pill's). */
+const glide = { type: "spring", stiffness: 480, damping: 40 } as const;
 
 type Change = (patch: Partial<VoiceSettings>, later?: boolean) => void;
 
@@ -78,6 +93,17 @@ function useVoiceSettings(): [VoiceSettings | null, Change] {
       flush();
     };
   }, [flush]);
+
+  // Discord's keys copied (the card here, or its toast): the launcher's answer is what stays.
+  useEffect(
+    () =>
+      useDiscordAsk.subscribe((now, before) => {
+        if (!now.copied || now.copied === before.copied || pending.current) return;
+        current.current = now.copied;
+        setSettings(now.copied);
+      }),
+    [],
+  );
 
   const change = useCallback<Change>(
     (patch, later = false) => {
@@ -333,6 +359,7 @@ function Advanced({ settings, change }: { settings: VoiceSettings; change: Chang
 
 export function VoiceSettingsSection() {
   const { t } = useTranslation();
+  const { layout } = useMotionPrefs();
   const [settings, change] = useVoiceSettings();
   const devices = useVoiceUi((s) => s.state.devices);
 
@@ -344,6 +371,13 @@ export function VoiceSettingsSection() {
       if (useVoiceUi.getState().state.testing) void voiceApi.testMic(false).catch(() => {});
       void voiceApi.settingsOpen(false).catch(() => {});
     };
+  }, []);
+
+  // The first visit may offer Discord's keys here, in place (VOICE-KEYS).
+  useEffect(() => {
+    useDiscordAsk.setState((s) => ({ inline: s.inline + 1 }));
+    void askDiscord("settings");
+    return () => useDiscordAsk.setState((s) => ({ inline: s.inline - 1 }));
   }, []);
 
   if (!settings) {
@@ -374,71 +408,76 @@ export function VoiceSettingsSection() {
             animate={{ opacity: 1, transition: enter(0.22) }}
             exit={{ opacity: 0, transition: leave(0.16) }}
           >
-            <DeviceRow
-              title={t("voice.settings.mic")}
-              devices={devices.inputs}
-              value={settings.inputDevice}
-              onChange={(inputDevice) => change({ inputDevice })}
-            />
-            <MicTest />
-            <DeviceRow
-              title={t("voice.settings.output")}
-              devices={devices.outputs}
-              value={settings.outputDevice}
-              onChange={(outputDevice) => change({ outputDevice })}
-            />
-            <Row title={t("voice.settings.mode")}>
-              <Segmented<VoiceTalkMode>
-                value={settings.mode}
-                onValueChange={(mode) => change({ mode })}
-                label={t("voice.settings.mode")}
-                options={[
-                  { value: "voice", label: t("voice.settings.modeVoice") },
-                  { value: "pushToTalk", label: t("voice.settings.modePtt") },
-                ]}
+            <DiscordInline />
+            {/* The rows glide (transform) as Discord's card comes and goes above them. */}
+            <motion.div layout={layout ? "position" : false} transition={{ layout: glide }}>
+              <DeviceRow
+                title={t("voice.settings.mic")}
+                devices={devices.inputs}
+                value={settings.inputDevice}
+                onChange={(inputDevice) => change({ inputDevice })}
               />
-            </Row>
-            {settings.mode === "pushToTalk" ? (
+              <MicTest />
+              <DeviceRow
+                title={t("voice.settings.output")}
+                devices={devices.outputs}
+                value={settings.outputDevice}
+                onChange={(outputDevice) => change({ outputDevice })}
+              />
+              <Row title={t("voice.settings.mode")}>
+                <Segmented<VoiceTalkMode>
+                  value={settings.mode}
+                  onValueChange={(mode) => change({ mode })}
+                  label={t("voice.settings.mode")}
+                  options={[
+                    { value: "voice", label: t("voice.settings.modeVoice") },
+                    { value: "pushToTalk", label: t("voice.settings.modePtt") },
+                  ]}
+                />
+              </Row>
+              {settings.mode === "pushToTalk" ? (
+                <KeyRow
+                  title={t("voice.settings.pttKey")}
+                  shortcut="pushToTalk"
+                  value={settings.pushToTalkKey}
+                  onPick={(pushToTalkKey) => change({ pushToTalkKey })}
+                  needed
+                />
+              ) : null}
+              <Row title={t("voice.settings.noise")}>
+                <Switch
+                  checked={settings.noiseSuppression}
+                  onCheckedChange={(on) => change({ noiseSuppression: on })}
+                  label={t("voice.settings.noise")}
+                  hideLabel
+                />
+              </Row>
+              {/* Above "Kısayollar": under it the switch read as one more shortcut. */}
+              <Row title={t("voice.settings.sounds")}>
+                <Switch
+                  checked={settings.sounds}
+                  onCheckedChange={(on) => change({ sounds: on })}
+                  label={t("voice.settings.sounds")}
+                  hideLabel
+                />
+              </Row>
+              <h3 className="mt-5 mb-0.5 text-[12.5px] font-semibold text-ash-300">
+                {t("voice.settings.shortcuts")}
+              </h3>
               <KeyRow
-                title={t("voice.settings.pttKey")}
-                shortcut="pushToTalk"
-                value={settings.pushToTalkKey}
-                onPick={(pushToTalkKey) => change({ pushToTalkKey })}
-                needed
+                title={t("voice.settings.muteKey")}
+                shortcut="mute"
+                value={settings.muteKey}
+                onPick={(muteKey) => change({ muteKey })}
               />
-            ) : null}
-            <Row title={t("voice.settings.noise")}>
-              <Switch
-                checked={settings.noiseSuppression}
-                onCheckedChange={(on) => change({ noiseSuppression: on })}
-                label={t("voice.settings.noise")}
-                hideLabel
+              <KeyRow
+                title={t("voice.settings.deafenKey")}
+                shortcut="deafen"
+                value={settings.deafenKey}
+                onPick={(deafenKey) => change({ deafenKey })}
               />
-            </Row>
-            <h3 className="mt-5 mb-0.5 text-[12.5px] font-semibold text-ash-300">
-              {t("voice.settings.shortcuts")}
-            </h3>
-            <KeyRow
-              title={t("voice.settings.muteKey")}
-              shortcut="mute"
-              value={settings.muteKey}
-              onPick={(muteKey) => change({ muteKey })}
-            />
-            <KeyRow
-              title={t("voice.settings.deafenKey")}
-              shortcut="deafen"
-              value={settings.deafenKey}
-              onPick={(deafenKey) => change({ deafenKey })}
-            />
-            <Row title={t("voice.settings.sounds")}>
-              <Switch
-                checked={settings.sounds}
-                onCheckedChange={(on) => change({ sounds: on })}
-                label={t("voice.settings.sounds")}
-                hideLabel
-              />
-            </Row>
-            <Advanced settings={settings} change={change} />
+              <Advanced settings={settings} change={change} />
+            </motion.div>
           </motion.div>
         ) : null}
       </AnimatePresence>

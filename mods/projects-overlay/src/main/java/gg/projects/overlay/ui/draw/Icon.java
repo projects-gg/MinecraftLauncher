@@ -90,8 +90,13 @@ public enum Icon {
     MIC("Microphone"),
     /** The microphone closed, and "Herkes için sustur". */
     MIC_OFF("MicrophoneSlash"),
-    /** Deafened ("Sağırlaştır" on). */
-    DEAF("SpeakerSlash"),
+    /** Hearing ("Sağırlaştır" off): the headphones, as players say it ("kulaklık"). */
+    HEADPHONES("Headphones"),
+    /**
+     * Deafened ("Sağırlaştır" on; the microphone is off with it): the headphones with Phosphor's slash, cut as its
+     * slashed icons are (VOICE-KEYS; Phosphor has no HeadphonesSlash; the launcher draws the same).
+     */
+    DEAF("Headphones", true),
     /** "Benim için sustur". */
     MUTE_FOR_ME("SpeakerSimpleSlash"),
     /** "Ara", and a ring's "Katıl". */
@@ -109,11 +114,18 @@ public enum Icon {
     private static final String RESOURCE = "/assets/projects_overlay/icons/phosphor.txt";
 
     public final String phosphorName;
+    /** Drawn with Phosphor's slash across it ({@link ShapeBaker#slashed}). */
+    public final boolean slashed;
     /** Atlas names per size, made on first use (icons are looked up every frame). */
     private String[] keys;
 
     Icon(String phosphorName) {
+        this(phosphorName, false);
+    }
+
+    Icon(String phosphorName, boolean slashed) {
         this.phosphorName = phosphorName;
+        this.slashed = slashed;
     }
 
     public String key(int size) {

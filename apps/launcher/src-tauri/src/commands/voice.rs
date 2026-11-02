@@ -7,6 +7,7 @@
 //! `voice_page_report`); it may call nothing else, and no other window may call those
 //! (`pl_voice::guard`, checked before any command runs).
 
+use pl_voice::discord::VoiceDiscordOffer;
 use pl_voice::engine::{EngineCommand, PageReport};
 use pl_voice::settings::{VoiceBackup, VoiceSettings};
 use pl_voice::view::{VoiceAnswer, VoiceKeyAsk, VoiceKeyCheck, VoiceModAction, VoiceState};
@@ -179,6 +180,32 @@ pub fn voice_save_settings(
 #[specta::specta]
 pub fn voice_check_key(state: State<'_, AppState>, ask: VoiceKeyAsk) -> CmdResult<VoiceKeyCheck> {
     Ok(state.voice.check_key(&ask))
+}
+
+/// Discord's push-to-talk, mute and deafen keys on this computer, offered once as the player first
+/// opens voice chat (VOICE-KEYS); null when answered before or when Discord has nothing to copy.
+/// Discord's local files are read only now, never at the launcher's start; nothing leaves the
+/// computer.
+#[tauri::command]
+#[specta::specta]
+pub async fn voice_discord_offer(
+    state: State<'_, AppState>,
+) -> CmdResult<Option<VoiceDiscordOffer>> {
+    let voice = state.voice.clone();
+    let offer = tauri::async_runtime::spawn_blocking(move || {
+        voice.discord_offer(crate::voice::input::discord_keys)
+    })
+    .await
+    .unwrap_or(None);
+    Ok(offer)
+}
+
+/// The answer to Discord's keys: "Kopyala" (`copy`) fills the shortcuts, "Hayır" leaves them;
+/// never asked again. Answers the settings as kept.
+#[tauri::command]
+#[specta::specta]
+pub fn voice_discord_answer(state: State<'_, AppState>, copy: bool) -> CmdResult<VoiceSettings> {
+    Ok(state.voice.discord_answer(copy))
 }
 
 /// The settings page opened (`open`) or closed: the voice engine runs meanwhile for the device
