@@ -44,8 +44,9 @@ import { useHostUi } from "@/features/host/store";
 import {
   FriendCallButton,
   InVoiceMark,
-  MissedMark,
+  MissedLine,
   useInVoice,
+  useMissedCall,
 } from "@/features/voice/friend-call";
 import { api } from "@/lib/api";
 import type { WorldInvite } from "@/lib/api/host-types";
@@ -587,11 +588,15 @@ export function FriendRow({
   // the headset tells it.
   const inVoice = useInVoice(friend.id);
   const voiceLine = inVoice && friend.state !== "playing";
+  // A missed call waits: the line says so in words until the player answers it (VOICE).
+  const missedLine = useMissedCall(friend.id) && !world;
   const line = world
     ? t("host.invite.inWorld")
-    : voiceLine
-      ? t("voice.presence.inVoice")
-      : presenceLine(friend, t);
+    : missedLine
+      ? t("voice.missed.title")
+      : voiceLine
+        ? t("voice.presence.inVoice")
+        : presenceLine(friend, t);
   const spokenLine = inVoice && !voiceLine ? `${line}, ${t("voice.presence.inVoice")}` : line;
   const badge = useShownBadge(friend.badge);
   const marks = useMarks(friend.marks);
@@ -659,7 +664,6 @@ export function FriendRow({
                       aria-label={t("social.list.favorite")}
                     />
                   ) : null}
-                  <MissedMark friend={friend.id} />
                 </BadgedName>
                 <span className="relative block h-[18px] overflow-hidden">
                   <AnimatePresence mode="popLayout" initial={false}>
@@ -667,17 +671,27 @@ export function FriendRow({
                       key={line}
                       className={cn(
                         "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
-                        joinable || world ? "text-jade-400" : "text-ash-400",
+                        missedLine
+                          ? "text-bone-100"
+                          : joinable || world
+                            ? "text-jade-400"
+                            : "text-ash-400",
                       )}
                       {...swap(reduce)}
                     >
-                      <InVoiceMark friend={friend.id} />
-                      {world ? (
-                        <WorldLine invite={world} />
-                      ) : voiceLine ? (
-                        line
+                      {missedLine ? (
+                        <MissedLine />
                       ) : (
-                        <PresenceText friend={friend} t={t} joinable={joinable} />
+                        <>
+                          <InVoiceMark friend={friend.id} />
+                          {world ? (
+                            <WorldLine invite={world} />
+                          ) : voiceLine ? (
+                            line
+                          ) : (
+                            <PresenceText friend={friend} t={t} joinable={joinable} />
+                          )}
+                        </>
                       )}
                     </motion.span>
                   </AnimatePresence>

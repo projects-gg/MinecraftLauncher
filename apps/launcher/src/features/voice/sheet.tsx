@@ -19,6 +19,7 @@ import {
   SpeakerHigh,
   SpeakerSimpleSlash,
   SpeakerSlash,
+  User,
   UserPlus,
   WarningCircle,
   X,
@@ -171,13 +172,16 @@ function MeRow({ room }: { room: VoiceRoomView }) {
     avatarUrl: me?.avatarUrl,
     friend: false,
   };
-  const role = roleWord(room.me.role, t);
+  // A role means something only with others in the room.
+  const role = room.people.length ? roleWord(room.me.role, t) : null;
   const marks = marksOf(room.me, t);
   return (
     <div className={rowShape}>
       <SpeakingFace face={face} size={36} />
-      <NameBlock name={face.name} second={role ?? t("voice.room.you")} />
+      <NameBlock name={face.name} second={role} />
       <Marks marks={marks} />
+      {/* At the row's end, as the crew's member list marks the player. */}
+      <span className="shrink-0 text-[12.5px] text-ash-400">{t("voice.room.you")}</span>
     </div>
   );
 }
@@ -233,7 +237,7 @@ function RingingRow({ id, onCancel }: { id: string; onCancel: () => void }) {
     <div className={rowShape}>
       <SpeakingFace face={face} size={36} dim speaking={false} />
       <NameBlock name={face.name} second={t("voice.room.ringing")} />
-      <Button size="sm" variant="ghost" onClick={onCancel}>
+      <Button size="sm" variant="secondary" onClick={onCancel}>
         {t("voice.room.cancelRing")}
       </Button>
     </div>
@@ -489,8 +493,10 @@ function CrewRooms({ room }: { room: VoiceRoomView }) {
               )}
             >
               {crewRoomName(r, t)}
-              <span className="font-display text-[12px] font-semibold text-ash-300 tabular-nums">
-                {count}
+              {/* A person's glyph before the count: "Oda 2 1" read as "Oda 21". */}
+              <span aria-hidden className="flex items-center gap-0.5 text-ash-300">
+                <User size={11} weight="bold" />
+                <span className="font-display text-[12px] font-semibold tabular-nums">{count}</span>
               </span>
             </button>
           </Tooltip>
@@ -673,7 +679,8 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
           {t("voice.room.leave")}
         </Button>
       </div>
-      {room.canClose ? <CloseRoom /> : null}
+      {/* Alone, closing is leaving: "Ayrıl" says it. */}
+      {room.canClose && room.people.length ? <CloseRoom /> : null}
     </footer>
   );
 }

@@ -18,7 +18,7 @@ export function KeyCap({
 }: {
   children: string;
   /** `quiet`: words in place of a key ("Atanmamış"); `listening`: waiting for a press, its edge
-   * in gold (the launcher's "working", as the server bars' sweep). */
+   * in bone (OYNA keeps the screen's one gold). */
   look?: "key" | "quiet" | "listening";
 }) {
   return (
@@ -29,7 +29,7 @@ export function KeyCap({
           "border border-white/14 bg-obsidian-800 font-display font-semibold text-bone-50 shadow-[inset_0_-2px_0_rgb(0_0_0/0.35)]",
         look === "quiet" && "font-sans font-medium text-ash-300",
         look === "listening" &&
-          "border border-gold-400/70 bg-obsidian-800 font-sans font-medium text-bone-100",
+          "border border-bone-100/60 bg-obsidian-800 font-sans font-medium text-bone-50",
       )}
     >
       {children}

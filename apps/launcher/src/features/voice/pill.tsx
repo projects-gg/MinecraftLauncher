@@ -10,6 +10,7 @@ import {
   Headset,
   Microphone,
   MicrophoneSlash,
+  Phone,
   PhoneDisconnect,
   WarningCircle,
 } from "@phosphor-icons/react";
@@ -81,11 +82,14 @@ function WordButton({
   onClick,
   tone = "quiet",
   label,
+  icon,
 }: {
   children: string;
   onClick: () => void;
   tone?: "quiet" | "cancel";
   label?: string;
+  /** A call's glyph on "Tekrar ara": "ara" is also "search", the glyph says which. */
+  icon?: ReactNode;
 }) {
   return (
     <button
@@ -93,13 +97,15 @@ function WordButton({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "relative flex h-[22px] cursor-pointer items-center rounded-full px-2.5 text-[12px] font-semibold whitespace-nowrap outline-none",
+        "relative flex h-[22px] cursor-pointer items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold whitespace-nowrap outline-none",
         "transition-[background-color,color,transform,scale] duration-150 ease-out active:scale-[0.95]",
         "focus-visible:ring-2 focus-visible:ring-gold-300 after:absolute after:inset-x-0 after:-inset-y-1.5",
         tone === "quiet" && "bg-white/10 text-bone-100 hover:bg-white/16 hover:text-bone-50",
         tone === "cancel" && "bg-white/8 text-bone-100 hover:bg-flare-400/16 hover:text-flare-300",
+        icon ? "pl-2" : null,
       )}
     >
+      {icon}
       {children}
     </button>
   );
@@ -141,7 +147,7 @@ function Pill() {
   const title = room ? roomTitle(room, nameOf, t, calling?.friend) : "";
   const words =
     mode === "calling"
-      ? t("voice.call.ringing")
+      ? t("voice.call.ringingName", { name: callee.name })
       : mode === "joining"
         ? t("voice.room.joining")
         : mode === "reconnecting"
@@ -250,7 +256,10 @@ function Pill() {
             {t("voice.call.cancel")}
           </WordButton>
         ) : mode === "noAnswer" && ended?.kind === "noAnswer" ? (
-          <WordButton onClick={() => void callFriend(ended.friend)}>
+          <WordButton
+            icon={<Phone size={12} weight="fill" aria-hidden />}
+            onClick={() => void callFriend(ended.friend)}
+          >
             {t("voice.call.again")}
           </WordButton>
         ) : mode === "failed" ? (

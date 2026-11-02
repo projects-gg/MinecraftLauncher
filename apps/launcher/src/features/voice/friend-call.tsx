@@ -2,8 +2,8 @@
 // way to call), "Odaya davet et" while the player's room may take them ("Aranıyor…" while it
 // rings), and after a missed call "Geri ara", or "Aramaya katıl" while that room still goes (the
 // card's "Katıl" is their game's). On the row: a headset beside the status while they are in voice
-// ("Sesli sohbette" in the launcher; never for an invisible friend: they are offline), and a gold
-// mark beside the name after a missed call, as the panel marks what waits for the player.
+// ("Sesli sohbette" in the launcher; never for an invisible friend: they are offline), and after a
+// missed call the status line says "Cevapsız arama" in words (a state, so no gold mark).
 import { Headset, Phone, PhonePlus, PhoneX } from "@phosphor-icons/react";
 import { Button, IconButton, Tooltip } from "@pl/ui";
 import { useTranslation } from "react-i18next";
@@ -41,36 +41,33 @@ export function useCallOffer(friend: string, isFriend = true) {
   );
 }
 
-/** The headset before the status line while they are in voice. */
+/** The headset before the status line while they are in voice (its words under the pointer). */
 export function InVoiceMark({ friend }: { friend: string }) {
+  const { t } = useTranslation();
   const inVoice = useInVoice(friend);
   if (!inVoice) return null;
   return (
-    <Headset
-      size={12}
-      weight="bold"
-      aria-hidden
-      className="mr-1 inline shrink-0 align-[-1px] text-ash-300"
-    />
+    <Tooltip content={t("voice.presence.inVoice")}>
+      <span className="mr-1 inline-flex align-[-1px]">
+        <Headset size={12} weight="bold" aria-hidden className="text-ash-300" />
+      </span>
+    </Tooltip>
   );
 }
 
-/** The gold mark beside the name after a missed call. */
-export function MissedMark({ friend }: { friend: string }) {
+/** A missed call from the friend waits (the row says it in its status line). */
+export function useMissedCall(friend: string): boolean {
+  return useMissed(friend) !== null;
+}
+
+/** The status line while a missed call waits: in words, with a call's glyph (no gold: a state). */
+export function MissedLine() {
   const { t } = useTranslation();
-  const missed = useMissed(friend);
-  if (!missed) return null;
   return (
-    <Tooltip content={t("voice.missed.title")}>
-      <span className="flex shrink-0">
-        <PhoneX
-          size={12}
-          weight="bold"
-          aria-label={t("voice.missed.title")}
-          className="text-gold-300"
-        />
-      </span>
-    </Tooltip>
+    <>
+      <PhoneX size={12} weight="bold" aria-hidden className="mr-1 inline align-[-1px]" />
+      {t("voice.missed.title")}
+    </>
   );
 }
 

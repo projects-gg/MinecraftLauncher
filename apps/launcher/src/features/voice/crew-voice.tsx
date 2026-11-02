@@ -1,8 +1,11 @@
 // The crew page's "Sesli" (VOICE-L3; voice.md §5.1): the crew's live rooms, who is in each and
 // "Katıl"; with nobody in any, "Genel" alone with "Katıl" (no explanation). The player's own room
-// sits on the quiet plate with "Ayrıl". A small "Yeni oda" while the crew may open one more. Rows
-// that come and go fade where they are; the others glide.
-import { Plus } from "@phosphor-icons/react";
+// sits on the quiet plate with "Ayrıl". "Yeni oda" while the crew may open one more. Written as the
+// page's other sections are ("Planlar", "Üyeler"): no box of its own, and the buttons end where
+// "Plan yap" and the members' "Katıl" end (8 px in, then the place of a row's "⋯"). A room's
+// "Katıl" carries a headset: on this page the members' "Katıl" joins their game. Rows that come and
+// go fade where they are; the others glide.
+import { Headset, Plus } from "@phosphor-icons/react";
 import { Button, cn } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -25,11 +28,11 @@ function RoomRow({ crew, room, here }: { crew: string; room: VoiceCrewRoom; here
   return (
     <div
       className={cn(
-        "flex min-h-[44px] items-center gap-3 rounded-md py-1.5 pr-1.5 pl-3 transition-colors duration-200",
-        here && "bg-white/[0.06]",
+        "flex min-h-[44px] items-center gap-2 rounded-[var(--radius-panel)] py-1.5 pr-2 pl-2 transition-colors duration-200",
+        here ? "bg-white/[0.06]" : "hover:bg-white/[0.045]",
       )}
     >
-      <span className="w-[88px] shrink-0 truncate text-[13.5px] font-semibold text-bone-50">
+      <span className="w-[84px] shrink-0 truncate text-[14px] font-semibold text-bone-50">
         {crewRoomName(room, t)}
       </span>
       <span className="flex min-w-0 flex-1 items-center">
@@ -59,14 +62,21 @@ function RoomRow({ crew, room, here }: { crew: string; room: VoiceCrewRoom; here
         ) : null}
       </span>
       {here ? (
-        <Button size="sm" variant="ghost" onClick={() => void leaveRoom()}>
+        <Button size="sm" variant="secondary" onClick={() => void leaveRoom()}>
           {t("voice.crew.leave")}
         </Button>
       ) : (
-        <Button size="sm" variant="secondary" onClick={() => void joinCrewRoom(crew, room.id)}>
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<Headset size={15} />}
+          onClick={() => void joinCrewRoom(crew, room.id)}
+        >
           {t("voice.crew.join")}
         </Button>
       )}
+      {/* The place of a row's "⋯", as the members' rows keep it. */}
+      <span aria-hidden className="size-8 shrink-0" />
     </div>
   );
 }
@@ -86,22 +96,26 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
   const canAdd = entry ? entry.canAdd : max > 1;
   return (
     <section className="mt-5" aria-labelledby={`voice-${team.id}`}>
-      <div className="mb-1.5 flex h-8 items-center gap-2">
-        <h3 id={`voice-${team.id}`} className="flex-1 text-[13px] font-semibold text-ash-300">
+      <div className="mb-1.5 flex min-h-8 items-center gap-2 pr-2">
+        <h3
+          id={`voice-${team.id}`}
+          className="min-w-0 flex-1 text-[13px] font-semibold text-ash-300"
+        >
           {t("voice.crew.title")}
         </h3>
         {canAdd ? (
           <Button
             size="sm"
-            variant="ghost"
-            icon={<Plus size={14} weight="bold" />}
+            variant="secondary"
+            icon={<Plus size={15} />}
             onClick={() => void openCrewRoom(team.id)}
           >
             {t("voice.crew.newRoom")}
           </Button>
         ) : null}
+        <span aria-hidden className="size-8 shrink-0" />
       </div>
-      <ul className="rounded-[var(--radius-panel)] bg-obsidian-950/40 p-1 ring-1 ring-white/8">
+      <ul className="flex flex-col gap-0.5">
         <AnimatePresence initial={false} mode="popLayout">
           {rooms.map((room) => (
             <motion.li

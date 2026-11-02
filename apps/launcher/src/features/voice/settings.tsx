@@ -6,7 +6,7 @@
 // is off. A change is saved at once (a slider after its drag settles); the launcher's answer is
 // what stays (it holds values to their ranges and a key to one shortcut). The voice engine runs
 // for the devices and the level bar only while this page is open.
-import { CaretDown } from "@phosphor-icons/react";
+import { CaretDown, Warning } from "@phosphor-icons/react";
 import { Button, cn, Segmented, Select, Skeleton, Slider, SwapLabel, Switch, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -191,7 +191,23 @@ function KeyRow({
   }, [refused]);
   const line = refused ?? clash ?? (needed && !value ? t("voice.settings.pttNeedsKey") : null);
   return (
-    <Row title={title} help={line ?? undefined}>
+    <Row
+      title={title}
+      // A real state, so the small gold triangle before a bone sentence (design.md §2).
+      help={
+        line ? (
+          <span className="inline-flex items-start gap-1.5 text-bone-100">
+            <Warning
+              size={13}
+              weight="fill"
+              aria-hidden
+              className="mt-[2px] shrink-0 text-gold-400"
+            />
+            {line}
+          </span>
+        ) : undefined
+      }
+    >
       <KeyPicker
         value={value}
         shortcut={shortcut}
@@ -269,6 +285,11 @@ function Advanced({ settings, change }: { settings: VoiceSettings; change: Chang
                   value={100 - (settings.sensitivity ?? MANUAL_SENSITIVITY)}
                   min={0}
                   max={100}
+                  // Which way hears more, at the two ends.
+                  marks={[
+                    { value: 4, label: t("voice.settings.sensitivityLow") },
+                    { value: 96, label: t("voice.settings.sensitivityHigh") },
+                  ]}
                   onValueChange={(v) => change({ sensitivity: 100 - v }, true)}
                   format={formatPercent}
                 />

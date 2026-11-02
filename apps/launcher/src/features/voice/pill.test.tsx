@@ -63,7 +63,8 @@ describe("the voice pill", () => {
   it("says the call rings, and İptal ends it", () => {
     const leave = vi.spyOn(voiceApi, "leave").mockResolvedValue();
     show(scenario("calling"));
-    expect(screen.getByText("Aranıyor…")).toBeTruthy();
+    // Who is called: the friends list does not know 302 here, so "Bir oyuncu".
+    expect(screen.getByText("Bir oyuncu aranıyor…")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Aramayı iptal et" }));
     expect(leave).toHaveBeenCalledOnce();
   });

@@ -1,7 +1,7 @@
 // Sesli sohbet (VOICE; voice.md §1 sözlük, §5.6 metinler, §7.10 hatalar). Tek kavram oda; eylemler
 // Ara, Katıl, Reddet, Ayrıl, Davet et. Kısa ve açıklamasız: açıklama cümlesi yalnız "Odayı kapat"ın
-// sorusunda ve iki ayarın altında (kapalıyken kimsenin arayamayacağı, denemenin hiçbir yere
-// gitmediği). Oyuncu adı ek almaz: cümleler adı eksiz kullanacak biçimde kurulur.
+// sorusunda ve iki ayarın altında (kapalıyken kimsenin arayamayacağı, denemede sesi yalnız
+// oyuncunun duyduğu). Oyuncu adı ek almaz: cümleler adı eksiz kullanacak biçimde kurulur.
 export const trVoice = {
   title: "Sesli sohbet",
   someone: "Bir oyuncu",
@@ -13,6 +13,7 @@ export const trVoice = {
     action: "Ara",
     inviteToRoom: "Odaya davet et",
     ringing: "Aranıyor…",
+    ringingName: "{{name}} aranıyor…",
     cancel: "İptal",
     cancelLabel: "Aramayı iptal et",
     noAnswer: "Cevap yok",
@@ -59,7 +60,7 @@ export const trVoice = {
     save: "Kaydet",
     cancel: "Vazgeç",
     close: "Odayı kapat",
-    closeAsk: "Herkes odadan çıkar.",
+    closeAsk: "Oda herkes için kapanır.",
     settings: "Sesli sohbet ayarları",
     newRoom: "Yeni oda",
     general: "Genel",
@@ -74,7 +75,7 @@ export const trVoice = {
   },
   person: {
     volume: "Ses seviyesi",
-    muteForMe: "Sustur (yalnız sen)",
+    muteForMe: "Benim için sustur",
     muteForAll: "Herkes için sustur",
     unmuteForAll: "Herkes için susturmayı kaldır",
     kick: "Odadan çıkar",
@@ -105,7 +106,7 @@ export const trVoice = {
   },
   mic: {
     denied: "Mikrofona izin verilmedi.",
-    openSettings: "Ayarları aç",
+    openSettings: "Windows ayarlarını aç",
     missing: "Mikrofon bulunamadı.",
     changed: "Mikrofon değişti.",
   },
@@ -147,7 +148,7 @@ export const trVoice = {
   },
   settings: {
     title: "Sesli sohbet",
-    enabled: "Sesli sohbet",
+    enabled: "Sesli sohbeti kullan",
     enabledHelp: "Kapalıyken kimse seni arayamaz.",
     mic: "Mikrofon",
     output: "Ses çıkışı",
@@ -156,7 +157,7 @@ export const trVoice = {
     test: "Mikrofonu dene",
     testStart: "Başlat",
     testStop: "Bitir",
-    testHelp: "Kendi sesini duyarsın; hiçbir yere gitmez.",
+    testHelp: "Sesini yalnız sen duyarsın.",
     mode: "Mikrofon ne zaman açık",
     modeVoice: "Konuşunca",
     modePtt: "Bas-konuş",
@@ -170,6 +171,8 @@ export const trVoice = {
     advanced: "Gelişmiş",
     sensitivity: "Hassasiyet",
     sensitivityAuto: "Otomatik hassasiyet",
+    sensitivityLow: "Az",
+    sensitivityHigh: "Çok",
     echo: "Yankı önleme",
     autoGain: "Otomatik ses seviyesi",
     micVolume: "Mikrofon sesi",
