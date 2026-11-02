@@ -21,6 +21,7 @@ export const trVoice = {
   },
   ring: {
     calling: "{{name}} arıyor",
+    verb: "arıyor",
     others: "Odadakiler: {{names}}",
     join: "Katıl",
     decline: "Reddet",

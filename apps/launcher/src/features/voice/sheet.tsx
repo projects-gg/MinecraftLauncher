@@ -21,7 +21,7 @@ import {
   SpeakerSlash,
   User,
   UserPlus,
-  WarningCircle,
+  Warning,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -313,14 +313,14 @@ function Notices({ room }: { room: VoiceRoomView }) {
   if (mic === "denied") {
     notices.push({
       key: "mic",
-      icon: <WarningCircle size={16} weight="fill" className="text-gold-300" />,
+      icon: <Warning size={16} weight="fill" className="text-gold-400" />,
       text: t("voice.mic.denied"),
       action: { label: t("voice.mic.openSettings"), onClick: () => void openMicSettings() },
     });
   } else if (mic === "missing") {
     notices.push({
       key: "mic",
-      icon: <WarningCircle size={16} weight="fill" className="text-gold-300" />,
+      icon: <Warning size={16} weight="fill" className="text-gold-400" />,
       text: t("voice.mic.missing"),
     });
   }
@@ -671,9 +671,10 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
         </Tooltip>
         <Button
           size="lg"
-          variant="danger"
+          variant="secondary"
           className="w-full px-2"
-          icon={<PhoneDisconnect size={17} weight="bold" />}
+          // Leaving ends nothing for the others: a plate with a red glyph; "Odayı kapat" alone is red.
+          icon={<PhoneDisconnect size={17} weight="bold" className="text-flare-400" />}
           onClick={() => void leaveRoom()}
         >
           {t("voice.room.leave")}

@@ -45,6 +45,7 @@ import {
   FriendCallButton,
   InVoiceMark,
   MissedLine,
+  MissedMark,
   useInVoice,
   useMissedCall,
 } from "@/features/voice/friend-call";
@@ -588,8 +589,10 @@ export function FriendRow({
   // the headset tells it.
   const inVoice = useInVoice(friend.id);
   const voiceLine = inVoice && friend.state !== "playing";
-  // A missed call waits: the line says so in words until the player answers it (VOICE).
-  const missedLine = useMissedCall(friend.id) && !world;
+  // A missed call waits (VOICE): the line says so in words until the player answers it, unless
+  // the line holds a game to join; then a quiet mark beside the name says it.
+  const missed = useMissedCall(friend.id);
+  const missedLine = missed && !world && !joinable;
   const line = world
     ? t("host.invite.inWorld")
     : missedLine
@@ -664,6 +667,7 @@ export function FriendRow({
                       aria-label={t("social.list.favorite")}
                     />
                   ) : null}
+                  {missed && !missedLine ? <MissedMark /> : null}
                 </BadgedName>
                 <span className="relative block h-[18px] overflow-hidden">
                   <AnimatePresence mode="popLayout" initial={false}>

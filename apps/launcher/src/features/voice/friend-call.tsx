@@ -60,6 +60,26 @@ export function useMissedCall(friend: string): boolean {
   return useMissed(friend) !== null;
 }
 
+/**
+ * A missed call beside the name, when the status line holds their game ("Projects'te" with its
+ * "Katıl", which must not read as answering the call): a quiet call glyph, its words on hover.
+ */
+export function MissedMark() {
+  const { t } = useTranslation();
+  return (
+    <Tooltip content={t("voice.missed.title")}>
+      <span className="flex shrink-0">
+        <PhoneX
+          size={12}
+          weight="bold"
+          aria-label={t("voice.missed.title")}
+          className="text-bone-100"
+        />
+      </span>
+    </Tooltip>
+  );
+}
+
 /** The status line while a missed call waits: in words, with a call's glyph (no gold: a state). */
 export function MissedLine() {
   const { t } = useTranslation();

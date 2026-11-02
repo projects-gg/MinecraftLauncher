@@ -7,7 +7,7 @@
 import { Phone, PhoneX } from "@phosphor-icons/react";
 import { Button, IconButton, toast } from "@pl/ui";
 import { useTranslation } from "react-i18next";
-import { MarkedSentence } from "@/features/social/person-mark";
+import { PersonMark } from "@/features/social/person-mark";
 import { SocialAvatar, SocialFace } from "@/features/social/social-face";
 import type { VoiceRing } from "@/lib/api/voice-types";
 import { answerRing, declineRing } from "./actions";
@@ -24,12 +24,15 @@ function RingToast({ toastId, ring }: { toastId: string | number; ring: VoiceRin
     <div className="flex w-full items-center gap-3 font-normal">
       <SocialAvatar source={from} size={40} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13.5px] leading-snug font-semibold text-bone-50">
-          <MarkedSentence
-            text={(who) => t("voice.ring.calling", { name: who })}
-            name={from.name}
-            marks={from.marks}
-          />
+        {/* A long name gives way, never the verb ("GeceKurdu_ is call…" said nothing). Both
+            languages put the name first. */}
+        <p className="text-[13.5px] leading-snug font-semibold text-bone-50">
+          <span className="sr-only">{t("voice.ring.calling", { name: from.name })}</span>
+          <span aria-hidden className="flex min-w-0 items-center gap-1">
+            <span className="min-w-0 truncate">{from.name}</span>
+            <PersonMark marks={from.marks} tooltip={false} className="shrink-0" />
+            <span className="shrink-0">{t("voice.ring.verb")}</span>
+          </span>
         </p>
         {others.length ? (
           <p

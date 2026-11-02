@@ -20,6 +20,7 @@ export const enVoice = {
   },
   ring: {
     calling: "{{name}} is calling",
+    verb: "is calling",
     others: "In the room: {{names}}",
     join: "Join",
     decline: "Decline",
