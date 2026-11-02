@@ -547,6 +547,13 @@ export const commands = {
 	 *  "Tekrar dene", a new answer instead of the kept one.
 	 */
 	cloudAfkSuggestPattern: (id: string, text: string, fresh: boolean) => typedError<PatternSuggestion, CmdError>(__TAURI_INVOKE("cloud_afk_suggest_pattern", { id, text, fresh })),
+	/**
+	 *  "ProBot AI ile kalıp kur" in a rule of this computer's AFK accounts (PATTERN-L): the same
+	 *  helper without a cloud account, offered while the overview's `desktopPatterns` says so. Only
+	 *  the player's words go to the service (no account, chat line, login command or password); it
+	 *  counts each call that reaches its model per player, so this never repeats by itself.
+	 */
+	cloudAfkSuggestPatternHere: (text: string, fresh: boolean) => typedError<PatternSuggestion, CmdError>(__TAURI_INVOKE("cloud_afk_suggest_pattern_here", { text, fresh })),
 	/**  "Buluta taşı": the desktop account in the cloud's form, and what stays on the desktop. */
 	cloudAfkMovePlan: (desktopId: string) => typedError<CloudMovePlan, CmdError>(__TAURI_INVOKE("cloud_afk_move_plan", { desktopId })),
 	/**
@@ -3805,6 +3812,12 @@ export type CloudOverview_Deserialize = {
 	 *  and a rule's pattern is written by hand, as before it.
 	 */
 	aiPatterns: boolean,
+	/**
+	 *  The same helper in the rules of this computer's AFK accounts (PATTERN-L): signed in, the
+	 *  service names this player for it (`/me` → `aiPatterns`: its model can answer, Studio's switch
+	 *  is on, the Discord account is old enough, no ban); false hides the helper there.
+	 */
+	desktopPatterns: boolean,
 };
 
 /**  The AFK page's look at 7/24 Bulut. */
@@ -3842,6 +3855,12 @@ export type CloudOverview_Serialize = {
 	 *  and a rule's pattern is written by hand, as before it.
 	 */
 	aiPatterns: boolean,
+	/**
+	 *  The same helper in the rules of this computer's AFK accounts (PATTERN-L): signed in, the
+	 *  service names this player for it (`/me` → `aiPatterns`: its model can answer, Studio's switch
+	 *  is on, the Discord account is old enough, no ban); false hides the helper there.
+	 */
+	desktopPatterns: boolean,
 };
 
 /**  Which page of afk.projects.gg to open. */
@@ -7311,8 +7330,9 @@ export type PatternProblem =
 "tooComplex";
 
 /**
- *  `POST /accounts/:id/rules/pattern` → `suggestion`: a trigger made from the player's words. Every
- *  field is the contract's (no defaults: one shape for both directions in the bindings).
+ *  `POST /accounts/:id/rules/pattern` (or, for this computer's rules, `POST /rules/pattern`) →
+ *  `suggestion`: a trigger made from the player's words. Every field is the contract's (no
+ *  defaults: one shape for both directions in the bindings).
  */
 export type PatternSuggestion = {
 	/**

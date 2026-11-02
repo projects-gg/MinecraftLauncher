@@ -96,7 +96,8 @@ const GROUP_SHOWN = 5;
 /** The card's corners (`--radius-panel`), kept by the layout animation's scale correction. */
 const RADIUS = 10;
 
-/** The three answers: "Geliyorum" leads while unanswered; the chosen one is checked. */
+/** The three answers: "Geliyorum" leads while unanswered; the chosen one is the quiet plate with a
+ * bone check (never gold, design.md §2), the others step back. */
 function PlanAnswers({
   answered,
   onAnswer,
@@ -120,11 +121,8 @@ function PlanAnswers({
             size="sm"
             aria-pressed={chosen}
             variant={variant(choice)}
-            className={cn(
-              "flex-1 transition-[box-shadow,background-color,color]",
-              chosen && "ring-1 ring-gold-400/70",
-            )}
-            icon={chosen ? <Check size={14} weight="bold" className="text-gold-300" /> : undefined}
+            className="flex-1"
+            icon={chosen ? <Check size={14} weight="bold" /> : undefined}
             onClick={() => onAnswer(choice)}
           >
             {t(`crewWave2.plans.${choice}`)}

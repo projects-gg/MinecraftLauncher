@@ -107,7 +107,7 @@ export function ChatAds({
                 messages={[{ key: line, who: name, text: line, kind: "public" }]}
               />
               {count > 1 ? (
-                <QuietLink tone="bone" onClick={() => setSample((shown) => (shown + 1) % count)}>
+                <QuietLink onClick={() => setSample((shown) => (shown + 1) % count)}>
                   {t("afkPlus.settings.adNext")}
                 </QuietLink>
               ) : null}

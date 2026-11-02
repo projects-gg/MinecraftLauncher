@@ -14,6 +14,7 @@ import {
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { useSocialUi } from "@/features/social/store";
+import { TEXT_LINK } from "@/lib/text-link";
 import { afkFailed } from "../errors";
 import { type CloudOverview, cloudApi } from "./api";
 import { offerLine } from "./status";
@@ -173,11 +174,7 @@ export function CloudIntroDialog({
         {signedOut ? (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ash-300">
             <span>{t("cloudAfk.intro.signIn")}</span>
-            <button
-              type="button"
-              onClick={signIn}
-              className="cursor-pointer rounded-sm font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
-            >
+            <button type="button" onClick={signIn} className={cn(TEXT_LINK, "font-medium")}>
               {t("cloudAfk.intro.signInAction")}
             </button>
           </p>

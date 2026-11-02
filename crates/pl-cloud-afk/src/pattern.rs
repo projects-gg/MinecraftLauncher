@@ -1,8 +1,10 @@
 //! "ProBot AI ile kalıp kur" (the service's README "Pattern helper"): the player says in their own
 //! words which chat messages an auto-reply rule should answer, and the service answers with a
 //! trigger and one plain sentence about it, as on afk.projects.gg. Free for players; the service
-//! counts the calls that reach its model per account (3 a minute, 20 a day), so nothing here repeats
-//! a request by itself. `/offer` → `ai.patterns` says whether to offer the helper at all.
+//! counts the calls that reach its model per account (3 a minute, 20 a day), and for this
+//! computer's rules per player (PATTERN-L), so nothing here repeats a request by itself.
+//! `/offer` → `ai.patterns` says whether to offer the helper at all, `/me` → `aiPatterns` whether
+//! to offer it in this computer's rules.
 
 use serde::{Deserialize, Serialize};
 
@@ -15,8 +17,9 @@ pub const PATTERN_TEXT_MAX: usize = 200;
 const SUMMARY_MAX: usize = 300;
 const EXAMPLE_MAX: usize = 160;
 
-/// `POST /accounts/:id/rules/pattern` → `suggestion`: a trigger made from the player's words. Every
-/// field is the contract's (no defaults: one shape for both directions in the bindings).
+/// `POST /accounts/:id/rules/pattern` (or, for this computer's rules, `POST /rules/pattern`) →
+/// `suggestion`: a trigger made from the player's words. Every field is the contract's (no
+/// defaults: one shape for both directions in the bindings).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PatternSuggestion {

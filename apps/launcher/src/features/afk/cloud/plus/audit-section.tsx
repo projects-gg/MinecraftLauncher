@@ -269,9 +269,7 @@ function AuditRow({
             {folded ? (
               <span className="text-ash-400">
                 {t("afkPlus.audit.hidden")}{" "}
-                <QuietLink tone="bone" onClick={() => setShown(true)}>
-                  {t("afkPlus.audit.show")}
-                </QuietLink>
+                <QuietLink onClick={() => setShown(true)}>{t("afkPlus.audit.show")}</QuietLink>
               </span>
             ) : (
               <span className="text-bone-100 [overflow-wrap:anywhere]">"{entry.x}"</span>
@@ -469,9 +467,7 @@ function WaitingMessage({ thread, onReply }: { thread: PlusInboxThread; onReply:
         "{thread.last.text}"
       </p>
       <div className="mt-1">
-        <QuietLink tone="bone" onClick={onReply}>
-          {t("afkPlus.audit.reply")}
-        </QuietLink>
+        <QuietLink onClick={onReply}>{t("afkPlus.audit.reply")}</QuietLink>
       </div>
     </div>
   );
@@ -638,9 +634,7 @@ export function AuditSection({
       />
     ) : keepsOne(name) ? (
       <div>
-        <QuietLink tone="bone" onClick={() => setThread(name)}>
-          {t("afkPlus.audit.reply")}
-        </QuietLink>
+        <QuietLink onClick={() => setThread(name)}>{t("afkPlus.audit.reply")}</QuietLink>
       </div>
     ) : null;
 

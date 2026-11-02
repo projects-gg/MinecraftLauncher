@@ -1,35 +1,18 @@
 // Everything the account surfaces open, mounted once with the main window's title bar: the
 // account center sheet, the Microsoft sign-in, the skin panels (Microsoft's, and the Projects
 // skin of username accounts with its toasts, SKIN1), the AFK launch question and a polite live
-// region for screen readers.
+// region for screen readers (live-region.tsx).
 import { prewarmImages } from "@pl/ui";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { PRESET_AVATARS } from "@/features/avatars/presets";
 import { ProjectsSkinHost } from "@/features/projects-skin/host";
 import { AppearanceSheet } from "@/features/skins/appearance-sheet";
 import { AccountCenterSheet } from "./account-center";
 import { AfkLaunchGuardDialog } from "./afk-guard";
+import { LiveRegion } from "./live-region";
 import { MicrosoftLoginDialog } from "./microsoft-login-dialog";
 import { useAccountsUi } from "./store";
-import { onAnnounce, useAccounts } from "./use-accounts";
-
-function LiveRegion() {
-  const [text, setText] = useState("");
-  useEffect(
-    () =>
-      onAnnounce((next) => {
-        // Re-announce identical text: clear first, then set on the next frame.
-        setText("");
-        requestAnimationFrame(() => setText(next));
-      }),
-    [],
-  );
-  return (
-    <div aria-live="polite" aria-atomic="true" className="sr-only">
-      {text}
-    </div>
-  );
-}
+import { useAccounts } from "./use-accounts";
 
 export function AccountsHost() {
   const { data: accounts = [] } = useAccounts();

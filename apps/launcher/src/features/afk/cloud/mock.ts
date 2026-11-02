@@ -510,6 +510,8 @@ async function overview(): Promise<CloudPageData> {
       plusMe: which === "signedout" || hidden ? null : mockPlusMe(),
       features: hidden ? null : offerFeatures(),
       aiPatterns: !hidden && mockAiPatterns(),
+      // This computer's rules too, while signed in (as the backend works it out).
+      desktopPatterns: !hidden && mockAiPatterns() && which !== "signedout" && which !== "failed",
     },
     twins,
   };
@@ -899,6 +901,7 @@ export const mockCloudApi: CloudApi = {
     return { kind: "sent" };
   },
   suggestPattern: (_id, text, fresh) => mockSuggestPattern(text, fresh),
+  suggestPatternHere: (text, fresh) => mockSuggestPattern(text, fresh),
   async movePlan(desktopId) {
     await delay(260);
     const desktop = (await api.afkAccounts()).find((a) => a.id === desktopId);

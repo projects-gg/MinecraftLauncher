@@ -342,6 +342,42 @@ pub async fn cloud_afk_suggest_pattern(
         .await?)
 }
 
+/// "ProBot AI ile kalıp kur" in a rule of this computer's AFK accounts (PATTERN-L): the same
+/// helper without a cloud account, offered while the overview's `desktopPatterns` says so. Only
+/// the player's words go to the service (no account, chat line, login command or password); it
+/// counts each call that reaches its model per player, so this never repeats by itself.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_suggest_pattern_here(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    text: String,
+    fresh: bool,
+) -> CmdResult<PatternSuggestion> {
+    let signed_out = || {
+        // Not the cloud accounts' sentence: this rule is on this computer.
+        CmdError::new(
+            "BULUT-OTURUM",
+            pick(
+                "ProBot AI için Arkadaşlar'da yeniden giriş yap.",
+                "Sign in to Friends again to use ProBot AI.",
+            ),
+            "signed out",
+        )
+    };
+    let Ok(token) = token(&state) else {
+        return Err(signed_out());
+    };
+    let lang = Lang::current().pick("tr", "en");
+    match service(&app, &state)
+        .suggest_pattern_here(&token, &text, lang, fresh)
+        .await
+    {
+        Err(CloudError::SignedOut | CloudError::Unauthorized) => Err(signed_out()),
+        result => Ok(result?),
+    }
+}
+
 /// The pattern helper's refusals in afk.projects.gg's words (its "ProBot AI" box).
 fn pattern_words(trouble: PatternTrouble) -> (&'static str, String) {
     match trouble {

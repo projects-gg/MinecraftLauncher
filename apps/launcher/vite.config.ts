@@ -27,7 +27,8 @@ export default defineConfig({
   build: {
     // WebView2 (Windows) is evergreen Chromium; WebKit on macOS/Linux needs a safer target.
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome120" : "safari16",
-    sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
+    // The CLI sets TAURI_ENV_DEBUG to "true" or "false"; Boolean("false") is true, so compare the text.
+    sourcemap: process.env.TAURI_ENV_DEBUG === "true",
     rolldownOptions: {
       // The launcher's page and the hidden voice chat window's (src-tauri voice.rs).
       input: {

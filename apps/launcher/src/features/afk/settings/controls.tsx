@@ -6,12 +6,10 @@ import { CaretRight, Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { cn, easeOutExpo, enter, Input, leave, Switch, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  createContext,
   type InputHTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
-  useContext,
   useEffect,
   useId,
   useRef,
@@ -19,6 +17,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { formatCount } from "@/lib/format";
+import { TEXT_LINK } from "@/lib/text-link";
 import { joinAddress, shownAddress, splitAddress } from "../address";
 import { limitWords } from "../spans";
 import type { Issue, Limit } from "./model";
@@ -115,11 +114,7 @@ export function Fold({ open, children }: { open: boolean; children: ReactNode })
 export function FolderLink({ onOpen }: { onOpen: () => void }) {
   const { t } = useTranslation();
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="cursor-pointer rounded-sm font-medium text-gold-300 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300 disabled:cursor-default disabled:no-underline"
-    >
+    <button type="button" onClick={onOpen} className={cn(TEXT_LINK, "font-medium")}>
       {t("afk.openFolder")}
     </button>
   );
@@ -192,23 +187,6 @@ export function WideRow({
       {children}
     </motion.div>
   );
-}
-
-const OneGoldScope = createContext(false);
-
-/**
- * A part of the window under the one-gold rule (design.md §2) for what has no bone default of its
- * own yet: its quiet text links are bone, so the screen's gold is its one action (the save,
- * "Devam"). The 7/24 Bulut question rows and setup steps (SETUP-UX-L). Switches are bone everywhere
- * already (@pl/ui's default, BETA-FB).
- */
-export function OneGold({ children }: { children: ReactNode }) {
-  return <OneGoldScope.Provider value={true}>{children}</OneGoldScope.Provider>;
-}
-
-/** Whether this part of the window is under the one-gold rule (`OneGold`). */
-export function useOneGold(): boolean {
-  return useContext(OneGoldScope);
 }
 
 /**
@@ -587,9 +565,9 @@ export function PatternFold({ pattern }: { pattern: string }) {
 }
 
 /**
- * ProBot AI's part in a 7/24 Bulut rule's trigger (the desktop has none): a pattern it made reads
- * as its sentence, and "ProBot AI ile kalıp kur" opens its box under the rule, where "Kalıbı kendim
- * yazacağım" waits too (`cloud/rule-assist.tsx`).
+ * ProBot AI's part in a rule's trigger, 7/24 Bulut and desktop alike (PATTERN-L): a pattern it made
+ * reads as its sentence, and "ProBot AI ile kalıp kur" opens its box under the rule, where "Kalıbı
+ * kendim yazacağım" waits too (`cloud/rule-assist.tsx`).
  */
 export interface TriggerAssist {
   /** The sentence of the pattern ProBot AI made; null: the field (a phrase, or written by hand). */
@@ -604,7 +582,8 @@ export interface TriggerAssist {
  * default ("Mesajda geçen söz"). A pattern written by hand is the advanced way ("Kalıbı kendim
  * yazacağım"), monospace with its one line of help; "Düz söze dön" goes back. The owner, 25 Oct:
  * players have no technical knowledge, so a "Düzenli ifade" switch in every rule gave way to this,
- * and on 7/24 Bulut ProBot AI builds the pattern from the player's own words (`assist`).
+ * and ProBot AI builds the pattern from the player's own words (`assist`; 7/24 Bulut's helper, on
+ * the desktop too since PATTERN-L).
  */
 export function TriggerField({
   id,
@@ -626,7 +605,7 @@ export function TriggerField({
   error: string | null;
   maxLength: number;
   autoFocus?: boolean;
-  /** 7/24 Bulut while its ProBot AI can answer. */
+  /** While 7/24 Bulut's ProBot AI can answer (a cloud rule, or a desktop one signed in). */
   assist?: TriggerAssist;
 }) {
   const { t } = useTranslation();
