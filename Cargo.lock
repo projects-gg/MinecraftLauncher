@@ -4477,6 +4477,7 @@ dependencies = [
  "pl-mc",
  "pl-net",
  "pl-social",
+ "pl-voice",
  "rand 0.10.3",
  "serde",
  "serde_json",

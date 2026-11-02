@@ -9,6 +9,12 @@
 //! force the signed side with `PROJECTS_SOCIAL_VOICE=1` for a local `wrangler dev`.
 //!
 //! Without a call nothing runs: no window, no socket, no input registration, no timer.
+//!
+//! The in-game overlay (VOICE-O) hears every state, speaking change and notice too (`pl_overlay`
+//! keeps the newest for games that start later and tells only a mod that shows voice chat); the
+//! game's presses come back to the same `Voice` methods as the page's commands ([`wire_overlay`]).
+//! While a game's mod shows voice chat, its cards stand in for the Windows notifications of rings,
+//! removals and a moderator's mute, as its toasts do for messages.
 
 mod input;
 mod probe;
@@ -52,12 +58,13 @@ pub fn install(app: &tauri::App) {
     probe::install(app);
 }
 
-/// Voice chat for the app: its parts wired, the page told every change.
+/// Voice chat for the app: its parts wired, the page and the in-game overlay told every change.
 pub fn create(
     app: &AppHandle,
     root: &Path,
     social: SocialService,
     runtime: tokio::runtime::Handle,
+    overlay: pl_overlay::Overlay,
 ) -> Voice {
     let platform = app_platform(app);
     let voice = Voice::new(
@@ -67,6 +74,8 @@ pub fn create(
         runtime,
     );
     let _ = platform.voice.set(voice.clone());
+    wire_overlay(&overlay, &voice);
+    let _ = platform.overlay.set(overlay);
     let hears = voice.clone();
     social.on_voice(move |event| on_hub(&hears, event));
     social.set_voice_switch(voice.settings().enabled);
@@ -138,6 +147,48 @@ pub fn on_social(app: &AppHandle, update: &pl_social::SocialUpdate) {
     if changed {
         state.voice.set_me(&me);
     }
+}
+
+/// The in-game overlay's presses (VOICE-O) go to the same `Voice` methods as the page's commands.
+/// The ones that act at once are done before the call returns, so two quick presses (the
+/// microphone off and on again) keep their order.
+fn wire_overlay(overlay: &pl_overlay::Overlay, voice: &Voice) {
+    use pl_overlay::{VoiceAct, VoiceFuture};
+    let voice = voice.clone();
+    overlay.on_voice(move |act| -> VoiceFuture {
+        let done = || -> VoiceFuture { Box::pin(std::future::ready(VoiceAnswer::OK)) };
+        let voice = voice.clone();
+        match act {
+            VoiceAct::Mute(on) => {
+                voice.set_mute(on);
+                done()
+            }
+            VoiceAct::Deaf(on) => {
+                voice.set_deaf(on);
+                done()
+            }
+            VoiceAct::Leave => {
+                voice.leave();
+                done()
+            }
+            VoiceAct::Decline { room } => {
+                voice.decline(&room);
+                done()
+            }
+            VoiceAct::Volume { person, percent } => {
+                voice.set_volume(&person, percent);
+                done()
+            }
+            VoiceAct::MuteForMe { person, on } => {
+                voice.set_muted_for_me(&person, on);
+                done()
+            }
+            VoiceAct::Accept { room } => Box::pin(async move { voice.accept(room).await }),
+            VoiceAct::Moderate(action) => Box::pin(async move { voice.moderate(action).await }),
+            VoiceAct::Call { friend } => Box::pin(async move { voice.call(friend).await }),
+            VoiceAct::Invite { friend } => Box::pin(async move { voice.invite(friend).await }),
+        }
+    });
 }
 
 /// The main page never gets the microphone or the camera (call once, in setup).
@@ -337,6 +388,8 @@ static PLATFORM: OnceLock<Arc<AppPlatform>> = OnceLock::new();
 pub struct AppPlatform {
     app: AppHandle,
     voice: OnceLock<Voice>,
+    /// The in-game overlay (VOICE-O): it hears every state, speaking change and notice.
+    overlay: OnceLock<pl_overlay::Overlay>,
     /// The attached voice page's channel.
     channel: Mutex<Option<Channel<EngineCommand>>>,
     /// The signed-in player's id, as last given to the machine.
@@ -355,6 +408,7 @@ impl AppPlatform {
         Self {
             app,
             voice: OnceLock::new(),
+            overlay: OnceLock::new(),
             channel: Mutex::new(None),
             me: Mutex::new(String::new()),
             names: Mutex::new(HashMap::new()),
@@ -379,6 +433,13 @@ impl AppPlatform {
         seen
     }
 
+    /// A game's mod shows voice chat now: its cards stand in for this launcher's notifications.
+    fn shown_in_game(&self) -> bool {
+        self.overlay
+            .get()
+            .is_some_and(pl_overlay::Overlay::shows_voice)
+    }
+
     fn name_of(&self, id: &str) -> String {
         lock(&self.names)
             .get(id)
@@ -393,8 +454,9 @@ impl AppPlatform {
         let tr = pl_lang::Lang::current() == pl_lang::Lang::Tr;
         match notice {
             SystemNotice::Ring { room, from, .. } => {
-                // In front of the player the page shows its card and rings itself.
-                if self.window_in_sight() {
+                // In front of the player the page shows its card and rings itself; in a game whose
+                // overlay shows voice chat, its card does (and rings while the window is away).
+                if self.window_in_sight() || self.shown_in_game() {
                     return;
                 }
                 let name = self.name_of(&from);
@@ -434,7 +496,7 @@ impl AppPlatform {
                 );
             }
             SystemNotice::Left { reason } => {
-                if self.window_in_sight() {
+                if self.window_in_sight() || self.shown_in_game() {
                     return;
                 }
                 let text = match (reason, tr) {
@@ -455,7 +517,7 @@ impl AppPlatform {
                 );
             }
             SystemNotice::MutedByModerator => {
-                if self.window_in_sight() {
+                if self.window_in_sight() || self.shown_in_game() {
                     return;
                 }
                 let app = self.app.clone();
@@ -565,6 +627,11 @@ impl Platform for AppPlatform {
     }
 
     fn state(&self, state: VoiceState) {
+        // The in-game overlay (VOICE-O): a ring rings in the game while the window is away (in
+        // front, the page rings).
+        if let Some(overlay) = self.overlay.get() {
+            overlay.set_voice(&state, !self.window_in_sight());
+        }
         // The tray's mute and leave items and the room in its tooltip (design §5.4).
         #[cfg(desktop)]
         {
@@ -599,10 +666,17 @@ impl Platform for AppPlatform {
     }
 
     fn notice(&self, notice: VoiceNotice) {
+        if let Some(overlay) = self.overlay.get() {
+            overlay.voice_notice(&notice);
+        }
         let _ = self.app.emit(NOTICE_EVENT, notice);
     }
 
     fn speaking(&self, speaking: VoiceSpeaking) {
+        // A game's overlay draws who speaks (only while a game runs; changes only).
+        if let Some(overlay) = self.overlay.get() {
+            overlay.voice_speaking(&speaking);
+        }
         // A resting page would only queue them; it reads the state when it comes back.
         if self.window_in_sight() {
             let _ = self.app.emit(SPEAKING_EVENT, speaking);

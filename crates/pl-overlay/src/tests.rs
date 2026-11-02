@@ -47,6 +47,8 @@ struct Calls {
     removed: Vec<String>,
     blocks: Vec<String>,
     reports: Vec<(String, pl_social::ReportReason, Option<String>, bool)>,
+    /// VOICE-O: the voice room each report carried.
+    report_rooms: Vec<Option<String>>,
     refuse_people: Option<SocialError>,
     /// OVL-UX2: the categories saved, crew invites, crewmates asked and requests accepted.
     groups_saved: Vec<(Vec<pl_social::FriendGroup>, Vec<pl_social::GroupMember>)>,
@@ -236,9 +238,11 @@ impl SocialActions for FakeSocial {
         reason: pl_social::ReportReason,
         note: Option<String>,
         block: bool,
+        voice: Option<String>,
     ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
         let mut calls = self.calls();
         calls.reports.push((friend.to_owned(), reason, note, block));
+        calls.report_rooms.push(voice);
         std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
     }
 
@@ -2248,5 +2252,266 @@ async fn a_game_with_the_emoji_picker_alone_hears_only_its_words_and_list() {
     let args = next.jvm_args();
     assert!(args.contains(&format!("{}off", crate::EMOJI_ARG)));
     assert!(!args.iter().any(|arg| arg.starts_with(crate::PANEL_ARG)));
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+// --- voice chat (VOICE-O) ------------------------------------------------------------------------
+
+/// The player in a friend room with Ayşe (a friend), Cem (a crewmate) and someone the lists do not
+/// know; Can's call rings for them.
+fn voice_room() -> pl_voice::view::VoiceState {
+    use pl_voice::view::{
+        VoiceMe, VoicePerson, VoicePhase, VoicePowers, VoiceQuality, VoiceRing, VoiceRole,
+        VoiceRoomKind, VoiceRoomView, VoiceState,
+    };
+    let person = |id: &str| VoicePerson {
+        id: id.into(),
+        role: VoiceRole::Member,
+        mute: false,
+        deaf: false,
+        muted_by_moderator: false,
+        quality: VoiceQuality::Good,
+        speaking: false,
+        volume: 100,
+        muted_for_me: false,
+        joined_at: 1_800_000_000,
+        can: VoicePowers::default(),
+    };
+    VoiceState {
+        available: true,
+        enabled: true,
+        room: Some(VoiceRoomView {
+            id: "f0123456789abcdef".into(),
+            kind: VoiceRoomKind::Friend,
+            crew: None,
+            name: None,
+            general: false,
+            max: 10,
+            phase: VoicePhase::Live,
+            me: VoiceMe {
+                id: "me".into(),
+                role: VoiceRole::Leader,
+                mute: false,
+                deaf: false,
+                muted_by_moderator: false,
+                talking: false,
+                quality: VoiceQuality::Good,
+            },
+            people: vec![person("f-ayse"), person("u-cem"), person("u-zz")],
+            ringing: Vec::new(),
+            can_rename: true,
+            can_close: true,
+        }),
+        rings: vec![VoiceRing {
+            room: "c0123456789abcdef".into(),
+            from: "f-can".into(),
+            with: Vec::new(),
+            until: 1_800_000_030,
+        }],
+        ..VoiceState::off()
+    }
+}
+
+#[tokio::test]
+async fn voice_chat_reaches_a_mod_that_shows_it_and_its_presses_reach_the_launcher() {
+    use pl_voice::view::{VoiceAnswer, VoiceNotice, VoiceRefusal, VoiceSpeaking, VoiceState};
+    use serde_json::json;
+
+    use crate::VoiceAct;
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let presses: Arc<Mutex<Vec<VoiceAct>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&presses);
+    overlay.on_voice(move |act| {
+        let answer = match &act {
+            VoiceAct::Call { .. } => VoiceAnswer::refused(VoiceRefusal::Unreachable),
+            _ => VoiceAnswer::OK,
+        };
+        sink.lock().unwrap().push(act);
+        Box::pin(std::future::ready(answer))
+    });
+    // Voice chat spoke before the game started: the game hears the newest state at once.
+    overlay.set_voice(&voice_room(), true);
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod hears none of it, and its presses go nowhere.
+    let mut old = MockMod::connect_with(&endpoint, &["people"]).await;
+    old.next_of("snapshot").await;
+    old.send(json!({"t":"voice-leave"})).await;
+    old.send(json!({"t":"open-conv","conv":"d:f-ayse:me"}))
+        .await;
+    loop {
+        let frame = old.next().await.expect("the bridge closed");
+        let t = frame["t"].as_str().unwrap_or_default().to_owned();
+        assert!(!t.starts_with("voice"), "an older mod heard {frame}");
+        if t == "history" {
+            break;
+        }
+    }
+    assert!(presses.lock().unwrap().is_empty());
+    assert!(!overlay.shows_voice());
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, &["people", "voice"]).await;
+    let voice = game.next_of("voice").await;
+    assert_eq!(voice["on"], true);
+    assert_eq!(voice["sound"], true, "the launcher's window is away");
+    let names: Vec<_> = voice["room"]["people"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["name"].clone())
+        .collect();
+    assert_eq!(
+        names,
+        [json!("Ayşe"), json!("Cem"), serde_json::Value::Null],
+        "a friend, a crewmate, and someone the lists do not know"
+    );
+    assert_eq!(
+        voice["rings"],
+        json!([{"room":"c0123456789abcdef","from":"f-can","name":"Can","until":1_800_000_030_000_i64}])
+    );
+    eventually("the hub hears the mod shows voice chat", || {
+        overlay.shows_voice()
+    })
+    .await;
+
+    // Speakers come as they change; the same again is not sent.
+    let speaking = VoiceSpeaking {
+        ids: vec!["f-ayse".into()],
+        me: true,
+    };
+    overlay.voice_speaking(&speaking);
+    assert_eq!(
+        game.next().await.unwrap(),
+        json!({"t":"voice-speaking","ids":["f-ayse"],"me":true})
+    );
+    overlay.voice_speaking(&speaking);
+    // A friend's change makes the session look at voice chat again: the speakers it would say are
+    // the newest ones, so nothing goes (the state's own flags are older).
+    let mut moved = view();
+    moved.friends[1].state = PresenceState::Launcher;
+    overlay.on_social(SocialUpdate::View(Box::new(moved)));
+    assert_eq!(game.next().await.unwrap()["t"], "friend");
+    overlay.voice_notice(&VoiceNotice::MutedByModerator);
+    assert_eq!(
+        game.next().await.unwrap(),
+        json!({"t":"voice-notice","kind":"muted"})
+    );
+    // A missed call is the launcher's to say.
+    overlay.voice_notice(&VoiceNotice::Missed {
+        from: "f-can".into(),
+        room: "c0123456789abcdef".into(),
+    });
+
+    // The player's presses reach the launcher; one with a result hears it.
+    game.send(json!({"t":"voice-set","mute":true})).await;
+    game.send(json!({"t":"voice-answer","room":"c0123456789abcdef","join":true}))
+        .await;
+    assert_eq!(
+        game.next().await.unwrap(),
+        json!({"t":"voice-result","act":"join","ok":true})
+    );
+    game.send(json!({"t":"voice-call","friend":"f-ayse"})).await;
+    assert_eq!(
+        game.next().await.unwrap(),
+        json!({"t":"voice-result","act":"call","ok":false,"reason":"unreachable","who":"f-ayse"})
+    );
+    // Someone not on the friend list is never called; a volume is held to its top.
+    game.send(json!({"t":"voice-call","friend":"x-bad"})).await;
+    assert_eq!(
+        game.next().await.unwrap()["reason"],
+        "unreachable",
+        "refused at once"
+    );
+    game.send(json!({"t":"voice-vol","person":"u-zz","percent":900}))
+        .await;
+    eventually("four presses went", || presses.lock().unwrap().len() == 4).await;
+    assert_eq!(
+        *presses.lock().unwrap(),
+        [
+            VoiceAct::Mute(true),
+            VoiceAct::Accept {
+                room: "c0123456789abcdef".into()
+            },
+            VoiceAct::Call {
+                friend: "f-ayse".into()
+            },
+            VoiceAct::Volume {
+                person: "u-zz".into(),
+                percent: 200
+            },
+        ]
+    );
+    // A report about someone in the room carries the room.
+    game.send(json!({"t":"report","friend":"f-ayse","reason":"harassment"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["action"], "report");
+    assert_eq!(
+        social.calls().report_rooms,
+        [Some("f0123456789abcdef".to_owned())]
+    );
+    // A flood stops at the launcher's door (the first press, the microphone off, never counts:
+    // going quiet is never held back).
+    for _ in 0..9 {
+        game.send(json!({"t":"voice-set","deaf":false})).await;
+    }
+    game.send(json!({"t":"voice-call","friend":"f-ayse"})).await;
+    assert_eq!(game.next_of("voice-result").await["reason"], "rate-limited");
+    assert_eq!(presses.lock().unwrap().len(), 13);
+    game.send(json!({"t":"voice-leave"})).await;
+    eventually("leaving is never held back", || {
+        presses.lock().unwrap().last() == Some(&VoiceAct::Leave)
+    })
+    .await;
+
+    // A change: only what the game shows (here a new microphone, with the speakers as they are). Off,
+    // nothing is left to show but that.
+    let mut changed = voice_room();
+    changed.devices.inputs.push(pl_voice::view::VoiceDevice {
+        id: "mic-2".into(),
+        label: "USB".into(),
+    });
+    let room = changed.room.as_mut().unwrap();
+    room.people[0].speaking = true;
+    room.me.talking = true;
+    overlay.set_voice(&changed, true);
+    overlay.set_voice(&VoiceState::off(), false);
+    assert_eq!(game.next().await.unwrap(), json!({"t":"voice"}));
+    // Out of a room, speakers go nowhere.
+    overlay.voice_speaking(&speaking);
+    overlay.voice_notice(&VoiceNotice::MicChanged);
+    assert_eq!(
+        game.next().await.unwrap(),
+        json!({"t":"voice-notice","kind":"mic-changed"})
+    );
+    drop(game);
+    eventually("the mod went: voice chat is the launcher's again", || {
+        !overlay.shows_voice()
+    })
+    .await;
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn without_voice_chat_wired_a_press_hears_it_cannot_go() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social, "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["voice"]).await;
+    game.next_of("snapshot").await;
+    // Voice chat never spoke: no frame, and a call has nothing to go to.
+    game.send(json!({"t":"voice-call","friend":"f-ayse"})).await;
+    assert_eq!(
+        game.next().await.unwrap(),
+        json!({"t":"voice-result","act":"call","ok":false,"reason":"off","who":"f-ayse"})
+    );
+    // The first state the launcher hears goes to the game at once.
+    overlay.set_voice(&voice_room(), false);
+    let voice = game.next_of("voice").await;
+    assert!(voice.get("sound").is_none(), "the launcher rings itself");
     overlay.stop(ByeReason::LauncherExit).await;
 }

@@ -34,6 +34,7 @@ mod session;
 #[cfg(test)]
 mod tests;
 mod token;
+pub mod voice;
 
 pub use feed::{MAX_CONVS, MAX_FRIENDS};
 pub use host::{HostSignal, HostSink, WorldsShown};
@@ -47,3 +48,4 @@ pub use server::{
 };
 pub use session::{CONNECT_WAIT, ConnectOutcome, PeopleChange, SocialActions};
 pub use token::SessionToken;
+pub use voice::{VoiceAct, VoiceFuture};

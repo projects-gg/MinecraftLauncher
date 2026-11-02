@@ -1,0 +1,853 @@
+//! Voice chat in the game (VOICE-O; `docs/tasks/voice.md` "VOICE-O", `ovl2-protocol.md` rows V):
+//! what the overlay shows of the launcher's voice chat, and how the player's presses there reach
+//! it.
+//!
+//! The launcher's `pl_voice::Voice` stays the one source of truth. The app hands every state change,
+//! every speaking change and every notice to the hub ([`crate::Overlay::set_voice`],
+//! [`crate::Overlay::voice_speaking`], [`crate::Overlay::voice_notice`]), which keeps the newest
+//! state for games that start later and passes them on to every game's session. A session tells
+//! only a mod whose hello lists `voice`, and only what changed ([`VoiceMirror`]): the whole room
+//! when something in it changes, the speakers on their own. Names come from the session's friend
+//! lists (friends, then crewmates); someone else goes nameless and the mod says "Bir oyuncu".
+//!
+//! The mod's presses are checked against the newest state ([`check`]: a ring that still rings,
+//! someone in the room, a friend on the list) and go to the app's voice chat
+//! ([`crate::Overlay::on_voice`]), which calls the same `Voice` methods as the page's commands.
+//! Nothing here runs while there is no game, and nothing in a game while voice chat is quiet.
+
+use std::future::Future;
+use std::pin::Pin;
+
+use pl_voice::view::{
+    VoiceAnswer, VoiceLeftReason, VoiceMic, VoiceModAction, VoiceNotice, VoiceRefusal,
+    VoiceSpeaking, VoiceState,
+};
+
+use crate::protocol::{
+    FromGame, ToGame, VoiceCan, VoiceMeShown, VoiceNoticeView, VoicePersonRef, VoicePersonShown,
+    VoiceRingShown, VoiceRoomShown, VoiceView,
+};
+
+/// The top of a person's volume, in percent (the launcher's slider; an engine that plays through
+/// `<audio>` holds it to 100 itself).
+pub const MAX_VOLUME: u16 = 200;
+
+/// What the app's voice chat answers a press with.
+pub type VoiceFuture = Pin<Box<dyn Future<Output = VoiceAnswer> + Send>>;
+
+/// A press in the game's voice chat, for the launcher's (the page's commands of the same name).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VoiceAct {
+    /// "Mikrofon": off (`true`) or on again (which ends deafening too).
+    Mute(bool),
+    /// "Sağırlaştır".
+    Deaf(bool),
+    /// "Ayrıl" ("İptal" while the player's call rings).
+    Leave,
+    /// "Katıl" on a ring.
+    Accept { room: String },
+    /// "Reddet" on a ring.
+    Decline { room: String },
+    /// "Ses seviyesi", in percent (0 to [`MAX_VOLUME`]).
+    Volume { person: String, percent: u16 },
+    /// "Benim için sustur".
+    MuteForMe { person: String, on: bool },
+    /// A leader's or moderator's row (only `mute`, `unmute`, `kick`, `unkick`, `mod` and `unmod`
+    /// come from the game).
+    Moderate(VoiceModAction),
+    /// "Ara".
+    Call { friend: String },
+    /// "Odaya davet et".
+    Invite { friend: String },
+}
+
+impl VoiceAct {
+    /// The name its `voice-result` carries; none for the presses whose outcome the next `voice`
+    /// shows by itself (the microphone, deafening, leaving, a decline, volumes).
+    pub fn result_name(&self) -> Option<&'static str> {
+        match self {
+            Self::Accept { .. } => Some("join"),
+            Self::Call { .. } => Some("call"),
+            Self::Invite { .. } => Some("invite"),
+            Self::Moderate(action) => moderation_name(action),
+            _ => None,
+        }
+    }
+
+    /// Whom it is about (a friend, someone in the room), by id; empty for the player's own.
+    pub fn who(&self) -> &str {
+        match self {
+            Self::Volume { person, .. } | Self::MuteForMe { person, .. } => person,
+            Self::Call { friend } | Self::Invite { friend } => friend,
+            Self::Moderate(
+                VoiceModAction::Mute { person }
+                | VoiceModAction::Unmute { person }
+                | VoiceModAction::Kick { person }
+                | VoiceModAction::Unkick { person }
+                | VoiceModAction::Mod { person }
+                | VoiceModAction::Unmod { person },
+            ) => person,
+            _ => "",
+        }
+    }
+}
+
+fn moderation_name(action: &VoiceModAction) -> Option<&'static str> {
+    Some(match action {
+        VoiceModAction::Mute { .. } => "mute",
+        VoiceModAction::Unmute { .. } => "unmute",
+        VoiceModAction::Kick { .. } => "kick",
+        VoiceModAction::Unkick { .. } => "unkick",
+        VoiceModAction::Mod { .. } => "mod",
+        VoiceModAction::Unmod { .. } => "unmod",
+        _ => return None,
+    })
+}
+
+/// A press that names something the newest state does not have (a ring that is over, someone who
+/// left the room, a friend no longer on the list): it does nothing, and the mod hears so when the
+/// press has a result of its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refused {
+    pub act: Option<&'static str>,
+    pub who: String,
+    pub why: VoiceRefusal,
+}
+
+impl Refused {
+    fn quiet() -> Self {
+        Self {
+            act: None,
+            who: String::new(),
+            why: VoiceRefusal::Nothing,
+        }
+    }
+
+    fn of(act: &'static str, who: &str, why: VoiceRefusal) -> Self {
+        Self {
+            act: Some(act),
+            who: who.to_owned(),
+            why,
+        }
+    }
+}
+
+/// The launcher's act for a mod's voice frame, after its checks against `state` (the newest; none
+/// before voice chat said anything) and the friend list (`is_friend`). `None`: the frame is not one
+/// of VOICE-O's.
+pub fn check(
+    frame: &FromGame,
+    state: Option<&VoiceState>,
+    is_friend: impl Fn(&str) -> bool,
+) -> Option<Result<VoiceAct, Refused>> {
+    let room = state.and_then(|state| state.room.as_ref());
+    let in_room =
+        |person: &str| room.is_some_and(|room| room.people.iter().any(|p| p.id == person));
+    Some(match frame {
+        FromGame::VoiceSet { mute, deaf } => match (mute, deaf) {
+            (Some(on), _) => Ok(VoiceAct::Mute(*on)),
+            (None, Some(on)) => Ok(VoiceAct::Deaf(*on)),
+            (None, None) => Err(Refused::quiet()),
+        },
+        FromGame::VoiceLeave {} => Ok(VoiceAct::Leave),
+        FromGame::VoiceAnswer { room: ring, join } => {
+            let rings = state.is_some_and(|state| state.rings.iter().any(|r| &r.room == ring));
+            match (rings, join) {
+                (true, true) => Ok(VoiceAct::Accept { room: ring.clone() }),
+                (true, false) => Ok(VoiceAct::Decline { room: ring.clone() }),
+                (false, true) => Err(Refused::of("join", "", VoiceRefusal::RoomGone)),
+                (false, false) => Err(Refused::quiet()),
+            }
+        }
+        FromGame::VoiceVol { person, percent } if in_room(person) => Ok(VoiceAct::Volume {
+            person: person.clone(),
+            percent: u16::try_from((*percent).clamp(0, i64::from(MAX_VOLUME))).unwrap_or(100),
+        }),
+        FromGame::VoiceLmute { person, on } if in_room(person) => Ok(VoiceAct::MuteForMe {
+            person: person.clone(),
+            on: *on,
+        }),
+        FromGame::VoiceVol { .. } | FromGame::VoiceLmute { .. } => Err(Refused::quiet()),
+        FromGame::VoiceMod { person, act } => {
+            let person = person.clone();
+            let action = match act.as_str() {
+                "mute" => VoiceModAction::Mute { person },
+                "unmute" => VoiceModAction::Unmute { person },
+                "kick" => VoiceModAction::Kick { person },
+                "unkick" => VoiceModAction::Unkick { person },
+                "mod" => VoiceModAction::Mod { person },
+                "unmod" => VoiceModAction::Unmod { person },
+                _ => return Some(Err(Refused::quiet())),
+            };
+            let act = VoiceAct::Moderate(action);
+            // "Geri al" after "Odadan çıkar" names someone who is out of the room by now.
+            let unkick = matches!(act, VoiceAct::Moderate(VoiceModAction::Unkick { .. }));
+            if room.is_some() && (unkick || in_room(act.who())) {
+                Ok(act)
+            } else {
+                Err(Refused::of(
+                    act.result_name().unwrap_or("mod"),
+                    act.who(),
+                    VoiceRefusal::NotFound,
+                ))
+            }
+        }
+        FromGame::VoiceCall { friend } if is_friend(friend) => Ok(VoiceAct::Call {
+            friend: friend.clone(),
+        }),
+        FromGame::VoiceCall { friend } => {
+            Err(Refused::of("call", friend, VoiceRefusal::Unreachable))
+        }
+        FromGame::VoiceInvite { friend } if room.is_some() && is_friend(friend) => {
+            Ok(VoiceAct::Invite {
+                friend: friend.clone(),
+            })
+        }
+        FromGame::VoiceInvite { friend } => {
+            Err(Refused::of("invite", friend, VoiceRefusal::Nothing))
+        }
+        _ => return None,
+    })
+}
+
+/// A refusal's name in `voice-result`.
+pub fn refusal_name(why: VoiceRefusal) -> &'static str {
+    match why {
+        VoiceRefusal::Off => "off",
+        VoiceRefusal::Unreachable => "unreachable",
+        VoiceRefusal::RateLimited => "rate-limited",
+        VoiceRefusal::AccountLimited => "account-limited",
+        VoiceRefusal::StaffMuted => "staff-muted",
+        VoiceRefusal::RoomFull => "room-full",
+        VoiceRefusal::RoomsFull => "rooms-full",
+        VoiceRefusal::RoomGone => "room-gone",
+        VoiceRefusal::Kicked => "kicked",
+        VoiceRefusal::NotMember => "not-member",
+        VoiceRefusal::NotAllowed => "not-allowed",
+        VoiceRefusal::NotFound => "not-found",
+        VoiceRefusal::InvalidName => "invalid-name",
+        VoiceRefusal::NameRejected => "name-rejected",
+        VoiceRefusal::Failed => "failed",
+        VoiceRefusal::Nothing => "nothing",
+    }
+}
+
+/// `voice-result` for an act that has one, as it went.
+pub fn result_of(act: &VoiceAct, answer: &VoiceAnswer) -> Option<ToGame> {
+    let name = act.result_name()?;
+    Some(ToGame::VoiceResult {
+        act: name,
+        ok: answer.is_ok(),
+        reason: answer.refused.map(refusal_name),
+        who: act.who().to_owned(),
+    })
+}
+
+/// `voice-result` for a press refused here (none for one without a result of its own).
+pub fn refused_result(refused: &Refused) -> Option<ToGame> {
+    Some(ToGame::VoiceResult {
+        act: refused.act?,
+        ok: false,
+        reason: Some(refusal_name(refused.why)),
+        who: refused.who.clone(),
+    })
+}
+
+/// The view of `state` for the mod: names from `name_of` (the friend lists; none: "Bir oyuncu"),
+/// crew names from `crew_name`. `sound`: the mod rings for a ring (the launcher's window is away).
+/// `speaking`: who speaks now, when that changed after `state` (the state's flags are as of its
+/// own change; a speaking change comes alone).
+pub fn view_of(
+    state: &VoiceState,
+    sound: bool,
+    speaking: Option<&VoiceSpeaking>,
+    name_of: impl Fn(&str) -> Option<String>,
+    crew_name: impl Fn(&str) -> Option<String>,
+) -> VoiceView {
+    let name = |id: &str| name_of(id).unwrap_or_default();
+    let room = state.room.as_ref().map(|room| VoiceRoomShown {
+        id: room.id.clone(),
+        kind: room.kind,
+        name: if room.general {
+            None
+        } else {
+            room.name.clone()
+        },
+        general: room.general,
+        crew: room.crew.as_deref().and_then(&crew_name),
+        phase: room.phase,
+        max: room.max,
+        me: VoiceMeShown {
+            role: room.me.role,
+            mute: room.me.mute,
+            deaf: room.me.deaf,
+            muted_by_moderator: room.me.muted_by_moderator,
+            talking: speaking.map_or(room.me.talking, |now| now.me),
+            quality: room.me.quality,
+        },
+        people: room
+            .people
+            .iter()
+            .map(|person| VoicePersonShown {
+                id: person.id.clone(),
+                name: name(&person.id),
+                role: person.role,
+                mute: person.mute,
+                deaf: person.deaf,
+                muted_by_moderator: person.muted_by_moderator,
+                quality: person.quality,
+                speaking: speaking.map_or(person.speaking, |now| now.ids.contains(&person.id)),
+                volume: person.volume.min(MAX_VOLUME),
+                muted_for_me: person.muted_for_me,
+                can: VoiceCan {
+                    mute: person.can.mute,
+                    kick: person.can.kick,
+                    moderator: person.can.moderator,
+                },
+            })
+            .collect(),
+        ringing: room
+            .ringing
+            .iter()
+            .map(|ring| VoicePersonRef {
+                id: ring.to.clone(),
+                name: name(&ring.to),
+            })
+            .collect(),
+    });
+    VoiceView {
+        on: state.available && state.enabled,
+        room,
+        calling: state.calling.as_ref().map(|calling| VoicePersonRef {
+            id: calling.friend.clone(),
+            name: name(&calling.friend),
+        }),
+        rings: state
+            .rings
+            .iter()
+            .map(|ring| VoiceRingShown {
+                room: ring.room.clone(),
+                from: ring.from.clone(),
+                name: name(&ring.from),
+                with: ring.with.iter().take(4).map(|id| name(id)).collect(),
+                until: ring.until.saturating_mul(1000),
+            })
+            .collect(),
+        sound: sound && !state.rings.is_empty(),
+    }
+}
+
+/// A launcher notice as the game's note, or none for the ones the game leaves to the launcher (a
+/// missed call: the ring's card said it, and the launcher keeps the list).
+pub fn notice_of(
+    notice: &VoiceNotice,
+    name_of: impl Fn(&str) -> Option<String>,
+) -> Option<VoiceNoticeView> {
+    let view = |kind, reason| VoiceNoticeView {
+        kind,
+        reason,
+        name: String::new(),
+    };
+    Some(match notice {
+        VoiceNotice::Left { reason, friend } => VoiceNoticeView {
+            kind: "left",
+            reason: Some(match reason {
+                VoiceLeftReason::Closed => "closed",
+                VoiceLeftReason::Alone => "alone",
+                VoiceLeftReason::NoAnswer => "no-answer",
+                VoiceLeftReason::Elsewhere => "elsewhere",
+                VoiceLeftReason::Kicked => "kicked",
+                VoiceLeftReason::Crew => "crew",
+                VoiceLeftReason::Idle => "idle",
+                VoiceLeftReason::Unavailable => "unavailable",
+                VoiceLeftReason::Failed => "failed",
+            }),
+            name: friend.as_deref().and_then(&name_of).unwrap_or_default(),
+        },
+        VoiceNotice::Moved { .. } => view("moved", None),
+        VoiceNotice::MutedByModerator => view("muted", None),
+        VoiceNotice::MicChanged => view("mic-changed", None),
+        VoiceNotice::Mic { mic } => match mic {
+            VoiceMic::Denied => view("mic", Some("denied")),
+            VoiceMic::Missing => view("mic", Some("missing")),
+            VoiceMic::Ok | VoiceMic::Unknown => return None,
+        },
+        VoiceNotice::Missed { .. } => return None,
+    })
+}
+
+/// What the live mod was told of voice chat, for the next differences.
+#[derive(Debug, Default)]
+pub struct VoiceMirror {
+    view: Option<VoiceView>,
+}
+
+impl VoiceMirror {
+    /// `voice` when `view` differs from what the mod has. While voice chat has nothing to show
+    /// (off, no room, no ring) a mod that heard nothing of it hears nothing: its settings show no
+    /// voice chat row for a feature that is not on.
+    pub fn update(&mut self, view: VoiceView) -> Option<ToGame> {
+        if self.view.as_ref() == Some(&view) {
+            return None;
+        }
+        if self.view.is_none() && view.is_empty() {
+            self.view = Some(view);
+            return None;
+        }
+        self.view = Some(view.clone());
+        Some(ToGame::Voice(Box::new(view)))
+    }
+
+    /// `voice-speaking` when the speakers changed, only while the player is in a room (someone
+    /// who is not in it any more is left out). The speakers stand in the mirror too, so the next
+    /// whole `voice` that only says the same is not sent.
+    pub fn speaking(&mut self, speaking: &VoiceSpeaking) -> Option<ToGame> {
+        let room = self.view.as_mut()?.room.as_mut()?;
+        let mut changed = room.me.talking != speaking.me;
+        room.me.talking = speaking.me;
+        for person in &mut room.people {
+            let now = speaking.ids.contains(&person.id);
+            changed |= person.speaking != now;
+            person.speaking = now;
+        }
+        changed.then(|| ToGame::VoiceSpeaking {
+            ids: room
+                .people
+                .iter()
+                .filter(|person| person.speaking)
+                .map(|person| person.id.clone())
+                .collect(),
+            me: room.me.talking,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pl_voice::view::{
+        VoiceCalling, VoiceMe, VoiceOutRing, VoicePerson, VoicePhase, VoicePowers, VoiceQuality,
+        VoiceRing, VoiceRole, VoiceRoomKind, VoiceRoomView,
+    };
+    use serde_json::json;
+
+    use super::*;
+
+    fn person(id: &str) -> VoicePerson {
+        VoicePerson {
+            id: id.into(),
+            role: VoiceRole::Member,
+            mute: false,
+            deaf: false,
+            muted_by_moderator: false,
+            quality: VoiceQuality::Good,
+            speaking: false,
+            volume: 100,
+            muted_for_me: false,
+            joined_at: 1_800_000_000,
+            can: VoicePowers::default(),
+        }
+    }
+
+    pub(crate) fn in_room() -> VoiceState {
+        let mut kaan = person("u-kaan");
+        kaan.role = VoiceRole::Leader;
+        kaan.speaking = true;
+        kaan.volume = 250;
+        let mut stranger = person("u-x");
+        stranger.mute = true;
+        stranger.quality = VoiceQuality::Weak;
+        stranger.muted_for_me = true;
+        stranger.can = VoicePowers {
+            mute: true,
+            kick: true,
+            move_to: true,
+            moderator: false,
+        };
+        VoiceState {
+            available: true,
+            enabled: true,
+            room: Some(VoiceRoomView {
+                id: "f0123456789abcdef".into(),
+                kind: VoiceRoomKind::Friend,
+                crew: None,
+                name: None,
+                general: false,
+                max: 10,
+                phase: VoicePhase::Live,
+                me: VoiceMe {
+                    id: "me".into(),
+                    role: VoiceRole::Moderator,
+                    mute: false,
+                    deaf: true,
+                    muted_by_moderator: false,
+                    talking: false,
+                    quality: VoiceQuality::Good,
+                },
+                people: vec![kaan, stranger],
+                ringing: vec![VoiceOutRing {
+                    to: "f-can".into(),
+                    until: 1_800_000_030,
+                }],
+                can_rename: false,
+                can_close: false,
+            }),
+            calling: Some(VoiceCalling {
+                friend: "f-can".into(),
+                until: 1_800_000_030,
+            }),
+            rings: vec![VoiceRing {
+                room: "c0123456789abcdef".into(),
+                from: "f-ayse".into(),
+                with: vec!["u-kaan".into(), "u-x".into()],
+                until: 1_800_000_020,
+            }],
+            ..VoiceState::off()
+        }
+    }
+
+    fn names(id: &str) -> Option<String> {
+        match id {
+            "u-kaan" => Some("Kaan_07".into()),
+            "f-ayse" => Some("Ayşe".into()),
+            "f-can" => Some("Can".into()),
+            _ => None,
+        }
+    }
+
+    fn crews(id: &str) -> Option<String> {
+        (id == "t-gk").then(|| "Gece Kuşları".to_owned())
+    }
+
+    #[test]
+    fn the_room_goes_with_names_and_only_what_is_set() {
+        let view = view_of(&in_room(), true, None, names, crews);
+        assert_eq!(
+            serde_json::to_value(ToGame::Voice(Box::new(view))).unwrap(),
+            json!({
+                "t": "voice", "on": true, "sound": true,
+                "room": {
+                    "id": "f0123456789abcdef", "kind": "friend", "phase": "live", "max": 10,
+                    "me": {"role": "moderator", "deaf": true},
+                    "people": [
+                        {"id": "u-kaan", "name": "Kaan_07", "role": "leader", "speaking": true,
+                         "volume": 200},
+                        {"id": "u-x", "role": "member", "mute": true, "quality": "weak",
+                         "volume": 100, "mutedForMe": true, "can": {"mute": true, "kick": true}},
+                    ],
+                    "ringing": [{"id": "f-can", "name": "Can"}],
+                },
+                "calling": {"id": "f-can", "name": "Can"},
+                "rings": [{"room": "c0123456789abcdef", "from": "f-ayse", "name": "Ayşe",
+                           "with": ["Kaan_07", ""], "until": 1_800_000_020_000_i64}],
+            })
+        );
+    }
+
+    #[test]
+    fn a_crew_rooms_general_is_worded_by_the_mod_and_names_its_crew() {
+        let mut state = in_room();
+        let room = state.room.as_mut().unwrap();
+        room.kind = VoiceRoomKind::Crew;
+        room.crew = Some("t-gk".into());
+        room.name = Some("Genel".into());
+        room.general = true;
+        state.rings.clear();
+        let view = view_of(&state, true, None, names, crews);
+        let room = view.room.as_ref().unwrap();
+        assert_eq!(
+            (room.name.as_deref(), room.general, room.crew.as_deref()),
+            (None, true, Some("Gece Kuşları"))
+        );
+        assert!(!view.sound, "nothing rings: nothing to ring for");
+        state.room.as_mut().unwrap().general = false;
+        state.room.as_mut().unwrap().name = Some("Oda 2".into());
+        let view = view_of(&state, false, None, names, crews);
+        assert_eq!(view.room.unwrap().name.as_deref(), Some("Oda 2"));
+        // Voice chat switched off by the player: no "Ara" anywhere.
+        let mut off = VoiceState::off();
+        off.available = true;
+        off.enabled = false;
+        assert_eq!(
+            serde_json::to_value(ToGame::Voice(Box::new(view_of(
+                &off, true, None, names, crews
+            ))))
+            .unwrap(),
+            json!({"t": "voice"})
+        );
+    }
+
+    #[test]
+    fn the_mirror_sends_a_room_once_and_speakers_as_they_change() {
+        let mut mirror = VoiceMirror::default();
+        let speaking = VoiceSpeaking {
+            ids: vec!["u-x".into()],
+            me: true,
+        };
+        assert!(
+            mirror.speaking(&speaking).is_none(),
+            "no room told yet: nothing"
+        );
+        let view = view_of(&in_room(), false, None, names, crews);
+        assert!(mirror.update(view.clone()).is_some());
+        assert!(mirror.update(view.clone()).is_none(), "the same again");
+        assert_eq!(
+            serde_json::to_value(mirror.speaking(&speaking).unwrap()).unwrap(),
+            json!({"t": "voice-speaking", "ids": ["u-x"], "me": true})
+        );
+        assert!(mirror.speaking(&speaking).is_none(), "no change");
+        // Someone who left (or never came) is not told.
+        let ghost = VoiceSpeaking {
+            ids: vec!["u-x".into(), "u-gone".into()],
+            me: true,
+        };
+        assert!(mirror.speaking(&ghost).is_none());
+        // A whole state that says what the speakers said already goes unsent.
+        let mut state = in_room();
+        let room = state.room.as_mut().unwrap();
+        room.people[0].speaking = false;
+        room.people[1].speaking = true;
+        room.me.talking = true;
+        assert!(
+            mirror
+                .update(view_of(&state, false, None, names, crews))
+                .is_none()
+        );
+        // Nobody speaks: one last frame, then silence.
+        let quiet = VoiceSpeaking::default();
+        assert_eq!(
+            serde_json::to_value(mirror.speaking(&quiet).unwrap()).unwrap(),
+            json!({"t": "voice-speaking", "ids": [], "me": false})
+        );
+        assert!(mirror.speaking(&quiet).is_none());
+        // Out of the room: speakers are nobody's business.
+        assert!(
+            mirror
+                .update(view_of(&VoiceState::off(), false, None, names, crews))
+                .is_some()
+        );
+        assert!(mirror.speaking(&speaking).is_none());
+    }
+
+    #[test]
+    fn the_newest_speakers_win_and_nothing_goes_while_there_is_nothing() {
+        // Voice chat off from the start: a mod that heard nothing of it hears nothing.
+        let mut mirror = VoiceMirror::default();
+        assert!(
+            mirror
+                .update(view_of(&VoiceState::off(), false, None, names, crews))
+                .is_none()
+        );
+        // The state says Kaan_07 speaks; a later change says nobody does: a whole view made after
+        // it (a name changed) says the later one.
+        let quiet = VoiceSpeaking::default();
+        let view = view_of(&in_room(), false, Some(&quiet), names, crews);
+        let room = view.room.as_ref().unwrap();
+        assert!(room.people.iter().all(|p| !p.speaking) && !room.me.talking);
+        let talking = VoiceSpeaking {
+            ids: vec!["u-x".into()],
+            me: true,
+        };
+        let view = view_of(&in_room(), false, Some(&talking), names, crews);
+        let room = view.room.as_ref().unwrap();
+        assert_eq!(
+            room.people
+                .iter()
+                .map(|p| (p.id.as_str(), p.speaking))
+                .collect::<Vec<_>>(),
+            [("u-kaan", false), ("u-x", true)]
+        );
+        assert!(room.me.talking);
+        assert!(mirror.update(view).is_some(), "a room is something to show");
+    }
+
+    #[test]
+    fn presses_go_only_for_what_the_state_has() {
+        let state = in_room();
+        let friends = |id: &str| matches!(id, "f-ayse" | "f-can");
+        let frame = |value: serde_json::Value| serde_json::from_value::<FromGame>(value).unwrap();
+        let go = |value| check(&frame(value), Some(&state), friends).unwrap();
+        assert_eq!(
+            go(json!({"t":"voice-set","mute":true})),
+            Ok(VoiceAct::Mute(true))
+        );
+        assert_eq!(
+            go(json!({"t":"voice-set","deaf":false})),
+            Ok(VoiceAct::Deaf(false))
+        );
+        assert!(go(json!({"t":"voice-set"})).is_err());
+        assert_eq!(go(json!({"t":"voice-leave"})), Ok(VoiceAct::Leave));
+        assert_eq!(
+            go(json!({"t":"voice-answer","room":"c0123456789abcdef","join":true})),
+            Ok(VoiceAct::Accept {
+                room: "c0123456789abcdef".into()
+            })
+        );
+        assert_eq!(
+            go(json!({"t":"voice-answer","room":"c0123456789abcdef","join":false})),
+            Ok(VoiceAct::Decline {
+                room: "c0123456789abcdef".into()
+            })
+        );
+        // A ring that is over: "Katıl" hears so, "Reddet" does nothing.
+        assert_eq!(
+            go(json!({"t":"voice-answer","room":"cffffffffffffffff","join":true})),
+            Err(Refused::of("join", "", VoiceRefusal::RoomGone))
+        );
+        assert_eq!(
+            go(json!({"t":"voice-answer","room":"cffffffffffffffff"})),
+            Err(Refused::quiet())
+        );
+        // Volumes are held to the slider's ends; only for someone in the room.
+        assert_eq!(
+            go(json!({"t":"voice-vol","person":"u-x","percent":350})),
+            Ok(VoiceAct::Volume {
+                person: "u-x".into(),
+                percent: 200
+            })
+        );
+        assert_eq!(
+            go(json!({"t":"voice-vol","person":"u-x","percent":-4})),
+            Ok(VoiceAct::Volume {
+                person: "u-x".into(),
+                percent: 0
+            })
+        );
+        assert!(go(json!({"t":"voice-vol","person":"f-ayse","percent":50})).is_err());
+        assert_eq!(
+            go(json!({"t":"voice-lmute","person":"u-kaan","on":true})),
+            Ok(VoiceAct::MuteForMe {
+                person: "u-kaan".into(),
+                on: true
+            })
+        );
+        assert!(go(json!({"t":"voice-lmute","person":"nobody","on":true})).is_err());
+        // Moderation: the room decides the role; here only who and what.
+        assert_eq!(
+            go(json!({"t":"voice-mod","person":"u-x","act":"kick"})),
+            Ok(VoiceAct::Moderate(VoiceModAction::Kick {
+                person: "u-x".into()
+            }))
+        );
+        assert_eq!(
+            go(json!({"t":"voice-mod","person":"u-gone","act":"unkick"})),
+            Ok(VoiceAct::Moderate(VoiceModAction::Unkick {
+                person: "u-gone".into()
+            })),
+            "the undo names someone who is out"
+        );
+        assert_eq!(
+            go(json!({"t":"voice-mod","person":"u-gone","act":"mute"})),
+            Err(Refused::of("mute", "u-gone", VoiceRefusal::NotFound))
+        );
+        assert_eq!(
+            go(json!({"t":"voice-mod","person":"u-x","act":"close"})),
+            Err(Refused::quiet()),
+            "closing and moving stay in the launcher"
+        );
+        // Calls and invites: friends only; an invite needs a room.
+        assert_eq!(
+            go(json!({"t":"voice-call","friend":"f-ayse"})),
+            Ok(VoiceAct::Call {
+                friend: "f-ayse".into()
+            })
+        );
+        assert_eq!(
+            go(json!({"t":"voice-call","friend":"u-kaan"})),
+            Err(Refused::of("call", "u-kaan", VoiceRefusal::Unreachable))
+        );
+        assert_eq!(
+            go(json!({"t":"voice-invite","friend":"f-can"})),
+            Ok(VoiceAct::Invite {
+                friend: "f-can".into()
+            })
+        );
+        let invite = frame(json!({"t":"voice-invite","friend":"f-can"}));
+        assert_eq!(
+            check(&invite, Some(&VoiceState::off()), friends),
+            Some(Err(Refused::of("invite", "f-can", VoiceRefusal::Nothing)))
+        );
+        assert_eq!(
+            check(&frame(json!({"t":"voice-leave"})), None, friends),
+            Some(Ok(VoiceAct::Leave))
+        );
+        assert_eq!(
+            check(&frame(json!({"t":"panel","open":true})), None, friends),
+            None
+        );
+    }
+
+    #[test]
+    fn results_and_notices_use_the_wire_names() {
+        let call = VoiceAct::Call {
+            friend: "f-ayse".into(),
+        };
+        let refused = result_of(&call, &VoiceAnswer::refused(VoiceRefusal::Unreachable)).unwrap();
+        assert_eq!(
+            serde_json::to_value(refused).unwrap(),
+            json!({"t":"voice-result","act":"call","ok":false,"reason":"unreachable","who":"f-ayse"})
+        );
+        let kick = VoiceAct::Moderate(VoiceModAction::Kick {
+            person: "u-x".into(),
+        });
+        assert_eq!(
+            serde_json::to_value(result_of(&kick, &VoiceAnswer::OK).unwrap()).unwrap(),
+            json!({"t":"voice-result","act":"kick","ok":true,"who":"u-x"})
+        );
+        assert!(result_of(&VoiceAct::Mute(true), &VoiceAnswer::OK).is_none());
+        assert_eq!(
+            serde_json::to_value(
+                refused_result(&Refused::of("join", "", VoiceRefusal::RoomGone)).unwrap()
+            )
+            .unwrap(),
+            json!({"t":"voice-result","act":"join","ok":false,"reason":"room-gone"})
+        );
+        assert!(refused_result(&Refused::quiet()).is_none());
+        let notice = |notice: VoiceNotice| {
+            notice_of(&notice, names)
+                .map(|view| serde_json::to_value(ToGame::VoiceNotice(view)).unwrap())
+        };
+        assert_eq!(
+            notice(VoiceNotice::Left {
+                reason: VoiceLeftReason::NoAnswer,
+                friend: Some("f-can".into())
+            }),
+            Some(json!({"t":"voice-notice","kind":"left","reason":"no-answer","name":"Can"}))
+        );
+        assert_eq!(
+            notice(VoiceNotice::Left {
+                reason: VoiceLeftReason::Kicked,
+                friend: None
+            }),
+            Some(json!({"t":"voice-notice","kind":"left","reason":"kicked"}))
+        );
+        assert_eq!(
+            notice(VoiceNotice::MutedByModerator),
+            Some(json!({"t":"voice-notice","kind":"muted"}))
+        );
+        assert_eq!(
+            notice(VoiceNotice::Mic {
+                mic: VoiceMic::Denied
+            }),
+            Some(json!({"t":"voice-notice","kind":"mic","reason":"denied"}))
+        );
+        assert_eq!(
+            notice(VoiceNotice::MicChanged),
+            Some(json!({"t":"voice-notice","kind":"mic-changed"}))
+        );
+        assert_eq!(
+            notice(VoiceNotice::Moved {
+                room: "c0123456789abcdef".into(),
+                name: "Oda 2".into()
+            }),
+            Some(json!({"t":"voice-notice","kind":"moved"}))
+        );
+        assert_eq!(
+            notice(VoiceNotice::Missed {
+                from: "f-ayse".into(),
+                room: "c0123456789abcdef".into()
+            }),
+            None,
+            "the ring's card said it; the launcher keeps the list"
+        );
+    }
+}

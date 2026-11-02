@@ -239,6 +239,58 @@ pub enum FromGame {
     /// picker in the overlay's settings. The launcher keeps it ("Sohbette emoji seçici", the same
     /// switch as its own Settings) and answers with `emojis`.
     Emoji { on: bool },
+    /// VOICE-O (V6; from a mod whose hello lists `voice`): "Mikrofon" (`mute`) or "Sağırlaştır"
+    /// (`deaf`) in the panel, the one pressed. Opening the microphone ends deafening too (the
+    /// launcher's rule); the next `voice` says how it stands.
+    VoiceSet {
+        #[serde(default)]
+        mute: Option<bool>,
+        #[serde(default)]
+        deaf: Option<bool>,
+    },
+    /// VOICE-O (V7): "Ayrıl", and "İptal" while the player's call rings.
+    VoiceLeave {},
+    /// VOICE-O (V8): "Katıl" (`join`) or "Reddet" on a ring the last `voice` listed.
+    VoiceAnswer {
+        #[serde(default)]
+        room: String,
+        #[serde(default)]
+        join: bool,
+    },
+    /// VOICE-O (V9): "Ses seviyesi" of someone in the player's room, in percent (0–200; the
+    /// launcher holds a value outside to it).
+    VoiceVol {
+        #[serde(default)]
+        person: String,
+        #[serde(default)]
+        percent: i64,
+    },
+    /// VOICE-O (V10): "Benim için sustur" (`on`) or its undo, for someone in the player's room.
+    VoiceLmute {
+        #[serde(default)]
+        person: String,
+        #[serde(default)]
+        on: bool,
+    },
+    /// VOICE-O (V11): a leader's or moderator's row on someone in the room: `mute` / `unmute`
+    /// ("Herkes için sustur"), `kick` ("Odadan çıkar"), `unkick` (its "Geri al"), `mod` / `unmod`
+    /// ("Moderatör yap", friend rooms). The room decides whether the player's role may.
+    VoiceMod {
+        #[serde(default)]
+        person: String,
+        #[serde(default)]
+        act: String,
+    },
+    /// VOICE-O (V12): "Ara" on a friend.
+    VoiceCall {
+        #[serde(default)]
+        friend: String,
+    },
+    /// VOICE-O (V13): "Odaya davet et": a friend into the player's friend room.
+    VoiceInvite {
+        #[serde(default)]
+        friend: String,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -309,7 +361,28 @@ pub const FEATURE_PANEL_OFF: &str = "panel-off";
 /// did not go (an older mod hears `rate`).
 pub const FEATURE_SLOW: &str = "slow";
 
+/// The `hello` feature of a mod with voice chat's in-game parts (VOICE-O, V1): it hears `voice`,
+/// `voice-speaking`, `voice-notice` and `voice-result`, reads friends' `voice`, and sends the
+/// `voice-*` presses. A mod without it hears none of them and its `voice-*` frames are dropped.
+pub const FEATURE_VOICE: &str = "voice";
+
 impl FromGame {
+    /// One of VOICE-O's presses: they go to the launcher's voice chat, never to the friends
+    /// feature.
+    pub fn is_voice(&self) -> bool {
+        matches!(
+            self,
+            Self::VoiceSet { .. }
+                | Self::VoiceLeave {}
+                | Self::VoiceAnswer { .. }
+                | Self::VoiceVol { .. }
+                | Self::VoiceLmute { .. }
+                | Self::VoiceMod { .. }
+                | Self::VoiceCall { .. }
+                | Self::VoiceInvite { .. }
+        )
+    }
+
     /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
     /// feature.
     pub fn is_host(&self) -> bool {
@@ -561,6 +634,33 @@ pub enum ToGame {
         hosts: Vec<String>,
         emojis: Vec<pl_content::ChatEmoji>,
     },
+    /// VOICE-O (V2): voice chat as the game shows it, whole: whether it may be used now, the
+    /// player's room with everyone in it, the call that rings at a friend, the rings for the
+    /// player. After the greeting and whenever what it shows changes. Only to a mod that said
+    /// `voice`.
+    Voice(Box<VoiceView>),
+    /// VOICE-O (V3): who speaks in the player's room now (`ids`) and whether the player's own
+    /// microphone sends (`me`): only when that changed, at most ten times a second (the voice page
+    /// measures and the launcher passes changes alone), only while the player is in a room. Only
+    /// to a mod that said `voice`.
+    VoiceSpeaking {
+        ids: Vec<String>,
+        me: bool,
+    },
+    /// VOICE-O (V4): a moment of voice chat worth a note in the game (the mod words it). Only to a
+    /// mod that said `voice`.
+    VoiceNotice(VoiceNoticeView),
+    /// VOICE-O (V5): how one of the player's presses went (`join`, `call`, `invite`, `mute`,
+    /// `unmute`, `kick`, `unkick`, `mod`, `unmod`), whom it was about (`who`, an id), and why not
+    /// (`reason`). Only to a mod that said `voice`.
+    VoiceResult {
+        act: &'static str,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<&'static str>,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        who: String,
+    },
     Bye {
         reason: ByeReason,
     },
@@ -680,6 +780,10 @@ pub struct FriendView {
     /// first (the first shows right of the name).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub marks: Vec<String>,
+    /// VOICE-O (V14): their voice chat: `ready` (they may be called), `in` (in a room; a call still
+    /// rings); absent: no "Ara".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voice: Option<pl_social::PresenceVoice>,
 }
 
 /// A friend in one of the crews the player may invite to (OVL-UX2, Q5).
@@ -1057,6 +1161,180 @@ pub enum ReactFailure {
     NotAllowed,
     /// No connection to the friends service.
     Offline,
+}
+
+/// VOICE-O (V2): voice chat as the game shows it. Everything absent is false, empty or none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoiceView {
+    /// Voice chat may be used now (Studio, the friends service and the player's own switch agree):
+    /// "Ara" and "Odaya davet et" may show.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub on: bool,
+    /// The room the player is in, or is getting into.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub room: Option<VoiceRoomShown>,
+    /// The friend the player's call rings at ("Aranıyor…"); the player waits in the room.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calling: Option<VoicePersonRef>,
+    /// Calls and invites ringing for the player, oldest first (the card with "Katıl"/"Reddet").
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rings: Vec<VoiceRingShown>,
+    /// The mod rings for them: the launcher's window is away, so nothing else does (in front, the
+    /// launcher's own page rings and the mod stays quiet).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub sound: bool,
+}
+
+impl VoiceView {
+    /// Nothing to show: voice chat is off and the player is in no room, called by no one.
+    pub fn is_empty(&self) -> bool {
+        !self.on && self.room.is_none() && self.calling.is_none() && self.rings.is_empty()
+    }
+}
+
+/// The player's room (V2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoiceRoomShown {
+    pub id: String,
+    /// `friend` or `crew`.
+    pub kind: pl_voice::view::VoiceRoomKind,
+    /// Its name; none for the crew's "Genel" (`general`, the mod says it in its language) and for a
+    /// friend room nobody named (the mod names it after the people in it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub general: bool,
+    /// A crew room's crew, by name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crew: Option<String>,
+    /// `joining`, `live` or `reconnecting` ("Yeniden bağlanıyor…").
+    pub phase: pl_voice::view::VoicePhase,
+    /// People at most, the player included.
+    pub max: u16,
+    pub me: VoiceMeShown,
+    /// Everyone else, longest present first.
+    pub people: Vec<VoicePersonShown>,
+    /// The player's invites still ringing ("Aranıyor…").
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ringing: Vec<VoicePersonRef>,
+}
+
+/// The player in the room (V2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceMeShown {
+    pub role: pl_voice::view::VoiceRole,
+    /// "Mikrofonu kapat".
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mute: bool,
+    /// "Sağırlaştır".
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub deaf: bool,
+    /// A moderator muted the player for everyone.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub muted_by_moderator: bool,
+    /// The microphone sends now (as of this frame; `voice-speaking` brings the changes).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub talking: bool,
+    /// `weak` or `bad`; absent while good.
+    #[serde(skip_serializing_if = "is_good")]
+    pub quality: pl_voice::view::VoiceQuality,
+}
+
+/// Someone else in the room (V2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoicePersonShown {
+    pub id: String,
+    /// As the friend lists show them; absent for someone who is neither a friend nor a crewmate
+    /// (the mod says "Bir oyuncu").
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    pub role: pl_voice::view::VoiceRole,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mute: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub deaf: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub muted_by_moderator: bool,
+    #[serde(skip_serializing_if = "is_good")]
+    pub quality: pl_voice::view::VoiceQuality,
+    /// Speaks now (as of this frame).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub speaking: bool,
+    /// Their volume for the player, in percent (100 as they come).
+    pub volume: u16,
+    /// "Benim için sustur".
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub muted_for_me: bool,
+    /// What the player's role may do to them (the person menu shows only these rows).
+    #[serde(skip_serializing_if = "VoiceCan::is_none")]
+    pub can: VoiceCan,
+}
+
+/// A leader's or moderator's rows on someone (V2). "Taşı" stays in the launcher.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct VoiceCan {
+    /// "Herkes için sustur" / its undo.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mute: bool,
+    /// "Odadan çıkar".
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub kick: bool,
+    /// "Moderatör yap" / "Moderatörlükten al".
+    #[serde(rename = "mod", skip_serializing_if = "std::ops::Not::not")]
+    pub moderator: bool,
+}
+
+impl VoiceCan {
+    pub fn is_none(&self) -> bool {
+        !self.mute && !self.kick && !self.moderator
+    }
+}
+
+/// Someone named in V2 (a call's friend, an invite that rings).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoicePersonRef {
+    pub id: String,
+    /// Absent for someone the lists do not know.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub name: String,
+}
+
+/// A call or invite ringing for the player (V2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoiceRingShown {
+    /// What `voice-answer` names.
+    pub room: String,
+    /// The caller, by id, and their name (absent when the lists do not know them).
+    pub from: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// The others in the room, by name (an unknown one empty), at most four.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub with: Vec<String>,
+    /// Unix milliseconds: it stops ringing then (no frame says so).
+    pub until: i64,
+}
+
+/// A voice chat moment for a note in the game (V4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoiceNoticeView {
+    /// `left` (with `reason`), `moved` (a moderator moved the player to another room of the
+    /// crew), `muted` (a moderator muted the player), `mic` (with `reason`: `denied`, `missing`),
+    /// `mic-changed` (the microphone was unplugged; the default one took over).
+    pub kind: &'static str,
+    /// `left`: `closed`, `alone`, `no-answer`, `elsewhere`, `kicked`, `crew`, `idle`,
+    /// `unavailable`, `failed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<&'static str>,
+    /// `left` / `no-answer`: the friend who did not join (absent when unknown).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub name: String,
+}
+
+fn is_good(quality: &pl_voice::view::VoiceQuality) -> bool {
+    *quality == pl_voice::view::VoiceQuality::Good
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1662,6 +1940,7 @@ mod tests {
             group: Some("g1".into()),
             crews: BTreeMap::from([("t1".to_owned(), CrewPlace::Invited)]),
             marks: vec!["admin".into(), "premium".into()],
+            voice: None,
         })
         .unwrap();
         assert_eq!(marked["marks"], serde_json::json!(["admin", "premium"]));
@@ -1744,6 +2023,7 @@ mod tests {
             group: None,
             crews: BTreeMap::new(),
             marks: Vec::new(),
+            voice: None,
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
@@ -1787,6 +2067,7 @@ mod tests {
             group: None,
             crews: BTreeMap::new(),
             marks: Vec::new(),
+            voice: None,
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));

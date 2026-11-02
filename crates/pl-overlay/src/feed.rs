@@ -651,6 +651,7 @@ impl Scene {
                         })
                         .collect(),
                     marks: marks.get(&friend.id).cloned().unwrap_or_default(),
+                    voice: friend.voice,
                 }
             })
             .collect();
