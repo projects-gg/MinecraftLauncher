@@ -1,0 +1,729 @@
+// Browser preview and tests of voice chat (VOICE-L3): every state the page shows, kept in memory and
+// changed by the actions like the app would. Nothing leaves the page. The people are the friends
+// mock's (GeceKurdu_ 301, KorAtesi 302, ElmasKazma 303, PixelAvci 304, NetherKral 305) and its
+// crew's ("Gece Kartalları": MaviElmas 701, DemirGolem_ 702, TasDevi 703), plus KumFirtinasi (909),
+// a friend's friend the lists do not know (named by `profiles`). Pair it with `?social=team` for the
+// crew scenarios.
+//
+// Preview switches, read once from the page URL's query or the route's (`#/…?voice=room`):
+// - `voice=<scenario>`: (none) / `ready` on, no room; `off` nothing anywhere; `disabled` the
+//   player's own switch is off; `calling` the player's call rings at KorAtesi; `noAnswer` the same,
+//   unanswered a moment later ("Cevap yok"); `room` a friend room (the player leads it: GeceKurdu_
+//   speaking, ElmasKazma muted, KumFirtinasi, NetherKral ringing); `roomNamed` the same, named;
+//   `full` a friend room at its 10; `crew` the crew's "Genel" (`&role=leader|moderator|member`),
+//   with "Oda 2" beside it; `crewFull` the crew has its 3 rooms; `ring` GeceKurdu_ calls, two more in
+//   his room; `missed` two missed calls; `joining`, `reconnecting`, `failed` (the stay ended:
+//   "Bağlanamadı"); `denied` / `missing` (the microphone); `weak` / `bad` (the player's
+//   connection); `modMuted`, `muted`, `deaf`.
+// - `speaking=<ids>|none`: who speaks (the scenario's own otherwise); `talking=1`: the player too.
+// - `call=answer|noAnswer|<refusal>`: what "Ara" gets (answered after 2.5 s by default).
+// - `join=ok|<refusal>`: what "Katıl" gets.
+import {
+  DEFAULT_VOICE_SETTINGS,
+  HIDDEN_VOICE_STATE,
+  VOICE_OK,
+  type VoiceAnswer,
+  type VoiceApi,
+  type VoiceCrewRooms,
+  type VoiceKey,
+  type VoiceKeyCheck,
+  type VoiceLevel,
+  type VoiceModAction,
+  type VoiceNotice,
+  type VoicePerson,
+  type VoicePresence,
+  type VoiceRefusal,
+  type VoiceRole,
+  type VoiceRoomView,
+  type VoiceSettings,
+  type VoiceShortcut,
+  type VoiceSpeaking,
+  type VoiceState,
+} from "./voice-types";
+
+const ME = "100";
+const CREW = "0123456789abcdef";
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+function param(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  const fromSearch = new URLSearchParams(window.location.search).get(key);
+  const fromHash = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get(key);
+  return fromSearch ?? fromHash;
+}
+
+const REFUSALS: readonly VoiceRefusal[] = [
+  "off",
+  "unreachable",
+  "rateLimited",
+  "accountLimited",
+  "staffMuted",
+  "roomFull",
+  "roomsFull",
+  "roomGone",
+  "kicked",
+  "notMember",
+  "notAllowed",
+  "notFound",
+  "invalidName",
+  "nameRejected",
+  "failed",
+];
+
+const refusalOf = (value: string | null | undefined): VoiceRefusal | null =>
+  REFUSALS.find((r) => r === value) ?? null;
+
+const refused = (why: VoiceRefusal, retryAfter: number | null = null): VoiceAnswer => ({
+  refused: why,
+  retryAfter,
+  until: null,
+});
+
+function person(id: string, extra: Partial<VoicePerson> = {}): VoicePerson {
+  return {
+    id,
+    role: "member",
+    mute: false,
+    deaf: false,
+    mutedByModerator: false,
+    quality: "good",
+    speaking: false,
+    volume: 100,
+    mutedForMe: false,
+    joinedAt: nowSec() - 600,
+    can: { mute: true, kick: true, moveTo: false, moderator: true },
+    ...extra,
+  };
+}
+
+/** The friends who may be called, and who is in a room already. */
+const PRESENCE: Record<string, VoicePresence> = {
+  "301": "ready",
+  "302": "ready",
+  "303": "in",
+  "304": "ready",
+  "305": "ready",
+  "701": "ready",
+  "702": "in",
+  "703": "ready",
+};
+
+const PROFILES = [{ id: "909", name: "KumFirtinasi", avatar: "preset:wolf" }];
+
+function friendRoom(extra: Partial<VoiceRoomView> = {}): VoiceRoomView {
+  const start = nowSec() - 1800;
+  return {
+    id: "f00000000000000a1",
+    kind: "friend",
+    crew: null,
+    name: null,
+    general: false,
+    max: 10,
+    phase: "live",
+    me: {
+      id: ME,
+      role: "leader",
+      mute: false,
+      deaf: false,
+      mutedByModerator: false,
+      talking: false,
+      quality: "good",
+    },
+    people: [
+      person("301", { joinedAt: start + 10, speaking: true }),
+      person("303", { joinedAt: start + 40, mute: true, role: "moderator" }),
+      person("909", { joinedAt: start + 300, volume: 140 }),
+    ],
+    ringing: [{ to: "305", until: nowSec() + 24 }],
+    canRename: true,
+    canClose: true,
+    ...extra,
+  };
+}
+
+function crewRole(): VoiceRole {
+  const role = param("role");
+  return role === "moderator" || role === "member" ? role : "leader";
+}
+
+function crewRoom(role: VoiceRole): VoiceRoomView {
+  const start = nowSec() - 3600;
+  const lead = role === "leader";
+  const mod = role === "moderator";
+  // What the player may do to each: a leader to everyone, a moderator to members only.
+  const powers = (target: VoiceRole) => {
+    const may = lead || (mod && target === "member");
+    return { mute: may, kick: may, moveTo: may, moderator: false };
+  };
+  const others: Array<[string, VoiceRole, Partial<VoicePerson>]> = [
+    ["301", lead ? "member" : "leader", { joinedAt: start }],
+    ["302", "moderator", { joinedAt: start + 60 }],
+    ["701", "member", { joinedAt: start + 600, quality: "weak" }],
+    ["702", "member", { joinedAt: start + 900, speaking: true }],
+  ];
+  return {
+    id: `g${CREW}`,
+    kind: "crew",
+    crew: CREW,
+    name: "Genel",
+    general: true,
+    max: 15,
+    phase: "live",
+    me: {
+      id: ME,
+      role,
+      mute: false,
+      deaf: false,
+      mutedByModerator: false,
+      talking: false,
+      quality: "good",
+    },
+    people: others.map(([id, r, extra]) => person(id, { role: r, can: powers(r), ...extra })),
+    ringing: [],
+    canRename: false,
+    canClose: false,
+  };
+}
+
+function crewRooms(full: boolean, inGeneral: boolean): VoiceCrewRooms {
+  const general = inGeneral ? [ME, "301", "302", "701", "702"] : ["301", "302", "701", "702"];
+  const rooms = [
+    { id: `g${CREW}`, name: "Genel", general: true, people: general },
+    { id: "c00000000000000b2", name: "Oda 2", general: false, people: ["703"] },
+  ];
+  if (full) rooms.push({ id: "c00000000000000b3", name: "Taş Ocağı", general: false, people: [] });
+  return { crew: CREW, rooms, canAdd: !full };
+}
+
+function stateFor(scenario: string): VoiceState {
+  const base: VoiceState = {
+    ...HIDDEN_VOICE_STATE,
+    available: true,
+    enabled: true,
+    mic: "ok",
+    devices: {
+      inputs: [
+        { id: "mic-headset", label: "Kulaklık mikrofonu (HyperX Cloud)" },
+        { id: "mic-webcam", label: "Kamera mikrofonu" },
+      ],
+      outputs: [
+        { id: "out-headset", label: "Kulaklık (HyperX Cloud)" },
+        { id: "out-speakers", label: "Hoparlör (Realtek)" },
+      ],
+    },
+    profiles: PROFILES,
+    presence: PRESENCE,
+    crews: [crewRooms(false, false)],
+  };
+  const withMe = (room: VoiceRoomView, patch: Partial<VoiceRoomView["me"]>): VoiceRoomView => ({
+    ...room,
+    me: { ...room.me, ...patch },
+  });
+  switch (scenario) {
+    case "off":
+      return HIDDEN_VOICE_STATE;
+    case "disabled":
+      return { ...base, enabled: false };
+    case "calling":
+    case "noAnswer":
+      return {
+        ...base,
+        room: friendRoom({ people: [], ringing: [] }),
+        calling: { friend: "302", until: nowSec() + 28 },
+      };
+    case "room":
+      return { ...base, room: friendRoom(), presence: { ...PRESENCE, "301": "in" } };
+    case "roomNamed":
+      return { ...base, room: friendRoom({ name: "Gece Ekibi" }) };
+    case "full":
+      return {
+        ...base,
+        room: friendRoom({
+          max: 4,
+          ringing: [],
+          people: [...friendRoom().people, person("304", { joinedAt: nowSec() - 100 })],
+        }),
+      };
+    case "crew":
+    case "crewFull":
+      return {
+        ...base,
+        room: crewRoom(crewRole()),
+        crews: [crewRooms(scenario === "crewFull", true)],
+      };
+    case "ring":
+      return {
+        ...base,
+        rings: [
+          { room: "f00000000000000c3", from: "301", with: ["303", "909"], until: nowSec() + 30 },
+        ],
+      };
+    case "missed":
+      return {
+        ...base,
+        missed: [
+          { room: "f00000000000000d4", from: "302", at: nowSec() - 120, joinable: true },
+          { room: "f00000000000000e5", from: "305", at: nowSec() - 3600, joinable: false },
+        ],
+      };
+    case "joining":
+      return { ...base, room: { ...friendRoom(), phase: "joining" } };
+    case "reconnecting":
+      return { ...base, room: { ...friendRoom(), phase: "reconnecting" } };
+    case "denied":
+    case "missing":
+      return {
+        ...base,
+        mic: scenario,
+        room: withMe(friendRoom(), { mute: true }),
+      };
+    case "weak":
+    case "bad":
+      return { ...base, room: withMe(friendRoom(), { quality: scenario }) };
+    case "modMuted":
+      return {
+        ...base,
+        room: withMe(crewRoom("member"), { mutedByModerator: true }),
+        crews: [crewRooms(false, true)],
+      };
+    case "muted":
+      return { ...base, room: withMe(friendRoom(), { mute: true }) };
+    case "deaf":
+      return { ...base, room: withMe(friendRoom(), { mute: true, deaf: true }) };
+    default:
+      return base;
+  }
+}
+
+/** Who a scenario has speaking (or `speaking=` says). */
+function speakingFor(state: VoiceState, override: string | null, talking: boolean): VoiceSpeaking {
+  if (override !== null) {
+    const ids = override === "none" ? [] : override.split(",").filter(Boolean);
+    return { ids: ids.filter((id) => id !== ME), me: talking || ids.includes(ME) };
+  }
+  const ids = state.room?.people.filter((p) => p.speaking).map((p) => p.id) ?? [];
+  return { ids, me: talking };
+}
+
+/** The keys the official pack's game uses (crates/pl-mc/data/key-bindings.json, in short). */
+const GAME_KEYS = new Set([
+  "KeyW",
+  "KeyA",
+  "KeyS",
+  "KeyD",
+  "Space",
+  "ShiftLeft",
+  "ControlLeft",
+  "KeyE",
+  "KeyQ",
+  "KeyF",
+  "KeyT",
+  "KeyL",
+  "Slash",
+  "Tab",
+  "F1",
+  "F2",
+  "F3",
+  "F5",
+  "F11",
+  "Escape",
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `Digit${n}`),
+]);
+const OVERLAY_KEYS = new Set(["F6", "F7", "F9", "KeyC", "KeyX"]);
+
+function clashOf(key: VoiceKey, others: Array<VoiceKey | null>): VoiceKeyCheck {
+  const same = (a: VoiceKey, b: VoiceKey) =>
+    a.kind === "keyboard" && b.kind === "keyboard"
+      ? a.code === b.code
+      : a.kind === "mouse" && b.kind === "mouse" && a.button === b.button;
+  if (others.some((other) => other && same(other, key))) return { usable: true, clash: "taken" };
+  if (key.kind === "mouse") return { usable: true, clash: null };
+  const { code } = key;
+  if (code === "Escape" || code === "MetaLeft" || code === "MetaRight") {
+    return { usable: false, clash: null };
+  }
+  if (code === "CapsLock" || code === "KeyV") return { usable: true, clash: "gameVoiceChat" };
+  if (OVERLAY_KEYS.has(code)) return { usable: true, clash: "overlay" };
+  if (GAME_KEYS.has(code)) return { usable: true, clash: "game" };
+  if (code === "AltLeft") return { usable: true, clash: "languageSwitch" };
+  return { usable: true, clash: null };
+}
+
+export interface VoiceMockOptions {
+  scenario?: string;
+  /** Who speaks (`speaking=`); null: the scenario's own. */
+  speaking?: string | null;
+  talking?: boolean;
+  /** What "Ara" gets: `answer`, `noAnswer` or a refusal. */
+  call?: string | null;
+  /** What "Katıl" gets: `ok` or a refusal. */
+  join?: string | null;
+  /** Timed changes (an answered call, a noAnswer, an invite that joins); off in most tests. */
+  timers?: boolean;
+}
+
+export interface VoiceMock extends VoiceApi {
+  /** Tests: push a notice or a speaking frame as the backend would. */
+  emitNotice(notice: VoiceNotice): void;
+  emitSpeaking(speaking: VoiceSpeaking): void;
+  current(): VoiceState;
+}
+
+export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
+  const scenario = options.scenario ?? "ready";
+  const timers = options.timers ?? true;
+  let state = stateFor(scenario);
+  let settings: VoiceSettings = { ...DEFAULT_VOICE_SETTINGS, enabled: state.enabled };
+  const stateListeners = new Set<(s: VoiceState) => void>();
+  const speakingListeners = new Set<(s: VoiceSpeaking) => void>();
+  const noticeListeners = new Set<(n: VoiceNotice) => void>();
+  const levelListeners = new Set<(l: VoiceLevel) => void>();
+  let speaking = speakingFor(state, options.speaking ?? null, options.talking ?? false);
+  let levelTimer: ReturnType<typeof setInterval> | undefined;
+  /** Who was removed, for the toast's "Geri al". */
+  const kicked = new Map<string, VoicePerson | undefined>();
+
+  const later = (ms: number, work: () => void) => {
+    if (timers) setTimeout(work, ms);
+  };
+  const commit = (next: VoiceState) => {
+    state = next;
+    for (const listener of stateListeners) listener(state);
+  };
+  const notice = (n: VoiceNotice) => {
+    for (const listener of noticeListeners) listener(n);
+  };
+  const emitSpeaking = (next: VoiceSpeaking) => {
+    speaking = next;
+    for (const listener of speakingListeners) listener(next);
+  };
+  const updateRoom = (change: (room: VoiceRoomView) => VoiceRoomView) => {
+    if (state.room) commit({ ...state, room: change(state.room) });
+  };
+  const updatePerson = (id: string, change: Partial<VoicePerson>) =>
+    updateRoom((room) => ({
+      ...room,
+      people: room.people.map((p) => (p.id === id ? { ...p, ...change } : p)),
+    }));
+
+  // A scenario that ends right away tells it as the backend would.
+  if (scenario === "noAnswer") {
+    later(900, () => {
+      commit({ ...state, room: null, calling: null });
+      notice({ kind: "left", reason: "noAnswer", friend: "302" });
+    });
+  }
+  if (scenario === "failed") {
+    later(300, () => notice({ kind: "left", reason: "failed", friend: null }));
+  }
+
+  const joinAnswer = (): VoiceAnswer | null => {
+    const refusal = refusalOf(options.join);
+    return refusal ? refused(refusal) : null;
+  };
+
+  return {
+    current: () => state,
+    emitNotice: notice,
+    emitSpeaking,
+    async state() {
+      return state;
+    },
+    onState(listener) {
+      stateListeners.add(listener);
+      return () => stateListeners.delete(listener);
+    },
+    onSpeaking(listener) {
+      speakingListeners.add(listener);
+      // The first frame, as the app sends one when the page starts listening.
+      if (speaking.ids.length || speaking.me) queueMicrotask(() => listener(speaking));
+      return () => speakingListeners.delete(listener);
+    },
+    onNotice(listener) {
+      noticeListeners.add(listener);
+      return () => noticeListeners.delete(listener);
+    },
+    onLevel(listener) {
+      levelListeners.add(listener);
+      return () => levelListeners.delete(listener);
+    },
+
+    async call(friend) {
+      const refusal = refusalOf(options.call);
+      if (refusal) return refused(refusal, refusal === "rateLimited" ? 30 : null);
+      if (!state.presence?.[friend]) return refused("unreachable");
+      commit({
+        ...state,
+        room: friendRoom({ id: `f${friend.padStart(16, "0")}`, people: [], ringing: [] }),
+        calling: { friend, until: nowSec() + 30 },
+      });
+      if (options.call === "noAnswer") {
+        later(4000, () => {
+          commit({ ...state, room: null, calling: null });
+          notice({ kind: "left", reason: "noAnswer", friend });
+        });
+      } else {
+        later(2500, () =>
+          commit({
+            ...state,
+            calling: null,
+            room: state.room
+              ? { ...state.room, people: [person(friend, { joinedAt: nowSec() })] }
+              : null,
+          }),
+        );
+      }
+      return VOICE_OK;
+    },
+    async answer(room) {
+      const no = joinAnswer();
+      if (no) return no;
+      const ring = state.rings.find((r) => r.room === room);
+      const missed = state.missed.find((m) => m.room === room);
+      const from = ring?.from ?? missed?.from;
+      if (!from) return refused("roomGone");
+      const people = [from, ...(ring?.with ?? [])].map((id, i) =>
+        person(id, { joinedAt: nowSec() - 300 + i, role: i === 0 ? "leader" : "member" }),
+      );
+      commit({
+        ...state,
+        rings: state.rings.filter((r) => r.room !== room),
+        missed: state.missed.filter((m) => m.room !== room),
+        calling: null,
+        room: friendRoom({
+          id: room,
+          people,
+          ringing: [],
+          me: { ...friendRoom().me, role: "member" },
+          canRename: false,
+          canClose: false,
+        }),
+      });
+      return VOICE_OK;
+    },
+    async decline(room) {
+      commit({ ...state, rings: state.rings.filter((r) => r.room !== room) });
+      return VOICE_OK;
+    },
+    async dismissMissed(room) {
+      commit({ ...state, missed: state.missed.filter((m) => m.room !== room) });
+    },
+    async joinCrew(crew, room) {
+      const no = joinAnswer();
+      if (no) return no;
+      const rooms = state.crews.find((c) => c.crew === crew);
+      const target = rooms?.rooms.find((r) => (room ? r.id === room : r.general));
+      const view = crewRoom(crewRole());
+      const people = (target?.people ?? []).filter((id) => id !== ME);
+      commit({
+        ...state,
+        calling: null,
+        room: {
+          ...view,
+          id: target?.id ?? view.id,
+          name: target?.name ?? view.name,
+          general: target?.general ?? true,
+          people: view.people
+            .filter((p) => people.includes(p.id))
+            .concat(
+              people
+                .filter((id) => !view.people.some((p) => p.id === id))
+                .map((id) =>
+                  person(id, { can: { mute: true, kick: true, moveTo: true, moderator: false } }),
+                ),
+            ),
+        },
+        crews: state.crews.map((c) =>
+          c.crew === crew
+            ? {
+                ...c,
+                rooms: c.rooms.map((r) => ({
+                  ...r,
+                  people:
+                    r.id === (target?.id ?? `g${crew}`)
+                      ? [...r.people.filter((id) => id !== ME), ME]
+                      : r.people.filter((id) => id !== ME),
+                })),
+              }
+            : c,
+        ),
+      });
+      return VOICE_OK;
+    },
+    async newCrewRoom(crew) {
+      const rooms = state.crews.find((c) => c.crew === crew);
+      if (rooms && !rooms.canAdd) return refused("roomsFull");
+      const id = `c${String(Date.now()).padStart(16, "0").slice(-16)}`;
+      const name = `Oda ${(rooms?.rooms.length ?? 1) + 1}`;
+      const view = crewRoom(crewRole());
+      commit({
+        ...state,
+        room: { ...view, id, name, general: false, people: [], canRename: true, canClose: false },
+        crews: state.crews.map((c) =>
+          c.crew === crew
+            ? {
+                ...c,
+                rooms: [
+                  ...c.rooms.map((r) => ({ ...r, people: r.people.filter((p) => p !== ME) })),
+                  { id, name, general: false, people: [ME] },
+                ],
+                canAdd: c.rooms.length + 1 < state.crewRoomsMax,
+              }
+            : c,
+        ),
+      });
+      return VOICE_OK;
+    },
+    async leave() {
+      commit({
+        ...state,
+        room: null,
+        calling: null,
+        crews: state.crews.map((c) => ({
+          ...c,
+          rooms: c.rooms.map((r) => ({ ...r, people: r.people.filter((id) => id !== ME) })),
+        })),
+      });
+    },
+    async retry() {
+      commit({ ...state, room: friendRoom() });
+      return VOICE_OK;
+    },
+    async setMute(mute) {
+      // Opening the microphone brings the sound back too (the launcher's rule, VOICE-L1).
+      updateRoom((room) => ({
+        ...room,
+        me: { ...room.me, mute, deaf: mute ? room.me.deaf : false },
+      }));
+    },
+    async setDeaf(deaf) {
+      // Deafening closes the microphone too; undeafening leaves it as it was before.
+      updateRoom((room) => ({
+        ...room,
+        me: { ...room.me, deaf, mute: deaf ? true : room.me.mute },
+      }));
+    },
+    async invite(friend) {
+      const room = state.room;
+      if (!room) return refused("nothing");
+      if (room.people.length + 1 + room.ringing.length >= room.max) return refused("roomFull");
+      updateRoom((r) => ({ ...r, ringing: [...r.ringing, { to: friend, until: nowSec() + 30 }] }));
+      later(3000, () =>
+        updateRoom((r) =>
+          r.ringing.some((x) => x.to === friend)
+            ? {
+                ...r,
+                ringing: r.ringing.filter((x) => x.to !== friend),
+                people: [...r.people, person(friend, { joinedAt: nowSec() })],
+              }
+            : r,
+        ),
+      );
+      return VOICE_OK;
+    },
+    async cancelInvite(friend) {
+      updateRoom((r) => ({ ...r, ringing: r.ringing.filter((x) => x.to !== friend) }));
+      return VOICE_OK;
+    },
+    async setVolume(id, volume) {
+      updatePerson(id, { volume: Math.max(0, Math.min(200, Math.round(volume))) });
+    },
+    async setMutedForMe(id, muted) {
+      updatePerson(id, { mutedForMe: muted });
+    },
+    async moderate(action: VoiceModAction) {
+      const room = state.room;
+      if (!room) return refused("nothing");
+      switch (action.act) {
+        case "mute":
+        case "unmute":
+          updatePerson(action.person, { mutedByModerator: action.act === "mute" });
+          return VOICE_OK;
+        case "kick":
+          updateRoom((r) => ({ ...r, people: r.people.filter((p) => p.id !== action.person) }));
+          kicked.set(
+            action.person,
+            room.people.find((p) => p.id === action.person),
+          );
+          return VOICE_OK;
+        case "unkick": {
+          const back = kicked.get(action.person);
+          kicked.delete(action.person);
+          if (back) updateRoom((r) => ({ ...r, people: [...r.people, back] }));
+          return VOICE_OK;
+        }
+        case "move":
+          updateRoom((r) => ({ ...r, people: r.people.filter((p) => p.id !== action.person) }));
+          commit({
+            ...state,
+            crews: state.crews.map((c) => ({
+              ...c,
+              rooms: c.rooms.map((r) => ({
+                ...r,
+                people:
+                  r.id === action.room
+                    ? [...r.people, action.person]
+                    : r.people.filter((id) => id !== action.person),
+              })),
+            })),
+          });
+          return VOICE_OK;
+        case "mod":
+        case "unmod":
+          updatePerson(action.person, { role: action.act === "mod" ? "moderator" : "member" });
+          return VOICE_OK;
+        case "rename": {
+          const name = action.name.trim();
+          if (name.length < 3 || name.length > 24) return refused("invalidName");
+          if (/salak|aptal/i.test(name)) return refused("nameRejected");
+          updateRoom((r) => ({ ...r, name }));
+          return VOICE_OK;
+        }
+        case "close":
+          commit({ ...state, room: null, calling: null });
+          return VOICE_OK;
+      }
+    },
+
+    async settings() {
+      return settings;
+    },
+    async saveSettings(next) {
+      settings = { ...next };
+      if (state.enabled !== next.enabled) commit({ ...state, enabled: next.enabled });
+      return settings;
+    },
+    async checkKey(key: VoiceKey, shortcut: VoiceShortcut) {
+      const others = [
+        shortcut === "pushToTalk" ? null : settings.pushToTalkKey,
+        shortcut === "mute" ? null : settings.muteKey,
+        shortcut === "deafen" ? null : settings.deafenKey,
+      ];
+      return clashOf(key, others);
+    },
+    async testMic(on) {
+      clearInterval(levelTimer);
+      commit({ ...state, testing: on });
+      if (!on || !timers) return;
+      // A voice that rises and falls, as a meter would show someone speaking.
+      let t = 0;
+      levelTimer = setInterval(() => {
+        t += 1;
+        const level = Math.max(0, Math.sin(t / 3) * 0.55 + Math.sin(t / 1.3) * 0.2);
+        const threshold = (settings.sensitivity ?? 18) / 100;
+        for (const listener of levelListeners) listener({ level, open: level > threshold });
+      }, 80);
+    },
+    async settingsOpen() {},
+    async openMicSettings() {},
+  };
+}
+
+/** The preview's voice chat, from the page URL. */
+export const mockVoice: VoiceMock = createVoiceMock({
+  scenario: param("voice") ?? "ready",
+  speaking: param("speaking"),
+  talking: param("talking") === "1",
+  call: param("call"),
+  join: param("join"),
+});
