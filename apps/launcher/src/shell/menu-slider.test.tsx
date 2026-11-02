@@ -45,7 +45,8 @@ describe("a menu's slider row", () => {
     expect(slider.getAttribute("aria-valuenow")).toBe("140");
     expect(slider.getAttribute("aria-valuetext")).toBe("%140");
     expect(slider.getAttribute("aria-valuemax")).toBe("200");
-    expect(screen.getByText("%140")).toBeTruthy();
+    // The sign is set in Figtree apart from the figure; the words read as one.
+    expect(slider.textContent).toContain("%140");
   });
 
   it("steps with the arrows and jumps with the page and end keys, within its ends", () => {

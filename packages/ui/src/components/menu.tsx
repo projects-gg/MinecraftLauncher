@@ -12,6 +12,7 @@ import { returnFocusAfterKeys } from "../input-modality";
 import { cn } from "../lib/cn";
 import { fromPortal } from "../native-menu";
 import { Kbd } from "./bits";
+import { SliderValue } from "./forms";
 
 export interface MenuItem {
   label: string;
@@ -228,7 +229,7 @@ function SliderRow({
         <Icon item={item} />
         <span className="min-w-0 flex-1">{item.label}</span>
         <span className="font-display text-[13px] font-semibold text-bone-50 tabular-nums">
-          {format(value)}
+          <SliderValue text={format(value)} />
         </span>
       </span>
       <span
