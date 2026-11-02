@@ -53,7 +53,7 @@ import {
   setVolume as setVoiceVolume,
 } from "@/features/voice/actions";
 import { callOffer, crewRoomName } from "@/features/voice/rules";
-import { useVoiceUi } from "@/features/voice/store";
+import { recentRoom, useVoiceUi } from "@/features/voice/store";
 import { api } from "@/lib/api";
 import type { HostView } from "@/lib/api/host-types";
 import type { SocialProfile, SocialSnapshot, SocialTeam, TeamMember } from "@/lib/api/social-types";
@@ -371,6 +371,7 @@ export function personItems(
   const offer = blocked
     ? null
     : callOffer(env.voice, person.id, Boolean(friend), crewMembersOf, view.friends);
+  const reportRoom = inRoom && voiceRoom ? voiceRoom.id : recentRoom(person.id);
   const full = personMenu({
     me: person.id === me,
     friend: Boolean(friend),
@@ -771,8 +772,9 @@ export function personItems(
                 kind: "player",
                 id: person.id,
                 ...(place.reaction ? { reaction: place.reaction } : {}),
-                // VOICE: someone in the player's room: the room's events are the evidence.
-                ...(inRoom && voiceRoom ? { voice: voiceRoom.id } : {}),
+                // VOICE: someone in the player's room, or there within the day: the room's
+                // events are the evidence.
+                ...(reportRoom ? { voice: reportRoom } : {}),
               },
               ...(place.reaction ? { reaction: { e: place.reaction.e } } : {}),
               name: person.name,

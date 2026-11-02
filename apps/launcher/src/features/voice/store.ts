@@ -32,6 +32,10 @@ interface VoiceUi {
   goTo: (page: VoicePage) => void;
   ended: VoiceEnded | null;
   setEnded: (ended: VoiceEnded | null) => void;
+  /** Who shared a room with the player lately (this run): person → the room and when they parted.
+   * "Rapor et" from their card carries that room for a day (voice.md §8.3). */
+  recent: Record<string, { room: string; at: number }>;
+  rememberRoom: (room: string, people: readonly string[], at: number) => void;
 }
 
 const same = (a: readonly string[], b: readonly string[]) =>
@@ -80,7 +84,26 @@ export const useVoiceUi = create<VoiceUi>()((set, get) => ({
   goTo: (page) => set({ page, direction: page === "room" ? -1 : 1 }),
   ended: null,
   setEnded: (ended) => set({ ended }),
+  recent: {},
+  rememberRoom: (room, people, at) =>
+    set((s) => {
+      // Only the day's: older entries go as new ones come.
+      const kept = Object.fromEntries(
+        Object.entries(s.recent).filter(([, seen]) => at - seen.at < RECENT_MS),
+      );
+      for (const id of people) kept[id] = { room, at };
+      return { recent: kept };
+    }),
 }));
+
+/** How long after a call "Rapor et" on someone's card still carries the room (a day). */
+export const RECENT_MS = 24 * 60 * 60 * 1000;
+
+/** The room someone shared with the player within the day, for a report from their card. */
+export function recentRoom(person: string, now = Date.now()): string | null {
+  const seen = useVoiceUi.getState().recent[person];
+  return seen && now - seen.at < RECENT_MS ? seen.room : null;
+}
 
 /** Whether someone speaks now (the player's own id: the player's microphone sends). */
 export function useSpeaking(id: string): boolean {

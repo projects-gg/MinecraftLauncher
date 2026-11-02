@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createVoiceMock } from "@/lib/api/voice-mock";
 import { HIDDEN_VOICE_STATE } from "@/lib/api/voice-types";
-import { useVoiceUi } from "./store";
+import { RECENT_MS, recentRoom, useVoiceUi } from "./store";
 
 afterEach(() => {
   useVoiceUi.setState({
@@ -43,6 +43,18 @@ describe("the voice store", () => {
       .getState()
       .setState(createVoiceMock({ scenario: "calling", timers: false }).current());
     expect(useVoiceUi.getState().ended).toBeNull();
+  });
+});
+
+describe("rooms shared lately", () => {
+  it("keeps who was in a room for a day, for a report from their card", () => {
+    const now = 1_800_000_000_000;
+    useVoiceUi.getState().rememberRoom("f1", ["301", "303"], now);
+    expect(recentRoom("301", now + 60_000)).toBe("f1");
+    expect(recentRoom("303", now + RECENT_MS + 1)).toBeNull();
+    expect(recentRoom("999", now)).toBeNull();
+    useVoiceUi.getState().rememberRoom("f2", ["305"], now + RECENT_MS + 1);
+    expect(Object.keys(useVoiceUi.getState().recent)).toEqual(["305"]);
   });
 });
 

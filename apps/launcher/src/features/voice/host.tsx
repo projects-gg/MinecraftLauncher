@@ -81,6 +81,17 @@ export function onVoiceState(before: VoiceState, after: VoiceState) {
   const { joined, left } = peopleChanges(before.room, after.room);
   for (const id of joined) announce(i18n.t("voice.a11y.joined", { name: faceNow(id).name }));
   for (const id of left) announce(i18n.t("voice.a11y.left", { name: faceNow(id).name }));
+  // Who shared the room, for a day's "Rapor et" from their card (voice.md §8.3).
+  const ui = useVoiceUi.getState();
+  const now = Date.now();
+  if (before.room && left.length) ui.rememberRoom(before.room.id, left, now);
+  if (before.room && after.room?.id !== before.room.id) {
+    ui.rememberRoom(
+      before.room.id,
+      before.room.people.map((p) => p.id),
+      now,
+    );
+  }
 }
 
 function useVoiceSync() {
