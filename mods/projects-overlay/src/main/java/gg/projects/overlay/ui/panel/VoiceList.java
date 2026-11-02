@@ -14,6 +14,7 @@ import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import gg.projects.overlay.ui.draw.ShapeSet;
+import gg.projects.overlay.voice.VoiceMarks;
 import gg.projects.overlay.voice.VoiceState;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -126,14 +127,7 @@ public final class VoiceList extends PanelWidget {
         fill(mine, own, role == null ? you : you + " · " + role, strong, small, textW);
         mine.marks.clear();
         mine.markInks.clear();
-        if (me.mutedByModerator()) {
-            mark(mine, Icon.MIC_OFF, Theme.FLARE_300);
-        } else if (me.mute()) {
-            mark(mine, Icon.MIC_OFF, Theme.ASH_300);
-        }
-        if (me.deaf()) {
-            mark(mine, Icon.DEAF, Theme.ASH_300);
-        }
+        voiceMarks(mine, me.mute(), me.deaf(), me.mutedByModerator());
         mine.bars = bars(me.quality());
         mine.narration = narration(own, state(mine, me.talking()));
         ring(mine, me.talking(), now);
@@ -144,14 +138,7 @@ public final class VoiceList extends PanelWidget {
             fill(row, name, roleOr(p.role(), null), strong, small, textW);
             row.marks.clear();
             row.markInks.clear();
-            if (p.mutedByModerator()) {
-                mark(row, Icon.MIC_OFF, Theme.FLARE_300);
-            } else if (p.mute()) {
-                mark(row, Icon.MIC_OFF, Theme.ASH_300);
-            }
-            if (p.deaf()) {
-                mark(row, Icon.DEAF, Theme.ASH_300);
-            }
+            voiceMarks(row, p.mute(), p.deaf(), p.mutedByModerator());
             if (p.mutedForMe()) {
                 mark(row, Icon.MUTE_FOR_ME, Theme.ASH_300);
             }
@@ -221,6 +208,21 @@ public final class VoiceList extends PanelWidget {
     private static void mark(Row row, Icon icon, int ink) {
         row.marks.add(icon);
         row.markInks.add(ink);
+    }
+
+    /**
+     * What is off, in one sign each (VOICE-KEYS, the launcher's room list; nothing while the microphone and the sound
+     * are on): a moderator's mute in flare (it holds whatever they do), then deafened alone (the microphone is off
+     * with it, as Discord shows it), else the microphone, in ash.
+     */
+    private static void voiceMarks(Row row, boolean mute, boolean deaf, boolean mutedByModerator) {
+        if (mutedByModerator) {
+            mark(row, Icon.MIC_OFF, Theme.FLARE_300);
+        }
+        Icon own = VoiceMarks.own(mute, deaf);
+        if (own != null) {
+            mark(row, own, Theme.ASH_300);
+        }
     }
 
     private static String roleOr(String role, String fallback) {

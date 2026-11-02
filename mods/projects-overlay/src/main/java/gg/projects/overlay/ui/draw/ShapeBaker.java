@@ -238,6 +238,34 @@ public final class ShapeBaker {
     }
 
     /**
+     * {@code base} (a white icon on a {@code viewBox} square) with Phosphor's slash across it, as its slashed icons
+     * draw it (MicrophoneSlash's line, top left to bottom right): a gap of {@code gap} cut out of the shape on each
+     * side of the line, then the line {@code stroke} wide with round ends (view-box units). For an icon Phosphor has
+     * no slashed form of (Headphones, VOICE-KEYS).
+     */
+    public static Image slashed(Image base, float viewBox, float stroke, float gap) {
+        int w = base.width();
+        int h = base.height();
+        float scale = w / viewBox;
+        float ax = 48f * scale;
+        float ay = 48f * scale;
+        float bx = 208f * scale;
+        float by = 224f * scale;
+        float half = stroke / 2f * scale;
+        float cut = half + gap * scale;
+        int[] out = new int[w * h];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                float d = segmentDistance(x + 0.5f, y + 0.5f, ax, ay, bx, by);
+                float kept = Theme.alpha(base.argb()[y * w + x]) / 255f * (1f - coverage(d - cut));
+                float line = coverage(d - half);
+                out[y * w + x] = Theme.withAlpha(0xFFFFFF, Math.max(kept, line));
+            }
+        }
+        return new Image(w, h, out);
+    }
+
+    /**
      * A white line {@code width} output pixels wide along path outlines drawn on a {@code viewBox} square, centred on
      * the outline as an SVG stroke is, with exact anti-aliasing from each pixel's distance to the nearest edge (a
      * crew mark's frame edge).

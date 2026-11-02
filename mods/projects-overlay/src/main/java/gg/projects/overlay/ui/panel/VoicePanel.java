@@ -8,6 +8,7 @@ import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
+import gg.projects.overlay.voice.VoiceMarks;
 import gg.projects.overlay.voice.VoiceState;
 import gg.projects.overlay.voice.VoiceWords;
 import java.util.ArrayList;
@@ -75,7 +76,7 @@ final class VoicePanel {
         this.overlay = overlay;
         strip = new VoiceStrip(() -> screen.showPage(OverlayScreen.Page.VOICE));
         mic = new IconButton(Icon.MIC, Texts.tr("voice.room.mute_mic"), this::toggleMic);
-        deaf = new IconButton(Icon.SOUND, Texts.tr("voice.room.deafen"), this::toggleDeaf);
+        deaf = new IconButton(Icon.HEADPHONES, Texts.tr("voice.room.deafen"), this::toggleDeaf);
         leave = new IconButton(Icon.PHONE_OFF, Texts.tr("voice.room.leave"), overlay::voiceLeave);
         // Quiet beside the microphone and hearing until reached for: flare is for what is off, and for leaving once
         // the pointer is on it.
@@ -88,7 +89,7 @@ final class VoicePanel {
         list = new VoiceList(screen::openVoiceMenu);
         pageMic = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("voice.room.mic"), Icon.MIC,
             this::toggleMic);
-        pageDeaf = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("voice.room.deafen"), Icon.SOUND,
+        pageDeaf = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("voice.room.deafen"), Icon.HEADPHONES,
             this::toggleDeaf);
         pageLeave = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("voice.room.leave"), Icon.PHONE_OFF,
             overlay::voiceLeave);
@@ -205,7 +206,8 @@ final class VoicePanel {
     private static List<VoiceStrip.Person> stripPeople(VoiceState.Room room) {
         List<VoiceStrip.Person> out = new ArrayList<>(room.people().size());
         for (VoiceState.Person p : room.people()) {
-            out.add(new VoiceStrip.Person(p.id(), VoiceState.shown(p.name(), WORDS), p.speaking()));
+            out.add(new VoiceStrip.Person(p.id(), VoiceState.shown(p.name(), WORDS), p.speaking(),
+                VoiceMarks.face(p.mute(), p.deaf(), p.mutedByModerator())));
         }
         return out;
     }
@@ -221,14 +223,14 @@ final class VoicePanel {
         mic.setColors(micOff ? off : Theme.ASH_300, micOff ? offLit : Theme.BONE_100);
         mic.setMessage(micWords);
         mic.active = !me.mutedByModerator();
-        deaf.setIcon(me.deaf() ? Icon.DEAF : Icon.SOUND);
+        deaf.setIcon(me.deaf() ? Icon.DEAF : Icon.HEADPHONES);
         deaf.setColors(me.deaf() ? off : Theme.ASH_300, me.deaf() ? offLit : Theme.BONE_100);
         deaf.setMessage(Texts.tr(me.deaf() ? "voice.room.deafen_off" : "voice.room.deafen"));
         pageMic.setIcon(micOff ? Icon.MIC_OFF : Icon.MIC);
         pageMic.setIconInk(micOff ? off : 0);
         pageMic.setMessage(micWords);
         pageMic.active = !me.mutedByModerator();
-        pageDeaf.setIcon(me.deaf() ? Icon.DEAF : Icon.SOUND);
+        pageDeaf.setIcon(me.deaf() ? Icon.DEAF : Icon.HEADPHONES);
         pageDeaf.setIconInk(me.deaf() ? off : 0);
         pageDeaf.setMessage(Texts.tr(me.deaf() ? "voice.room.deafen_off" : "voice.room.deafen"));
     }

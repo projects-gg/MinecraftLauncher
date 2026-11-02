@@ -65,7 +65,8 @@ const ICONS = [
   ["Headset", "regular"],
   ["Microphone", "regular"],
   ["MicrophoneSlash", "regular"],
-  ["SpeakerSlash", "regular"],
+  // Hearing and deafened: the headphones (VOICE-KEYS; the slash is cut in at bake time, Icon.DEAF).
+  ["Headphones", "regular"],
   ["SpeakerSimpleSlash", "regular"],
   ["Phone", "regular"],
   ["PhonePlus", "regular"],

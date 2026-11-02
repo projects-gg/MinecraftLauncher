@@ -9,6 +9,7 @@ import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
+import gg.projects.overlay.voice.VoiceMarks;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,17 +25,21 @@ import net.minecraft.util.FormattedCharSequence;
 /**
  * The room strip's body on the panel's chats and friends pages (VOICE-O; voice.md §5.3): the headset, the room's title
  * and, while it is not live, how it stands ("Bağlanıyor…", "Yeniden bağlanıyor…"); under them the faces of the others,
- * each with its jade ring while they speak (in 100 ms, out 300 ms; opacity only), and "+3" for those who do not fit. A
- * press, Enter or Space opens the room page. The strip's three buttons are the panel's own widgets beside it.
+ * each with its jade ring while they speak (in 100 ms, out 300 ms; opacity only) and, when their microphone or sound is
+ * off, its sign on the face's corner (VOICE-KEYS), and "+3" for those who do not fit. A press, Enter or Space opens the
+ * room page. The strip's three buttons are the panel's own widgets beside it.
  */
 public final class VoiceStrip extends PanelWidget {
     static final int FACE = 12;
     static final int FACE_GAP = 4;
+    /** A face's mark: an 8 px sign on a 10 px dark disc whose centre is 2 px in from the face's corner. */
+    static final int MARK = 8;
+    static final int MARK_DISC = 10;
     private static final long RING_IN_MS = 100;
     private static final long RING_OUT_MS = 300;
 
-    /** Someone's face in the strip. */
-    public record Person(String id, String name, boolean speaking) {
+    /** Someone's face in the strip; {@code mark} null while their microphone and sound are on. */
+    public record Person(String id, String name, boolean speaking, VoiceMarks.Mark mark) {
     }
 
     private final Runnable onOpen;
@@ -43,6 +48,7 @@ public final class VoiceStrip extends PanelWidget {
     private float stateWidth;
     private final List<String> ids = new ArrayList<>();
     private final Map<String, Face> faces = new HashMap<>();
+    private final Map<String, VoiceMarks.Mark> marks = new HashMap<>();
     private final Map<String, Tween> rings = new HashMap<>();
     private String more;
     private Component narration = Component.empty();
@@ -66,6 +72,7 @@ public final class VoiceStrip extends PanelWidget {
         int fit = Math.max(1, (w + FACE_GAP) / (FACE + FACE_GAP));
         int shown = people.size() <= fit ? people.size() : Math.max(0, fit - 1);
         ids.clear();
+        marks.clear();
         List<String> names = new ArrayList<>(people.size());
         for (int i = 0; i < people.size(); i++) {
             Person p = people.get(i);
@@ -80,6 +87,9 @@ public final class VoiceStrip extends PanelWidget {
                 Face face = faces.get(p.id);
                 if (face == null || !Texts.initial(p.name).equals(face.letter())) {
                     faces.put(p.id, Face.of(p.name));
+                }
+                if (p.mark != null) {
+                    marks.put(p.id, p.mark);
                 }
             }
         }
@@ -158,6 +168,13 @@ public final class VoiceStrip extends PanelWidget {
                 Draw.pushAlpha(spoke);
                 Draw.frame(g, Frames.SPEAKING, Draw.snap(fx), Draw.snap(fy), FACE, FACE);
                 Draw.popAlpha();
+            }
+            VoiceMarks.Mark mark = marks.get(id);
+            if (mark != null) {
+                float cx = fx + FACE - 2;
+                float cy = fy + FACE - 2;
+                Draw.disc(g, MARK_DISC, cx, cy, Theme.OBSIDIAN_950);
+                Draw.icon(g, mark.icon(), MARK, cx - MARK / 2f, cy - MARK / 2f, mark.ink());
             }
             fx += FACE + FACE_GAP;
         }

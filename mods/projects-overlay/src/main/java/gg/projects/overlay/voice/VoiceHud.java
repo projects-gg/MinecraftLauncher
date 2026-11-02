@@ -49,6 +49,8 @@ public final class VoiceHud implements HudElement {
     private final Speakers speakers = new Speakers();
     private final Tween mark = new Tween(0f);
     private Icon markIcon = Icon.MIC_OFF;
+    /** Ash for the player's own choice, flare for a moderator's mute (VOICE-KEYS: the room list's signs). */
+    private int markInk = Theme.ASH_300;
     /** Names as the game draws them, made once per name and GUI scale (each String draw runs the bidi pass). */
     private final Map<String, Line> lines = new HashMap<>();
     /** The names of the room's people, kept while one who left still fades out. */
@@ -77,7 +79,9 @@ public final class VoiceHud implements HudElement {
     public void me(VoiceState.Me me, long now) {
         boolean show = me != null && me.micOff();
         if (show) {
-            markIcon = me.deaf() ? Icon.DEAF : Icon.MIC_OFF;
+            // Deafened shows the headphones alone (the microphone is off with it); a moderator's mute holds over both.
+            markIcon = !me.mutedByModerator() && me.deaf() ? Icon.DEAF : Icon.MIC_OFF;
+            markInk = me.mutedByModerator() ? Theme.FLARE_300 : Theme.ASH_300;
         }
         float target = show ? 1f : 0f;
         if (mark.target() != target) {
@@ -123,7 +127,7 @@ public final class VoiceHud implements HudElement {
         if (m > 0.004f) {
             Draw.pushAlpha(m);
             Draw.frame(g, Frames.SPEAKER, MARGIN, y, ROW_H, ROW_H);
-            Draw.icon(g, markIcon, 8, MARGIN + 3, y + 3, Theme.FLARE_300);
+            Draw.icon(g, markIcon, 8, MARGIN + 3, y + 3, markInk);
             Draw.popAlpha();
             y += ROW_H + GAP;
         }

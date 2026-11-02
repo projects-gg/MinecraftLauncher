@@ -5,8 +5,8 @@ import java.util.Map;
 
 /** Bakes every frame, disc, strip and icon the overlay draws for one GUI scale into one atlas. Pure. */
 public final class ShapeSet {
-    /** Disc diameters in GUI pixels: presence dots, switch and slider thumbs, avatars. */
-    public static final int[] DISCS = {3, 5, 8, 16, 18};
+    /** Disc diameters in GUI pixels: presence dots, switch and slider thumbs, a voice face's mark (10), avatars. */
+    public static final int[] DISCS = {3, 5, 8, 10, 16, 18};
     /** The shadow left of the panel, and the fades at the ends of a sideways-scrolling row. */
     public static final String PANEL_SHADOW = "strip:panel_shadow";
     public static final String FADE_LEFT = "strip:fade_left";
@@ -73,8 +73,13 @@ public final class ShapeSet {
             for (Map.Entry<Icon, String> e : paths.entrySet()) {
                 for (int size : Icon.SIZES) {
                     int pixels = size * k;
-                    packer.add(e.getKey().key(size),
-                        ShapeBaker.icon(Icon.contours(e.getValue(), pixels), Icon.VIEW_BOX, size, k));
+                    ShapeBaker.Image image =
+                        ShapeBaker.icon(Icon.contours(e.getValue(), pixels), Icon.VIEW_BOX, size, k);
+                    if (e.getKey().slashed) {
+                        // The regular weight's slash (16 wide), with its gap.
+                        image = ShapeBaker.slashed(image, Icon.VIEW_BOX, 16f, 16f);
+                    }
+                    packer.add(e.getKey().key(size), image);
                 }
             }
         }
