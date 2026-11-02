@@ -5,8 +5,9 @@
 //
 //   check  In Prepare, before anything builds (lib.mjs `stableFromBetaRefusal`): the run started on
 //          the beta's tag, the version is the beta's stable one, the beta channel still announces
-//          that beta, the stable channel an older version, the rollout is 0-100, and the stable tag
-//          is free or already on this commit (an earlier run of the same promotion).
+//          that beta, the stable channel an older version, the rollout is 0-100, the CDN has no
+//          files of that version yet, and the stable tag is free or already on this commit (an
+//          earlier run of the same promotion).
 //   tag    At the end: the annotated stable tag on the beta's commit, the notes as its message.
 //          Nothing when an earlier run made it; refused when the tag names another commit.
 //
@@ -119,6 +120,26 @@ async function githubJson(path, init) {
   return response.json();
 }
 
+/**
+ * Whether the CDN already serves `version`'s Windows installer: an earlier run uploaded the
+ * release and stopped before its channel file. A new build makes other bytes, which R2's
+ * immutable files refuse an hour later, so the way on is that run again ("Re-run failed jobs").
+ */
+async function filesThere(version) {
+  const url = `${CDN}/${PREFIX}/releases/${version}/Projects.Launcher_${version}_x64-setup.exe`;
+  let response;
+  try {
+    response = await fetchRetrying(`${url}?fresh=${Date.now()}`, { method: "HEAD" });
+  } catch (err) {
+    throw new Refusal("release/unreadable", `${url} could not be read: ${err.message}`);
+  }
+  if (response.status === 404 || response.status === 403) return false;
+  if (!response.ok) {
+    throw new Refusal("release/unreadable", `${url} could not be read: HTTP ${response.status}`);
+  }
+  return true;
+}
+
 /** The commit `tag` names (an annotated tag followed to it), or null when there is no such tag. */
 async function tagCommit(repo, tag) {
   const response = await github(`/repos/${repo}/git/ref/tags/${encodeURIComponent(tag)}`);
@@ -151,6 +172,12 @@ async function check(flags) {
     stableChannel,
   });
   if (refusal) throw refusal;
+  if (await filesThere(version)) {
+    throw new Refusal(
+      "release/files-exist",
+      `the CDN already has ${version}'s files: re-run the run that uploaded them instead`,
+    );
+  }
   const repo = env("GITHUB_REPOSITORY");
   const sha = env("GITHUB_SHA");
   const tag = `v${version}`;

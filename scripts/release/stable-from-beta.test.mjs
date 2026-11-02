@@ -91,6 +91,7 @@ const state = {
   stable: { version: "2.0.3" },
   failing: 0,
   cached: 0,
+  files: new Set(),
   refs: new Map(),
   tags: new Map(),
 };
@@ -118,6 +119,10 @@ function startServer() {
           }
           const doc = state[channel[1]];
           return doc ? send(200, doc) : send(404);
+        }
+        if (url.pathname.startsWith("/v1/releases/")) {
+          if (!url.searchParams.get("fresh")) state.cached++;
+          return send(state.files.has(url.pathname) ? 200 : 404);
         }
         if (req.headers.authorization !== "Bearer test-token") return send(401);
         const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : null;
@@ -217,6 +222,12 @@ test("check refuses with a named annotation", async () => {
   state.stable = { version: "2.1.0" };
   await assert.rejects(cli(CHECK), refused("stable-ahead"));
   state.stable = { version: "2.0.3" };
+
+  // Files an earlier run uploaded (it stopped before the channel file): a new build would make
+  // other bytes, so that run is the way on.
+  state.files.add("/v1/releases/2.1.0/Projects.Launcher_2.1.0_x64-setup.exe");
+  await assert.rejects(cli(CHECK), refused("files-exist"));
+  state.files.clear();
 
   // The stable tag on another commit stops it; on this one (an earlier run's) it does not.
   state.refs.set("v2.1.0", { type: "commit", sha: OTHER });
