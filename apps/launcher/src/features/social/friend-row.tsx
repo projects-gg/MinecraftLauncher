@@ -52,10 +52,12 @@ import type { InviteState } from "./crews";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
 import { REST } from "./groups";
+import { discordIdOf } from "./identity";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { isJoinable, notifiesOnline, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { PersonMarkList, useMarks } from "./person-mark";
 import { usePersonItems } from "./person-menu";
 import { canInvite } from "./play-together";
 import { PresenceText } from "./presence-text";
@@ -258,15 +260,18 @@ function FriendCard({
             name={friend.name}
             badge={friend.badge}
             wearer={friend.id}
-            mark={friend.mark}
+            marks={friend.marks}
             size="lg"
             chip="button"
             className="gap-2"
             nameClassName="font-display text-[18px] leading-tight font-semibold text-bone-50"
           />
-          <p className="truncate text-[12.5px] text-ash-400" data-selectable>
-            @{friend.username}
-          </p>
+          {/* SOC-ID: a Discord handle only for someone with Discord. */}
+          {discordIdOf(friend) !== null ? (
+            <p className="truncate text-[12.5px] text-ash-400" data-selectable>
+              @{friend.username}
+            </p>
+          ) : null}
           <p
             className={cn(
               "mt-1 truncate text-[13px]",
@@ -282,12 +287,12 @@ function FriendCard({
             ) : (
               <PresenceText friend={friend} t={t} joinable={joinable} />
             )}
-            {friend.dnd ? (
-              <span className="text-gold-300"> ({t("social.presence.dnd")})</span>
-            ) : null}
+            {friend.dnd ? <span> ({t("social.presence.dnd")})</span> : null}
           </p>
         </div>
       </div>
+      {/* Every badge with its name (BADGES-UI), under the name block at the card's full width. */}
+      <PersonMarkList marks={friend.marks} className="mt-3" />
       {friend.since ? (
         <p className="mt-3 text-[12px] text-ash-400">
           {t("social.actions.friendsSince", { date: dateFormat().format(new Date(friend.since)) })}
@@ -324,9 +329,11 @@ function FriendCard({
             {t("chat.actions.message")}
           </Button>
         ) : null}
-        <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
-          {t("social.actions.message")}
-        </DiscordButton>
+        {friend.discordUrl ? (
+          <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
+            {t("social.actions.message")}
+          </DiscordButton>
+        ) : null}
         {team?.crews && team.state !== "member" ? (
           <Menu
             items={crewInviteItems(team.crews, t)}
@@ -569,6 +576,7 @@ export function FriendRow({
   const joinable = friend.state === "playing" && isJoinable(friend.game);
   const line = world ? t("host.invite.inWorld") : presenceLine(friend, t);
   const badge = useShownBadge(friend.badge);
+  const marks = useMarks(friend.marks);
 
   // Remove and block ask first, in the card: it opens at the question once the menu is gone.
   const openAt = (question: Confirm) =>
@@ -609,7 +617,7 @@ export function FriendRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${badgeRowLabel(friend.name, badge, t, friend.mark)}, ${line}`}
+              aria-label={`${badgeRowLabel(friend.name, badge, t, marks)}, ${line}`}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
             >
               <SocialAvatar source={friend} size={36} state={friend.state} dnd={friend.dnd} />
@@ -618,7 +626,7 @@ export function FriendRow({
                   name={friend.name}
                   badge={friend.badge}
                   wearer={friend.id}
-                  mark={friend.mark}
+                  marks={friend.marks}
                   dim={friend.state === "offline"}
                   nameClassName={cn(
                     "text-[14px] font-semibold",

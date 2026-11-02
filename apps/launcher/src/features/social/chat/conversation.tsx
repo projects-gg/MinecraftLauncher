@@ -244,7 +244,7 @@ function samePerson(a: ChatPerson, b: ChatPerson): boolean {
     (a.name === b.name &&
       a.avatar === b.avatar &&
       a.avatarUrl === b.avatarUrl &&
-      a.mark === b.mark &&
+      (a.marks ?? []).join(",") === (b.marks ?? []).join(",") &&
       (a.badge === b.badge || JSON.stringify(a.badge) === JSON.stringify(b.badge)))
   );
 }
@@ -997,7 +997,7 @@ export function Conversation({
     return ids
       .map((id) => {
         const person = people(id);
-        return `${id}:${person.name}:${person.avatar ?? ""}:${person.avatarUrl ?? ""}:${person.mark ?? ""}:${JSON.stringify(person.badge ?? null)}`;
+        return `${id}:${person.name}:${person.avatar ?? ""}:${person.avatarUrl ?? ""}:${person.marks?.join(",") ?? ""}:${JSON.stringify(person.badge ?? null)}`;
       })
       .join("|");
   }, [messages, people]);

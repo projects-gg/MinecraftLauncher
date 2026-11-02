@@ -34,9 +34,24 @@ public final class Protocol {
      * cards, the crews' "ekibe katıldı" lines; TEAM6-O), {@code link} (codeless Discord linking: the launcher's
      * permit to a Projects server that asks, and its question; SKIN1-O), {@code host} (opening a singleplayer world
      * to friends: the gate, the screens, the pause menu's button; HOST1-M, rows H1–H16), {@code slow} (a crew chat's
-     * slow mode: {@code slow} on conversations, the wait in the composer, {@code slow} as a reason; CHAT-CALM).
+     * slow mode: {@code slow} on conversations, the wait in the composer, {@code slow} as a reason; CHAT-CALM),
+     * {@code marks} (profile badges: the {@code marks} catalogue, and the first badge of a friend, a crew chat's
+     * sender or a toast's person right of their name; BADGES-UI).
      */
-    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link", "host", "slow");
+    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link", "host", "slow", "marks");
+    /**
+     * BADGES-UI: the profile badges' looks this build draws ({@code pl_social}'s {@code MARK_COLORS}, {@code
+     * MARK_GLYPHS}, {@code MARK_SHAPES}); a badge with any other comes from a newer catalogue and is not drawn.
+     */
+    public static final List<String> MARK_COLORS = List.of("blue", "red", "purple", "green", "orange", "teal", "indigo",
+        "pink", "slate");
+    public static final List<String> MARK_GLYPHS = List.of("check", "star", "cloud", "bolt", "crown", "heart", "flask",
+        "play", "trophy");
+    public static final List<String> MARK_SHAPES = List.of("seal", "round", "shield");
+    /** Badges a catalogue or a person holds at most (one bit each of the service's 31-bit set). */
+    public static final int MAX_MARKS = 31;
+    /** A badge's name, in either language. */
+    public static final int MAX_MARK_NAME_CHARS = 32;
     /** Minecraft's legacy formatting sign; launcher text must never carry formatting into the game. */
     private static final int SECTION_SIGN = 0xA7;
     /** The keycap mark (1️⃣): the digit stays, the mark would draw as a dashed box. */

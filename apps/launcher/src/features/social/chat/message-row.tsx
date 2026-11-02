@@ -166,7 +166,7 @@ function StateMark({ message, seen }: { message: ChatMessage; seen: boolean }) {
           ) : state === "failed" ? (
             <WarningCircle size={13} weight="fill" className="text-flare-400" aria-hidden />
           ) : (
-            <Check size={12} weight="bold" className="text-gold-300" aria-hidden />
+            <Check size={12} weight="bold" className="text-ash-400" aria-hidden />
           )}
         </motion.span>
       </AnimatePresence>
@@ -595,7 +595,7 @@ function MessageRowView({
                 name={sender.name}
                 badge={sender.badge}
                 wearer={message.from}
-                mark={sender.mark}
+                marks={sender.marks}
                 className="mb-1 ml-1 max-w-full text-[12px] font-semibold text-ash-300"
               />
             </PersonContextMenu>

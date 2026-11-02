@@ -13,10 +13,10 @@ use pl_lang::{Lang, pick};
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
     BadgeRequestResult, CallAnswer, CallOutcome, ChatCardView, ChatPage, ChatQuota, CrewMuteEdit,
-    ErrorCode, FriendGroup, GroupMember, InviteResult, JoinMode, JoinResult, LookupView,
-    PermissionsEdit, PlanAnswer, ProfileUpdate, ReportReason, ReportTarget, SendOutcome,
-    SessionInfo, SettingsMeta, SocialError, SocialService, SocialUpdate, SocialView, StatusMode,
-    TeamEdit, TeamLook, TeamLookupView, TeamNotificationsEdit,
+    ErrorCode, FriendGroup, GroupMember, IdentityStep, InviteResult, JoinMode, JoinResult,
+    LookupView, NameResult, PermissionsEdit, PlanAnswer, ProfileUpdate, Provider, ReportReason,
+    ReportTarget, SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService, SocialUpdate,
+    SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView, TeamNotificationsEdit,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -225,24 +225,89 @@ pub fn social_state(state: State<'_, AppState>) -> SocialView {
     state.social.view()
 }
 
-/// Opens Discord's sign-in page in the browser; the page comes back through
-/// `projects://auth/done`. Returns the page so the UI can open it again.
+/// Opens the sign-in page of `provider` (Discord, or Microsoft while the service offers it, SOC-ID)
+/// in the browser; the page comes back through `projects://auth/done`. Returns the page so the UI
+/// can open it again.
 #[tauri::command]
 #[specta::specta]
-pub async fn social_sign_in(app: AppHandle, state: State<'_, AppState>) -> CmdResult<String> {
-    let url = state.social.begin_sign_in().await?;
-    // Debug builds can skip the browser for automated tests (the test plays the browser).
+pub async fn social_sign_in(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    provider: Provider,
+) -> CmdResult<String> {
+    let url = state.social.begin_sign_in(provider).await?;
+    open_in_browser(&app, url.as_str());
+    Ok(url.to_string())
+}
+
+/// A page of the friends service (a sign-in, a link) in the player's browser. Debug builds can
+/// skip the browser for automated tests (the test plays the browser).
+fn open_in_browser(app: &AppHandle, url: &str) {
     #[cfg(debug_assertions)]
     let open = std::env::var_os("PROJECTS_SOCIAL_NO_BROWSER").is_none();
     #[cfg(not(debug_assertions))]
     let open = true;
     if open {
         use tauri_plugin_opener::OpenerExt;
-        if let Err(error) = app.opener().open_url(url.as_str(), None::<&str>) {
-            tracing::warn!(%error, "could not open the browser for the friends sign-in");
+        if let Err(error) = app.opener().open_url(url, None::<&str>) {
+            tracing::warn!(%error, "could not open the browser for the friends service");
         }
     }
-    Ok(url.to_string())
+}
+
+/// SOC-ID: asks which ways sign in now (the panel opened; at most once a minute). The view's
+/// `providers` follows.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_refresh_providers(state: State<'_, AppState>) -> CmdResult<()> {
+    state.social.refresh_providers().await;
+    Ok(())
+}
+
+/// SOC-ID "Hesap bağla": the browser opens on the service's page; the link finishes when its
+/// `projects://auth/done` comes back (the view's `identityChange` waits meanwhile).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_link_identity(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    provider: Provider,
+) -> CmdResult<IdentityStep> {
+    let step = state.social.link_identity(provider).await;
+    if let IdentityStep::Browser { url } = &step {
+        open_in_browser(&app, url);
+    }
+    Ok(step)
+}
+
+/// SOC-ID "Kaldır" (after its confirmation): done at once, or proved in the browser with another
+/// linked way.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_unlink_identity(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    provider: Provider,
+) -> CmdResult<IdentityStep> {
+    let step = state.social.unlink_identity(provider).await;
+    if let IdentityStep::Browser { url } = &step {
+        open_in_browser(&app, url);
+    }
+    Ok(step)
+}
+
+/// SOC-ID: "Vazgeç" while the browser is open on a link or a removal.
+#[tauri::command]
+#[specta::specta]
+pub fn social_identity_cancel(state: State<'_, AppState>) {
+    state.social.cancel_identity_change();
+}
+
+/// SOC-ID: the profile name ("Profil adı", the name step of a new account).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_set_name(state: State<'_, AppState>, name: String) -> CmdResult<NameResult> {
+    Ok(state.social.set_name(&name).await)
 }
 
 #[tauri::command]
@@ -375,6 +440,17 @@ pub async fn social_set_avatar(state: State<'_, AppState>, avatar: String) -> Cm
         .social
         .update_profile(ProfileUpdate::default().avatar(&avatar))
         .await?)
+}
+
+/// "Rozetlerim" (BADGES): the badges the player keeps off their profile, every one of them
+/// (`[]` shows them all). Shown at once; a refusal takes it back and says why.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_set_marks_hidden(
+    state: State<'_, AppState>,
+    hidden: Vec<String>,
+) -> CmdResult<()> {
+    Ok(state.social.set_marks_hidden(hidden).await?)
 }
 
 /// "Birlikte oyna".

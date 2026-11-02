@@ -1,4 +1,5 @@
 // "Arkadaş ayarları": profile picture (bundled pictures, the Discord photo, the Minecraft head),
+// the player's profile badges ("Rozetler", BADGES-UI: a switch each, off keeps one off the profile),
 // privacy (the crew tag worn before the name, TEAM6; with crews, "Birlikte oynanan süre": kept on
 // this computer only, deleted when turned off or with "Süreleri sil", TEAM5), world sharing's
 // privacy by its name (HOST1), favourite
@@ -6,11 +7,11 @@
 // same component shows in the panel and in Settings → Arkadaşlar. With chat, "Sohbet" holds the
 // chat's text size (CHAT-PROD), for players who do not use Ctrl + wheel.
 import { Desktop, SignOut, Trash } from "@phosphor-icons/react";
-import { Button, Dialog, Select, Skeleton, Slider, Switch } from "@pl/ui";
+import { Button, cn, Dialog, ProfileMark, Select, Skeleton, Slider, Switch } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce, useAccounts } from "@/features/accounts/use-accounts";
 import { AvatarPicker } from "@/features/avatars/avatar-picker";
@@ -25,7 +26,11 @@ import { tagChoices } from "./badges";
 import { useChatTextSize } from "./chat/text-size";
 import { DEFAULT_TEXT_SIZE, TEXT_SIZES, zoomOf } from "./chat/text-zoom";
 import { CrewNotifyGroup } from "./crew-notify";
+import { discordIdOf, newAccount, ownNameOffered } from "./identity";
+import { useMicrosoftOffer } from "./identity-store";
 import { dayMonth, limitOf } from "./limits";
+import { LinkedAccountsSection, ProfileNameSection } from "./linked-accounts";
+import { BUILTIN_MARK_DEFS, heldMarks, hiddenAfter } from "./marks";
 import { rise, useSocialMotion } from "./motion";
 import { NameWithMark } from "./person-mark";
 import { SocialAvatar, SocialFace } from "./social-face";
@@ -64,16 +69,21 @@ function PictureSection({ me }: { me: SocialMe }) {
   const texture = useMinecraftTexture();
   const [pending, setPending] = useState<string | null>(null);
   const leading = [
-    {
-      id: "discord",
-      label: t("social.settings.discordPhoto"),
-      face: (size: number) => (
-        <SocialFace
-          source={{ name: me.name, avatar: "discord", avatarUrl: me.discordAvatarUrl }}
-          size={size}
-        />
-      ),
-    },
+    // SOC-ID: the Discord photo only with a Discord account.
+    ...(discordIdOf(me) !== null && me.discordAvatarUrl
+      ? [
+          {
+            id: "discord",
+            label: t("social.settings.discordPhoto"),
+            face: (size: number) => (
+              <SocialFace
+                source={{ name: me.name, avatar: "discord", avatarUrl: me.discordAvatarUrl }}
+                size={size}
+              />
+            ),
+          },
+        ]
+      : []),
     ...(texture
       ? [
           {
@@ -103,6 +113,96 @@ function PictureSection({ me }: { me: SocialMe }) {
           });
         }}
       />
+    </Section>
+  );
+}
+
+/**
+ * "Rozetler" (BADGES-UI): every profile badge the player holds, each with a switch; one turned off
+ * leaves their profile everywhere (the service keeps it, on brings it back). A switch turns at the
+ * click and follows the view once the view shows the same; a refusal turns it back. Absent while
+ * the player holds none this launcher can draw, or the service cannot hide them.
+ */
+function BadgesSection({ me }: { me: SocialMe }) {
+  const { t, i18n } = useTranslation();
+  const defs = useSocialUi((s) => s.view.markDefs) ?? BUILTIN_MARK_DEFS;
+  const english = i18n.language === "en";
+  const held = useMemo(
+    () => heldMarks(me.marks, me.marksHidden, defs, english),
+    [me.marks, me.marksHidden, defs, english],
+  );
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const noteId = useId();
+  const baseId = useId();
+  useEffect(() => {
+    setPending((now) => {
+      const left = Object.entries(now).filter(([key, show]) =>
+        held.some((one) => one.item.key === key && one.shown !== show),
+      );
+      return left.length === Object.keys(now).length ? now : Object.fromEntries(left);
+    });
+  }, [held]);
+  if (me.marksHidden === undefined || held.length === 0) return null;
+  const shown = held.map((one) => ({ ...one, shown: pending[one.item.key] ?? one.shown }));
+  // Badges kept off that this version cannot draw stay off.
+  const unseen = me.marksHidden.filter((key) => !held.some((one) => one.item.key === key));
+  const change = (key: string, show: boolean) => {
+    setPending((now) => ({ ...now, [key]: show }));
+    const hidden = [...hiddenAfter(shown, key, show), ...unseen];
+    void attempt(() => api.social.setMarksHidden(hidden)).then((done) => {
+      if (done !== undefined) return;
+      setPending((now) => {
+        const { [key]: _, ...rest } = now;
+        return rest;
+      });
+    });
+  };
+  return (
+    <Section title={t("badges.title")}>
+      <div className="space-y-3.5">
+        {shown.map((one) => {
+          const id = `${baseId}-${one.item.key}`;
+          return (
+            <div key={one.item.key} className="switch-row flex items-center gap-3">
+              <Switch
+                id={id}
+                hideLabel
+                checked={one.shown}
+                onCheckedChange={(on) => change(one.item.key, on)}
+                label={one.item.label}
+                describedBy={noteId}
+              />
+              <label
+                htmlFor={id}
+                className="flex min-w-0 cursor-pointer items-center gap-2 select-none"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "flex shrink-0 transition-opacity duration-150",
+                    !one.shown && "opacity-45",
+                  )}
+                >
+                  <ProfileMark
+                    color={one.item.color}
+                    glyph={one.item.glyph}
+                    shape={one.item.shape}
+                    size={16}
+                    label={one.item.label}
+                    tooltip={false}
+                  />
+                </span>
+                <span className="truncate text-[13px] font-medium text-bone-100">
+                  {one.item.label}
+                </span>
+              </label>
+            </div>
+          );
+        })}
+      </div>
+      <p id={noteId} className="mt-3 text-[12px] text-ash-400">
+        {t("badges.note")}
+      </p>
     </Section>
   );
 }
@@ -447,7 +547,9 @@ function BackupSection({ me }: { me: SocialMe }) {
         label={t("social.settings.backupToggle")}
         description={
           limit
-            ? t("safety.limited.backup", { date: dayMonth(limit.until) })
+            ? t(newAccount(me) ? "identity.limited.backup" : "safety.limited.backup", {
+                date: dayMonth(limit.until),
+              })
             : enabled && waits
               ? t("safety.backupWaits")
               : enabled && me.backup
@@ -497,6 +599,8 @@ function SessionRow({ session, onRevoke }: { session: SocialSession; onRevoke: (
             : t("social.settings.lastUsed", {
                 when: formatRelative(`${session.lastUsedOn}T12:00:00Z`),
               })}
+          {/* SOC-ID: a session that came in with Microsoft says so, in the same sentence. */}
+          {session.via === "microsoft" ? `, ${t("identity.settings.viaMicrosoft")}` : null}
         </span>
       </span>
       {session.current ? null : (
@@ -582,7 +686,7 @@ function BlockedSection() {
               <span className="min-w-0 flex-1">
                 <NameWithMark
                   name={user.name}
-                  mark={user.mark}
+                  marks={user.marks}
                   className="text-[14px] text-bone-100"
                 />
               </span>
@@ -667,15 +771,19 @@ function AccountSection() {
 
 export function SocialSettings() {
   const me = useSocialUi((s) => s.view.me);
+  const offer = useMicrosoftOffer();
   if (!me) return null;
   return (
     <div>
+      {ownNameOffered(me, offer) ? <ProfileNameSection me={me} /> : null}
       <PictureSection me={me} />
+      <BadgesSection me={me} />
       <PrivacySection me={me} />
       <ChatSection />
       <WorldsSection />
       <NotificationSection />
       <BackupSection me={me} />
+      <LinkedAccountsSection me={me} />
       <SessionsSection />
       <BlockedSection />
       <AccountSection />

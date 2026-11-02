@@ -38,7 +38,7 @@ function InviteToast({ toastId, invite }: { toastId: string | number; invite: So
           <MarkedSentence
             text={(who) => t("social.notices.invite", { name: who })}
             name={name}
-            mark={invite.mark}
+            marks={invite.marks}
           />
         </p>
         {where ? <p className="truncate text-[12.5px] text-jade-400">{where}</p> : null}
@@ -76,8 +76,10 @@ export function showInviteToast(invite: SocialInvite) {
 
 function WorldInviteToast({ toastId, invite }: { toastId: string | number; invite: WorldInvite }) {
   const { t } = useTranslation();
-  // The friend's mark (SOC-VERIFY) from the friend list: the invite itself does not carry it.
-  const mark = useSocialUi((s) => s.view.friends.find((friend) => friend.id === invite.from)?.mark);
+  // The friend's badges (BADGES-UI) from the friend list: the invite itself does not carry them.
+  const marks = useSocialUi(
+    (s) => s.view.friends.find((friend) => friend.id === invite.from)?.marks,
+  );
   return (
     <div className="flex w-full items-center gap-3 font-normal">
       <SocialAvatar
@@ -90,7 +92,7 @@ function WorldInviteToast({ toastId, invite }: { toastId: string | number; invit
           <MarkedSentence
             text={(who) => t("host.invite.title", { name: who })}
             name={invite.name}
-            mark={mark}
+            marks={marks}
           />
         </p>
         <p className="truncate text-[12px] text-ash-400 tabular-nums">
@@ -150,7 +152,7 @@ function TeamInviteToast({ toastId, invite }: { toastId: string | number; invite
           <MarkedSentence
             text={(who) => t("teams.notices.invite", { name: who, team: invite.name })}
             name={from.name}
-            mark={from.mark}
+            marks={from.marks}
           />
         </p>
         <Button

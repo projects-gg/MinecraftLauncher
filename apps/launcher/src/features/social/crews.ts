@@ -100,7 +100,7 @@ export function callerIn(call: CrewCall, crews: readonly Pick<SocialTeam, "membe
         name: member.name,
         avatar: member.avatar,
         avatarUrl: member.avatarUrl,
-        mark: member.mark,
+        marks: member.marks,
       };
     }
   }
@@ -109,7 +109,7 @@ export function callerIn(call: CrewCall, crews: readonly Pick<SocialTeam, "membe
     name: call.name ?? "",
     avatar: call.avatar,
     avatarUrl: call.avatarUrl,
-    mark: call.mark,
+    marks: call.marks,
   };
 }
 

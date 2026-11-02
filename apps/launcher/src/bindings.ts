@@ -1296,11 +1296,31 @@ export const commands = {
 	instanceDiskUsageCancel: (requestId: string) => __TAURI_INVOKE<void>("instance_disk_usage_cancel", { requestId }),
 	socialState: () => __TAURI_INVOKE<SocialView_Serialize>("social_state"),
 	/**
-	 *  Opens Discord's sign-in page in the browser; the page comes back through
-	 *  `projects://auth/done`. Returns the page so the UI can open it again.
+	 *  Opens the sign-in page of `provider` (Discord, or Microsoft while the service offers it, SOC-ID)
+	 *  in the browser; the page comes back through `projects://auth/done`. Returns the page so the UI
+	 *  can open it again.
 	 */
-	socialSignIn: () => typedError<string, CmdError>(__TAURI_INVOKE("social_sign_in")),
+	socialSignIn: (provider: Provider) => typedError<string, CmdError>(__TAURI_INVOKE("social_sign_in", { provider })),
 	socialSignInCancel: () => __TAURI_INVOKE<void>("social_sign_in_cancel"),
+	/**
+	 *  SOC-ID: asks which ways sign in now (the panel opened; at most once a minute). The view's
+	 *  `providers` follows.
+	 */
+	socialRefreshProviders: () => typedError<null, CmdError>(__TAURI_INVOKE("social_refresh_providers")),
+	/**
+	 *  SOC-ID "Hesap bağla": the browser opens on the service's page; the link finishes when its
+	 *  `projects://auth/done` comes back (the view's `identityChange` waits meanwhile).
+	 */
+	socialLinkIdentity: (provider: Provider) => typedError<IdentityStep, CmdError>(__TAURI_INVOKE("social_link_identity", { provider })),
+	/**
+	 *  SOC-ID "Kaldır" (after its confirmation): done at once, or proved in the browser with another
+	 *  linked way.
+	 */
+	socialUnlinkIdentity: (provider: Provider) => typedError<IdentityStep, CmdError>(__TAURI_INVOKE("social_unlink_identity", { provider })),
+	/**  SOC-ID: "Vazgeç" while the browser is open on a link or a removal. */
+	socialIdentityCancel: () => __TAURI_INVOKE<void>("social_identity_cancel"),
+	/**  SOC-ID: the profile name ("Profil adı", the name step of a new account). */
+	socialSetName: (name: string) => typedError<NameResult, CmdError>(__TAURI_INVOKE("social_set_name", { name })),
 	socialSignOut: () => typedError<null, CmdError>(__TAURI_INVOKE("social_sign_out")),
 	/**  "Tekrar dene" after an outage or when another device took over. */
 	socialRefresh: () => typedError<null, CmdError>(__TAURI_INVOKE("social_refresh")),
@@ -1320,6 +1340,11 @@ export const commands = {
 	socialSetPrivacy: (shareServer: boolean | null, shareLastSeen: boolean | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_privacy", { shareServer, shareLastSeen })),
 	/**  `discord`, `preset:<slug>` or `minecraft:<texture hash>`. */
 	socialSetAvatar: (avatar: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_avatar", { avatar })),
+	/**
+	 *  "Rozetlerim" (BADGES): the badges the player keeps off their profile, every one of them
+	 *  (`[]` shows them all). Shown at once; a refusal takes it back and says why.
+	 */
+	socialSetMarksHidden: (hidden: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_marks_hidden", { hidden })),
 	/**  "Birlikte oyna". */
 	socialInvite: (id: string) => typedError<InviteResult, CmdError>(__TAURI_INVOKE("social_invite", { id })),
 	socialDismissInvite: (id: string) => __TAURI_INVOKE<void>("social_dismiss_invite", { id }),
@@ -1330,7 +1355,7 @@ export const commands = {
 	 *  open): the UI opens the web profile instead.
 	 */
 	socialOpenInDiscord: (id: string) => __TAURI_INVOKE<boolean>("social_open_in_discord", { id }),
-	socialSessions: () => typedError<SessionInfo[], CmdError>(__TAURI_INVOKE("social_sessions")),
+	socialSessions: () => typedError<SessionInfo_Serialize[], CmdError>(__TAURI_INVOKE("social_sessions")),
 	socialRevokeSession: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_revoke_session", { id })),
 	socialRevokeOtherSessions: () => typedError<number, CmdError>(__TAURI_INVOKE("social_revoke_other_sessions")),
 	/**  "Verilerimi sil". */
@@ -4291,8 +4316,11 @@ export type CrewCallView_Deserialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
-	/**  The caller's mark (SOC-VERIFY), as the crew shows them. */
-	mark: ProfileMark | null,
+	/**
+	 *  The caller's badges (BADGES; keys of `markDefs`, the most important first), as the crew
+	 *  shows them.
+	 */
+	marks: string[],
 	/**
 	 *  `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
 	 *  call from before CALL1: an answer, nothing to join).
@@ -4327,8 +4355,11 @@ export type CrewCallView_Serialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
-	/**  The caller's mark (SOC-VERIFY), as the crew shows them. */
-	mark: ProfileMark | null,
+	/**
+	 *  The caller's badges (BADGES; keys of `markDefs`, the most important first), as the crew
+	 *  shows them.
+	 */
+	marks: string[],
 	/**
 	 *  `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
 	 *  call from before CALL1: an answer, nothing to join).
@@ -4697,12 +4728,14 @@ export type FriendView_Deserialize = {
 	dnd: boolean,
 	/**  Where they play; `projects` means "Katıl". `host` of another server only when shared. */
 	game: Game_Deserialize | null,
-	/**  Their Discord profile, for "Discord'dan mesaj at". */
+	/**  Their Discord profile, for "Discord'dan mesaj at"; empty when they have no Discord. */
 	discordUrl: string,
+	/**  Their Discord account (SOC-ID; None: no Discord). */
+	discordId: string | null,
 	/**  The crew tag they wear before their name (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  Their mark right of the name (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges right of the name (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
 };
 
 export type FriendView_Serialize = {
@@ -4720,12 +4753,14 @@ export type FriendView_Serialize = {
 	dnd: boolean,
 	/**  Where they play; `projects` means "Katıl". `host` of another server only when shared. */
 	game: Game_Serialize | null,
-	/**  Their Discord profile, for "Discord'dan mesaj at". */
+	/**  Their Discord profile, for "Discord'dan mesaj at"; empty when they have no Discord. */
 	discordUrl: string,
+	/**  Their Discord account (SOC-ID; None: no Discord). */
+	discordId: string | null,
 	/**  The crew tag they wear before their name (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  Their mark right of the name (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges right of the name (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
 };
 
 export type Game = Game_Serialize | Game_Deserialize;
@@ -4963,6 +4998,61 @@ export type HostView_Serialize = {
 	invites: WorldInviteView_Serialize[],
 };
 
+/**  One way into the account (`me.identities`), as "Bağlı hesaplar" lists it. */
+export type Identity = {
+	provider: Provider,
+	/**  `YYYY-MM-DD` */
+	linkedOn: string,
+	/**  Linked in the last 7 days ("Yeni"). */
+	isNew?: boolean,
+	/**  Discord: the Discord username; Microsoft: none. */
+	hint?: string | null,
+};
+
+/**  A link or a removal waiting for its browser step, as the settings show it. */
+export type IdentityChangeView = {
+	provider: Provider,
+	/**  A removal (its proof is another linked way); otherwise a link. */
+	unlink: boolean,
+	/**  The page the browser shows ("Tarayıcıyı yeniden aç"). */
+	url: string,
+};
+
+/**  Why a link or a removal did not go through; the launcher words it. */
+export type IdentityFailure = 
+/**  That way is switched off right now (`provider_off`). */
+"providerOff" | 
+/**  It is linked already (`identity_exists`). */
+"exists" | 
+/**  It is not linked (`identity_not_found`). */
+"notFound" | 
+/**  The only way into the account stays (`last_identity`). */
+"last" | 
+/**  That account belongs to another Projects account (`identity_taken`). */
+"taken" | 
+/**  The proof with a linked account did not hold (`proof_failed`). */
+"proofFailed" | 
+/**  That account cannot be linked now (`identity_unavailable`). */
+"unavailable" | 
+/**  The browser step took too long, or its link was used already: start again. */
+"expired" | 
+/**  Five changes a day (`rate_limited`, item `identity_changes`). */
+"tooMany" | 
+/**  The service could not be reached. */
+"offline" | "failed";
+
+/**  What a link or a removal needs next ("Hesap bağla", "Kaldır"). */
+export type IdentityStep = 
+/**
+ *  The browser is open on this page; the change finishes when its `projects://auth/done`
+ *  comes back (the view's `identityChange` waits meanwhile).
+ */
+{ kind: "browser"; url: string } | 
+/**  Done at once (a removal with a fresh proof): the profile shows it. */
+{ kind: "done" } | 
+/**  Refused, and why. */
+{ kind: "refused"; reason: IdentityFailure };
+
 /**  What kind of file is being imported into a game directory. */
 export type ImportKind = "mod" | "resourcePack" | "shaderPack";
 
@@ -5194,8 +5284,8 @@ export type InviteView_Deserialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY), from the friend list. */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`), from the friend list. */
+	marks: string[],
 	/**  Unix seconds. */
 	at: number,
 	/**  Their server when it can be shared (`projects` = "Katıl"). */
@@ -5212,8 +5302,8 @@ export type InviteView_Serialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY), from the friend list. */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`), from the friend list. */
+	marks: string[],
 	/**  Unix seconds. */
 	at: number,
 	/**  Their server when it can be shared (`projects` = "Katıl"). */
@@ -5471,8 +5561,10 @@ export type JoinRequestView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
+	/**  Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle). */
+	discordId: string | null,
 	/**  Unix seconds. */
 	sentAt: number,
 	/**
@@ -5818,13 +5910,24 @@ export type LimitedKey =
 "skinChange" | "other";
 
 /**
- *  A limited account ("Sınırlı hesap", a new Discord account): until when, and what is limited
- *  (only what this launcher knows how to say).
+ *  Why an account is limited ("Sınırlı hesap", `me.limited.reason`): its Discord account is new
+ *  (every account opened with Discord, and an older service), or the account itself is.
+ */
+export type LimitedReason = "discord" | "account";
+
+/**
+ *  A limited account ("Sınırlı hesap", a new Discord account or a new account): until when, and
+ *  what is limited (only what this launcher knows how to say).
  */
 export type LimitedView = {
 	/**  Unix seconds. */
 	until: number,
 	items: LimitedItem[],
+	/**
+	 *  SOC-ID: its Discord account is new ("Discord hesabın yeni olduğu için…"), or the account
+	 *  itself ("Hesabın yeni olduğu için…").
+	 */
+	reason: LimitedReason,
 };
 
 export type Limits = {
@@ -5941,6 +6044,24 @@ export type MaintenanceView = {
 	until: string | null,
 };
 
+/**  One badge of the catalogue: its key (what cards carry), its name and its look. */
+export type MarkDef = {
+	key: string,
+	name: MarkName,
+	/**  One of [`MARK_COLORS`]. */
+	color: string,
+	/**  One of [`MARK_GLYPHS`]. */
+	glyph: string,
+	/**  One of [`MARK_SHAPES`]. */
+	shape: string,
+};
+
+/**  A badge's name in both of the launcher's languages. */
+export type MarkName = {
+	tr: string,
+	en: string,
+};
+
 export type McVersionView = {
 	id: string,
 	/**  "release" | "snapshot" | "oldBeta" | "oldAlpha" */
@@ -5967,8 +6088,27 @@ export type MeView = {
 	avatar: string,
 	/**  Discord picture URL when `avatar` is `discord`. */
 	avatarUrl: string | null,
-	/**  The Discord picture (or Discord's default one), for the picker's Discord choice. */
+	/**
+	 *  The Discord picture (or Discord's default one), for the picker's Discord choice; empty
+	 *  without a Discord account.
+	 */
 	discordAvatarUrl: string,
+	/**
+	 *  SOC-ID: the linked Discord account (None: none). It is `id` for every account opened with
+	 *  Discord; SKIN1 and 7/24 Bulut work only then for now.
+	 */
+	discordId: string | null,
+	/**  The ways into the account ("Bağlı hesaplar"), in the service's order. */
+	identities: Identity[],
+	/**  How this session signed in ("Bu cihaz"). */
+	signInVia: Provider,
+	/**  Where the profile name comes from (`unset`: the placeholder of a new account). */
+	nameSource: NameSource,
+	/**
+	 *  The service takes a profile name of the player's own ("Profil adı"; false from an older
+	 *  service, which turns the field away).
+	 */
+	ownNames: boolean,
 	/**  `PRJ-XXXX-XXXX` */
 	friendCode: string,
 	/**  What the QR points to: `<service>/f/PRJ-XXXX-XXXX`. */
@@ -5982,8 +6122,13 @@ export type MeView = {
 	limited: LimitedView | null,
 	/**  The crew tag the player wears (TEAM6; None when none, and while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  The player's own mark (SOC-VERIFY), as friends see it. */
-	mark: ProfileMark | null,
+	/**  The player's own badges (BADGES; keys of `markDefs`), as friends see them. */
+	marks: string[],
+	/**
+	 *  The badges the player holds and keeps off their profile ("Rozetlerim"), in the
+	 *  catalogue's order. None from a service from before badges: nothing to choose there.
+	 */
+	marksHidden: string[] | null,
 };
 
 /**  "Belleği artır/düşür ve tekrar dene". */
@@ -6295,6 +6440,8 @@ export type ModNoticeView = {
 	 *  good); None: nothing is blocked.
 	 */
 	blocked: SkinBlockView | null,
+	/**  `identityLinked` / `identityRemoved` (SOC-ID): the way in it names. */
+	provider: Provider | null,
 };
 
 /**  Choices from the mod center. */
@@ -6636,6 +6783,34 @@ export type MoveProgressView = {
 	totalFiles: number,
 };
 
+/**  What became of a new profile name. */
+export type NameResult = "saved" | 
+/**  Not 3–16 letters, digits, spaces or `_` with two letters or digits (`invalid_name`). */
+"invalid" | 
+/**  The service's filter turned it away (`name_rejected`). */
+"rejected" | 
+/**  Three changes a day (`rate_limited`, item `name_changes`). */
+"tooMany" | 
+/**
+ *  An account with Discord names itself only while Microsoft signs in (`provider_off`): the
+ *  ways in are asked again and "Profil adı" goes.
+ */
+"providerOff" | 
+/**  The service could not be reached. */
+"offline" | "failed";
+
+/**  Where the profile name comes from. */
+export type NameSource = 
+/**  The Discord account's name (every account opened with Discord, and an older service). */
+"discord" | 
+/**  The player chose it. */
+"own" | 
+/**
+ *  The placeholder of an account opened with Microsoft ("Oyuncu" and four digits): the
+ *  launcher asks for a name right after the sign-in.
+ */
+"unset";
+
 export type NewInstanceRequest = {
 	name: string,
 	icon: string,
@@ -6679,7 +6854,14 @@ export type NoticeKind =
  *  Staff in game reset the player's Projects skin (SKIN1), perhaps keeping them from changing
  *  it for a while ([`ModNotice::until`]).
  */
-"skinReset" | "other";
+"skinReset" | 
+/**
+ *  A way into the account was linked ([`ModNotice::provider`]; SOC-ID): "Sen yapmadıysan kaldır
+ *  ve öteki oturumları kapat."
+ */
+"identityLinked" | 
+/**  A way into the account was removed ([`ModNotice::provider`]; SOC-ID). */
+"identityRemoved" | "other";
 
 /**
  *  The notification choices this computer keeps (Settings → Arkadaşlar and the chat's "Sessize
@@ -8537,13 +8719,6 @@ export type Privacy = {
 	shareTyping?: boolean | null,
 };
 
-/**
- *  A mark Projects' staff give an account in Studio (SOC-VERIFY), shown right of the name wherever
- *  the account shows: the verified mark (blue, "Doğrulanmış hesap") or the admin mark (red,
- *  "Projects yöneticisi").
- */
-export type ProfileMark = "verified" | "admin";
-
 /**  What one profile brings, read on demand. */
 export type ProfileMeasure = {
 	id: string,
@@ -8564,8 +8739,10 @@ export type ProfileView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
+	/**  Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle). */
+	discordId: string | null,
 };
 
 export type ProgressView = {
@@ -8913,6 +9090,9 @@ export type ProjectsSkinView_Serialize = {
 	onProjects: boolean,
 };
 
+/**  A way into a Projects account. */
+export type Provider = "discord" | "microsoft";
+
 /**
  *  Dark modules of a QR code. Draw with `viewBox="0 0 size size"` (no quiet zone included:
  *  leave at least 2 modules of light margin around it).
@@ -9090,8 +9270,10 @@ export type RequestView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
-	/**  Their mark (SOC-VERIFY). */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first). */
+	marks: string[],
+	/**  Their Discord account (SOC-ID; None: no Discord, and `username` is no Discord handle). */
+	discordId: string | null,
 	/**  Unix seconds. */
 	sentAt: number,
 };
@@ -9288,7 +9470,9 @@ export type SessionCheck =
 /**  Could not be checked right now (no internet, service outage). */
 "unknown";
 
-export type SessionInfo = {
+export type SessionInfo = SessionInfo_Serialize | SessionInfo_Deserialize;
+
+export type SessionInfo_Deserialize = {
 	/**  Public id, for revoking. */
 	id: string,
 	device: string,
@@ -9296,6 +9480,26 @@ export type SessionInfo = {
 	lastUsedOn: string,
 	/**  This device. */
 	current: boolean,
+	/**
+	 *  How the session signed in (SOC-ID; None from an older service, and for a way this version
+	 *  does not know).
+	 */
+	via?: Provider | null,
+};
+
+export type SessionInfo_Serialize = {
+	/**  Public id, for revoking. */
+	id: string,
+	device: string,
+	createdOn: string,
+	lastUsedOn: string,
+	/**  This device. */
+	current: boolean,
+	/**
+	 *  How the session signed in (SOC-ID; None from an older service, and for a way this version
+	 *  does not know).
+	 */
+	via: Provider | null,
 };
 
 /**  Session lifecycle. */
@@ -9558,7 +9762,14 @@ export type SignInFailure =
 /**  The account is suspended or banned (`restriction` in the view says until when). */
 "restricted" | 
 /**  No new accounts are made right now; this Discord account has none yet. */
-"signupsClosed";
+"signupsClosed" | 
+/**
+ *  SOC-ID: this Microsoft account is no Projects account's yet, and new ones are not made
+ *  with Microsoft now (`identity_not_linked`): sign in with Discord and link it.
+ */
+"notLinked" | 
+/**  SOC-ID: that way is switched off right now (`provider_off`). */
+"providerOff";
 
 /**  How long staff keep the player from changing their Projects skin (SKIN1). */
 export type SkinBlockView = {
@@ -9614,25 +9825,35 @@ export type SocialNotice = SocialNotice_Serialize | SocialNotice_Deserialize;
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Deserialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Deserialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "invite"; invite: InviteView_Deserialize }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "request"; request: RequestView }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { askName?: never; call?: never; conv?: never; crew?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnline"; id: string }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
-/**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; staff?: never; until?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
+/**
+ *  Signed in. `restore` is a settings backup saved by another computer, worth offering;
+ *  `ask_name`: a new account with a placeholder name (SOC-ID), "Arkadaşların seni hangi adla
+ *  görsün?".
+ */
+({ kind: "signedIn"; restore: SettingsMeta | null; 
+/**  `askName` on the wire (the enum's `rename_all` names the variants only). */
+askName: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; staff?: never; unlink?: never; until?: never } | 
+/**  SOC-ID: a way into the account was linked (`linked`) or removed: "Microsoft bağlandı.". */
+({ kind: "identityChanged"; provider: Provider; linked: boolean }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
+/**  SOC-ID: a link or a removal that went to the browser did not go through. */
+({ kind: "identityFailed"; provider: Provider; unlink: boolean; reason: IdentityFailure }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
 name: string | null; 
 /**  Projects' moderators did it (community rules). */
-staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; notice?: never; plan?: never; request?: never; restore?: never; until?: never } | 
+staff: boolean }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; notice?: never; plan?: never; provider?: never; request?: never; restore?: never; unlink?: never; until?: never } | 
 /**
  *  A new chat message from someone else, live (never one of the player's own, nor one a sync
  *  brought): the launcher decides whether to say it.
@@ -9641,68 +9862,78 @@ staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; 
 /**  The sender's name as the lists show it. */
 name: string | null; 
 /**  The crew of a crew's chat. */
-crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+crew: string | null }) & { askName?: never; call?: never; friend?: never; id?: never; invite?: never; linked?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  Moderators suspended or banned the account: every session ended. */
-({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
+({ kind: "restricted"; until: number | null }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never } | 
 /**
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { askName?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
  *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
  */
-({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { askName?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
-({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewmateOnProjects"; id: string }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  Someone asked to join one of the player's crews, live (only for a player who may answer,
  *  never while every crew or that crew is muted).
  */
-({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { askName?: never; call?: never; conv?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A join request of the player's was taken: they are in that crew now. */
-({ kind: "requestAccepted"; crew: string; name: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "requestAccepted"; crew: string; name: string }) & { askName?: never; call?: never; conv?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
  *  is muted).
  */
-({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewPlan"; plan: PlanView }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  The player just joined a crowded crew and the service muted it for them (CHAT-CALM): said
  *  once, with "Sesi aç".
  */
-({ kind: "crowdedCrewMuted"; crew: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crowdedCrewMuted"; crew: string }) & { askName?: never; call?: never; conv?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "signedOutRemotely" }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  Cloud AFK's notice about one of the player's cloud accounts (AFKPLUS): the launcher words it
  *  and, once the player saw it, sends `afk_seen` ([`crate::SocialService::afk_seen`]).
  */
-({ kind: "afkNotice"; notice: AfkNotice_Deserialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
+({ kind: "afkNotice"; notice: AfkNotice_Deserialize }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never };
 
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Serialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Serialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "invite"; invite: InviteView_Serialize }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "request"; request: RequestView }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Serialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Serialize }) & { askName?: never; call?: never; conv?: never; crew?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnline"; id: string }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
-/**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; staff?: never; until?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
+/**
+ *  Signed in. `restore` is a settings backup saved by another computer, worth offering;
+ *  `ask_name`: a new account with a placeholder name (SOC-ID), "Arkadaşların seni hangi adla
+ *  görsün?".
+ */
+({ kind: "signedIn"; restore: SettingsMeta | null; 
+/**  `askName` on the wire (the enum's `rename_all` names the variants only). */
+askName: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; staff?: never; unlink?: never; until?: never } | 
+/**  SOC-ID: a way into the account was linked (`linked`) or removed: "Microsoft bağlandı.". */
+({ kind: "identityChanged"; provider: Provider; linked: boolean }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
+/**  SOC-ID: a link or a removal that went to the browser did not go through. */
+({ kind: "identityFailed"; provider: Provider; unlink: boolean; reason: IdentityFailure }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
 name: string | null; 
 /**  Projects' moderators did it (community rules). */
-staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; notice?: never; plan?: never; request?: never; restore?: never; until?: never } | 
+staff: boolean }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; notice?: never; plan?: never; provider?: never; request?: never; restore?: never; unlink?: never; until?: never } | 
 /**
  *  A new chat message from someone else, live (never one of the player's own, nor one a sync
  *  brought): the launcher decides whether to say it.
@@ -9711,45 +9942,45 @@ staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; 
 /**  The sender's name as the lists show it. */
 name: string | null; 
 /**  The crew of a crew's chat. */
-crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+crew: string | null }) & { askName?: never; call?: never; friend?: never; id?: never; invite?: never; linked?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  Moderators suspended or banned the account: every session ended. */
-({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
+({ kind: "restricted"; until: number | null }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never } | 
 /**
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Serialize }) & { askName?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
  *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
  */
-({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { askName?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
-({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewmateOnProjects"; id: string }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  Someone asked to join one of the player's crews, live (only for a player who may answer,
  *  never while every crew or that crew is muted).
  */
-({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { askName?: never; call?: never; conv?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  A join request of the player's was taken: they are in that crew now. */
-({ kind: "requestAccepted"; crew: string; name: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "requestAccepted"; crew: string; name: string }) & { askName?: never; call?: never; conv?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
  *  is muted).
  */
-({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewPlan"; plan: PlanView }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  The player just joined a crowded crew and the service muted it for them (CHAT-CALM): said
  *  once, with "Sesi aç".
  */
-({ kind: "crowdedCrewMuted"; crew: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crowdedCrewMuted"; crew: string }) & { askName?: never; call?: never; conv?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "signedOutRemotely" }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; notice?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never } | 
 /**
  *  Cloud AFK's notice about one of the player's cloud accounts (AFKPLUS): the launcher words it
  *  and, once the player saw it, sends `afk_seen` ([`crate::SocialService::afk_seen`]).
  */
-({ kind: "afkNotice"; notice: AfkNotice_Serialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
+({ kind: "afkNotice"; notice: AfkNotice_Serialize }) & { askName?: never; call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; linked?: never; message?: never; name?: never; plan?: never; provider?: never; reason?: never; request?: never; restore?: never; staff?: never; unlink?: never; until?: never };
 
 export type SocialView = SocialView_Serialize | SocialView_Deserialize;
 
@@ -9840,6 +10071,33 @@ export type SocialView_Deserialize = {
 	restriction: RestrictionView | null,
 	/**  The settings backup waits until then (Unix seconds): the service protects its storage. */
 	backupWaitsUntil: number | null,
+	/**
+	 *  The ways the sign-in screen offers now, Discord first (SOC-ID; Discord alone until the
+	 *  service said otherwise, and from an older service).
+	 */
+	providers: Provider[],
+	/**
+	 *  Of `providers`, the ways whose first sign-in opens a new account (Discord always). A way
+	 *  that only signs in stands under "Bağlı hesabınla gir"; once one opens accounts too, the
+	 *  invitations drop Discord's mark ("Giriş yap").
+	 */
+	signUpWays: Provider[],
+	/**
+	 *  The service said its ways in since this launcher started (or since its address changed).
+	 *  Until then `providers` and `sign_up_ways` are the defaults, and the launcher shows the ways
+	 *  it kept from the last answer instead.
+	 */
+	providersKnown: boolean,
+	/**  The way of the sign-in in progress (while `auth` is `signingIn`): its waiting card. */
+	signingInWith: Provider | null,
+	/**  A link or a removal waiting for its browser step (SOC-ID). */
+	identityChange: IdentityChangeView | null,
+	/**
+	 *  The profile badges that show, in order, the most important first (BADGES): what the
+	 *  `marks` keys of every card name. The built-in catalogue until the service's arrives; a key
+	 *  missing here is not drawn.
+	 */
+	markDefs: MarkDef[],
 };
 
 export type SocialView_Serialize = {
@@ -9929,6 +10187,33 @@ export type SocialView_Serialize = {
 	restriction: RestrictionView | null,
 	/**  The settings backup waits until then (Unix seconds): the service protects its storage. */
 	backupWaitsUntil: number | null,
+	/**
+	 *  The ways the sign-in screen offers now, Discord first (SOC-ID; Discord alone until the
+	 *  service said otherwise, and from an older service).
+	 */
+	providers: Provider[],
+	/**
+	 *  Of `providers`, the ways whose first sign-in opens a new account (Discord always). A way
+	 *  that only signs in stands under "Bağlı hesabınla gir"; once one opens accounts too, the
+	 *  invitations drop Discord's mark ("Giriş yap").
+	 */
+	signUpWays: Provider[],
+	/**
+	 *  The service said its ways in since this launcher started (or since its address changed).
+	 *  Until then `providers` and `sign_up_ways` are the defaults, and the launcher shows the ways
+	 *  it kept from the last answer instead.
+	 */
+	providersKnown: boolean,
+	/**  The way of the sign-in in progress (while `auth` is `signingIn`): its waiting card. */
+	signingInWith: Provider | null,
+	/**  A link or a removal waiting for its browser step (SOC-ID). */
+	identityChange: IdentityChangeView | null,
+	/**
+	 *  The profile badges that show, in order, the most important first (BADGES): what the
+	 *  `marks` keys of every card name. The built-in catalogue until the service's arrives; a key
+	 *  missing here is not drawn.
+	 */
+	markDefs: MarkDef[],
 };
 
 /**  The launcher a source belongs to. Names are brand names: the UI shows them as they are. */
@@ -10222,7 +10507,10 @@ export type TeamMemberView_Deserialize = {
 	dnd: boolean,
 	/**  Where they play; `projects` means "Katıl". Never another server's address. */
 	game: Game_Deserialize | null,
+	/**  Their Discord profile, for "Discord'dan mesaj at"; empty when they have no Discord. */
 	discordUrl: string,
+	/**  Their Discord account (SOC-ID; None: no Discord). */
+	discordId: string | null,
 	/**  Unix seconds. */
 	joinedAt: number,
 	/**
@@ -10232,8 +10520,8 @@ export type TeamMemberView_Deserialize = {
 	togetherMonth: number,
 	/**  The crew tag they wear, of any crew (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  Their mark (SOC-VERIFY), the player's own too. */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first), the player's own too. */
+	marks: string[],
 };
 
 export type TeamMemberView_Serialize = {
@@ -10255,7 +10543,10 @@ export type TeamMemberView_Serialize = {
 	dnd: boolean,
 	/**  Where they play; `projects` means "Katıl". Never another server's address. */
 	game: Game_Serialize | null,
+	/**  Their Discord profile, for "Discord'dan mesaj at"; empty when they have no Discord. */
 	discordUrl: string,
+	/**  Their Discord account (SOC-ID; None: no Discord). */
+	discordId: string | null,
 	/**  Unix seconds. */
 	joinedAt: number,
 	/**
@@ -10265,8 +10556,8 @@ export type TeamMemberView_Serialize = {
 	togetherMonth: number,
 	/**  The crew tag they wear, of any crew (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
-	/**  Their mark (SOC-VERIFY), the player's own too. */
-	mark: ProfileMark | null,
+	/**  Their badges (BADGES; keys of `markDefs`, the most important first), the player's own too. */
+	marks: string[],
 };
 
 /**

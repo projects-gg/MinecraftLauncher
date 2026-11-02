@@ -1,8 +1,8 @@
-//! Sign-in with Discord: verifier and challenge, the browser URL, the one-time code of the
-//! `projects://auth/done` deep link, and the session token type.
+//! Sign-in with Discord or Microsoft (SOC-ID): verifier and challenge, the browser URL, the
+//! one-time code of the `projects://auth/done` deep link, and the session token type.
 //!
 //! The launcher never receives a token in a URL. It opens [`LoginAttempt::browser_url`]; the
-//! service finishes the Discord step and the sign-in page opens `projects://auth/done?c=<code>`
+//! service finishes the provider's step and the sign-in page opens `projects://auth/done?c=<code>`
 //! ([`AUTH_DONE_LINK`]). The launcher takes the code out of that link with
 //! [`auth_code_from_deep_link`] and calls [`crate::SocialClient::complete_login`] with the same
 //! attempt and the code. Both are needed: the verifier (which never leaves this process until the
@@ -21,9 +21,10 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
 use url::Url;
 
+use crate::identity::Provider;
 use crate::model::Me;
 
-/// Deep link the sign-in page opens when Discord is done: `projects://auth/done?c=<code>`.
+/// Deep link the sign-in page opens when the provider is done: `projects://auth/done?c=<code>`.
 pub const AUTH_DONE_LINK: &str = "projects://auth/done";
 
 /// A session bearer token (`pls_…`). Keep it in the OS keychain; it is never logged.
@@ -63,19 +64,18 @@ pub struct LoginAttempt {
     verifier: String,
     challenge: String,
     browser_url: Url,
+    provider: Provider,
 }
 
 impl LoginAttempt {
-    pub(crate) fn new(base: &Url) -> Self {
-        let mut bytes = [0u8; 32];
-        rand::fill(&mut bytes[..]);
-        Self::from_verifier(base, URL_SAFE_NO_PAD.encode(bytes))
+    pub(crate) fn new(base: &Url, provider: Provider) -> Self {
+        Self::from_verifier(base, provider, new_verifier())
     }
 
-    pub(crate) fn from_verifier(base: &Url, verifier: String) -> Self {
+    pub(crate) fn from_verifier(base: &Url, provider: Provider, verifier: String) -> Self {
         let challenge = challenge_for(&verifier);
         let mut browser_url = base
-            .join("auth/discord/start")
+            .join(&format!("auth/{}/start", provider.as_wire()))
             .expect("a fixed relative path always joins");
         browser_url
             .query_pairs_mut()
@@ -84,6 +84,7 @@ impl LoginAttempt {
             verifier,
             challenge,
             browser_url,
+            provider,
         }
     }
 
@@ -96,6 +97,11 @@ impl LoginAttempt {
         &self.challenge
     }
 
+    /// The way the player signs in with (SOC-ID).
+    pub fn provider(&self) -> Provider {
+        self.provider
+    }
+
     pub(crate) fn verifier(&self) -> &str {
         &self.verifier
     }
@@ -105,8 +111,16 @@ impl fmt::Debug for LoginAttempt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LoginAttempt")
             .field("challenge", &self.challenge)
+            .field("provider", &self.provider)
             .finish_non_exhaustive()
     }
+}
+
+/// 32 random bytes, base64url without padding: a PKCE verifier (a sign-in's, or a link's).
+pub(crate) fn new_verifier() -> String {
+    let mut bytes = [0u8; 32];
+    rand::fill(&mut bytes[..]);
+    URL_SAFE_NO_PAD.encode(bytes)
 }
 
 /// `BASE64URL(SHA256(verifier))` (RFC 7636 S256).
@@ -167,8 +181,8 @@ mod tests {
     #[test]
     fn attempts_are_random_and_point_at_the_service() {
         let base = Url::parse("https://social.projects.gg/").unwrap();
-        let a = LoginAttempt::new(&base);
-        let b = LoginAttempt::new(&base);
+        let a = LoginAttempt::new(&base, Provider::Discord);
+        let b = LoginAttempt::new(&base, Provider::Discord);
         assert_ne!(a.verifier(), b.verifier());
         assert_eq!(a.verifier().len(), 43);
         assert_eq!(a.challenge(), challenge_for(a.verifier()));
@@ -181,6 +195,17 @@ mod tests {
         );
         // The verifier never shows up in logs.
         assert!(!format!("{a:?}").contains(a.verifier()));
+        // SOC-ID: Microsoft's sign-in starts at its own page, the same way.
+        let microsoft = LoginAttempt::new(&base, Provider::Microsoft);
+        assert_eq!(microsoft.provider(), Provider::Microsoft);
+        assert_eq!(
+            microsoft.browser_url().as_str(),
+            format!(
+                "https://social.projects.gg/auth/microsoft/start?challenge={}",
+                microsoft.challenge()
+            )
+        );
+        assert_eq!(microsoft.challenge().len(), 43);
     }
 
     #[test]

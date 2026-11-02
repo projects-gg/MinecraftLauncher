@@ -1,6 +1,7 @@
 // "Sınırlı hesap" (SPAM1): a quiet chip with a lock on the player's own card while their Discord
-// account is new. Hovering or pressing it opens what is limited and until when ("Bu sınırlar
-// kendiliğinden kalkar."). Nobody else ever sees it.
+// account (SOC-ID: or, opened with Microsoft, the account itself) is new. Hovering or pressing it
+// opens what is limited and until when ("Bu sınırlar kendiliğinden kalkar."). Nobody else ever
+// sees it.
 import { LockSimple } from "@phosphor-icons/react";
 import { easeOutExpo, swallowDismissClick } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -9,6 +10,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import type { SocialMe } from "@/lib/api/social-types";
+import { newAccount } from "./identity";
 import { dayMonth, isLimited } from "./limits";
 
 /** Hovering opens it after a moment; leaving closes it a moment later (the pointer may be on its
@@ -78,7 +80,10 @@ export function LimitedChip({ me }: { me: SocialMe }) {
                 exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.11 } })}
               >
                 <p className="text-[13px] leading-snug font-semibold text-bone-50">
-                  {t("safety.limited.title", { date: dayMonth(limited.until) })}
+                  {/* SOC-ID: an account that is new itself hears so, not about Discord. */}
+                  {t(newAccount(me) ? "identity.limited.title" : "safety.limited.title", {
+                    date: dayMonth(limited.until),
+                  })}
                 </p>
                 <ul className="mt-2.5 flex flex-col gap-1.5">
                   {limited.items.map((item) => (

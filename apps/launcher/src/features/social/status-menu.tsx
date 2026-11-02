@@ -3,7 +3,9 @@
 // Görünmez). The chosen status shows at once and settles when the service confirms; a failure puts
 // the old one back. The panel's menu changes it too. With crew tags (TEAM6) the tag the player
 // wears sits before the name (its card as on anyone's), and the picker's "Ekip etiketi ▸" puts one
-// on, switches or takes it off ("Etiket yok").
+// on, switches or takes it off ("Etiket yok"). The player's profile badges (BADGES-UI) show as
+// others see them: the first beside the name, its tooltip naming them all (the picker is for the
+// status; friends settings' "Rozetler" lists them with their switches).
 import { CaretDown, CaretRight, Check, TagSimple } from "@phosphor-icons/react";
 import { cn, easeOutExpo, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -77,7 +79,7 @@ export function MeCard({ me }: { me: SocialMe }) {
           name={me.name}
           badge={badge}
           wearer={me.id}
-          mark={me.mark}
+          marks={me.marks}
           chip="button"
           nameClassName="text-[15px] leading-tight font-semibold text-bone-50"
         />
@@ -143,7 +145,7 @@ export function MeCard({ me }: { me: SocialMe }) {
                             </span>
                             <span className="flex-1">{t(`social.status.${option}`)}</span>
                             <DropdownMenu.ItemIndicator>
-                              <Check size={15} weight="bold" className="text-gold-300" />
+                              <Check size={15} weight="bold" className="text-bone-100" />
                             </DropdownMenu.ItemIndicator>
                           </DropdownMenu.RadioItem>
                         ))}
@@ -186,7 +188,7 @@ export function MeCard({ me }: { me: SocialMe }) {
                                     <span className="flex w-5" aria-hidden />
                                     <span className="flex-1">{t("team6.noTag")}</span>
                                     <DropdownMenu.ItemIndicator>
-                                      <Check size={15} weight="bold" className="text-gold-300" />
+                                      <Check size={15} weight="bold" className="text-bone-100" />
                                     </DropdownMenu.ItemIndicator>
                                   </DropdownMenu.RadioItem>
                                   {choices.map(({ crew, main, blocked }) => (
@@ -222,7 +224,7 @@ export function MeCard({ me }: { me: SocialMe }) {
                                           <Check
                                             size={15}
                                             weight="bold"
-                                            className="text-gold-300"
+                                            className="text-bone-100"
                                           />
                                         </DropdownMenu.ItemIndicator>
                                       </span>

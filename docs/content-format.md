@@ -390,7 +390,7 @@ cache file extension.
 
 Every field is optional (`{}` is a valid config). Defaults: no maintenance, no banners, bundled
 hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`,
-`teams`, `chat`, `skins`, `worlds`, `subServers` and `overlayJars` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
+`teams`, `chat`, `skins`, `worlds`, `subServers`, `overlayJars` and `phoneAfk` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
 news feed, the launcher's built-in recommended Minecraft version.
 
 - `banners[].level`: `info | warning | event | critical`; a banner is shown while
@@ -514,6 +514,11 @@ news feed, the launcher's built-in recommended Minecraft version.
   fetch no jar. Studio may publish jars first and turn this on after. Writers omit it while it is
   `false`; launchers that do not know the field or `overlay` ignore them. Publishing either needs a
   Studio of `aa95309` or later (STUDIO3).
+- `features.phoneAfk`: "Telefonda AFK" (PHONE-AFK), the Android app's local AFK (a bot running on the
+  phone). Off by default; while it is `false` (or missing) the app shows and starts nothing of it.
+  Do not turn it on before the agreement's bot exception is live. Writers omit it while it is
+  `false`; launchers and apps that do not know the field ignore it. Publishing it needs a Studio
+  that knows the field (AFK-M-GATE).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte

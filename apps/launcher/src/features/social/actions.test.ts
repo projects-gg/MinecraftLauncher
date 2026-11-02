@@ -8,7 +8,12 @@ vi.mock("@pl/ui", () => ({
     success: vi.fn(),
   }),
 }));
-vi.mock("@/lib/attention", () => ({ showNotification: vi.fn() }));
+const showNotification = vi.fn(async () => true);
+const away = { value: false };
+vi.mock("@/lib/attention", () => ({
+  showNotification: (...args: unknown[]) => showNotification(...(args as [])),
+  windowAway: () => away.value,
+}));
 vi.mock("@/features/accounts/use-accounts", () => ({
   announce: vi.fn(),
   friendlyError: (_error: unknown, fallback: string) => ({ message: fallback }),
@@ -16,11 +21,13 @@ vi.mock("@/features/accounts/use-accounts", () => ({
 vi.mock("@/lib/api", () => ({ api: {} }));
 vi.mock("@/lib/clipboard", () => ({ copyText: vi.fn() }));
 vi.mock("@/lib/i18n", () => ({ default: { t: (key: string) => key } }));
-vi.mock("@/lib/platform", () => ({ isTauri: () => false }));
-vi.mock("@/stores/prefs", () => ({ usePrefs: { getState: () => ({}) } }));
+vi.mock("@/lib/platform", () => ({ isTauri: () => true }));
+vi.mock("@/stores/prefs", () => ({
+  usePrefs: { getState: () => ({ desktopNotifications: true }) },
+}));
 vi.mock("./store", () => ({ useSocialUi: { getState: () => ({}) } }));
 
-const { attempt } = await import("./actions");
+const { attempt, notifyOutside } = await import("./actions");
 
 describe("attempt", () => {
   beforeEach(() => {
@@ -49,5 +56,24 @@ describe("attempt", () => {
     expect(done).toBeUndefined();
     expect(toastError).toHaveBeenCalledTimes(1);
     expect(toastError).toHaveBeenCalledWith("social.actions.failed");
+  });
+});
+
+describe("notifyOutside", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // A launcher started in the tray never had the focus: the page may still say it has it.
+  it("notifies when the window is away, whatever the page's focus says", async () => {
+    away.value = true;
+    expect(await notifyOutside("Title")).toBe(true);
+    expect(showNotification).toHaveBeenCalled();
+  });
+
+  it("stays quiet when the window is in front", async () => {
+    away.value = false;
+    expect(await notifyOutside("Title")).toBe(false);
+    expect(showNotification).not.toHaveBeenCalled();
   });
 });

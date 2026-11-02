@@ -1557,7 +1557,8 @@ fn people2_view() -> SocialView {
         username: "cem".into(),
         avatar: "discord".into(),
         avatar_url: None,
-        mark: None,
+        marks: Vec::new(),
+        discord_id: Some("u-cem".into()),
         sent_at: 1,
     }];
     v

@@ -9,7 +9,7 @@ import { Play, X } from "@phosphor-icons/react";
 import { ContextMenu, IconButton, type MenuItem } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import { openMenuFromKey } from "@/features/social/menu-key";
-import { MarkedSentence, markedName, NameWithMark } from "@/features/social/person-mark";
+import { MarkedSentence, NameWithMark, useMarkedName } from "@/features/social/person-mark";
 import { usePeopleItems } from "@/features/social/person-menu";
 import { SocialAvatar } from "@/features/social/social-face";
 import { useSocialUi } from "@/features/social/store";
@@ -22,9 +22,9 @@ import { useHostUi } from "./store";
 /** The friend's own "Katıl" is the row's: their rows follow without it. */
 const SKIP_JOIN = ["joinWorld"] as const;
 
-/** The inviting friend's mark (SOC-VERIFY), from the friend list. */
-function useFriendMark(id: string) {
-  return useSocialUi((s) => s.view.friends.find((friend) => friend.id === id)?.mark);
+/** The inviting friend's profile badges (BADGES-UI), from the friend list. */
+function useFriendMarks(id: string) {
+  return useSocialUi((s) => s.view.friends.find((friend) => friend.id === id)?.marks);
 }
 
 function useInviteItems(invite: WorldInvite, where: "panel" | "home"): Array<MenuItem | null> {
@@ -92,7 +92,7 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
   // press from fixed, so their line stays calm; a refused join reads as an error.
   const failed = inviteFailureKey(invite.join);
   const calm = retryWithCopy(invite.join);
-  const mark = useFriendMark(invite.from);
+  const marks = useFriendMarks(invite.from);
   return (
     <ContextMenu items={items}>
       <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
@@ -104,7 +104,7 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
         <span className="min-w-0 flex-1">
           <NameWithMark
             name={invite.name}
-            mark={mark}
+            marks={marks}
             className="text-[14px] font-semibold text-bone-50"
           />
           <span className="flex items-center gap-2 text-[12.5px] text-ash-300">
@@ -147,14 +147,15 @@ export function HomeWorldLine({ invite }: { invite: WorldInvite }) {
   const items = useInviteItems(invite, "home");
   const openPanel = useSocialUi((s) => s.openPanel);
   const closeHome = useHostUi((s) => s.closeHome);
-  const mark = useFriendMark(invite.from);
+  const marks = useFriendMarks(invite.from);
+  const named = useMarkedName(invite.name, marks);
   // After missing mods the line says why its button copies the install (Home has no row below
   // the name for it, and the toast that said it may be long gone when the player comes back).
   const sentence = (name: string) =>
     retryWithCopy(invite.join)
       ? t("small9.join.homeMissingMods", { name })
       : t("host.invite.title", { name });
-  const text = sentence(markedName(invite.name, mark, t));
+  const text = sentence(named);
   return (
     <>
       <ContextMenu items={items}>
@@ -182,7 +183,7 @@ export function HomeWorldLine({ invite }: { invite: WorldInvite }) {
             round
           />
           <span className="truncate text-[13.5px] font-medium text-bone-50">
-            <MarkedSentence text={sentence} name={invite.name} mark={mark} />
+            <MarkedSentence text={sentence} name={invite.name} marks={marks} />
           </span>
         </button>
       </ContextMenu>

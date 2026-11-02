@@ -26,9 +26,9 @@ use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
     ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST, FEATURE_LANG,
-    FEATURE_LINK, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_PEOPLE3,
-    FEATURE_TAGS, FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret,
-    SendFailure, ToGame,
+    FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
+    FEATURE_PEOPLE3, FEATURE_TAGS, FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS,
+    ReactFailure, Secret, SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -613,6 +613,8 @@ struct Live {
     hosts: bool,
     /// The mod draws crew tags (TEAM6-O: `tags` in its hello).
     tags: bool,
+    /// The mod draws profile badges (BADGES-UI: `marks` in its hello).
+    marks: bool,
     /// The mod carries the codeless linking permit (SKIN1-O: `link` in its hello).
     links: bool,
     /// When it last asked for the permit.
@@ -922,30 +924,30 @@ impl<S: SocialActions> Session<S> {
         }
     }
 
-    /// Takes a new view; whether someone now wears another crew tag than before (or none).
+    /// Takes a new view; whether someone now wears another crew tag than before (or none), or
+    /// shows other profile badges (BADGES-UI).
     fn set_view(&mut self, view: Arc<SocialView>) -> bool {
         self.codeless = self.social.codeless_offered();
         let link = self.codeless && self.game.is_some();
         let scene = scene_of(&view, &self.config, &self.worlds, link);
-        let wears_changed = scene.wears_differ(&self.scene);
+        let senders_changed = scene.wears_differ(&self.scene) || scene.marks_differ(&self.scene);
         self.scene = scene;
         self.view = view;
-        wears_changed
+        senders_changed
     }
 
-    /// Someone took off their crew tag or wears another (TEAM6-O): the messages the panel shows
-    /// carry the old one, so the conversation on screen comes again (only to a mod that draws tags;
-    /// the next `open-conv` refreshes any other).
+    /// Someone took off their crew tag or wears another (TEAM6-O), or their badges changed
+    /// (BADGES-UI): the messages the panel shows carry the old ones, so the conversation on screen
+    /// comes again (only to a mod that draws tags or badges; the next `open-conv` refreshes any
+    /// other).
     fn reshow_open_conversation(&self) {
         let Some(live) = &self.live else {
             return;
         };
         // Only crew chat names its senders.
-        let Some(conv) = live
-            .open
-            .as_deref()
-            .filter(|conv| live.panel && live.tags && self.scene.is_crew_conv(conv))
-        else {
+        let Some(conv) = live.open.as_deref().filter(|conv| {
+            live.panel && (live.tags || live.marks) && self.scene.is_crew_conv(conv)
+        }) else {
             return;
         };
         let page = self.social.chat_page(conv);
@@ -1381,7 +1383,10 @@ impl<S: SocialActions> Session<S> {
                 // The crew rows build on the whole person menu.
                 let people3 = people2 && features.iter().any(|f| f == FEATURE_PEOPLE3);
                 let langs = features.iter().any(|f| f == FEATURE_LANG);
-                let mut mirror = Mirror::for_mod(tags, people2).with_people3(people3);
+                let marks = features.iter().any(|f| f == FEATURE_MARKS);
+                let mut mirror = Mirror::for_mod(tags, people2)
+                    .with_people3(people3)
+                    .with_marks(marks);
                 mirror.set_lang(langs.then_some(self.lang));
                 let frames = mirror.greet(&self.scene, &self.launcher, self.config.reduced_motion);
                 // A reconnect forgets a "Bağlan" the earlier connection never answered.
@@ -1402,6 +1407,7 @@ impl<S: SocialActions> Session<S> {
                     typed_at: None,
                     hosts,
                     tags,
+                    marks,
                     links: features.iter().any(|f| f == FEATURE_LINK),
                     link_wanted_at: None,
                     people: features.iter().any(|f| f == FEATURE_PEOPLE),

@@ -23,7 +23,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
 use url::Url;
 
-use crate::auth::{LoginAttempt, SessionToken, SignedIn, auth_code_from_deep_link};
+use crate::auth::{
+    LoginAttempt, SessionToken, SignedIn, auth_code_from_deep_link, challenge_for, new_verifier,
+};
 use crate::beta::{BetaAccess, BetaAnswer, BetaRecordFile, decide_join, decide_keep};
 use crate::cards::StoredCard;
 use crate::chat::{
@@ -38,14 +40,19 @@ use crate::codes::{crew_code, normalize_crew_link, normalize_friend_code, normal
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
 use crate::history::{Change, Conversation, Entry, History, crew_conversation};
+use crate::identity::{
+    IdentityAnswer, IdentityChangeView, IdentityFailure, IdentityStep, LimitedReason, NameResult,
+    NameSource, Provider, clean_name, sign_in_ways, sign_up_ways,
+};
 use crate::kept::{KeptCopy, KeptLists};
 use crate::links::{find_links, first_link};
+use crate::marks::{MarkCatalog, legacy_mark};
 use crate::minecraft::{McSignal, McSink};
 use crate::model::{
     ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMute, CrewMuteEdit, EditFeatures,
     FIRST_EMBLEMS, FriendGroup, FriendGroups, JoinMode, JoinOutcome, LimitedKey, LinkRule,
-    MAX_FRIEND_GROUPS, Me, ProfileUpdate, ReportReason, RequestOutcome, SLOW_STEPS, SessionInfo,
-    SettingsMeta, SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS,
+    MAX_FRIEND_GROUPS, Me, NoticeKind, ProfileUpdate, ReportReason, RequestOutcome, SLOW_STEPS,
+    SessionInfo, SettingsMeta, SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS,
     TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK,
     TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES,
     TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TEAM_FEATURE_SLOW, TeamEdit,
@@ -72,9 +79,14 @@ use crate::view::{
 const REFETCH_AFTER: Duration = Duration::from_secs(60);
 /// "Tekrar dene" is honoured at most this often.
 const MANUAL_REFRESH_GAP: Duration = Duration::from_secs(10);
+/// The ways into an account are asked at most this often (SOC-ID; when the panel opens).
+const PROVIDERS_GAP: Duration = Duration::from_secs(60);
 const LOGOUT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// What the service tells the UI.
+// BADGES' badge lists and SOC-ID's Discord ids grew the cards a notice carries: one update at a
+// time is made and handed to the sink at once, so a box per notice would buy nothing.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum SocialUpdate {
     View(Box<SocialView>),
@@ -98,6 +110,9 @@ const TYPING_EVERY: Duration = Duration::from_secs(4);
 const MARK_EVERY: Duration = Duration::from_secs(2);
 /// A busy hub's wait for a card is honoured once, if it is at most this long (CHAT2).
 const CARD_RETRY_MAX: Duration = Duration::from_secs(10);
+/// BADGES: the badge catalogue is read again at most this often while its revision stays (a
+/// reconnect, a card naming a badge it does not know); a revision that moved reads it at once.
+const CATALOG_GAP: Duration = Duration::from_secs(600);
 
 pub type UpdateSink = Arc<dyn Fn(SocialUpdate) + Send + Sync>;
 
@@ -244,6 +259,49 @@ struct Core {
     /// view shows them until the service answers.
     profile_pending: Vec<PendingProfile>,
     profile_seq: u64,
+    /// SOC-ID: the ways the sign-in screen offers, as the service last said (empty: Discord
+    /// alone, until it says). Kept across sign-outs; a new service forgets them.
+    providers: Vec<Provider>,
+    /// Of those, the ways whose first sign-in opens a new account (Discord always).
+    sign_up_ways: Vec<Provider>,
+    /// When the ways in were last asked (at most once a minute).
+    providers_asked: Option<Instant>,
+    /// SOC-ID: a link or a removal waiting for its browser step.
+    identity: Option<PendingIdentity>,
+    /// BADGES: the badge catalogue every card's `marks` name (the built-in one until the
+    /// service's arrives) and its `ETag`. It is public: it survives sign-outs, not a new service.
+    catalog: MarkCatalog,
+    catalog_etag: Option<String>,
+    /// A catalogue read is on its way; `catalog_again`: one whose revision moved was asked for
+    /// meanwhile (it goes once this one is back).
+    catalog_reading: bool,
+    catalog_again: bool,
+    /// When the last catalogue read started ([`CATALOG_GAP`]).
+    catalog_read_at: Option<Instant>,
+    /// Bumped with every new service: an older read's answer is dropped.
+    catalog_epoch: u64,
+    /// The last view named a badge the catalogue does not know (it was made with a newer one).
+    catalog_unknown: bool,
+}
+
+/// A link or a removal that went to the browser (SOC-ID): its `projects://auth/done` is claimed
+/// with this verifier instead of a sign-in's.
+struct PendingIdentity {
+    provider: Provider,
+    unlink: bool,
+    verifier: String,
+    /// The page the browser shows ("Tarayıcıyı yeniden aç").
+    url: Url,
+    /// Its link came back and the claim is on its way: the change still waits (the settings
+    /// keep showing it until the answer), and another copy of the link changes nothing.
+    claiming: bool,
+}
+
+/// What a claim of a link or a removal needs ([`SocialService::claim_identity`]).
+struct ClaimedIdentity {
+    provider: Provider,
+    unlink: bool,
+    verifier: String,
 }
 
 /// A change of the player's picture, status or privacy switches the service has not answered yet.
@@ -308,6 +366,23 @@ impl Core {
             if let Some(share) = update.share_typing {
                 me.privacy.share_typing = Some(share);
             }
+            if let Some(name) = &update.name {
+                me.profile.display_name = Some(name.clone());
+            }
+            // BADGES: the badges the player holds, shown or kept off, in the catalogue's order.
+            if let Some(hidden) = &update.marks_hidden {
+                let held = self.catalog.order(
+                    me.profile
+                        .shown_marks()
+                        .into_iter()
+                        .chain(me.marks_hidden.iter().flatten().cloned()),
+                );
+                let (off, shown): (Vec<String>, Vec<String>) =
+                    held.into_iter().partition(|key| hidden.contains(key));
+                me.profile.mark = legacy_mark(&shown);
+                me.profile.marks = shown;
+                me.marks_hidden = Some(off);
+            }
         }
         Some(me)
     }
@@ -363,16 +438,103 @@ impl SocialService {
     }
 
     fn emit_view(&self) {
-        let (changes, view) = {
+        let (changes, view, unknown) = {
             let mut core = self.lock();
             core.seq += 1;
             let changes = std::mem::take(&mut core.chat_outbox);
-            (changes, build_view(&mut core))
+            let view = build_view(&mut core);
+            (changes, view, std::mem::take(&mut core.catalog_unknown))
         };
         for change in changes {
             (self.inner.sink)(SocialUpdate::Chat(change));
         }
         (self.inner.sink)(SocialUpdate::View(Box::new(view)));
+        // BADGES: a card was made with a newer catalogue than this one.
+        if unknown {
+            self.want_catalog(false);
+        }
+    }
+
+    /// BADGES: reads the badge catalogue (`GET /v1/marks`, by its `ETag`) unless a read is on its
+    /// way. `forced` when its revision moved (`marksRev`, `markdefs`); otherwise at most every
+    /// [`CATALOG_GAP`] (a connect, a card naming a badge this catalogue does not know).
+    fn want_catalog(&self, forced: bool) {
+        let (client, etag, epoch) = {
+            let mut core = self.lock();
+            let Some(client) = core.client.clone() else {
+                return;
+            };
+            if core.catalog_reading {
+                core.catalog_again |= forced;
+                return;
+            }
+            if !forced
+                && core
+                    .catalog_read_at
+                    .is_some_and(|at| at.elapsed() < CATALOG_GAP)
+            {
+                return;
+            }
+            core.catalog_reading = true;
+            core.catalog_read_at = Some(Instant::now());
+            (client, core.catalog_etag.clone(), core.catalog_epoch)
+        };
+        let service = self.clone();
+        self.spawn(async move { service.read_catalog(client, etag, epoch).await });
+    }
+
+    async fn read_catalog(&self, client: SocialClient, etag: Option<String>, epoch: u64) {
+        let answer = client.mark_catalog(etag.as_deref()).await;
+        let (changed, again) = {
+            let mut core = self.lock();
+            if core.catalog_epoch != epoch {
+                return;
+            }
+            core.catalog_reading = false;
+            let changed = match answer {
+                Ok(Some((catalog, etag))) => {
+                    core.catalog_etag = etag;
+                    let changed = core.catalog != catalog;
+                    core.catalog = catalog;
+                    changed
+                }
+                // `304`: still the one held.
+                Ok(None) => false,
+                Err(error) => {
+                    tracing::info!(%error, "the badge catalogue stays as it was");
+                    false
+                }
+            };
+            (changed, std::mem::take(&mut core.catalog_again))
+        };
+        if changed {
+            self.emit_view();
+        }
+        if again {
+            self.want_catalog(true);
+        }
+    }
+
+    /// The player's profile again (`GET /v1/me`), when a badge left their shown ones and they may
+    /// have kept it off on another device (BADGES: only `me` says which they keep off).
+    async fn reread_me(&self, generation: u64) {
+        let Some(session) = self.current_session(generation) else {
+            return;
+        };
+        match session.me().await {
+            Ok(me) => {
+                {
+                    let mut core = self.lock();
+                    if core.generation != generation {
+                        return;
+                    }
+                    core.settings_version = me.settings.as_ref().map(|s| s.version);
+                    core.state.set_me(me);
+                }
+                self.emit_view();
+            }
+            Err(error) => tracing::info!(%error, "the profile stays as it was"),
+        }
     }
 
     fn notify(&self, notice: SocialNotice) {
@@ -442,6 +604,17 @@ impl SocialService {
                 return;
             }
             reset(&mut core);
+            // Another service may offer other ways in (SOC-ID).
+            core.providers.clear();
+            core.sign_up_ways.clear();
+            core.providers_asked = None;
+            // BADGES: another service has its own badge catalogue.
+            core.catalog = MarkCatalog::builtin();
+            core.catalog_etag = None;
+            core.catalog_reading = false;
+            core.catalog_again = false;
+            core.catalog_read_at = None;
+            core.catalog_epoch += 1;
             core.client = url.as_ref().map(|url| {
                 SocialClient::with_http_client(
                     self.inner.http.clone(),
@@ -626,6 +799,10 @@ impl SocialService {
         let mut ended = false;
         let mut quietly = false;
         let mut restricted = None;
+        // BADGES: read the catalogue (forced when its revision moved), and the player's profile
+        // when one of their own badges left the shown ones.
+        let mut catalog = None;
+        let mut reread = false;
         let deliver;
         let typing;
         let tag_off;
@@ -644,7 +821,34 @@ impl SocialService {
                 // This device's own save is on its way and wins; its echo arrives after it.
                 return;
             }
+            let own_before = match &event {
+                PresenceEvent::MarksChanged { id, .. } => core
+                    .state
+                    .me()
+                    .filter(|me| me.profile.id == *id)
+                    .map(|me| me.profile.shown_marks()),
+                _ => None,
+            };
             let mut notices = core.state.apply(&event, unix_now());
+            if let Some(before) = own_before {
+                let after = core
+                    .state
+                    .me()
+                    .map(|me| me.profile.shown_marks())
+                    .unwrap_or_default();
+                // A hide of this device's own still on its way brings `me` with its answer.
+                let hiding = core.profile_pending.iter().any(|pending| {
+                    pending.generation == core.generation && pending.update.marks_hidden.is_some()
+                });
+                reread = !hiding && before.iter().any(|key| !after.contains(key));
+            }
+            match &event {
+                PresenceEvent::Connected { .. } => catalog = Some(false),
+                PresenceEvent::MarkDefs { rev } if *rev != core.catalog.rev => {
+                    catalog = Some(true);
+                }
+                _ => {}
+            }
             if changes_relations(&event) {
                 core.forget_rel();
             }
@@ -728,6 +932,13 @@ impl SocialService {
             let service = self.clone();
             self.spawn(async move { service.refetch(generation).await });
         }
+        if let Some(forced) = catalog {
+            self.want_catalog(forced);
+        }
+        if reread {
+            let service = self.clone();
+            self.spawn(async move { service.reread_me(generation).await });
+        }
     }
 
     fn current_session(&self, generation: u64) -> Option<Session> {
@@ -746,7 +957,7 @@ impl SocialService {
         let epoch = self.lock().rel_epoch;
         match session.friends_answer().await {
             Ok((mut overview, answer)) => {
-                {
+                let behind = {
                     let mut core = self.lock();
                     if core.generation != generation {
                         return;
@@ -759,11 +970,16 @@ impl SocialService {
                         core.settings_version = me.settings.as_ref().map(|s| s.version);
                         core.state.set_me(me);
                     }
+                    let behind = catalog_behind(&core, overview.marks_rev);
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
                     observe_together(&mut core);
-                }
+                    behind
+                };
                 self.emit_view();
+                if behind {
+                    self.want_catalog(true);
+                }
             }
             Err(SocialError::Unauthorized) => self.end_session(generation, false),
             Err(SocialError::Restricted { until }) => self.end_restricted(generation, until),
@@ -799,6 +1015,7 @@ impl SocialService {
         };
         let mut ended = false;
         let mut restricted = None;
+        let mut behind = false;
         {
             let mut core = self.lock();
             if core.generation != generation {
@@ -831,6 +1048,7 @@ impl SocialService {
             }
             match overview {
                 Some(Ok((overview, _))) => {
+                    behind = catalog_behind(&core, overview.marks_rev);
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
                     observe_together(&mut core);
@@ -847,6 +1065,9 @@ impl SocialService {
             self.end_session(generation, false);
         } else {
             self.emit_view();
+            if behind {
+                self.want_catalog(true);
+            }
         }
     }
 
@@ -879,9 +1100,10 @@ impl SocialService {
 
     // --- sign-in --------------------------------------------------------------------------
 
-    /// Starts a Discord sign-in and returns the page to open in the browser. Fails while the
-    /// service does not answer, so nobody lands on a broken page.
-    pub async fn begin_sign_in(&self) -> Result<Url> {
+    /// Starts a sign-in with `provider` (Discord, or Microsoft while the service offers it) and
+    /// returns the page to open in the browser. Fails while the service does not answer, so
+    /// nobody lands on a broken page.
+    pub async fn begin_sign_in(&self, provider: Provider) -> Result<Url> {
         let client = {
             let core = self.lock();
             if matches!(core.auth, AuthPhase::SignedIn | AuthPhase::Restoring) {
@@ -897,7 +1119,7 @@ impl SocialService {
             if core.client.as_ref().map(SocialClient::base_url) != Some(client.base_url()) {
                 return Err(SocialError::Unavailable { retry_after: None });
             }
-            let attempt = client.begin_login();
+            let attempt = client.begin_login_with(provider);
             let url = attempt.browser_url().clone();
             core.login = Some(attempt);
             core.auth = AuthPhase::SigningIn;
@@ -919,22 +1141,52 @@ impl SocialService {
     }
 
     /// Handles `projects://auth/done?c=…`; false for any other link. The link is used only
-    /// while this launcher waits for a sign-in it started itself.
+    /// while this launcher waits for a sign-in it started itself, or (SOC-ID) for a link or a
+    /// removal of one of the account's ways in: then it finishes that instead.
     pub fn complete_sign_in(&self, link: &str) -> bool {
         let Some(code) = auth_code_from_deep_link(link) else {
             return false;
         };
-        let pending = {
+        enum Waiting {
+            SignIn(LoginAttempt, SocialClient, u64),
+            Identity(ClaimedIdentity, u64),
+        }
+        let waiting = {
             let mut core = self.lock();
-            match (core.login.take(), core.client.clone()) {
-                (Some(attempt), Some(client)) => Some((attempt, client, core.generation)),
-                _ => None,
+            let generation = core.generation;
+            if core.auth == AuthPhase::SignedIn
+                && let Some(change) = core.identity.as_mut()
+            {
+                // The change keeps waiting until the claim answers, so the settings never show
+                // its buttons in between; the link's second copy has no claim of its own.
+                (!change.claiming).then(|| {
+                    change.claiming = true;
+                    Waiting::Identity(
+                        ClaimedIdentity {
+                            provider: change.provider,
+                            unlink: change.unlink,
+                            verifier: change.verifier.clone(),
+                        },
+                        generation,
+                    )
+                })
+            } else {
+                match (core.login.take(), core.client.clone()) {
+                    (Some(attempt), Some(client)) => {
+                        Some(Waiting::SignIn(attempt, client, core.generation))
+                    }
+                    _ => None,
+                }
             }
         };
-        match pending {
-            Some((attempt, client, generation)) => {
+        match waiting {
+            Some(Waiting::SignIn(attempt, client, generation)) => {
                 let service = self.clone();
                 self.spawn(async move { service.claim(generation, client, attempt, code).await });
+            }
+            Some(Waiting::Identity(change, generation)) => {
+                let service = self.clone();
+                self.spawn(async move { service.claim_identity(generation, change, code).await });
             }
             None => tracing::debug!("sign-in link while no sign-in is waiting; ignored"),
         }
@@ -970,6 +1222,8 @@ impl SocialService {
                     .settings
                     .clone()
                     .filter(|backup| backup.device != self.inner.config.device);
+                // SOC-ID: a new account with a placeholder name asks for one.
+                let ask_name = me.name_source() == NameSource::Unset;
                 {
                     let mut core = self.lock();
                     if core.generation != generation {
@@ -986,7 +1240,7 @@ impl SocialService {
                     self.start_presence(&mut core);
                 }
                 self.emit_view();
-                self.notify(SocialNotice::SignedIn { restore });
+                self.notify(SocialNotice::SignedIn { restore, ask_name });
                 self.fetch_friends(generation).await;
             }
             Err(error) => {
@@ -996,6 +1250,14 @@ impl SocialService {
                         code: ErrorCode::AuthPendingNotFound,
                         ..
                     } => SignInFailure::Expired,
+                    SocialError::Refused {
+                        code: ErrorCode::IdentityNotLinked,
+                        ..
+                    } => SignInFailure::NotLinked,
+                    SocialError::Refused {
+                        code: ErrorCode::ProviderOff,
+                        ..
+                    } => SignInFailure::ProviderOff,
                     SocialError::Restricted { .. } => SignInFailure::Restricted,
                     SocialError::SignupsClosed { .. } => SignInFailure::SignupsClosed,
                     error if error.is_transient() => SignInFailure::Unavailable,
@@ -1126,7 +1388,29 @@ impl SocialService {
                 self.end_restricted(generation, until);
                 Err(SocialError::Restricted { until })
             }
-            Err(error) => Err(error),
+            Err(error) => Err(self.limited_why(error)),
+        }
+    }
+
+    /// A limited account's refusal says why as the profile does (SOC-ID): a new Discord account,
+    /// or a new account.
+    fn limited_why(&self, error: SocialError) -> SocialError {
+        match error {
+            SocialError::Limited {
+                item,
+                until,
+                retry_after,
+                reason,
+            } => SocialError::Limited {
+                item,
+                until,
+                retry_after,
+                reason: match self.lock().state.me().map(Me::limited_reason) {
+                    Some(LimitedReason::Account) => LimitedReason::Account,
+                    _ => reason,
+                },
+            },
+            other => other,
         }
     }
 
@@ -1329,6 +1613,29 @@ impl SocialService {
         drop(turn);
         self.emit_view();
         result.map(|_| ())
+    }
+
+    /// "Rozetler" (BADGES-UI): the badges the player keeps off their profile, every one of them
+    /// (`[]` shows all). Shown at once like the other profile changes (SOC-LAG). Keys this
+    /// launcher's catalogue does not know yet stay in the list (the service ignores keys it does
+    /// not know, and one it knows must not show because this copy is behind); malformed ones go.
+    /// Only with a service that keeps the choice.
+    pub async fn set_marks_hidden(&self, keys: Vec<String>) -> Result<()> {
+        let keys = {
+            let core = self.lock();
+            let offered = core.state.me().is_some_and(|me| me.marks_hidden.is_some());
+            if !offered {
+                return Err(SocialError::InvalidInput("badges are not offered"));
+            }
+            let mut keys = core.catalog.order(
+                keys.into_iter()
+                    .filter(|key| crate::marks::is_mark_key(key)),
+            );
+            keys.truncate(crate::marks::MAX_MARKS);
+            keys
+        };
+        self.update_profile(ProfileUpdate::default().marks_hidden(keys))
+            .await
     }
 
     // --- friend categories ----------------------------------------------------------------
@@ -1964,7 +2271,7 @@ impl SocialService {
                 self.spawn(async move { service.refetch(generation).await });
                 Err(SocialError::InvalidInput("not in a team"))
             }
-            Err(error) => Err(error),
+            Err(error) => Err(self.limited_why(error)),
         }
     }
 
@@ -2378,6 +2685,248 @@ impl SocialService {
         Ok(())
     }
 
+    // --- the ways into the account and the profile name (SOC-ID, crate::identity) -----------
+
+    /// Asks the service which ways sign in now (the friends panel opened): at most once a minute
+    /// and never on a timer. Until it answers, and when it cannot, the sign-in screen offers what
+    /// it offered before (Discord alone at first).
+    pub async fn refresh_providers(&self) {
+        let client = {
+            let mut core = self.lock();
+            if core
+                .providers_asked
+                .is_some_and(|at| at.elapsed() < PROVIDERS_GAP)
+            {
+                return;
+            }
+            let Some(client) = core.client.clone() else {
+                return;
+            };
+            core.providers_asked = Some(Instant::now());
+            client
+        };
+        let answer = client.providers().await;
+        {
+            let mut core = self.lock();
+            if core.client.as_ref().map(SocialClient::base_url) != Some(client.base_url()) {
+                return;
+            }
+            match answer {
+                Ok(list) => {
+                    let ways = sign_in_ways(&list);
+                    let open = sign_up_ways(&list);
+                    if core.providers == ways && core.sign_up_ways == open {
+                        return;
+                    }
+                    core.providers = ways;
+                    core.sign_up_ways = open;
+                }
+                Err(error) => {
+                    tracing::info!(%error, "could not ask the ways into an account");
+                    // The next opening asks again.
+                    core.providers_asked = None;
+                    return;
+                }
+            }
+        }
+        self.emit_view();
+    }
+
+    /// "Hesap bağla": starts linking `provider` to the account. The browser opens on the answered
+    /// page; the link finishes when its `projects://auth/done` comes back
+    /// ([`Self::complete_sign_in`]).
+    pub async fn link_identity(&self, provider: Provider) -> IdentityStep {
+        self.change_identity(provider, false).await
+    }
+
+    /// "Kaldır": starts removing `provider` (never the account's only way in). Done at once when
+    /// the proof is fresh; otherwise like a link, proved in the browser with another linked way.
+    pub async fn unlink_identity(&self, provider: Provider) -> IdentityStep {
+        self.change_identity(provider, true).await
+    }
+
+    async fn change_identity(&self, provider: Provider, unlink: bool) -> IdentityStep {
+        // What the profile says already needs no request.
+        let refused = {
+            let core = self.lock();
+            core.state.me().and_then(|me| {
+                let ways = me.identities();
+                let linked = ways.iter().any(|way| way.provider == provider);
+                match (unlink, linked) {
+                    (false, true) => Some(IdentityFailure::Exists),
+                    (true, false) => Some(IdentityFailure::NotFound),
+                    (true, true) if ways.len() < 2 => Some(IdentityFailure::Last),
+                    _ => None,
+                }
+            })
+        };
+        if let Some(reason) = refused {
+            return IdentityStep::Refused { reason };
+        }
+        let verifier = new_verifier();
+        let challenge = challenge_for(&verifier);
+        let answer = self
+            .call(|session| async move {
+                if unlink {
+                    session.unlink_identity(provider, &challenge).await
+                } else {
+                    session
+                        .link_identity(provider, &challenge)
+                        .await
+                        .map(IdentityAnswer::Browser)
+                }
+            })
+            .await;
+        match answer {
+            Ok((IdentityAnswer::Browser(url), generation)) => {
+                {
+                    let mut core = self.lock();
+                    if core.generation != generation {
+                        return IdentityStep::Refused {
+                            reason: IdentityFailure::Failed,
+                        };
+                    }
+                    // A newer change takes the place of one still waiting (a claim on its way
+                    // then leaves it be: [`Self::claim_identity`]).
+                    core.identity = Some(PendingIdentity {
+                        provider,
+                        unlink,
+                        verifier,
+                        url: url.clone(),
+                        claiming: false,
+                    });
+                }
+                self.emit_view();
+                IdentityStep::Browser {
+                    url: url.to_string(),
+                }
+            }
+            Ok((IdentityAnswer::Done(me), generation)) => {
+                if self.lock().generation == generation {
+                    self.own_change(generation, *me, provider, false, None);
+                }
+                IdentityStep::Done
+            }
+            Err(error) => {
+                tracing::info!(%error, "the ways into the account did not change");
+                IdentityStep::Refused {
+                    reason: IdentityFailure::of(&error),
+                }
+            }
+        }
+    }
+
+    /// "Vazgeç" while the browser is open on a link or a removal: its `projects://auth/done`, if
+    /// it still comes, changes nothing.
+    pub fn cancel_identity_change(&self) {
+        let waited = self.lock().identity.take().is_some();
+        if waited {
+            self.emit_view();
+        }
+    }
+
+    async fn claim_identity(&self, generation: u64, change: ClaimedIdentity, code: String) {
+        let ClaimedIdentity {
+            provider,
+            unlink,
+            verifier,
+        } = change;
+        let claimed = verifier.clone();
+        // Only the sign-in that started the change sends its verifier.
+        if self.lock().generation != generation {
+            return;
+        }
+        let answer = self
+            .call(|session| async move { session.claim_identity(&verifier, &code).await })
+            .await;
+        match answer {
+            Ok((me, sent)) if sent == generation => {
+                self.own_change(generation, me, provider, !unlink, Some(claimed));
+            }
+            // Answered for another sign-in: nothing of it shows.
+            Ok(_) => {}
+            Err(error) => {
+                tracing::info!(%error, "a link or a removal did not finish");
+                {
+                    let mut core = self.lock();
+                    if core.generation != generation {
+                        return;
+                    }
+                    finish_identity(&mut core, &claimed);
+                }
+                self.emit_view();
+                self.notify(SocialNotice::IdentityFailed {
+                    provider,
+                    unlink,
+                    reason: IdentityFailure::of(&error),
+                });
+            }
+        }
+    }
+
+    /// A link (`linked`) or a removal this launcher made went through: the profile it brought
+    /// shows, together with the end of the change that waited for it (`claimed`: its verifier).
+    /// Its note about the change is no news here and stays hidden in this run, but it is never
+    /// marked seen at the service: that would take it from the account's other devices, where it
+    /// is the warning about a way in someone else added or removed.
+    fn own_change(
+        &self,
+        generation: u64,
+        me: Me,
+        provider: Provider,
+        linked: bool,
+        claimed: Option<String>,
+    ) {
+        let kind = if linked {
+            NoticeKind::IdentityLinked
+        } else {
+            NoticeKind::IdentityRemoved
+        };
+        // The service lists these notes in `identityNotices` (an older build of it: `notices`).
+        let ids: Vec<String> = me
+            .identity_notices
+            .iter()
+            .chain(&me.notices)
+            .filter(|notice| notice.kind == kind && notice.provider == Some(provider))
+            .map(|notice| notice.id.clone())
+            .collect();
+        self.update(generation, |core| {
+            if let Some(verifier) = &claimed {
+                finish_identity(core, verifier);
+            }
+            core.state.set_me(me);
+            core.state.notices_seen(&ids);
+        });
+        self.notify(SocialNotice::IdentityChanged { provider, linked });
+    }
+
+    /// The profile name ("Profil adı", and the name step of a new account): checked here as the
+    /// service checks it ([`clean_name`]); the service filters it too and allows three changes a
+    /// day. The view shows it at once.
+    pub async fn set_name(&self, name: &str) -> NameResult {
+        let Some(name) = clean_name(name) else {
+            return NameResult::Invalid;
+        };
+        let update = ProfileUpdate {
+            name: Some(name),
+            ..ProfileUpdate::default()
+        };
+        match self.update_profile(update).await {
+            Ok(()) => NameResult::Saved,
+            Err(error) => {
+                tracing::info!(%error, "the profile name did not change");
+                let result = NameResult::of(&error);
+                if result == NameResult::ProviderOff {
+                    // An account with Discord names itself only while Microsoft signs in: the
+                    // ways in are asked again at once, and "Profil adı" goes with the answer.
+                    self.lock().providers_asked = None;
+                    self.refresh_providers().await;
+                }
+                result
+            }
+        }
+    }
+
     // --- settings backup ------------------------------------------------------------------
 
     /// Saves launcher preferences (never secrets: the launcher sends an allow-list). When
@@ -2397,6 +2946,7 @@ impl SocialService {
                     item: LimitedKey::SettingsBackup,
                     until: Some(limited.until),
                     retry_after: None,
+                    reason: limited.reason,
                 });
             }
             if let Some(until) = core.backup_waits_until
@@ -3602,7 +4152,7 @@ fn changes_relations(event: &PresenceEvent) -> bool {
         PresenceEvent::TeamRequests { .. }
             | PresenceEvent::TeamChanged { .. }
             | PresenceEvent::BadgeChanged { .. }
-            | PresenceEvent::MarkChanged { .. }
+            | PresenceEvent::MarksChanged { .. }
             | PresenceEvent::TeamInvited(_)
             | PresenceEvent::GroupsChanged(_)
             | PresenceEvent::CrewNotifications(_)
@@ -3657,6 +4207,18 @@ fn lookup_view(lookup: TeamLookup, code: String, link: Option<String>) -> TeamLo
 
 /// The invites this account answered or closed in an earlier run stay closed (once the profile
 /// says whose they are).
+/// The claimed link or removal (by its verifier) waits no more (SOC-ID); a newer change that took
+/// its place meanwhile stays.
+fn finish_identity(core: &mut Core, verifier: &str) {
+    if core
+        .identity
+        .as_ref()
+        .is_some_and(|change| change.verifier == verifier)
+    {
+        core.identity = None;
+    }
+}
+
 fn remember_closed_invites(core: &mut Core) {
     let (Some(file), Some(me)) = (&core.closed_invites, core.state.me()) else {
         return;
@@ -3783,6 +4345,7 @@ fn reset(core: &mut Core) {
     core.reacting.clear();
     core.cards_asked.clear();
     core.backup_waits_until = None;
+    core.identity = None;
 }
 
 /// The categories the UI wants saved, checked as the service will check them.
@@ -4301,14 +4864,41 @@ fn unix_now_ms() -> i64 {
 }
 
 /// The switches a profile change sets, one bit each.
-fn profile_fields(update: &ProfileUpdate) -> u8 {
-    u8::from(update.avatar.is_some())
-        | (u8::from(update.status.is_some()) << 1)
-        | (u8::from(update.share_server.is_some()) << 2)
-        | (u8::from(update.share_last_seen.is_some()) << 3)
-        | (u8::from(update.share_read.is_some()) << 4)
-        | (u8::from(update.share_typing.is_some()) << 5)
-        | (u8::from(update.badge.is_some()) << 6)
+fn profile_fields(update: &ProfileUpdate) -> u16 {
+    u16::from(update.avatar.is_some())
+        | (u16::from(update.status.is_some()) << 1)
+        | (u16::from(update.share_server.is_some()) << 2)
+        | (u16::from(update.share_last_seen.is_some()) << 3)
+        | (u16::from(update.share_read.is_some()) << 4)
+        | (u16::from(update.share_typing.is_some()) << 5)
+        | (u16::from(update.badge.is_some()) << 6)
+        | (u16::from(update.name.is_some()) << 7)
+        | (u16::from(update.marks_hidden.is_some()) << 8)
+}
+
+/// BADGES: a read's `marksRev` names another catalogue than the one held (read it again).
+fn catalog_behind(core: &Core, rev: Option<i64>) -> bool {
+    rev.is_some_and(|rev| rev != core.catalog.rev)
+}
+
+/// BADGES: whether a view names a badge the catalogue does not know (made with a newer one).
+fn names_unknown_marks(view: &SocialView, catalog: &MarkCatalog) -> bool {
+    let me = view
+        .me
+        .iter()
+        .flat_map(|me| me.marks.iter().chain(me.marks_hidden.iter().flatten()));
+    let friends = view.friends.iter().flat_map(|friend| friend.marks.iter());
+    let requests = view
+        .incoming
+        .iter()
+        .chain(view.outgoing.iter())
+        .flat_map(|request| request.marks.iter());
+    let members = view
+        .crews
+        .iter()
+        .flat_map(|crew| crew.members.iter())
+        .flat_map(|member| member.marks.iter());
+    !catalog.knows_all(me.chain(friends).chain(requests).chain(members))
 }
 
 /// Every switch the waiting change `id` sets is set again by newer changes of the same sign-in
@@ -4415,7 +5005,7 @@ fn build_view(core: &mut Core) -> SocialView {
             }
         }
     }
-    SocialView {
+    let view = SocialView {
         seq: core.seq,
         enabled: core.url.is_some(),
         auth: core.auth,
@@ -4482,7 +5072,31 @@ fn build_view(core: &mut Core) -> SocialView {
         notices: core.state.notices(),
         restriction: core.restriction,
         backup_waits_until: core.backup_waits_until.filter(|until| *until > now),
-    }
+        providers: if core.providers.is_empty() {
+            vec![Provider::Discord]
+        } else {
+            core.providers.clone()
+        },
+        sign_up_ways: if core.sign_up_ways.is_empty() {
+            vec![Provider::Discord]
+        } else {
+            core.sign_up_ways.clone()
+        },
+        providers_known: !core.providers.is_empty(),
+        signing_in_with: core
+            .login
+            .as_ref()
+            .filter(|_| core.auth == AuthPhase::SigningIn)
+            .map(LoginAttempt::provider),
+        identity_change: core.identity.as_ref().map(|change| IdentityChangeView {
+            provider: change.provider,
+            unlink: change.unlink,
+            url: change.url.to_string(),
+        }),
+        mark_defs: core.catalog.marks.clone(),
+    };
+    core.catalog_unknown = names_unknown_marks(&view, &core.catalog);
+    view
 }
 
 fn unix_now() -> i64 {
@@ -4940,6 +5554,15 @@ mod tests {
         paths
     }
 
+    /// [`paths`] without the badge catalogue, which a launcher run reads at its first connect
+    /// (BADGES-UI): what a test about the lists cares for.
+    fn list_paths(asked: &[Recorded]) -> Vec<&str> {
+        paths(asked)
+            .into_iter()
+            .filter(|path| *path != "/v1/marks")
+            .collect()
+    }
+
     /// The relations version the presence connect named, if any.
     fn named_rel(asked: &[Recorded]) -> Option<String> {
         let connect = asked.iter().find(|r| r.path == "/v1/presence")?;
@@ -5016,7 +5639,10 @@ mod tests {
         let before = server.requests().len();
         hello(&second, Some(REL_1));
         tokio::time::sleep(Duration::from_millis(200)).await;
-        assert_eq!(server.requests().len(), before, "nothing read again");
+        assert!(
+            list_paths(&server.requests()[before..]).is_empty(),
+            "nothing read again"
+        );
         assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_1));
         second.service.configure(None);
 
@@ -5032,7 +5658,7 @@ mod tests {
             third.service.lock().rel.get().as_deref() == Some(REL_2)
         })
         .await;
-        assert_eq!(paths(&server.requests()[before..]), ["/v1/friends"]);
+        assert_eq!(list_paths(&server.requests()[before..]), ["/v1/friends"]);
         assert_eq!(kept().map(|copy| copy.rel).as_deref(), Some(REL_2));
     }
 
@@ -6625,7 +7251,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(claims.load(Ordering::SeqCst), 0);
 
-        let browser = harness.service.begin_sign_in().await.unwrap();
+        let browser = harness
+            .service
+            .begin_sign_in(Provider::Discord)
+            .await
+            .unwrap();
         assert!(browser.as_str().contains("/auth/discord/start?challenge="));
         assert_eq!(harness.service.view().auth, AuthPhase::SigningIn);
         assert!(harness.service.complete_sign_in(&link));
@@ -6643,7 +7273,7 @@ mod tests {
         // The backup came from another computer: worth offering.
         assert!(harness.notices().iter().any(|notice| matches!(
             notice,
-            SocialNotice::SignedIn { restore: Some(meta) } if meta.device == "Laptop"
+            SocialNotice::SignedIn { restore: Some(meta), ask_name: false } if meta.device == "Laptop"
         )));
         // The same link again does nothing: the attempt is used up.
         assert!(harness.service.complete_sign_in(&link));
@@ -6663,7 +7293,11 @@ mod tests {
         .await;
         let harness = Harness::new(Arc::new(MemoryTokenStore::new()));
         harness.service.configure(url(&server));
-        harness.service.begin_sign_in().await.unwrap();
+        harness
+            .service
+            .begin_sign_in(Provider::Discord)
+            .await
+            .unwrap();
         harness
             .service
             .complete_sign_in(&format!("projects://auth/done?c={}", "C".repeat(43)));
@@ -6690,13 +7324,19 @@ mod tests {
         let harness = Harness::new(Arc::new(MemoryTokenStore::new()));
         harness.service.configure(url(&server));
         assert!(matches!(
-            harness.service.begin_sign_in().await,
+            harness.service.begin_sign_in(Provider::Discord).await,
             Err(SocialError::Unavailable { .. })
         ));
         assert_eq!(harness.service.view().auth, AuthPhase::SignedOut);
         // Not configured: nothing to sign in to.
         harness.service.configure(None);
-        assert!(harness.service.begin_sign_in().await.is_err());
+        assert!(
+            harness
+                .service
+                .begin_sign_in(Provider::Discord)
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -7128,5 +7768,591 @@ mod tests {
                 .iter()
                 .any(|crew| crew.id == "fedcba9876543210" && crew.notifications.muted)
         );
+    }
+
+    // --- SOC-ID: the ways into the account and the profile name ---------------------------
+
+    /// A new account opened with Microsoft: no Discord, a placeholder name.
+    const MS_ME: &str = r#"{"id":"9123456789012345678","username":"Oyuncu4821",
+        "displayName":"Oyuncu4821","avatar":"preset:fox","avatarHash":null,
+        "discordAvatarHash":null,"discordId":null,"friendCode":"PRJ-MMMM-SSSS","status":"online",
+        "privacy":{"shareServer":false,"shareLastSeen":true},"createdOn":"2026-11-01",
+        "settings":null,"identities":[{"provider":"microsoft","linkedOn":"2026-11-01",
+        "isNew":true,"hint":null}],"signInVia":"microsoft","nameSource":"unset"}"#;
+
+    /// `ME` with more fields.
+    fn me_with(extra: &str) -> String {
+        format!("{},{extra}}}", ME.trim_end().strip_suffix('}').unwrap())
+    }
+
+    async fn noticed(harness: &Harness, what: &str, found: impl Fn(&SocialNotice) -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !harness.notices().iter().any(&found) {
+            assert!(Instant::now() < deadline, "no notice: {what}");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    /// A Microsoft sign-in starts at its own page and names its way while it waits; a new
+    /// account asks for a name, checked here first and then by the service.
+    #[tokio::test]
+    async fn signs_in_with_microsoft_and_names_a_new_account() {
+        let names = Arc::new(Mutex::new(Vec::<String>::new()));
+        let server = MockServer::start({
+            let names = names.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/health") => MockReply::json(200, r#"{"ok":true,"api":1}"#),
+                        ("POST", "/v1/auth/claim") => MockReply::json(
+                            200,
+                            &format!(r#"{{"token":"pls_{}","me":{MS_ME}}}"#, "B".repeat(43)),
+                        ),
+                        ("GET", "/v1/friends") => MockReply::json(200, FRIENDS),
+                        ("PATCH", "/v1/me") => {
+                            let name = req.json()["name"].as_str().unwrap_or_default().to_owned();
+                            names.lock().unwrap().push(name.clone());
+                            if name == "Kötü Ad" {
+                                MockReply::json(
+                                    422,
+                                    r#"{"error":{"code":"name_rejected","message":"x"}}"#,
+                                )
+                            } else {
+                                MockReply::json(
+                                    200,
+                                    &MS_ME
+                                        .replace(
+                                            r#""displayName":"Oyuncu4821""#,
+                                            &format!(r#""displayName":"{name}""#),
+                                        )
+                                        .replace(
+                                            r#""nameSource":"unset""#,
+                                            r#""nameSource":"own""#,
+                                        ),
+                                )
+                            }
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let harness = Harness::new(Arc::new(MemoryTokenStore::new()));
+        harness.service.configure(url(&server));
+        let browser = harness
+            .service
+            .begin_sign_in(Provider::Microsoft)
+            .await
+            .unwrap();
+        assert!(
+            browser
+                .as_str()
+                .contains("/auth/microsoft/start?challenge=")
+        );
+        assert_eq!(
+            harness.service.view().signing_in_with,
+            Some(Provider::Microsoft)
+        );
+        assert!(
+            harness
+                .service
+                .complete_sign_in(&format!("projects://auth/done?c={}", "C".repeat(43)))
+        );
+        let view = harness
+            .until("signed in", |view| {
+                view.loaded && view.auth == AuthPhase::SignedIn
+            })
+            .await;
+        assert_eq!(view.signing_in_with, None);
+        let me = view.me.unwrap();
+        assert_eq!(me.discord_id, None);
+        assert_eq!(me.discord_avatar_url, "");
+        assert_eq!(me.sign_in_via, Provider::Microsoft);
+        assert_eq!(me.name_source, NameSource::Unset);
+        noticed(&harness, "ask for a name", |notice| {
+            matches!(notice, SocialNotice::SignedIn { ask_name: true, .. })
+        })
+        .await;
+
+        // Nothing goes for a name the service would turn away anyway.
+        assert_eq!(harness.service.set_name("ab").await, NameResult::Invalid);
+        assert_eq!(
+            harness.service.set_name("Kötü Ad").await,
+            NameResult::Rejected
+        );
+        assert_eq!(
+            harness.service.set_name("  Gece   Kurdu ").await,
+            NameResult::Saved
+        );
+        assert_eq!(*names.lock().unwrap(), ["Kötü Ad", "Gece Kurdu"]);
+        let me = harness.service.view().me.unwrap();
+        assert_eq!(me.name, "Gece Kurdu");
+        assert_eq!(me.name_source, NameSource::Own);
+    }
+
+    #[tokio::test]
+    async fn a_microsoft_account_of_nobody_is_told_to_link_it_first() {
+        let server = MockServer::start(|req| match req.path.as_str() {
+            "/v1/health" => MockReply::json(200, r#"{"ok":true,"api":1}"#),
+            _ => MockReply::json(
+                403,
+                r#"{"error":{"code":"identity_not_linked","message":"x"}}"#,
+            ),
+        })
+        .await;
+        let harness = Harness::new(Arc::new(MemoryTokenStore::new()));
+        harness.service.configure(url(&server));
+        harness
+            .service
+            .begin_sign_in(Provider::Microsoft)
+            .await
+            .unwrap();
+        harness
+            .service
+            .complete_sign_in(&format!("projects://auth/done?c={}", "C".repeat(43)));
+        harness
+            .until("signed out", |view| view.auth == AuthPhase::SignedOut)
+            .await;
+        noticed(&harness, "not linked", |notice| {
+            *notice
+                == SocialNotice::SignInFailed {
+                    reason: SignInFailure::NotLinked,
+                }
+        })
+        .await;
+    }
+
+    /// Linking goes through the browser and its `projects://auth/done` finishes it with this
+    /// launcher's verifier; what the profile says already needs no request; a removal with a
+    /// fresh proof is done at once; a page of another site never opens.
+    #[tokio::test]
+    async fn links_and_removes_ways_in_through_the_browser() {
+        let challenge = Arc::new(Mutex::new(None::<String>));
+        let seen = Arc::new(AtomicBool::new(false));
+        let claims = Arc::new(AtomicUsize::new(0));
+        let elsewhere = Arc::new(AtomicBool::new(true));
+        let both = me_with(
+            r#""discordId":"123456789012345678","identities":[{"provider":"discord",
+            "linkedOn":"2026-10-16","isNew":false,"hint":"ayse"},{"provider":"microsoft",
+            "linkedOn":"2026-11-01","isNew":true,"hint":null}],"signInVia":"discord",
+            "nameSource":"discord","identityNotices":[{"id":"n-link","kind":"identity_linked",
+            "at":5,"provider":"microsoft"}]"#,
+        );
+        let server = MockServer::start({
+            let challenge = challenge.clone();
+            let seen = seen.clone();
+            let claims = claims.clone();
+            let elsewhere = elsewhere.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => MockReply::json(200, ME),
+                        ("GET", "/v1/friends") => MockReply::json(200, FRIENDS),
+                        ("POST", "/v1/me/identities/link") => {
+                            let body = req.json();
+                            assert_eq!(body["provider"], "microsoft");
+                            let sent = body["challenge"].as_str().unwrap().to_owned();
+                            assert_eq!(sent.len(), 43);
+                            *challenge.lock().unwrap() = Some(sent);
+                            let host = if elsewhere.swap(false, Ordering::SeqCst) {
+                                "evil.example".to_owned()
+                            } else {
+                                req.header("host").unwrap().to_owned()
+                            };
+                            MockReply::json(
+                                200,
+                                &format!(r#"{{"url":"http://{host}/auth/link?t=abc"}}"#),
+                            )
+                        }
+                        ("POST", "/v1/me/identities/claim") => {
+                            claims.fetch_add(1, Ordering::SeqCst);
+                            let body = req.json();
+                            let verifier = body["verifier"].as_str().unwrap();
+                            assert_eq!(Some(challenge_for(verifier)), *challenge.lock().unwrap());
+                            assert_eq!(body["code"], "D".repeat(43));
+                            MockReply::json(200, &format!(r#"{{"me":{both}}}"#))
+                        }
+                        ("POST", "/v1/me/identities/unlink") => {
+                            assert_eq!(req.json()["provider"], "microsoft");
+                            MockReply::json(200, &format!(r#"{{"me":{ME}}}"#))
+                        }
+                        ("POST", "/v1/me/notices/seen") => {
+                            seen.store(true, Ordering::SeqCst);
+                            MockReply::empty(204)
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.configure(url(&server));
+        harness.until("friends", |view| view.loaded).await;
+        // An older profile: opened with Discord, its only way in.
+        let me = harness.service.view().me.unwrap();
+        assert_eq!(me.identities.len(), 1);
+        assert_eq!(me.discord_id.as_deref(), Some("123456789012345678"));
+        let refused = |reason| IdentityStep::Refused { reason };
+        assert_eq!(
+            harness.service.link_identity(Provider::Discord).await,
+            refused(IdentityFailure::Exists)
+        );
+        assert_eq!(
+            harness.service.unlink_identity(Provider::Discord).await,
+            refused(IdentityFailure::Last)
+        );
+        assert_eq!(
+            harness.service.unlink_identity(Provider::Microsoft).await,
+            refused(IdentityFailure::NotFound)
+        );
+        assert!(
+            server
+                .requests()
+                .iter()
+                .all(|req| !req.path.starts_with("/v1/me/identities"))
+        );
+
+        // A page of another site never opens.
+        assert_eq!(
+            harness.service.link_identity(Provider::Microsoft).await,
+            refused(IdentityFailure::Failed)
+        );
+        assert!(harness.service.view().identity_change.is_none());
+
+        let step = harness.service.link_identity(Provider::Microsoft).await;
+        let IdentityStep::Browser { url: page } = step.clone() else {
+            panic!("{step:?}");
+        };
+        assert!(page.ends_with("/auth/link?t=abc"));
+        let change = harness.service.view().identity_change.unwrap();
+        assert_eq!(
+            (change.provider, change.unlink),
+            (Provider::Microsoft, false)
+        );
+        let back = format!("projects://auth/done?c={}", "D".repeat(43));
+        assert!(harness.service.complete_sign_in(&back));
+        // The change waits until the claim answers (its buttons never come back in between),
+        // and the link's second copy claims nothing.
+        assert!(harness.service.view().identity_change.is_some());
+        assert!(harness.service.complete_sign_in(&back));
+        let view = harness
+            .until("linked", |view| {
+                view.me.as_ref().is_some_and(|me| me.identities.len() == 2)
+            })
+            .await;
+        assert!(view.identity_change.is_none());
+        assert_eq!(claims.load(Ordering::SeqCst), 1);
+        // This launcher made the change: its note never shows here.
+        assert!(view.notices.is_empty());
+        noticed(&harness, "linked", |notice| {
+            *notice
+                == SocialNotice::IdentityChanged {
+                    provider: Provider::Microsoft,
+                    linked: true,
+                }
+        })
+        .await;
+
+        // A removal with a fresh proof: done at once.
+        assert_eq!(
+            harness.service.unlink_identity(Provider::Microsoft).await,
+            IdentityStep::Done
+        );
+        assert_eq!(harness.service.view().me.unwrap().identities.len(), 1);
+        noticed(&harness, "removed", |notice| {
+            *notice
+                == SocialNotice::IdentityChanged {
+                    provider: Provider::Microsoft,
+                    linked: false,
+                }
+        })
+        .await;
+        // Its note stays at the service: the account's other devices still show it.
+        assert!(!seen.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn the_ways_in_are_asked_at_most_once_a_minute() {
+        let asked = Arc::new(AtomicUsize::new(0));
+        let server = MockServer::start({
+            let asked = asked.clone();
+            move |req| match req.path.as_str() {
+                "/v1/auth/providers" => {
+                    asked.fetch_add(1, Ordering::SeqCst);
+                    MockReply::json(
+                        200,
+                        r#"{"providers":[{"id":"discord","signIn":true,"signUp":true},
+                        {"id":"microsoft","signIn":true,"signUp":false}]}"#,
+                    )
+                }
+                _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+            }
+        })
+        .await;
+        let harness = Harness::new(Arc::new(MemoryTokenStore::new()));
+        harness.service.configure(url(&server));
+        assert_eq!(harness.service.view().providers, [Provider::Discord]);
+        assert!(!harness.service.view().providers_known);
+        harness.service.refresh_providers().await;
+        assert_eq!(
+            harness.service.view().providers,
+            [Provider::Discord, Provider::Microsoft]
+        );
+        assert!(harness.service.view().providers_known);
+        // Microsoft signs in but opens no account yet: it stands under "Bağlı hesabınla gir".
+        assert_eq!(harness.service.view().sign_up_ways, [Provider::Discord]);
+        harness.service.refresh_providers().await;
+        assert_eq!(asked.load(Ordering::SeqCst), 1);
+        // A service from before SOC-ID: Discord alone.
+        let older = MockServer::start(|_| {
+            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+        })
+        .await;
+        harness.service.configure(url(&older));
+        assert_eq!(harness.service.view().providers, [Provider::Discord]);
+        assert!(!harness.service.view().providers_known);
+        harness.service.refresh_providers().await;
+        assert_eq!(harness.service.view().providers, [Provider::Discord]);
+        assert_eq!(harness.service.view().sign_up_ways, [Provider::Discord]);
+        assert!(harness.service.view().providers_known);
+    }
+
+    /// A new account's refusals say "Hesabın yeni olduğu için…", as its profile does.
+    #[tokio::test]
+    async fn a_new_accounts_refusals_name_the_account() {
+        let limited = MS_ME.replace(
+            r#""nameSource":"unset""#,
+            r#""nameSource":"own","limited":{"until":4102444800,"items":[{"key":"code_lookups",
+            "perDay":10}],"reason":"account"}"#,
+        );
+        let server = MockServer::start(move |req| {
+            presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                "/v1/me" => MockReply::json(200, &limited),
+                "/v1/friends" => MockReply::json(200, FRIENDS),
+                _ => MockReply::json(
+                    403,
+                    r#"{"error":{"code":"account_limited","message":"x","item":"code_lookups"}}"#,
+                ),
+            })
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        assert_eq!(
+            view.me.unwrap().limited.unwrap().reason,
+            LimitedReason::Account
+        );
+        assert!(matches!(
+            harness.service.lookup("PRJ-AAAA-BBBB").await,
+            Err(SocialError::Limited {
+                item: LimitedKey::CodeLookups,
+                reason: LimitedReason::Account,
+                ..
+            })
+        ));
+    }
+
+    /// BADGES: the launcher draws with the built-in badge catalogue until the service's arrives;
+    /// it reads it (`GET /v1/marks`, by its `ETag` once it holds one) when a list's `marksRev` or
+    /// a `markdefs` frame names another revision, when a card names a badge it does not know, and
+    /// at a connect at most every ten minutes. "Rozetlerim" shows a hide at once and sends every
+    /// hidden key.
+    #[tokio::test]
+    async fn the_badge_catalogue_follows_the_service() {
+        const ME_BADGED: &str = r#"{"id":"123456789012345678","username":"ayse","displayName":"Ayşe",
+            "avatar":"discord","avatarHash":null,"discordAvatarHash":null,"friendCode":"PRJ-ABCD-EFGH",
+            "status":"online","privacy":{"shareServer":false,"shareLastSeen":true},
+            "createdOn":"2026-10-16","settings":null,"marks":["staff"],"marksHidden":["premium"]}"#;
+        let rev = Arc::new(AtomicUsize::new(1));
+        let server = MockServer::start({
+            let rev = rev.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                    "/v1/me" if req.method == "PATCH" => {
+                        assert_eq!(req.json(), serde_json::json!({"marksHidden": ["staff"]}));
+                        let mut me: serde_json::Value = serde_json::from_str(ME_BADGED).unwrap();
+                        me["marks"] = serde_json::json!(["premium"]);
+                        me["marksHidden"] = serde_json::json!(["staff"]);
+                        MockReply::json(200, &me.to_string())
+                    }
+                    "/v1/me" => MockReply::json(200, ME_BADGED),
+                    "/v1/friends" => {
+                        let mut list: serde_json::Value = serde_json::from_str(FRIENDS).unwrap();
+                        list["friends"][0]["marks"] = serde_json::json!(["m10", "verified"]);
+                        list["marksRev"] = rev.load(Ordering::SeqCst).into();
+                        MockReply::json(200, &list.to_string())
+                    }
+                    "/v1/marks" => {
+                        let now = rev.load(Ordering::SeqCst);
+                        let etag = format!("\"{now}\"");
+                        if req.header("if-none-match") == Some(etag.as_str()) {
+                            return MockReply::empty(304).with_header("ETag", &etag);
+                        }
+                        let name = if now == 1 { "Yeni" } else { "Yenilendi" };
+                        let body = serde_json::json!({"rev": now, "marks": [
+                            {"key": "verified", "name": {"tr": "Doğrulanmış hesap", "en": "Verified account"},
+                                "color": "blue", "glyph": "check", "shape": "seal"},
+                            {"key": "m10", "name": {"tr": name, "en": "New"},
+                                "color": "teal", "glyph": "bolt", "shape": "shield"},
+                        ]});
+                        MockReply::json(200, &body.to_string()).with_header("ETag", &etag)
+                    }
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        // Before any read: the built-in catalogue.
+        let builtin = harness.service.view().mark_defs;
+        assert_eq!(builtin.len(), 5);
+        assert_eq!(builtin[0].key, "admin");
+        harness.service.configure(url(&server));
+        // The list names `marksRev` 1 and a badge the built-in catalogue does not know.
+        let view = harness
+            .until("the service's catalogue", |view| {
+                view.loaded && view.mark_defs.iter().any(|def| def.key == "m10")
+            })
+            .await;
+        assert_eq!(view.friends[0].marks, ["m10", "verified"]);
+        assert_eq!(view.mark_defs.len(), 2);
+        let me = view.me.unwrap();
+        assert_eq!(me.marks, ["staff"]);
+        assert_eq!(
+            me.marks_hidden.as_deref(),
+            Some(&["premium".to_owned()][..])
+        );
+        let settle = || async {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while harness.service.lock().catalog_reading && Instant::now() < deadline {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+        settle().await;
+        let reads = || -> Vec<Option<String>> {
+            server
+                .requests()
+                .iter()
+                .filter(|r| r.path == "/v1/marks")
+                .map(|r| r.header("if-none-match").map(str::to_owned))
+                .collect()
+        };
+        let first = reads();
+        assert_eq!(first[0], None, "the first read has no ETag");
+        assert!(
+            first[1..].iter().all(|tag| tag.as_deref() == Some("\"1\"")),
+            "{first:?}"
+        );
+        assert_eq!(harness.service.lock().catalog.rev, 1);
+
+        let (generation, epoch) = {
+            let core = harness.service.lock();
+            (core.generation, core.epoch)
+        };
+        // The same revision: nothing is read.
+        harness
+            .service
+            .on_presence(generation, epoch, PresenceEvent::MarkDefs { rev: 1 });
+        settle().await;
+        assert_eq!(reads().len(), first.len());
+        // Studio's owner saved: read at once, the new names show.
+        rev.store(2, Ordering::SeqCst);
+        harness
+            .service
+            .on_presence(generation, epoch, PresenceEvent::MarkDefs { rev: 2 });
+        let view = harness
+            .until("the new catalogue", |view| {
+                view.mark_defs
+                    .iter()
+                    .any(|def| def.key == "m10" && def.name.tr == "Yenilendi")
+            })
+            .await;
+        assert_eq!(view.mark_defs[1].glyph, "bolt");
+        settle().await;
+        let after_defs = reads().len();
+        let connected = || PresenceEvent::Connected {
+            status: crate::model::StatusMode::Online,
+            friends: vec![],
+            invites: vec![],
+            calls: vec![],
+            clock: None,
+            rel: None,
+            chat: None,
+            plans: None,
+        };
+        // A connect within ten minutes of the last read reads nothing; a later one asks by the
+        // ETag and keeps the catalogue on a 304.
+        harness.service.on_presence(generation, epoch, connected());
+        settle().await;
+        assert_eq!(reads().len(), after_defs);
+        harness.service.lock().catalog_read_at = Some(Instant::now() - CATALOG_GAP);
+        harness.service.on_presence(generation, epoch, connected());
+        settle().await;
+        let last = reads();
+        assert_eq!(last.len(), after_defs + 1);
+        assert_eq!(last.last().unwrap().as_deref(), Some("\"2\""));
+        assert_eq!(harness.service.lock().catalog.rev, 2);
+
+        // "Rozetlerim": keep "Projects personeli" off the profile; shown at once, sent whole.
+        harness
+            .service
+            .set_marks_hidden(vec!["staff".into()])
+            .await
+            .unwrap();
+        let me = harness.service.view().me.unwrap();
+        assert_eq!(me.marks, ["premium"]);
+        assert_eq!(me.marks_hidden.as_deref(), Some(&["staff".to_owned()][..]));
+        assert!(
+            server
+                .requests()
+                .iter()
+                .any(|r| r.method == "PATCH" && r.path == "/v1/me")
+        );
+    }
+
+    /// BADGES: while the player's hide is on its way the view shows it already, in the
+    /// catalogue's order.
+    #[test]
+    fn a_hide_on_its_way_shows_at_once() {
+        let mut core = Core::default();
+        let me: Me = serde_json::from_str(
+            r#"{"id":"123456789012345678","username":"ayse","displayName":"Ayşe","avatar":"discord",
+            "avatarHash":null,"discordAvatarHash":null,"friendCode":"PRJ-ABCD-EFGH","status":"online",
+            "privacy":{"shareServer":false,"shareLastSeen":true},"createdOn":"2026-10-16",
+            "settings":null,"marks":["admin","premium"],"mark":"admin","marksHidden":["verified"]}"#,
+        )
+        .unwrap();
+        core.state.set_me(me);
+        core.profile_pending.push(PendingProfile {
+            id: 1,
+            generation: core.generation,
+            update: ProfileUpdate::default().marks_hidden(vec!["admin".into()]),
+        });
+        let shown = core.shown_me().unwrap();
+        assert_eq!(shown.profile.marks, ["verified", "premium"]);
+        assert_eq!(shown.profile.mark, Some(crate::ProfileMark::Verified));
+        assert_eq!(
+            shown.marks_hidden.as_deref(),
+            Some(&["admin".to_owned()][..])
+        );
+        // Showing them all again.
+        core.profile_pending[0].update = ProfileUpdate::default().marks_hidden(Vec::new());
+        let shown = core.shown_me().unwrap();
+        assert_eq!(shown.profile.marks, ["admin", "verified", "premium"]);
+        assert_eq!(shown.marks_hidden.as_deref(), Some(&[][..]));
     }
 }

@@ -236,6 +236,8 @@ export interface PanelInput {
   view: ProjectsSkinView;
   /** Signed in to friends (the friends panel's word; the view may lag behind it). */
   signedIn: boolean;
+  /** SOC-ID: signed in with an account not opened with Discord: no Projects skin for it yet. */
+  discordOnly?: boolean;
   /** A picked skin is shown and not saved. */
   draft: boolean;
   /** The save request is on its way. */
@@ -248,8 +250,9 @@ export interface PanelInput {
 }
 
 export interface PanelState {
-  /** What fills the editor column: the Discord card, the "off" line, or the editor. */
-  body: "connect" | "session" | "off" | "editor";
+  /** What fills the editor column: the Discord card, the "off" line, or the editor; SOC-ID:
+   * `discord`, the line of an account not opened with Discord. */
+  body: "connect" | "session" | "off" | "discord" | "editor";
   link: LinkArea;
   /** `locked` while a change is on its way; `dim` while the player may not change skins. */
   picker: "open" | "locked" | "dim";
@@ -271,7 +274,9 @@ export interface PanelState {
 export function panelState(input: PanelInput): PanelState {
   const { view, draft, sending, failure, waitedLong, nowSec } = input;
   const signedIn = input.signedIn && view.access !== "signedOut";
-  const editor = signedIn && view.access !== "session" && view.access !== "off";
+  // SOC-ID: the Projects skin works only for accounts opened with Discord for now.
+  const discordOnly = signedIn && Boolean(input.discordOnly);
+  const editor = signedIn && !discordOnly && view.access !== "session" && view.access !== "off";
   const unreachable = view.access === "unreachable";
   const job = view.job;
   const busy = Boolean(job) || sending;
@@ -341,11 +346,13 @@ export function panelState(input: PanelInput): PanelState {
   return {
     body: !signedIn
       ? "connect"
-      : view.access === "session"
-        ? "session"
-        : view.access === "off"
-          ? "off"
-          : "editor",
+      : discordOnly
+        ? "discord"
+        : view.access === "session"
+          ? "session"
+          : view.access === "off"
+            ? "off"
+            : "editor",
     link,
     picker: !editor ? "open" : busy ? "locked" : limited || blocked ? "dim" : "open",
     preview,

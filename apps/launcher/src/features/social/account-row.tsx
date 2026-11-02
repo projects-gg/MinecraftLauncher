@@ -3,12 +3,14 @@
 // tile and "Discord ile giriş yap" read as a third way to add a game account, right above "Microsoft
 // ile giriş yap"; Blurple stays on the button that really opens Discord); the player's friends
 // profile and who is online once signed in. Opens the friends panel (the account center closes
-// first). Hidden while the feature is off.
-import { CaretRight } from "@phosphor-icons/react";
+// first). Hidden while the feature is off. SOC-ID: once Microsoft opens accounts too, the tile
+// holds the friends icon instead of Discord's mark.
+import { CaretRight, UsersThree } from "@phosphor-icons/react";
 import { springSnappy } from "@pl/ui";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { DiscordMark } from "./discord-button";
+import { useMicrosoftOffer } from "./identity-store";
 import { onlineFriends } from "./model";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -18,6 +20,7 @@ export function SocialAccountRow({ onOpen }: { onOpen: () => void }) {
   const view = useSocialUi((s) => s.view);
   const favorites = useSocialPrefs((s) => s.favorites);
   const openPanel = useSocialUi((s) => s.openPanel);
+  const neutral = useMicrosoftOffer() === "open";
   if (!view.enabled) return null;
   const me = view.auth === "signedIn" ? view.me : undefined;
   const online = me ? onlineFriends(view.friends, favorites).length : 0;
@@ -41,7 +44,11 @@ export function SocialAccountRow({ onOpen }: { onOpen: () => void }) {
           />
         ) : (
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] opacity-80">
-            <DiscordMark height={14} />
+            {neutral ? (
+              <UsersThree size={18} className="text-bone-100" aria-hidden />
+            ) : (
+              <DiscordMark height={14} />
+            )}
           </span>
         )}
         <span className="min-w-0 flex-1">

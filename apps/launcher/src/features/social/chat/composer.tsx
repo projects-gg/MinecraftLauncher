@@ -42,6 +42,7 @@ import { EmojiPickerButton, insertText, useEmojiPrefs } from "@/features/emoji";
 import { api } from "@/lib/api";
 import type { ChatCard, ChatLinkRules, ChatMessage } from "@/lib/api/social-types";
 import { inside, leaveOnEscape } from "../edit-escape";
+import { newAccount } from "../identity";
 import { limitOf, opensIn } from "../limits";
 import { enter, leave, rise, useSocialMotion } from "../motion";
 import { useSocialUi } from "../store";
@@ -218,6 +219,8 @@ export function Composer({
   const limitedLinks = useSocialUi(
     (s) => limitOf(s.view.me, "chatLinks", Date.now())?.until ?? null,
   );
+  // SOC-ID: an account that is new itself hears so, not about Discord.
+  const accountNew = useSocialUi((s) => newAccount(s.view.me));
   // The field's words follow the chat's text size (a zoom: its lines, padding and height in its
   // own pixels stay as measured below).
   const writingZoom = useChatTextSize((s) => writingZoomOf(s.size));
@@ -459,7 +462,9 @@ export function Composer({
           : problem === "words"
             ? t("chat.failure.words")
             : "limited" in problem
-              ? t("chat2.links.limited", { when: opensIn(t, problem.limited, Date.now()) })
+              ? t(accountNew ? "identity.limited.links" : "chat2.links.limited", {
+                  when: opensIn(t, problem.limited, Date.now()),
+                })
               : hasExtras || problem.link !== "form"
                 ? t(`chat2.links.rules.${ruleWords(problem.link)}`)
                 : t("chat.composer.link"));
@@ -608,7 +613,14 @@ export function Composer({
                   : t("chat.composer.placeholder")
           }
           maxLength={4_000}
-          className="min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3.5 text-[13.5px] leading-5 text-bone-50 outline-none placeholder:text-ash-500 [scrollbar-width:thin]"
+          className={cn(
+            "min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3.5 text-[13.5px] leading-5 text-bone-50 outline-none [scrollbar-width:thin]",
+            // The slow mode's hint and wait are information, not a decorative hint: ash-400 reads
+            // ~5.9:1 on the field (ash-500 measured 3.9:1, design.md §2).
+            wait > 0 || (slow > 0 && !editing)
+              ? "placeholder:text-ash-400"
+              : "placeholder:text-ash-500",
+          )}
           style={{ height: LINE + PAD * 2, zoom: writingZoom }}
         />
         <span className="mb-[3px] flex">
