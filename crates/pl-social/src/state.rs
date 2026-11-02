@@ -586,8 +586,9 @@ impl SocialState {
             | PresenceEvent::ChatReacted { .. }
             | PresenceEvent::ChatTyping { .. }
             | PresenceEvent::ChatRead { .. } => {}
-            // World sessions belong to the launcher's host (HOST1, `crate::world`).
-            PresenceEvent::World(_) => {}
+            // World sessions belong to the launcher's host (HOST1, `crate::world`); voice chat to
+            // its voice chat (VOICE, `crate::voice`).
+            PresenceEvent::World(_) | PresenceEvent::Voice(_) => {}
             // The badge catalogue lives in the service (`SocialService::read_catalog`).
             PresenceEvent::MarkDefs { .. } => {}
         }
@@ -2051,6 +2052,7 @@ fn friend_view(
         discord_id: profile.discord_id().map(str::to_owned),
         badge,
         marks: profile.shown_marks(),
+        voice: online.and_then(|p| p.voice),
     }
 }
 
@@ -2267,6 +2269,7 @@ mod tests {
             avatar: None,
             avatar_hash: None,
             last_seen: None,
+            voice: None,
         }
     }
 

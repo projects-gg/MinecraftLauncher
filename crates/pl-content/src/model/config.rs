@@ -493,8 +493,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 }
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
-/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars` and `phoneAfk`, which stay off until
-/// Studio turns them on.
+/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk` and `voice`, which stay
+/// off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -547,6 +547,12 @@ pub struct Features {
     /// agreement's bot exception is live. Written only when on, so configs keep their exact shape.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub phone_afk: bool,
+    /// "Sesli sohbet" (VOICE): friends call each other and crews talk in their rooms (needs
+    /// `friends` too, and the friends service's `voice1` with Studio's `voiceOn`). Off by default
+    /// until the service's voice rooms and the privacy page's lines are live; written only when
+    /// on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub voice: bool,
 }
 
 impl Default for Features {
@@ -565,6 +571,7 @@ impl Default for Features {
             sub_servers: false,
             overlay_jars: false,
             phone_afk: false,
+            voice: false,
         }
     }
 }

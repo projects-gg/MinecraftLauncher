@@ -55,6 +55,8 @@ pub fn create(
         };
         // World sharing reads the friends' names and where the player is (HOST1).
         crate::host::on_social(&emitter, &update);
+        // Voice chat reads who the player is and the names its notifications show (VOICE).
+        crate::voice::on_social(&emitter, &update);
         overlay.on_social(update);
     });
     let tokens: Arc<dyn pl_social::TokenStore> =
@@ -385,7 +387,10 @@ pub async fn social_remove_friend(state: State<'_, AppState>, id: String) -> Cmd
 #[tauri::command]
 #[specta::specta]
 pub async fn social_block(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    Ok(state.social.block(&id).await?)
+    state.social.block(&id).await?;
+    // A two-person call with them ends at once (VOICE; the room hides them from each other).
+    state.voice.blocked(&id);
+    Ok(())
 }
 
 #[tauri::command]

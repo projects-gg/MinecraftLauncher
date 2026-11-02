@@ -276,6 +276,12 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
         snapshot.config.features.friends,
         snapshot.config.features.worlds,
     );
+    // "Sesli sohbet" (VOICE): the presence connection asks for `voice1` only while it is on.
+    crate::voice::apply_flag(
+        state,
+        snapshot.config.features.friends,
+        snapshot.config.features.voice,
+    );
     // "Hızlı kaynak paketi yükleme" (FASTPACK): the next pack sync follows the flag.
     crate::fastpack::apply_flag(&state.root, snapshot.config.features.fast_packs);
     state

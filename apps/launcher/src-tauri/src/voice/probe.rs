@@ -1,9 +1,6 @@
-//! The voice window (VOICE, design §6.1 in the task note `voice.md`).
-//!
-//! Voice chat's engine runs in a window of its own that is never shown: the main page may rest
-//! and be suspended during a call (webview_rest) while the call's audio work stays in a small page
-//! without React (`apps/launcher/voice.html`). For now only VOICE-0's probe exists, in debug
-//! builds: `PROJECTS_VOICE_PROBE=<config file>` (pl_voice::probe::ProbeConfig) opens the window,
+//! VOICE-0's probe of the voice window (debug builds only; the product path is `super`, which
+//! never uses anything here): `PROJECTS_VOICE_PROBE=<config file>` (pl_voice::probe::ProbeConfig)
+//! opens the window,
 //! gives its page the microphone, and the page runs a call against itself (two peer connections:
 //! one Opus encode, one decode and playout, like a call with one other person) while this side
 //! records what VOICE-0 measures to the config's `out` file: the page's audio and network
@@ -14,13 +11,13 @@
 /// Opens the probe's voice window when a debug build is asked to (call once, in setup).
 pub fn install(app: &tauri::App) {
     #[cfg(debug_assertions)]
-    probe::install(app);
+    run::install(app);
     #[cfg(not(debug_assertions))]
     let _ = app;
 }
 
 #[cfg(debug_assertions)]
-mod probe {
+mod run {
     use std::borrow::Cow;
     use std::io::Write;
     use std::path::Path;
@@ -147,6 +144,12 @@ mod probe {
             p.record(json!({ "k": "done" }))
         });
 
+        // The probe's page talks through events; the product's voice window has no capability
+        // at all (its two commands are app commands, `pl_voice::guard`).
+        app.add_capability(
+            r#"{"identifier":"voice-probe","windows":["voice"],"permissions":["core:event:default"]}"#,
+        )
+        .map_err(|error| error.to_string())?;
         let window =
             WebviewWindowBuilder::new(app, VOICE_WINDOW, WebviewUrl::App(VOICE_PAGE.into()))
                 .title("Projects Launcher")

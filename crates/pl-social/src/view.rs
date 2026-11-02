@@ -1155,6 +1155,9 @@ pub struct FriendView {
     pub badge: Option<Box<CrewBadgeView>>,
     /// Their badges right of the name (BADGES; keys of `markDefs`, the most important first).
     pub marks: Vec<String>,
+    /// Voice chat (VOICE): `ready` offers "Ara", `in` is in a room ("Sesli sohbette"; "Ara" still
+    /// rings); None: no "Ara".
+    pub voice: Option<crate::voice::PresenceVoice>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]

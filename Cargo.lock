@@ -4518,8 +4518,16 @@ dependencies = [
 name = "pl-voice"
 version = "2.0.0"
 dependencies = [
+ "futures",
+ "pl-social",
+ "rustls",
  "serde",
  "serde_json",
+ "specta",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
  "url",
 ]
 

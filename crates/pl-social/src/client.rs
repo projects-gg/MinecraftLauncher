@@ -1189,9 +1189,25 @@ impl Session {
         worlds: bool,
         rel: Option<RelVersion>,
     ) -> PresenceHandle {
+        self.connect_presence_full(options, chat, worlds, false, rel)
+    }
+
+    /// [`Session::connect_presence_with`], with voice chat when `voice` (VOICE: `voice1` in the
+    /// capabilities; its messages flow once the service took it).
+    pub fn connect_presence_full(
+        &self,
+        options: PresenceOptions,
+        chat: Option<ChatSetup>,
+        worlds: bool,
+        voice: bool,
+        rel: Option<RelVersion>,
+    ) -> PresenceHandle {
         let mut url = self.client.presence_url_with(chat.is_some());
         if worlds {
             crate::world::ask_for_worlds(&mut url);
+        }
+        if voice {
+            crate::voice::ask_for_voice(&mut url);
         }
         PresenceHandle::spawn(
             url,
@@ -1200,6 +1216,43 @@ impl Session {
             options,
             chat,
             rel,
+        )
+    }
+
+    /// VOICE: a ticket to one of the crew's live rooms (`room`), or to its "Genel" (none)
+    /// (`POST /v1/voice/crew`).
+    pub async fn voice_crew(
+        &self,
+        crew: &str,
+        room: Option<&str>,
+    ) -> Result<crate::voice::VoiceCrewTicket> {
+        let mut body = serde_json::json!({ "crew": crew });
+        if let Some(room) = room {
+            body["room"] = room.into();
+        }
+        self.call(Method::POST, "v1/voice/crew", Some(body))
+            .await?
+            .json()
+    }
+
+    /// VOICE: a new room of the crew, "Oda 2", "Oda 3", … (`POST /v1/voice/crew/new`).
+    pub async fn voice_crew_new(&self, crew: &str) -> Result<crate::voice::VoiceCrewTicket> {
+        self.call(
+            Method::POST,
+            "v1/voice/crew/new",
+            Some(serde_json::json!({ "crew": crew })),
+        )
+        .await?
+        .json()
+    }
+
+    /// VOICE: the service's address, this session's token and the user agent, for the room
+    /// socket (`GET /v1/voice?ticket=…`, `pl-voice`).
+    pub fn voice_socket(&self) -> (Url, String, String) {
+        (
+            self.client.base_url().clone(),
+            self.token.expose().to_owned(),
+            self.client.user_agent().to_owned(),
         )
     }
 

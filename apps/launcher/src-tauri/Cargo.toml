@@ -80,9 +80,11 @@ tauri-plugin-updater = { workspace = true }
 
 # The page's rest while the window is out of sight (webview_rest.rs) and the system notifications
 # (notify.rs): the versions and features Tauri, its notification plugin and pl-auth already build,
-# so nothing new is compiled. The voice window's probe (voice.rs, VOICE-0) names what it uses:
-# process times and memory (Threading, ProcessStatus: sysinfo's) and Raw Input with its hidden
-# window (UI_Input, Gdi, LibraryLoader: tao's), so the shared `windows` build stays the same.
+# so nothing new is compiled. Voice chat (voice/, VOICE) names what it uses: process times and
+# memory for VOICE-0's probe (Threading, ProcessStatus: sysinfo's), Raw Input with its hidden
+# window and the last touch for the inactivity rule (UI_Input, UI_Input_KeyboardAndMouse,
+# System_SystemInformation, Gdi, LibraryLoader: tao's and wry's), so the shared `windows` build
+# stays the same.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
 windows = { version = "0.62", features = [
@@ -96,8 +98,10 @@ windows = { version = "0.62", features = [
     "Win32_System_LibraryLoader",
     "Win32_System_ProcessStatus",
     "Win32_System_Registry",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_UI_Input",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
