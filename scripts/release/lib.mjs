@@ -549,6 +549,22 @@ export function stableFromBetaRefusal({
   return null;
 }
 
+/**
+ * The bundles a stable release uploads, as collect-artifacts.mjs names them (GitHub's names):
+ * Prepare asks the CDN for each before a stable from a beta builds.
+ */
+export function releaseBundles(version) {
+  const v = parseVersion(version).raw;
+  return [
+    `Projects.Launcher-${v}-1.x86_64.rpm`,
+    `Projects.Launcher_${v}_amd64.AppImage`,
+    `Projects.Launcher_${v}_amd64.deb`,
+    `Projects.Launcher_${v}_universal.app.tar.gz`,
+    `Projects.Launcher_${v}_universal.dmg`,
+    `Projects.Launcher_${v}_x64-setup.exe`,
+  ];
+}
+
 /** A refusal when `tag` already names a commit (`commit`; null: no such tag) other than `sha`. */
 export function tagRefusal({ tag, commit, sha }) {
   if (!commit || commit === sha) return null;

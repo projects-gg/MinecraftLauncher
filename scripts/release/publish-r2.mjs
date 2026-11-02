@@ -190,8 +190,18 @@ async function publish(flags, r2) {
     console.log(`uploaded ${key} (${body.length} bytes)`);
   }
 
-  // 2. The channel file, last.
-  if (manifest) await writeChannel(r2, channel, manifest, dryRun);
+  // 2. The channel file, last, after reading it again: uploading took minutes, and a release that
+  // reached the channel meanwhile (a newer beta) is not replaced.
+  if (manifest) {
+    if (r2) {
+      const now = await readChannel(r2, channel);
+      guardExpected(channel, now, version, flags["expect-current"]);
+      if (now?.version !== current?.version) {
+        guardDowngrade(channel, now, version, flags["allow-downgrade"]);
+      }
+    }
+    await writeChannel(r2, channel, manifest, dryRun);
+  }
 }
 
 async function promote(flags, r2) {
@@ -214,7 +224,11 @@ async function promote(flags, r2) {
       throw new Error(`${key}: ${entry.url} is missing from the bucket`);
     }
   }
-  const target = from === to ? source : await readChannel(r2, to);
+  // Read last, after the checks above: what the target announces right before it is written.
+  const target = await readChannel(r2, to);
+  if (from === to && target?.version !== version) {
+    throw new Error(`${to} announces ${target?.version ?? "nothing"} now, not ${version}`);
+  }
   if (from !== to) guardDowngrade(to, target, version, flags["allow-downgrade"]);
 
   const same = from === to;

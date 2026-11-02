@@ -26,6 +26,7 @@ import {
   parseArgs,
   parseVersion,
   Refusal,
+  releaseBundles,
   run,
   stableFromBetaRefusal,
   tagRefusal,
@@ -121,23 +122,32 @@ async function githubJson(path, init) {
 }
 
 /**
- * Whether the CDN already serves `version`'s Windows installer: an earlier run uploaded the
- * release and stopped before its channel file. A new build makes other bytes, which R2's
+ * Whether the CDN already serves any of `version`'s bundles: an earlier run uploaded (some of)
+ * the release and stopped before its channel file. A new build makes other bytes, which R2's
  * immutable files refuse an hour later, so the way on is that run again ("Re-run failed jobs").
+ * Every bundle is asked for, not one: an upload that stopped half way left the first few only.
  */
 async function filesThere(version) {
-  const url = `${CDN}/${PREFIX}/releases/${version}/Projects.Launcher_${version}_x64-setup.exe`;
-  let response;
-  try {
-    response = await fetchRetrying(`${url}?fresh=${Date.now()}`, { method: "HEAD" });
-  } catch (err) {
-    throw new Refusal("release/unreadable", `${url} could not be read: ${err.message}`);
-  }
-  if (response.status === 404 || response.status === 403) return false;
-  if (!response.ok) {
-    throw new Refusal("release/unreadable", `${url} could not be read: HTTP ${response.status}`);
-  }
-  return true;
+  const answers = await Promise.all(
+    releaseBundles(version).map(async (name) => {
+      const url = `${CDN}/${PREFIX}/releases/${version}/${name}`;
+      let response;
+      try {
+        response = await fetchRetrying(`${url}?fresh=${Date.now()}`, { method: "HEAD" });
+      } catch (err) {
+        throw new Refusal("release/unreadable", `${url} could not be read: ${err.message}`);
+      }
+      if (response.status === 404 || response.status === 403) return false;
+      if (!response.ok) {
+        throw new Refusal(
+          "release/unreadable",
+          `${url} could not be read: HTTP ${response.status}`,
+        );
+      }
+      return true;
+    }),
+  );
+  return answers.some(Boolean);
 }
 
 /** The commit `tag` names (an annotated tag followed to it), or null when there is no such tag. */

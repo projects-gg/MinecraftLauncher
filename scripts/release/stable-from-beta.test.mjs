@@ -16,6 +16,7 @@ import {
   commandData,
   commandProperty,
   Refusal,
+  releaseBundles,
   stableFromBetaRefusal,
   stableOf,
   tagRefusal,
@@ -77,6 +78,19 @@ test("tagRefusal refuses a stable tag on another commit only", () => {
   assert.equal(tagRefusal({ tag: "v2.1.0", commit: null, sha: SHA }), null);
   assert.equal(tagRefusal({ tag: "v2.1.0", commit: SHA, sha: SHA }), null);
   assert.equal(tagRefusal({ tag: "v2.1.0", commit: OTHER, sha: SHA })?.code, "release/tag-taken");
+});
+
+test("releaseBundles names a stable release's bundles as the CDN serves them", () => {
+  // stable.json of 2.0.1 on cdn.projects.gg names these (rpm sorts first in an upload).
+  assert.deepEqual(releaseBundles("2.0.1"), [
+    "Projects.Launcher-2.0.1-1.x86_64.rpm",
+    "Projects.Launcher_2.0.1_amd64.AppImage",
+    "Projects.Launcher_2.0.1_amd64.deb",
+    "Projects.Launcher_2.0.1_universal.app.tar.gz",
+    "Projects.Launcher_2.0.1_universal.dmg",
+    "Projects.Launcher_2.0.1_x64-setup.exe",
+  ]);
+  assert.deepEqual([...releaseBundles("2.0.1")].sort(), releaseBundles("2.0.1"));
 });
 
 test("workflow commands escape what GitHub would read as syntax", () => {
@@ -224,10 +238,13 @@ test("check refuses with a named annotation", async () => {
   state.stable = { version: "2.0.3" };
 
   // Files an earlier run uploaded (it stopped before the channel file): a new build would make
-  // other bytes, so that run is the way on.
-  state.files.add("/v1/releases/2.1.0/Projects.Launcher_2.1.0_x64-setup.exe");
-  await assert.rejects(cli(CHECK), refused("files-exist"));
-  state.files.clear();
+  // other bytes, so that run is the way on. Any bundle counts: an upload that stopped half way
+  // left the first few only (the rpm sorts first).
+  for (const name of releaseBundles("2.1.0")) {
+    state.files.add(`/v1/releases/2.1.0/${name}`);
+    await assert.rejects(cli(CHECK), refused("files-exist"));
+    state.files.clear();
+  }
 
   // The stable tag on another commit stops it; on this one (an earlier run's) it does not.
   state.refs.set("v2.1.0", { type: "commit", sha: OTHER });
