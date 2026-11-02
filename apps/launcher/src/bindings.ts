@@ -370,6 +370,29 @@ export const commands = {
 	 */
 	voiceCheckKey: (ask: VoiceKeyAsk) => typedError<VoiceKeyCheck, CmdError>(__TAURI_INVOKE("voice_check_key", { ask })),
 	/**
+	 *  Discord's push-to-talk, mute and deafen keys on this computer, offered once as the player first
+	 *  opens voice chat (VOICE-KEYS); null when answered before or when Discord has nothing to copy.
+	 *  Discord's local files are read only now, never at the launcher's start; nothing leaves the
+	 *  computer.
+	 */
+	voiceDiscordOffer: () => typedError<{
+	pushToTalk: VoiceKey | null,
+	mute: VoiceKey | null,
+	deafen: VoiceKey | null,
+	/**  Discord's microphone works by push-to-talk: copying turns "Bas-konuş" on too. */
+	pushToTalkMode: boolean,
+	/**
+	 *  Shortcuts Discord has that cannot be used here (a gamepad, the Windows key, two keys at
+	 *  once, push-to-talk with Ctrl…): the card's one line names them.
+	 */
+	skipped: VoiceShortcut[],
+} | null, CmdError>(__TAURI_INVOKE("voice_discord_offer")),
+	/**
+	 *  The answer to Discord's keys: "Kopyala" (`copy`) fills the shortcuts, "Hayır" leaves them;
+	 *  never asked again. Answers the settings as kept.
+	 */
+	voiceDiscordAnswer: (copy: boolean) => typedError<VoiceSettings, CmdError>(__TAURI_INVOKE("voice_discord_answer", { copy })),
+	/**
 	 *  The settings page opened (`open`) or closed: the voice engine runs meanwhile for the device
 	 *  lists and the microphone's level bar.
 	 */
@@ -11322,12 +11345,31 @@ export type VoiceDevices = {
 };
 
 /**
+ *  Discord's shortcuts as ours (`voice_discord_offer`): the card lists those set; copying fills
+ *  ours with them.
+ */
+export type VoiceDiscordOffer = {
+	pushToTalk: VoiceKey | null,
+	mute: VoiceKey | null,
+	deafen: VoiceKey | null,
+	/**  Discord's microphone works by push-to-talk: copying turns "Bas-konuş" on too. */
+	pushToTalkMode: boolean,
+	/**
+	 *  Shortcuts Discord has that cannot be used here (a gamepad, the Windows key, two keys at
+	 *  once, push-to-talk with Ctrl…): the card's one line names them.
+	 */
+	skipped: VoiceShortcut[],
+};
+
+/**
  *  A shortcut's key: a keyboard key by its place on the keyboard (the page's
  *  `KeyboardEvent.code`, `KeyV`, `CapsLock`, `F8`: the same key whatever the layout), or a mouse
- *  button. `label` is what the page showed when it was picked (the layout's letter), kept to show
- *  it again.
+ *  button, with the modifiers held with it (mute and deafen only; none is the single key, which
+ *  fires whatever else is held). `label` is what the page showed when it was picked (the layout's
+ *  letter), kept to show it again. An older file has no `mods` and reads as a single key (always
+ *  written, so the page's type is the same both ways).
  */
-export type VoiceKey = { kind: "keyboard"; code: string; label?: string } | { kind: "mouse"; button: VoiceMouseButton };
+export type VoiceKey = { kind: "keyboard"; code: string; label?: string; mods?: VoiceModifier[] } | { kind: "mouse"; button: VoiceMouseButton; mods?: VoiceModifier[] };
 
 /**  The input that a key check is about: the key and the shortcut it would be. */
 export type VoiceKeyAsk = {
@@ -11362,7 +11404,12 @@ export type VoiceKeyClash =
 /**  Left Alt: Alt+Shift switches the keyboard's language. */
 "languageSwitch" | 
 /**  Another voice shortcut has it already. */
-"taken";
+"taken" | 
+/**
+ *  Mute or deafen on a key that writes (a letter, a digit, Space…) without Ctrl or Alt: it
+ *  fires while the player types too (VOICE-KEYS; never refused).
+ */
+"typing";
 
 /**  Why the player's stay ended (in [`VoiceNotice::Left`]). */
 export type VoiceLeftReason = 
@@ -11450,6 +11497,13 @@ export type VoiceModAction =
 { act: "rename"; name: string } | 
 /**  "Odayı kapat" (the leader; the page asks first: "Herkes odadan çıkar."). */
 { act: "close" };
+
+/**
+ *  A key held with a shortcut's key (VOICE-KEYS: "Ctrl + Shift + M", so it does not fire while the
+ *  player types). Left and right count alike; Right Alt is AltGr on most layouts and never counts
+ *  as Alt ([`crate::input::Held`]).
+ */
+export type VoiceModifier = "ctrl" | "shift" | "alt";
 
 /**  A mouse button a shortcut may use (the left and right buttons never). */
 export type VoiceMouseButton = "middle" | 

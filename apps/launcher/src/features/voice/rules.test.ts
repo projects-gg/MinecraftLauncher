@@ -419,9 +419,13 @@ describe("shortcut keys", () => {
       mods: ["ctrl", "shift"],
     });
     // Without the layout, Shift's symbol never names a digit; a letter is upper-cased.
-    expect(keyFromEvent({ code: "Digit1", key: "!" }, "tr", ["shift"])?.label).toBe("1");
-    expect(keyFromEvent({ code: "KeyM", key: "m" }, "tr", ["ctrl"])?.label).toBe("M");
-    expect(keyFromEvent({ code: "Quote", key: "i" }, "tr", [], layout)?.label).toBe("İ");
+    expect(keyFromEvent({ code: "Digit1", key: "!" }, "tr", ["shift"])).toMatchObject({
+      label: "1",
+    });
+    expect(keyFromEvent({ code: "KeyM", key: "m" }, "tr", ["ctrl"])).toMatchObject({ label: "M" });
+    expect(keyFromEvent({ code: "Quote", key: "i" }, "tr", [], layout)).toMatchObject({
+      label: "İ",
+    });
     expect(keyFromMouse(3, ["ctrl"])).toEqual({ kind: "mouse", button: "back", mods: ["ctrl"] });
   });
 
