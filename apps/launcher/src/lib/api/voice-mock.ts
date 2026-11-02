@@ -11,8 +11,9 @@
 //   unanswered a moment later ("Cevap yok"); `room` a friend room (the player leads it: GeceKurdu_
 //   speaking, ElmasKazma muted, KumFirtinasi, NetherKral ringing); `roomNamed` the same, named;
 //   `full` a friend room at its 10; `crew` the crew's "Genel" (`&role=leader|moderator|member`),
-//   with "Oda 2" beside it; `crewFull` the crew has its 3 rooms; `ring` GeceKurdu_ calls, two more in
-//   his room; `missed` two missed calls; `joining`, `reconnecting`, `failed` (the stay ended:
+//   with "Oda 2" beside it; `crewFull` the crew has its 3 rooms; `ring` GeceKurdu_ calls, two more
+//   in his room (`ringLong`: a 16-character tag calls); `missed` two missed calls; `joining`,
+//   `reconnecting`, `failed` (the stay ended:
 //   "Bağlanamadı"); `denied` / `missing` (the microphone); `weak` / `bad` (the player's
 //   connection); `modMuted`, `muted`, `deaf`.
 // - `speaking=<ids>|none`: who speaks (the scenario's own otherwise); `talking=1`: the player too.
@@ -108,7 +109,11 @@ const PRESENCE: Record<string, VoicePresence> = {
   "703": "ready",
 };
 
-const PROFILES = [{ id: "909", name: "KumFirtinasi", avatar: "preset:wolf" }];
+const PROFILES = [
+  { id: "909", name: "KumFirtinasi", avatar: "preset:wolf" },
+  // The longest a gamer tag gets (16): the ring card's name must never be cut.
+  { id: "911", name: "KaranlikSovalye_", avatar: "preset:knight" },
+];
 
 function friendRoom(extra: Partial<VoiceRoomView> = {}): VoiceRoomView {
   const start = nowSec() - 1800;
@@ -252,10 +257,16 @@ function stateFor(scenario: string): VoiceState {
         crews: [crewRooms(scenario === "crewFull", true)],
       };
     case "ring":
+    case "ringLong":
       return {
         ...base,
         rings: [
-          { room: "f00000000000000c3", from: "301", with: ["303", "909"], until: nowSec() + 30 },
+          {
+            room: "f00000000000000c3",
+            from: scenario === "ringLong" ? "911" : "301",
+            with: ["303", "909"],
+            until: nowSec() + 30,
+          },
         ],
       };
     case "missed":
