@@ -294,6 +294,8 @@ export type ReportTarget =
       id: string;
       plan?: { crew: string; id: string };
       reaction?: { conv: string; id: number; e: string };
+      /** VOICE: reported from the player's voice room (its id; the room's events are the evidence). */
+      voice?: string;
     }
   /** `code`: the crew was looked up by code; `via`: reported from the tag a friend or crewmate wears
    * (TEAM6: that player's id, never kept by the service). */

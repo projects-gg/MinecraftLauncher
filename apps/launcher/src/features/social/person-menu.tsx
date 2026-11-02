@@ -771,6 +771,8 @@ export function personItems(
                 kind: "player",
                 id: person.id,
                 ...(place.reaction ? { reaction: place.reaction } : {}),
+                // VOICE: someone in the player's room: the room's events are the evidence.
+                ...(inRoom && voiceRoom ? { voice: voiceRoom.id } : {}),
               },
               ...(place.reaction ? { reaction: { e: place.reaction.e } } : {}),
               name: person.name,
