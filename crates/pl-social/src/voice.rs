@@ -28,6 +28,16 @@ pub(crate) fn ask_for_voice(url: &mut url::Url) {
     crate::world::ask_for_cap(url, VOICE_CAP);
 }
 
+/// A room id as the service makes them (`[fgc]` + 16 hex digits).
+pub(crate) fn is_room_id(room: &str) -> bool {
+    let bytes = room.as_bytes();
+    bytes.len() == 17
+        && matches!(bytes[0], b'f' | b'g' | b'c')
+        && bytes[1..]
+            .iter()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(b))
+}
+
 /// `hello.voice` and `voice_state.voice`: Studio's switch and what launchers apply themselves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
