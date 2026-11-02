@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import net.minecraft.client.resources.server.PackLoadFeedback;
 import net.minecraft.client.resources.server.PackReloadConfig;
 import net.minecraft.client.resources.server.ServerPackManager;
@@ -38,6 +39,8 @@ class SamePackTest {
         final List<Runnable> downloading = new ArrayList<>();
         final List<PackReloadConfig.Callbacks> reloads = new ArrayList<>();
         final ServerPackManager manager;
+        /** The server packs the game's resources have selected (the game's pack repository): all of them by default. */
+        Predicate<UUID> selected = id -> true;
 
         Game() {
             PackLoadFeedback feedback = new PackLoadFeedback() {
@@ -73,10 +76,14 @@ class SamePackTest {
 
         /** The server pushes a pack the way the game handles it with the mod: the mod's answer first. */
         void push(UUID id, HashCode hash) throws Exception {
-            if (!SamePack.answer(manager, id, hash)) {
+            if (!answer(id, hash)) {
                 manager.pushPack(id, URI.create("https://packs.example/" + id).toURL(), hash);
             }
             manager.tick();
+        }
+
+        boolean answer(UUID id, HashCode hash) {
+            return SamePack.answer(manager, id, hash, selected);
         }
 
         /** Every download under way finishes (from the game's cache). */
@@ -155,12 +162,47 @@ class SamePackTest {
         Game game = new Game();
         game.push(PACK, SHA1);
         // Downloading.
-        assertFalse(SamePack.answer(game.manager, PACK, SHA1));
+        assertFalse(game.answer(PACK, SHA1));
         game.downloaded();
         // Its reload under way.
-        assertFalse(SamePack.answer(game.manager, PACK, SHA1));
+        assertFalse(game.answer(PACK, SHA1));
         game.reloaded();
-        assertTrue(SamePack.answer(game.manager, PACK, SHA1));
+        assertTrue(game.answer(PACK, SHA1));
+    }
+
+    @Test
+    void aPackUnderAnotherIsLeftToTheGame() throws Exception {
+        // Two packs applied: the later one stacks above the first.
+        Game game = new Game().applied(PACK, SHA1);
+        game.push(OTHER, NEWER);
+        game.downloaded();
+        game.reloaded();
+        game.said.clear();
+
+        // The first again: the game would put it on top, so it reloads as the game does.
+        game.push(PACK, SHA1);
+        assertEquals(List.of("pack ACCEPTED"), game.said);
+        assertEquals(3, game.asked.size());
+
+        // The topmost again, unchanged: kept.
+        Game top = new Game().applied(PACK, SHA1);
+        top.push(OTHER, NEWER);
+        top.downloaded();
+        top.reloaded();
+        top.said.clear();
+        top.push(OTHER, NEWER);
+        assertEquals(List.of("other ACCEPTED", "other DOWNLOADED", "other APPLIED"), top.said);
+        assertTrue(top.reloads.isEmpty());
+    }
+
+    @Test
+    void aPackTheGameDoesNotShowIsLoadedAgain() throws Exception {
+        // A reload and its recovery both failed: the game still marks the pack active, its resources lack it.
+        Game game = new Game().applied(PACK, SHA1);
+        game.selected = id -> false;
+        game.push(PACK, SHA1);
+        assertEquals(List.of("pack ACCEPTED"), game.said);
+        assertEquals(2, game.asked.size());
     }
 
     @Test
@@ -170,9 +212,9 @@ class SamePackTest {
         game.manager.popAll();
         game.manager.resetPromptStatus();
         game.manager.tick();
-        assertFalse(SamePack.answer(game.manager, PACK, SHA1));
+        assertFalse(game.answer(PACK, SHA1));
         game.reloaded();
-        assertFalse(SamePack.answer(game.manager, PACK, SHA1));
+        assertFalse(game.answer(PACK, SHA1));
 
         // Joining again: the game's normal load, from its download cache.
         game.manager.allowServerPacks();

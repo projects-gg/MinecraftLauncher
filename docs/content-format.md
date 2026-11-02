@@ -1318,7 +1318,9 @@ a top-level `projects` object that other launchers ignore; Studio can export a r
     pack's own copy and does not count). It never installs `d4phKsx2` (2.0.4, FASTPACK-LEAVE):
     ResourcePackCached keeps a server's pack applied after the player leaves and applies it again
     at the game's start; the copy an older launcher installed is removed like an item switched off.
-    Studio may keep listing it for those older launchers or drop it. Like the overlay it never
+    Take it out of the manifests: a launcher before 2.0.4 installs it while a manifest lists it
+    (and `features.fastPacks` is on), and removes its unchanged copy once it leaves the pack, as
+    any file that left the pack. Like the overlay it never
     lists them in the mod center or the instance's mods and never records, adopts or flags a choice
     for them; turning the setting or the flag off, or such a jar of the player's, removes only the
     file the pack installed. Clients without the setting (older launchers, Android) treat them as
