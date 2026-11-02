@@ -7,8 +7,8 @@ import java.util.List;
  * How the overlay looks and sounds on this computer: the player's fine-tuning from the panel's settings
  * page. The launcher decides whether a toast is sent; these decide how (or whether) the game shows it.
  * {@code keyUsed} is no preference: the overlay key has opened the panel here at least once (F7-OPEN: the toasts'
- * "Açılmazsa [Fn] + [F7] tuşlarına bas" line stops for good). Immutable; the {@code with…} methods return a changed
- * copy.
+ * "Açılmazsa [Fn] + [F7] tuşlarına bas" line stops for good). {@code showSpeakers} (VOICE-O): "Konuşanları göster", the
+ * HUD's corner of who speaks in the player's voice room. Immutable; the {@code with…} methods return a changed copy.
  */
 public record OverlaySettings(
     boolean messageToasts,
@@ -25,7 +25,8 @@ public record OverlaySettings(
     int callVolume,
     boolean keyUsed,
     List<String> recentStickers,
-    List<String> recentEmojis) {
+    List<String> recentEmojis,
+    boolean showSpeakers) {
 
     public static final int MAX_VOLUME = 100;
 
@@ -75,7 +76,7 @@ public record OverlaySettings(
     }
 
     public static final OverlaySettings DEFAULTS = new OverlaySettings(true, true, true, true, true,
-        Duration.NORMAL, Corner.BOTTOM_RIGHT, false, true, 70, true, 85, false, List.of(), List.of());
+        Duration.NORMAL, Corner.BOTTOM_RIGHT, false, true, 70, true, 85, false, List.of(), List.of(), true);
     /** Stickers the picker keeps at the top (the last sent first). */
     public static final int RECENT_STICKERS = 8;
     /** Emojis the chat's emoji picker keeps at the top (the last written first; CHAT-EMOJI). */
@@ -147,76 +148,98 @@ public record OverlaySettings(
 
     public OverlaySettings withMessageToasts(boolean v) {
         return new OverlaySettings(v, callToasts, inviteToasts, infoToasts, showMessageText, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withCallToasts(boolean v) {
         return new OverlaySettings(messageToasts, v, inviteToasts, infoToasts, showMessageText, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withInviteToasts(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, v, infoToasts, showMessageText, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withInfoToasts(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, v, showMessageText, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withShowMessageText(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, v, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withDuration(Duration v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, v, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withCorner(Corner v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration, v,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withReduceMotion(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, v, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            corner, v, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withMessageSound(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, v, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            corner, reduceMotion, v, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withMessageVolume(int v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, v, callSound, callVolume, keyUsed, recentStickers, recentEmojis);
+            corner, reduceMotion, messageSound, v, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withCallSound(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, v, callVolume, keyUsed, recentStickers, recentEmojis);
+            corner, reduceMotion, messageSound, messageVolume, v, callVolume, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withCallVolume(int v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, callSound, v, keyUsed, recentStickers, recentEmojis);
+            corner, reduceMotion, messageSound, messageVolume, callSound, v, keyUsed, recentStickers, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withRecentStickers(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, v, recentEmojis);
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, v, recentEmojis,
+            showSpeakers);
     }
 
     public OverlaySettings withRecentEmojis(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, v);
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, v,
+            showSpeakers);
+    }
+
+    /** "Konuşanları göster" (VOICE-O). */
+    public OverlaySettings withShowSpeakers(boolean v) {
+        return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
+            recentEmojis, v);
     }
 
     public OverlaySettings withKeyUsed(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, v, recentStickers, recentEmojis);
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, v, recentStickers, recentEmojis,
+            showSpeakers);
     }
 }

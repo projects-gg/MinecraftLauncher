@@ -90,6 +90,7 @@ public final class Protocol {
             features.add(PEOPLE);
             features.add(PEOPLE2);
             features.add(PEOPLE3);
+            features.add(VOICE);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -344,6 +345,75 @@ public final class Protocol {
         o.addProperty("group", "");
         o.addProperty("name", name);
         return o;
+    }
+
+    // ---- Voice chat (VOICE-O, rows V1-V14 of docs/tasks/ovl2-protocol.md) -------------------------------------
+
+    /**
+     * Voice chat's feature in {@code hello} (V1): the mod hears {@code voice}, {@code voice-speaking}, {@code voice-notice}
+     * and {@code voice-result}, reads friends' {@code voice} and sends the frames below. Sent beside {@link #PEOPLE3}.
+     */
+    public static final String VOICE = "voice";
+
+    /** "Mikrofon" (V6): the microphone off ({@code true}) or on again (which ends deafening too). */
+    public static JsonObject voiceMute(boolean on) {
+        JsonObject o = message("voice-set");
+        o.addProperty("mute", on);
+        return o;
+    }
+
+    /** "Sağırlaştır" (V6). */
+    public static JsonObject voiceDeaf(boolean on) {
+        JsonObject o = message("voice-set");
+        o.addProperty("deaf", on);
+        return o;
+    }
+
+    /** "Ayrıl" (V7), and "İptal" while the player's call rings. */
+    public static JsonObject voiceLeave() {
+        return message("voice-leave");
+    }
+
+    /** "Katıl" ({@code join}) or "Reddet" on a ring (V8). */
+    public static JsonObject voiceAnswer(String room, boolean join) {
+        JsonObject o = message("voice-answer");
+        o.addProperty("room", room);
+        o.addProperty("join", join);
+        return o;
+    }
+
+    /** "Ses seviyesi" of someone in the room, in percent (V9). */
+    public static JsonObject voiceVolume(String person, int percent) {
+        JsonObject o = message("voice-vol");
+        o.addProperty("person", person);
+        o.addProperty("percent", percent);
+        return o;
+    }
+
+    /** "Benim için sustur" ({@code on}) or its undo (V10). */
+    public static JsonObject voiceMuteForMe(String person, boolean on) {
+        JsonObject o = message("voice-lmute");
+        o.addProperty("person", person);
+        o.addProperty("on", on);
+        return o;
+    }
+
+    /** A leader's or moderator's row (V11): {@code mute}, {@code unmute}, {@code kick}, {@code mod}, {@code unmod}. */
+    public static JsonObject voiceModerate(String person, String act) {
+        JsonObject o = message("voice-mod");
+        o.addProperty("person", person);
+        o.addProperty("act", act);
+        return o;
+    }
+
+    /** "Ara" (V12). */
+    public static JsonObject voiceCall(String friend) {
+        return friendFrame("voice-call", friend);
+    }
+
+    /** "Odaya davet et" (V13). */
+    public static JsonObject voiceInvite(String friend) {
+        return friendFrame("voice-invite", friend);
     }
 
     private static JsonObject friendFrame(String type, String friend) {

@@ -296,6 +296,16 @@ public final class SettingsList extends PanelWidget {
     public SettingsList(Supplier<OverlaySettings> settings,
         java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, List<Shortcut> shortcuts,
         Languages languages, EmojiSwitch emojis) {
+        this(settings, apply, shortcuts, languages, emojis, false);
+    }
+
+    /**
+     * {@code voice}: the launcher speaks of voice chat in this game (VOICE-O): a "Sesli sohbet" section after the
+     * notifications, with "Konuşanları göster".
+     */
+    public SettingsList(Supplier<OverlaySettings> settings,
+        java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, List<Shortcut> shortcuts,
+        Languages languages, EmojiSwitch emojis, boolean voice) {
         super(0, 0, 100, 100, Texts.tr("settings.title"));
         this.settings = settings;
         this.apply = apply;
@@ -340,6 +350,11 @@ public final class SettingsList extends PanelWidget {
         items.add(new Choice(Texts.str("settings.corner"), new String[] {Texts.str("settings.corner.bottom"),
             Texts.str("settings.corner.top")}, s -> s.corner().ordinal(),
             (s, i) -> s.withCorner(OverlaySettings.Corner.values()[i])));
+        if (voice) {
+            items.add(new Section(Texts.str("voice.title")));
+            items.add(new Toggle(Texts.str("settings.voice.speakers"), OverlaySettings::showSpeakers,
+                s -> s.withShowSpeakers(!s.showSpeakers())));
+        }
         items.add(new Section(Texts.str("settings.sound")));
         items.add(new Toggle(Texts.str("settings.sound.message"), OverlaySettings::messageSound,
             s -> s.withMessageSound(!s.messageSound())));

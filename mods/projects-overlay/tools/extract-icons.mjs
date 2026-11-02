@@ -61,6 +61,16 @@ const ICONS = [
   ["ShieldStar", "regular"],
   ["Crown", "regular"],
   ["FolderSimplePlus", "regular"],
+  // Voice chat (VOICE-O), the launcher's signs (features/voice, the person menu's voice rows).
+  ["Headset", "regular"],
+  ["Microphone", "regular"],
+  ["MicrophoneSlash", "regular"],
+  ["SpeakerSlash", "regular"],
+  ["SpeakerSimpleSlash", "regular"],
+  ["Phone", "regular"],
+  ["PhonePlus", "regular"],
+  ["PhoneX", "regular"],
+  ["PhoneDisconnect", "regular"],
 ];
 
 // The crew palette's emblems (crew-look.ts EMBLEMS) and the icons team-emblem.tsx draws them with.

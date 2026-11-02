@@ -120,6 +120,14 @@ public enum Frames {
         .withGradient(Theme.mix(Theme.GOLD_300, Theme.GOLD_400, 0.45f), Theme.GOLD_600).fixed(18)),
     SEND_HOVER(FrameSpec.rounded(4, Theme.withAlpha(0xFFFFFF, 0.07f), 0).fixed(18)),
     FOCUS_18(FrameSpec.rounded(4, 0, 0).withRing(Theme.GOLD_300, 1.5f).fixed(18)),
+    /**
+     * VOICE-O: a speaker's plate in the HUD's corner (a face and a name), the toast's translucent obsidian at the size of
+     * a line, so the world still shows through.
+     */
+    SPEAKER(FrameSpec.rounded(4, Theme.withAlpha(Theme.OBSIDIAN_900, Alphas.TOAST), Theme.withAlpha(0xFFFFFF, 0.10f))
+        .fixed(14)),
+    /** VOICE-O: someone speaking: a thin jade ring around their face (the launcher's speaking ring), at its opacity. */
+    SPEAKING(FrameSpec.rounded(2, 0, 0).withRing(Theme.JADE_400, 1f)),
     /** A keycap ("F7"): raised, with a darker lip. */
     KEYCAP(FrameSpec.rounded(2, Theme.OBSIDIAN_700, Theme.withAlpha(0xFFFFFF, 0.13f))
         .withShadow(Theme.withAlpha(Theme.OBSIDIAN_950, 0.9f), 0.5f, 1f).fixed(10)),
