@@ -3,9 +3,11 @@
 // who "Davet et" lists, the words for a refusal or an ended stay, and a shortcut key's label.
 import { matchesQuery } from "@pl/ui";
 import type { TFunction } from "i18next";
-import type { Friend, SocialSnapshot } from "@/lib/api/social-types";
+import type { Friend, SocialSnapshot, SocialTeam, TeamMember } from "@/lib/api/social-types";
 import type {
   VoiceAnswer,
+  VoiceCrewRoom,
+  VoiceCrewRooms,
   VoiceKey,
   VoiceKeyCheck,
   VoiceLeftReason,
@@ -457,6 +459,113 @@ export function toneNow(
   if (state.rings.length) return "ring";
   if (state.calling) return "ringback";
   return null;
+}
+
+// --- VOICE-ROOMS: the crew page's rooms ---------------------------------------------------------
+
+/** A crew's "Genel" room id (the friends service's `g` + crew id). */
+export const generalRoomId = (crew: string) => `g${crew}`;
+
+/**
+ * A crew's rooms as the crew page lists them: "Genel" first, always (an older service left an
+ * empty "Genel" out while another room was live, and the row disappeared), then the rest in the
+ * service's order, without any the player is deleting (`hidden`, waiting for its "Geri al").
+ */
+export function crewRoomList(
+  crew: string,
+  entry: Pick<VoiceCrewRooms, "rooms"> | undefined,
+  hidden: readonly string[] = [],
+): VoiceCrewRoom[] {
+  const id = generalRoomId(crew);
+  const rooms = entry?.rooms ?? [];
+  const general = rooms.find((room) => room.id === id) ?? {
+    id,
+    name: "Genel",
+    general: true,
+    people: [],
+    max: null,
+    own: false,
+  };
+  return [general, ...rooms.filter((room) => room.id !== id && !hidden.includes(room.id))];
+}
+
+/** The player's place in a crew, as the crew's room rules read it. */
+export type CrewStanding = Pick<SocialTeam, "role" | "moderator">;
+
+const leads = (standing: CrewStanding) => standing.role === "founder";
+const moderates = (standing: CrewStanding) => leads(standing) || standing.moderator;
+
+/** What the player may do to one of the crew's rooms from the crew page (voice.md §4). */
+export interface RoomPowers {
+  /** "Odayı düzenle": name and people at most. */
+  edit: boolean;
+  /** "Yukarı taşı" / "Aşağı taşı", and dragging the room. */
+  order: boolean;
+  /** "Odayı sil". */
+  remove: boolean;
+}
+
+/** Nothing but the room's own action ("Genel", a member's room of someone else, the switch off). */
+export const NO_ROOM_POWERS: RoomPowers = { edit: false, order: false, remove: false };
+
+/**
+ * The crew's leader and moderators change, order and delete any room but "Genel"; whoever opened
+ * a room changes and deletes it; nothing while the service does not let crews arrange rooms.
+ */
+export function roomPowers(
+  standing: CrewStanding,
+  room: Pick<VoiceCrewRoom, "general" | "own">,
+  manage: boolean,
+): RoomPowers {
+  if (!manage || room.general) return NO_ROOM_POWERS;
+  const may = moderates(standing);
+  return { edit: may || room.own, order: may, remove: may || room.own };
+}
+
+/**
+ * Whether the player may move `member` between the crew's rooms (a drag of their face): the
+ * room's "Taşı" rule, leaders anyone, moderators members only; never themselves.
+ */
+export function mayMovePerson(
+  standing: CrewStanding,
+  member: Pick<TeamMember, "role" | "moderator" | "me"> | undefined,
+  manage: boolean,
+): boolean {
+  if (!manage || !member || member.me) return false;
+  if (leads(standing)) return true;
+  return standing.moderator && member.role !== "founder" && !member.moderator;
+}
+
+/** The rooms' order (no "Genel") with `id` one step up (-1) or down (1); null at an end. */
+export function moveRoom(order: readonly string[], id: string, step: -1 | 1): string[] | null {
+  const at = order.indexOf(id);
+  const to = at + step;
+  if (at < 0 || to < 0 || to >= order.length) return null;
+  const next = [...order];
+  next.splice(at, 1);
+  next.splice(to, 0, id);
+  return next;
+}
+
+/** A room's people at most as the edit dialog offers it: none (the crew's maximum), or 2 to it. */
+export function limitChoices(crewMax: number): Array<number | null> {
+  const top = Math.max(2, Math.min(25, crewMax));
+  return [null, ...Array.from({ length: top - 1 }, (_, i) => i + 2)];
+}
+
+/** Whether a room is full for one more (its own limit within the crew's maximum). */
+export function crewRoomFull(
+  room: Pick<VoiceCrewRoom, "people" | "max">,
+  crewMax: number,
+  joining = 1,
+): boolean {
+  return room.people.length + joining > Math.min(crewMax, room.max ?? crewMax);
+}
+
+/** A room name as typed is one the service takes (3–24 characters; the filter is the service's). */
+export function roomNameFits(name: string): boolean {
+  const size = [...name.trim()].length;
+  return size >= 3 && size <= 24;
 }
 
 /** Who came into and who left the room between two states (for the screen reader). */

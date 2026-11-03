@@ -25,6 +25,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
+  ContextMenu,
   cn,
   EntranceGate,
   focusPanel,
@@ -47,6 +48,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { openMenuFromKey } from "@/features/social/menu-key";
 import { enter, glide, leave, pageVariants, rise } from "@/features/social/motion";
 import { usePersonItems } from "@/features/social/person-menu";
 import { SocialFace } from "@/features/social/social-face";
@@ -64,14 +66,19 @@ import {
   toggleDeaf,
   toggleMute,
 } from "./actions";
+import { roomMenuItems } from "./crew-room-menu";
+import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
 import { QualityBars, SpeakingFace } from "./faces";
 import { HeadphonesSlash } from "./icons";
 import {
+  crewRoomList,
   crewRoomName,
   invitables,
+  NO_ROOM_POWERS,
   presenceOf,
   roleWord,
   roomFull,
+  roomPowers,
   roomTitle,
   shownRoomName,
   type VoiceFace,
@@ -474,29 +481,75 @@ function RoomName({
   );
 }
 
+/**
+ * The crew's rooms as tabs, in the crew page's order and names ("Genel" first; VOICE-ROOMS: a right
+ * click or Shift+F10 opens the room's menu: its own action and, by role, its place; changing and
+ * deleting rooms stay on the crew page, where the row takes the form).
+ */
 function CrewRooms({ room }: { room: VoiceRoomView }) {
   const { t } = useTranslation();
   const crewRooms = useVoiceUi((s) => s.state.crews.find((c) => c.crew === room.crew));
+  const team = useSocialUi((s) => s.view.crews.find((c) => c.id === room.crew));
+  const hidden = useCrewRoomsUi((s) => s.hidden);
+  const pending = useCrewRoomsUi((s) => (room.crew ? s.order[room.crew] : undefined));
   if (!room.crew) return null;
   const crew = room.crew;
-  const listed = crewRooms?.rooms ?? [];
+  const [general, ...rest] = crewRoomList(crew, crewRooms, hidden);
+  const ordered = [...(general ? [general] : []), ...withPendingOrder(rest, pending)];
   // The player's own room is always there, even before the crew's list says so.
-  const rooms = listed.some((r) => r.id === room.id)
-    ? listed
-    : [{ id: room.id, name: room.name ?? "", general: room.general, people: [] }, ...listed];
+  const rooms = ordered.some((r) => r.id === room.id)
+    ? ordered
+    : [
+        ...ordered,
+        {
+          id: room.id,
+          name: room.name ?? "",
+          general: room.general,
+          people: [],
+          max: null,
+          own: false,
+        },
+      ];
+  const manage = crewRooms?.manage ?? false;
+  const standing = team ? { role: team.role, moderator: team.moderator } : null;
+  const order = rooms.filter((r) => !r.general).map((r) => r.id);
   return (
     <fieldset className="-mx-1 mt-3 flex min-w-0 gap-1.5 overflow-x-auto border-0 px-1 pb-0.5 [scrollbar-width:none]">
       <legend className="sr-only">{t("voice.room.rooms")}</legend>
       {rooms.map((r) => {
         const here = r.id === room.id;
         const count = here ? room.people.length + 1 : r.people.length;
+        const shown = crewRoomName(r, t);
+        const powers = standing ? roomPowers(standing, r, manage) : NO_ROOM_POWERS;
+        const items = roomMenuItems(
+          {
+            crew,
+            room: r,
+            here,
+            powers: { ...powers, edit: false, remove: false },
+            order,
+            onEdit: () => {},
+            onRemove: () => {},
+          },
+          t,
+        );
         return (
-          <Tooltip key={r.id} content={t("voice.crew.join")} disabled={here}>
+          <ContextMenu
+            key={r.id}
+            items={items}
+            title={shown}
+            wrapTrigger={(trigger) => (
+              <Tooltip content={t("voice.crew.join")} disabled={here}>
+                {trigger}
+              </Tooltip>
+            )}
+          >
             <button
               type="button"
               aria-current={here ? "true" : undefined}
-              aria-label={`${crewRoomName(r, t)}, ${t("voice.crew.people", { count })}`}
+              aria-label={`${shown}, ${t("voice.crew.people", { count })}`}
               onClick={here ? undefined : () => void joinCrewRoom(crew, r.id)}
+              onKeyDown={(event) => void openMenuFromKey(event)}
               className={cn(
                 "chamfer flex h-7 shrink-0 items-center gap-1.5 px-3 text-[12.5px] font-medium whitespace-nowrap outline-none [--cut:6px]",
                 "transition-[background-color,color,transform,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300",
@@ -505,14 +558,14 @@ function CrewRooms({ room }: { room: VoiceRoomView }) {
                   : "cursor-pointer bg-white/6 text-ash-300 hover:bg-white/10 hover:text-bone-50 active:scale-[0.97]",
               )}
             >
-              {crewRoomName(r, t)}
+              {shown}
               {/* A person's glyph before the count: "Oda 2 1" read as "Oda 21". */}
               <span aria-hidden className="flex items-center gap-0.5 text-ash-300">
                 <User size={11} weight="bold" />
                 <span className="font-display text-[12px] font-semibold tabular-nums">{count}</span>
               </span>
             </button>
-          </Tooltip>
+          </ContextMenu>
         );
       })}
       {crewRooms?.canAdd ? (

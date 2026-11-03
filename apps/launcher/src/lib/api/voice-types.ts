@@ -135,15 +135,37 @@ export interface VoiceCrewRoom {
   general: boolean;
   /** Who is in it now (blocked people left out). */
   people: string[];
+  /** VOICE-ROOMS: people at most, when the crew set fewer than the crew room maximum. */
+  max: number | null;
+  /** VOICE-ROOMS: the player opened it (they may change and delete it). */
+  own: boolean;
 }
 
-/** One crew's live rooms. */
+/** One crew's rooms, "Genel" first, then the crew's own order. */
 export interface VoiceCrewRooms {
   crew: string;
   rooms: VoiceCrewRoom[];
   /** "Yeni oda" may show. */
   canAdd: boolean;
+  /** VOICE-ROOMS: crews arrange their rooms (Studio's "Oda yönetimi"): the rooms' menu, drags. */
+  manage: boolean;
+  /** VOICE-ROOMS: people at most in a crew room (a room's own limit is below it). */
+  crewMax: number;
 }
+
+/**
+ * VOICE-ROOMS: a change of a crew's rooms from the crew page. The friends service checks the role
+ * (leader, moderators, a room's opener), the switch and the crew's day.
+ */
+export type VoiceCrewOp =
+  /** "Odayı düzenle": its name (3–24 characters) and people at most (null: the crew's maximum). */
+  | { op: "edit"; crew: string; room: string; name: string; max: number | null }
+  /** The crew's rooms ("Genel" aside) in this order. */
+  | { op: "order"; crew: string; rooms: string[] }
+  /** "Odayı sil": its people go to "Genel"; `empty`: only while nobody is in it. */
+  | { op: "remove"; crew: string; room: string; empty: boolean }
+  /** A leader or moderator moves a crewmate to another room of the crew. */
+  | { op: "move"; crew: string; person: string; room: string };
 
 /** An audio device; `id` is what the settings keep (none there: the system's default). */
 export interface VoiceDevice {
@@ -425,6 +447,8 @@ export interface VoiceApi {
   joinCrew(crew: string, room: string | null): Promise<VoiceAnswer>;
   /** "Yeni oda": opens one and joins it. */
   newCrewRoom(crew: string): Promise<VoiceAnswer>;
+  /** VOICE-ROOMS: a change of the crew's rooms from the crew page. */
+  crewChange(op: VoiceCrewOp): Promise<VoiceAnswer>;
   /** "Ayrıl" (also "İptal" while a call rings: the room ends with the player). */
   leave(): Promise<void>;
   /** "Tekrar dene" after "Bağlanamadı.". */

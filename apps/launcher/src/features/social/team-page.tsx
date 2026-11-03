@@ -118,9 +118,15 @@ import { togetherTime } from "./together";
 import { useCallClock } from "./use-call-clock";
 
 /** A section of the crew page ("Planlar", "Üyeler", …): a step above the roster's group labels
- * ("Projects'te 3"), which share its size otherwise (SMALL12). */
-function SectionTitle({ children }: { children: string }) {
-  return <h3 className="mb-2.5 text-[13px] font-semibold text-ash-300">{children}</h3>;
+ * ("Projects'te 3"), which share its size otherwise (SMALL12). `inset` (VOICE-ROOMS: the crew
+ * view's lists): its words start where the rows' do, 8 px in from the plates' edge, as Discord's
+ * category labels line up with their channels, not with the channels' hover plates. */
+function SectionTitle({ children, inset = false }: { children: string; inset?: boolean }) {
+  return (
+    <h3 className={cn("mb-2.5 text-[13px] font-semibold text-ash-300", inset && "px-2")}>
+      {children}
+    </h3>
+  );
 }
 
 function useCrewFeatures() {
@@ -495,7 +501,7 @@ function CrewChatRules({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
   return (
     <section className="mt-5">
-      <SectionTitle>{t("chatCalm.chatTitle")}</SectionTitle>
+      <SectionTitle inset>{t("chatCalm.chatTitle")}</SectionTitle>
       <div className="rounded-[var(--radius-panel)] bg-obsidian-950/40 px-4 py-3 ring-1 ring-white/8">
         <CrewSlowMode team={team} />
       </div>
@@ -947,7 +953,7 @@ function CrewRoster({ team }: { team: SocialTeam }) {
   return (
     <>
       {/* Its own title: the player's row leads the list, under "Planlar" it read as a plan. */}
-      <SectionTitle>{t("teams.roster.title")}</SectionTitle>
+      <SectionTitle inset>{t("teams.roster.title")}</SectionTitle>
       <ul aria-label={team.name} className="relative flex flex-col">
         <AnimatePresence initial={false} mode="popLayout">
           {items.map((item) => (
@@ -1002,7 +1008,7 @@ function InviteFriends({ team }: { team: SocialTeam }) {
   const full = team.members.length >= team.limit;
   return (
     <section className="mt-5">
-      <SectionTitle>{t("teams.invite.title")}</SectionTitle>
+      <SectionTitle inset>{t("teams.invite.title")}</SectionTitle>
       {friends.filter((f) => !members.has(f.id)).length >= 8 ? (
         <div className="mb-2">
           <SearchInput
@@ -1015,7 +1021,7 @@ function InviteFriends({ team }: { team: SocialTeam }) {
         </div>
       ) : null}
       {candidates.length === 0 ? (
-        <p className="px-1 text-[13px] text-ash-400">{t("teams.invite.none")}</p>
+        <p className="px-2 text-[13px] text-ash-400">{t("teams.invite.none")}</p>
       ) : (
         <ul className="max-h-[280px] overflow-y-auto">
           {candidates.map((friend) => {
@@ -1102,7 +1108,7 @@ function CrewPermissions({ team }: { team: SocialTeam }) {
 
   return (
     <section className="mt-5">
-      <SectionTitle>{t("teams.roles.title")}</SectionTitle>
+      <SectionTitle inset>{t("teams.roles.title")}</SectionTitle>
       <div className="rounded-[var(--radius-panel)] bg-obsidian-950/40 px-3 py-1.5 ring-1 ring-white/8">
         <table className="w-full border-collapse">
           <thead>
@@ -1298,7 +1304,7 @@ function CrewView({ team }: { team: SocialTeam }) {
           </motion.div>
         ) : null}
 
-        <motion.p className="mt-5 px-1 text-[12px] leading-snug text-ash-400" {...glideBox}>
+        <motion.p className="mt-5 px-2 text-[12px] leading-snug text-ash-400" {...glideBox}>
           {t("teams.privacy")}
         </motion.p>
 

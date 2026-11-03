@@ -1041,8 +1041,9 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
     <section className="mt-5">
       {/* "Plan yap" ends where the members' "Katıl" plates do, in the same plate (LANDING-L: the two
           stood out of line): their rows keep 8 px on the right and, after an 8 px gap, the place of
-          their "⋯" (SMALLS-L), so this row keeps both too. */}
-      <div className="mb-2.5 flex min-h-8 items-center gap-2 pr-2">
+          their "⋯" (SMALLS-L), so this row keeps both too. VOICE-ROOMS: the title starts where the
+          rows' words do (8 px in), as every list of the crew page. */}
+      <div className="mb-2.5 flex min-h-8 items-center gap-2 pr-2 pl-2">
         <h3 className="min-w-0 flex-1 text-[13px] font-semibold text-ash-300">
           {t("crewWave2.plans.title")}
         </h3>
@@ -1059,7 +1060,7 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
         <span aria-hidden className="size-8 shrink-0" />
       </div>
       {may && limit ? (
-        <p className="mb-2 flex items-start gap-2.5 px-1 text-[13px] leading-snug text-ash-300">
+        <p className="mb-2 flex items-start gap-2.5 px-2 text-[13px] leading-snug text-ash-300">
           <LockSimple size={16} className="mt-px shrink-0 text-ash-400" aria-hidden />
           {t(newAccount(me) ? "identity.limited.plans" : "crewWave2.plans.limited", {
             when: opensIn(t, limit.until, Date.now()),
@@ -1087,7 +1088,7 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
           {!plans.length && !forming ? (
             <motion.li
               key="none"
-              className="text-[13px] text-ash-400"
+              className="px-2 text-[13px] text-ash-400"
               layout={layout ? "position" : false}
               transition={{ layout: glide }}
               {...rise(reduce, 0, 0.2)}
@@ -1108,7 +1109,7 @@ export function CrewPlans({ team }: { team: SocialTeam }) {
         </AnimatePresence>
       </ul>
       {may && full && !forming ? (
-        <p className="mt-2 px-1 text-[12.5px] text-ash-400">{t("crewWave2.plans.full")}</p>
+        <p className="mt-2 px-2 text-[12.5px] text-ash-400">{t("crewWave2.plans.full")}</p>
       ) : null}
     </section>
   );

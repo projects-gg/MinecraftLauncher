@@ -6,6 +6,7 @@ import { announce } from "@/features/accounts/use-accounts";
 import { voiceApi } from "@/lib/api/voice-api";
 import type { VoiceAnswer, VoiceModAction } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
+import { useCrewRoomsUi } from "./crew-rooms-store";
 import { refusalText } from "./rules";
 import { faceNow, useVoiceUi } from "./store";
 
@@ -182,4 +183,97 @@ export function closeRoom(): Promise<boolean> {
 /** "Ayarları aç" under "Mikrofona izin verilmedi.". */
 export function openMicSettings(): Promise<boolean> {
   return run(() => voiceApi.openMicSettings());
+}
+
+// --- VOICE-ROOMS: the crew page's room changes -------------------------------------------------
+
+/** How long a deleted empty room waits for "Geri al" before the delete goes. */
+export const ROOM_UNDO_MS = 5000;
+
+/** "Odayı düzenle" ("Kaydet"): null when it was saved, else the words for the dialog. */
+export async function editCrewRoom(
+  crew: string,
+  room: string,
+  name: string,
+  max: number | null,
+): Promise<string | null> {
+  try {
+    const answer = await voiceApi.crewChange({ op: "edit", crew, room, name: name.trim(), max });
+    if (answer.refused === null) return null;
+    return refusalText(answer, i18n.t) ?? i18n.t("voice.refused.failed");
+  } catch {
+    return i18n.t("voice.refused.failed");
+  }
+}
+
+/**
+ * The crew's rooms ("Genel" aside) in a new order (a drag, Alt+↑/↓, "Yukarı taşı"): shown at once,
+ * and back as they were when the service refuses.
+ */
+export async function orderCrewRooms(crew: string, rooms: readonly string[]): Promise<boolean> {
+  const ui = useCrewRoomsUi.getState();
+  ui.setOrder(crew, rooms);
+  const done = await ask(() => voiceApi.crewChange({ op: "order", crew, rooms: [...rooms] }));
+  if (done) announce(i18n.t("voice.rooms.ordered"));
+  // Done: the service's list follows (`voice_rooms`); refused: the saved order comes back.
+  if (!done) useCrewRoomsUi.getState().setOrder(crew, null);
+  return done;
+}
+
+/** "Odayı sil" of a room with people in it (after its one sentence): they go to "Genel". */
+export function removeCrewRoom(crew: string, room: string): Promise<boolean> {
+  return ask(() => voiceApi.crewChange({ op: "remove", crew, room, empty: false }));
+}
+
+/**
+ * "Odayı sil" of an empty room: it leaves the list at once and the toast offers "Geri al"; the
+ * delete goes only when the toast ends (taken back, nothing was sent). Someone who came in
+ * meanwhile keeps it: it comes back, with one line.
+ */
+export function removeEmptyCrewRoom(crew: string, room: string, shownName: string): void {
+  const ui = useCrewRoomsUi.getState();
+  if (ui.hidden.includes(room)) return;
+  ui.hide(room);
+  let settled = false;
+  const commit = async () => {
+    if (settled) return;
+    settled = true;
+    try {
+      const answer = await voiceApi.crewChange({ op: "remove", crew, room, empty: true });
+      if (answer.refused === null) return;
+      useCrewRoomsUi.getState().show(room);
+      // "nothing": someone is in it now (the service's `room_not_empty`).
+      toast(
+        answer.refused === "nothing"
+          ? i18n.t("voice.rooms.notRemoved")
+          : (refusalText(answer, i18n.t) ?? i18n.t("voice.refused.failed")),
+      );
+    } catch {
+      useCrewRoomsUi.getState().show(room);
+      failed();
+    }
+  };
+  const text = i18n.t("voice.rooms.removed", { room: shownName });
+  announce(text);
+  toast(text, {
+    duration: ROOM_UNDO_MS,
+    action: {
+      label: i18n.t("voice.rooms.undo"),
+      onClick: () => {
+        if (settled) return;
+        settled = true;
+        useCrewRoomsUi.getState().show(room);
+      },
+    },
+    onAutoClose: () => void commit(),
+    onDismiss: () => void commit(),
+  });
+}
+
+/** A leader or moderator drags a crewmate to another room of the crew. */
+export async function moveCrewmate(crew: string, person: string, room: string): Promise<boolean> {
+  const name = faceNow(person).name;
+  const done = await ask(() => voiceApi.crewChange({ op: "move", crew, person, room }), name);
+  if (done) announce(i18n.t("voice.rooms.moved", { name }));
+  return done;
 }
