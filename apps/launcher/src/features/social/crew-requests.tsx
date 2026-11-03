@@ -66,7 +66,8 @@ function RequestRow({ team, request }: { team: SocialTeam; request: JoinRequest 
 
   return (
     <ContextMenu items={items}>
-      <div className="rounded-[var(--radius-panel)] py-1.5 pr-1 pl-2">
+      {/* With the box's 8 px, the crew page's 14 px line on both sides (CREW-POLISH). */}
+      <div className="rounded-[var(--radius-panel)] px-2 py-1.5">
         <div className="flex items-center gap-3">
           <SocialAvatar source={request} size={32} />
           <span className="min-w-0 flex-1">

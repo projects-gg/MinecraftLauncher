@@ -1,9 +1,10 @@
 // The crew page's "Sesli" (VOICE-L3, VOICE-ROOMS; voice.md §5.1): the crew's rooms, "Genel" always
 // first, who is in each and "Katıl"; the player's own room sits on the quiet plate with "Ayrıl".
-// "Yeni oda" while the crew may open one more. Written as the page's other sections are: no box of
-// its own; the heading and every row's words start on one line with the members' faces (8 px in
-// from the plates' edge), and the buttons end where "Plan yap" and the members' "Katıl" end (8 px
-// in, then the place of a row's "⋯"). A row shows as many faces as its width takes, then "+N".
+// "Yeni oda" while the crew may open one more. Written on the crew page's grid (CREW-POLISH): no
+// box of its own; the heading and every row's words start where the crew card's do (14 px in from
+// the plates' edge), and every button ends where "Ekibi çağır", "Plan yap" and the members' "⋯"
+// end (14 px in). A room's faces follow its name, then "+N" when the row is full, then a limit's
+// "2/4"; the room's "⋯" (only where the player may change it) sits before its button.
 //
 // While the crew arranges its rooms (Studio's "Oda yönetimi", `manage`): a right click on a room
 // (Shift+F10, the menu key) or its "⋯" (shown under the pointer and the focus) opens the room's
@@ -14,15 +15,14 @@
 // they are; the others and the sections below glide; a dragged row lifts (transform and opacity
 // only; fades only with less motion).
 import { DotsThree, Headset, Plus } from "@phosphor-icons/react";
-import { Button, ContextMenu, cn, IconButton, Menu, OverflowTooltip } from "@pl/ui";
+import { Button, ContextMenu, cn, IconButton, Menu, OverflowTooltip, Tooltip } from "@pl/ui";
 import { AnimatePresence, type DragControls, motion, Reorder, useDragControls } from "motion/react";
 import {
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
-  type RefObject,
+  useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -43,8 +43,10 @@ import {
 import { DraggableFace, useDropTarget, useFaceDrag } from "./crew-face-drag";
 import { hasRoomPowers, RoomEditForm, RoomRemoveAsk, roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
+import { DiscordInRoom } from "./discord-offer";
 import {
   type CrewStanding,
+  crewRoomFull,
   crewRoomList,
   crewRoomName,
   facesThatFit,
@@ -58,7 +60,7 @@ import { useFaces, useVoiceUi, voiceOn } from "./store";
 
 /** Whether a press starts on something of its own (a button, a face) rather than the row. */
 const onControl = (target: EventTarget | null) =>
-  target instanceof Element && target.closest("button, [data-voice-face]") !== null;
+  target instanceof Element && target.closest("button, [data-voice-face], [data-no-drag]") !== null;
 
 /** A room row's "⋯", else its first button: where the keyboard comes back to in a row. */
 function focusRow(room: string) {
@@ -69,22 +71,30 @@ function focusRow(room: string) {
   target?.focus();
 }
 
-/** An element's width, again whenever it changes (nothing is watched in between). */
-function useWidth(ref: RefObject<HTMLElement | null>): number | null {
+/** A ref for an element and its width, again whenever it changes (nothing is watched in between);
+ * null while there is none or it is hidden. A callback ref: it follows an element that comes later. */
+function useWidthOf(): [(node: HTMLElement | null) => void, number | null] {
   const [width, setWidth] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    // The box's own width: a lifted row's scale does not change what fits. None while hidden.
-    const read = () => setWidth(element.clientWidth || null);
+  const watch = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((node: HTMLElement | null) => {
+    watch.current?.disconnect();
+    watch.current = null;
+    if (!node) {
+      setWidth(null);
+      return;
+    }
+    // The box's own width: a lifted row's scale does not change what fits.
+    const read = () => setWidth(node.clientWidth || null);
     read();
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(read);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
+    watch.current = new ResizeObserver(read);
+    watch.current.observe(node);
+  }, []);
+  return [ref, width];
 }
+
+/** The flex gap between the last face (or "+N") and a limit's count. */
+const COUNT_GAP = 4;
 
 function Faces({
   team,
@@ -93,6 +103,7 @@ function Faces({
   crewMax,
   standing,
   manage,
+  count,
 }: {
   team: SocialTeam;
   room: VoiceCrewRoom;
@@ -100,14 +111,19 @@ function Faces({
   crewMax: number;
   standing: CrewStanding;
   manage: boolean;
+  /** A limit's "2/4", right after the faces (CREW-POLISH: at the row's end it floated alone). */
+  count?: ReactNode;
 }) {
   const { t } = useTranslation();
   const faces = useFaces(room.people);
-  const box = useRef<HTMLSpanElement>(null);
-  const width = useWidth(box);
-  const shown = faces.slice(0, facesThatFit(faces.length, width));
+  const [box, width] = useWidthOf();
+  const [tail, tailWidth] = useWidthOf();
+  // The faces take the row's free width less the count's, so "2/4" always fits after them.
+  const free =
+    width === null ? null : Math.max(0, width - (count ? (tailWidth ?? 0) + COUNT_GAP : 0));
+  const shown = faces.slice(0, facesThatFit(faces.length, free));
   const more = faces.length - shown.length;
-  // There when empty too: it takes the row's free width, so a limit's "2/4" keeps its place.
+  // There when empty too: it takes the row's free width (the buttons keep their place).
   return (
     <span ref={box} className="flex min-w-0 flex-1 items-center gap-1">
       {shown.map((face) => {
@@ -124,7 +140,9 @@ function Faces({
             crewMax={crewMax}
           />
         ) : (
-          <span key={face.id} role="img" aria-label={face.name} className="shrink-0">
+          // A flex box: a picture and a letter face sit on one line (inline, a picture rode its
+          // baseline 3 px above the letter's tile).
+          <span key={face.id} role="img" aria-label={face.name} className="flex shrink-0">
             <SocialFace
               source={face}
               size={24}
@@ -143,6 +161,11 @@ function Faces({
           )}
         >
           +{more}
+        </span>
+      ) : null}
+      {count ? (
+        <span ref={tail} className="flex shrink-0 pl-1">
+          {count}
         </span>
       ) : null}
     </span>
@@ -261,6 +284,7 @@ function RoomRow({
 
   const more = hasRoomPowers(powers);
   const limited = room.max !== null && room.max < crewMax;
+  const full = !here && crewRoomFull(room, crewMax);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (mode !== "view") return;
@@ -297,7 +321,7 @@ function RoomRow({
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
         className={cn(
-          "group/room relative min-h-[44px] rounded-[var(--radius-panel)] py-1.5 pr-2 pl-2 transition-colors duration-200",
+          "group/room relative min-h-[44px] rounded-[var(--radius-panel)] px-4 py-1.5 transition-colors duration-200",
           // A closing form fades inside the row, not over the next one (a lifted row casts its shadow).
           !lifted && "overflow-hidden",
           here || mode !== "view"
@@ -342,54 +366,43 @@ function RoomRow({
           ) : (
             <motion.div
               key="view"
-              className="relative flex min-h-8 items-center gap-2"
+              className="relative flex min-h-8 items-center gap-2.5"
               {...rise(reduce, 3, 0.2)}
             >
-              {/* A long name takes up to half the row (the faces make way), cut beyond it. */}
+              {/* A long name takes up to half the row (the faces make way), cut beyond it; the
+                  faces follow it (CREW-POLISH: a fixed column left them far from short names). */}
               <OverflowTooltip text={shown} of={nameRef}>
                 <span
                   ref={nameRef}
-                  className="max-w-[50%] min-w-[112px] shrink-0 truncate text-[14px] font-semibold text-bone-50"
+                  className="max-w-[50%] shrink-0 truncate text-[14px] font-semibold text-bone-50"
                 >
                   {shown}
                 </span>
               </OverflowTooltip>
-              <span className="flex min-w-0 flex-1 items-center gap-2">
-                <Faces
-                  team={team}
-                  room={room}
-                  rooms={rooms}
-                  crewMax={crewMax}
-                  standing={standing}
-                  manage={manage}
-                />
-                {limited ? (
-                  <span
-                    className="shrink-0 font-display text-[12px] font-semibold text-ash-400 tabular-nums"
-                    role="img"
-                    aria-label={t("voice.rooms.countLabel", {
-                      count: room.people.length,
-                      max: room.max,
-                    })}
-                  >
-                    {t("voice.rooms.count", { count: room.people.length, max: room.max })}
-                  </span>
-                ) : null}
-              </span>
-              {here ? (
-                <Button size="sm" variant="secondary" onClick={() => void leaveRoom()}>
-                  {t("voice.crew.leave")}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  icon={<Headset size={15} />}
-                  onClick={() => void joinCrewRoom(team.id, room.general ? null : room.id)}
-                >
-                  {t("voice.crew.join")}
-                </Button>
-              )}
+              <Faces
+                team={team}
+                room={room}
+                rooms={rooms}
+                crewMax={crewMax}
+                standing={standing}
+                manage={manage}
+                count={
+                  limited ? (
+                    <span
+                      className="font-display text-[12px] font-semibold text-ash-400 tabular-nums"
+                      role="img"
+                      aria-label={t("voice.rooms.countLabel", {
+                        count: room.people.length,
+                        max: room.max,
+                      })}
+                    >
+                      {t("voice.rooms.count", { count: room.people.length, max: room.max })}
+                    </span>
+                  ) : null
+                }
+              />
+              {/* The room's "⋯" before its button: the button keeps the page's one right edge,
+                  where "Ekibi çağır" and "Plan yap" end, whether or not a row has a menu. */}
               {more ? (
                 <Menu
                   open={open}
@@ -415,9 +428,27 @@ function RoomRow({
                     />
                   }
                 />
+              ) : null}
+              {here ? (
+                <Button size="sm" variant="secondary" onClick={() => void leaveRoom()}>
+                  {t("voice.crew.leave")}
+                </Button>
               ) : (
-                // The place of a row's "⋯", as the members' rows keep it.
-                <span aria-hidden className="size-8 shrink-0" />
+                // A full room says so where it acts (the service would refuse the join).
+                <Tooltip content={t("voice.refused.roomFull")} disabled={!full}>
+                  {/* A press on the closed button does not drag the row. */}
+                  <span className="inline-flex" data-no-drag>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Headset size={15} />}
+                      disabled={full}
+                      onClick={() => void joinCrewRoom(team.id, room.general ? null : room.id)}
+                    >
+                      {t("voice.crew.join")}
+                    </Button>
+                  </span>
+                </Tooltip>
               )}
             </motion.div>
           )}
@@ -532,7 +563,8 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
   const generalRow = <li>{row(general)}</li>;
   return (
     <section className="mt-6" aria-labelledby={`voice-${team.id}`}>
-      <div className="flex min-h-8 items-center gap-2 pr-2 pl-2">
+      {/* A small gap under the heading: "Yeni oda" no longer sits on the first room's plate. */}
+      <div className="mb-1.5 flex min-h-8 items-center gap-2 px-4">
         <h3
           id={`voice-${team.id}`}
           className="min-w-0 flex-1 text-[13px] font-semibold text-ash-300"
@@ -549,7 +581,6 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
             {t("voice.crew.newRoom")}
           </Button>
         ) : null}
-        <span aria-hidden className="size-8 shrink-0" />
       </div>
       {reorders ? (
         <Reorder.Group
@@ -561,7 +592,7 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
             latest.current = next;
             setDragOrder(next);
           }}
-          className="flex flex-col gap-0.5"
+          className="flex flex-col gap-1"
         >
           {generalRow}
           <AnimatePresence initial={false}>
@@ -578,7 +609,8 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
           </AnimatePresence>
         </Reorder.Group>
       ) : (
-        <ul className="flex flex-col gap-0.5">
+        // 4 px between rooms: the player's room plate and a hovered neighbour read as two.
+        <ul className="flex flex-col gap-1">
           {generalRow}
           <AnimatePresence initial={false} mode="popLayout">
             {others.map((room) => (
@@ -596,6 +628,9 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
           </AnimatePresence>
         </ul>
       )}
+      {/* Discord's keys, asked once (VOICE-KEYS), under the rooms while the player is in one of
+          them: as a toast it lay over the members until answered (CREW-POLISH). */}
+      <DiscordInRoom active={here !== null} />
     </section>
   );
 }

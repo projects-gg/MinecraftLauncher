@@ -9,7 +9,10 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-/** The overlay's icons: Phosphor (the launcher's family), outlines in {@code icons/phosphor.txt}. */
+/**
+ * The overlay's icons: Phosphor (the launcher's family), outlines in {@code icons/phosphor.txt}; brand marks (Discord's
+ * own symbol) in {@code icons/brands.txt}, the same 256 box.
+ */
 public enum Icon {
     GEAR("GearSix"),
     BACK("CaretLeft"),
@@ -58,8 +61,12 @@ public enum Icon {
     RADIO_ON("RadioButton"),
     /** "Ece ekibe katıldı" in crew chat (TEAM6 §7), as the launcher's line. */
     WAVE("HandWaving"),
-    /** The Discord account in that question: the symbol alone, uncoloured, as the launcher's link area. */
-    DISCORD("DiscordLogo"),
+    /**
+     * Discord's own symbol (its brand assets, the launcher's {@code discord-symbol-white.png}), uncoloured: the Discord
+     * account in that question and "Discord'dan mesaj at". Phosphor's drawing of it read as a blob at the menu's size
+     * (the owner: "discord logosu orijinali gibi olmamış").
+     */
+    DISCORD("DiscordMark"),
     /** "Arkadaşlarını çağır" (HOST1): the launcher's "Arkadaşlarınla oyna" carries the same sign. */
     USER_PLUS("UserPlus"),
     /** "Dünyadan çıkar" on a guest's row (HOST1). */
@@ -121,7 +128,8 @@ public enum Icon {
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};
     static final float VIEW_BOX = 256f;
-    private static final String RESOURCE = "/assets/projects_overlay/icons/phosphor.txt";
+    private static final String[] RESOURCES = {"/assets/projects_overlay/icons/phosphor.txt",
+        "/assets/projects_overlay/icons/brands.txt"};
 
     public final String phosphorName;
     /** Drawn with Phosphor's slash across it ({@link ShapeBaker#slashed}). */
@@ -158,9 +166,22 @@ public enum Icon {
     /** Every icon's outline, read from the mod's resources. */
     public static Map<Icon, String> loadPaths() throws IOException {
         Map<Icon, String> paths = new EnumMap<>(Icon.class);
-        try (InputStream in = Icon.class.getResourceAsStream(RESOURCE)) {
+        for (String resource : RESOURCES) {
+            read(resource, paths);
+        }
+        for (Icon icon : values()) {
+            if (!paths.containsKey(icon)) {
+                throw new IOException("no outline for " + icon.phosphorName);
+            }
+        }
+        return paths;
+    }
+
+    /** The outlines of one resource file ("name<TAB>weight<TAB>path" lines) for the icons that name them. */
+    private static void read(String resource, Map<Icon, String> paths) throws IOException {
+        try (InputStream in = Icon.class.getResourceAsStream(resource)) {
             if (in == null) {
-                throw new IOException("missing " + RESOURCE);
+                throw new IOException("missing " + resource);
             }
             BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
             for (String line; (line = reader.readLine()) != null; ) {
@@ -178,12 +199,6 @@ public enum Icon {
                 }
             }
         }
-        for (Icon icon : values()) {
-            if (!paths.containsKey(icon)) {
-                throw new IOException("no outline for " + icon.phosphorName);
-            }
-        }
-        return paths;
     }
 
     /** Outlines ready to fill at {@code pixels} output pixels. */
