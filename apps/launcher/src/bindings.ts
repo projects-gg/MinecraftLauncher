@@ -406,6 +406,11 @@ export const commands = {
 	/**  A downloaded backup's voice part (this computer's devices stay). */
 	voiceRestore: (backup: VoiceBackup) => typedError<null, CmdError>(__TAURI_INVOKE("voice_restore", { backup })),
 	/**
+	 *  The page shows the live meters (`on`: its window on screen with a room's pill or panel) or not
+	 *  (VOICE-CALL): `voice-levels` comes meanwhile, and the voice page measures only then.
+	 */
+	voiceLevels: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("voice_levels", { on })),
+	/**
 	 *  The voice page (the hidden `voice` window only): hands over its channel for the launcher's
 	 *  commands; the launcher configures it and, in a room, starts the call.
 	 */
@@ -4709,6 +4714,13 @@ tail: boolean } |
 { t: "setup"; on: boolean } | 
 /**  "Mikrofonu dene": the player hears themselves (nothing goes anywhere), or not. */
 { t: "selfTest"; on: boolean } | 
+/**
+ *  The launcher's live meters (VOICE-CALL; only while its window shows them): report
+ *  [`PageReport::Levels`] at most sixteen times a second, only on change. `me`: the player's
+ *  microphone (the capture listens for it even while nothing is sent); `people`: who makes
+ *  sound in the room. A stay's end turns both off.
+ */
+{ t: "meters"; me: boolean; people: boolean } | 
 /**  The stay ended: close the peer connection, stop the microphone. */
 { t: "leave" };
 
@@ -4744,18 +4756,43 @@ export type EngineSettings = {
 	pushToTalk: boolean,
 	/**  Opus bit rate (kbps, Studio's `voiceKbps`). */
 	kbps: number,
-	/**  Join and leave sounds. */
+	/**  "Sesli sohbet sesleri" (the launcher sends only the sounds it wants anyway). */
 	sounds: boolean,
+	/**
+	 *  "Ses seviyesi" (VOICE-CALL): everyone's voice at once, on top of each person's own;
+	 *  percent, held to the playout path's top (`pl_voice::gain`).
+	 */
+	outputVolume: number,
 };
 
-/**  A short sound the page plays in its own output (the ring itself is the launcher's). */
+/**
+ *  A short sound the page plays in its own output (the ring itself is the launcher's). One family
+ *  of our own synthesized notes (VOICE-CALL): the launcher decides when, so a press on the page, a
+ *  shortcut, the tray and the in-game overlay sound the same; "Sesli sohbet sesleri" turns all
+ *  but the waiting tone off.
+ */
 export type EngineSound = 
 /**  Someone came into the room. */
 "join" | 
 /**  Someone left. */
 "leave" | 
-/**  A shortcut muted or deafened (a short tick). */
-"tick" | 
+/**  The player's microphone turned off (by the player, or a moderator's mute). */
+"micOff" | 
+/**  The player's microphone turned on. */
+"micOn" | 
+/**  The player deafened. */
+"deafOn" | 
+/**  The player's sound is back (undeafened). */
+"deafOff" | 
+/**
+ *  The player is in: the first `hello` with someone there, a call answered, or the connection
+ *  back after "Yeniden bağlanıyor…".
+ */
+"connected" | 
+/**  The stay ended (the player left, or the room ended it); never on a move to another room. */
+"ended" | 
+/**  The connection dropped ("Yeniden bağlanıyor…" shows). */
+"lost" | 
 /**  The caller's waiting tone, until [`EngineSound::Stop`] or someone comes. */
 "waiting" | "stop";
 
@@ -7328,6 +7365,12 @@ export type PageReport =
 { t: "devices"; devices: VoiceDevices } | 
 /**  The microphone's level for the settings page (0–1, at most ten a second, only in setup). */
 { t: "level"; level: number | null; open: boolean } | 
+/**
+ *  The live meters' levels (VOICE-CALL, after [`EngineCommand::Meters`]): the player's
+ *  microphone (`me`, 0–1 on the settings bar's scale; `open`: sent now) and the people who make
+ *  sound now (`ids` with their `levels`, 0–1; the quiet left out).
+ */
+{ t: "levels"; me: number | null; open: boolean; ids: string[]; levels: (number | null)[] } | 
 /**  Answer to [`EngineCommand::Stats`]. */
 { t: "stats"; rttMs: number | null; loss: number | null; jitterMs: number | null } | 
 /**
@@ -11448,6 +11491,23 @@ export type VoiceLevel = {
 	open: boolean,
 };
 
+/**
+ *  The live meters (`voice-levels`, VOICE-CALL): the player's microphone beside its button and
+ *  how loud each person speaks, on the settings bar's 0–1 scale. Only while the page asks
+ *  (`voice_levels`) and the main window is on screen, at most sixteen a second, only on change.
+ */
+export type VoiceLevels = {
+	/**  The player's microphone (0 while it is off). */
+	me: number | null,
+	/**
+	 *  What it picks up goes out now; else it is heard but not sent (under the sensitivity, alone
+	 *  in the room, push-to-talk up).
+	 */
+	open: boolean,
+	/**  People in the room who make sound now (the quiet are left out). */
+	people: VoicePersonLevel[],
+};
+
 /**  The player in the room. */
 export type VoiceMe = {
 	id: string,
@@ -11566,6 +11626,13 @@ export type VoicePerson = {
 	joinedAt: number,
 	/**  What the player may do to them (the person menu shows only these). */
 	can: VoicePowers,
+};
+
+/**  One person's level in [`VoiceLevels`]. */
+export type VoicePersonLevel = {
+	id: string,
+	/**  0 to 1. */
+	level: number | null,
 };
 
 /**  One person's choices. */
@@ -11718,8 +11785,20 @@ export type VoiceSettings = {
 	sensitivity?: number | null,
 	/**  "Mikrofon sesi" while automatic volume is off (percent, 0–200). */
 	micVolume?: number,
-	/**  "Katılma ve ayrılma sesleri". */
+	/**
+	 *  "Sesli sohbet sesleri" (VOICE-CALL; it was "Katılma ve ayrılma sesleri", the same field, so
+	 *  the old choice carries on): someone came or left, the microphone or deafen turned, the
+	 *  player got in, left, or lost the connection. The ring and the caller's waiting tone keep
+	 *  their own rule.
+	 */
 	sounds?: boolean,
+	/**  "Aramadan önce sor" (VOICE-CALL): "Sesli arama başlat" asks "{name} aransın mı?" first. */
+	askBeforeCall?: boolean,
+	/**
+	 *  "Ses seviyesi" under "Ses çıkışı" (VOICE-CALL, SOC-GAP §3.11): everyone's voice at once, on
+	 *  top of each person's own (percent, 0–200).
+	 */
+	outputVolume?: number,
 };
 
 /**  Which shortcut a key is for. */
@@ -11807,6 +11886,17 @@ export type VoiceState = {
 	 *  backup again a while after it moves (`voice_backup`).
 	 */
 	backupRev: number,
+	/**
+	 *  "Aramadan önce sor": "Sesli arama başlat" asks "{name} aransın mı?" first (the page and the
+	 *  in-game overlay alike).
+	 */
+	askBeforeCall: boolean,
+	/**
+	 *  When someone else first shared the room with the player in this stay (Unix seconds, this
+	 *  computer's clock): a call's start, for its timer. None while the player has only been
+	 *  alone in it, and with no room; it holds through reconnects and people coming and going.
+	 */
+	togetherSince: number | null,
 };
 
 /**  When the microphone sends. */
