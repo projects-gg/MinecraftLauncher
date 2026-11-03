@@ -4,20 +4,25 @@
 // push-to-talk, mute or deafen keys, a small card lists them in our words ("Bas-konuş: Fare 4",
 // "Mikrofonu kapat/aç: Ctrl + Shift + M") with "Hayır" and "Kopyala"; one line names a key that
 // cannot be used here. Either answer is final (the launcher remembers it on this computer); nothing
-// shows when Discord has none. In a room the card is a toast (the ring card's place); on the
-// settings page it sits at the top of the section, where the copied keys then show.
+// shows when Discord has none. In a room the card is a toast (the ring card's place), except on the
+// crew page of the player's room, where it sits under the rooms (CREW-POLISH: the toast lay over
+// the members until answered); on the settings page it sits at the top of the section, where the
+// copied keys then show.
 import { Warning } from "@phosphor-icons/react";
 import { Button, cn, toast } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { enter, leave } from "@/features/social/motion";
 import { voiceApi } from "@/lib/api/voice-api";
 import type { VoiceDiscordOffer, VoiceSettings, VoiceShortcut } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
+import { isWindowAway } from "@/lib/window-away";
 import { KeyCaps } from "./key-picker";
 import { keyParts } from "./rules";
+import { useVoiceUi } from "./store";
 
 type Phase = "idle" | "asking" | "open" | "done";
 
@@ -26,7 +31,7 @@ interface DiscordAsk {
   offer: VoiceDiscordOffer | null;
   /** The settings as kept after "Kopyala" (an open settings page takes them). */
   copied: VoiceSettings | null;
-  /** Settings pages showing the card in place (then no toast). */
+  /** Pages showing the card in place (settings, the crew page of the player's room): no toast. */
   inline: number;
 }
 
@@ -38,13 +43,16 @@ export const useDiscordAsk = create<DiscordAsk>(() => ({
 }));
 
 const TOAST_ID = "voice-discord";
-/** The toast goes because the question was answered elsewhere, not because the player closed it. */
-let closing = false;
+/** The card is up as a toast. */
+let toastUp = false;
+/** The toast's next `onDismiss` is ours (answered, or moved in place), not the player's "Hayır".
+ * Sonner calls it after its own render, so a flag set only around `dismiss` would be gone. */
+let quiet = false;
 
 function closeToast() {
-  closing = true;
+  if (!toastUp) return;
+  quiet = true;
   toast.dismiss(TOAST_ID);
-  closing = false;
 }
 
 /**
@@ -70,9 +78,15 @@ export async function askDiscord(where: "room" | "settings") {
       classNames: { content: "min-w-0 flex-1", title: "w-full" },
       // Closed by the player: as "Hayır".
       onDismiss: () => {
-        if (!closing) void answerDiscord(false);
+        toastUp = false;
+        if (quiet) {
+          quiet = false;
+          return;
+        }
+        void answerDiscord(false);
       },
     });
+    toastUp = true;
   }
 }
 
@@ -184,9 +198,17 @@ export function DiscordToast() {
   );
 }
 
-/** The card in place at the top of Settings → Sesli sohbet; the copied keys show in the rows. It
- * fades in and out (opacity); the rows under it glide to their place (the section's layout). */
-export function DiscordInline() {
+/** The card in place at the top of Settings → Sesli sohbet (the copied keys show in the rows), and
+ * under the crew page's rooms. It fades in and out (opacity); what is under it glides to its place
+ * (the page's layout). `className` sets its margins (the settings' by default); `say`: "Kopyala"
+ * says it is done, as the toast does (a page without the key rows). */
+export function DiscordInline({
+  className = "mt-3 mb-1",
+  say = false,
+}: {
+  className?: string;
+  say?: boolean;
+}) {
   const phase = useDiscordAsk((s) => s.phase);
   const offer = useDiscordAsk((s) => s.offer);
   const shown = phase === "open" && offer !== null;
@@ -196,14 +218,46 @@ export function DiscordInline() {
         <motion.section
           key="discord"
           aria-label={i18n.t("voice.discord.title")}
-          className="mt-3 mb-1 rounded-[var(--radius-panel)] bg-white/[0.035] p-4 ring-1 ring-white/8"
+          className={cn(
+            "rounded-[var(--radius-panel)] bg-white/[0.035] p-4 ring-1 ring-white/8",
+            className,
+          )}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: enter(0.22) }}
           exit={{ opacity: 0, transition: leave(0.16) }}
         >
-          <OfferCard offer={offer} onAnswer={(copy) => void answerDiscord(copy)} />
+          <OfferCard
+            offer={offer}
+            onAnswer={(copy) => {
+              void answerDiscord(copy).then((kept) => {
+                if (say && kept && copy) toast(i18n.t("voice.discord.copied"));
+              });
+            }}
+          />
         </motion.section>
       ) : null}
     </AnimatePresence>
   );
+}
+
+/**
+ * On the crew page while the player is in one of its rooms (CREW-POLISH): the card under the rooms,
+ * in the page's flow, where the toast lay over the members. A toast already up moves here; leaving
+ * the page or the room unanswered hands it back to the toast (in a room, with the window in front),
+ * after the render, so another page that shows it in place counts first.
+ */
+export function DiscordInRoom({ active }: { active: boolean }) {
+  useEffect(() => {
+    if (!active) return;
+    useDiscordAsk.setState((s) => ({ inline: s.inline + 1 }));
+    closeToast();
+    return () => {
+      useDiscordAsk.setState((s) => ({ inline: s.inline - 1 }));
+      window.setTimeout(() => {
+        const open = useDiscordAsk.getState().phase === "open";
+        if (open && useVoiceUi.getState().state.room && !isWindowAway()) void askDiscord("room");
+      }, 0);
+    };
+  }, [active]);
+  return active ? <DiscordInline className="mt-3" say /> : null;
 }
