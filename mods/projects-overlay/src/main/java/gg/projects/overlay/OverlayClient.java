@@ -126,6 +126,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private String worldFriend;
     private ServerTarget worldTarget;
     private OverlayScreen.Page lastPage = OverlayScreen.Page.CHATS;
+    /** The chat picker's tab last used in this game (OVL-SOC: it opens there again; "Emoji" first). */
+    private int pickerTab;
     private String lastConversation;
     private String lastToastConversation;
     private long lastToastAt;
@@ -627,6 +629,14 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
 
     public void rememberPage(OverlayScreen.Page page) {
         lastPage = page;
+    }
+
+    public int pickerTab() {
+        return pickerTab;
+    }
+
+    public void rememberPickerTab(int tab) {
+        pickerTab = tab;
     }
 
     public void rememberConversation(String id) {
@@ -1468,6 +1478,16 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     public void voiceInvite(String friendId, String name) {
         voiceNames.put(friendId, name);
         voiceSend(Protocol.voiceInvite(friendId));
+    }
+
+    /** "Katıl" on one of the crew's rooms in crew chat's "Sesli" (OVL-SOC). */
+    public void voiceJoinCrew(String crew, String room) {
+        voiceSend(Protocol.voiceJoin(crew, room));
+    }
+
+    /** "Yeni oda" in crew chat's "Sesli" (OVL-SOC): the player opens one and joins it. */
+    public void voiceNewRoom(String crew) {
+        voiceSend(Protocol.voiceNewRoom(crew));
     }
 
     /** Sends a voice press; when it cannot go at all the panel says so at once. */

@@ -37,6 +37,7 @@ on:
       - "scripts/release/overlay-auto.mjs"
       - "scripts/release/overlay-jars.mjs"
       - "mods/projects-overlay/**"
+      - "apps/launcher/src/features/emoji/data/**"
 
 permissions:
   contents: read

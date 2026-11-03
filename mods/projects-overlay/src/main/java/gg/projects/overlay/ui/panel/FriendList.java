@@ -6,10 +6,12 @@ import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.state.Presence;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.MarkTip;
 import gg.projects.overlay.ui.Marks;
+import gg.projects.overlay.ui.PresenceDot;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -37,8 +39,9 @@ import net.minecraft.util.FormattedCharSequence;
 
 /**
  * Friends, the ones in a game first, then those in the launcher, then the rest quietly: a face with the presence dot
- * (filled jade in a game, a jade ring in the launcher, none offline), the name and where they are, "Katıl" when the
- * player can go to them, and a "…" at the row's end.
+ * (OVL-SOC, {@link PresenceDot}: bright jade in a game, the softer jade in the launcher, gold with its bar on "Rahatsız
+ * etmeyin", none offline), the name and where they are, "Katıl" when the player can go to them, and a "…" at the
+ * row's end.
  *
  * <p>The row opens the friend's conversation (a click, Enter; OVL-UX, the owner: "sol tık mesajı açsın"); where there is
  * none to open (chat off) it opens the friend's menu instead, as the launcher's row opens the friend's card. Their menu
@@ -96,6 +99,8 @@ public final class FriendList extends PanelWidget {
         boolean lone;
         boolean online;
         boolean inGame;
+        /** Their presence dot on the face's corner (OVL-SOC). */
+        Presence presence = Presence.OFFLINE;
         boolean joinable;
         /** Their face: the launcher's player head with their first letter (OVL-UX2). */
         Face face;
@@ -260,6 +265,7 @@ public final class FriendList extends PanelWidget {
             row.nameW = strong.width(name);
             row.online = f.online();
             row.inGame = f.inGame();
+            row.presence = f.presence();
             row.joinable = f.joinable() && canJoin.test(f);
             row.message = state.dm(f.id()) != null;
             String where = Texts.str("friend.where." + whereKey(f.where()));
@@ -289,7 +295,9 @@ public final class FriendList extends PanelWidget {
             if (row.fav) {
                 said += ", " + Texts.str("people.list.star");
             }
-            row.narration = Texts.tr("narration.friend", said, where);
+            // The gold dot's meaning is said too (never colour alone).
+            String heard = PresenceDot.spoken(row.presence);
+            row.narration = Texts.tr("narration.friend", said, heard == null ? where : where + ", " + heard);
             rows.add(row);
             y += ROW_H;
         }
@@ -592,14 +600,8 @@ public final class FriendList extends PanelWidget {
             Draw.pushAlpha(row.online ? 1f : 0.55f);
             row.face.draw(g, FACE, cx, cy);
             Draw.popAlpha();
-            if (row.online) {
-                // Filled jade in a game, a jade ring in the launcher (docs/design.md, Friends).
-                Draw.disc(g, 8, cx + 6, cy + 6, Theme.OBSIDIAN_900);
-                Draw.disc(g, 5, cx + 6, cy + 6, Theme.JADE_400);
-                if (!row.inGame) {
-                    Draw.disc(g, 3, cx + 6, cy + 6, Theme.OBSIDIAN_900);
-                }
-            }
+            // Every state a filled disc (docs/design.md, Friends; the owner, 3 Nov: "çember yerine daire").
+            PresenceDot.onFace(g, row.presence, cx + 6, cy + 6, Theme.OBSIDIAN_900);
             float tx = x0 + FACE + 8;
             // A name without a place line sits in the middle of its row (the face's middle).
             float nameMid = row.lone ? ROW_H / 2f : NAME_MID;

@@ -10,9 +10,10 @@ import net.minecraft.client.gui.font.glyphs.BakedGlyph;
  * to that font (a Projects pack emoji is a private use character of it), so "does the font have the character" is the
  * question "is the pack loaded", asked of the very thing chat will use: in the lobby without the pack it is no, on Survival
  * once the pack loaded it is yes. The answers are kept only while the font stays the same; every resource reload (a pack
- * coming or going, a move between the network's servers) makes a new one.
+ * coming or going, a move between the network's servers) makes a new one. The panel's emoji picker asks it too at GUI
+ * scale 1, where the game's own font draws the panel (OVL-SOC).
  */
-final class GameFont {
+public final class GameFont {
     /** A code point no font has: what the font draws for a character it lacks. */
     private static final int SURELY_MISSING = 0x10FFFF;
 
@@ -24,7 +25,7 @@ final class GameFont {
     }
 
     /** Whether the game's font draws {@code cp} (true when it cannot tell, so a preview never hides for that). */
-    static boolean draws(int cp) {
+    public static boolean draws(int cp) {
         GlyphSource now = Fonts.gameGlyphs();
         if (now == null) {
             return true;

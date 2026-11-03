@@ -11,12 +11,16 @@ on:
     paths:
       - "mods/projects-overlay/**"
       - "crates/pl-overlay/**"
+      # The panel's emoji picker reads the launcher's picker data (build.gradle, OVL-SOC).
+      - "apps/launcher/src/features/emoji/data/**"
       - ".github/workflows/overlay.yml"
   pull_request:
     branches: [v2, main]
     paths:
       - "mods/projects-overlay/**"
       - "crates/pl-overlay/**"
+      # The panel's emoji picker reads the launcher's picker data (build.gradle, OVL-SOC).
+      - "apps/launcher/src/features/emoji/data/**"
       - ".github/workflows/overlay.yml"
   workflow_dispatch:
 
