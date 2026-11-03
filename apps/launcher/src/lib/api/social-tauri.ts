@@ -142,6 +142,8 @@ function friend(v: FriendView): Friend {
     discordId: v.discordId,
     badge: badge(v.badge),
     marks: marksOf(v.marks),
+    // VOICE: whether they may be called ("Sesli arama başlat"); without it no friend ever could be.
+    voice: opt(v.voice),
   };
 }
 
