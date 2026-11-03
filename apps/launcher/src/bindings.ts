@@ -9633,7 +9633,12 @@ export type ReportReason =
 /**  Harassment or bullying. */
 "harassment" | 
 /**  An inappropriate message. */
-"inappropriate" | "spam" | "scam" | "other";
+"inappropriate" | "spam" | "scam" | "other" | 
+/**
+ *  BAN-TYPES: "Sesli sohbet ihlali", only for a player reported with the voice room
+ *  (`target.voice`); without it the report goes as `Other`.
+ */
+"voice";
 
 /**
  *  What the player reports ("Rapor et"): a player, a crew (`code` when it was looked up by code)
@@ -11672,7 +11677,12 @@ export type VoiceLeftReason =
  */
 "unavailable" | 
 /**  The connection did not come back: "Bağlanamadı." with "Tekrar dene" (`voice_retry`). */
-"failed";
+"failed" | 
+/**
+ *  BAN-TYPES: Projects' moderators restricted the player's voice chat (the notice's `until`):
+ *  "Sesli sohbet kullanman … kısıtlandı."
+ */
+"restricted";
 
 /**  The microphone's level for the settings page's bar (`voice-level`, while it is open). */
 export type VoiceLevel = {
@@ -11772,21 +11782,51 @@ export type VoiceMouseButton = "middle" |
  *  A moment worth a toast (`voice-notice`). The launcher shows the Windows notification itself
  *  for rings, missed calls and removals while its window is away; the page shows the rest.
  */
-export type VoiceNotice = 
+export type VoiceNotice = VoiceNotice_Serialize | VoiceNotice_Deserialize;
+
+/**
+ *  A moment worth a toast (`voice-notice`). The launcher shows the Windows notification itself
+ *  for rings, missed calls and removals while its window is away; the page shows the rest.
+ */
+export type VoiceNotice_Deserialize = 
 /**  The stay ended for a reason the player did not choose. */
-{ kind: "left"; reason: VoiceLeftReason; 
+({ kind: "left"; reason: VoiceLeftReason; 
 /**  `noAnswer`: the friend who did not join (for "Tekrar ara"). */
-friend: string | null } | 
+friend: string | null; 
+/**  BAN-TYPES: `restricted`'s end, when the service said (Unix seconds). */
+until: number | null }) & { from?: never; mic?: never; name?: never; room?: never } | 
 /**  A leader or moderator moved the player to another room of the crew. */
-{ kind: "moved"; room: string; name: string } | 
+({ kind: "moved"; room: string; name: string }) & { friend?: never; from?: never; mic?: never; reason?: never; until?: never } | 
 /**  "Bir moderatör seni susturdu." */
-{ kind: "mutedByModerator" } | 
+({ kind: "mutedByModerator" }) & { friend?: never; from?: never; mic?: never; name?: never; reason?: never; room?: never; until?: never } | 
 /**  A missed call ("Cevapsız arama"). */
-{ kind: "missed"; from: string; room: string } | 
+({ kind: "missed"; from: string; room: string }) & { friend?: never; mic?: never; name?: never; reason?: never; until?: never } | 
 /**  The microphone changed (unplugged): "Mikrofon değişti." */
-{ kind: "micChanged" } | 
+({ kind: "micChanged" }) & { friend?: never; from?: never; mic?: never; name?: never; reason?: never; room?: never; until?: never } | 
 /**  The microphone cannot be used: "Mikrofona izin verilmedi." / "Mikrofon bulunamadı.". */
-{ kind: "mic"; mic: VoiceMic };
+({ kind: "mic"; mic: VoiceMic }) & { friend?: never; from?: never; name?: never; reason?: never; room?: never; until?: never };
+
+/**
+ *  A moment worth a toast (`voice-notice`). The launcher shows the Windows notification itself
+ *  for rings, missed calls and removals while its window is away; the page shows the rest.
+ */
+export type VoiceNotice_Serialize = 
+/**  The stay ended for a reason the player did not choose. */
+({ kind: "left"; reason: VoiceLeftReason; 
+/**  `noAnswer`: the friend who did not join (for "Tekrar ara"). */
+friend: string | null; 
+/**  BAN-TYPES: `restricted`'s end, when the service said (Unix seconds). */
+until?: number | null }) & { from?: never; mic?: never; name?: never; room?: never } | 
+/**  A leader or moderator moved the player to another room of the crew. */
+({ kind: "moved"; room: string; name: string }) & { friend?: never; from?: never; mic?: never; reason?: never; until?: never } | 
+/**  "Bir moderatör seni susturdu." */
+({ kind: "mutedByModerator" }) & { friend?: never; from?: never; mic?: never; name?: never; reason?: never; room?: never; until?: never } | 
+/**  A missed call ("Cevapsız arama"). */
+({ kind: "missed"; from: string; room: string }) & { friend?: never; mic?: never; name?: never; reason?: never; until?: never } | 
+/**  The microphone changed (unplugged): "Mikrofon değişti." */
+({ kind: "micChanged" }) & { friend?: never; from?: never; mic?: never; name?: never; reason?: never; room?: never; until?: never } | 
+/**  The microphone cannot be used: "Mikrofona izin verilmedi." / "Mikrofon bulunamadı.". */
+({ kind: "mic"; mic: VoiceMic }) & { friend?: never; from?: never; name?: never; reason?: never; room?: never; until?: never };
 
 /**  The player's invite that still rings. */
 export type VoiceOutRing = {
