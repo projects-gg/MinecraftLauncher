@@ -329,7 +329,8 @@ pub struct VoiceMissed {
     pub joinable: bool,
 }
 
-/// One crew's live rooms.
+/// One crew's rooms, in the order to show them: "Genel" first (always, VOICE-ROOMS), then the
+/// crew's own order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct VoiceCrewRooms {
@@ -337,16 +338,70 @@ pub struct VoiceCrewRooms {
     pub rooms: Vec<VoiceCrewRoom>,
     /// "Yeni oda" may show (fewer rooms than the crew may have).
     pub can_add: bool,
+    /// VOICE-ROOMS: the friends service lets crews arrange their rooms (Studio's "Oda yönetimi"):
+    /// the crew page offers the rooms' menu (change, order, delete) and moving people by role.
+    pub manage: bool,
+    /// VOICE-ROOMS: people at most in a crew room (Studio's): a room's own limit is below it.
+    pub crew_max: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct VoiceCrewRoom {
     pub id: String,
+    /// The service's name ("Genel", "Oda 2", or the crew's own): shown through
+    /// [`VoiceCrewRoom::shown_name`].
     pub name: String,
     pub general: bool,
     /// Who is in it now (blocked people left out).
     pub people: Vec<String>,
+    /// VOICE-ROOMS: people at most, when the crew set fewer than the crew room maximum.
+    pub max: Option<u16>,
+    /// VOICE-ROOMS: the player opened it (they may change and delete it).
+    pub own: bool,
+}
+
+impl VoiceCrewRoom {
+    /// The name as the launcher's surfaces say it (the page's `crewRoomName`, the tray and the
+    /// overlay): "Genel" and the service's "Oda 2" in the player's language, a name the crew gave
+    /// as given.
+    pub fn shown_name(&self, english: bool) -> String {
+        if self.general {
+            return if english { "General" } else { "Genel" }.to_owned();
+        }
+        shown_room_name(&self.name, english)
+    }
+}
+
+/// VOICE-ROOMS: a change of a crew's rooms from the crew page (`voice_crew_change`). The friends
+/// service checks the role (leader, moderators, a room's opener), the switch and the day's count;
+/// the launcher only says what it was asked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "op", rename_all = "camelCase")]
+pub enum VoiceCrewOp {
+    /// "Odayı düzenle": its name (3–24 characters) and people at most (none: the crew room
+    /// maximum). Never "Genel".
+    Edit {
+        crew: String,
+        room: String,
+        name: String,
+        max: Option<u16>,
+    },
+    /// The crew's rooms ("Genel" aside) in this order (a drag, "Yukarı taşı", "Aşağı taşı").
+    Order { crew: String, rooms: Vec<String> },
+    /// "Odayı sil": its people go to "Genel". `empty`: only while nobody is in it (the delete that
+    /// waited for its "Geri al").
+    Remove {
+        crew: String,
+        room: String,
+        empty: bool,
+    },
+    /// A leader or moderator drags a crewmate's face to another room of the crew.
+    Move {
+        crew: String,
+        person: String,
+        room: String,
+    },
 }
 
 /// The microphone as the voice engine saw it last.
@@ -531,6 +586,9 @@ impl VoiceAnswer {
             "not_found" => VoiceRefusal::NotFound,
             "invalid_name" => VoiceRefusal::InvalidName,
             "name_rejected" => VoiceRefusal::NameRejected,
+            // VOICE-ROOMS: a delete that waited for its "Geri al" found someone in the room: it was
+            // not deleted, nothing was done (the page says so).
+            "room_not_empty" => VoiceRefusal::Nothing,
             _ => VoiceRefusal::Failed,
         };
         Self {
@@ -749,5 +807,42 @@ mod tests {
             Some("Gece Ekibi")
         );
         assert_eq!(room(None, false).shown_name(true), None);
+    }
+
+    /// VOICE-ROOMS: a crew's room is named as the room the player is in, and the crew page's
+    /// changes read as the page writes them.
+    #[test]
+    fn crew_rooms_are_named_and_changed_as_the_page_says() {
+        let crew_room = |name: &str, general: bool| VoiceCrewRoom {
+            id: "c0123456789abcdef".into(),
+            name: name.into(),
+            general,
+            people: Vec::new(),
+            max: None,
+            own: false,
+        };
+        assert_eq!(crew_room("Genel", true).shown_name(true), "General");
+        assert_eq!(crew_room("Genel", true).shown_name(false), "Genel");
+        assert_eq!(crew_room("Oda 3", false).shown_name(true), "Room 3");
+        assert_eq!(crew_room("Taş Ocağı", false).shown_name(true), "Taş Ocağı");
+        let edit: VoiceCrewOp = serde_json::from_value(json!({
+            "op": "edit", "crew": "0123456789abcdef", "room": "c0123456789abcdef",
+            "name": "Antrenman", "max": null
+        }))
+        .unwrap();
+        assert_eq!(
+            edit,
+            VoiceCrewOp::Edit {
+                crew: "0123456789abcdef".into(),
+                room: "c0123456789abcdef".into(),
+                name: "Antrenman".into(),
+                max: None
+            }
+        );
+        let order: VoiceCrewOp = serde_json::from_value(
+            json!({"op": "order", "crew": "0123456789abcdef", "rooms": ["c0123456789abcdef"]}),
+        )
+        .unwrap();
+        assert!(matches!(order, VoiceCrewOp::Order { rooms, .. } if rooms.len() == 1));
     }
 }

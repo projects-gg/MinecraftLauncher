@@ -172,8 +172,8 @@ pub use view::{
     TeamRequestView, TeamView,
 };
 pub use voice::{
-    PresenceVoice, VOICE_CAP, VoiceAck, VoiceCrewRoom, VoiceCrewRooms, VoiceCrewTicket, VoiceError,
-    VoiceEvent, VoiceFrame, VoiceRing, VoiceSink, VoiceStatus,
+    PresenceVoice, VOICE_CAP, VoiceAck, VoiceCrewChange, VoiceCrewRoom, VoiceCrewRooms,
+    VoiceCrewTicket, VoiceError, VoiceEvent, VoiceFrame, VoiceRing, VoiceSink, VoiceStatus,
 };
 pub use world::{
     E4mcHint, Hidden, TurnIce, WORLDS_CAP, WorldAck, WorldAnswer, WorldError, WorldEvent,

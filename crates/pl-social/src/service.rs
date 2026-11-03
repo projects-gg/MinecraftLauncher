@@ -3211,6 +3211,16 @@ impl SocialService {
         }
     }
 
+    /// VOICE-ROOMS: a change of the crew's rooms from the crew page.
+    pub async fn voice_crew_change(&self, change: &crate::voice::VoiceCrewChange) -> Result<()> {
+        let session = self
+            .lock()
+            .session
+            .clone()
+            .ok_or(SocialError::Unauthorized)?;
+        session.voice_crew_change(change).await
+    }
+
     /// Where the room socket goes and as whom (VOICE): the service's address, the session's
     /// token, the user agent; None while signed out.
     pub fn voice_socket(&self) -> Option<(Url, String, String)> {

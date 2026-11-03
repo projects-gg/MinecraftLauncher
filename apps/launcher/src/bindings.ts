@@ -336,6 +336,11 @@ export const commands = {
 	voiceJoinCrew: (crew: string, room: string | null) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_join_crew", { crew, room })),
 	/**  "Yeni oda" in a crew: the player joins it at once. */
 	voiceNewCrewRoom: (crew: string) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_new_crew_room", { crew })),
+	/**
+	 *  VOICE-ROOMS: a change of a crew's rooms from the crew page ("Odayı düzenle", the order,
+	 *  "Odayı sil", a crewmate dragged to another room); the crew's new list comes as `voice-state`.
+	 */
+	voiceCrewChange: (op: VoiceCrewOp) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("voice_crew_change", { op })),
 	/**  "Ayrıl"; also "İptal" on the "Aranıyor…" pill (the call ends with it). */
 	voiceLeave: () => typedError<null, CmdError>(__TAURI_INVOKE("voice_leave")),
 	/**  "Tekrar dene" after "Bağlanamadı.". */
@@ -11322,20 +11327,59 @@ export type VoiceCalling = {
 	until: number,
 };
 
+/**
+ *  VOICE-ROOMS: a change of a crew's rooms from the crew page (`voice_crew_change`). The friends
+ *  service checks the role (leader, moderators, a room's opener), the switch and the day's count;
+ *  the launcher only says what it was asked.
+ */
+export type VoiceCrewOp = 
+/**
+ *  "Odayı düzenle": its name (3–24 characters) and people at most (none: the crew room
+ *  maximum). Never "Genel".
+ */
+{ op: "edit"; crew: string; room: string; name: string; max: number | null } | 
+/**  The crew's rooms ("Genel" aside) in this order (a drag, "Yukarı taşı", "Aşağı taşı"). */
+{ op: "order"; crew: string; rooms: string[] } | 
+/**
+ *  "Odayı sil": its people go to "Genel". `empty`: only while nobody is in it (the delete that
+ *  waited for its "Geri al").
+ */
+{ op: "remove"; crew: string; room: string; empty: boolean } | 
+/**  A leader or moderator drags a crewmate's face to another room of the crew. */
+{ op: "move"; crew: string; person: string; room: string };
+
 export type VoiceCrewRoom = {
 	id: string,
+	/**
+	 *  The service's name ("Genel", "Oda 2", or the crew's own): shown through
+	 *  [`VoiceCrewRoom::shown_name`].
+	 */
 	name: string,
 	general: boolean,
 	/**  Who is in it now (blocked people left out). */
 	people: string[],
+	/**  VOICE-ROOMS: people at most, when the crew set fewer than the crew room maximum. */
+	max: number | null,
+	/**  VOICE-ROOMS: the player opened it (they may change and delete it). */
+	own: boolean,
 };
 
-/**  One crew's live rooms. */
+/**
+ *  One crew's rooms, in the order to show them: "Genel" first (always, VOICE-ROOMS), then the
+ *  crew's own order.
+ */
 export type VoiceCrewRooms = {
 	crew: string,
 	rooms: VoiceCrewRoom[],
 	/**  "Yeni oda" may show (fewer rooms than the crew may have). */
 	canAdd: boolean,
+	/**
+	 *  VOICE-ROOMS: the friends service lets crews arrange their rooms (Studio's "Oda yönetimi"):
+	 *  the crew page offers the rooms' menu (change, order, delete) and moving people by role.
+	 */
+	manage: boolean,
+	/**  VOICE-ROOMS: people at most in a crew room (Studio's): a room's own limit is below it. */
+	crewMax: number,
 };
 
 /**  An audio device; `id` is what the settings keep (none there: the system's default). */

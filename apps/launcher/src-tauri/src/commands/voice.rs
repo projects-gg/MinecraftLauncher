@@ -10,7 +10,9 @@
 use pl_voice::discord::VoiceDiscordOffer;
 use pl_voice::engine::{EngineCommand, PageReport};
 use pl_voice::settings::{VoiceBackup, VoiceSettings};
-use pl_voice::view::{VoiceAnswer, VoiceKeyAsk, VoiceKeyCheck, VoiceModAction, VoiceState};
+use pl_voice::view::{
+    VoiceAnswer, VoiceCrewOp, VoiceKeyAsk, VoiceKeyCheck, VoiceModAction, VoiceState,
+};
 use tauri::State;
 use tauri::ipc::Channel;
 
@@ -73,6 +75,17 @@ pub async fn voice_new_crew_room(
     crew: String,
 ) -> CmdResult<VoiceAnswer> {
     Ok(state.voice.join_crew(crew, None, true).await)
+}
+
+/// VOICE-ROOMS: a change of a crew's rooms from the crew page ("Odayı düzenle", the order,
+/// "Odayı sil", a crewmate dragged to another room); the crew's new list comes as `voice-state`.
+#[tauri::command]
+#[specta::specta]
+pub async fn voice_crew_change(
+    state: State<'_, AppState>,
+    op: VoiceCrewOp,
+) -> CmdResult<VoiceAnswer> {
+    Ok(state.voice.crew_change(op).await)
 }
 
 /// "Ayrıl"; also "İptal" on the "Aranıyor…" pill (the call ends with it).

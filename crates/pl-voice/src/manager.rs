@@ -29,8 +29,8 @@ use crate::machine::{
 use crate::settings::{Store, VoiceBackup, VoiceKey, VoiceSettings};
 use crate::socket::{self, SocketEvent, SocketTarget};
 use crate::view::{
-    VoiceAnswer, VoiceKeyAsk, VoiceKeyCheck, VoiceLevel, VoiceModAction, VoiceNotice, VoiceRefusal,
-    VoiceShortcut, VoiceSpeaking, VoiceState,
+    VoiceAnswer, VoiceCrewOp, VoiceKeyAsk, VoiceKeyCheck, VoiceLevel, VoiceModAction, VoiceNotice,
+    VoiceRefusal, VoiceShortcut, VoiceSpeaking, VoiceState,
 };
 use crate::wire::{self, Ticket, ToRoom};
 
@@ -62,6 +62,9 @@ pub trait Service: Send + Sync + 'static {
     ) -> BoxFuture<'_, Result<CrewTicket, VoiceAnswer>>;
     /// Where room sockets go and with which session (none while signed out).
     fn socket_target(&self) -> Option<SocketTarget>;
+    /// VOICE-ROOMS: a change of a crew's rooms from the crew page (the service checks the role,
+    /// the switch and the crew's day).
+    fn crew_change(&self, op: VoiceCrewOp) -> BoxFuture<'_, Result<(), VoiceAnswer>>;
 }
 
 /// The launcher's own parts.
@@ -461,6 +464,22 @@ impl Voice {
         }
     }
 
+    /// VOICE-ROOMS: the crew page's room change ("Odayı düzenle", the rooms' order, "Odayı sil", a
+    /// drag that moves a crewmate). What cannot be right is refused here; the role, the switch and
+    /// the crew's day are the service's. The crew's new list comes as its `voice_rooms`.
+    pub async fn crew_change(&self, op: VoiceCrewOp) -> VoiceAnswer {
+        if let Err(answer) = lock(&self.inner.machine).may_manage() {
+            return answer;
+        }
+        if let Some(refusal) = crew_op_refusal(&op) {
+            return VoiceAnswer::refused(refusal);
+        }
+        match self.inner.service.crew_change(op).await {
+            Ok(()) => VoiceAnswer::OK,
+            Err(answer) => answer,
+        }
+    }
+
     /// "Tekrar dene" after "Bağlanamadı.".
     pub async fn retry(&self) -> VoiceAnswer {
         let retry = lock(&self.inner.machine).retry_ticket();
@@ -634,5 +653,108 @@ impl Voice {
     /// A shortcut's key changed (Raw Input's thread).
     pub fn key(&self, change: KeyChange) {
         self.effects(|machine, _, _| machine.key(change));
+    }
+}
+
+/// VOICE-ROOMS: a crew page change that cannot be right as asked (ids that are not ids, "Genel"
+/// where it never changes, a name outside 3–24 characters, a limit outside 2–25), or none.
+fn crew_op_refusal(op: &VoiceCrewOp) -> Option<VoiceRefusal> {
+    let crew_ok = |crew: &str| crew.len() == 16 && crew.bytes().all(|b| b.is_ascii_hexdigit());
+    let kept = |room: &str| wire::is_room_id(room) && room.starts_with('c');
+    let crew_room = |room: &str| wire::is_room_id(room) && !room.starts_with('f');
+    match op {
+        VoiceCrewOp::Edit {
+            crew,
+            room,
+            name,
+            max,
+        } => {
+            if !crew_ok(crew) || !kept(room) {
+                return Some(VoiceRefusal::NotAllowed);
+            }
+            if !(3..=24).contains(&name.trim().chars().count()) {
+                return Some(VoiceRefusal::InvalidName);
+            }
+            max.is_some_and(|max| !(2..=25).contains(&max))
+                .then_some(VoiceRefusal::NotAllowed)
+        }
+        VoiceCrewOp::Order { crew, rooms } => {
+            (!crew_ok(crew) || rooms.len() > 10 || !rooms.iter().all(|room| kept(room)))
+                .then_some(VoiceRefusal::NotAllowed)
+        }
+        VoiceCrewOp::Remove { crew, room, .. } => {
+            (!crew_ok(crew) || !kept(room)).then_some(VoiceRefusal::NotAllowed)
+        }
+        VoiceCrewOp::Move { crew, person, room } => (!crew_ok(crew)
+            || person.is_empty()
+            || !person.bytes().all(|b| b.is_ascii_digit())
+            || !crew_room(room))
+        .then_some(VoiceRefusal::NotAllowed),
+    }
+}
+
+#[cfg(test)]
+mod crew_op_tests {
+    use super::*;
+
+    const CREW: &str = "0123456789abcdef";
+    const ROOM: &str = "c0123456789abcdef";
+
+    #[test]
+    fn refuses_crew_page_changes_that_cannot_be_right() {
+        let edit = |room: &str, name: &str, max: Option<u16>| VoiceCrewOp::Edit {
+            crew: CREW.into(),
+            room: room.into(),
+            name: name.into(),
+            max,
+        };
+        assert_eq!(crew_op_refusal(&edit(ROOM, "Antrenman", Some(4))), None);
+        assert_eq!(crew_op_refusal(&edit(ROOM, "  Taş Ocağı ", None)), None);
+        assert_eq!(
+            crew_op_refusal(&edit(ROOM, "ab", None)),
+            Some(VoiceRefusal::InvalidName)
+        );
+        assert_eq!(
+            crew_op_refusal(&edit(ROOM, "Bir oda adı yirmi dört harften uzun", None)),
+            Some(VoiceRefusal::InvalidName)
+        );
+        assert_eq!(
+            crew_op_refusal(&edit(ROOM, "Antrenman", Some(1))),
+            Some(VoiceRefusal::NotAllowed)
+        );
+        // "Genel" never changes; friend rooms are no crew's.
+        assert_eq!(
+            crew_op_refusal(&edit("g0123456789abcdef", "Lobi", None)),
+            Some(VoiceRefusal::NotAllowed)
+        );
+        assert_eq!(
+            crew_op_refusal(&VoiceCrewOp::Remove {
+                crew: CREW.into(),
+                room: "f0123456789abcdef".into(),
+                empty: false
+            }),
+            Some(VoiceRefusal::NotAllowed)
+        );
+        assert_eq!(
+            crew_op_refusal(&VoiceCrewOp::Order {
+                crew: CREW.into(),
+                rooms: vec![ROOM.into()]
+            }),
+            None
+        );
+        // A crewmate can be moved to "Genel" too.
+        let move_to = |person: &str, room: &str| VoiceCrewOp::Move {
+            crew: CREW.into(),
+            person: person.into(),
+            room: room.into(),
+        };
+        assert_eq!(
+            crew_op_refusal(&move_to("123456789012345678", "g0123456789abcdef")),
+            None
+        );
+        assert_eq!(
+            crew_op_refusal(&move_to("someone", ROOM)),
+            Some(VoiceRefusal::NotAllowed)
+        );
     }
 }

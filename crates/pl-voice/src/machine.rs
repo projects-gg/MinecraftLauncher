@@ -55,6 +55,8 @@ pub struct ServiceVoice {
     pub ring_seconds: u32,
     pub idle_minutes: u32,
     pub kbps: u16,
+    /// VOICE-ROOMS: crews arrange their rooms (Studio's "Oda yönetimi").
+    pub manage: bool,
 }
 
 impl Default for ServiceVoice {
@@ -67,6 +69,7 @@ impl Default for ServiceVoice {
             ring_seconds: DEFAULT_RING_SECONDS,
             idle_minutes: crate::idle::DEFAULT_MINUTES,
             kbps: DEFAULT_KBPS,
+            manage: false,
         }
     }
 }
@@ -94,11 +97,15 @@ pub enum RingEnd {
 }
 
 /// One crew room as the hub lists it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CrewRoom {
     pub id: String,
     pub name: String,
     pub ids: Vec<String>,
+    /// VOICE-ROOMS: people at most, when the crew set fewer than the crew room maximum.
+    pub max: Option<u16>,
+    /// VOICE-ROOMS: the player opened it.
+    pub own: bool,
 }
 
 /// How a stay begins.
@@ -557,6 +564,17 @@ impl Machine {
     /// May the player call `friend` now (the caller asks the hub then)?
     pub fn may_call(&self) -> Result<(), VoiceAnswer> {
         if self.usable() {
+            Ok(())
+        } else {
+            Err(VoiceAnswer::refused(VoiceRefusal::Off))
+        }
+    }
+
+    /// VOICE-ROOMS: may the crew page change rooms now (voice chat usable, and the service lets
+    /// crews arrange their rooms)? The role is the service's to check.
+    pub fn may_manage(&self) -> Result<(), VoiceAnswer> {
+        self.may_call()?;
+        if self.service().manage {
             Ok(())
         } else {
             Err(VoiceAnswer::refused(VoiceRefusal::Off))
@@ -1996,19 +2014,7 @@ impl Machine {
             crews: self
                 .crews
                 .iter()
-                .map(|(crew, rooms)| VoiceCrewRooms {
-                    crew: crew.clone(),
-                    rooms: rooms
-                        .iter()
-                        .map(|room| VoiceCrewRoom {
-                            id: room.id.clone(),
-                            name: room.name.clone(),
-                            general: room.id.starts_with('g'),
-                            people: room.ids.clone(),
-                        })
-                        .collect(),
-                    can_add: rooms.len() < usize::from(service.crew_rooms),
-                })
+                .map(|(crew, rooms)| crew_rooms_view(crew, rooms, service))
                 .collect(),
             crew_rooms_max: service.crew_rooms,
             mic: self.page.mic.unwrap_or(VoiceMic::Unknown),
@@ -2085,11 +2091,14 @@ impl Machine {
             });
         };
         let my_role = role_view(room.my_role);
-        let other_rooms = room
-            .crew
-            .as_ref()
-            .and_then(|crew| self.crews.get(crew))
-            .is_some_and(|rooms| rooms.iter().any(|r| r.id != room.id));
+        // VOICE-ROOMS: "Genel" is always one of the crew's rooms, listed or not.
+        let other_rooms = room.crew.as_ref().is_some_and(|crew| {
+            !room.is_general()
+                || self
+                    .crews
+                    .get(crew)
+                    .is_some_and(|rooms| rooms.iter().any(|r| r.id != room.id))
+        });
         let playout = self.playout();
         let people = room
             .people_in_order()
@@ -2145,7 +2154,16 @@ impl Machine {
             can_rename: !general
                 && match room.kind {
                     RoomKind::Friend => room.my_role == Role::Leader,
-                    RoomKind::Crew => room.my_role != Role::Member || stay.opened_by_me,
+                    // VOICE-ROOMS: a kept room's opener, also in a later run (the crew's list says).
+                    RoomKind::Crew => {
+                        room.my_role != Role::Member
+                            || stay.opened_by_me
+                            || room
+                                .crew
+                                .as_ref()
+                                .and_then(|crew| self.crews.get(crew))
+                                .is_some_and(|rooms| rooms.iter().any(|r| r.id == room.id && r.own))
+                    }
                 },
             can_close: !general && room.my_role == Role::Leader,
         })
@@ -2157,6 +2175,40 @@ fn role_view(role: Role) -> VoiceRole {
         Role::Leader => VoiceRole::Leader,
         Role::Moderator => VoiceRole::Moderator,
         Role::Member => VoiceRole::Member,
+    }
+}
+
+/// VOICE-ROOMS: one crew's rooms as the surfaces show them, "Genel" always first: a service from
+/// before VOICE-ROOMS left an empty "Genel" out while another room was live (it disappeared from
+/// the crew page), and lists it wherever it came. The rest keep the service's order.
+fn crew_rooms_view(crew: &str, rooms: &[CrewRoom], service: ServiceVoice) -> VoiceCrewRooms {
+    let general_id = format!("g{crew}");
+    let general = rooms
+        .iter()
+        .find(|room| room.id == general_id)
+        .cloned()
+        .unwrap_or_else(|| CrewRoom {
+            id: general_id.clone(),
+            name: "Genel".to_owned(),
+            ..CrewRoom::default()
+        });
+    let view = |room: &CrewRoom| VoiceCrewRoom {
+        id: room.id.clone(),
+        name: room.name.clone(),
+        general: room.id.starts_with('g'),
+        people: room.ids.clone(),
+        max: room.max,
+        own: room.own,
+    };
+    let rooms: Vec<VoiceCrewRoom> = std::iter::once(view(&general))
+        .chain(rooms.iter().filter(|room| room.id != general_id).map(view))
+        .collect();
+    VoiceCrewRooms {
+        crew: crew.to_owned(),
+        can_add: rooms.len() < usize::from(service.crew_rooms),
+        rooms,
+        manage: service.manage,
+        crew_max: service.crew_max,
     }
 }
 

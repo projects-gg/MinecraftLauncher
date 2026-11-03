@@ -595,11 +595,13 @@ fn a_move_joins_the_other_room() {
                     id: GENERAL.into(),
                     name: "Genel".into(),
                     ids: vec!["me".into()],
+                    ..CrewRoom::default()
                 },
                 CrewRoom {
                     id: "c00000000000000aa".into(),
                     name: "Oda 2".into(),
                     ids: Vec::new(),
+                    ..CrewRoom::default()
                 },
             ],
         )],
@@ -833,6 +835,7 @@ fn powers_follow_the_roles() {
             name: None,
             leader: Some("me".into()),
             mods: vec!["mod".into()],
+            max: None,
         },
         5,
         UNIX,
@@ -859,6 +862,7 @@ fn powers_follow_the_roles() {
             name: None,
             leader: Some("mod".into()),
             mods: vec!["me".into()],
+            max: None,
         },
         6,
         UNIX,
@@ -1162,6 +1166,7 @@ fn crew_rooms_show_with_their_limit() {
             id: GENERAL.into(),
             name: "Genel".into(),
             ids: vec!["a".into()],
+            ..CrewRoom::default()
         }],
     );
     let view = machine.view(0, UNIX);
@@ -1170,6 +1175,46 @@ fn crew_rooms_show_with_their_limit() {
     assert!(view.crews[0].can_add);
     machine.crew_rooms(CREW, Vec::new());
     assert!(machine.view(0, UNIX).crews.is_empty());
+}
+
+/// VOICE-ROOMS: "Genel" first even when an older service left it out, the crew's order after it,
+/// each room's own limit and opener, the switch, and the room count with "Genel" in it.
+#[test]
+fn crew_rooms_list_genel_first_in_the_crews_order() {
+    let mut machine = ready();
+    machine.hub_settings(ServiceVoice {
+        manage: true,
+        ..on()
+    });
+    machine.crew_rooms(
+        CREW,
+        vec![
+            CrewRoom {
+                id: "c00000000000000bb".into(),
+                name: "Taş Ocağı".into(),
+                ids: vec!["a".into()],
+                max: Some(4),
+                own: true,
+            },
+            CrewRoom {
+                id: "c00000000000000aa".into(),
+                name: "Oda 2".into(),
+                ..CrewRoom::default()
+            },
+        ],
+    );
+    let crews = machine.view(0, UNIX).crews;
+    let rooms = &crews[0].rooms;
+    assert_eq!(
+        rooms.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+        [GENERAL, "c00000000000000bb", "c00000000000000aa"]
+    );
+    assert!(rooms[0].general && rooms[0].people.is_empty());
+    assert_eq!((rooms[1].max, rooms[1].own), (Some(4), true));
+    assert_eq!(rooms[2].shown_name(true), "Room 2");
+    assert!(crews[0].manage);
+    // Three rooms with "Genel": the crew has all it may (3 by default).
+    assert!(!crews[0].can_add);
 }
 
 #[test]
@@ -1460,6 +1505,7 @@ fn crewmates_in_a_crew_room_are_in_voice() {
             id: GENERAL.into(),
             name: "Genel".into(),
             ids: vec!["a".into(), "me".into()],
+            ..CrewRoom::default()
         }],
     );
     let presence = machine.view(0, UNIX).presence;
