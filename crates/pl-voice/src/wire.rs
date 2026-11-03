@@ -327,6 +327,8 @@ pub enum ClosedWhy {
     Budget,
     Staff,
     Account,
+    /// BAN-TYPES: Projects' moderators restricted the player's voice chat (until `closed.until`).
+    Muted,
     #[serde(other)]
     Off,
 }
@@ -427,6 +429,9 @@ pub enum FromRoom {
     },
     Closed {
         why: ClosedWhy,
+        /// BAN-TYPES: `muted`'s end (Unix seconds).
+        #[serde(default)]
+        until: Option<i64>,
     },
     Ack {
         #[serde(default)]
@@ -785,15 +790,27 @@ mod tests {
             ("budget", ClosedWhy::Budget),
             ("staff", ClosedWhy::Staff),
             ("account", ClosedWhy::Account),
+            ("muted", ClosedWhy::Muted),
             // Anything else like `off`.
             ("sunset", ClosedWhy::Off),
         ] {
             assert_eq!(
                 FromRoom::parse(&format!(r#"{{"t":"closed","why":"{why}"}}"#)),
-                FromRoom::Closed { why: read },
+                FromRoom::Closed {
+                    why: read,
+                    until: None
+                },
                 "{why}"
             );
         }
+        // BAN-TYPES: a voice chat ban says until when.
+        assert_eq!(
+            FromRoom::parse(r#"{"t":"closed","why":"muted","until":1700000000}"#),
+            FromRoom::Closed {
+                why: ClosedWhy::Muted,
+                until: Some(1_700_000_000)
+            }
+        );
         assert!(matches!(
             FromRoom::parse(r#"{"t":"ack","rid":2,"ice":{"urls":["turn:turn.cloudflare.com:443?transport=tcp"],"username":"x","credential":"y","ttl":7200}}"#),
             FromRoom::Ack { rid: Some(2), ice: Some(ice), until: None } if ice.urls.len() == 1 && ice.ttl == 7200

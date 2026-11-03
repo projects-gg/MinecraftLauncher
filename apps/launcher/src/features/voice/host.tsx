@@ -42,7 +42,7 @@ export function handleVoiceNotice(notice: VoiceNotice) {
         announce(t("voice.left.failed"));
         return;
       }
-      const text = leftText(notice.reason, t);
+      const text = leftText(notice.reason, t, notice.until);
       announce(text);
       toast(text);
       return;

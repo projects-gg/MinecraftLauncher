@@ -412,6 +412,12 @@ fn refusal_of(error: &pl_social::SocialError) -> VoiceAnswer {
     use pl_social::SocialError;
     match error {
         SocialError::Refused { code, .. } => VoiceAnswer::from_code(code.as_str(), None, None),
+        // BAN-TYPES: a voice chat ban, with its end.
+        SocialError::VoiceMuted { until } => VoiceAnswer {
+            refused: Some(VoiceRefusal::StaffMuted),
+            retry_after: None,
+            until: *until,
+        },
         SocialError::RateLimited { retry_after, .. } => VoiceAnswer {
             refused: Some(VoiceRefusal::RateLimited),
             retry_after: retry_after.map(|wait| wait.as_secs()),
@@ -559,6 +565,9 @@ impl AppPlatform {
                     (VoiceLeftReason::Kicked, false) => "You were removed from the room.",
                     (VoiceLeftReason::Closed, true) => "Oda kapatıldı.",
                     (VoiceLeftReason::Closed, false) => "The room was closed.",
+                    // BAN-TYPES: a voice chat ban took the player out.
+                    (VoiceLeftReason::Restricted, true) => "Sesli sohbet kullanman kısıtlandı.",
+                    (VoiceLeftReason::Restricted, false) => "Your voice chat was restricted.",
                     (_, true) => "Sesli sohbet şu an kullanılamıyor.",
                     (_, false) => "Voice chat isn't available right now.",
                 };

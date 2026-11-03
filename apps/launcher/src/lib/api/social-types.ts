@@ -295,7 +295,9 @@ export type ReportReason =
   | "inappropriate"
   | "spam"
   | "scam"
-  | "other";
+  | "other"
+  /** BAN-TYPES: "Sesli sohbet ihlali", only for a player reported with the voice room. */
+  | "voice";
 
 /** What the player reports ("Rapor et"). */
 export type ReportTarget =

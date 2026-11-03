@@ -124,6 +124,9 @@ export const enVoice = {
     idle: "You left because you were away for a while.",
     unavailable: "Voice chat isn't available right now.",
     failed: "Couldn't connect.",
+    // BAN-TYPES: a voice chat ban took the player out ({{until}}: "until 5 November, 14:00").
+    restricted: "Your voice chat was restricted.",
+    restrictedUntil: "Your voice chat is restricted {{until}}.",
   },
   mic: {
     denied: "Microphone access is off.",
@@ -147,6 +150,8 @@ export const enVoice = {
     invalidName: "Room names are 3 to 24 characters long.",
     nameRejected: "That name can't be used.",
     failed: "Couldn't connect.",
+    // BAN-TYPES: a voice chat ban, with its end.
+    staffMutedUntil: "Your voice chat is restricted {{until}}.",
   },
   invite: {
     title: "Invite",

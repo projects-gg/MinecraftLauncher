@@ -1524,6 +1524,9 @@ pub enum ReportReason {
     Spam,
     Scam,
     Other,
+    /// BAN-TYPES: "Sesli sohbet ihlali", only for a player reported with the voice room
+    /// (`target.voice`); without it the report goes as `Other`.
+    Voice,
 }
 
 impl ReportReason {
@@ -1536,6 +1539,7 @@ impl ReportReason {
             Self::Spam => "spam",
             Self::Scam => "scam",
             Self::Other => "other",
+            Self::Voice => "voice",
         }
     }
 }
@@ -1549,6 +1553,7 @@ impl<'de> Deserialize<'de> for ReportReason {
             "inappropriate" => Self::Inappropriate,
             "spam" => Self::Spam,
             "scam" => Self::Scam,
+            "voice" => Self::Voice,
             _ => Self::Other,
         })
     }
@@ -1979,6 +1984,17 @@ impl ChatRejection {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn report_reasons_read_and_go_as_the_service_names_them() {
+        // BAN-TYPES: "Sesli sohbet ihlali" both ways; one this version does not know is `Other`.
+        let voice: ReportReason = serde_json::from_str(r#""voice""#).unwrap();
+        assert_eq!(voice, ReportReason::Voice);
+        assert_eq!(voice.as_wire(), "voice");
+        assert_eq!(serde_json::to_value(voice).unwrap(), "voice");
+        let unknown: ReportReason = serde_json::from_str(r#""cheating""#).unwrap();
+        assert_eq!(unknown, ReportReason::Other);
+    }
 
     #[test]
     fn parses_me_and_friends() {

@@ -333,6 +333,24 @@ describe("words", () => {
     expect(leftText("idle", t)).toBe("Uzun süre hareketsiz kaldığın için ayrıldın.");
     expect(leftText("noAnswer", t)).toBe("Cevap yok");
   });
+
+  it("says until when a voice chat ban runs (BAN-TYPES)", () => {
+    const now = new Date(2026, 10, 3, 18, 0).getTime();
+    const until = new Date(2026, 10, 5, 14, 0).getTime() / 1000;
+    const muted = (end: number | null) =>
+      ({ refused: "staffMuted", retryAfter: null, until: end }) as Parameters<
+        typeof refusalText
+      >[0];
+    // The date stays on one line (a no-break space between the day and the month).
+    const nb = String.fromCharCode(0xa0);
+    const line = `Sesli sohbet kullanman 5${nb}Kasım 14:00'e kadar kısıtlandı.`;
+    expect(refusalText(muted(until), t, undefined, now)).toBe(line);
+    expect(refusalText(muted(null), t, undefined, now)).toBe(
+      "Susturulduğun için şu an bunu yapamazsın.",
+    );
+    expect(leftText("restricted", t, until, now)).toBe(line);
+    expect(leftText("restricted", t)).toBe("Sesli sohbet kullanman kısıtlandı.");
+  });
 });
 
 describe("shortcut keys", () => {

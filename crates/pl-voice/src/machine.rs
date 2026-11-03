@@ -305,6 +305,9 @@ pub struct Machine {
     pending: BTreeMap<u32, Pending>,
     /// The room the last failed stay was in ("Tekrar dene").
     retry: Option<(String, Option<String>, Ticket)>,
+    /// BAN-TYPES: the end of the voice chat ban that ends the stay now (`closed` `muted`), for its
+    /// notice and a waiting join's answer; the next `end_stay` takes it.
+    restricted_until: Option<i64>,
     backoff: BackoffPolicy,
     /// VOICE-CALL: the page shows live meters now (its window on screen, a room's pill or panel).
     meters: bool,
@@ -348,6 +351,7 @@ impl Machine {
             next_rid: 1,
             pending: BTreeMap::new(),
             retry: None,
+            restricted_until: None,
             backoff: BackoffPolicy {
                 initial: std::time::Duration::from_millis(1_000),
                 max: std::time::Duration::from_secs(15),
@@ -929,6 +933,7 @@ impl Machine {
         reason: Option<(VoiceLeftReason, Option<String>)>,
         out: &mut Vec<Effect>,
     ) {
+        let restricted_until = self.restricted_until.take();
         let Some(stay) = self.stay.take() else {
             return;
         };
@@ -944,6 +949,11 @@ impl Machine {
         if stay.join_waiting {
             let answer = match reason {
                 Some((VoiceLeftReason::Unavailable, _)) => VoiceAnswer::refused(VoiceRefusal::Off),
+                // BAN-TYPES: a voice chat ban, until its end.
+                Some((VoiceLeftReason::Restricted, _)) => VoiceAnswer {
+                    until: restricted_until,
+                    ..VoiceAnswer::refused(VoiceRefusal::StaffMuted)
+                },
                 Some(_) => VoiceAnswer::refused(VoiceRefusal::Failed),
                 None => VoiceAnswer::refused(VoiceRefusal::Nothing),
             };
@@ -980,10 +990,14 @@ impl Machine {
             out.push(Effect::Notice(VoiceNotice::Left {
                 reason,
                 friend: friend.clone(),
+                until: restricted_until.filter(|_| reason == VoiceLeftReason::Restricted),
             }));
             if matches!(
                 reason,
-                VoiceLeftReason::Kicked | VoiceLeftReason::Closed | VoiceLeftReason::Unavailable
+                VoiceLeftReason::Kicked
+                    | VoiceLeftReason::Closed
+                    | VoiceLeftReason::Unavailable
+                    | VoiceLeftReason::Restricted
             ) {
                 out.push(Effect::System(SystemNotice::Left { reason }));
             }
@@ -1098,6 +1112,8 @@ impl Machine {
             let reason = match answer.refused {
                 Some(VoiceRefusal::Off) => VoiceLeftReason::Unavailable,
                 Some(VoiceRefusal::Kicked) => VoiceLeftReason::Kicked,
+                // BAN-TYPES: a voice chat ban met coming back (its end is not in the refusal).
+                Some(VoiceRefusal::StaffMuted) => VoiceLeftReason::Restricted,
                 _ => VoiceLeftReason::Failed,
             };
             self.end_stay(now, Some((reason, None)), &mut out);
@@ -1275,7 +1291,7 @@ impl Machine {
             FromRoom::Kicked => {
                 self.end_stay(now, Some((VoiceLeftReason::Kicked, None)), &mut out);
             }
-            FromRoom::Closed { why } => {
+            FromRoom::Closed { why, until } => {
                 let friend = self
                     .stay
                     .as_ref()
@@ -1286,6 +1302,7 @@ impl Machine {
                     ClosedWhy::NoAnswer => VoiceLeftReason::NoAnswer,
                     ClosedWhy::Elsewhere => VoiceLeftReason::Elsewhere,
                     ClosedWhy::Crew => VoiceLeftReason::Crew,
+                    ClosedWhy::Muted => VoiceLeftReason::Restricted,
                     ClosedWhy::Off | ClosedWhy::Budget | ClosedWhy::Staff | ClosedWhy::Account => {
                         VoiceLeftReason::Unavailable
                     }
@@ -1293,6 +1310,10 @@ impl Machine {
                 let friend = (reason == VoiceLeftReason::NoAnswer)
                     .then_some(friend)
                     .flatten();
+                // BAN-TYPES: a voice chat ban's end goes with the notice.
+                if reason == VoiceLeftReason::Restricted {
+                    self.restricted_until = until;
+                }
                 self.end_stay(now, Some((reason, friend)), &mut out);
             }
             FromRoom::Moved { room, .. } if !wire::is_room_id(&room) => {

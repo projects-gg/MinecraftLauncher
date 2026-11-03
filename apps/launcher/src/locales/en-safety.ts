@@ -25,6 +25,9 @@ export const enSafety = {
   restricted: {
     until: "Your account is restricted until {{date}}.",
     forever: "Your account is restricted for good.",
+    // BAN-TYPES: what still works (the game, offline and on servers).
+    play: "You can still play. Friends, chat and voice chat are off until then.",
+    playForever: "You can still play. Friends, chat and voice chat are off.",
     rules: "Community rules",
   },
   signupsClosed: "No new accounts can be made right now. Try again tomorrow.",
@@ -42,6 +45,8 @@ export const enSafety = {
       spam: "Spam",
       scam: "Scam",
       other: "Something else",
+      // BAN-TYPES: a warning for a voice room report.
+      voice: "Voice chat violation",
     },
     ok: "Got it",
   },

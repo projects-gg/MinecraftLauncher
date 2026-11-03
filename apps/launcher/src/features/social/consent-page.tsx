@@ -209,12 +209,22 @@ export function ConsentPage() {
                     className="mb-4 flex flex-col items-center gap-2 rounded-[var(--radius-panel)] bg-obsidian-950/45 px-4 py-3.5 ring-1 ring-flare-400/25"
                     {...rise(reduce, 4)}
                   >
-                    <p className="flex items-start gap-2 text-left text-[13.5px] text-bone-100">
+                    <div className="flex items-start gap-2 text-left">
                       <Prohibit size={17} className="mt-px shrink-0 text-flare-400" aria-hidden />
-                      {restricted.until !== undefined
-                        ? t("safety.restricted.until", { date: dayMonth(restricted.until) })
-                        : t("safety.restricted.forever")}
-                    </p>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[13.5px] text-bone-100">
+                          {restricted.until !== undefined
+                            ? t("safety.restricted.until", { date: dayMonth(restricted.until) })
+                            : t("safety.restricted.forever")}
+                        </p>
+                        {/* BAN-TYPES: what still works, so nobody reads it as a ban from playing. */}
+                        <p className="text-[13px] text-ash-300">
+                          {restricted.until !== undefined
+                            ? t("safety.restricted.play")
+                            : t("safety.restricted.playForever")}
+                        </p>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={() => openWebLink(COMMUNITY_RULES_URL)}
