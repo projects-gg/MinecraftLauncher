@@ -377,6 +377,12 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
                     "Your Discord account is new, so you can't change your Projects skin yet.",
                     false,
                 ),
+                // SOC-NOTE.
+                LimitedKey::StatusNote => (
+                    "Discord hesabın yeni olduğu için şimdilik not ekleyemezsin.",
+                    "Your Discord account is new, so you can't add a note yet.",
+                    false,
+                ),
                 LimitedKey::Other => (
                     "Discord hesabın yeni olduğu için bu şimdilik yapılamıyor.",
                     "Your Discord account is new, so this can't be done yet.",
@@ -475,6 +481,50 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
             lang.pick(
                 "Şu an mesaj gönderemezsin.",
                 "You can't send messages right now.",
+            )
+            .to_owned(),
+        ),
+        // A status note (SOC-NOTE): chat's reasons, or its form.
+        E::NoteRejected { reason } => (
+            "SOSYAL-DURUM-NOT",
+            match reason {
+                Some(ChatRejection::Link) => {
+                    lang.pick("Notta bağlantı olamaz.", "A note can't have a link.")
+                }
+                Some(ChatRejection::Phone) => lang.pick(
+                    "Notta telefon numarası olamaz.",
+                    "A note can't have a phone number.",
+                ),
+                Some(ChatRejection::Words) => {
+                    lang.pick("Bu not yazılamaz.", "This note can't be used.")
+                }
+                None => lang.pick(
+                    "Not tek satır ve en çok 40 karakter olabilir.",
+                    "A note is one line of up to 40 characters.",
+                ),
+            }
+            .to_owned(),
+        ),
+        // SOC-NOTE: the day's notes (10) and pin changes (30).
+        E::RateLimited {
+            item: Some(pl_social::ChatQuota::StatusNote),
+            ..
+        } => (
+            "SOSYAL-DURUM-NOT-SINIR",
+            lang.pick(
+                "Bugün daha fazla not ekleyemezsin. Yarın yine dene.",
+                "You can't add more notes today. Try again tomorrow.",
+            )
+            .to_owned(),
+        ),
+        E::RateLimited {
+            item: Some(pl_social::ChatQuota::Pins),
+            ..
+        } => (
+            "SOSYAL-SABIT-SINIR",
+            lang.pick(
+                "Bugün daha fazla mesaj sabitleyemezsin. Yarın yine dene.",
+                "You can't pin more messages today. Try again tomorrow.",
             )
             .to_owned(),
         ),
@@ -632,7 +682,8 @@ impl From<pl_social::SocialError> for CmdError {
             | E::TextLocked { .. }
             | E::ChatRejected { .. }
             | E::ChatMuted { .. }
-            | E::PlanNoteRejected { .. } => (
+            | E::PlanNoteRejected { .. }
+            | E::NoteRejected { .. } => (
                 "SOSYAL",
                 pick(
                     "Bir sorun oluştu. Biraz sonra tekrar dene.",
@@ -811,6 +862,22 @@ impl From<pl_social::SocialError> for CmdError {
                 C::ChatOff => (
                     "SOSYAL-SOHBET-KAPALI",
                     pick("Sohbet şu an kapalı.", "Chat is off right now."),
+                ),
+                // SOC-NOTE.
+                C::NoteOff => (
+                    "SOSYAL-DURUM-NOT-KAPALI",
+                    pick("Notlar şu an kapalı.", "Notes are off right now."),
+                ),
+                C::PinsOff => (
+                    "SOSYAL-SABIT-KAPALI",
+                    pick("Mesaj sabitleme şu an kapalı.", "Pinning is off right now."),
+                ),
+                C::PinsFull => (
+                    "SOSYAL-SABIT-DOLU",
+                    pick(
+                        "En çok 3 mesaj sabitlenebilir.",
+                        "Up to 3 messages can be pinned.",
+                    ),
                 ),
                 C::MessageNotFound => (
                     "SOSYAL-SOHBET-MESAJ",

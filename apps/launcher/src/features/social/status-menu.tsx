@@ -7,10 +7,14 @@
 // others see them: the first beside the name, its tooltip naming them all (the picker is for the
 // status; friends settings' "Rozetler" lists them with their switches).
 //
+// SOC-NOTE §3.5: the menu's "Not ekle" / "Notu düzenle" opens the note's dialog, and the player's
+// own note takes the status's words in the picker (Discord's way: the dot keeps the status, the
+// tooltip and the screen reader say it), in the same line: nothing moves when it comes or goes.
+//
 // SOC-NEXT §3.3: "Rahatsız etmeyin" and "Görünmez" open a short list ("1 saat", "8 saat", "Yarın
 // sabaha kadar", "Ben açana kadar"; the crew mute's words); a timed one goes back to "Çevrimiçi"
 // by itself (next/host.tsx) and the status's tooltip says until when ("17:30'a kadar").
-import { CaretDown, CaretRight, Check, TagSimple } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, Check, NotePencil, TagSimple } from "@phosphor-icons/react";
 import { cn, easeOutExpo, returnFocusAfterKeys, Tooltip } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
@@ -32,6 +36,8 @@ import { swap, useSocialMotion } from "./motion";
 import { useSocNext } from "./next/flag";
 import { useSocNextPrefs } from "./next/prefs";
 import { STATUS_PRESETS, statusUntil } from "./next/status-timer";
+import { askNote } from "./note/note-dialog";
+import { useNotesOn, useOwnNote } from "./note/notes";
 import { PresenceDot, SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
@@ -85,6 +91,11 @@ export function MeCard({ me }: { me: SocialMe }) {
   const timer = useSocNextPrefs((s) => (timed ? s.statusTimer : null));
   // "17:30'a kadar" while a timed status holds.
   const until = timer && timer.status === status ? untilText(t, timer.until, Date.now()) : null;
+  // SOC-NOTE: the player's own note in the picker's words.
+  const ownNote = useOwnNote();
+  const statusWords = until
+    ? t("socNext.status.until", { status: t(`social.status.${status}`), until })
+    : t(`social.status.${status}`);
   const choose = (next: StatusMode) => {
     if (timed) useSocNextPrefs.getState().setStatusTimer(null);
     changeStatus(next);
@@ -94,6 +105,8 @@ export function MeCard({ me }: { me: SocialMe }) {
   const tags = useSocialUi((s) => s.view.crew.badges);
   const crews = useSocialUi((s) => s.view.crews);
   const choices = tags ? tagChoices(crews, Date.now()) : [];
+  // SOC-NOTE: "Not ekle" while notes are on (SOC-NEXT's switch and the service's).
+  const notes = useNotesOn();
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -115,22 +128,34 @@ export function MeCard({ me }: { me: SocialMe }) {
         {/* A limited account's chip sits by the status, where the name keeps its whole width. */}
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
           <DropdownMenu.Root open={open} onOpenChange={setOpen}>
-            <Tooltip content={until ?? ""} disabled={!until || open}>
+            <Tooltip
+              content={ownNote ? statusWords : (until ?? "")}
+              disabled={(!until && !ownNote) || open}
+            >
               <DropdownMenu.Trigger asChild>
                 <button
                   type="button"
                   aria-label={
-                    until
-                      ? `${t("social.status.change")}, ${t("socNext.status.until", { status: t(`social.status.${status}`), until })}`
-                      : t("social.status.change")
+                    ownNote
+                      ? `${t("social.status.change")}, ${statusWords}, ${t("socNote.note.mine", { text: ownNote.text })}`
+                      : until
+                        ? `${t("social.status.change")}, ${statusWords}`
+                        : t("social.status.change")
                   }
-                  className="group -ml-1.5 flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[12.5px] text-ash-300 outline-none transition-colors hover:bg-white/6 hover:text-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=open]:text-bone-100"
+                  className={cn(
+                    "group -ml-1.5 flex h-6 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[12.5px] text-ash-300 outline-none transition-colors hover:bg-white/6 hover:text-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=open]:text-bone-100",
+                    ownNote ? "min-w-0" : "shrink-0",
+                  )}
                 >
                   <PresenceDot kind={dotOf(status)} size={8} />
-                  <span className="relative inline-flex">
+                  <span className={cn("relative inline-flex", ownNote && "min-w-0")}>
                     <AnimatePresence mode="popLayout" initial={false}>
-                      <motion.span key={status} {...swap(reduce)}>
-                        {t(`social.status.${status}`)}
+                      <motion.span
+                        key={ownNote ? `note:${ownNote.text}` : status}
+                        className={ownNote ? "truncate text-bone-100" : undefined}
+                        {...swap(reduce)}
+                      >
+                        {ownNote ? ownNote.text : t(`social.status.${status}`)}
                       </motion.span>
                     </AnimatePresence>
                   </span>
@@ -234,6 +259,19 @@ export function MeCard({ me }: { me: SocialMe }) {
                           ),
                         )}
                       </DropdownMenu.RadioGroup>
+                      {notes ? (
+                        <>
+                          <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
+                          <DropdownMenu.Item className={itemClass} onSelect={() => askNote()}>
+                            <span className="flex w-5 justify-center">
+                              <NotePencil size={15} className="text-ash-300" aria-hidden />
+                            </span>
+                            <span className="flex-1">
+                              {ownNote ? t("socNote.note.edit") : t("socNote.note.add")}
+                            </span>
+                          </DropdownMenu.Item>
+                        </>
+                      ) : null}
                       {choices.length ? (
                         <>
                           <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />

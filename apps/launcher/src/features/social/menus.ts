@@ -578,7 +578,17 @@ export function planMenu(input: PlanInput): Plan<PlanAction> {
 
 // --- a chat message (CHAT1, FIX2, CHAT2) ---------------------------------------------------------
 
-export type MessageAction = "react" | "reply" | "copy" | "copyLink" | "edit" | "delete" | "report";
+export type MessageAction =
+  | "react"
+  | "reply"
+  | "copy"
+  | "copyLink"
+  // SOC-NOTE: a crew chat's leader and moderators pin and unpin.
+  | "pin"
+  | "unpin"
+  | "edit"
+  | "delete"
+  | "report";
 
 export interface MessageInput {
   /** It takes reactions now (CHAT2: sent, younger than a week, while the extra is on). The right
@@ -596,12 +606,14 @@ export interface MessageInput {
   deletable: boolean;
   /** Someone else's message: "Rapor et". */
   report: boolean;
+  /** SOC-NOTE: "Sabitle" or "Sabitlemeyi kaldır" (a crew chat's leader and moderators). */
+  pin?: "pin" | "unpin" | null;
 }
 
 /**
  * A message's right click (Shift+F10) and its "…": the reactions and "Yanıtla" first (what a
- * player does most), then copying, then the player's own edit and delete, then the report. A
- * tombstone has no menu at all.
+ * player does most), then copying and pinning (SOC-NOTE: away from the red "Herkesten sil"), then
+ * the player's own edit and delete, then the report. A tombstone has no menu at all.
  */
 export function messageMenu(input: MessageInput): Plan<MessageAction> {
   return tidy<MessageAction>([
@@ -611,6 +623,8 @@ export function messageMenu(input: MessageInput): Plan<MessageAction> {
     ...only<MessageAction>(
       input.copyable && { action: "copy" },
       input.link && { action: "copyLink" },
+      input.pin === "pin" && { action: "pin" },
+      input.pin === "unpin" && { action: "unpin" },
     ),
     null,
     ...only<MessageAction>(

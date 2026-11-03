@@ -42,7 +42,7 @@
 // messages fold into one quiet line each run ("Göster" opens it; a search result in it opens it
 // too), and a direct conversation with someone ignored is faded; the crew's names reach the rows
 // for mentions.
-import { ArrowDown, CalendarBlank, HandWaving } from "@phosphor-icons/react";
+import { ArrowDown, CalendarBlank, HandWaving, PushPin } from "@phosphor-icons/react";
 import { cn, scrollBehavior, toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
 import {
@@ -72,6 +72,14 @@ import { FoldItem } from "../next/ignore-ui";
 import type { Mentionable } from "../next/mentions";
 import { useSocNextPrefs } from "../next/prefs";
 import { ChatSearchBar, useChatSearch, useSearchShortcut } from "../next/search-bar";
+import {
+  canPinIn,
+  PinStripSlot,
+  pinMessage,
+  unpinMessage,
+  useCrewPins,
+  usePinsOn,
+} from "../note/pins";
 import type { PersonPlace } from "../person-menu";
 import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
@@ -186,8 +194,8 @@ export interface ChatLine {
   /** Unix ms. */
   at: number;
   text: string;
-  /** Its mark: a plan's calendar (the default) or a newcomer's waving hand. */
-  kind?: "plan" | "welcome";
+  /** Its mark: a plan's calendar (the default), a newcomer's waving hand, a pin (SOC-NOTE). */
+  kind?: "plan" | "welcome" | "pin";
   /** One small action beside it while it may be pressed ("Selam ver"). */
   action?: { label: string; onPress: () => void };
 }
@@ -433,6 +441,8 @@ const LineItem = memo(function LineItem({
       >
         {line.kind === "welcome" ? (
           <HandWaving size={13} weight="duotone" className="shrink-0 text-gold-300" aria-hidden />
+        ) : line.kind === "pin" ? (
+          <PushPin size={13} weight="duotone" className="shrink-0 text-gold-300" aria-hidden />
         ) : (
           <CalendarBlank
             size={13}
@@ -935,6 +945,13 @@ export function Conversation({
     });
   }, []);
 
+  // SOC-NOTE: a crew chat's pins, and whether the player pins (its leader and moderators).
+  const crewPins = useCrewPins(crew ? conv : null);
+  const pinsLive = usePinsOn();
+  const pinsOn = crew && pinsLive;
+  const managePins = canPinIn(liveTeam);
+  const pinsNow = useRef(crewPins);
+  pinsNow.current = crewPins;
   const actions = useMemo<RowActions>(
     () => ({
       onEdit: (message) => setEditing(message),
@@ -985,6 +1002,12 @@ export function Conversation({
           .finally(() => endReacting(message.key));
       },
       onJump: (key) => jumpTo(key),
+      // SOC-NOTE: "Sabitle" asks first when three are there (pins.tsx).
+      onPin: (message, on) => {
+        if (message.id === undefined) return;
+        if (on) pinMessage(conv, message, pinsNow.current, t);
+        else void unpinMessage(conv, message.id, t);
+      },
       onUnfurl: (message) =>
         api.social.chatUnfurl(conv, message.key).then(
           () => true,
@@ -1023,8 +1046,22 @@ export function Conversation({
       quick: quickReactions(recentEmoji),
       people: stablePeople,
       members: crew ? members : undefined,
+      pins: pinsOn ? { list: crewPins, manage: managePins } : undefined,
     }),
-    [conv, extras, linkRules, me, writable, recentEmoji, stablePeople, crew, members],
+    [
+      conv,
+      extras,
+      linkRules,
+      me,
+      writable,
+      recentEmoji,
+      stablePeople,
+      crew,
+      members,
+      pinsOn,
+      crewPins,
+      managePins,
+    ],
   );
   const byId = useMemo(() => {
     const map = new Map<number, ChatMessage>();
@@ -1262,12 +1299,14 @@ export function Conversation({
           onScrollEnd={() => setSettled(SCROLL_ENDS)}
           className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-2 [scrollbar-gutter:stable]"
         >
-          {/* With "yazıyor…" on, the list keeps a line free under its newest message for it. */}
+          {/* With "yazıyor…" on, the list keeps a line free under its newest message for it;
+              SOC-NOTE: with pins, room at its top for their line. */}
           <div
             ref={content}
             className={cn(
               "flex min-h-full flex-col justify-end transition-opacity duration-200",
               extras.typing && "pb-7",
+              crewPins.length > 0 && "pt-11",
               faded && "opacity-80",
             )}
           >
@@ -1280,6 +1319,16 @@ export function Conversation({
           </div>
         </motion.div>
       </MotionConfig>
+      {/* SOC-NOTE: the crew chat's pins over the list (the search bar takes its place). */}
+      {crew && !searchQueryNow ? (
+        <PinStripSlot
+          conv={conv}
+          pins={crewPins}
+          people={people}
+          manage={managePins}
+          onJump={(key) => jumpTo(key)}
+        />
+      ) : null}
       {next ? (
         <ChatSearchBar
           conv={conv}
@@ -1296,7 +1345,11 @@ export function Conversation({
           <motion.div
             key="day"
             aria-hidden
-            className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md bg-obsidian-800/95 px-2.5 py-1 text-[12px] font-medium whitespace-nowrap text-ash-300 shadow-[0_10px_30px_rgb(34_6_6/0.5)] ring-1 ring-white/8"
+            className={cn(
+              "pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-md bg-obsidian-800/95 px-2.5 py-1 text-[12px] font-medium whitespace-nowrap text-ash-300 shadow-[0_10px_30px_rgb(34_6_6/0.5)] ring-1 ring-white/8",
+              // SOC-NOTE: under the pins' line while it shows.
+              crewPins.length > 0 ? "top-12" : "top-2",
+            )}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: enter(0.16) }}
             exit={{ opacity: 0, transition: leave(0.12) }}

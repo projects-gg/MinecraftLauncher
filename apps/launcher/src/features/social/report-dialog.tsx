@@ -2,6 +2,8 @@
 // top (a crew invite can be about the crew or who sent it); then the fixed reasons, an optional
 // note for moderators (200 characters) and, for players and senders, "Ayrıca engelle" (unticked).
 // The reported person never learns about it. Sent: "Raporun iletildi."; a refusal stays in place.
+// SOC-NOTE: a friend reported while their status note shows takes "Uygunsuz not" too, the note in
+// the dialog's top, and the note goes along as the moderators' evidence (whatever the reason).
 import { Button, Dialog, Segmented, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { RadioGroup } from "radix-ui";
@@ -10,8 +12,9 @@ import { useTranslation } from "react-i18next";
 import { friendlyError } from "@/features/accounts/use-accounts";
 import { Check } from "@/features/settings/cleanup/check";
 import { api } from "@/lib/api";
-import type { ReportReason } from "@/lib/api/social-types";
+import type { ReportReason, ReportTarget } from "@/lib/api/social-types";
 import { enter, leave } from "./motion";
+import { useShownNote } from "./note/notes";
 import {
   canBlock,
   NOTE_MAX,
@@ -25,7 +28,16 @@ import { SocialAvatar } from "./social-face";
 import { type ReportRequest, useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
 
-function Subject({ request, inviter }: { request: ReportRequest; inviter: boolean }) {
+function Subject({
+  request,
+  inviter,
+  statusNote,
+}: {
+  request: ReportRequest;
+  inviter: boolean;
+  /** SOC-NOTE: the friend's status note, when it goes along. */
+  statusNote?: string;
+}) {
   const { t } = useTranslation();
   const name = inviter && request.inviter ? request.inviter.name : request.name;
   const person = inviter && request.inviter ? request.inviter.person : request.person;
@@ -56,6 +68,12 @@ function Subject({ request, inviter }: { request: ReportRequest; inviter: boolea
         {kind === "player" && !inviter && request.reaction ? (
           <p className="mt-0.5 truncate text-[12.5px] text-ash-300">
             {t("chat2.report.reaction", { emoji: request.reaction.e })}
+          </p>
+        ) : null}
+        {/* SOC-NOTE: the friend's status note. */}
+        {kind === "player" && !inviter && statusNote ? (
+          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-bone-100 break-words">
+            <span className="sr-only">{t("socNote.note.title")}: </span>"{statusNote}"
           </p>
         ) : null}
         {kind === "message" && request.text ? (
@@ -92,11 +110,24 @@ export function ReportDialog() {
     setError(null);
   }, [request]);
 
-  const target = request && inviter && request.inviter ? request.inviter.target : request?.target;
+  const chosen = request && inviter && request.inviter ? request.inviter.target : request?.target;
+  // SOC-NOTE: a friend's note shows: it goes along (not from a plan, a reaction or a voice room).
+  const friend = useSocialUi((s) =>
+    chosen?.kind === "player" ? s.view.friends.find((f) => f.id === chosen.id) : undefined,
+  );
+  const statusNote = useShownNote(friend);
+  const plain = chosen?.kind === "player" && !chosen.plan && !chosen.reaction && !chosen.voice;
+  // The reasons a friend with a note takes ("Uygunsuz durum notu" too); the note goes along only
+  // with it.
+  const offered: ReportTarget | undefined =
+    chosen?.kind === "player" && plain && statusNote ? { ...chosen, note: true } : chosen;
+  const target: ReportTarget | undefined =
+    offered?.kind === "player" && offered.note && reason !== "inappropriate" ? chosen : offered;
   const kind = target?.kind ?? "player";
-  const reasons = target ? reasonsFor(target) : REPORT_REASONS[kind];
+  const reasons = offered ? reasonsFor(offered) : REPORT_REASONS[kind];
   const fromPlan = target?.kind === "player" && Boolean(target.plan);
   const fromReaction = target?.kind === "player" && Boolean(target.reaction);
+  const fromNote = offered?.kind === "player" && Boolean(offered.note);
   const length = noteLength(note);
   const tooLong = length > NOTE_MAX;
   const ready = Boolean(target && reason && reasons.includes(reason)) && !tooLong && !busy;
@@ -156,7 +187,11 @@ export function ReportDialog() {
               className="self-start"
             />
           ) : null}
-          <Subject request={request} inviter={inviter} />
+          <Subject
+            request={request}
+            inviter={inviter}
+            statusNote={fromNote ? statusNote?.text : undefined}
+          />
           <RadioGroup.Root
             aria-label={t("reports.reasonsLabel")}
             value={reason ?? ""}
@@ -175,7 +210,7 @@ export function ReportDialog() {
                 >
                   <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
                 </span>
-                {t(reasonKey(kind, option, fromPlan, fromReaction))}
+                {t(reasonKey(kind, option, fromPlan, fromReaction, fromNote))}
               </RadioGroup.Item>
             ))}
           </RadioGroup.Root>

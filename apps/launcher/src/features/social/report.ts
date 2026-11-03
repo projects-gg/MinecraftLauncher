@@ -23,23 +23,38 @@ const PLAN_REASONS: readonly ReportReason[] = [
   "other",
 ];
 
+/** SOC-NOTE: a friend whose status note shows also takes "Uygunsuz durum notu", beside the
+ * other "Uygunsuz …" reasons. */
+const NOTE_REASONS: readonly ReportReason[] = [
+  "name",
+  "profile",
+  "inappropriate",
+  "harassment",
+  "spam",
+  "scam",
+  "other",
+];
+
 /** The reasons a target takes, in the dialog's order. */
 export function reasonsFor(target: ReportTarget): readonly ReportReason[] {
   if (target.kind === "player" && (target.plan || target.reaction)) return PLAN_REASONS;
+  if (target.kind === "player" && target.note) return NOTE_REASONS;
   return REPORT_REASONS[target.kind];
 }
 
 /** The words of a reason for a target ("Uygunsuz ad" for a player, "… ya da slogan" for a crew,
- * "Uygunsuz not" from a plan). */
+ * "Uygunsuz not" from a plan, "Uygunsuz durum notu" for a status note). */
 export function reasonKey(
   kind: ReportKind,
   reason: ReportReason,
   plan = false,
   reaction = false,
+  statusNote = false,
 ): string {
   if (reason === "name")
     return kind === "crew" ? "reports.reasons.crewName" : "reports.reasons.playerName";
   if (plan && reason === "inappropriate") return "fix2.report.noteReason";
+  if (statusNote && reason === "inappropriate") return "socNote.report.reason";
   if (reaction && reason === "inappropriate") return "chat2.report.reactionReason";
   return `reports.reasons.${reason}`;
 }

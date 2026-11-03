@@ -153,6 +153,8 @@ pub use protocol::{
     PLANS_CAP, PRESENCE_CAPS, PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP,
     REPLIES_CAP, STICKERS_CAP, TYPING_CAP, is_projects_host, presence_caps,
 };
+// SOC-NOTE: status notes and pinned messages.
+pub use protocol::{ChatPin, NOTES_CAP, PINS_CAP, StatusNote};
 pub use qr::{QrPath, qr_path};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};
 pub use state::{Connection, GREET_WINDOW_SECS, INVITE_LIFETIME_SECS, SocialState};
@@ -171,6 +173,8 @@ pub use view::{
     SocialNotice, SocialView, TagOffView, TeamInviteView, TeamLookupView, TeamMemberView,
     TeamRequestView, TeamView,
 };
+// SOC-NOTE's views.
+pub use view::{CrewPinsView, FriendNoteView, PinLineView, PinView, SocNoteView};
 pub use voice::{
     PresenceVoice, VOICE_CAP, VoiceAck, VoiceCrewChange, VoiceCrewRoom, VoiceCrewRooms,
     VoiceCrewTicket, VoiceError, VoiceEvent, VoiceFrame, VoiceRing, VoiceSink, VoiceStatus,

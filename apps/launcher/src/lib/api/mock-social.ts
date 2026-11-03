@@ -65,6 +65,7 @@ import {
   startIdentity,
 } from "./mock-identity";
 import { pick } from "./mock-lang";
+import { socNoteApi, withSocNote } from "./mock-soc-note";
 import { seedSocNextPrefs } from "./mock-socnext";
 import type {
   BackupMeta,
@@ -916,20 +917,35 @@ const chat = mockChat({
 });
 let view = withPlace(
   placed(
-    chat.prepare(
-      identitySnapshot(
-        calmSnapshot(
-          badgesSnapshot(
-            wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }),
-            badgesContext(),
+    // SOC-NOTE (mock-soc-note.ts): notes and pins on top of chat's data.
+    withSocNote(
+      chat.prepare(
+        identitySnapshot(
+          calmSnapshot(
+            badgesSnapshot(
+              wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }),
+              badgesContext(),
+            ),
+            calmContext(),
           ),
-          calmContext(),
+          { scenario: scenario() },
         ),
-        { scenario: scenario() },
       ),
+      socNoteHost(),
     ),
   ),
 );
+
+/** What mock-soc-note.ts works on (SOC-NOTE). */
+function socNoteHost() {
+  return {
+    param: searchParam,
+    pick,
+    view: () => view,
+    commit,
+    messages: (conv: string) => chat.messages(conv),
+  };
+}
 
 /** What mock-identity.ts works on (SOC-ID): this preview's data and its ways to change it. */
 function identityContext() {
@@ -1235,6 +1251,8 @@ export const mockSocial: SocialApi = {
     return () => noticeListeners.delete(listener);
   },
   ...chat.api,
+  // SOC-NOTE (mock-soc-note.ts): the status note and pins.
+  ...socNoteApi(socNoteHost()),
   // SOC-NEXT "Yayıncı modu": `?streamer=live` acts as if OBS were running.
   streamingApp: async () => searchParam("streamer") === "live",
   async report(target, _reason, _note, block) {

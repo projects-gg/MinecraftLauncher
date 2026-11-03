@@ -206,6 +206,70 @@ pub struct ChatView {
     /// The link rules the service applies now, while links are on (CHAT2): the composer checks
     /// with them, and a link in a message may be pressed only while it passes them.
     pub links: Option<ChatLinksView>,
+    /// SOC-NOTE: status notes and pinned messages.
+    pub soc_note: SocNoteView,
+}
+
+/// SOC-NOTE's part of the chat view: status notes and the pins of crew chats.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SocNoteView {
+    /// Status notes are on (Studio's switch, and this connection took them): the status menu
+    /// offers "Not ekle", friends' notes show.
+    pub notes: bool,
+    /// SOC-NOTE: the player's own status note while notes are on (`until`: Unix seconds, 0: until
+    /// taken off; the launcher hides it once over).
+    pub note: Option<crate::protocol::StatusNote>,
+    /// SOC-NOTE: the status notes of the player's friends who are online and have one, while notes
+    /// are on (the friend list, cards and crew pages show them; over ones the launcher hides).
+    pub friend_notes: Vec<FriendNoteView>,
+    /// SOC-NOTE: pinned messages are on (Studio's switch, this connection took them, chat works).
+    pub pins_on: bool,
+    /// SOC-NOTE: the pins of the player's crews' chats that have some, while pins are on.
+    pub pins: Vec<CrewPinsView>,
+    /// SOC-NOTE: "Kaan_07 bir mesajı sabitledi." lines of the player's crews' chats, oldest first:
+    /// pins made while this launcher was connected, in this run only (nothing keeps them), at most
+    /// 10 a chat.
+    pub pin_lines: Vec<PinLineView>,
+}
+
+/// A friend's status note (SOC-NOTE): whose, and the note.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendNoteView {
+    pub id: String,
+    pub note: crate::protocol::StatusNote,
+}
+
+/// One crew chat's pinned messages (SOC-NOTE), the oldest pin first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewPinsView {
+    /// `c:<team id>`.
+    pub conv: String,
+    pub pins: Vec<PinView>,
+}
+
+/// A pinned message (SOC-NOTE): the message's id (its key in the chat), author and text, and when
+/// it was pinned (Unix milliseconds on this computer's clock).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PinView {
+    pub id: i64,
+    pub from: String,
+    pub text: String,
+    pub pinned_at: i64,
+}
+
+/// "… bir mesajı sabitledi." (SOC-NOTE): who pinned which message of a crew chat, and when (Unix
+/// milliseconds on this computer's clock).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PinLineView {
+    pub conv: String,
+    pub by: String,
+    pub id: i64,
+    pub at: i64,
 }
 
 /// What chat offers beyond CHAT1 now (CHAT2), one switch each.
@@ -567,6 +631,11 @@ pub enum ReportTarget {
         /// for 24 hours after the call): the room's events go along as the moderators' evidence.
         #[serde(default)]
         voice: Option<String>,
+    },
+    /// SOC-NOTE: a friend reported for their status note ("Uygunsuz not", reason
+    /// `inappropriate`): the service keeps the note as the moderators' evidence.
+    PlayerNote {
+        id: String,
     },
     /// A crew; `code` when it was looked up by code, `via` (TEAM6) when it is reported from the
     /// card of the tag that friend or crewmate wears ("Ekibi rapor et").

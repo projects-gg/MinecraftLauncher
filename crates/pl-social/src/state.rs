@@ -589,6 +589,8 @@ impl SocialState {
             // World sessions belong to the launcher's host (HOST1, `crate::world`); voice chat to
             // its voice chat (VOICE, `crate::voice`).
             PresenceEvent::World(_) | PresenceEvent::Voice(_) => {}
+            // SOC-NOTE: the chat state's (`service.rs` `apply_chat`).
+            PresenceEvent::OwnNote(_) | PresenceEvent::ChatPins { .. } => {}
             // The badge catalogue lives in the service (`SocialService::read_catalog`).
             PresenceEvent::MarkDefs { .. } => {}
         }
@@ -1842,6 +1844,28 @@ impl SocialState {
             .unwrap_or_default()
     }
 
+    /// SOC-NOTE: the status notes of friends who are online and have one (their presence carries
+    /// it; the service sends it only to a connection that took notes, only between friends).
+    pub fn friend_notes(&self) -> Vec<(String, crate::protocol::StatusNote)> {
+        let Some(overview) = self.overview.as_ref() else {
+            return Vec::new();
+        };
+        let mut notes: Vec<(String, crate::protocol::StatusNote)> = overview
+            .friends
+            .iter()
+            .filter_map(|friend| {
+                let presence = self.online.get(&friend.profile.id)?;
+                let note = presence
+                    .note
+                    .clone()
+                    .filter(|_| presence.state != PresenceState::Offline)?;
+                Some((friend.profile.id.clone(), note))
+            })
+            .collect();
+        notes.sort_by(|a, b| a.0.cmp(&b.0));
+        notes
+    }
+
     pub fn incoming(&self) -> Vec<RequestView> {
         self.overview
             .as_ref()
@@ -2270,6 +2294,7 @@ mod tests {
             avatar_hash: None,
             last_seen: None,
             voice: None,
+            note: None,
         }
     }
 
@@ -2311,6 +2336,8 @@ mod tests {
                 rel: None,
                 chat: None,
                 plans: None,
+                note: None,
+                pins: None,
             },
             NOW,
         );
@@ -2342,6 +2369,8 @@ mod tests {
                 rel: None,
                 chat: None,
                 plans: None,
+                note: None,
+                pins: None,
             },
             NOW,
         );
@@ -2616,6 +2645,8 @@ mod tests {
             rel: None,
             chat: None,
             plans: None,
+            note: None,
+            pins: None,
         }
     }
 
@@ -2734,6 +2765,8 @@ mod tests {
                 rel: None,
                 chat: None,
                 plans: None,
+                note: None,
+                pins: None,
             },
             NOW,
         );
@@ -2846,6 +2879,8 @@ mod tests {
                 rel: None,
                 chat: None,
                 plans: None,
+                note: None,
+                pins: None,
             },
             NOW,
         );
@@ -3093,6 +3128,8 @@ mod tests {
                 rel: None,
                 chat: None,
                 plans: None,
+                note: None,
+                pins: None,
             },
             NOW,
         );
@@ -3997,6 +4034,8 @@ mod tests {
             rel: None,
             chat: None,
             plans: Some(plans),
+            note: None,
+            pins: None,
         }
     }
 

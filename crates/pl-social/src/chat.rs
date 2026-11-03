@@ -77,6 +77,29 @@ pub fn prepare_text(text: &str) -> Option<String> {
     (1..=CHAT_TEXT_MAX).contains(&size).then_some(text)
 }
 
+/// SOC-NOTE: a status note's characters at most (the service's `NOTE.chars`).
+pub const STATUS_NOTE_MAX: usize = 40;
+
+/// A status note as it will go (SOC-NOTE): spaces collapsed and trimmed, as the service cleans it.
+/// None when nothing is left (taking it off); refused when it is not one line or is longer than 40
+/// characters. The service checks links, phone numbers and words itself.
+pub fn prepare_status_note(text: &str) -> Result<Option<String>, SocialError> {
+    let refused = SocialError::NoteRejected { reason: None };
+    if text.len() > 1_000 {
+        return Err(refused);
+    }
+    let trimmed = text.trim();
+    if trimmed.contains(['\n', '\r']) {
+        return Err(refused);
+    }
+    let note = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
+    match note.chars().count() {
+        0 => Ok(None),
+        size if size <= STATUS_NOTE_MAX => Ok(Some(note)),
+        _ => Err(refused),
+    }
+}
+
 /// A crew plan's note as it will go (FIX2): spaces collapsed and trimmed, as the service cleans
 /// it. None when nothing is left (no note, or clearing it); refused when it is not one line or is
 /// longer than the service takes. The service checks links, phone numbers and words itself (the
@@ -532,6 +555,17 @@ mod tests {
         assert_eq!(nonce.len(), 12);
         assert!(nonce.bytes().all(|b| b.is_ascii_alphanumeric()));
         assert_ne!(nonce, new_nonce());
+    }
+
+    #[test]
+    fn a_status_note_goes_on_one_line_of_40() {
+        let note = |text: &str| prepare_status_note(text).map_err(|e| e.code().cloned());
+        assert_eq!(note("  Sınavım   var  "), Ok(Some("Sınavım var".into())));
+        assert_eq!(note("   "), Ok(None));
+        assert_eq!(note(&"🎮".repeat(40)), Ok(Some("🎮".repeat(40))));
+        let refused = Err(Some(ErrorCode::InvalidNote));
+        assert_eq!(note(&"a".repeat(41)), refused);
+        assert_eq!(note("iki\nsatır"), refused);
     }
 
     #[test]

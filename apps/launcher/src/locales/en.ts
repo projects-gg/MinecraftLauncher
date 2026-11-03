@@ -61,6 +61,7 @@ import { enSmall7 } from "./en-small7";
 import { enSmall9 } from "./en-small9";
 import { enSmall10 } from "./en-small10";
 import { enSocNext } from "./en-soc-next";
+import { enSocNote } from "./en-soc-note";
 import { enStars } from "./en-stars";
 import { enTeam6 } from "./en-team6";
 import { enTeams } from "./en-teams";
@@ -354,6 +355,7 @@ export const en: DeepPartial<Strings> = {
   stars: enStars,
   voice: enVoice,
   socNext: enSocNext,
+  socNote: enSocNote,
   nav: {
     home: "Home",
     library: "Library",

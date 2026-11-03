@@ -161,6 +161,15 @@ export interface Friend extends SocialProfile {
    * a room (`in`); absent: they cannot be called (voice chat off, invisible, an older launcher).
    */
   voice?: "ready" | "in";
+  /** SOC-NOTE: their status note while they are online and notes are on (`chat.socNote.notes`). */
+  note?: StatusNote;
+}
+
+/** SOC-NOTE: a status note, one line of at most 40 characters for friends; `until`: Unix seconds
+ * (0: until taken off). */
+export interface StatusNote {
+  text: string;
+  until: number;
 }
 
 export interface FriendRequest extends SocialProfile {
@@ -249,7 +258,9 @@ export type LimitedKey =
   /** CHAT2: 100 reaction changes a day (`perDay`). */
   | "chatReactions"
   /** SKIN1: changing the Projects skin (the service's `skin_change`). */
-  | "skinChange";
+  | "skinChange"
+  /** SOC-NOTE: setting a status note. */
+  | "statusNote";
 
 export interface LimitedAccount {
   /** Unix seconds: the limits lift by themselves then. */
@@ -299,6 +310,8 @@ export type ReportTarget =
       reaction?: { conv: string; id: number; e: string };
       /** VOICE: reported from the player's voice room (its id; the room's events are the evidence). */
       voice?: string;
+      /** SOC-NOTE: a friend with a status note: the note goes along as the evidence. */
+      note?: boolean;
     }
   /** `code`: the crew was looked up by code; `via`: reported from the tag a friend or crewmate wears
    * (TEAM6: that player's id, never kept by the service). */
@@ -492,6 +505,36 @@ export interface Conversation {
   peerRead?: number;
 }
 
+/** SOC-NOTE: a crew chat's pinned message: the message's id and author, its text, when it was
+ * pinned (Unix ms). */
+export interface ChatPin {
+  id: number;
+  from: string;
+  text: string;
+  pinnedAt: number;
+}
+
+/** SOC-NOTE: "Kaan_07 bir mesajı sabitledi." of this run (Unix ms). */
+export interface PinLine {
+  conv: string;
+  by: string;
+  id: number;
+  at: number;
+}
+
+/** SOC-NOTE's part of the chat state. */
+export interface SocNoteState {
+  /** Status notes are on (Studio's switch, the connection took them). */
+  notes: boolean;
+  /** The player's own note. */
+  note?: StatusNote;
+  /** Pinned messages are on. */
+  pinsOn: boolean;
+  /** Crew chat (`c:<team id>`) → its pins, the oldest pin first (only chats that have some). */
+  pins: Record<string, ChatPin[]>;
+  pinLines: PinLine[];
+}
+
 export interface ChatState {
   /** The service's switch: off hides the composer; what this computer holds stays readable. */
   on: boolean;
@@ -508,6 +551,8 @@ export interface ChatState {
   stickerSets?: string[];
   /** CHAT2: the link rules while links are on. */
   links?: ChatLinkRules;
+  /** SOC-NOTE: status notes and pins (absent: a launcher build or a service without them). */
+  socNote?: SocNoteState;
 }
 
 /** A conversation's messages, oldest first (`more`: older ones remain on this computer). */
@@ -1237,6 +1282,13 @@ export interface SocialApi {
   chatSendSticker(conv: string, sticker: string, reply?: number): Promise<string>;
   /** CHAT2: adds the player's reaction to a message (`on`), or takes it back. */
   chatReact(conv: string, id: number, emoji: string, on: boolean): Promise<void>;
+  /** SOC-NOTE: the player's status note until `until` (Unix seconds; 0: until taken off); `""`
+   * takes it off. */
+  setStatusNote(text: string, until: number): Promise<void>;
+  /** SOC-NOTE: pins a crew chat's message (in place of pin `replace` when three are there). */
+  chatPin(conv: string, id: number, replace?: number): Promise<void>;
+  /** SOC-NOTE: takes a crew chat's pin off. */
+  chatUnpin(conv: string, id: number): Promise<void>;
   /** CHAT2: the player writes here (a key in a box with text and focus); the backend sends it at
    * most every 4 seconds, and only when someone in the conversation can see it. */
   chatTyping(conv: string): void;

@@ -48,6 +48,8 @@ import { openMenuFromKey } from "./menu-key";
 import { type PersonAction, personMenu } from "./menus";
 import { isJoinable, presenceLine, presenceParts } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { CardNote } from "./note/note-ui";
+import { useShownNote } from "./note/notes";
 import { PersonMarkList, useMarks } from "./person-mark";
 import { type PersonQuestion, usePersonItems } from "./person-menu";
 import { PresenceText } from "./presence-text";
@@ -206,6 +208,8 @@ function MemberCard({
     member.friend ? s.view.friends.find((f) => f.id === member.id) : undefined,
   );
   const joinable = member.state === "playing" && isJoinable(member.game);
+  // SOC-NOTE: a friend's status note, under where they are.
+  const note = useShownNote(member.blocked ? undefined : friend);
   const days = daysSince(member.joinedAt, Date.now());
   // "Bu ay birlikte 3 sa" (TEAM5): kept on this computer only, off unless the player keeps it.
   const together = togetherTime(member.togetherMonth ?? 0);
@@ -396,6 +400,7 @@ function MemberCard({
               />
             )}
           </p>
+          <CardNote note={note} />
         </div>
       </div>
       {/* Every badge with its name (BADGES-UI), under the name block at the card's full width. */}
@@ -578,9 +583,17 @@ export function TeamMemberRow({
     member.friend ? s.view.friends.find((f) => f.id === member.id) : undefined,
   );
   const joinable = member.state === "playing" && isJoinable(member.game) && !member.blocked;
+  // SOC-NOTE: a friend's status note while they are not playing (friends see it, nobody else).
+  const note = useShownNote(friend);
+  const noteLine =
+    note && line === "presence" && !member.blocked && member.state === "launcher"
+      ? note.text
+      : null;
   const presence = member.blocked
     ? t("teams.member.blocked")
-    : presenceLine(friend && member.state === "offline" ? friend : member, t);
+    : noteLine
+      ? noteLine
+      : presenceLine(friend && member.state === "offline" ? friend : member, t);
   const badge = useShownBadge(member.badge);
   const marks = useMarks(member.marks);
   const shown =
@@ -686,11 +699,15 @@ export function TeamMemberRow({
                         key={sub}
                         className={cn(
                           "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
-                          joinable && !versionOnly ? "text-jade-400" : "text-ash-400",
+                          noteLine
+                            ? "text-bone-100"
+                            : joinable && !versionOnly
+                              ? "text-jade-400"
+                              : "text-ash-400",
                         )}
                         {...swap(reduce)}
                       >
-                        {member.blocked || versionOnly ? (
+                        {member.blocked || versionOnly || noteLine ? (
                           sub
                         ) : (
                           <PresenceText
