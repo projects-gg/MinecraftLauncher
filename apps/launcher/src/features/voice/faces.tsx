@@ -2,13 +2,74 @@
 // around it that fades in while they speak and out after (opacity only, never moving, nothing at
 // all while nobody speaks; the store holds no speaker while the window is away). Round inside a
 // pill, the list's rounded square elsewhere (design.md §4, "round inside round").
+//
+// VOICE-CALL: the speaking indicator follows the voice. A second, softer ring brightens with how
+// loud they speak and settles back between words (transform scale and opacity only, written by the
+// live levels: no render, no frame loop). On the pill's faces and the call's large faces it grows a
+// few pixels outside the ring; the panel's rows have no room between neighbours, so there it fills
+// the gap inside the ring instead and never leaves the ring's box. The player's own face does it
+// only while what they say goes out. Reduced motion and Performance mode: the plain ring.
 import { MicrophoneSlash } from "@phosphor-icons/react";
-import { cn, SignalBars } from "@pl/ui";
+import { cn, SignalBars, useMotionPrefs } from "@pl/ui";
+import { useRef } from "react";
 import { SocialFace } from "@/features/social/social-face";
 import type { VoiceQuality } from "@/lib/api/voice-types";
 import { HeadphonesSlash } from "./icons";
+import { MIC, usePainter } from "./levels";
 import type { VoiceFace, VoiceFaceMark } from "./rules";
-import { useSpeaking } from "./store";
+import { useSpeaking, useVoiceUi } from "./store";
+
+/** A voice's strength for the halo (0–1): from a quiet word (-39 dBFS) to a loud one (-9). */
+export function haloStrength(level: number): number {
+  return Math.max(0, Math.min(1, (level - 0.35) / 0.5));
+}
+
+/**
+ * How far the halo grows past the ring at full strength, by the face's size; 0 where it stays
+ * inside the ring. The call's faces: about 3 px, clear of the names under them.
+ */
+export function haloReach(size: number): number {
+  if (size >= 64) return 0.08;
+  // The panel's rows: neighbours' rings are a few pixels apart, so nothing grows there.
+  if (size >= 32) return 0;
+  // The pill's 20 px faces: a few pixels, or it would not show at all.
+  return 0.2;
+}
+
+/** The ring that follows the voice (absent under reduced motion). */
+function Halo({ id, size, round }: { id: string; size: number; round: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const shown = useRef(0);
+  const isMe = useVoiceUi((s) => s.state.room?.me.id === id);
+  const reach = haloReach(size);
+  usePainter(isMe ? MIC : id, (level, open) => {
+    const element = ref.current;
+    if (!element) return;
+    const strength = isMe && !open ? 0 : haloStrength(level);
+    if (strength === shown.current) return;
+    // A voice rises at once and lets go a little slower (a meter's ballistics).
+    element.style.transitionDuration = strength > shown.current ? "80ms" : "240ms";
+    shown.current = strength;
+    // Softer than the ring itself: it says how loud, the ring says who.
+    element.style.opacity = String(strength * 0.7);
+    if (reach) element.style.transform = `scale(${1 + strength * reach})`;
+  });
+  return (
+    <span
+      ref={ref}
+      aria-hidden
+      data-voice-halo=""
+      style={{ opacity: 0, transform: "scale(1)" }}
+      className={cn(
+        // A layer of its own (a few pixels): its steps never repaint the face or the glass around.
+        "pointer-events-none absolute -inset-[3px] transition-[transform,opacity] ease-out will-change-[transform,opacity]",
+        // Inside the ring's box (the rows): the gap between the face and the ring fills with the voice.
+        reach ? "ring-[1.5px] ring-jade-400/60" : "ring-2 ring-jade-400/80 ring-inset",
+        round ? "rounded-full" : "rounded-[calc(var(--radius-head)+3px)]",
+      )}
+    />
+  );
+}
 
 /**
  * What is off on a small face (VOICE-KEYS), as a sign on a dark disc at its lower right corner:
@@ -72,6 +133,7 @@ export function SpeakingFace({
 }) {
   const live = useSpeaking(face.id);
   const speaking = forced ?? live;
+  const { reduce } = useMotionPrefs();
   const radius = round ? "rounded-full" : "rounded-[var(--radius-head)]";
   return (
     <span className={cn("relative inline-flex shrink-0", className)}>
@@ -84,6 +146,8 @@ export function SpeakingFace({
       >
         <SocialFace source={face} size={size} />
       </span>
+      {/* The voice's own strength (VOICE-CALL), under the ring; never for a still preview. */}
+      {reduce || forced !== undefined ? null : <Halo id={face.id} size={size} round={round} />}
       {/* Fast in (the voice is heard now), slower out, so short pauses do not flicker. */}
       <span
         aria-hidden

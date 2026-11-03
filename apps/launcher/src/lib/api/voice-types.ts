@@ -207,6 +207,14 @@ export interface VoiceState {
   volumeMax?: number;
   /** Grows when the settings or a person's choices change: the settings backup goes up again. */
   backupRev?: number;
+  // VOICE-CALL ---------------------------------------------------------------------------------
+  /** "Aramadan önce sor": "Sesli arama başlat" asks first (absent: an older launcher, it asks). */
+  askBeforeCall?: boolean;
+  /**
+   * When someone else first shared the room with the player in this stay (Unix seconds, this
+   * computer's clock): the call timer's start. Null while the player has only been alone in it.
+   */
+  togetherSince?: number | null;
 }
 
 /** Nothing at all: before the service and the signed config said anything. */
@@ -237,6 +245,20 @@ export interface VoiceLevel {
   level: number;
   /** Above the sensitivity: this would be sent. */
   open: boolean;
+}
+
+/**
+ * The live meters (`voice-levels`, VOICE-CALL): the player's microphone and how loud each person
+ * speaks, on the settings bar's 0–1 scale; only while the page asks (`setLevels`) and its window is
+ * on screen, at most sixteen a second, only on change.
+ */
+export interface VoiceLevels {
+  /** The player's microphone (0 while it is off). */
+  me: number;
+  /** What it picks up goes out now (else heard but not sent). */
+  open: boolean;
+  /** People who make sound now; the quiet are left out. */
+  people: Array<{ id: string; level: number }>;
 }
 
 /** Why the player's stay ended. */
@@ -340,7 +362,12 @@ export interface VoiceSettings {
   sensitivity: number | null;
   /** Percent, 0–200, while automatic volume is off. */
   micVolume: number;
+  /** "Sesli sohbet sesleri" (it was "Katılma ve ayrılma sesleri"; the same value). */
   sounds: boolean;
+  /** "Aramadan önce sor" (VOICE-CALL). */
+  askBeforeCall: boolean;
+  /** "Ses seviyesi": everyone's voice at once, percent 0–200 (VOICE-CALL). */
+  outputVolume: number;
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
@@ -357,6 +384,8 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   sensitivity: null,
   micVolume: 100,
   sounds: true,
+  askBeforeCall: true,
+  outputVolume: 100,
 };
 
 /** Which shortcut a key is for. */
@@ -413,6 +442,10 @@ export interface VoiceApi {
   onSpeaking(listener: (speaking: VoiceSpeaking) => void): () => void;
   onNotice(listener: (notice: VoiceNotice) => void): () => void;
   onLevel(listener: (level: VoiceLevel) => void): () => void;
+  /** The live meters' levels (VOICE-CALL), while `setLevels(true)`. */
+  onLevels(listener: (levels: VoiceLevels) => void): () => void;
+  /** The page shows the live meters now (its window in front with a room), or not. */
+  setLevels(on: boolean): Promise<void>;
 
   /** "Ara": a new friend room, ringing the friend. */
   call(friend: string): Promise<VoiceAnswer>;

@@ -119,4 +119,14 @@ describe("the voice pill", () => {
     show(scenario("weak"));
     expect(screen.getByRole("button", { name: /Bağlantı zayıf/ })).toBeTruthy();
   });
+
+  it("shows a call with one friend's time, and the microphone's meter (VOICE-CALL)", () => {
+    const { container } = show(scenario("call1"));
+    expect(screen.getByRole("timer").textContent).toMatch(/^04:1[2-4]$/);
+    expect(container.querySelector("[data-voice-meter]")).not.toBeNull();
+    cleanup();
+    // A group call or a crew room: no time.
+    show(scenario("room"));
+    expect(screen.queryByRole("timer")).toBeNull();
+  });
 });

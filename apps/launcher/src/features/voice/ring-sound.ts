@@ -1,17 +1,18 @@
-// Voice chat's two tones (VOICE-L3): the ring while a call or invite rings for the player and the
+// Voice chat's ring on the page (VOICE-L3): while a call or invite rings for the player and the
 // launcher is in front (VOICE-L1's rule: behind, Windows' call notification rings with its own
-// sound), and a soft ringback while the player's own call rings at a friend. Our own synthesized
-// chimes (no file to ship or license), each drawn once in an OfflineAudioContext into a WAV that an
-// audio element loops. Nothing plays while nothing rings, and nothing with the window away.
+// sound). Our own synthesized chime (no file to ship or license), drawn once in an
+// OfflineAudioContext into a WAV that an audio element loops. Nothing plays while nothing rings,
+// and nothing with the window away. The caller's waiting tone is the voice window's (VOICE-CALL:
+// one tone, heard in the tray and the game too; the page's own ringback doubled it).
 import { encodeWav } from "@/lib/wav";
 
-export type VoiceTone = "ring" | "ringback";
+export type VoiceTone = "ring";
 
 const SAMPLE_RATE = 44_100;
-/** One loop of each tone, its rest included (seconds). */
-const LENGTH: Record<VoiceTone, number> = { ring: 2.6, ringback: 4 };
-/** A ring is meant to be heard; the ringback only keeps the caller company. */
-const VOLUME: Record<VoiceTone, number> = { ring: 0.6, ringback: 0.3 };
+/** One loop of the ring, its rest included (seconds). */
+const LENGTH: Record<VoiceTone, number> = { ring: 2.6 };
+/** A ring is meant to be heard. */
+const VOLUME: Record<VoiceTone, number> = { ring: 0.6 };
 
 /** A soft bell: a sine and its quiet octave, a quick attack, a long fall. */
 function chime(ctx: BaseAudioContext, frequency: number, at: number, peak: number, length: number) {
@@ -34,18 +35,12 @@ function chime(ctx: BaseAudioContext, frequency: number, at: number, peak: numbe
   }
 }
 
-function draw(ctx: BaseAudioContext, tone: VoiceTone) {
-  if (tone === "ring") {
-    // Two rising pairs ("ding-dong, ding-dong"), then a rest.
-    chime(ctx, 659.25, 0.02, 0.22, 0.5);
-    chime(ctx, 880, 0.22, 0.2, 0.6);
-    chime(ctx, 659.25, 0.72, 0.22, 0.5);
-    chime(ctx, 880, 0.92, 0.2, 0.7);
-  } else {
-    // One low, warm pair every four seconds.
-    chime(ctx, 440, 0.02, 0.12, 1.2);
-    chime(ctx, 523.25, 0.06, 0.06, 1.1);
-  }
+function draw(ctx: BaseAudioContext) {
+  // Two rising pairs ("ding-dong, ding-dong"), then a rest.
+  chime(ctx, 659.25, 0.02, 0.22, 0.5);
+  chime(ctx, 880, 0.22, 0.2, 0.6);
+  chime(ctx, 659.25, 0.72, 0.22, 0.5);
+  chime(ctx, 880, 0.92, 0.2, 0.7);
 }
 
 const clips = new Map<VoiceTone, Promise<HTMLAudioElement | null>>();
@@ -54,7 +49,7 @@ async function render(tone: VoiceTone): Promise<HTMLAudioElement | null> {
   if (typeof OfflineAudioContext === "undefined" || typeof Audio === "undefined") return null;
   try {
     const ctx = new OfflineAudioContext(1, Math.ceil(SAMPLE_RATE * LENGTH[tone]), SAMPLE_RATE);
-    draw(ctx, tone);
+    draw(ctx);
     const rendered = await ctx.startRendering();
     const wav = new Blob([encodeWav(rendered.getChannelData(0), SAMPLE_RATE)], {
       type: "audio/wav",

@@ -257,6 +257,20 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
           { action: "voiceMuteForMe", checked: voiceRoom.mutedForMe },
         )
       : []),
+    // VOICE-CALL: anyone else, "Sesli arama başlat" at the top (the owner's "sağ tıklayıp sesli
+    // arama başlat"), or "Odaya davet et" while the player's room may take them.
+    ...only<PersonAction>(
+      !voiceRoom &&
+        together &&
+        offer !== null &&
+        (offer === "call"
+          ? { action: "voiceCall" }
+          : {
+              action: "voiceInvite",
+              disabled: offer !== "invite",
+              checked: offer === "ringing" ? true : undefined,
+            }),
+    ),
     null,
     ...(voiceRoom
       ? only<PersonAction>(
@@ -296,16 +310,6 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
           checked: input.world.invite === "invited" ? true : undefined,
         },
       together && friend && Boolean(input.chat) && { action: "chat" },
-      // "Ara" beside "Mesaj gönder"; "Odaya davet et" while the player's room may take them.
-      together &&
-        offer !== null &&
-        (offer === "call"
-          ? { action: "voiceCall" }
-          : {
-              action: "voiceInvite",
-              disabled: offer !== "invite",
-              checked: offer === "ringing" ? true : undefined,
-            }),
       Boolean(input.discord) && { action: "message" },
       // On a request's own row its answers say it all.
       together &&

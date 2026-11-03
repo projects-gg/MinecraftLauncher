@@ -225,6 +225,15 @@ pub fn voice_self_test(state: State<'_, AppState>, on: bool) -> CmdResult<()> {
     Ok(())
 }
 
+/// The page shows the live meters (`on`: its window on screen with a room's pill or panel) or not
+/// (VOICE-CALL): `voice-levels` comes meanwhile, and the voice page measures only then.
+#[tauri::command]
+#[specta::specta]
+pub fn voice_levels(state: State<'_, AppState>, on: bool) -> CmdResult<()> {
+    state.voice.set_meters(on);
+    Ok(())
+}
+
 /// "Ayarları aç" under "Mikrofona izin verilmedi.": Windows' microphone privacy page.
 #[tauri::command]
 #[specta::specta]

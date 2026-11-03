@@ -12,12 +12,15 @@ import type { VoiceNotice, VoiceState } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
 import { isWindowAway, onWindowAwayChange } from "@/lib/window-away";
 import { openMicSettings } from "./actions";
+import { CallConfirm } from "./call-confirm";
 import { askDiscord } from "./discord-offer";
+import { useLevelStream } from "./levels";
+import { loadVoicePrefs } from "./prefs";
 import { playTone } from "./ring-sound";
 import { dismissRingToast, showRingToast } from "./ring-toast";
 import { leftText, peopleChanges, toneNow } from "./rules";
 import { RoomSheet } from "./sheet";
-import { faceNow, useVoiceUi } from "./store";
+import { faceNow, useVoiceUi, voiceOn } from "./store";
 
 /** Toasts with a way out stay a little longer (they ask for an answer). */
 const ACTION_TOAST_MS = 9000;
@@ -147,7 +150,13 @@ function useVoiceSync() {
 
 function useVoiceTones() {
   useEffect(() => {
-    const decide = () => playTone(toneNow(useVoiceUi.getState().state, isWindowAway()));
+    // The ring only (VOICE-CALL): the caller's waiting tone is the voice window's, which also
+    // sounds in the tray and in the game; the page's own one doubled it while the window was in
+    // front.
+    const decide = () => {
+      const tone = toneNow(useVoiceUi.getState().state, isWindowAway());
+      playTone(tone === "ring" ? tone : null);
+    };
     decide();
     const stopStore = useVoiceUi.subscribe((now, before) => {
       if (now.state !== before.state) decide();
@@ -212,10 +221,30 @@ function useDiscordOnRoom() {
   }, []);
 }
 
+/**
+ * The settings other surfaces read (VOICE-CALL: the meters' sensitivity, the panel's volume): once
+ * voice chat shows, and again whenever the launcher says they changed.
+ */
+function useVoicePrefsSync() {
+  const on = useVoiceUi((s) => voiceOn(s.state));
+  const revision = useVoiceUi((s) => s.state.backupRev ?? 0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the revision says when they changed
+  useEffect(() => {
+    if (on) loadVoicePrefs();
+  }, [on, revision]);
+}
+
 export function VoiceHost() {
   useVoiceSync();
   useVoiceTones();
   useMissedSeen();
   useDiscordOnRoom();
-  return <RoomSheet />;
+  useVoicePrefsSync();
+  useLevelStream();
+  return (
+    <>
+      <RoomSheet />
+      <CallConfirm />
+    </>
+  );
 }
