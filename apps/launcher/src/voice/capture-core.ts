@@ -22,6 +22,11 @@ export interface CaptureEvents {
   me(on: boolean): void;
   /** The settings page's bar: the loudest of the last 100 ms (0–1), and whether it is speech. */
   level(level: number, open: boolean): void;
+  /**
+   * The launcher's live meter (VOICE-CALL): the loudest of the last 60 ms (0–1, in 64 steps) and
+   * whether any of it went out; only on change, and a quiet microphone posts nothing.
+   */
+  meter(level: number, open: boolean): void;
   /** RNNoise takes more of the audio thread than it can give (once). */
   slow(): void;
 }
@@ -39,6 +44,12 @@ const SCALE = 32768;
 const PTT_TAIL_FRAMES = 20;
 /** The level bar's pace: ten a second. */
 const LEVEL_FRAMES = 10;
+/** The live meter's pace (VOICE-CALL): about sixteen a second. */
+const METER_FRAMES = 6;
+/** The live meter's steps (a meter of a few bars needs no finer value; fewer posts change). */
+const METER_STEPS = 64;
+/** Below this (-48 dBFS on the bar's scale) the meter reads 0: a room's quiet lights nothing. */
+const METER_QUIET = 0.2;
 /** RNNoise's cost is judged over this many cleaned frames (1 s of speech)... */
 const SLOW_FRAMES = 100;
 /** ...and is too much above this share of their length, twice in a row. */
@@ -68,6 +79,14 @@ export class CaptureCore {
   private tail = 0;
   private testing = false;
   private levels = false;
+  /** The launcher's live meter (VOICE-CALL). */
+  private metering = false;
+  private meterPeak = Number.NEGATIVE_INFINITY;
+  private meterOpen = false;
+  private meterFrames = 0;
+  /** The meter's last post (a step, and whether it went out), to post only changes. */
+  private meterSent = 0;
+  private meterSentOpen = false;
   private denoiser: Denoiser | null = null;
   /** RNNoise cleaned the previous frame (its state follows the sound). */
   private denoisedLast = false;
@@ -125,6 +144,21 @@ export class CaptureCore {
     this.levelOpen = false;
   }
 
+  /**
+   * The launcher's live meter (VOICE-CALL): while on, the microphone is listened to even when
+   * nothing may go out (alone in the room, push-to-talk up), so the player sees it hears them.
+   */
+  setMeter(on: boolean): void {
+    if (on === this.metering) return;
+    this.metering = on;
+    this.meterFrames = 0;
+    this.meterPeak = Number.NEGATIVE_INFINITY;
+    this.meterOpen = false;
+    // Off: the meter rests (the engine says so itself); on: the first post is a change.
+    this.meterSent = 0;
+    this.meterSentOpen = false;
+  }
+
   /** "Mikrofonu dene": the player hears what would be sent; nothing goes out meanwhile. */
   setTest(on: boolean): void {
     this.testing = on;
@@ -150,6 +184,7 @@ export class CaptureCore {
       this.tail > 0 ||
       this.testing ||
       this.levels ||
+      this.metering ||
       this.sendGain > 0 ||
       this.monitorGain > 0
     );
@@ -205,7 +240,10 @@ export class CaptureCore {
     const sendable = this.config.ptt && (this.talkOpen || this.tail > 0) && !this.testing;
     let vad: number | null = null;
     const denoiser = this.config.ns ? this.denoiser : null;
-    if (denoiser && (sendable || this.gate.wantsDenoise(db))) {
+    // Only the live meter listens (nothing may go out, no test, no settings bar): the level is
+    // all it needs, the noise suppressor sleeps (VOICE-CALL).
+    const heard = this.talkOpen || this.tail > 0 || this.testing || this.levels;
+    if (denoiser && heard && (sendable || this.gate.wantsDenoise(db))) {
       const begin = this.clock();
       if (!this.denoisedLast) {
         // RNNoise answers each frame with the one before it: a run starts from the frame that
@@ -233,6 +271,7 @@ export class CaptureCore {
     this.sendFrames[slot] = send ? 1 : 0;
     this.monitorFrames[slot] = this.testing && voice ? 1 : 0;
     this.setMe(send && voice);
+    if (this.metering) this.meterFrame(db, send);
     if (this.levels) {
       this.levelPeak = Math.max(this.levelPeak, db);
       this.levelOpen ||= voice;
@@ -244,6 +283,29 @@ export class CaptureCore {
         this.levelOpen = false;
       }
     }
+  }
+
+  /**
+   * One frame for the live meter: every 60 ms its loudest, posted when it moved by more than a
+   * step or its "out" changed. Under the room's quiet (-48 dBFS) it reads 0, so a still microphone
+   * posts nothing at all.
+   */
+  private meterFrame(db: number, sent: boolean): void {
+    this.meterPeak = Math.max(this.meterPeak, db);
+    this.meterOpen ||= sent;
+    this.meterFrames += 1;
+    if (this.meterFrames < METER_FRAMES) return;
+    const level = levelOf(this.meterPeak);
+    const step = level < METER_QUIET ? 0 : Math.round(level * METER_STEPS);
+    const open = this.meterOpen && step > 0;
+    this.meterFrames = 0;
+    this.meterPeak = Number.NEGATIVE_INFINITY;
+    this.meterOpen = false;
+    const moved = Math.abs(step - this.meterSent) > 1 || (step === 0) !== (this.meterSent === 0);
+    if (!moved && open === this.meterSentOpen) return;
+    this.meterSent = step;
+    this.meterSentOpen = open;
+    this.events.meter(step / METER_STEPS, open);
   }
 
   private measure(ms: number): void {

@@ -30,6 +30,10 @@ export interface GraphEvents {
   me(on: boolean): void;
   /** The settings page's bar. */
   level(level: number, open: boolean): void;
+  /** The launcher's live meter of the microphone (VOICE-CALL), on change. */
+  meter(level: number, open: boolean): void;
+  /** The receivers' levels for the live meters (VOICE-CALL): every measured receiver's, on change. */
+  levels(levels: ReadonlyArray<readonly [mid: string, level: number]>): void;
   /** A receiver's sound is speech now (or stopped). */
   speaking(mid: string, on: boolean): void;
   /** The microphone's state; `changed`: the one in use went and another took its place. */
@@ -49,6 +53,8 @@ export interface Graph {
   /** The way out opens or closes; `tail` false: close at once even in push-to-talk. */
   talk(open: boolean, tail?: boolean): void;
   levels(on: boolean): void;
+  /** The launcher's live meters (VOICE-CALL): the microphone's (`me`), the people's. */
+  meters(me: boolean, people: boolean): void;
   test(on: boolean): void;
   deaf(on: boolean): void;
   /** A receiver of the call (not played until `play`). */
@@ -115,6 +121,16 @@ function limiterOf(ctx: AudioContext): DynamicsCompressorNode {
   });
 }
 
+/** "Ses seviyesi" as a gain (VOICE-CALL): 0–2 (the launcher holds it to the path's top). */
+function masterOf(settings: EngineSettings): number {
+  return Math.min(200, Math.max(0, settings.outputVolume)) / 100;
+}
+
+/** An `<audio>` element's volume: the person's, then everyone's, 100 % at most. */
+function elementVolume(volume: number, master: number): number {
+  return Math.min(1, (volume / 100) * Math.min(1, master));
+}
+
 /** What a refused `getUserMedia` means for the player. */
 function micStateOf(error: unknown): VoiceMic {
   const name = error instanceof Error ? error.name : "";
@@ -150,6 +166,10 @@ export class AudioGraph implements Graph {
   private ns: "loading" | "ready" | "failed" | "slow" = "loading";
   private deafOn = false;
   private testOn = false;
+  /** The people's live levels (VOICE-CALL), for speakers nodes made later too. */
+  private peopleLevels = false;
+  /** "Ses seviyesi" (VOICE-CALL): everyone at once, 0–2 (1 on the `<audio>` path at most). */
+  private master = 1;
   private sinkId = "";
   private inputs: VoiceDevice[] | null = null;
   private outputs: VoiceDevice[] | null = null;
@@ -185,6 +205,7 @@ export class AudioGraph implements Graph {
     wasm: ArrayBuffer | null,
   ) {
     this.settings = settings;
+    this.master = masterOf(settings);
     if (!wasm) {
       this.ns = "failed";
       events.failed("rnnoise_load");
@@ -208,7 +229,8 @@ export class AudioGraph implements Graph {
     this.sendTrack = track;
     this.limiter = limiterOf(ctx);
     this.limiter.connect(ctx.destination);
-    this.mix = new GainNode(ctx, { gain: 1 });
+    // Everyone's voice at once ("Ses seviyesi"); deafened, nothing (`deaf`).
+    this.mix = new GainNode(ctx, { gain: this.master });
     this.mix.connect(this.limiter);
     this.monitor = new GainNode(ctx, { gain: 1 });
     this.monitor.connect(this.limiter);
@@ -266,6 +288,9 @@ export class AudioGraph implements Graph {
       case "level":
         this.events.level(message.level, message.open);
         break;
+      case "meter":
+        this.events.meter(message.level, message.open);
+        break;
       case "ns":
         if (message.ok) {
           this.ns = "ready";
@@ -293,6 +318,11 @@ export class AudioGraph implements Graph {
     const before = this.settings;
     this.settings = settings;
     this.post({ t: "config", config: this.captureConfig() });
+    const master = masterOf(settings);
+    if (master !== this.master) {
+      this.master = master;
+      this.applyMaster();
+    }
     const builtIn = (s: EngineSettings) => s.noiseSuppression && !this.nsUsable();
     if (
       before.inputDevice !== settings.inputDevice ||
@@ -314,6 +344,28 @@ export class AudioGraph implements Graph {
     this.post({ t: "levels", on });
   }
 
+  meters(me: boolean, people: boolean): void {
+    this.post({ t: "meter", on: me });
+    if (people === this.peopleLevels) return;
+    this.peopleLevels = people;
+    for (const node of this.speakers) {
+      node.port.postMessage({ t: "levels", on: people } satisfies SpeakersMessage);
+    }
+  }
+
+  /** "Ses seviyesi" now, on the path that plays people (VOICE-CALL). */
+  private applyMaster(): void {
+    if (this.path === "webAudio") {
+      if (!this.deafOn) this.mix.gain.setTargetAtTime(this.master, this.ctx.currentTime, GLIDE_S);
+      return;
+    }
+    for (const entry of this.entries.values()) {
+      if (entry.element && entry.volume !== null) {
+        entry.element.volume = elementVolume(entry.volume, this.master);
+      }
+    }
+  }
+
   test(on: boolean): void {
     if (on === this.testOn) return;
     this.testOn = on;
@@ -324,7 +376,7 @@ export class AudioGraph implements Graph {
 
   deaf(on: boolean): void {
     this.deafOn = on;
-    this.mix.gain.setTargetAtTime(on ? 0 : 1, this.ctx.currentTime, GLIDE_S / 2);
+    this.mix.gain.setTargetAtTime(on ? 0 : this.master, this.ctx.currentTime, GLIDE_S / 2);
     if (this.path === "element") {
       for (const entry of this.entries.values()) {
         if (entry.element) entry.element.muted = on || entry.volume === null;
@@ -602,7 +654,7 @@ export class AudioGraph implements Graph {
       entry.boost?.disconnect();
       entry.gain = null;
       entry.boost = null;
-      element.volume = Math.min(1, volume / 100);
+      element.volume = elementVolume(volume, this.master);
       element.muted = this.deafOn;
       return;
     }
@@ -643,7 +695,10 @@ export class AudioGraph implements Graph {
       });
       const base = this.speakers.length * SPEAKER_SLOTS;
       node.port.onmessage = (event: MessageEvent<SpeakersPost>) =>
-        this.onSpeaker(base + event.data.slot, event.data.on, event.data.generation);
+        this.onSpeakers(base, event.data);
+      if (this.peopleLevels) {
+        node.port.postMessage({ t: "levels", on: true } satisfies SpeakersMessage);
+      }
       this.speakers.push(node);
       slot = this.slots.length;
       for (let i = 0; i < SPEAKER_SLOTS; i++) {
@@ -679,6 +734,23 @@ export class AudioGraph implements Graph {
       }
     }
     if (this.lit.delete(slot)) this.events.speaking(mid, false);
+  }
+
+  private onSpeakers(base: number, post: SpeakersPost): void {
+    if (this.closed) return;
+    if (post.t === "on") {
+      this.onSpeaker(base + post.slot, post.on, post.generation);
+      return;
+    }
+    if (!this.peopleLevels) return;
+    const levels: Array<readonly [string, number]> = [];
+    post.levels.forEach((level, i) => {
+      const slot = base + i;
+      const mid = this.slots[slot];
+      // An empty slot, or one whose person changed while the post was on its way.
+      if (mid && post.generations[i] === this.slotGenerations[slot]) levels.push([mid, level]);
+    });
+    this.events.levels(levels);
   }
 
   private onSpeaker(slot: number, on: boolean, generation: number): void {

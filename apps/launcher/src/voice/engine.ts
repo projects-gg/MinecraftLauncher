@@ -24,9 +24,11 @@ import type {
 } from "./boundary";
 import { Call, type CallEvents, type CallLike, type CallOptions } from "./call";
 import { AudioGraph, type Graph, type GraphEvents } from "./graph";
+import { LevelsReporter } from "./levels";
 import { MidMap } from "./mids";
 import { grade, type Quality, QualityTracker, type RawStats, windowOf } from "./quality";
 import { SerialQueue } from "./queue";
+import { playsWhileDeaf } from "./sounds";
 import { realTimers, SpeakingReporter, type Timers } from "./speaking";
 
 export interface Engine {
@@ -57,6 +59,7 @@ export const DEFAULT_SETTINGS: EngineSettings = {
   pushToTalk: false,
   kbps: 24,
   sounds: true,
+  outputVolume: 100,
 };
 
 /** The quality check's pace in a call with others: rare while good, close while not. */
@@ -101,6 +104,11 @@ class VoiceEngine implements Engine {
   private readonly lit = new Set<string>();
   private me = false;
   private readonly speaking: SpeakingReporter;
+  /** The launcher's live meters (VOICE-CALL): what it asked for, and the receivers' levels. */
+  private meterMe = false;
+  private meterPeople = false;
+  private readonly midLevels = new Map<string, number>();
+  private readonly levels: LevelsReporter;
   private readonly quality = new QualityTracker();
   private qualityTimer: (() => void) | null = null;
   private qualityBefore: RawStats | null = null;
@@ -116,6 +124,10 @@ class VoiceEngine implements Engine {
   ) {
     this.speaking = new SpeakingReporter(
       (ids, me) => this.report({ t: "speaking", ids, me }),
+      deps.timers,
+    );
+    this.levels = new LevelsReporter(
+      (frame) => this.report({ t: "levels", ...frame }),
       deps.timers,
     );
   }
@@ -167,6 +179,9 @@ class VoiceEngine implements Engine {
         this.testing = command.on;
         this.refresh();
         break;
+      case "meters":
+        this.meters(command.me, command.people);
+        break;
       case "leave":
         this.leave();
         break;
@@ -195,6 +210,7 @@ class VoiceEngine implements Engine {
           // Settings that changed while it opened; the test before the way out opens.
           void graph.configure(this.settings).catch(() => undefined);
           graph.levels(this.setup || this.testing);
+          graph.meters(this.meterMe, this.meterPeople);
           graph.test(this.testing);
           graph.deaf(this.deaf);
           graph.talk(this.talkOpen);
@@ -222,6 +238,17 @@ class VoiceEngine implements Engine {
       },
       level: (level, open) => {
         if (this.setup || this.testing) this.report({ t: "level", level, open });
+      },
+      meter: (level, open) => {
+        if (this.meterMe && this.stay) this.levels.setMe(level, open);
+      },
+      levels: (levels) => {
+        if (!this.meterPeople || !this.stay) return;
+        for (const [mid, level] of levels) {
+          if (level > 0) this.midLevels.set(mid, level);
+          else this.midLevels.delete(mid);
+        }
+        this.pushLevels();
       },
       speaking: (mid, on) => {
         if (on) this.lit.add(mid);
@@ -282,9 +309,33 @@ class VoiceEngine implements Engine {
   }
 
   private sound(name: EngineSound): void {
-    // Deafened, nothing plays but the shortcut's own tick.
-    if (this.deaf && name !== "tick" && name !== "stop") return;
+    // Deafened, nothing plays but the player's own state (VOICE-CALL: the microphone, the sound,
+    // in and out); someone coming or leaving, and the caller's tone, wait for the sound to be back.
+    if (this.deaf && !playsWhileDeaf(name)) return;
     this.graph?.sound(name);
+  }
+
+  /** The launcher's live meters (VOICE-CALL): what to measure now. */
+  private meters(me: boolean, people: boolean): void {
+    this.meterMe = me;
+    this.meterPeople = people;
+    this.graph?.meters(me, people);
+    // What is no longer measured rests (the launcher hears that once).
+    if (!me) this.levels.setMe(0, false);
+    if (!people && this.midLevels.size) {
+      this.midLevels.clear();
+      this.pushLevels();
+    }
+  }
+
+  /** The people's levels as the launcher knows them: by person, only people played now. */
+  private pushLevels(): void {
+    const people = new Map<string, number>();
+    for (const [mid, level] of this.midLevels) {
+      const person = this.personOf(mid);
+      if (person && this.receivers.has(mid)) people.set(person.id, level);
+    }
+    this.levels.setPeople(people);
   }
 
   // -----------------------------------------------------------------------------------------
@@ -375,6 +426,7 @@ class VoiceEngine implements Engine {
         this.lit.delete(mid);
         this.graph?.detach(mid);
         this.pushSpeaking();
+        if (this.midLevels.delete(mid)) this.pushLevels();
       },
     };
   }
@@ -442,6 +494,12 @@ class VoiceEngine implements Engine {
     this.talkOpen = false;
     this.cancelTurnWait();
     this.graph?.talk(false, false);
+    // The stay's end turns the live meters off (the launcher knows: VOICE-CALL).
+    this.meterMe = false;
+    this.meterPeople = false;
+    this.graph?.meters(false, false);
+    this.midLevels.clear();
+    this.levels.reset();
     void this.queue.run(async () => {
       this.dropCall();
       this.speaking.clear();
@@ -466,6 +524,10 @@ class VoiceEngine implements Engine {
     this.lit.clear();
     this.mids.clear();
     this.pushSpeaking();
+    if (this.midLevels.size) {
+      this.midLevels.clear();
+      this.pushLevels();
+    }
   }
 
   // -----------------------------------------------------------------------------------------
@@ -489,6 +551,8 @@ class VoiceEngine implements Engine {
       }
     }
     this.pushSpeaking();
+    // Someone silenced (or gone) leaves the meters too.
+    if (this.midLevels.size) this.pushLevels();
   }
 
   private pushSpeaking(): void {

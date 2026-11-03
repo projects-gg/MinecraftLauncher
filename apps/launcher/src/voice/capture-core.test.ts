@@ -11,6 +11,7 @@ const PER_S = RATE / BLOCK;
 class Rig {
   readonly me: boolean[] = [];
   readonly levels: { level: number; open: boolean }[] = [];
+  readonly meters: { level: number; open: boolean }[] = [];
   slow = 0;
   now = 0;
   readonly core: CaptureCore;
@@ -22,6 +23,7 @@ class Rig {
       {
         me: (on) => this.me.push(on),
         level: (level, open) => this.levels.push({ level, open }),
+        meter: (level, open) => this.meters.push({ level, open }),
         slow: () => {
           this.slow += 1;
         },
@@ -85,6 +87,54 @@ function fakeDenoiser(vad: number): Denoiser & { calls: number } {
 
 const QUIET = -65;
 const SPEECH = -25;
+
+describe("CaptureCore: the live meter (VOICE-CALL)", () => {
+  it("listens without sending, and the noise suppressor sleeps meanwhile", () => {
+    const denoiser = fakeDenoiser(0.9);
+    const rig = new Rig({}, denoiser);
+    rig.core.setMeter(true);
+    const { sent } = rig.feed(SPEECH, 0.5);
+    expect(sent.every((v) => v === 0)).toBe(true);
+    expect(denoiser.calls).toBe(0);
+    expect(rig.meters.length).toBeGreaterThan(0);
+    // Heard, not sent: never "open".
+    expect(rig.meters.every((m) => !m.open)).toBe(true);
+    expect(Math.max(...rig.meters.map((m) => m.level))).toBeCloseTo(levelOf(SPEECH), 1);
+    expect(rig.me).toEqual([]);
+  });
+
+  it("says what goes out, about sixteen times a second at most, and nothing in the quiet", () => {
+    const rig = new Rig({ ns: false });
+    rig.core.talk(true);
+    rig.core.setMeter(true);
+    rig.feed(QUIET, 1);
+    expect(rig.meters).toEqual([]);
+    rig.feed(SPEECH, 1);
+    expect(rig.meters.length).toBeGreaterThan(0);
+    expect(rig.meters.length).toBeLessThanOrEqual(17);
+    expect(rig.meters.some((m) => m.open)).toBe(true);
+    // A steady voice changes nothing more after it settles.
+    const settled = rig.meters.length;
+    rig.feed(SPEECH, 1);
+    expect(rig.meters.length - settled).toBeLessThanOrEqual(1);
+    // Quiet again: one post that it rests, then none.
+    rig.feed(QUIET, 1);
+    expect(rig.meters.at(-1)).toEqual({ level: 0, open: false });
+    const rested = rig.meters.length;
+    rig.feed(QUIET, 1);
+    expect(rig.meters).toHaveLength(rested);
+  });
+
+  it("stops listening when the meter goes off", () => {
+    const rig = new Rig({ ns: false });
+    rig.core.setMeter(true);
+    rig.feed(SPEECH, 0.3);
+    rig.core.setMeter(false);
+    const before = rig.meters.length;
+    rig.feed(SPEECH, 0.5);
+    expect(rig.meters).toHaveLength(before);
+  });
+});
 
 describe("CaptureCore", () => {
   it("does nothing while nothing needs the microphone (muted, no bar, no test)", () => {
