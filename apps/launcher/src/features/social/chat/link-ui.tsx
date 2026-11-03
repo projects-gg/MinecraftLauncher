@@ -28,6 +28,7 @@ import { type ReactElement, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatCard, ChatCardIcon } from "@/lib/api/social-types";
 import { openWebLink } from "@/lib/links";
+import { decorate, type Spans, searchRangesOf, useSearchMarks } from "../next/decorate";
 import type { MessageLink } from "./text";
 
 /** A link as the drawing needs it (text.ts's `messageLinks` makes them). */
@@ -63,6 +64,9 @@ function hostIn(host: string, list: readonly string[]): boolean {
 export type TextPiece =
   | { kind: "text"; text: string }
   | { kind: "link"; link: FoundLink; text: string };
+
+const NO_SPANS: Spans = [];
+const NO_RANGES: ReadonlyArray<readonly [number, number]> = [];
 
 export function piecesOf(text: string, links: readonly FoundLink[]): TextPiece[] {
   const pieces: TextPiece[] = [];
@@ -148,14 +152,32 @@ function LinkOpener({
 }
 
 /** A message's text with its links (only those the rules let through can be pressed). */
-export function MessageText({ text, links }: { text: string; links: readonly FoundLink[] }) {
-  if (!links.some((l) => l.ok)) return <>{text}</>;
+export function MessageText({
+  text,
+  links,
+  mentions = NO_SPANS,
+  searchKey,
+}: {
+  text: string;
+  links: readonly FoundLink[];
+  /** SOC-NEXT: where the message mentions crewmates ("@Kaan_07"). */
+  mentions?: Spans;
+  /** SOC-NEXT: the message's key, for the open search's marks (next/decorate.tsx). */
+  searchKey?: string;
+}) {
+  const marks = useSearchMarks();
+  const search = searchKey ? searchRangesOf(text, marks) : NO_RANGES;
+  const current = searchKey !== undefined && marks.current === searchKey;
+  if (!links.some((l) => l.ok)) return <>{decorate(text, 0, mentions, search, current)}</>;
+  let offset = 0;
   return (
     <>
       {piecesOf(text, links).map((piece, index) => {
+        const at = offset;
+        offset += piece.text.length;
         if (piece.kind === "text" || !piece.link.ok) {
           // biome-ignore lint/suspicious/noArrayIndexKey: pieces of one text, in place
-          return <span key={index}>{piece.text}</span>;
+          return <span key={index}>{decorate(piece.text, at, mentions, search, current)}</span>;
         }
         const link = piece.link;
         return (

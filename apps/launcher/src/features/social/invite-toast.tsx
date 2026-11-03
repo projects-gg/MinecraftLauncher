@@ -13,6 +13,7 @@ import type { WorldInvite } from "@/lib/api/host-types";
 import type { SocialInvite, TeamInvite } from "@/lib/api/social-types";
 import { canJoinInvite, joinInvite } from "./join-dialog";
 import { isJoinable } from "./model";
+import { shownHost } from "./next/streamer";
 import { MarkedSentence } from "./person-mark";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
@@ -24,7 +25,10 @@ function InviteToast({ toastId, invite }: { toastId: string | number; invite: So
   const where = isJoinable(invite.server)
     ? t("social.presence.projects")
     : invite.server?.host
-      ? t("social.presence.otherHost", { host: invite.server.host })
+      ? // SOC-NEXT "Yayıncı modu": no address on a stream.
+        shownHost(invite.server.host)
+        ? t("social.presence.otherHost", { host: invite.server.host })
+        : t("social.presence.other")
       : null;
   return (
     <div className="flex w-full items-center gap-3 font-normal">

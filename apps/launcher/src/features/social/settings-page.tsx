@@ -32,6 +32,8 @@ import { dayMonth, limitOf } from "./limits";
 import { LinkedAccountsSection, ProfileNameSection } from "./linked-accounts";
 import { BUILTIN_MARK_DEFS, heldMarks, hiddenAfter } from "./marks";
 import { rise, useSocialMotion } from "./motion";
+import { IgnoredSection } from "./next/ignore-ui";
+import { StreamerSetting } from "./next/streamer-ui";
 import { NameWithMark } from "./person-mark";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -382,6 +384,8 @@ function PrivacySection({ me }: { me: SocialMe }) {
           />
         ) : null}
         {crews ? <TogetherSetting /> : null}
+        {/* SOC-NEXT: "Yayıncı modu" (shown only with SOC-NEXT on). */}
+        <StreamerSetting />
       </div>
     </Section>
   );
@@ -786,6 +790,8 @@ export function SocialSettings() {
       <LinkedAccountsSection me={me} />
       <SessionsSection />
       <BlockedSection />
+      {/* SOC-NEXT: "Yok saydıkların" beside the blocked list. */}
+      <IgnoredSection Section={Section} />
       <AccountSection />
     </div>
   );

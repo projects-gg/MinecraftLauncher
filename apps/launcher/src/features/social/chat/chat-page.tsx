@@ -2,7 +2,19 @@
 // the crew tag they wear, TEAM6), "Discord'dan mesajlaş" as Discord's own mark alone (its words the
 // tooltip; the app when it is installed) and the conversation's menu (mute here, clear the history
 // here, report); the body is the conversation.
-import { BellSlash, Broom, CaretLeft, DotsThree, Flag, SpeakerHigh } from "@phosphor-icons/react";
+//
+// SOC-NEXT: the header's magnifier opens the search ("Sohbette ara", as Ctrl+F does); a friend
+// with a nickname shows it with the name the service knows small and grey beside it; while the
+// player ignores them the header's second line says so, with "Bırak".
+import {
+  BellSlash,
+  Broom,
+  CaretLeft,
+  DotsThree,
+  Flag,
+  MagnifyingGlass,
+  SpeakerHigh,
+} from "@phosphor-icons/react";
 import { Button, ContentIcon, cn, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
 import { Dialog as RadixDialog } from "radix-ui";
 import { useCallback, useEffect, useState } from "react";
@@ -16,6 +28,9 @@ import { BadgeChip, useShownBadge } from "../crew-badge";
 import { untilText } from "../crew-notify";
 import { openInDiscord } from "../discord-link";
 import { MUTE_PRESETS, muteUntilFor } from "../mute";
+import { useSocNext } from "../next/flag";
+import { IgnoredLine, useIgnoring } from "../next/ignore-ui";
+import { openChatSearch } from "../next/search-bar";
 import { PersonMark } from "../person-mark";
 import { PersonContextMenu } from "../person-menu";
 import { PresenceText } from "../presence-text";
@@ -161,6 +176,8 @@ export function ChatHeader() {
   const setMute = useSocialPrefs((s) => s.setChatMute);
   const [clearing, setClearing] = useState(false);
   const badge = useShownBadge(peer?.badge);
+  const next = useSocNext();
+  const ignoring = useIgnoring(peer?.id);
   if (!conv) return null;
   const muted = chatMutedNow(conv, mutes, Date.now());
   const name = peer?.name ?? title ?? t("chat.list.someone");
@@ -226,6 +243,11 @@ export function ChatHeader() {
               <RadixDialog.Title className="flex min-w-0 items-center gap-1.5 truncate text-[15px] leading-tight font-semibold text-bone-50">
                 <span className="flex min-w-0 items-center gap-1">
                   <span className="truncate">{name}</span>
+                  {peer?.realName ? (
+                    <span className="min-w-0 shrink truncate text-[12px] font-normal text-ash-400">
+                      {peer.realName}
+                    </span>
+                  ) : null}
                   {/* Their first badge right of the name (BADGES-UI), in the title's words; its
                       tooltip names them all (a title line, not a card: no list here). */}
                   <PersonMark marks={peer?.marks} />
@@ -241,12 +263,20 @@ export function ChatHeader() {
             </div>
             {peer ? (
               <p className="truncate text-[12px] text-ash-300">
-                <PresenceText friend={peer} t={t} />
+                {ignoring ? <IgnoredLine friend={peer} /> : <PresenceText friend={peer} t={t} />}
               </p>
             ) : null}
           </div>
         </div>
       </PersonContextMenu>
+      {next ? (
+        <IconButton
+          label={t("socNext.search.open")}
+          icon={<MagnifyingGlass size={18} />}
+          className="shrink-0"
+          onClick={() => openChatSearch(conv)}
+        />
+      ) : null}
       {/* "Ara" (VOICE), as an icon beside the conversation's other actions. */}
       {peer ? <ChatCallButton friend={peer.id} /> : null}
       {peer?.discordUrl ? (

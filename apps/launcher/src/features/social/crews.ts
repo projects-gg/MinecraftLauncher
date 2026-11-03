@@ -13,6 +13,7 @@ import type {
 } from "@/lib/api/social-types";
 import { callWaitUntil, crewsOfCall, myCall } from "./calls";
 import { crewmatesOnProjects, isProjectsHost } from "./model";
+import { shownHost } from "./next/streamer";
 import { crewRights } from "./teams";
 
 /** The crew page's add view ("Ekip kur ya da katıl"), in place of a crew. */
@@ -155,8 +156,11 @@ export function callWhereLine(where: CallWhere, t: TFunction): string {
   switch (where.kind) {
     case "projects":
       return t("social.presence.projects");
-    case "server":
-      return t("social.presence.otherHost", { host: where.host });
+    case "server": {
+      // SOC-NEXT "Yayıncı modu": no address on a stream.
+      const host = shownHost(where.host);
+      return host ? t("social.presence.otherHost", { host }) : t("social.presence.other");
+    }
     case "ready":
       return t("teams.call.ready");
   }

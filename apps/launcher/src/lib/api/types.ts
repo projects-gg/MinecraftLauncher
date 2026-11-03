@@ -195,6 +195,8 @@ export interface HomeContent {
   maintenance?: Maintenance;
   /** An active problem on the status page; never set while `maintenance` is. */
   status?: HomeStatus;
+  /** SOC-NEXT's screens in the friends feature (`features.socNext` with `features.friends`). */
+  socNext?: boolean;
   /** True when the content came from the local cache because the network failed. */
   offline: boolean;
 }
