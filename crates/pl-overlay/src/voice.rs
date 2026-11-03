@@ -1090,15 +1090,21 @@ mod tests {
                     name: "Genel".into(),
                     general: true,
                     people: vec!["u-kaan".into(), "u-x".into()],
+                    max: None,
+                    own: false,
                 },
                 VoiceCrewRoom {
                     id: "c1111111111111111".into(),
                     name: "Oda 2".into(),
                     general: false,
                     people: vec!["f-ayse".into()],
+                    max: None,
+                    own: false,
                 },
             ],
             can_add: true,
+            manage: false,
+            crew_max: 15,
         }];
         state
     }

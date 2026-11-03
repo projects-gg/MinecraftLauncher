@@ -2540,8 +2540,12 @@ async fn the_crews_rooms_reach_a_mod_that_shows_them_and_its_joins_reach_the_lau
             name: "Oda 2".into(),
             general: false,
             people: vec!["u-cem".into()],
+            max: None,
+            own: false,
         }],
         can_add: false,
+        manage: false,
+        crew_max: 15,
     }];
     overlay.set_voice(&state, false);
     let endpoint = overlay.start(social, "t").await.unwrap();
