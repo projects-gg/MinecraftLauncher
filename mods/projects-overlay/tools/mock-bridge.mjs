@@ -66,7 +66,9 @@
 // the ones with a result; a call to KorAtesi is refused as "unreachable"). Dev commands: "voice-ring" (NetherKral calls,
 // 30 s), "voice-speak" (with "ids", default PixelAvci, and "me"), "voice-quiet", "voice-notice" (with "kind", "reason",
 // "name"), "voice-phase" (with "phase"), "voice-sound" (with "on"), "voice-crew" (a crew room of six), "voice-out" (out
-// of the room).
+// of the room). OVL-SOC: a mod whose hello lists "voice-rooms" too hears "voice-crews" (Gece Kuşları: "Genel" with four,
+// "Oda 2" with one; Akıncılar: "Genel" alone) and its "voice-join" is answered (the player goes into that room; "new"
+// opens "Oda 3"); YildizTozu is on do-not-disturb ("dnd").
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -160,7 +162,7 @@ const state = {
   friends: [
     { id: "f-ayse", name: "PixelAvci", where: "projects", joinable: true },
     { id: "f-elif", name: "ZumrutKilic", where: "server", joinable: true, host: "mc.ornek.net" },
-    { id: "f-zeynep", name: "YildizTozu", where: "single", joinable: false },
+    { id: "f-zeynep", name: "YildizTozu", where: "single", joinable: false, dnd: true },
     { id: "f-deniz", name: "MaviElmas", where: "game", joinable: false },
     { id: "f-mert", name: "NetherKral", where: "launcher", joinable: false },
     { id: "f-can", name: "KorAtesi", where: "offline", joinable: false },
@@ -545,7 +547,38 @@ function friendRows() {
 }
 
 // VOICE-O: voice chat as the launcher shows it, and whether the connected mod shows it (its hello lists "voice").
-const voiceMock = { hears: false, view: null };
+const voiceMock = { hears: false, view: null, rooms: false, crews: null };
+
+// OVL-SOC (V21): the crews' rooms, in the launcher's order (the mock's crew chats are "crew:gece" and "crew:akinci").
+function voiceCrews() {
+  return [
+    {
+      crew: "gece",
+      conv: "crew:gece",
+      add: true,
+      rooms: [
+        {
+          id: "c0123456789abcdef",
+          general: true,
+          people: [
+            { id: "f-ayse", name: "PixelAvci" },
+            { id: "f-mert", name: "NetherKral" },
+            { id: "u-2", name: "MaviElmas" },
+            { id: "u-3", name: "Ruzgar_12" },
+          ],
+        },
+        { id: "c1111111111111111", name: "Oda 2", people: [{ id: "u-4", name: "KumSaati" }] },
+      ],
+    },
+    { crew: "akinci", conv: "crew:akinci", rooms: [{ id: "gakinci", general: true }] },
+  ];
+}
+
+function sendCrews(socket) {
+  if (args.voice && voiceMock.hears && voiceMock.rooms) {
+    send(socket, { t: "voice-crews", crews: voiceMock.view?.on ? voiceMock.crews : [] });
+  }
+}
 
 function voicePerson(id, name, extra = {}) {
   return { id, ...(name ? { name } : {}), role: "member", volume: 100, ...extra };
@@ -596,6 +629,7 @@ function voiceCrewRoom() {
 function sendVoice(socket) {
   if (args.voice && voiceMock.hears) {
     send(socket, { t: "voice", ...voiceMock.view });
+    sendCrews(socket);
   }
 }
 
@@ -628,6 +662,11 @@ function onVoice(socket, frame) {
     case "voice-leave":
       view.room = undefined;
       view.calling = undefined;
+      for (const c of voiceMock.crews ?? []) {
+        for (const r of c.rooms) {
+          r.people = (r.people ?? []).filter((p) => p.id !== "me");
+        }
+      }
       break;
     case "voice-answer": {
       const ring = (view.rings ?? []).find((r) => r.room === frame.room);
@@ -686,6 +725,42 @@ function onVoice(socket, frame) {
       };
       voiceResult(socket, "call", true, null, frame.friend);
       break;
+    case "voice-join": {
+      // OVL-SOC (V22): into one of a crew's rooms, or a new one ("Oda 3").
+      const crew = (voiceMock.crews ?? []).find((c) => c.crew === frame.crew);
+      if (!crew || !voiceMock.rooms) {
+        voiceResult(socket, "join", false, "not-member");
+        return;
+      }
+      let target = crew.rooms.find((r) => r.id === frame.room);
+      if (frame.new) {
+        target = { id: "c2222222222222222", name: "Oda 3", people: [] };
+        crew.rooms.push(target);
+        crew.add = false;
+      } else if (!target) {
+        voiceResult(socket, "join", false, "room-gone");
+        return;
+      }
+      for (const c of voiceMock.crews) {
+        for (const r of c.rooms) {
+          r.people = (r.people ?? []).filter((p) => p.id !== "me");
+        }
+      }
+      target.people = [...(target.people ?? []), { id: "me", name: state.me.name }];
+      voiceMock.view.room = {
+        id: target.id,
+        kind: "crew",
+        ...(target.general ? { general: true } : { name: target.name }),
+        crew: crew.crew === "gece" ? "Gece Kuşları" : "Akıncılar",
+        phase: "live",
+        max: 15,
+        me: { role: "member" },
+        people: target.people.filter((p) => p.id !== "me").map((p) => voicePerson(p.id, p.name)),
+      };
+      voiceMock.view.calling = undefined;
+      voiceResult(socket, "join", true);
+      break;
+    }
     case "voice-invite":
       if (room) {
         room.ringing = [
@@ -853,7 +928,9 @@ function onConnection(socket) {
         emojis.hears = Array.isArray(frame.features) && frame.features.includes("emoji");
         emojis.quiet = Array.isArray(frame.features) && frame.features.includes("panel-off");
         voiceMock.hears = Array.isArray(frame.features) && frame.features.includes("voice");
+        voiceMock.rooms = voiceMock.hears && frame.features.includes("voice-rooms");
         voiceMock.view = voiceFriendRoom();
+        voiceMock.crews = voiceCrews();
         startSession(socket);
         continue;
       }
@@ -1207,6 +1284,7 @@ function onFrame(socket, frame) {
     case "voice-mod":
     case "voice-call":
     case "voice-invite":
+    case "voice-join":
       // VOICE-O: only a launcher that plays voice chat, only from a mod that said "voice".
       if (args.voice && voiceMock.hears) {
         onVoice(socket, frame);

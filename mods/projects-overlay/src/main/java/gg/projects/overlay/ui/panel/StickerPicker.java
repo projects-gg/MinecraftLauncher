@@ -30,7 +30,8 @@ import org.joml.Matrix3x2fStack;
  * A press or Enter sends it at once and the picker closes (as a reply when one is being written). It opens
  * from the sticker button with a short rise; nothing about it runs while it is closed. Given less height than its
  * whole grid (a short GUI with a call card above), the grid scrolls under its name line: the wheel, and the arrows
- * bring the picked one into view (CHAT2-O2 follow-up).
+ * bring the picked one into view (CHAT2-O2 follow-up). OVL-SOC: the second of the chat picker's tabs ("Emoji",
+ * "Çıkartmalar"; {@link PickerTabs}) at its top; ↑ from the first row reaches them.
  */
 public final class StickerPicker extends PanelWidget {
     private static final int PAD = 5;
@@ -39,6 +40,10 @@ public final class StickerPicker extends PanelWidget {
     private static final long HOVER_MS = 110;
 
     private final Consumer<String> onPick;
+    private final PickerTabs.Switch onTab;
+    /** The emoji tab is beside it (OVL-SOC), and whether the keys are on the tabs. */
+    private boolean tabs;
+    private boolean onTabs;
     private final List<StickerSet.Sticker> recent = new ArrayList<>(8);
     private final List<StickerSet.Sticker> all = new ArrayList<>(32);
     private final Tween lift = new Tween(1f);
@@ -58,17 +63,24 @@ public final class StickerPicker extends PanelWidget {
     private FormattedCharSequence name;
     private FormattedCharSequence title;
 
-    public StickerPicker(Consumer<String> onPick) {
+    public StickerPicker(Consumer<String> onPick, PickerTabs.Switch onTab) {
         super(0, 0, 100, 100, Texts.tr("chat.stickers"));
         this.onPick = onPick;
+        this.onTab = onTab;
     }
 
     public void setReducedMotion(boolean value) {
         reducedMotion = value;
     }
 
-    /** Opens with the set and the player's recent stickers (references, the last sent first). */
-    public void open(List<String> recentRefs, long now) {
+    /**
+     * Opens with the set and the player's recent stickers (references, the last sent first); {@code tabs}: the emoji tab
+     * is beside it; {@code swap}: it comes in place of the emoji tab (a fade, no rise); {@code keysOnTabs}: the keys
+     * swapped it, so they stay on the tabs.
+     */
+    public void open(List<String> recentRefs, boolean tabs, boolean swap, boolean keysOnTabs, long now) {
+        this.tabs = tabs;
+        onTabs = tabs && keysOnTabs;
         StickerSet set = StickerSet.get();
         all.clear();
         all.addAll(set.all());
@@ -86,7 +98,7 @@ public final class StickerPicker extends PanelWidget {
         lastHovered = -1;
         focused = 0;
         namedIndex = -2;
-        openedAt = now;
+        openedAt = swap ? now - OPEN_MS / 2 : now;
         scroll.snap(0f);
         lastFrame = 0;
         visible = true;
@@ -106,13 +118,14 @@ public final class StickerPicker extends PanelWidget {
         return visible ? Ease.OUT.at(Math.min(1f, (now - openedAt) / (float) OPEN_MS)) : 0f;
     }
 
-    /** The picker's height at {@code width}, with or without the recent row. */
-    public static int height(int width, boolean withRecent) {
+    /** The picker's height at {@code width}, with or without the recent row and the tabs. */
+    public static int height(int width, boolean withRecent, boolean tabs) {
         StickerSet set = StickerSet.get();
         int columns = Math.max(1, set.columns());
         int rows = Math.max(1, (set.all().size() + columns - 1) / columns);
         int cell = cellSize(width, columns);
-        return PAD + (withRecent ? cell + SECTION_GAP : 0) + rows * cell + 4 + 9 + PAD;
+        return PAD + (tabs ? PickerTabs.HEIGHT + PickerTabs.BELOW : 0) + (withRecent ? cell + SECTION_GAP : 0)
+            + rows * cell + 4 + 9 + PAD;
     }
 
     /** The art size the picker draws stickers at for this width (prepared before it opens). */
@@ -164,9 +177,9 @@ public final class StickerPicker extends PanelWidget {
         return gridTop() + contentY(index) - scroll.value();
     }
 
-    /** The grid's box: under the top padding, over the name line. */
+    /** The grid's box: under the top padding (and the tabs), over the name line. */
     private float gridTop() {
-        return getY() + PAD;
+        return getY() + PAD + (tabs ? PickerTabs.HEIGHT + PickerTabs.BELOW : 0);
     }
 
     private float gridBottom() {
@@ -231,6 +244,16 @@ public final class StickerPicker extends PanelWidget {
     @Override
     public void onClick(MouseButtonEvent event, boolean doubleClick) {
         PanelInput.usedMouse();
+        if (tabs) {
+            int tab = PickerTabs.at(event.x(), event.y(), getX() + PAD, getY() + PAD, getWidth() - 2 * PAD);
+            if (tab == PickerTabs.EMOJI) {
+                onTab.to(tab, false);
+                return;
+            }
+            if (tab >= 0) {
+                return;
+            }
+        }
         int i = indexAt(event.x(), event.y());
         if (i >= 0) {
             pick(i);
@@ -245,9 +268,31 @@ public final class StickerPicker extends PanelWidget {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
+        if (!visible) {
+            // Closed (a press elsewhere, the layout) while it still had the keys: it does nothing.
+            return false;
+        }
+        if (onTabs) {
+            if (event.isLeft()) {
+                PanelInput.usedKeyboard();
+                onTab.to(PickerTabs.EMOJI, true);
+                return true;
+            }
+            if (event.isDown()) {
+                PanelInput.usedKeyboard();
+                onTabs = false;
+                return true;
+            }
+            return event.isRight() || event.isUp();
+        }
         int n = count();
         if (n == 0) {
             return false;
+        }
+        if (event.isUp() && tabs && rowOf(focused) == 0) {
+            PanelInput.usedKeyboard();
+            onTabs = true;
+            return true;
         }
         int next = focused;
         if (event.isLeft()) {
@@ -328,6 +373,10 @@ public final class StickerPicker extends PanelWidget {
         int w = getWidth();
         int h = getHeight();
         Draw.frame(g, Frames.POPOVER, x0, y0, w, h);
+        if (tabs) {
+            PickerTabs.draw(g, x0 + PAD, y0 + PAD, w - 2 * PAD, PickerTabs.STICKERS, isHovered() ? mouseX : -1, mouseY,
+                onTabs && keyboardFocus());
+        }
         float gridTop = gridTop();
         float gridBottom = gridBottom();
         boolean scrolls = maxScroll() > 0f;
@@ -349,7 +398,7 @@ public final class StickerPicker extends PanelWidget {
                 Draw.frame(g, Frames.CELL_HOVER, cx, cy, cell, cell);
                 g.requestCursor(CursorTypes.POINTING_HAND);
             }
-            if (keyboardFocus() && i == focused) {
+            if (keyboardFocus() && !onTabs && i == focused) {
                 Draw.frame(g, Frames.CELL_FOCUS, cx, cy, cell, cell);
             }
             float scale = i == hovered ? lift.value(now) : 1f;
