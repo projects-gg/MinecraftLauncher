@@ -1,6 +1,7 @@
 // One friend in the list: picture with presence, name, where they are, and "Katıl" when they are
 // on projects.gg. The row opens their card (beside the panel; a click, Enter or a double click):
-// join, "Birlikte oyna", "Mesaj" (chat, CHAT1), "Discord'dan mesaj at", favourite, the online
+// join, "Birlikte oyna", "Mesaj" (chat, CHAT1), "Sesli arama başlat" (VOICE-CALL; "Discord'dan
+// mesaj at" is in their menu), favourite, the online
 // notice, and in a quieter corner remove, block and "Rapor et" (MOD1), the first two confirmed in
 // place with one sentence. The row's menu (a right click, Shift+F10 or the menu key, or its "…")
 // is the person menu every place shows (person-menu.tsx, FIX2). With several crews (TEAM4) "Ekibe
@@ -57,8 +58,6 @@ import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { directConversation } from "./chat/conversations";
 import { BadgedName, badgeRowLabel, focusFirstAction, useShownBadge } from "./crew-badge";
 import type { InviteState } from "./crews";
-import { DiscordButton } from "./discord-button";
-import { openInDiscord } from "./discord-link";
 import { REST } from "./groups";
 import { discordIdOf } from "./identity";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
@@ -344,13 +343,9 @@ function FriendCard({
             {t("chat.actions.message")}
           </Button>
         ) : null}
-        {/* "Ara" (VOICE): the main way to call a friend; "Odaya davet et" while in a room. */}
+        {/* "Sesli arama başlat" (VOICE-CALL) in the place "Discord'dan mesaj at" had (the owner's
+            words; Discord stays in the friend's menu); "Odaya davet et" while in a room. */}
         <FriendCallButton friend={friend} onDone={onDone} />
-        {friend.discordUrl ? (
-          <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
-            {t("social.actions.message")}
-          </DiscordButton>
-        ) : null}
         {team?.crews && team.state !== "member" ? (
           <Menu
             items={crewInviteItems(team.crews, t)}

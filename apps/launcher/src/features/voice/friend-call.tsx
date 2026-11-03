@@ -1,15 +1,20 @@
-// Voice chat on a friend's row and card (VOICE-L3; voice.md §3.2, §5.1). The card's "Ara" (the main
-// way to call), "Odaya davet et" while the player's room may take them ("Aranıyor…" while it
+// Voice chat on a friend's row and card (VOICE-L3; voice.md §3.2, §5.1). The card's "Sesli arama
+// başlat" (VOICE-CALL: in the place of "Discord'dan mesaj at", the owner's words; Discord stays in
+// the person menu), "Odaya davet et" while the player's room may take them ("Aranıyor…" while it
 // rings), and after a missed call "Geri ara", or "Aramaya katıl" while that room still goes (the
-// card's "Katıl" is their game's). On the row: a headset beside the status while they are in voice
-// ("Sesli sohbette" in the launcher; never for an invisible friend: they are offline), and after a
-// missed call the status line says "Cevapsız arama" in words (a state, so no gold mark).
+// card's "Katıl" is their game's). While voice chat is on the card always has its voice button: a
+// friend who cannot be called now gets it faded with one plain reason under the pointer (never
+// which setting of theirs: offline, invisible and voice chat off read the same). A call asks first
+// (call-confirm.tsx). On the row: a headset beside the status while they are in voice ("Sesli
+// sohbette" in the launcher; never for an invisible friend: they are offline), and after a missed
+// call the status line says "Cevapsız arama" in words (a state, so no gold mark).
 import { Headset, Phone, PhonePlus, PhoneX } from "@phosphor-icons/react";
-import { Button, IconButton, Tooltip } from "@pl/ui";
+import { Button, cn, IconButton, Tooltip } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import { useSocialUi } from "@/features/social/store";
 import type { Friend } from "@/lib/api/social-types";
-import { answerRing, callFriend, inviteToRoom } from "./actions";
+import { answerRing, inviteToRoom } from "./actions";
+import { askToCall } from "./call-confirm";
 import { callOffer, presenceOf } from "./rules";
 import { useVoiceUi, voiceOn } from "./store";
 
@@ -109,9 +114,19 @@ export function ChatCallButton({ friend }: { friend: string }) {
       icon={offer === "call" ? <Phone size={18} /> : <PhonePlus size={18} />}
       className="shrink-0"
       disabled={offer === "ringing" || offer === "full"}
-      onClick={() => void (offer === "call" ? callFriend(friend) : inviteToRoom(friend))}
+      onClick={() => (offer === "call" ? askToCall(friend) : void inviteToRoom(friend))}
     />
   );
+}
+
+/**
+ * Why a friend cannot be called now, in one plain sentence: they share the player's room already,
+ * or anything else (offline, invisible, their voice chat off: none of it is told).
+ */
+function useWaitReason(friend: string): string {
+  const { t } = useTranslation();
+  const together = useVoiceUi((s) => Boolean(s.state.room?.people.some((p) => p.id === friend)));
+  return together ? t("voice.call.together") : t("voice.call.unreachable");
 }
 
 /** The card's voice action (one button, as wide as the card's others). */
@@ -123,8 +138,11 @@ export function FriendCallButton({
   onDone: () => void;
 }) {
   const { t } = useTranslation();
+  const on = useVoiceUi((s) => voiceOn(s.state));
   const offer = useCallOffer(friend.id);
   const missed = useMissed(friend.id);
+  const reason = useWaitReason(friend.id);
+  if (!on) return null;
   if (missed?.joinable) {
     return (
       <Button
@@ -140,7 +158,21 @@ export function FriendCallButton({
       </Button>
     );
   }
-  if (!offer) return null;
+  if (!offer) {
+    // Here, faded, with its reason (focusable: the keyboard reads the reason too).
+    return (
+      <Tooltip content={reason}>
+        <Button
+          variant="secondary"
+          className="w-full cursor-default opacity-45"
+          icon={<Phone size={16} />}
+          aria-disabled
+        >
+          {t("voice.call.action")}
+        </Button>
+      </Tooltip>
+    );
+  }
   if (offer === "call") {
     return (
       <Button
@@ -149,22 +181,27 @@ export function FriendCallButton({
         icon={<Phone size={16} />}
         onClick={() => {
           onDone();
-          void callFriend(friend.id);
+          askToCall(friend.id);
         }}
       >
         {missed ? t("voice.missed.callBack") : t("voice.call.action")}
       </Button>
     );
   }
+  const full = offer === "full";
   return (
-    <Button
-      variant="secondary"
-      className="w-full"
-      icon={<PhonePlus size={16} />}
-      disabled={offer !== "invite"}
-      onClick={() => void inviteToRoom(friend.id)}
-    >
-      {offer === "ringing" ? t("voice.call.ringing") : t("voice.call.inviteToRoom")}
-    </Button>
+    <Tooltip content={t("voice.refused.roomFull")} disabled={!full}>
+      <span className={cn("flex w-full", full && "cursor-default")}>
+        <Button
+          variant="secondary"
+          className="w-full"
+          icon={<PhonePlus size={16} />}
+          disabled={offer !== "invite"}
+          onClick={() => void inviteToRoom(friend.id)}
+        >
+          {offer === "ringing" ? t("voice.call.ringing") : t("voice.call.inviteToRoom")}
+        </Button>
+      </span>
+    </Tooltip>
   );
 }

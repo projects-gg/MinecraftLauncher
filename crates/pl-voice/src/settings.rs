@@ -165,8 +165,16 @@ pub struct VoiceSettings {
     pub sensitivity: Option<u8>,
     /// "Mikrofon sesi" while automatic volume is off (percent, 0–200).
     pub mic_volume: u16,
-    /// "Katılma ve ayrılma sesleri".
+    /// "Sesli sohbet sesleri" (VOICE-CALL; it was "Katılma ve ayrılma sesleri", the same field, so
+    /// the old choice carries on): someone came or left, the microphone or deafen turned, the
+    /// player got in, left, or lost the connection. The ring and the caller's waiting tone keep
+    /// their own rule.
     pub sounds: bool,
+    /// "Aramadan önce sor" (VOICE-CALL): "Sesli arama başlat" asks "{name} aransın mı?" first.
+    pub ask_before_call: bool,
+    /// "Ses seviyesi" under "Ses çıkışı" (VOICE-CALL, SOC-GAP §3.11): everyone's voice at once, on
+    /// top of each person's own (percent, 0–200).
+    pub output_volume: u16,
 }
 
 impl Default for VoiceSettings {
@@ -185,6 +193,8 @@ impl Default for VoiceSettings {
             sensitivity: None,
             mic_volume: 100,
             sounds: true,
+            ask_before_call: true,
+            output_volume: 100,
         }
     }
 }
@@ -197,6 +207,7 @@ impl VoiceSettings {
         use crate::view::VoiceShortcut;
         self.sensitivity = self.sensitivity.map(|value| value.min(100));
         self.mic_volume = self.mic_volume.min(MIC_VOLUME_MAX);
+        self.output_volume = self.output_volume.min(VOLUME_MAX);
         self.input_device = self.input_device.filter(|id| valid_device(id));
         self.output_device = self.output_device.filter(|id| valid_device(id));
         self.push_to_talk_key = self.push_to_talk_key.take().map(|key| key.with_mods(&[]));
@@ -530,11 +541,16 @@ mod tests {
     fn defaults_need_no_setup() {
         let settings = VoiceSettings::default();
         assert!(settings.enabled && settings.noise_suppression && settings.sounds);
+        assert!(settings.ask_before_call);
         assert_eq!(settings.mode, VoiceTalkMode::Voice);
         assert!(settings.watched_keys().is_empty());
         // An older or empty file reads as the defaults.
         let read: VoiceSettings = serde_json::from_value(json!({})).unwrap();
         assert_eq!(read, settings);
+        // A file from before VOICE-CALL: "Katılma ve ayrılma sesleri" off stays off as "Sesli
+        // sohbet sesleri", and calls ask first.
+        let old: VoiceSettings = serde_json::from_value(json!({"sounds": false})).unwrap();
+        assert!(!old.sounds && old.ask_before_call);
     }
 
     #[test]
@@ -546,12 +562,14 @@ mod tests {
             deafen_key: Some(VoiceKey::mouse(VoiceMouseButton::Back)),
             sensitivity: Some(250),
             mic_volume: 900,
+            output_volume: 450,
             ..VoiceSettings::default()
         }
         .normalized();
         assert_eq!(settings.mute_key, None);
         assert_eq!(settings.sensitivity, Some(100));
         assert_eq!(settings.mic_volume, MIC_VOLUME_MAX);
+        assert_eq!(settings.output_volume, VOLUME_MAX);
         let watched = settings.watched_keys();
         assert_eq!(watched.len(), 2);
         // A key the launcher does not know is dropped.

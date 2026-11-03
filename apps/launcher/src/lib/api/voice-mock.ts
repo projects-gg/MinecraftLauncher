@@ -23,6 +23,10 @@
 // - `join=ok|<refusal>`: what "Katıl" gets.
 // - `voiceKeys=combo`: shortcuts already set (VOICE-KEYS); `discord=1|skip`: Discord's keys to
 //   offer once (VOICE-KEYS).
+// - VOICE-CALL: `voice=call1` a call with KorAtesi, live for 4:12; `voice=callingBusy` the call
+//   rings at ElmasKazma, who is in another room; `levels=<me>[,<id>:<level>…]` the live meters as
+//   still frames (0–1, `me` may end in `!` when it does not go out), else a voice that rises and
+//   falls for whoever speaks; `ask=0` "Aramadan önce sor" off; `volume=<percent>` "Ses seviyesi".
 import {
   DEFAULT_VOICE_SETTINGS,
   HIDDEN_VOICE_STATE,
@@ -34,6 +38,7 @@ import {
   type VoiceKey,
   type VoiceKeyCheck,
   type VoiceLevel,
+  type VoiceLevels,
   type VoiceModAction,
   type VoiceNotice,
   type VoicePerson,
@@ -307,8 +312,29 @@ function stateFor(scenario: string): VoiceState {
         room: friendRoom({ people: [], ringing: [] }),
         calling: { friend: "302", until: nowSec() + 28 },
       };
+    case "callingBusy":
+      return {
+        ...base,
+        room: friendRoom({ people: [], ringing: [] }),
+        calling: { friend: "303", until: nowSec() + 28 },
+      };
+    case "call1":
+      return {
+        ...base,
+        room: friendRoom({
+          people: [person("302", { joinedAt: nowSec() - 252, role: "member" })],
+          ringing: [],
+        }),
+        presence: { ...PRESENCE, "302": "in" },
+        togetherSince: nowSec() - 252,
+      };
     case "room":
-      return { ...base, room: friendRoom(), presence: { ...PRESENCE, "301": "in" } };
+      return {
+        ...base,
+        room: friendRoom(),
+        presence: { ...PRESENCE, "301": "in" },
+        togetherSince: nowSec() - 1800,
+      };
     case "roomNamed":
       return { ...base, room: friendRoom({ name: "Gece Ekibi" }) };
     case "full":
@@ -500,6 +526,28 @@ export interface VoiceMockOptions {
   /** Discord's keys on this computer (`discord=1`: push-to-talk on Fare 4 with Discord in
    * push-to-talk, "Ctrl + Shift + M", "Num *"; `discord=skip`: its deafen is a gamepad button). */
   discord?: string | null;
+  /** VOICE-CALL: the live meters as a still frame (`levels=`); none: a moving voice. */
+  levels?: string | null;
+  /** "Aramadan önce sor" (`ask=0`: off). */
+  ask?: boolean;
+  /** "Ses seviyesi" (`volume=`). */
+  volume?: number | null;
+}
+
+/**
+ * A `levels=` preview's still frame: "0.7,301:0.85,303:0.4" (the microphone first; "0.5!" heard
+ * but not sent).
+ */
+export function levelsFor(preset: string | null | undefined): VoiceLevels | null {
+  if (!preset) return null;
+  const [mine = "0", ...rest] = preset.split(",");
+  const held = mine.endsWith("!");
+  const me = Math.max(0, Math.min(1, Number.parseFloat(held ? mine.slice(0, -1) : mine) || 0));
+  const people = rest
+    .map((part) => part.split(":"))
+    .filter((pair): pair is [string, string] => pair.length === 2 && Boolean(pair[0]))
+    .map(([id, level]) => ({ id, level: Math.max(0, Math.min(1, Number.parseFloat(level) || 0)) }));
+  return { me, open: me > 0 && !held, people };
 }
 
 /** What a `discord=` preview's Discord has. */
@@ -535,20 +583,26 @@ export interface VoiceMock extends VoiceApi {
 export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
   const scenario = options.scenario ?? "ready";
   const timers = options.timers ?? true;
-  let state = stateFor(scenario);
   let settings: VoiceSettings = {
     ...DEFAULT_VOICE_SETTINGS,
-    enabled: state.enabled,
+    enabled: stateFor(scenario).enabled,
     ...keysFor(options.keys),
+    askBeforeCall: options.ask ?? true,
+    outputVolume: options.volume ?? 100,
   };
+  let state: VoiceState = { ...stateFor(scenario), askBeforeCall: settings.askBeforeCall };
   /** Discord's keys until the player answers (then never again, as the launcher keeps it). */
   let discord = discordFor(options.discord);
   const stateListeners = new Set<(s: VoiceState) => void>();
   const speakingListeners = new Set<(s: VoiceSpeaking) => void>();
   const noticeListeners = new Set<(n: VoiceNotice) => void>();
   const levelListeners = new Set<(l: VoiceLevel) => void>();
+  const levelsListeners = new Set<(l: VoiceLevels) => void>();
   let speaking = speakingFor(state, options.speaking ?? null, options.talking ?? false);
   let levelTimer: ReturnType<typeof setInterval> | undefined;
+  /** The live meters (VOICE-CALL): a still frame, or a voice moving while they are asked for. */
+  const stillLevels = levelsFor(options.levels);
+  let levelsTimer: ReturnType<typeof setInterval> | undefined;
   /** Who was removed, for the toast's "Geri al". */
   const kicked = new Map<string, VoicePerson | undefined>();
 
@@ -616,6 +670,38 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
       levelListeners.add(listener);
       return () => levelListeners.delete(listener);
     },
+    onLevels(listener) {
+      levelsListeners.add(listener);
+      return () => levelsListeners.delete(listener);
+    },
+    async setLevels(on) {
+      clearInterval(levelsTimer);
+      levelsTimer = undefined;
+      if (!on) return;
+      const send = (frame: VoiceLevels) => {
+        for (const listener of levelsListeners) listener(frame);
+      };
+      if (stillLevels) {
+        queueMicrotask(() => send(stillLevels));
+        return;
+      }
+      if (!timers) return;
+      // Whoever speaks, rising and falling as a voice does, sixteen times a second.
+      let t = 0;
+      levelsTimer = setInterval(() => {
+        t += 1;
+        const voice = (k: number) =>
+          Math.max(
+            0,
+            Math.min(1, 0.62 + Math.sin(t / 2.1 + k) * 0.2 + Math.sin(t / 0.8 + k) * 0.08),
+          );
+        send({
+          me: speaking.me ? voice(7) : 0,
+          open: speaking.me,
+          people: speaking.ids.map((id, i) => ({ id, level: voice(i * 1.7) })),
+        });
+      }, 60);
+    },
 
     async call(friend) {
       const refusal = refusalOf(options.call);
@@ -625,6 +711,7 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
         ...state,
         room: friendRoom({ id: `f${friend.padStart(16, "0")}`, people: [], ringing: [] }),
         calling: { friend, until: nowSec() + 30 },
+        togetherSince: null,
       });
       if (options.call === "noAnswer") {
         later(4000, () => {
@@ -639,6 +726,7 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
             room: state.room
               ? { ...state.room, people: [person(friend, { joinedAt: nowSec() })] }
               : null,
+            togetherSince: nowSec(),
           }),
         );
       }
@@ -667,6 +755,7 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
           canRename: false,
           canClose: false,
         }),
+        togetherSince: nowSec(),
       });
       return VOICE_OK;
     },
@@ -808,6 +897,7 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
         ...state,
         room: null,
         calling: null,
+        togetherSince: null,
         crews: state.crews.map((c) => ({
           ...c,
           rooms: c.rooms.map((r) => ({ ...r, people: r.people.filter((id) => id !== ME) })),
@@ -917,7 +1007,9 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
     },
     async saveSettings(next) {
       settings = { ...next };
-      if (state.enabled !== next.enabled) commit({ ...state, enabled: next.enabled });
+      if (state.enabled !== next.enabled || state.askBeforeCall !== next.askBeforeCall) {
+        commit({ ...state, enabled: next.enabled, askBeforeCall: next.askBeforeCall });
+      }
       return settings;
     },
     async checkKey(key: VoiceKey, shortcut: VoiceShortcut) {
@@ -988,4 +1080,7 @@ export const mockVoice: VoiceMock = createVoiceMock({
   join: param("join"),
   keys: param("voiceKeys"),
   discord: param("discord"),
+  levels: param("levels"),
+  ask: param("ask") !== "0",
+  volume: param("volume") ? Number(param("volume")) : null,
 });

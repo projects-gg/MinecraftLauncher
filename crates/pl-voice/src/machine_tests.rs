@@ -631,7 +631,7 @@ fn a_move_joins_the_other_room() {
 #[test]
 fn mute_and_deafen() {
     let mut machine = ready();
-    let generation = live_call(&mut machine, vec![person("me", 1)]);
+    let generation = live_call(&mut machine, vec![person("me", 1), person("friend", 2)]);
     let effects = machine.set_mute(true);
     assert!(effects.contains(&Effect::Send {
         generation,
@@ -670,7 +670,7 @@ fn mute_and_deafen() {
 #[test]
 fn the_shortcuts_deafen_and_undeafen_as_discord_does() {
     let mut machine = ready();
-    live_call(&mut machine, vec![person("me", 1)]);
+    live_call(&mut machine, vec![person("me", 1), person("friend", 2)]);
     let press = |machine: &mut Machine, shortcut| {
         machine.key(KeyChange {
             shortcut,
@@ -678,11 +678,11 @@ fn the_shortcuts_deafen_and_undeafen_as_discord_does() {
         })
     };
     let me = |machine: &Machine| machine.view(0, UNIX).room.unwrap().me;
-    // Deafened, the gate closes with a tick; the microphone choice itself is kept.
+    // Deafened, the gate closes with its sound; the microphone choice itself is kept.
     let effects = press(&mut machine, VoiceShortcut::Deafen);
     assert!(engine(&effects).contains(&&talk(false, false)));
     assert!(engine(&effects).contains(&&EngineCommand::Sound {
-        sound: EngineSound::Tick
+        sound: EngineSound::DeafOn
     }));
     assert!(me(&machine).deaf && !me(&machine).mute);
     // Undeafened, the microphone is back as it was before (open).
@@ -735,7 +735,11 @@ fn input_is_registered_only_in_a_room_with_a_shortcut() {
     machine.socket_open(generation, 1);
     machine.socket_message(
         generation,
-        hello(vec![person("me", 1)], Role::Member, false),
+        hello(
+            vec![person("me", 1), person("friend", 2)],
+            Role::Member,
+            false,
+        ),
         2,
         UNIX,
     );
@@ -778,7 +782,7 @@ fn input_is_registered_only_in_a_room_with_a_shortcut() {
     assert!(engine(&effects).iter().any(|c| matches!(
         c,
         EngineCommand::Sound {
-            sound: EngineSound::Tick
+            sound: EngineSound::MicOff
         }
     )));
     // Leaving stops it.
@@ -1565,4 +1569,441 @@ fn the_backup_revision_follows_what_it_carries() {
     // The same again changes nothing.
     machine.set_volume("x", 120);
     assert_eq!(machine.view(0, UNIX).backup_rev, start + 3);
+}
+
+// --- VOICE-CALL: the call's feel ------------------------------------------------------------------
+
+/// The page's sounds among the effects, in order.
+fn sounds(effects: &[Effect]) -> Vec<EngineSound> {
+    engine(effects)
+        .into_iter()
+        .filter_map(|command| match command {
+            EngineCommand::Sound { sound } => Some(*sound),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A call the player starts: joined, the page attached, the socket open, the offer sent.
+fn calling(machine: &mut Machine, friend: &str) -> u64 {
+    let effects = machine.join(
+        StayStart {
+            room: ROOM.into(),
+            ticket: Ticket::new("v1.call.mac"),
+            calling: Some(friend.into()),
+            opened_by_me: false,
+        },
+        1_000,
+        UNIX,
+    );
+    let generation = connect_generation(&effects);
+    machine.page_attached();
+    machine.socket_open(generation, 1_100);
+    machine.page_report(
+        PageReport::Offer {
+            sdp: Some("v=0 offer".into()),
+            mid: Some("0".into()),
+        },
+        1_200,
+    );
+    generation
+}
+
+#[test]
+fn alone_nothing_goes_out_until_someone_comes() {
+    let mut machine = ready();
+    let generation = live_call(&mut machine, vec![person("me", 1)]);
+    // Alone: the gate stays shut, whatever the microphone.
+    assert!(!machine.view(0, UNIX).room.unwrap().me.mute);
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Joined {
+            person: person("friend", 5),
+        },
+        2_000,
+        UNIX,
+    );
+    assert!(engine(&effects).contains(&&talk(true, false)));
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Left {
+            u: "friend".into(),
+            why: crate::wire::LeftWhy::Gone,
+        },
+        3_000,
+        UNIX,
+    );
+    assert!(engine(&effects).contains(&&talk(false, false)));
+}
+
+#[test]
+fn the_call_timer_starts_with_the_first_one_to_share_the_room() {
+    let mut machine = ready();
+    let generation = calling(&mut machine, "friend");
+    machine.socket_message(
+        generation,
+        hello(vec![person("me", 1)], Role::Leader, true),
+        1_300,
+        UNIX,
+    );
+    assert_eq!(machine.view(1_300, UNIX).together_since, None);
+    machine.socket_message(
+        generation,
+        FromRoom::Joined {
+            person: person("friend", 9),
+        },
+        5_000,
+        UNIX + 4,
+    );
+    assert_eq!(machine.view(5_000, UNIX + 4).together_since, Some(UNIX + 4));
+    // People coming and going, and a reconnect's `hello`, keep it.
+    machine.socket_message(
+        generation,
+        FromRoom::Joined {
+            person: person("other", 12),
+        },
+        8_000,
+        UNIX + 7,
+    );
+    machine.socket_message(
+        generation,
+        hello(
+            vec![person("me", 1), person("friend", 9)],
+            Role::Leader,
+            false,
+        ),
+        9_000,
+        UNIX + 8,
+    );
+    assert_eq!(machine.view(9_000, UNIX + 8).together_since, Some(UNIX + 4));
+    // The one who answers: from their first `hello` with the caller in it.
+    let mut callee = ready();
+    live_call(&mut callee, vec![person("me", 3), person("caller", 1)]);
+    assert_eq!(callee.view(0, UNIX).together_since, Some(UNIX));
+    callee.leave(10_000);
+    assert_eq!(callee.view(10_000, UNIX).together_since, None);
+}
+
+#[test]
+fn a_call_sounds_as_it_goes() {
+    let mut machine = ready();
+    let generation = calling(&mut machine, "friend");
+    // Waiting alone: the caller's tone, no "connected" yet.
+    let effects = machine.socket_message(
+        generation,
+        hello(vec![person("me", 1)], Role::Leader, true),
+        1_300,
+        UNIX,
+    );
+    assert_eq!(sounds(&effects), [EngineSound::Waiting]);
+    // The friend comes: the tone stops and the call connects (not "someone came").
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Joined {
+            person: person("friend", 5),
+        },
+        2_000,
+        UNIX,
+    );
+    assert_eq!(
+        sounds(&effects),
+        [EngineSound::Stop, EngineSound::Connected]
+    );
+    // Someone else comes, then leaves.
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Joined {
+            person: person("other", 6),
+        },
+        3_000,
+        UNIX,
+    );
+    assert_eq!(sounds(&effects), [EngineSound::Join]);
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Left {
+            u: "other".into(),
+            why: crate::wire::LeftWhy::Gone,
+        },
+        4_000,
+        UNIX,
+    );
+    assert_eq!(sounds(&effects), [EngineSound::Leave]);
+    // The player's own toggles, wherever they come from.
+    assert_eq!(sounds(&machine.set_mute(true)), [EngineSound::MicOff]);
+    assert_eq!(sounds(&machine.set_mute(false)), [EngineSound::MicOn]);
+    assert_eq!(sounds(&machine.set_deaf(true)), [EngineSound::DeafOn]);
+    // Opening the microphone while deafened brings the sound back: that is what it says.
+    assert_eq!(sounds(&machine.set_mute(false)), [EngineSound::DeafOff]);
+    assert_eq!(
+        sounds(&machine.key(KeyChange {
+            shortcut: VoiceShortcut::Deafen,
+            down: true,
+        })),
+        [EngineSound::DeafOn]
+    );
+    machine.set_deaf(false);
+    // A moderator's mute turns the microphone off, its end on again.
+    let state = |sm| FromRoom::State {
+        u: "me".into(),
+        mute: None,
+        deaf: None,
+        sm: Some(sm),
+        q: None,
+    };
+    let effects = machine.socket_message(generation, state(true), 5_000, UNIX);
+    assert_eq!(sounds(&effects), [EngineSound::MicOff]);
+    let effects = machine.socket_message(generation, state(false), 5_100, UNIX);
+    assert_eq!(sounds(&effects), [EngineSound::MicOn]);
+    // Leaving: the end is heard before the page closes the call.
+    let effects = machine.leave(6_000);
+    let commands = engine(&effects);
+    let ended = commands
+        .iter()
+        .position(|c| {
+            **c == EngineCommand::Sound {
+                sound: EngineSound::Ended,
+            }
+        })
+        .expect("the end's sound");
+    let leave = commands
+        .iter()
+        .position(|c| matches!(c, EngineCommand::Leave))
+        .expect("the page's leave");
+    assert!(ended < leave);
+}
+
+#[test]
+fn joining_sounds_once_and_a_move_is_no_ending() {
+    let mut machine = ready();
+    // Into a room with people: in.
+    let effects = machine.join(
+        StayStart {
+            room: ROOM.into(),
+            ticket: Ticket::new("t"),
+            calling: None,
+            opened_by_me: false,
+        },
+        1_000,
+        UNIX,
+    );
+    let generation = connect_generation(&effects);
+    machine.page_attached();
+    machine.socket_open(generation, 1_100);
+    let effects = machine.socket_message(
+        generation,
+        hello(
+            vec![person("me", 2), person("friend", 1)],
+            Role::Member,
+            true,
+        ),
+        1_300,
+        UNIX,
+    );
+    assert_eq!(sounds(&effects), [EngineSound::Connected]);
+    // Another room at once (a crew room's "Katıl", a move): no ending in between.
+    let effects = machine.join(
+        StayStart {
+            room: "c00000000000000aa".into(),
+            ticket: Ticket::new("t2"),
+            calling: None,
+            opened_by_me: false,
+        },
+        2_000,
+        UNIX,
+    );
+    assert!(sounds(&effects).is_empty());
+    assert!(engine(&effects).contains(&&EngineCommand::Leave));
+}
+
+#[test]
+fn the_called_friend_there_already_answers_the_call() {
+    let mut machine = ready();
+    let generation = calling(&mut machine, "friend");
+    let effects = machine.socket_message(
+        generation,
+        hello(
+            vec![person("me", 1), person("friend", 2)],
+            Role::Leader,
+            true,
+        ),
+        1_300,
+        UNIX,
+    );
+    assert!(machine.view(1_300, UNIX).calling.is_none());
+    assert_eq!(
+        sounds(&effects),
+        [EngineSound::Stop, EngineSound::Connected]
+    );
+    assert!(engine(&effects).contains(&&talk(true, false)));
+}
+
+#[test]
+fn a_lost_connection_is_heard_and_so_is_its_return() {
+    let mut machine = ready();
+    let generation = live_call(&mut machine, vec![person("me", 1), person("friend", 2)]);
+    machine.socket_closed(generation, None, 10_000);
+    let back = machine.next_deadline(10_000).unwrap();
+    let effects = machine.tick(back, UNIX, back);
+    let again = connect_generation(&effects);
+    assert!(sounds(&effects).is_empty(), "a blip under 2 s says nothing");
+    machine.socket_open(again, 11_500);
+    let effects = machine.tick(12_000, UNIX, 12_000);
+    assert_eq!(sounds(&effects), [EngineSound::Lost]);
+    let effects = machine.socket_message(
+        again,
+        hello(
+            vec![person("me", 1), person("friend", 2)],
+            Role::Leader,
+            false,
+        ),
+        12_100,
+        UNIX,
+    );
+    assert_eq!(sounds(&effects), [EngineSound::Connected]);
+}
+
+#[test]
+fn voice_chat_sounds_off_keeps_only_the_callers_tone() {
+    let mut machine = ready();
+    machine.save_settings(
+        VoiceSettings {
+            sounds: false,
+            ..VoiceSettings::default()
+        },
+        0,
+    );
+    let generation = calling(&mut machine, "friend");
+    let effects = machine.socket_message(
+        generation,
+        hello(vec![person("me", 1)], Role::Leader, true),
+        1_300,
+        UNIX,
+    );
+    assert_eq!(sounds(&effects), [EngineSound::Waiting]);
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Joined {
+            person: person("friend", 5),
+        },
+        2_000,
+        UNIX,
+    );
+    assert_eq!(sounds(&effects), [EngineSound::Stop]);
+    assert!(sounds(&machine.set_mute(true)).is_empty());
+    assert!(sounds(&machine.leave(3_000)).is_empty());
+}
+
+#[test]
+fn the_meters_run_only_while_the_page_shows_them() {
+    let mut machine = ready();
+    let meters = |effects: &[Effect]| -> Vec<(bool, bool)> {
+        engine(effects)
+            .into_iter()
+            .filter_map(|command| match command {
+                EngineCommand::Meters { me, people } => Some((*me, *people)),
+                _ => None,
+            })
+            .collect()
+    };
+    // Asked without a room: nothing to measure.
+    assert!(meters(&machine.set_meters(true)).is_empty());
+    assert!(
+        machine
+            .levels_of(0.5, true, Vec::new(), Vec::new())
+            .is_none()
+    );
+    // In a room the page measures both.
+    let effects = machine.join(
+        StayStart {
+            room: ROOM.into(),
+            ticket: Ticket::new("t"),
+            calling: None,
+            opened_by_me: false,
+        },
+        1_000,
+        UNIX,
+    );
+    let generation = connect_generation(&effects);
+    assert_eq!(meters(&machine.page_attached()), [(true, true)]);
+    machine.socket_open(generation, 1_100);
+    machine.socket_message(
+        generation,
+        hello(
+            vec![person("me", 2), person("friend", 1)],
+            Role::Member,
+            true,
+        ),
+        1_300,
+        UNIX,
+    );
+    // Only people in the room, levels held to 0–1.
+    let levels = machine
+        .levels_of(
+            1.5,
+            true,
+            vec!["friend".into(), "stranger".into()],
+            vec![0.4, 0.9],
+        )
+        .unwrap();
+    assert_eq!(levels.me, 1.0);
+    assert!(levels.open);
+    assert_eq!(levels.people.len(), 1);
+    assert_eq!(levels.people[0].id, "friend");
+    // Muted: the microphone is not measured any more (and says nothing).
+    assert_eq!(meters(&machine.set_mute(true)), [(false, true)]);
+    let levels = machine
+        .levels_of(0.5, true, Vec::new(), Vec::new())
+        .unwrap();
+    assert_eq!(levels.me, 0.0);
+    assert!(!levels.open);
+    assert_eq!(meters(&machine.set_mute(false)), [(true, true)]);
+    // The window went away: both off.
+    assert_eq!(meters(&machine.set_meters(false)), [(false, false)]);
+    assert!(
+        machine
+            .levels_of(0.5, true, Vec::new(), Vec::new())
+            .is_none()
+    );
+    // A leave turns the page's meters off by itself: nothing more to say.
+    machine.set_meters(true);
+    let effects = machine.leave(2_000);
+    assert!(meters(&effects).is_empty());
+    assert!(meters(&machine.set_meters(false)).is_empty());
+}
+
+#[test]
+fn asking_before_a_call_and_the_master_volume_are_settings() {
+    let mut machine = ready();
+    assert!(machine.view(0, UNIX).ask_before_call);
+    let (_, effects) = machine.save_settings(
+        VoiceSettings {
+            ask_before_call: false,
+            output_volume: 160,
+            ..VoiceSettings::default()
+        },
+        0,
+    );
+    assert!(!machine.view(0, UNIX).ask_before_call);
+    // No page yet: nothing configured.
+    assert!(engine(&effects).is_empty());
+    let configured = |effects: &[Effect]| {
+        engine(effects)
+            .into_iter()
+            .find_map(|command| match command {
+                EngineCommand::Configure { settings } => Some(settings.output_volume),
+                _ => None,
+            })
+    };
+    live_call(&mut machine, vec![person("me", 1), person("friend", 2)]);
+    let effects = machine.page_attached();
+    assert_eq!(configured(&effects), Some(160));
+    // A page that plays through `<audio>` stops at 100 %, for everyone as for each.
+    let effects = machine.page_report(
+        PageReport::Playout {
+            playout: crate::gain::Playout::Element,
+        },
+        2_000,
+    );
+    assert_eq!(configured(&effects), Some(100));
 }

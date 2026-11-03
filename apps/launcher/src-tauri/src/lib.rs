@@ -252,6 +252,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_voice::view::VoiceNotice>()
         .typ::<pl_voice::view::VoiceSpeaking>()
         .typ::<pl_voice::view::VoiceLevel>()
+        // "voice-levels": the live meters (VOICE-CALL).
+        .typ::<pl_voice::view::VoiceLevels>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
@@ -358,6 +360,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::voice::voice_open_mic_settings,
             commands::voice::voice_backup,
             commands::voice::voice_restore,
+            commands::voice::voice_levels,
             // the hidden voice window's page only (`pl_voice::guard`)
             commands::voice::voice_page_attach,
             commands::voice::voice_page_report,

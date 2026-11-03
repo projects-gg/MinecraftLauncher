@@ -35,8 +35,11 @@ pub struct EngineSettings {
     pub push_to_talk: bool,
     /// Opus bit rate (kbps, Studio's `voiceKbps`).
     pub kbps: u16,
-    /// Join and leave sounds.
+    /// "Sesli sohbet sesleri" (the launcher sends only the sounds it wants anyway).
     pub sounds: bool,
+    /// "Ses seviyesi" (VOICE-CALL): everyone's voice at once, on top of each person's own;
+    /// percent, held to the playout path's top (`pl_voice::gain`).
+    pub output_volume: u16,
 }
 
 /// One person as the page plays them.
@@ -65,7 +68,10 @@ impl std::fmt::Debug for EngineIce {
     }
 }
 
-/// A short sound the page plays in its own output (the ring itself is the launcher's).
+/// A short sound the page plays in its own output (the ring itself is the launcher's). One family
+/// of our own synthesized notes (VOICE-CALL): the launcher decides when, so a press on the page, a
+/// shortcut, the tray and the in-game overlay sound the same; "Sesli sohbet sesleri" turns all
+/// but the waiting tone off.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum EngineSound {
@@ -73,8 +79,21 @@ pub enum EngineSound {
     Join,
     /// Someone left.
     Leave,
-    /// A shortcut muted or deafened (a short tick).
-    Tick,
+    /// The player's microphone turned off (by the player, or a moderator's mute).
+    MicOff,
+    /// The player's microphone turned on.
+    MicOn,
+    /// The player deafened.
+    DeafOn,
+    /// The player's sound is back (undeafened).
+    DeafOff,
+    /// The player is in: the first `hello` with someone there, a call answered, or the connection
+    /// back after "Yeniden bağlanıyor…".
+    Connected,
+    /// The stay ended (the player left, or the room ended it); never on a move to another room.
+    Ended,
+    /// The connection dropped ("Yeniden bağlanıyor…" shows).
+    Lost,
     /// The caller's waiting tone, until [`EngineSound::Stop`] or someone comes.
     Waiting,
     Stop,
@@ -134,6 +153,14 @@ pub enum EngineCommand {
     SelfTest {
         on: bool,
     },
+    /// The launcher's live meters (VOICE-CALL; only while its window shows them): report
+    /// [`PageReport::Levels`] at most sixteen times a second, only on change. `me`: the player's
+    /// microphone (the capture listens for it even while nothing is sent); `people`: who makes
+    /// sound in the room. A stay's end turns both off.
+    Meters {
+        me: bool,
+        people: bool,
+    },
     /// The stay ended: close the peer connection, stop the microphone.
     Leave,
 }
@@ -154,6 +181,7 @@ impl std::fmt::Debug for EngineCommand {
             Self::Stats => "stats",
             Self::Setup { .. } => "setup",
             Self::SelfTest { .. } => "selfTest",
+            Self::Meters { .. } => "meters",
             Self::Leave => "leave",
         };
         f.write_str(kind)
@@ -190,6 +218,15 @@ pub enum PageReport {
     Devices { devices: VoiceDevices },
     /// The microphone's level for the settings page (0–1, at most ten a second, only in setup).
     Level { level: f32, open: bool },
+    /// The live meters' levels (VOICE-CALL, after [`EngineCommand::Meters`]): the player's
+    /// microphone (`me`, 0–1 on the settings bar's scale; `open`: sent now) and the people who make
+    /// sound now (`ids` with their `levels`, 0–1; the quiet left out).
+    Levels {
+        me: f32,
+        open: bool,
+        ids: Vec<String>,
+        levels: Vec<f32>,
+    },
     /// Answer to [`EngineCommand::Stats`].
     #[serde(rename_all = "camelCase")]
     Stats {
@@ -219,6 +256,7 @@ impl std::fmt::Debug for PageReport {
                 devices.outputs.len()
             ),
             Self::Level { .. } => f.write_str("level"),
+            Self::Levels { ids, .. } => write!(f, "levels({} people)", ids.len()),
             Self::Stats { .. } => f.write_str("stats"),
             Self::Playout { playout } => write!(f, "playout({playout:?})"),
             Self::Failed { code } => write!(f, "failed({code})"),
@@ -253,6 +291,15 @@ impl PageReport {
                         .any(device_too_big)
             }
             Self::Level { level, .. } => !level.is_finite(),
+            Self::Levels {
+                me, ids, levels, ..
+            } => {
+                !me.is_finite()
+                    || ids.len() > 64
+                    || ids.len() != levels.len()
+                    || ids.iter().any(|id| id.len() > 64)
+                    || levels.iter().any(|level| !level.is_finite())
+            }
             Self::Failed { code } => code.len() > 64,
             _ => false,
         }
@@ -297,6 +344,22 @@ mod tests {
             })
             .unwrap(),
             json!({"t":"sound","sound":"waiting"})
+        );
+        // VOICE-CALL: the sounds' names and the meters as the page reads them.
+        assert_eq!(
+            serde_json::to_value(EngineCommand::Sound {
+                sound: EngineSound::MicOff
+            })
+            .unwrap(),
+            json!({"t":"sound","sound":"micOff"})
+        );
+        assert_eq!(
+            serde_json::to_value(EngineCommand::Meters {
+                me: true,
+                people: false
+            })
+            .unwrap(),
+            json!({"t":"meters","me":true,"people":false})
         );
         assert_eq!(
             format!(
@@ -358,5 +421,31 @@ mod tests {
         };
         assert!(big.is_oversized());
         assert!(!format!("{big:?}").contains('x'));
+        // VOICE-CALL's meters: names and levels pair up, nothing endless or huge.
+        let levels: PageReport = serde_json::from_value(
+            json!({"t":"levels","me":0.5,"open":true,"ids":["u2"],"levels":[0.25]}),
+        )
+        .unwrap();
+        assert!(!levels.is_oversized());
+        assert_eq!(format!("{levels:?}"), "levels(1 people)");
+        let unpaired: PageReport = serde_json::from_value(
+            json!({"t":"levels","me":0.5,"open":false,"ids":["u2","u3"],"levels":[0.25]}),
+        )
+        .unwrap();
+        assert!(unpaired.is_oversized());
+        let crowd = PageReport::Levels {
+            me: 0.0,
+            open: false,
+            ids: (0..65).map(|n| n.to_string()).collect(),
+            levels: vec![0.5; 65],
+        };
+        assert!(crowd.is_oversized());
+        let endless = PageReport::Levels {
+            me: f32::NAN,
+            open: false,
+            ids: Vec::new(),
+            levels: Vec::new(),
+        };
+        assert!(endless.is_oversized());
     }
 }

@@ -61,6 +61,14 @@ pub struct VoiceState {
     /// volume or "Benim için sustur", here or from the in-game overlay): the page uploads the
     /// backup again a while after it moves (`voice_backup`).
     pub backup_rev: u32,
+    // VOICE-CALL ---------------------------------------------------------------------------------
+    /// "Aramadan önce sor": "Sesli arama başlat" asks "{name} aransın mı?" first (the page and the
+    /// in-game overlay alike).
+    pub ask_before_call: bool,
+    /// When someone else first shared the room with the player in this stay (Unix seconds, this
+    /// computer's clock): a call's start, for its timer. None while the player has only been
+    /// alone in it, and with no room; it holds through reconnects and people coming and going.
+    pub together_since: Option<i64>,
 }
 
 impl VoiceState {
@@ -82,6 +90,8 @@ impl VoiceState {
             presence: std::collections::BTreeMap::new(),
             volume_max: crate::gain::Playout::WebAudio.max_percent(),
             backup_rev: 0,
+            ask_before_call: true,
+            together_since: None,
         }
     }
 }
@@ -451,6 +461,30 @@ pub struct VoiceLevel {
     pub level: f32,
     /// Above the sensitivity: this would be sent.
     pub open: bool,
+}
+
+/// The live meters (`voice-levels`, VOICE-CALL): the player's microphone beside its button and
+/// how loud each person speaks, on the settings bar's 0–1 scale. Only while the page asks
+/// (`voice_levels`) and the main window is on screen, at most sixteen a second, only on change.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceLevels {
+    /// The player's microphone (0 while it is off).
+    pub me: f32,
+    /// What it picks up goes out now; else it is heard but not sent (under the sensitivity, alone
+    /// in the room, push-to-talk up).
+    pub open: bool,
+    /// People in the room who make sound now (the quiet are left out).
+    pub people: Vec<VoicePersonLevel>,
+}
+
+/// One person's level in [`VoiceLevels`].
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct VoicePersonLevel {
+    pub id: String,
+    /// 0 to 1.
+    pub level: f32,
 }
 
 /// Why the player's stay ended (in [`VoiceNotice::Left`]).

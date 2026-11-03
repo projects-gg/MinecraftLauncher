@@ -24,6 +24,7 @@ export type CaptureMessage =
   | { t: "config"; config: CaptureConfig }
   | { t: "talk"; open: boolean; tail: boolean }
   | { t: "levels"; on: boolean }
+  | { t: "meter"; on: boolean }
   | { t: "test"; on: boolean }
   | { t: "mic" }
   | { t: "close" };
@@ -32,6 +33,7 @@ export type CapturePost =
   | { t: "ns"; ok: boolean }
   | { t: "me"; on: boolean }
   | { t: "level"; level: number; open: boolean }
+  | { t: "meter"; level: number; open: boolean }
   | { t: "slow" };
 
 /** The audio thread's clock: `performance` where the scope has it, else the date (1 ms steps). */
@@ -53,6 +55,7 @@ class Capture extends AudioWorkletProcessor {
       {
         me: (on) => post({ t: "me", on }),
         level: (level, open) => post({ t: "level", level, open }),
+        meter: (level, open) => post({ t: "meter", level, open }),
         slow: () => post({ t: "slow" }),
       },
       clock,
@@ -88,6 +91,9 @@ class Capture extends AudioWorkletProcessor {
         break;
       case "levels":
         this.core.setLevels(message.on);
+        break;
+      case "meter":
+        this.core.setMeter(message.on);
         break;
       case "test":
         this.core.setTest(message.on);

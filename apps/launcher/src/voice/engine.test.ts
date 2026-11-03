@@ -350,16 +350,84 @@ describe("the voice engine", () => {
     expect(r.graph().talkOpen).toBe(false);
   });
 
-  it("plays only the shortcut's tick while deafened", async () => {
+  it("plays only the player's own sounds while deafened", async () => {
     const r = await inRoom();
     r.send({ t: "sound", sound: "waiting" }, { t: "deaf", on: true });
-    r.send({ t: "sound", sound: "join" }, { t: "sound", sound: "tick" });
+    r.send({ t: "sound", sound: "deafOn" }, { t: "sound", sound: "join" });
+    r.send({ t: "sound", sound: "waiting" }, { t: "sound", sound: "micOn" });
     r.send(
       { t: "sound", sound: "leave" },
       { t: "deaf", on: false },
+      { t: "sound", sound: "deafOff" },
       { t: "sound", sound: "leave" },
     );
-    expect(r.graph().sounds).toEqual(["waiting", "stop", "tick", "leave"]);
+    expect(r.graph().sounds).toEqual(["waiting", "stop", "deafOn", "micOn", "deafOff", "leave"]);
+  });
+
+  describe("the live meters (VOICE-CALL)", () => {
+    it("measures only what the launcher asks for, and says it on change", async () => {
+      const r = await inRoom();
+      expect(r.graph().meterMe).toBe(false);
+      r.send({ t: "meters", me: true, people: true });
+      expect(r.graph().meterMe).toBe(true);
+      expect(r.graph().meterPeople).toBe(true);
+      r.graph().events.meter(0.5, true);
+      r.graph().events.levels([["1", 0.75]]);
+      r.timers.advance(100);
+      expect(r.of("levels").at(-1)).toEqual({
+        t: "levels",
+        me: 0.5,
+        open: true,
+        ids: ["u2"],
+        levels: [0.75],
+      });
+      // At most sixteen a second: changes within the gap wait for its end, in one report.
+      const before = r.of("levels").length;
+      r.graph().events.meter(0.6, true);
+      r.graph().events.meter(0.7, true);
+      expect(r.of("levels")).toHaveLength(before);
+      r.timers.advance(60);
+      expect(r.of("levels")).toHaveLength(before + 1);
+      expect(r.of("levels").at(-1)?.me).toBe(0.7);
+      // Nothing new: nothing said.
+      r.graph().events.meter(0.7, true);
+      r.timers.advance(200);
+      expect(r.of("levels")).toHaveLength(before + 1);
+    });
+
+    it("leaves out a receiver nobody plays, and rests what stops being measured", async () => {
+      const r = await inRoom();
+      r.send({ t: "meters", me: true, people: true });
+      r.graph().events.levels([["1", 0.5]]);
+      r.timers.advance(100);
+      // Silenced ("Benim için sustur"): their level goes.
+      r.send({ t: "people", people: [person("u2", 100, true)] });
+      r.timers.advance(100);
+      expect(r.of("levels").at(-1)?.ids).toEqual([]);
+      r.graph().events.meter(0.4, false);
+      r.timers.advance(100);
+      // Muted: the launcher turns the microphone's meter off; it reads 0 once.
+      r.send({ t: "meters", me: false, people: true });
+      r.timers.advance(100);
+      expect(r.of("levels").at(-1)).toMatchObject({ me: 0, open: false });
+      expect(r.graph().meterMe).toBe(false);
+      // Levels for the microphone while it is not measured change nothing.
+      const said = r.of("levels").length;
+      r.graph().events.meter(0.9, true);
+      r.timers.advance(100);
+      expect(r.of("levels")).toHaveLength(said);
+    });
+
+    it("turns everything off with the stay, and keeps a newly opened sound's meters", async () => {
+      const r = rig();
+      r.send({ t: "meters", me: true, people: false }, { t: "join" });
+      await settle();
+      expect(r.graph().meterMe).toBe(true);
+      r.send({ t: "leave" });
+      await settle();
+      expect(r.graph().meterMe).toBe(false);
+      expect(r.graph().meterPeople).toBe(false);
+    });
   });
 
   it("passes settings to the sound and the bit rate to the call", async () => {

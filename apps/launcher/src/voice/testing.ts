@@ -56,6 +56,9 @@ export class FakeGraph implements Graph {
   talkTail = true;
   deafOn = false;
   levelsOn = false;
+  /** The live meters (VOICE-CALL): the microphone's, the people's. */
+  meterMe = false;
+  meterPeople = false;
   testOn = false;
   closed = false;
 
@@ -70,6 +73,10 @@ export class FakeGraph implements Graph {
   }
   levels(on: boolean): void {
     this.levelsOn = on;
+  }
+  meters(me: boolean, people: boolean): void {
+    this.meterMe = me;
+    this.meterPeople = people;
   }
   test(on: boolean): void {
     this.testOn = on;

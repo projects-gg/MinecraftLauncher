@@ -29,8 +29,8 @@ use crate::machine::{
 use crate::settings::{Store, VoiceBackup, VoiceKey, VoiceSettings};
 use crate::socket::{self, SocketEvent, SocketTarget};
 use crate::view::{
-    VoiceAnswer, VoiceCrewOp, VoiceKeyAsk, VoiceKeyCheck, VoiceLevel, VoiceModAction, VoiceNotice,
-    VoiceRefusal, VoiceShortcut, VoiceSpeaking, VoiceState,
+    VoiceAnswer, VoiceCrewOp, VoiceKeyAsk, VoiceKeyCheck, VoiceLevel, VoiceLevels, VoiceModAction,
+    VoiceNotice, VoiceRefusal, VoiceShortcut, VoiceSpeaking, VoiceState,
 };
 use crate::wire::{self, Ticket, ToRoom};
 
@@ -86,6 +86,9 @@ pub trait Platform: Send + Sync + 'static {
     fn level(&self, level: VoiceLevel);
     /// Milliseconds since the computer was last touched (keyboard, mouse, controller).
     fn idle_ms(&self) -> u64;
+    /// The live meters' levels (VOICE-CALL), while the page asks for them; at most sixteen a
+    /// second. Nothing by default.
+    fn levels(&self, _levels: VoiceLevels) {}
 }
 
 /// How long an action waits for the room's answer.
@@ -631,6 +634,12 @@ impl Voice {
         self.effects(|machine, now, _| machine.set_test(on, now));
     }
 
+    /// The page shows live meters (VOICE-CALL: its window on screen with a room's pill or panel),
+    /// or not.
+    pub fn set_meters(&self, on: bool) {
+        self.effects(|machine, _, _| machine.set_meters(on));
+    }
+
     // -------------------------------------------------------------------------------------------
     // The voice window's side
 
@@ -639,7 +648,28 @@ impl Voice {
     }
 
     pub fn page_report(&self, report: PageReport) {
-        self.effects(|machine, now, _| machine.page_report(report, now));
+        if !matches!(report, PageReport::Levels { .. }) {
+            self.effects(|machine, now, _| machine.page_report(report, now));
+            return;
+        }
+        // The live meters' levels (VOICE-CALL, up to sixteen a second) change nothing the machine
+        // keeps: straight to the page's event, past the effects queue and the timer.
+        if report.is_oversized() {
+            return;
+        }
+        let PageReport::Levels {
+            me,
+            open,
+            ids,
+            levels,
+        } = report
+        else {
+            return;
+        };
+        let shown = lock(&self.inner.machine).levels_of(me, open, ids, levels);
+        if let Some(levels) = shown {
+            self.inner.platform.levels(levels);
+        }
     }
 
     pub fn page_gone(&self) {

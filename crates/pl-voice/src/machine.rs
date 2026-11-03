@@ -20,9 +20,10 @@ use crate::room::Room;
 use crate::settings::{Store, VoiceKey, VoicePersonPrefs, VoiceSettings};
 use crate::view::{
     VoiceAnswer, VoiceCalling, VoiceCrewRoom, VoiceCrewRooms, VoiceDevices, VoiceLeftReason,
-    VoiceLevel, VoiceMe, VoiceMic, VoiceMissed, VoiceModAction, VoiceNotice, VoiceOutRing,
-    VoicePerson, VoicePhase, VoicePowers, VoiceProfile, VoiceQuality, VoiceRefusal, VoiceRing,
-    VoiceRole, VoiceRoomKind, VoiceRoomView, VoiceShortcut, VoiceSpeaking, VoiceState,
+    VoiceLevel, VoiceLevels, VoiceMe, VoiceMic, VoiceMissed, VoiceModAction, VoiceNotice,
+    VoiceOutRing, VoicePerson, VoicePersonLevel, VoicePhase, VoicePowers, VoiceProfile,
+    VoiceQuality, VoiceRefusal, VoiceRing, VoiceRole, VoiceRoomKind, VoiceRoomView, VoiceShortcut,
+    VoiceSpeaking, VoiceState,
 };
 use crate::wire::{self, ClosedWhy, FromRoom, ModAct, Role, RoomKind, Sdp, Ticket, ToRoom};
 
@@ -250,6 +251,9 @@ struct Stay {
     quality: u8,
     ptt_down: bool,
     idle: Idle,
+    /// VOICE-CALL: since when someone else shares the room with the player (Unix seconds, this
+    /// computer's clock; the call timer's start). Set once per stay.
+    together_since: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -299,6 +303,10 @@ pub struct Machine {
     /// The room the last failed stay was in ("Tekrar dene").
     retry: Option<(String, Option<String>, Ticket)>,
     backoff: BackoffPolicy,
+    /// VOICE-CALL: the page shows live meters now (its window on screen, a room's pill or panel).
+    meters: bool,
+    /// What the attached page measures for the meters (`me`, `people`); a fresh page: neither.
+    meters_sent: (bool, bool),
 }
 
 impl std::fmt::Debug for Machine {
@@ -339,6 +347,8 @@ impl Machine {
                 max: std::time::Duration::from_secs(15),
                 spread: std::time::Duration::from_millis(1_500),
             },
+            meters: false,
+            meters_sent: (false, false),
         }
     }
 
@@ -531,6 +541,8 @@ impl Machine {
                 push_to_talk: settings.push_to_talk().is_some(),
                 kbps: self.service().kbps,
                 sounds: settings.sounds,
+                // VOICE-CALL: everyone at once, held to the path's top as a person's volume is.
+                output_volume: gain::clamp(settings.output_volume, self.playout()),
             },
         }
     }
@@ -743,6 +755,8 @@ impl Machine {
         }
         if self.stay.is_some() {
             self.end_stay(now, None, &mut out);
+            // A move to another room is no ending (VOICE-CALL): its "Connected" says it.
+            out.retain(|effect| !is_sound(effect, EngineSound::Ended));
         }
         // Joining ends its ring and its missed call; calling a friend back ("Geri ara") ends their
         // missed calls too.
@@ -789,6 +803,7 @@ impl Machine {
             quality: 0,
             ptt_down: false,
             idle: Idle::new(now, service.idle_minutes),
+            together_since: None,
         });
         out.push(Effect::Connect {
             generation,
@@ -798,6 +813,7 @@ impl Machine {
         if self.page.attached {
             self.ask_offer(&mut out);
         }
+        self.sync_meters(&mut out);
         self.sync_input(&mut out);
         out.push(Effect::Changed);
         out
@@ -890,7 +906,15 @@ impl Machine {
             });
         }
         if self.page.attached {
+            // VOICE-CALL: the stay's end is heard before the page closes it (its sound outlasts
+            // the call: the page's sound waits 1.5 s after a stay). Never for a join refused
+            // before it began.
+            if stay.welcomed {
+                self.cue(EngineSound::Ended, out);
+            }
             out.push(Effect::Engine(EngineCommand::Leave));
+            // The page's leave turns its meters off.
+            self.meters_sent = (false, false);
         }
         if let Some((reason, friend)) = reason {
             if reason == VoiceLeftReason::Failed {
@@ -1114,10 +1138,12 @@ impl Machine {
                 if let Some(resume) = resume {
                     stay.ticket = resume;
                 }
+                let first = !stay.welcomed;
                 stay.welcomed = true;
                 // The room is back. With an answer the audio is still on its way: a connection
                 // lost before stays away (and gives up after its minute) until the page says
                 // `connected`, so rejoins that never connect cannot hold the stay forever.
+                let back = sdp.is_none() && stay.away_shown;
                 if sdp.is_none() {
                     stay.away_since = None;
                     stay.away_shown = false;
@@ -1133,6 +1159,18 @@ impl Machine {
                     }
                 }
                 let alone = model.people.is_empty();
+                // VOICE-CALL: the friend the player calls is here already (they came before this
+                // `hello`): the call is answered as if they had just come.
+                let answered = stay
+                    .calling
+                    .as_ref()
+                    .is_some_and(|(friend, _)| model.people.contains_key(friend));
+                if answered {
+                    stay.calling = None;
+                }
+                if !alone && stay.together_since.is_none() {
+                    stay.together_since = Some(unix);
+                }
                 stay.room = Some(model);
                 if let Some(sdp) = sdp {
                     stay.audio_ok = false;
@@ -1156,13 +1194,21 @@ impl Machine {
                         sound: EngineSound::Waiting,
                     }));
                 }
-                if self.store.settings().sounds && !joined.is_empty() && self.page.attached {
+                if answered && self.page.attached {
                     out.push(Effect::Engine(EngineCommand::Sound {
-                        sound: EngineSound::Join,
+                        sound: EngineSound::Stop,
                     }));
+                }
+                // VOICE-CALL: in (a caller's own wait says it with its tone), or back after
+                // "Yeniden bağlanıyor…"; a room that changed meanwhile says who came.
+                if (first && !calling) || back {
+                    self.cue(EngineSound::Connected, &mut out);
+                } else if !joined.is_empty() {
+                    self.cue(EngineSound::Join, &mut out);
                 }
                 out.extend(self.playback());
                 self.talk(&mut out);
+                self.sync_meters(&mut out);
                 out.push(Effect::Changed);
             }
             FromRoom::Offer { sdp, mids } => {
@@ -1276,47 +1322,63 @@ impl Machine {
             }
             FromRoom::Unknown => {}
             other => {
-                let sounds = self.store.settings().sounds;
                 let attached = self.page.attached;
+                let mic_chosen = !self.mute && !self.deaf;
                 let Some(stay) = self.stay.as_mut() else {
                     return out;
                 };
                 let Some(room) = stay.room.as_mut() else {
                     return out;
                 };
+                let cut_before = room.my_sm;
                 let applied = room.apply(&other);
+                let cut = room.my_sm;
                 if let Some(id) = &applied.left {
                     stay.speaking.remove(id);
                 }
-                if applied.joined.is_some() && stay.calling.is_some() {
-                    // Someone came: the call is answered.
-                    stay.calling = None;
-                    if attached {
-                        out.push(Effect::Engine(EngineCommand::Sound {
-                            sound: EngineSound::Stop,
-                        }));
-                    }
+                // VOICE-CALL: the call's timer starts with the first one to share the room.
+                if applied.joined.is_some() && stay.together_since.is_none() {
+                    stay.together_since = Some(unix);
                 }
-                if sounds && attached {
-                    if applied.joined.is_some() {
-                        out.push(Effect::Engine(EngineCommand::Sound {
-                            sound: EngineSound::Join,
-                        }));
-                    } else if applied.left.is_some() {
-                        out.push(Effect::Engine(EngineCommand::Sound {
-                            sound: EngineSound::Leave,
-                        }));
-                    }
+                // Someone came: the call is answered.
+                let answered = applied.joined.is_some() && stay.calling.take().is_some();
+                if answered && attached {
+                    out.push(Effect::Engine(EngineCommand::Sound {
+                        sound: EngineSound::Stop,
+                    }));
+                }
+                if answered {
+                    self.cue(EngineSound::Connected, &mut out);
+                } else if applied.joined.is_some() {
+                    self.cue(EngineSound::Join, &mut out);
+                } else if applied.left.is_some() {
+                    self.cue(EngineSound::Leave, &mut out);
                 }
                 if applied.muted_me {
                     out.push(Effect::Notice(VoiceNotice::MutedByModerator));
                     out.push(Effect::System(SystemNotice::MutedByModerator));
                 }
+                // A moderator's mute (or its end) turns a microphone the player keeps open.
+                if cut != cut_before && mic_chosen {
+                    let sound = if cut {
+                        EngineSound::MicOff
+                    } else {
+                        EngineSound::MicOn
+                    };
+                    self.cue(sound, &mut out);
+                }
                 if applied.playback {
                     out.extend(self.playback());
                 }
-                if matches!(other, FromRoom::State { .. }) && applied.changed {
+                // Alone, nothing goes out (VOICE-CALL): the gate follows who is in the room too.
+                if (matches!(other, FromRoom::State { .. }) && applied.changed)
+                    || applied.joined.is_some()
+                    || applied.left.is_some()
+                {
                     self.talk(&mut out);
+                }
+                if cut != cut_before {
+                    self.sync_meters(&mut out);
                 }
                 if applied.changed {
                     out.push(Effect::Changed);
@@ -1422,6 +1484,7 @@ impl Machine {
         if self.mute == on && !(self.deaf && !on) {
             return out;
         }
+        let was_deaf = self.deaf;
         self.mute = on;
         // Opening the microphone ends deafness too (Discord's way).
         if !on {
@@ -1432,6 +1495,18 @@ impl Machine {
         }
         self.send_set(&mut out);
         self.talk(&mut out);
+        // VOICE-CALL: heard whoever turned it (the page, a shortcut, the tray, the game's overlay);
+        // opening it while deafened brings the sound back, and says that.
+        if self.stay.is_some() {
+            match (on, was_deaf) {
+                (true, false) => self.cue(EngineSound::MicOff, &mut out),
+                (false, true) => self.cue(EngineSound::DeafOff, &mut out),
+                (false, false) => self.cue(EngineSound::MicOn, &mut out),
+                // Deafened, the microphone was off already.
+                (true, true) => {}
+            }
+        }
+        self.sync_meters(&mut out);
         out.push(Effect::Changed);
         out
     }
@@ -1447,6 +1522,15 @@ impl Machine {
         }
         self.send_set(&mut out);
         self.talk(&mut out);
+        if self.stay.is_some() {
+            let sound = if on {
+                EngineSound::DeafOn
+            } else {
+                EngineSound::DeafOff
+            };
+            self.cue(sound, &mut out);
+        }
+        self.sync_meters(&mut out);
         out.push(Effect::Changed);
         out
     }
@@ -1469,8 +1553,11 @@ impl Machine {
             return false;
         };
         let muted_for_all = stay.room.as_ref().is_some_and(|room| room.my_sm);
+        // VOICE-CALL: nobody else in the room hears it, so nothing goes out until someone comes
+        // (no packets for the SFU, no work for the noise suppressor; a caller waiting alone).
+        let alone = stay.room.as_ref().is_none_or(|room| room.people.is_empty());
         let push_to_talk = self.store.settings().push_to_talk().is_some();
-        !self.mute && !self.deaf && !muted_for_all && (!push_to_talk || stay.ptt_down)
+        !self.mute && !self.deaf && !muted_for_all && !alone && (!push_to_talk || stay.ptt_down)
     }
 
     /// The gate as it should be now; a close cuts at once (a mute, a deafen, a moderator's mute).
@@ -1503,25 +1590,94 @@ impl Machine {
             }
             // Deafened, the microphone shows as off: the mute key opens it and ends deafness
             // (Discord's way; flipping `mute` alone would change nothing the player can see).
+            // Their own sounds say it (VOICE-CALL; the shortcut's tick went).
             VoiceShortcut::Mute if change.down => {
                 out.extend(self.set_mute(!(self.mute || self.deaf)));
-                self.tick_sound(&mut out);
             }
             VoiceShortcut::Deafen if change.down => {
                 out.extend(self.set_deaf(!self.deaf));
-                self.tick_sound(&mut out);
             }
             _ => {}
         }
         out
     }
 
-    fn tick_sound(&self, out: &mut Vec<Effect>) {
-        if self.page.attached {
-            out.push(Effect::Engine(EngineCommand::Sound {
-                sound: EngineSound::Tick,
-            }));
+    /// One of voice chat's own sounds (VOICE-CALL), while the page plays them and the player
+    /// keeps "Sesli sohbet sesleri" on.
+    fn cue(&self, sound: EngineSound, out: &mut Vec<Effect>) {
+        if self.page.attached && self.store.settings().sounds {
+            out.push(Effect::Engine(EngineCommand::Sound { sound }));
         }
+    }
+
+    /// The page's live meters as they should be now (VOICE-CALL): the people's while the page
+    /// shows a room, the player's microphone while it is theirs to open (not muted, deafened or
+    /// muted for everyone). A fresh page starts with both off.
+    fn sync_meters(&mut self, out: &mut Vec<Effect>) {
+        if !self.page.attached {
+            return;
+        }
+        let wanted = match &self.stay {
+            Some(stay) if self.meters => {
+                let muted_for_all = stay.room.as_ref().is_some_and(|room| room.my_sm);
+                (!self.mute && !self.deaf && !muted_for_all, true)
+            }
+            _ => (false, false),
+        };
+        if wanted == self.meters_sent {
+            return;
+        }
+        self.meters_sent = wanted;
+        out.push(Effect::Engine(EngineCommand::Meters {
+            me: wanted.0,
+            people: wanted.1,
+        }));
+    }
+
+    /// The page shows live meters now (its window on screen with a room's pill or panel), or
+    /// not (VOICE-CALL).
+    pub fn set_meters(&mut self, on: bool) -> Vec<Effect> {
+        if self.meters == on {
+            return Vec::new();
+        }
+        self.meters = on;
+        let mut out = Vec::new();
+        self.sync_meters(&mut out);
+        out
+    }
+
+    /// The live meters' levels as the page reported them, for the launcher's page (VOICE-CALL):
+    /// only while it asks for them, only people in the room, the player's microphone only while
+    /// it is measured.
+    pub fn levels_of(
+        &self,
+        me: f32,
+        open: bool,
+        ids: Vec<String>,
+        levels: Vec<f32>,
+    ) -> Option<VoiceLevels> {
+        if !self.meters {
+            return None;
+        }
+        let stay = self.stay.as_ref()?;
+        let people = match &stay.room {
+            Some(room) => ids
+                .into_iter()
+                .zip(levels)
+                .filter(|(id, _)| room.people.contains_key(id))
+                .map(|(id, level)| VoicePersonLevel {
+                    id,
+                    level: level.clamp(0.0, 1.0),
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        let measured = self.meters_sent.0;
+        Some(VoiceLevels {
+            me: if measured { me.clamp(0.0, 1.0) } else { 0.0 },
+            open: measured && open,
+            people,
+        })
     }
 
     fn sync_input(&mut self, out: &mut Vec<Effect>) {
@@ -1624,6 +1780,8 @@ impl Machine {
     /// The page attached (after the window opened, or again after a crash).
     pub fn page_attached(&mut self) -> Vec<Effect> {
         self.page.attached = true;
+        // A fresh page measures nothing for the meters until told.
+        self.meters_sent = (false, false);
         let mut out = vec![Effect::Engine(self.configure())];
         if self.page.setup {
             out.push(Effect::Engine(EngineCommand::Setup { on: true }));
@@ -1642,6 +1800,7 @@ impl Machine {
             self.ask_offer(&mut out);
             out.extend(self.playback());
             self.talk(&mut out);
+            self.sync_meters(&mut out);
         }
         out
     }
@@ -1689,6 +1848,7 @@ impl Machine {
     /// The window's page went away (closed by the launcher).
     pub fn page_gone(&mut self) {
         self.page.attached = false;
+        self.meters_sent = (false, false);
         if let Some(stay) = &mut self.stay {
             stay.offer_asked = false;
         }
@@ -1813,26 +1973,38 @@ impl Machine {
             }
             PageReport::Lost => self.audio_lost(now, &mut out),
             PageReport::Connected => {
+                let mut back = false;
                 if let Some(stay) = self.stay.as_mut() {
                     stay.audio_ok = true;
                     stay.losses = 0;
                     stay.rejoin_at = None;
                     if stay.link == Link::Open {
+                        back = stay.away_shown;
                         stay.away_since = None;
                         stay.away_shown = false;
                         stay.give_up_at = None;
                     }
                     out.push(Effect::Changed);
                 }
+                // VOICE-CALL: back after "Yeniden bağlanıyor…".
+                if back {
+                    self.cue(EngineSound::Connected, &mut out);
+                }
             }
             PageReport::Playout { playout } => {
                 if self.playout != Some(playout) {
                     self.playout = Some(playout);
-                    // Volumes held to the path's top, and the slider's top with them.
+                    // Volumes held to the path's top, and the slider's top with them; the
+                    // master volume too (VOICE-CALL).
+                    if self.page.attached {
+                        out.push(Effect::Engine(self.configure()));
+                    }
                     out.extend(self.playback());
                     out.push(Effect::Changed);
                 }
             }
+            // The manager hands these straight to the page's event (`Voice::page_report`).
+            PageReport::Levels { .. } => {}
             PageReport::Mic { mic, changed } => {
                 let before = self.page.mic;
                 self.page.mic = Some(mic);
@@ -1926,6 +2098,7 @@ impl Machine {
         let mut end: Option<VoiceLeftReason> = None;
         let mut reconnect: Option<(u64, Ticket)> = None;
         let mut rejoin = false;
+        let mut lost = false;
         if let Some(stay) = &mut self.stay {
             if stay.give_up_at.is_some_and(|at| now >= at) {
                 end = Some(VoiceLeftReason::Failed);
@@ -1948,6 +2121,7 @@ impl Machine {
                         .is_some_and(|since| now >= since + RECONNECTING_SHOWN_MS)
                 {
                     stay.away_shown = true;
+                    lost = true;
                     out.push(Effect::Changed);
                 }
                 if let Some(room) = &mut stay.room
@@ -1956,6 +2130,10 @@ impl Machine {
                     out.push(Effect::Changed);
                 }
             }
+        }
+        // VOICE-CALL: "Yeniden bağlanıyor…" shows now; heard too (in the game, in the tray).
+        if lost {
+            self.cue(EngineSound::Lost, &mut out);
         }
         if let Some(reason) = end {
             self.end_stay(now, Some((reason, None)), &mut out);
@@ -2046,6 +2224,8 @@ impl Machine {
                 .collect(),
             volume_max: self.playout().max_percent(),
             backup_rev: self.store.revision(),
+            ask_before_call: settings.ask_before_call,
+            together_since: self.stay.as_ref().and_then(|stay| stay.together_since),
         }
     }
 
@@ -2226,6 +2406,11 @@ fn rejoin_wait(losses: u32) -> u64 {
 
 fn secs_ms(seconds: i64) -> u64 {
     u64::try_from(seconds).unwrap_or(0).saturating_mul(1_000)
+}
+
+/// Whether an effect plays that sound on the page.
+fn is_sound(effect: &Effect, sound: EngineSound) -> bool {
+    matches!(effect, Effect::Engine(EngineCommand::Sound { sound: s }) if *s == sound)
 }
 
 /// One [`Effect::Changed`] is enough.

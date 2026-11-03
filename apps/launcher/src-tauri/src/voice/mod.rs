@@ -33,7 +33,7 @@ use pl_voice::manager::BoxFuture;
 use pl_voice::settings::{Store, VoiceKey};
 use pl_voice::socket::SocketTarget;
 use pl_voice::view::{
-    VoiceAnswer, VoiceCrewOp, VoiceLeftReason, VoiceLevel, VoiceNotice, VoiceRefusal,
+    VoiceAnswer, VoiceCrewOp, VoiceLeftReason, VoiceLevel, VoiceLevels, VoiceNotice, VoiceRefusal,
     VoiceShortcut, VoiceSpeaking, VoiceState,
 };
 use pl_voice::wire::Ticket;
@@ -49,6 +49,9 @@ pub const NOTICE_EVENT: &str = "voice-notice";
 pub const SPEAKING_EVENT: &str = "voice-speaking";
 /// The microphone's level for the settings page (`VoiceLevel`).
 pub const LEVEL_EVENT: &str = "voice-level";
+/// The live meters (`VoiceLevels`, VOICE-CALL), only while the page asks and its window is on
+/// screen.
+pub const LEVELS_EVENT: &str = "voice-levels";
 
 /// How long the hub may take to answer a call.
 const CALL_WAIT: Duration = Duration::from_secs(10);
@@ -749,6 +752,14 @@ impl Platform for AppPlatform {
 
     fn idle_ms(&self) -> u64 {
         input::idle_ms()
+    }
+
+    fn levels(&self, levels: VoiceLevels) {
+        // The page asks only while its window is in front; a window that went away meanwhile
+        // takes nothing more (the page turns them off as it notices).
+        if self.window_in_sight() {
+            let _ = self.app.emit_to("main", LEVELS_EVENT, levels);
+        }
     }
 }
 
