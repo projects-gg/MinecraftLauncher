@@ -122,12 +122,18 @@ import { togetherTime } from "./together";
 import { useCallClock } from "./use-call-clock";
 
 /** A section of the crew page ("Planlar", "Üyeler", …): a step above the roster's group labels
- * ("Projects'te 3"), which share its size otherwise (SMALL12). `inset` (VOICE-ROOMS: the crew
- * view's lists): its words start where the rows' do, 8 px in from the plates' edge, as Discord's
- * category labels line up with their channels, not with the channels' hover plates. */
+ * ("Projects'te 3"), which share its size otherwise (SMALL12). `inset` (the crew view's lists):
+ * its words start where the rows' do, as Discord's category labels line up with their channels,
+ * not with the channels' hover plates.
+ *
+ * The crew view's grid (CREW-POLISH; the owner, 3 Nov: "hizasızlığı görüyorsundur"): the crew
+ * card, the boxes and the rows' plates fill the column; every heading, row and box starts its
+ * words 14 px in (the card's own padding) and ends its last control 14 px in, where "Ekibi çağır"
+ * ends: the rooms' buttons, "Plan yap", the members' "⋯". A ghost button's words take the line
+ * (its plate shows only under the pointer). */
 function SectionTitle({ children, inset = false }: { children: string; inset?: boolean }) {
   return (
-    <h3 className={cn("mb-2.5 text-[13px] font-semibold text-ash-300", inset && "px-2")}>
+    <h3 className={cn("mb-2.5 text-[13px] font-semibold text-ash-300", inset && "px-4")}>
       {children}
     </h3>
   );
@@ -598,6 +604,7 @@ function CodeRow({ team }: { team: SocialTeam }) {
                   size="sm"
                   variant="ghost"
                   icon={<ArrowsClockwise size={14} />}
+                  className="-ml-3"
                   onClick={() => setAsking(true)}
                 >
                   {t("teams.code.rotate")}
@@ -900,12 +907,12 @@ function CrewCard({
   );
 }
 
-/** The player's own row: their face, the tag they wear (TEAM6), their badge, "Sen". */
+/** The player's own row: their face, the tag they wear (TEAM6), their badge; "Sen" is its group's
+ * heading. */
 function MeRow({ member }: { member: TeamMember }) {
-  const { t } = useTranslation();
   const badge = useMyBadge();
   return (
-    <div className="flex items-center gap-3 py-1.5 pr-2 pl-2">
+    <div className="flex items-center gap-3 px-4 py-1.5">
       <SocialAvatar source={member} size={32} />
       <BadgedName
         name={member.name}
@@ -917,25 +924,20 @@ function MeRow({ member }: { member: TeamMember }) {
       >
         <RoleBadge member={member} />
       </BadgedName>
-      {/* "Sen" in the column of the others' "Katıl"; the empty place after it is their "⋯",
-          which shows under the pointer (TASTE-SWEEP SMALLS-L). */}
-      <span className="flex items-center gap-2">
-        <span className="text-[12px] text-ash-400">{t("teams.you")}</span>
-        <span aria-hidden className="size-8 shrink-0" />
-      </span>
     </div>
   );
 }
 
 type RosterItem =
-  | { key: string; kind: "group"; label: string; count: number }
+  | { key: string; kind: "group"; label: string; count?: number }
   | { key: string; kind: "member"; member: TeamMember };
 
 /**
- * The player's own row, then the teammates grouped by where they are; inside a group the leader,
- * the moderators, then names. The groups count teammates only, as the card's strip does (SMALL12).
- * One list, so someone who joins Projects glides into its group instead of vanishing and
- * reappearing.
+ * The player's own row under "Sen", then the teammates grouped by where they are; inside a group
+ * the leader, the moderators, then names. Every row sits under a heading (CREW-POLISH: the own row
+ * between "Üyeler" and the first group read as out of order). The groups count teammates only, as
+ * the card's strip does (SMALL12), so "Sen" has no count. One list, so someone who joins Projects
+ * glides into its group instead of vanishing and reappearing.
  */
 function CrewRoster({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
@@ -943,7 +945,12 @@ function CrewRoster({ team }: { team: SocialTeam }) {
   const items = useMemo<RosterItem[]>(() => {
     const me = team.members.find((member) => member.me);
     return [
-      ...(me ? [{ key: `m:${me.id}`, kind: "member" as const, member: me }] : []),
+      ...(me
+        ? [
+            { key: "g:me", kind: "group" as const, label: t("teams.you") },
+            { key: `m:${me.id}`, kind: "member" as const, member: me },
+          ]
+        : []),
       ...rosterGroups(team).flatMap(({ where, members }) => [
         {
           key: `g:${where}`,
@@ -961,7 +968,7 @@ function CrewRoster({ team }: { team: SocialTeam }) {
       <SectionTitle inset>{t("teams.roster.title")}</SectionTitle>
       <ul aria-label={team.name} className="relative flex flex-col">
         <AnimatePresence initial={false} mode="popLayout">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <motion.li
               key={item.key}
               layout={layout ? "position" : false}
@@ -971,16 +978,24 @@ function CrewRoster({ team }: { team: SocialTeam }) {
               exit={{ opacity: 0, transition: leave(0.22) }}
             >
               {item.kind === "group" ? (
-                <h3 className="flex items-center gap-2 px-2 pt-3 pb-1 text-[12.5px] font-medium text-ash-400">
+                // A group's heading: more room above than below; the first sits under "Üyeler".
+                <h4
+                  className={cn(
+                    "flex items-center gap-2 px-4 pb-1 text-[12.5px] font-medium text-ash-400",
+                    index === 0 ? "pt-0" : "pt-3",
+                  )}
+                >
                   {item.label}
-                  <span className="relative inline-flex font-display tabular-nums">
-                    <AnimatePresence mode="popLayout" initial={false}>
-                      <motion.span key={item.count} {...swap(reduce, 0.18)}>
-                        {item.count}
-                      </motion.span>
-                    </AnimatePresence>
-                  </span>
-                </h3>
+                  {item.count === undefined ? null : (
+                    <span className="relative inline-flex font-display tabular-nums">
+                      <AnimatePresence mode="popLayout" initial={false}>
+                        <motion.span key={item.count} {...swap(reduce, 0.18)}>
+                          {item.count}
+                        </motion.span>
+                      </AnimatePresence>
+                    </span>
+                  )}
+                </h4>
               ) : item.member.me ? (
                 <MeRow member={item.member} />
               ) : (
@@ -1026,7 +1041,7 @@ function InviteFriends({ team }: { team: SocialTeam }) {
         </div>
       ) : null}
       {candidates.length === 0 ? (
-        <p className="px-2 text-[13px] text-ash-400">{t("teams.invite.none")}</p>
+        <p className="px-4 text-[13px] text-ash-400">{t("teams.invite.none")}</p>
       ) : (
         <ul className="max-h-[280px] overflow-y-auto">
           {candidates.map((friend) => {
@@ -1034,7 +1049,7 @@ function InviteFriends({ team }: { team: SocialTeam }) {
             return (
               // A friend here has the menu they have everywhere (FIX2: right click, Shift+F10).
               <PersonContextMenu key={friend.id} person={friend} place={{ from: "team" }}>
-                <li className="group/invite flex items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-1 pl-2 transition-colors duration-150 hover:bg-white/[0.035] has-[[data-state=open]]:bg-white/[0.05]">
+                <li className="group/invite flex items-center gap-3 rounded-[var(--radius-panel)] px-4 py-1.5 transition-colors duration-150 hover:bg-white/[0.035] has-[[data-state=open]]:bg-white/[0.05]">
                   <SocialAvatar source={friend} size={32} state={friend.state} dnd={friend.dnd} />
                   <span className="min-w-0 flex-1">
                     <NameWithMark
@@ -1114,7 +1129,7 @@ function CrewPermissions({ team }: { team: SocialTeam }) {
   return (
     <section className="mt-5">
       <SectionTitle inset>{t("teams.roles.title")}</SectionTitle>
-      <div className="rounded-[var(--radius-panel)] bg-obsidian-950/40 px-3 py-1.5 ring-1 ring-white/8">
+      <div className="rounded-[var(--radius-panel)] bg-obsidian-950/40 px-4 py-1.5 ring-1 ring-white/8">
         <table className="w-full border-collapse">
           <thead>
             <tr className="text-[12px] text-ash-400">
@@ -1309,11 +1324,11 @@ function CrewView({ team }: { team: SocialTeam }) {
           </motion.div>
         ) : null}
 
-        <motion.p className="mt-5 px-2 text-[12px] leading-snug text-ash-400" {...glideBox}>
+        <motion.p className="mt-5 px-4 text-[12px] leading-snug text-ash-400" {...glideBox}>
           {t("teams.privacy")}
         </motion.p>
 
-        <motion.div ref={leaveRef} className="mt-3 border-t border-white/8 pt-3" {...glideBox}>
+        <motion.div ref={leaveRef} className="mt-3 border-t border-white/8 px-4 pt-3" {...glideBox}>
           <AnimatePresence mode="popLayout" initial={false}>
             {asking ? (
               <motion.div key={asking} {...rise(reduce, 4, 0.2)}>
@@ -1337,7 +1352,7 @@ function CrewView({ team }: { team: SocialTeam }) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="text-flare-400"
+                  className="-ml-3 text-flare-400"
                   icon={leaving === "leave" ? <SignOut size={14} /> : <Trash size={14} />}
                   onClick={() => setAsking(leaving)}
                 >
