@@ -620,10 +620,31 @@ export function TeamMemberRow({
     from: "team",
     ask: (question) => openAt(CARD_QUESTION[question]),
   });
+  const menu = (
+    <span className="flex" data-no-drag>
+      <Menu
+        items={items}
+        trigger={
+          <IconButton
+            label={t("friendMenus.options", { name: member.name })}
+            icon={<DotsThree size={18} weight="bold" />}
+            size="sm"
+            className="opacity-0 transition-opacity duration-150 group-hover/friend:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+          />
+        }
+      />
+    </span>
+  );
 
   return (
     <ContextMenu items={items} disabled={!items.length}>
-      <div className="group/friend flex items-center gap-2 rounded-[var(--radius-panel)] pr-2 transition-colors duration-150 hover:bg-white/[0.045] has-[[data-state=open]]:bg-white/[0.06]">
+      {/* The crew page's rows keep its 14 px line on both sides (CREW-POLISH), the list's 8 px. */}
+      <div
+        className={cn(
+          "group/friend flex items-center gap-2 rounded-[var(--radius-panel)] transition-colors duration-150 hover:bg-white/[0.045] has-[[data-state=open]]:bg-white/[0.06]",
+          line === "where" ? "pr-4" : "pr-2",
+        )}
+      >
         <Popover.Root
           open={open}
           onOpenChange={(next) => {
@@ -644,8 +665,8 @@ export function TeamMemberRow({
               }}
               aria-label={`${badgeRowLabel(member.name, badge, t, marks)}, ${presence}`}
               className={cn(
-                "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
-                line === "where" ? "py-1.5" : "py-2",
+                "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
+                line === "where" ? "py-1.5 pl-4" : "py-2 pl-2",
               )}
             >
               <SocialAvatar
@@ -745,6 +766,9 @@ export function TeamMemberRow({
             ) : null}
           </AnimatePresence>
         </Popover.Root>
+        {/* On the crew page the "⋯" (shown under the pointer) sits before "Katıl", so every button
+            there ends on the page's one right edge, as the rooms' do (CREW-POLISH). */}
+        {line === "where" ? menu : null}
         <AnimatePresence initial={false}>
           {joinable ? (
             <motion.span key="join" className="flex" data-no-drag {...rise(reduce, 0, 0.2)}>
@@ -752,19 +776,7 @@ export function TeamMemberRow({
             </motion.span>
           ) : null}
         </AnimatePresence>
-        <span className="flex" data-no-drag>
-          <Menu
-            items={items}
-            trigger={
-              <IconButton
-                label={t("friendMenus.options", { name: member.name })}
-                icon={<DotsThree size={18} weight="bold" />}
-                size="sm"
-                className="opacity-0 transition-opacity duration-150 group-hover/friend:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
-              />
-            }
-          />
-        </span>
+        {line === "where" ? null : menu}
       </div>
     </ContextMenu>
   );

@@ -1,6 +1,7 @@
 // Copies the outlines of the Phosphor icons the overlay draws (the launcher's icon family, MIT) into
 // src/main/resources/assets/projects_overlay/icons/phosphor.txt, one "name<TAB>weight<TAB>path" line
 // each. The overlay rasterizes them at the GUI scale (ui/draw/ShapeBaker.java), so they stay sharp.
+// Brand marks (Discord's own symbol, not Phosphor's drawing of it) are in icons/brands.txt, by hand.
 // The crews' emblems (TEAM6: the fill weight the launcher's crew mark uses, team-emblem.tsx) go to
 // emblems.txt beside it, one "emblem<TAB>name<TAB>path" line each.
 //
@@ -47,7 +48,6 @@ const ICONS = [
   ["Circle", "regular"],
   ["RadioButton", "fill"],
   ["HandWaving", "regular"],
-  ["DiscordLogo", "fill"],
   ["UserPlus", "regular"],
   ["UserMinus", "regular"],
   ["LockSimple", "regular"],

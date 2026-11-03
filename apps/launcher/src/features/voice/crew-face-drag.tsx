@@ -225,7 +225,9 @@ export function DraggableFace({
               setOpen(true);
             }}
             className={cn(
-              "relative shrink-0 cursor-grab touch-none rounded-[var(--radius-head)] outline-none select-none focus-visible:ring-2 focus-visible:ring-gold-300 active:cursor-grabbing",
+              // `flex`: a picture and a letter face sit on one line (CREW-POLISH; inline, a
+              // picture rode its baseline 3 px above the letter's tile).
+              "relative flex shrink-0 cursor-grab touch-none rounded-[var(--radius-head)] outline-none select-none focus-visible:ring-2 focus-visible:ring-gold-300 active:cursor-grabbing",
               "transition-opacity duration-150",
               lift && "opacity-35",
             )}

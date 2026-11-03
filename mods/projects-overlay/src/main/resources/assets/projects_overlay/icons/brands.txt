@@ -1,0 +1,8 @@
+# Brand marks the overlay draws as icons, in the icons' 256x256 viewBox (copied by hand, not by
+# tools/extract-icons.mjs). Each is a brand's own mark, used only where the overlay leads to that brand.
+#
+# DiscordMark: Discord's symbol from Discord's brand assets (https://discord.com/branding), the same white
+# symbol as the launcher's apps/launcher/src/assets/brand/discord-symbol-white.png; its 127.14x96.36 outline
+# scaled by 1.8798 and moved by (8.5, 37.43), as wide as Phosphor's DiscordLogo and centred. Drawn uncoloured
+# as every icon, as the launcher's DiscordMark (Blurple stays on its buttons that open Discord).
+DiscordMark	brand	M210.96,52.6A197.66,197.66,0,0,0,161.65,37.43a135.46,135.46,0,0,0,-6.32,12.84A183.62,183.62,0,0,0,100.61,50.27A136.04,136.04,0,0,0,94.29,37.43A199.05,199.05,0,0,0,44.95,52.64C13.74,98.81,5.29,143.83,9.52,188.21h0A198.75,198.75,0,0,0,69.99,218.57A146.06,146.06,0,0,0,82.94,197.68a128.62,128.62,0,0,1,-20.4,-9.74c1.71,-1.24,3.38,-2.52,5,-3.76a142.06,142.06,0,0,0,120.91,0c1.64,1.33,3.31,2.61,5,3.76a129.11,129.11,0,0,1,-20.43,9.76a144.75,144.75,0,0,0,12.95,20.87A197.85,197.85,0,0,0,246.48,188.23h0C251.45,136.76,238.01,92.15,210.96,52.6ZM88.3,160.92C76.51,160.92,66.77,150.22,66.77,137.06s9.4,-23.95,21.49,-23.95S110.01,123.9,109.8,137.06S100.31,160.92,88.3,160.92Zm79.4,0C155.9,160.92,146.2,150.22,146.2,137.06s9.4,-23.95,21.51,-23.95S189.39,123.9,189.19,137.06S179.71,160.92,167.7,160.92Z
