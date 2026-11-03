@@ -175,6 +175,18 @@ mod tests {
             .collect()
     }
 
+    /// The pack's mappings on `key` in normal play (`game` context).
+    fn in_play_on(key: &str) -> Vec<&'static str> {
+        PACK_KEYS
+            .lines()
+            .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+            .filter_map(|line| {
+                let cols: Vec<&str> = line.split('\t').collect();
+                (cols.get(1) == Some(&key) && cols.get(2) == Some(&"game")).then(|| cols[0])
+            })
+            .collect()
+    }
+
     #[test]
     fn every_table_file_is_a_settings_file() {
         let table: Table = serde_json::from_str(TABLE_JSON).unwrap();
@@ -286,9 +298,13 @@ mod tests {
 
     #[test]
     fn chest_tracker_menu_key_is_free_in_play() {
-        // Chest Tracker opens its menu with the key below Esc (GLFW's grave accent) and keeps it;
-        // its bundled Where Is It searches with Y only in inventory screens.
-        assert!(!keys_in_play().contains("key.keyboard.grave.accent"));
+        // Chest Tracker opens its menu with the key below Esc (GLFW's grave accent) and keeps it:
+        // nothing else acts on it in play. Its bundled Where Is It searches with Y in inventory
+        // screens (in the world only with an option that is off by default).
+        assert_eq!(
+            in_play_on("key.keyboard.grave.accent"),
+            ["key.chesttracker.open_gui"]
+        );
     }
 
     #[tokio::test]

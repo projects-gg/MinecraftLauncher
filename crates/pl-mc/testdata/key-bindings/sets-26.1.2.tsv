@@ -1,0 +1,23 @@
+# Default key bindings of the ready-made sets' Minecraft 26.1.2 variants (pvp, performans and yapi in
+# the signed index of 3 November 2026; Fabric Loader 0.19.5), read from their mod jars with
+# scripts/keys/KeyScan.java; the game's rows are in projects-26.1.2.tsv. Mods without key mappings
+# have no rows. Columns and when it acts: as in projects-26.1.2.tsv.
+key.decentfreelook.freelook	key.keyboard.f6	game	Decent Freelook
+key.dynamic_fps.toggle_forced	key.keyboard.unknown	game	Dynamic FPS
+key.dynamic_fps.toggle_disabled	key.keyboard.unknown	game	Dynamic FPS
+key.entityculling.toggle	key.keyboard.unknown	game	Entity Culling
+key.entityculling.toggleBoxes	key.keyboard.unknown	game	Entity Culling
+key.gammautils.gammaToggle	key.keyboard.g	game	Gamma Utils
+key.gammautils.increaseGamma	key.keyboard.up	game	Gamma Utils
+key.gammautils.decreaseGamma	key.keyboard.down	game	Gamma Utils
+key.gammautils.maxGamma	key.keyboard.unknown	game	Gamma Utils
+key.gammautils.minGamma	key.keyboard.unknown	game	Gamma Utils
+key.gammautils.nightVisionToggle	key.keyboard.h	game	Gamma Utils
+key.gammautils.increaseNightVision	key.keyboard.right	game	Gamma Utils
+key.gammautils.decreaseNightVision	key.keyboard.left	game	Gamma Utils
+key.modmenu.open_menu	key.keyboard.unknown	game	Mod Menu
+key.tiptapshow.openconfig	key.keyboard.unknown	game	TipTapShow
+key.tiptapshow.openposition	key.keyboard.unknown	game	TipTapShow
+key.tiptapshow.toggleoverlay	key.keyboard.unknown	game	TipTapShow
+armorhud.keybind.toggle	key.keyboard.unknown	game	uku's Armor HUD
+key.wi_zoom.zoom	key.keyboard.v	game	WI Zoom

@@ -14,6 +14,8 @@
 // name, input type, key code, options.txt key, category, note, constructor. Rows noted "name not
 // constant" or "key not constant" are built at run time (e.g. Replay Mod's "key.replaymod.<id>"):
 // read those with javap. The client jar goes first; the first jar's rows are marked "vanilla:".
+// Key codes are named with the client jar's own table (InputConstants.Type.addKey): GLFW key codes
+// up to 26.2, SDL scancodes from 26.3 (W is 87, then 26); options.txt keeps the same names.
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -24,10 +26,15 @@ import org.objectweb.asm.tree.analysis.*;
 
 public class KeyScan {
   static final String KM = "net/minecraft/client/KeyMapping";
+  /** The class whose static initializer names the key codes (addKey(type, name, code)). */
+  static final String KEY_TYPES = "com/mojang/blaze3d/platform/InputConstants$Type";
   static final Map<String, String> SUPERS = new HashMap<>();
   /** jar label -> classes (code kept). */
   static final Map<String, List<ClassNode>> JARS = new LinkedHashMap<>();
   static final List<String> OUT = new ArrayList<>();
+  /** The client jar's key names by code (keyboard, mouse); empty: the GLFW names below. */
+  static final Map<Integer, String> KEY_NAMES = new HashMap<>();
+  static final Map<Integer, String> MOUSE_NAMES = new HashMap<>();
 
   public static void main(String[] args) throws Exception {
     for (int i = 0; i < args.length; i++) {
@@ -36,6 +43,8 @@ public class KeyScan {
         readJar(label, in);
       }
     }
+    readKeyNames();
+    System.err.println("key names from the client jar: " + KEY_NAMES.size() + " keyboard, " + MOUSE_NAMES.size() + " mouse");
     // Wrappers: methods whose parameters reach a KeyMapping constructor's name or key.
     Map<String, int[]> wrappers = new LinkedHashMap<>(); // owner.name+desc -> [nameArg, keyArg]
     for (int round = 0; round < 6; round++) {
@@ -74,8 +83,9 @@ public class KeyScan {
           ClassNode cn = new ClassNode();
           new ClassReader(b).accept(cn, ClassReader.SKIP_FRAMES);
           if (cn.superName != null) SUPERS.put(cn.name, cn.superName);
-          // The client jar is big: only its classes that mention key mappings are analysed.
-          if (!label.startsWith("vanilla:") || mentionsKeys(b)) list.add(cn);
+          // The client jar is big: only its classes that mention key mappings are analysed, and
+          // the one that names the key codes.
+          if (!label.startsWith("vanilla:") || mentionsKeys(b) || cn.name.equals(KEY_TYPES)) list.add(cn);
         } catch (Exception ex) {
           System.err.println("skip " + label + " " + n + ": " + ex);
         }
@@ -85,6 +95,30 @@ public class KeyScan {
       }
     }
     JARS.put(label, list);
+  }
+
+  /** Reads the client jar's addKey(type, name, code) calls; a later call for a code wins, as in the game. */
+  static void readKeyNames() throws AnalyzerException {
+    for (var jar : JARS.entrySet()) {
+      if (!jar.getKey().startsWith("vanilla:")) continue;
+      for (ClassNode cn : jar.getValue()) {
+        if (!cn.name.equals(KEY_TYPES)) continue;
+        for (MethodNode mn : cn.methods) {
+          if (!mn.name.equals("<clinit>")) continue;
+          Frame<CV>[] frames = new Analyzer<>(new Interp()).analyze(cn.name, mn);
+          for (int i = 0; i < mn.instructions.size(); i++) {
+            if (!(mn.instructions.get(i) instanceof MethodInsnNode min) || frames[i] == null) continue;
+            if (!min.name.equals("addKey") || !min.desc.equals("(L" + KEY_TYPES + ";Ljava/lang/String;I)V")) continue;
+            Frame<CV> f = frames[i];
+            int top = f.getStackSize();
+            CV type = f.getStack(top - 3), name = f.getStack(top - 2), code = f.getStack(top - 1);
+            if (name.cst instanceof String s && code.cst instanceof Integer c) {
+              (String.valueOf(type.cst).endsWith(".MOUSE") ? MOUSE_NAMES : KEY_NAMES).put(c, s);
+            }
+          }
+        }
+      }
+    }
   }
 
   static boolean mentionsKeys(byte[] b) {
@@ -160,7 +194,7 @@ public class KeyScan {
       String type = typeArg >= 0 ? str(av[typeArg]) : "KEYSYM(default)";
       String cat = catArg >= 0 && catArg != nameArg ? str(av[catArg]) : "";
       String codeStr = code == null ? "" : str(code);
-      String keyName = code != null && code.cst instanceof Integer c ? glfw(type, c) : "?";
+      String keyName = code != null && code.cst instanceof Integer c ? keyName(type, c) : "?";
       String note = (name == null || !(name.cst instanceof String)) ? "name not constant" : "";
       if (code == null || !(code.cst instanceof Integer)) note += (note.isEmpty() ? "" : "; ") + "key not constant";
       OUT.add(jar + "\t" + cn.name.substring(cn.name.lastIndexOf('/') + 1) + "." + mn.name + "\t" + str(name)
@@ -194,7 +228,19 @@ public class KeyScan {
     return v.cst.toString();
   }
 
-  /** The options.txt name of a GLFW key or mouse button (InputConstants). */
+  /**
+   * The options.txt name of a key code or mouse button: the client jar's own name for it, else the
+   * GLFW one (InputConstants up to 26.2). -1 is InputConstants.UNKNOWN.getValue() (see Interp).
+   */
+  static String keyName(String type, int c) {
+    boolean mouse = type.contains("MOUSE");
+    if (c == -1 && !mouse) return "key.keyboard.unknown";
+    Map<Integer, String> names = mouse ? MOUSE_NAMES : KEY_NAMES;
+    if (!names.isEmpty()) return names.getOrDefault(c, (mouse ? "mouse code " : "code ") + c);
+    return glfw(type, c);
+  }
+
+  /** The options.txt name of a GLFW key or mouse button (InputConstants up to 26.2). */
   static String glfw(String type, int c) {
     if (type.contains("MOUSE")) {
       return switch (c) {

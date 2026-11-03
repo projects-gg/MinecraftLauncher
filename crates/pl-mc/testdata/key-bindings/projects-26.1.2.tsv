@@ -1,9 +1,10 @@
-# Default key bindings of the official pack (projects 1.0.0: Minecraft 26.1.2, Fabric Loader 0.19.5),
-# read from the client jar and the mod jars with scripts/keys/KeyScan.java (19 October 2026).
+# Default key bindings of the official pack (projects 1.0.5: Minecraft 26.1.2, Fabric Loader 0.19.5),
+# read from the client jar and the mod jars with scripts/keys/KeyScan.java (3 November 2026).
 # Columns: options.txt name (after "key_"), default key, when it acts, where it comes from.
 # When it acts: game (in the world), creative (hotbar save/load modifiers), spectator, debug (only
 # with F3 held), recording (only while Replay Mod records; off in the pack), replay (only in Replay
-# Mod's viewer, which takes the key over there).
+# Mod's viewer, which takes the key over there), screen (only in an open screen: Where Is It's search
+# over an item; in the world only with its "search using item in hand", off by default).
 key.forward	key.keyboard.w	game	Minecraft
 key.left	key.keyboard.a	game	Minecraft
 key.back	key.keyboard.s	game	Minecraft
@@ -64,6 +65,8 @@ key.debug.networkCharts	key.keyboard.3	debug	Minecraft
 key.debug.lightmapTexture	key.keyboard.4	debug	Minecraft
 key.smoothCamera	key.keyboard.unknown	game	Minecraft
 key.spectatorOutlines	key.keyboard.unknown	spectator	Minecraft
+key.chesttracker.open_gui	key.keyboard.grave.accent	game	Chest Tracker
+key.whereisit.search	key.keyboard.y	screen	Chest Tracker
 key.dynamic_fps.toggle_forced	key.keyboard.unknown	game	Dynamic FPS
 key.dynamic_fps.toggle_disabled	key.keyboard.unknown	game	Dynamic FPS
 key.entityculling.toggle	key.keyboard.unknown	game	Entity Culling

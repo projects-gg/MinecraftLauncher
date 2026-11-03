@@ -15,8 +15,9 @@
 //! "Geri al" ([`undo_key_fix_in`]). Along with them it gives a push to talk the file still leaves
 //! unbound its key (KEYS3, [`find_unbound_keys`]); that alone never makes a fix.
 //!
-//! `testdata/key-bindings` holds the pack's default keys per Minecraft version (read from the
-//! jars with `scripts/keys/KeyScan.java`); the tests check the table against them.
+//! `testdata/key-bindings` holds, per Minecraft version, the default keys of the game with the
+//! pack's member for it and of the ready-made sets' variants (read from the jars with
+//! `scripts/keys/KeyScan.java`); the tests check the table against each version.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -178,8 +179,10 @@ impl KeyClash {
 }
 
 /// False for mappings that act only outside normal play: F3 combinations, creative mode's
-/// hotbar modifiers, spectator keys and Replay Mod (its viewer and recording). Sharing a key with
-/// them is no clash. The inventory's "when it acts" column says the same (tested).
+/// hotbar modifiers, spectator keys, Replay Mod (its viewer and recording) and Where Is It's search
+/// (in Chest Tracker), which acts in a screen over an item and in the world only with its
+/// "search using item in hand", off by default. Sharing a key with them is no clash. The
+/// inventory's "when it acts" column says the same (tested).
 fn acts_in_play(name: &str) -> bool {
     match name {
         // F3 itself and Replay Mod's settings screen work in normal play.
@@ -188,7 +191,8 @@ fn acts_in_play(name: &str) -> bool {
         | "key.loadToolbarActivator"
         | "key.spectatorHotbar"
         | "key.spectatorOutlines"
-        | "key.toggleSpectatorShaderEffects" => false,
+        | "key.toggleSpectatorShaderEffects"
+        | "key.whereisit.search" => false,
         _ => !(name.starts_with("key.debug.") || name.starts_with("key.replaymod.")),
     }
 }
@@ -536,15 +540,38 @@ pub async fn undo_key_fix_in(game_dir: &Path, backup: &str) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::collections::{BTreeMap, BTreeSet, HashSet};
 
     use super::*;
 
-    /// The official pack's default key bindings per Minecraft version it is published for.
-    const INVENTORIES: &[(&str, &str)] = &[(
-        "26.1.2",
-        include_str!("../../testdata/key-bindings/projects-26.1.2.tsv"),
-    )];
+    /// The default key bindings of what gets the table, per Minecraft version
+    /// (`testdata/key-bindings`): the game with the official pack's member for that version
+    /// (`projects-<version>.tsv`; the game alone while the pack has none there) and the ready-made
+    /// sets' variants for it (`sets-<version>.tsv`). One instance can have both (a set adds what
+    /// the pack lacks), so each version is checked as a whole.
+    const INVENTORIES: &[(&str, [&str; 2])] = &[
+        (
+            "26.1.2",
+            [
+                include_str!("../../testdata/key-bindings/projects-26.1.2.tsv"),
+                include_str!("../../testdata/key-bindings/sets-26.1.2.tsv"),
+            ],
+        ),
+        (
+            "26.2",
+            [
+                include_str!("../../testdata/key-bindings/projects-26.2.tsv"),
+                include_str!("../../testdata/key-bindings/sets-26.2.tsv"),
+            ],
+        ),
+        (
+            "26.3",
+            [
+                include_str!("../../testdata/key-bindings/projects-26.3.tsv"),
+                include_str!("../../testdata/key-bindings/sets-26.3.tsv"),
+            ],
+        ),
+    ];
 
     struct Row<'a> {
         name: &'a str,
@@ -570,6 +597,29 @@ mod tests {
             .collect()
     }
 
+    /// A version's rows ([`INVENTORIES`]): each file's, a mapping both files have once (with the
+    /// same key and context in both).
+    fn inventory(version: &str, files: &[&'static str]) -> Vec<Row<'static>> {
+        let mut all: Vec<Row<'static>> = Vec::new();
+        for &text in files {
+            let rows = rows(text);
+            let names: HashSet<&str> = rows.iter().map(|row| row.name).collect();
+            assert_eq!(names.len(), rows.len(), "{version}: a name twice");
+            for row in rows {
+                match all.iter().find(|seen| seen.name == row.name) {
+                    Some(seen) => assert_eq!(
+                        (seen.key, seen.context),
+                        (row.key, row.context),
+                        "{version}: {} differs between the files",
+                        row.name
+                    ),
+                    None => all.push(row),
+                }
+            }
+        }
+        all
+    }
+
     fn is_key_name(key: &str) -> bool {
         let keyboard = key.strip_prefix("key.keyboard.").is_some_and(|rest| {
             !rest.is_empty()
@@ -585,7 +635,7 @@ mod tests {
 
     /// Keys used by more than one `game` binding once `table` is applied.
     fn shared_in_play<'a>(
-        rows: &'a [Row<'a>],
+        rows: &[Row<'a>],
         table: &'a [KeyBinding],
     ) -> BTreeMap<&'a str, Vec<&'a str>> {
         let mut by_key: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -661,27 +711,32 @@ mod tests {
     #[test]
     fn the_official_pack_shares_no_key_in_play() {
         let table = official_pack_bindings();
-        for (version, text) in INVENTORIES {
-            let rows = rows(text);
-            let by_name: HashMap<&str, &Row> = rows.iter().map(|row| (row.name, row)).collect();
-            assert_eq!(by_name.len(), rows.len(), "{version}: a name twice");
+        for (version, files) in INVENTORIES {
+            let rows = inventory(version, files);
             for row in &rows {
                 assert!(is_key_name(row.key), "{version}: {}", row.key);
                 assert!(
                     matches!(
                         row.context,
-                        "game" | "creative" | "spectator" | "debug" | "recording" | "replay"
+                        "game"
+                            | "creative"
+                            | "spectator"
+                            | "debug"
+                            | "recording"
+                            | "replay"
+                            | "screen"
                     ),
                     "{version}: {}",
                     row.context
                 );
             }
+            // Only mods' keys move, each from the default the table names. A version without the
+            // mod (WI Zoom after 26.1.2) just has no use for its line.
             for binding in table {
-                let row = by_name
-                    .get(binding.name.as_str())
-                    .unwrap_or_else(|| panic!("{version}: no {} in the pack", binding.name));
-                assert_eq!(row.key, binding.default, "{version}: {}", binding.name);
-                assert_ne!(row.source, "Minecraft", "{version}: {}", binding.name);
+                if let Some(row) = rows.iter().find(|row| row.name == binding.name) {
+                    assert_eq!(row.key, binding.default, "{version}: {}", binding.name);
+                    assert_ne!(row.source, "Minecraft", "{version}: {}", binding.name);
+                }
             }
             assert_eq!(
                 shared_in_play(&rows, table),
@@ -689,31 +744,43 @@ mod tests {
                 "{version}: keys shared in play"
             );
         }
+        let pack = rows(INVENTORIES[0].1[0]);
+        for binding in table {
+            assert!(
+                pack.iter().any(|row| row.name == binding.name),
+                "no {} in the pack",
+                binding.name
+            );
+        }
     }
 
     #[test]
     fn the_mods_own_defaults_clash() {
-        // What the table fixes (26.1.2): both mappings act on one key press.
-        let rows = rows(INVENTORIES[0].1);
-        let shared = shared_in_play(&rows, &[]);
-        assert_eq!(
-            shared,
-            BTreeMap::from([
-                (
-                    "key.keyboard.g",
-                    vec!["key.quickActions", "key.gammautils.gammaToggle"]
-                ),
-                (
-                    "key.keyboard.h",
-                    vec!["key.gammautils.nightVisionToggle", "key.hide_icons"]
-                ),
-                (
-                    "key.keyboard.r",
-                    vec!["iris.keybind.reload", "gui.xaero_quick_eat"]
-                ),
-                ("key.keyboard.v", vec!["key.voice_chat", "key.wi_zoom.zoom"]),
-            ])
+        // What the table fixes: both mappings act on one key press. The sets bring Gamma Utils to
+        // every version; the rest is the official pack's (26.1.2 only so far). The game's own
+        // newer keys (26.2's friends list on O, 26.3's F3+X) clash with none of them.
+        let gamma = (
+            "key.keyboard.g",
+            vec!["key.quickActions", "key.gammautils.gammaToggle"],
         );
+        for (version, files) in INVENTORIES {
+            let mut expected = BTreeMap::from([gamma.clone()]);
+            if *version == "26.1.2" {
+                expected.extend([
+                    (
+                        "key.keyboard.h",
+                        vec!["key.gammautils.nightVisionToggle", "key.hide_icons"],
+                    ),
+                    (
+                        "key.keyboard.r",
+                        vec!["iris.keybind.reload", "gui.xaero_quick_eat"],
+                    ),
+                    ("key.keyboard.v", vec!["key.voice_chat", "key.wi_zoom.zoom"]),
+                ]);
+            }
+            let rows = inventory(version, files);
+            assert_eq!(shared_in_play(&rows, &[]), expected, "{version}");
+        }
     }
 
     #[test]
@@ -733,36 +800,35 @@ mod tests {
 
     #[test]
     fn the_partners_are_the_clashes_of_the_pack() {
-        // `clashesWith` names exactly the other side of each clash the mods' defaults make.
+        // `clashesWith` names exactly the other side of each clash the mods' defaults make: every
+        // clash of every version is declared, and every declared one happens in some version.
         let table = official_pack_bindings();
-        for (version, text) in INVENTORIES {
-            let rows = rows(text);
-            let expected: BTreeSet<(&str, &str)> = shared_in_play(&rows, &[])
-                .into_values()
-                .map(|names| {
-                    assert_eq!(names.len(), 2, "{version}: {names:?}");
-                    let moved = table
-                        .iter()
-                        .find(|binding| names.contains(&binding.name.as_str()))
-                        .unwrap_or_else(|| panic!("{version}: the table leaves {names:?}"));
-                    let partner = names.iter().find(|name| **name != moved.name).unwrap();
-                    (moved.name.as_str(), *partner)
-                })
-                .collect();
-            let declared: BTreeSet<(&str, &str)> = table
-                .iter()
-                .filter_map(|binding| {
-                    Some((binding.name.as_str(), binding.clashes_with.as_deref()?))
-                })
-                .collect();
-            assert_eq!(declared, expected, "{version}");
+        let declared: BTreeSet<(&str, &str)> = table
+            .iter()
+            .filter_map(|binding| Some((binding.name.as_str(), binding.clashes_with.as_deref()?)))
+            .collect();
+        let mut found = BTreeSet::new();
+        for (version, files) in INVENTORIES {
+            let rows = inventory(version, files);
+            for names in shared_in_play(&rows, &[]).into_values() {
+                assert_eq!(names.len(), 2, "{version}: {names:?}");
+                let moved = table
+                    .iter()
+                    .find(|binding| names.contains(&binding.name.as_str()))
+                    .unwrap_or_else(|| panic!("{version}: the table leaves {names:?}"));
+                let partner = names.iter().find(|name| **name != moved.name).unwrap();
+                let clash = (moved.name.as_str(), *partner);
+                assert!(declared.contains(&clash), "{version}: {clash:?} undeclared");
+                found.insert(clash);
+            }
         }
+        assert_eq!(declared, found);
     }
 
     #[test]
     fn in_play_follows_the_inventory() {
-        for (version, text) in INVENTORIES {
-            for row in rows(text) {
+        for (version, files) in INVENTORIES {
+            for row in inventory(version, files) {
                 assert_eq!(
                     acts_in_play(row.name),
                     row.context == "game",
@@ -784,8 +850,8 @@ mod tests {
         for binding in official_pack_bindings() {
             assert!(!OVERLAY_KEYS.contains(&binding.key.as_str()), "{binding:?}");
         }
-        for (version, text) in INVENTORIES {
-            for row in rows(text) {
+        for (version, files) in INVENTORIES {
+            for row in inventory(version, files) {
                 assert!(
                     row.context != "game" || !OVERLAY_KEYS.contains(&row.key),
                     "{version}: {} has an overlay key",
@@ -799,7 +865,7 @@ mod tests {
     /// default: a file from before the table.
     fn game_file() -> String {
         let mut file = String::from("version:4671\r\nfov:0.0\r\nlang:tr_tr\r\n");
-        for row in rows(INVENTORIES[0].1) {
+        for row in rows(INVENTORIES[0].1[0]) {
             file.push_str(&format!("key_{}:{}\r\n", row.name, row.key));
         }
         file.push_str(
