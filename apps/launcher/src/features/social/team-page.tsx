@@ -1058,18 +1058,27 @@ function InviteFriends({ team }: { team: SocialTeam }) {
                       className="text-[13.5px] font-semibold text-bone-100"
                     />
                   </span>
-                  <Button
-                    size="sm"
-                    variant={invited ? "ghost" : "secondary"}
-                    icon={invited ? <Check size={14} weight="bold" /> : <UserPlus size={14} />}
-                    disabled={invited || full || busy === friend.id}
-                    onClick={() => void invite(friend)}
-                    onKeyDown={(event) => {
-                      openMenuFromKey(event);
-                    }}
-                  >
-                    {invited ? t("teams.invite.sent") : t("teams.invite.action")}
-                  </Button>
+                  {/* Asked already: a quiet line on the right edge, not a dimmed button (it read
+                      at 2.9:1 and ended 11 px short of the buttons; CREW-POLISH). */}
+                  {invited ? (
+                    <span className="inline-flex h-8 shrink-0 items-center gap-1.5 text-[12.5px] font-medium text-ash-400">
+                      <Check size={14} weight="bold" aria-hidden />
+                      {t("teams.invite.sent")}
+                    </span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<UserPlus size={14} />}
+                      disabled={full || busy === friend.id}
+                      onClick={() => void invite(friend)}
+                      onKeyDown={(event) => {
+                        openMenuFromKey(event);
+                      }}
+                    >
+                      {t("teams.invite.action")}
+                    </Button>
+                  )}
                 </li>
               </PersonContextMenu>
             );

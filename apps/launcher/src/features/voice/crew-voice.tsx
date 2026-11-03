@@ -15,7 +15,7 @@
 // they are; the others and the sections below glide; a dragged row lifts (transform and opacity
 // only; fades only with less motion).
 import { DotsThree, Headset, Plus } from "@phosphor-icons/react";
-import { Button, ContextMenu, cn, IconButton, Menu, OverflowTooltip } from "@pl/ui";
+import { Button, ContextMenu, cn, IconButton, Menu, OverflowTooltip, Tooltip } from "@pl/ui";
 import { AnimatePresence, type DragControls, motion, Reorder, useDragControls } from "motion/react";
 import {
   type KeyboardEvent,
@@ -46,6 +46,7 @@ import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
 import { DiscordInRoom } from "./discord-offer";
 import {
   type CrewStanding,
+  crewRoomFull,
   crewRoomList,
   crewRoomName,
   facesThatFit,
@@ -59,7 +60,7 @@ import { useFaces, useVoiceUi, voiceOn } from "./store";
 
 /** Whether a press starts on something of its own (a button, a face) rather than the row. */
 const onControl = (target: EventTarget | null) =>
-  target instanceof Element && target.closest("button, [data-voice-face]") !== null;
+  target instanceof Element && target.closest("button, [data-voice-face], [data-no-drag]") !== null;
 
 /** A room row's "⋯", else its first button: where the keyboard comes back to in a row. */
 function focusRow(room: string) {
@@ -139,7 +140,9 @@ function Faces({
             crewMax={crewMax}
           />
         ) : (
-          <span key={face.id} role="img" aria-label={face.name} className="shrink-0">
+          // A flex box: a picture and a letter face sit on one line (inline, a picture rode its
+          // baseline 3 px above the letter's tile).
+          <span key={face.id} role="img" aria-label={face.name} className="flex shrink-0">
             <SocialFace
               source={face}
               size={24}
@@ -281,6 +284,7 @@ function RoomRow({
 
   const more = hasRoomPowers(powers);
   const limited = room.max !== null && room.max < crewMax;
+  const full = !here && crewRoomFull(room, crewMax);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (mode !== "view") return;
@@ -430,14 +434,21 @@ function RoomRow({
                   {t("voice.crew.leave")}
                 </Button>
               ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  icon={<Headset size={15} />}
-                  onClick={() => void joinCrewRoom(team.id, room.general ? null : room.id)}
-                >
-                  {t("voice.crew.join")}
-                </Button>
+                // A full room says so where it acts (the service would refuse the join).
+                <Tooltip content={t("voice.refused.roomFull")} disabled={!full}>
+                  {/* A press on the closed button does not drag the row. */}
+                  <span className="inline-flex" data-no-drag>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Headset size={15} />}
+                      disabled={full}
+                      onClick={() => void joinCrewRoom(team.id, room.general ? null : room.id)}
+                    >
+                      {t("voice.crew.join")}
+                    </Button>
+                  </span>
+                </Tooltip>
               )}
             </motion.div>
           )}
@@ -552,7 +563,8 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
   const generalRow = <li>{row(general)}</li>;
   return (
     <section className="mt-6" aria-labelledby={`voice-${team.id}`}>
-      <div className="flex min-h-8 items-center gap-2 px-4">
+      {/* A small gap under the heading: "Yeni oda" no longer sits on the first room's plate. */}
+      <div className="mb-1.5 flex min-h-8 items-center gap-2 px-4">
         <h3
           id={`voice-${team.id}`}
           className="min-w-0 flex-1 text-[13px] font-semibold text-ash-300"
@@ -580,7 +592,7 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
             latest.current = next;
             setDragOrder(next);
           }}
-          className="flex flex-col gap-0.5"
+          className="flex flex-col gap-1"
         >
           {generalRow}
           <AnimatePresence initial={false}>
@@ -597,7 +609,8 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
           </AnimatePresence>
         </Reorder.Group>
       ) : (
-        <ul className="flex flex-col gap-0.5">
+        // 4 px between rooms: the player's room plate and a hovered neighbour read as two.
+        <ul className="flex flex-col gap-1">
           {generalRow}
           <AnimatePresence initial={false} mode="popLayout">
             {others.map((room) => (
