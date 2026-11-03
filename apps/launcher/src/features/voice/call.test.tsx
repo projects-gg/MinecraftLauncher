@@ -100,7 +100,7 @@ describe("asking before a call", () => {
     expect(call).toHaveBeenCalledWith("302");
   });
 
-  it('"Vazgeç" calls nobody', async () => {
+  it('starts on "Vazgeç", which calls nobody (a held Enter never rings)', async () => {
     const call = vi.spyOn(voiceApi, "call").mockResolvedValue(VOICE_OK);
     act(() => useVoiceUi.getState().setState(scenario("ready")));
     render(
@@ -110,7 +110,9 @@ describe("asking before a call", () => {
     );
     act(() => askToCall("302"));
     await settle();
-    fireEvent.click(screen.getByRole("button", { name: "Vazgeç" }));
+    const cancel = screen.getByRole("button", { name: "Vazgeç" });
+    expect(document.activeElement).toBe(cancel);
+    fireEvent.click(cancel);
     await settle();
     expect(call).not.toHaveBeenCalled();
   });

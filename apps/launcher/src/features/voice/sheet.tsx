@@ -269,6 +269,8 @@ function People({ room }: { room: VoiceRoomView }) {
     <AnimatePresence initial={false} mode="popLayout">
       <motion.div
         key={stage ? "stage" : "list"}
+        // The call's stage sits in the middle of the panel, as a call does.
+        className={stage ? "flex flex-1 flex-col" : undefined}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1, transition: enter(0.22) }}
         exit={{ opacity: 0, transition: leave(0.14) }}
@@ -707,7 +709,8 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
   const threshold = useVoicePrefs((s) => meterThreshold(s.settings));
   return (
     <footer className="shrink-0 border-t border-white/8 px-4 pt-3 pb-3.5">
-      <div className="grid grid-cols-3 gap-2">
+      {/* "Mikrofon" a little wider: its meter beside the word ("Microphone" in English). */}
+      <div className="grid grid-cols-[1.3fr_1fr_1fr] gap-2">
         <Tooltip content={micLabel}>
           <Button
             size="lg"
@@ -781,7 +784,7 @@ function RoomPage({ room }: { room: VoiceRoomView }) {
   return (
     <>
       <RoomHeader room={room} title={title} />
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 pt-3 pb-4">
         <Notices room={room} />
         <People room={room} />
       </div>

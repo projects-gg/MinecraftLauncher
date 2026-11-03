@@ -6,9 +6,10 @@
 // beside the microphone in the title bar's pill and the room panel, a long one in Settings (the mic
 // test, and the sensitivity drawn on it).
 //
-// Motion: each bar's opacity only (a 75 ms fade; nothing moves), written straight to the element as
-// levels come (no render); at rest nothing changes. Reduced motion and Performance mode: no levels
-// at all, every bar fades in together while the microphone sends and out after.
+// Motion: each bar's opacity only, on or off at once like a meter's segments (nothing moves), written
+// straight to the element as levels come (no render); at rest nothing changes. Reduced motion and
+// Performance mode: no levels at all, every bar fades in together while the microphone sends and
+// out after.
 import { cn, useMotionPrefs } from "@pl/ui";
 import { useEffect, useRef } from "react";
 import { voiceApi } from "@/lib/api/voice-api";
@@ -122,8 +123,14 @@ export function VoiceMeter({
           key={i}
           style={{ opacity: UNLIT, transform: i < short ? "scaleY(0.5)" : undefined }}
           className={cn(
-            "block h-[10px] w-[2px] rounded-[1px] bg-current transition-[opacity,transform]",
-            reduce ? "duration-150" : "duration-75",
+            "block h-[10px] w-[2px] rounded-[1px] bg-current",
+            // Live, a bar is on or off at once, as a level meter's segments are (and one paint per
+            // level, not a fade's frames); reduced motion: all of them fade together.
+            // A short meter's bars are tiny layers of their own: a level only changes the
+            // compositor's opacity, nothing repaints (the title bar's pill is glass).
+            reduce
+              ? "transition-[opacity,transform] duration-150"
+              : cn("transition-transform duration-150", bars <= 8 && "will-change-[opacity]"),
             barClassName,
           )}
         />

@@ -1,12 +1,13 @@
 // "Sesli arama başlat" asks first (VOICE-CALL; the owner: "tıklayınca emin misin diye sorsun"):
-// "{name} aransın mı?" with "Vazgeç" and "Ara", the friend's face beside the question. Enter calls,
-// Esc or a press outside lets it be. Wherever a call starts (the friend's card, a person menu, the
-// chat's header) it asks the same, unless the player turned "Aramadan önce sor" off in Settings →
-// Sesli sohbet. "Tekrar ara" right after "Cevap yok" and "Odaya davet et" do not ask: the one repeats
-// a call just asked about, the other starts none.
+// "{name} aransın mı?" with "Vazgeç" and "Ara", the friend's face beside the question. The keyboard
+// starts on "Vazgeç" (the in-game overlay's rule, OVL-SOC: a held Enter never rings anyone; Tab,
+// then Enter calls); Esc or a press outside lets it be. Wherever a call starts (the friend's card,
+// a person menu, the chat's header) it asks the same, unless the player turned "Aramadan önce sor"
+// off in Settings → Sesli sohbet. "Tekrar ara" right after "Cevap yok" and "Odaya davet et" do not
+// ask: the one repeats a call just asked about, the other starts none.
 import { Phone } from "@phosphor-icons/react";
 import { Button, Dialog } from "@pl/ui";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { SocialFace } from "@/features/social/social-face";
@@ -32,15 +33,6 @@ export function answerCallAsk(yes: boolean): void {
   if (yes && friend) void callFriend(friend);
 }
 
-/** Enter calls while the dialog itself has the focus (its buttons keep their own Enter). */
-function onEnter(event: KeyboardEvent): void {
-  if (event.key !== "Enter" || event.repeat) return;
-  const active = document.activeElement;
-  if (active instanceof HTMLButtonElement || active instanceof HTMLInputElement) return;
-  event.preventDefault();
-  answerCallAsk(true);
-}
-
 /** The question (mounted once, by VoiceHost). */
 export function CallConfirm() {
   const { t } = useTranslation();
@@ -50,12 +42,6 @@ export function CallConfirm() {
   if (friend) last.current = friend;
   const shown = friend ?? last.current;
   const face = useFace(shown ?? "");
-
-  useEffect(() => {
-    if (!friend) return;
-    window.addEventListener("keydown", onEnter);
-    return () => window.removeEventListener("keydown", onEnter);
-  }, [friend]);
 
   if (!shown) return null;
   return (
@@ -80,7 +66,13 @@ export function CallConfirm() {
       width={400}
       footer={
         <>
-          <Button variant="ghost" onClick={() => answerCallAsk(false)}>
+          {/* The focus starts here: Enter alone never calls (the dialog keeps a focus it finds). */}
+          <Button
+            variant="ghost"
+            autoFocus
+            data-call-cancel=""
+            onClick={() => answerCallAsk(false)}
+          >
             {t("voice.call.askNo")}
           </Button>
           <Button

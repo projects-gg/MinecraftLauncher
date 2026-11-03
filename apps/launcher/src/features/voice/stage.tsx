@@ -134,7 +134,8 @@ export function CallStage({
   return (
     <section
       aria-label={t("voice.title")}
-      className="flex flex-col items-center px-2 pt-7 pb-3"
+      // In the middle of the panel, a little above it (the eye's middle).
+      className="flex flex-1 flex-col items-center justify-center px-2 pt-4 pb-14"
       data-voice-stage=""
     >
       <div className="flex items-start justify-center gap-6">

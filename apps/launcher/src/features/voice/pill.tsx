@@ -172,6 +172,8 @@ function Pill() {
   const quality = room?.me.quality ?? "good";
   const weak = quality !== "good" && mode === "live";
   const me = room?.me;
+  // The microphone's buttons (and its meter) show in the room itself, not while a call rings.
+  const metered = Boolean(me) && mode !== "calling" && mode !== "noAnswer" && mode !== "failed";
   const micOff = Boolean(me && (me.mute || me.deaf || me.mutedByModerator));
   const micLabel = me?.mutedByModerator
     ? t("voice.mutedByMod")
@@ -245,8 +247,13 @@ function Pill() {
             </span>
           )}
         </span>
-        {/* A little narrower since the meter came (VOICE-CALL): the pill keeps its width at 1024. */}
-        <span className="relative grid min-w-0 max-w-[clamp(72px,9vw,150px)]">
+        {/* A little narrower beside the meter (VOICE-CALL): the pill keeps its width at 1024. */}
+        <span
+          className={cn(
+            "relative grid min-w-0",
+            metered ? "max-w-[clamp(72px,9vw,150px)]" : "max-w-[clamp(84px,11vw,160px)]",
+          )}
+        >
           <AnimatePresence initial={false} mode="popLayout">
             <motion.span
               key={`${mode}:${mode === "live" ? words : ""}`}

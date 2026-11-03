@@ -45,7 +45,8 @@ function Halo({ id, size, round }: { id: string; size: number; round: boolean })
     // A voice rises at once and lets go a little slower (a meter's ballistics).
     element.style.transitionDuration = strength > shown.current ? "80ms" : "240ms";
     shown.current = strength;
-    element.style.opacity = String(strength * 0.85);
+    // Softer than the ring itself: it says how loud, the ring says who.
+    element.style.opacity = String(strength * 0.7);
     element.style.transform = `scale(${1 + strength * haloReach(size)})`;
   });
   return (
@@ -55,7 +56,8 @@ function Halo({ id, size, round }: { id: string; size: number; round: boolean })
       data-voice-halo=""
       style={{ opacity: 0, transform: "scale(1)" }}
       className={cn(
-        "pointer-events-none absolute -inset-[3px] ring-[1.5px] ring-jade-400/60 transition-[transform,opacity] ease-out",
+        // A layer of its own (a few pixels): its steps never repaint the face or the glass around.
+        "pointer-events-none absolute -inset-[3px] ring-[1.5px] ring-jade-400/60 transition-[transform,opacity] ease-out will-change-[transform,opacity]",
         round ? "rounded-full" : "rounded-[calc(var(--radius-head)+3px)]",
       )}
     />

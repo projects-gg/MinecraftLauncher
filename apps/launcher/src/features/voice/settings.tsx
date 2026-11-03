@@ -484,8 +484,6 @@ export function VoiceSettingsSection() {
                   min={0}
                   max={volumeMax}
                   step={5}
-                  // Where they arrive as they are (the person menu's notch).
-                  marks={volumeMax > 100 ? [{ value: 100, label: formatPercent(100) }] : undefined}
                   onValueChange={(outputVolume) => change({ outputVolume }, true)}
                   format={formatPercent}
                 />
