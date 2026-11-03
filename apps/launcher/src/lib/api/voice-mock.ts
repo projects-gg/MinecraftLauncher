@@ -763,6 +763,19 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
       commit({ ...state, rings: state.rings.filter((r) => r.room !== room) });
       return VOICE_OK;
     },
+    async setIgnored(ids) {
+      // As the launcher does: an ignored person's ring goes quietly into the missed list.
+      const quiet = state.rings.filter((r) => ids.includes(r.from));
+      if (!quiet.length) return;
+      commit({
+        ...state,
+        rings: state.rings.filter((r) => !ids.includes(r.from)),
+        missed: [
+          ...quiet.map((r) => ({ room: r.room, from: r.from, at: nowSec(), joinable: true })),
+          ...state.missed.filter((m) => !quiet.some((r) => r.room === m.room)),
+        ],
+      });
+    },
     async dismissMissed(room) {
       commit({ ...state, missed: state.missed.filter((m) => m.room !== room) });
     },

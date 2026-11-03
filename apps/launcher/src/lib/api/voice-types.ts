@@ -110,7 +110,10 @@ export interface VoiceCalling {
   until: number;
 }
 
-/** A call or invite ringing for the player. Do-not-disturb rings never come here. */
+/**
+ * A call or invite ringing for the player. Do-not-disturb rings never come here, nor (SOC-NEXT
+ * §3.7) the rings of someone the player ignores: theirs wait in `missed` without a word.
+ */
 export interface VoiceRing {
   room: string;
   from: string;
@@ -468,6 +471,8 @@ export interface VoiceApi {
   onLevels(listener: (levels: VoiceLevels) => void): () => void;
   /** The page shows the live meters now (its window in front with a room), or not. */
   setLevels(on: boolean): Promise<void>;
+  /** Whom the player ignores here (SOC-NEXT §3.7; none while its switch is off): quiet rings. */
+  setIgnored(ids: string[]): Promise<void>;
 
   /** "Ara": a new friend room, ringing the friend. */
   call(friend: string): Promise<VoiceAnswer>;
