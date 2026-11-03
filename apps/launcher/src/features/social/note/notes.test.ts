@@ -52,10 +52,19 @@ describe("status notes (SOC-NOTE §3.5)", () => {
     expect(nextNoteEnd([{ text: "z", until: 0 }], NOW)).toBeNull();
   });
 
-  it("take 'Uygunsuz not' in a friend's report", () => {
+  it("take 'Uygunsuz durum notu' in a friend's report, beside the other 'Uygunsuz' reasons", () => {
     const target = { kind: "player" as const, id: "305", note: true };
-    expect(reasonsFor(target)).toContain("inappropriate");
+    expect(reasonsFor(target)).toEqual([
+      "name",
+      "profile",
+      "inappropriate",
+      "harassment",
+      "spam",
+      "scam",
+      "other",
+    ]);
     expect(reasonsFor({ kind: "player", id: "305" })).not.toContain("inappropriate");
+    expect(reasonKey("player", "inappropriate", false, false, true)).toBe("socNote.report.reason");
     expect(reasonKey("player", "inappropriate", true)).toBe("fix2.report.noteReason");
   });
 });
@@ -87,7 +96,7 @@ describe("pinned messages (SOC-NOTE §3.8)", () => {
     expect(pinChoice(message, [pin], false, NOW)).toBeNull();
   });
 
-  it("go into the message menu before editing and deleting", () => {
+  it("go into the message menu beside copying, away from deleting", () => {
     const plan = messageMenu({
       reactable: false,
       repliable: true,
@@ -102,8 +111,8 @@ describe("pinned messages (SOC-NOTE §3.8)", () => {
       "reply",
       null,
       "copy",
-      null,
       "pin",
+      null,
       "edit",
       "delete",
     ]);

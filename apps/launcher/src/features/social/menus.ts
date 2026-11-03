@@ -612,8 +612,8 @@ export interface MessageInput {
 
 /**
  * A message's right click (Shift+F10) and its "…": the reactions and "Yanıtla" first (what a
- * player does most), then copying, then the player's own edit and delete, then the report. A
- * tombstone has no menu at all.
+ * player does most), then copying and pinning (SOC-NOTE: away from the red "Herkesten sil"), then
+ * the player's own edit and delete, then the report. A tombstone has no menu at all.
  */
 export function messageMenu(input: MessageInput): Plan<MessageAction> {
   return tidy<MessageAction>([
@@ -623,11 +623,11 @@ export function messageMenu(input: MessageInput): Plan<MessageAction> {
     ...only<MessageAction>(
       input.copyable && { action: "copy" },
       input.link && { action: "copyLink" },
+      input.pin === "pin" && { action: "pin" },
+      input.pin === "unpin" && { action: "unpin" },
     ),
     null,
     ...only<MessageAction>(
-      input.pin === "pin" && { action: "pin" },
-      input.pin === "unpin" && { action: "unpin" },
       input.editable && { action: "edit" },
       input.deletable && { action: "delete" },
     ),

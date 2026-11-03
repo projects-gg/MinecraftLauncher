@@ -117,7 +117,8 @@ export function ReportDialog() {
   );
   const statusNote = useShownNote(friend);
   const plain = chosen?.kind === "player" && !chosen.plan && !chosen.reaction && !chosen.voice;
-  // The reasons a friend with a note takes ("Uygunsuz not" too); the note goes along only with it.
+  // The reasons a friend with a note takes ("Uygunsuz durum notu" too); the note goes along only
+  // with it.
   const offered: ReportTarget | undefined =
     chosen?.kind === "player" && plain && statusNote ? { ...chosen, note: true } : chosen;
   const target: ReportTarget | undefined =
@@ -209,7 +210,7 @@ export function ReportDialog() {
                 >
                   <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
                 </span>
-                {t(reasonKey(kind, option, fromPlan || fromNote, fromReaction))}
+                {t(reasonKey(kind, option, fromPlan, fromReaction, fromNote))}
               </RadioGroup.Item>
             ))}
           </RadioGroup.Root>

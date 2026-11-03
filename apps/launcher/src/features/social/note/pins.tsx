@@ -5,7 +5,7 @@
 // computer holds it (and the next press to the one before, Telegram's way); otherwise the list
 // opens, with each pin's text in full. The line comes and goes as a fade (and a 4 px rise), a new
 // shown pin swaps in place; nothing moves under it (the list keeps room at its top).
-import { ListBullets, PushPin, X } from "@phosphor-icons/react";
+import { ListBullets, PushPin, PushPinSlash } from "@phosphor-icons/react";
 import { Button, cn, Dialog, easeOutExpo, IconButton, returnFocusAfterKeys, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
@@ -317,7 +317,7 @@ export function PinStrip({
                             <IconButton
                               size="sm"
                               label={t("socNote.pins.unpin")}
-                              icon={<X size={14} />}
+                              icon={<PushPinSlash size={14} />}
                               tooltipSide="left"
                               className="absolute top-1.5 right-1"
                               onClick={() => void unpinMessage(conv, entry.id, t)}

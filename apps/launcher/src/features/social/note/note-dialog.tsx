@@ -4,7 +4,7 @@
 // the field as the player types (a link, a phone number, too long), the service's refusal there
 // too. "Ne kadar kalsın": "1 saat", "Bugün" (the default: the end of the player's day) or
 // "Silinmesin". Enter saves, Esc or "Vazgeç" leaves; "Notu kaldır" takes a note off at once.
-import { Button, cn, Dialog, Field, Input, Segmented, toast } from "@pl/ui";
+import { Button, cn, Dialog, Input, Segmented, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,7 +36,7 @@ export function askNote() {
 function NoteLine({ id, text }: { id: string; text: string | null }) {
   const { reduce } = useSocialMotion();
   return (
-    <p id={id} className="relative min-h-[20px] px-0.5 pt-1.5 text-[12px] leading-none">
+    <p id={id} className="relative min-h-[18px] px-0.5 pt-1 text-[12px] leading-none">
       <AnimatePresence initial={false}>
         {text ? (
           <motion.span
@@ -63,7 +63,6 @@ export function NoteDialog() {
   const [length, setLength] = useState<NoteLength>("today");
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
-  const fieldId = useId();
   const lineId = useId();
   const lengthId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -144,41 +143,38 @@ export function NoteDialog() {
           save();
         }}
       >
-        <Field label={t("socNote.note.label")} htmlFor={fieldId}>
-          <div className="relative">
-            <Input
-              ref={input}
-              id={fieldId}
-              autoFocus
-              value={text}
-              placeholder={t("socNote.note.placeholder")}
-              maxLength={NOTE_MAX * 5}
-              enterKeyHint="done"
-              invalid={Boolean(line)}
-              aria-describedby={line || showCount ? lineId : undefined}
-              onChange={(event) => {
-                setText(event.target.value);
-                setRefused(null);
-              }}
-              className={cn(
-                "transition-[border-color,box-shadow,padding]",
-                showCount && "pr-[52px]",
-              )}
-            />
-            <span
-              aria-hidden={!showCount}
-              className={cn(
-                "pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[11.5px] tabular-nums transition-opacity duration-150",
-                showCount ? "opacity-100" : "opacity-0",
-                count > NOTE_MAX ? "text-flare-300" : "text-ash-400",
-              )}
-            >
-              {t("socNote.note.count", { count })}
-            </span>
-          </div>
-          <NoteLine id={lineId} text={line} />
-        </Field>
-        <p id={lengthId} className="mt-1 mb-2 text-[12.5px] font-medium text-ash-300">
+        {/* The dialog's title names the one field (a "Not" label over it only repeated it). */}
+        <div className="relative">
+          <Input
+            ref={input}
+            autoFocus
+            value={text}
+            aria-label={t("socNote.note.title")}
+            placeholder={t("socNote.note.placeholder")}
+            maxLength={NOTE_MAX * 5}
+            enterKeyHint="done"
+            invalid={Boolean(line)}
+            aria-describedby={line || showCount ? lineId : undefined}
+            onChange={(event) => {
+              setText(event.target.value);
+              setRefused(null);
+            }}
+            className={cn("transition-[border-color,box-shadow,padding]", showCount && "pr-[52px]")}
+          />
+          <span
+            aria-hidden={!showCount}
+            className={cn(
+              "pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[11.5px] tabular-nums transition-opacity duration-150",
+              showCount ? "opacity-100" : "opacity-0",
+              count > NOTE_MAX ? "text-flare-300" : "text-ash-400",
+            )}
+          >
+            {t("socNote.note.count", { count })}
+          </span>
+        </div>
+        <NoteLine id={lineId} text={line} />
+        {/* A field label's looks (Field's), so the dialog has one label style. */}
+        <p id={lengthId} className="mt-2 mb-1.5 text-[13px] font-medium text-bone-100">
           {t("socNote.note.lengthLabel")}
         </p>
         <Segmented
