@@ -1,5 +1,5 @@
-// SOC-ID: the ways into the friends account (Discord and Microsoft), "Linked accounts", the
-// profile name of a new account, and what works only with Discord.
+// SOC-ID: the ways into the friends account (Discord and Microsoft), "Linked accounts" and the
+// profile name of a new account.
 export const enIdentity = {
   providers: {
     discord: "Discord",
@@ -47,9 +47,7 @@ export const enIdentity = {
   },
   remove: {
     title: "Remove {{provider}}?",
-    discordNumber:
-      "24/7 Cloud won't open without Discord, and your Projects skin and your crew tag on the forum go too.",
-    discord: "Your Discord photo and your crew tag on the forum go too.",
+    discord: "Your Discord photo, your Projects skin and your crew tag on the forum go too.",
     confirm: "Remove",
     cancel: "Cancel",
   },
@@ -87,8 +85,6 @@ export const enIdentity = {
     open: "See linked accounts",
     ok: "OK",
   },
-  /** SKIN1 and 7/24 Bulut, for an account not opened with Discord. */
-  discordOnly: "For now this is only for accounts opened with Discord.",
   /** A limited account that is new itself (opened with Microsoft): its own words. */
   limited: {
     title: "Your account is new, so until {{date}}:",

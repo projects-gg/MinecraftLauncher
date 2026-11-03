@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cleanName,
   discordIdOf,
-  discordIsAccount,
+  hasDiscord,
   identitiesOf,
   linkableOf,
   linkedDate,
@@ -24,16 +24,11 @@ describe("whose Discord a profile has", () => {
     );
   });
 
-  it("keeps the Projects skin and 7/24 Bulut to accounts opened with Discord", () => {
-    expect(discordIsAccount({ id: "123456789012345678" })).toBe(true);
-    expect(discordIsAccount({ id: "123456789012345678", discordId: "123456789012345678" })).toBe(
-      true,
-    );
-    expect(discordIsAccount({ id: "9123456789012345678", discordId: "80351110224678912" })).toBe(
-      false,
-    );
-    expect(discordIsAccount({ id: "9123456789012345678", discordId: null })).toBe(false);
-    expect(discordIsAccount(undefined)).toBe(false);
+  it("opens the Projects skin to any account with a Discord linked", () => {
+    expect(hasDiscord({ id: "123456789012345678" })).toBe(true);
+    expect(hasDiscord({ id: "9123456789012345678", discordId: "80351110224678912" })).toBe(true);
+    expect(hasDiscord({ id: "9123456789012345678", discordId: null })).toBe(false);
+    expect(hasDiscord(undefined)).toBe(false);
   });
 });
 

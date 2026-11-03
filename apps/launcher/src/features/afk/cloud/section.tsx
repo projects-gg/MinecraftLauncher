@@ -11,8 +11,6 @@ import { Button, cn, enter, IconButton, leave, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { discordIsAccount } from "@/features/social/identity";
-import { useSocialUi } from "@/features/social/store";
 import type { AfkAccount } from "@/lib/api";
 import { afkFailed } from "../errors";
 import { type CloudAccount, cloudApi } from "./api";
@@ -140,10 +138,6 @@ export function CloudSection({
   const { data, skewMs, refetch, isFetching } = useCloudPage();
   const reach = useCloudReach();
   const ui = useCloudUi();
-  // SOC-ID: 7/24 Bulut works only for accounts opened with Discord for now.
-  const discordOnly = useSocialUi(
-    (s) => s.view.auth === "signedIn" && !discordIsAccount(s.view.me),
-  );
   const restart = useCloudAction("restart");
   const guardedStart = useGuardedStart();
   const actions = useCloudCardActions(desktop);
@@ -271,23 +265,6 @@ export function CloudSection({
     moveFocus.current = true;
     setSelecting(true);
   };
-
-  // SOC-ID: one line instead of the offer for an account not opened with Discord.
-  if (discordOnly) {
-    return (
-      <section
-        aria-label={t("cloudAfk.title")}
-        className={cn("mt-7", centered && "mx-auto w-full max-w-[460px]")}
-      >
-        <div className="border-t border-white/7 pt-5">
-          <h2 className="font-display text-section font-semibold text-bone-50">
-            {t("cloudAfk.title")}
-          </h2>
-          <p className="mt-1.5 text-[13px] text-ash-300">{t("identity.discordOnly")}</p>
-        </div>
-      </section>
-    );
-  }
 
   return (
     <section

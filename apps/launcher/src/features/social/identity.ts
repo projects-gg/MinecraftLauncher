@@ -21,16 +21,9 @@ export function discordIdOf(profile: Pick<SocialProfile, "id" | "discordId">): s
 }
 
 /**
- * The account's number is its Discord id: it was opened with Discord and keeps that Discord
- * account. The Projects skin and 7/24 Bulut work only for these for now (`discord_required`).
- */
-export function discordIsAccount(me: Pick<SocialProfile, "id" | "discordId"> | undefined): boolean {
-  return me !== undefined && discordIdOf(me) === me.id;
-}
-
-/**
- * The account has a Discord account linked, whether it was opened with Discord or linked one later
- * (MS-REST): the Projects skin works with that Discord id.
+ * The account has a Discord account linked, whether it was opened with Discord or linked one later:
+ * the Projects skin needs it (MS-REST: it works with that Discord id). 7/24 Bulut needs none (AFK-MS:
+ * it serves an account by its number).
  */
 export function hasDiscord(me: Pick<SocialProfile, "id" | "discordId"> | undefined): boolean {
   return me !== undefined && discordIdOf(me) !== null;

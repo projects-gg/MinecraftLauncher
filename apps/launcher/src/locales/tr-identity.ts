@@ -1,7 +1,6 @@
-// SOC-ID: the ways into the friends account (Discord and Microsoft), "Bağlı hesaplar", the profile
-// name of a new account, and what works only with Discord. Short, the phone's words; a sentence of
-// explanation only where a step cannot be undone (a password typed on the wrong page, what goes with
-// Discord).
+// SOC-ID: the ways into the friends account (Discord and Microsoft), "Bağlı hesaplar" and the
+// profile name of a new account. Short, the phone's words; a sentence of explanation only where a step
+// cannot be undone (a password typed on the wrong page, what goes with Discord).
 export const trIdentity = {
   providers: {
     discord: "Discord",
@@ -52,10 +51,11 @@ export const trIdentity = {
   },
   remove: {
     title: "{{provider}} bağlantısı kaldırılsın mı?",
-    /** Discord is the account's number: 7/24 Bulut and the Projects skin need it. */
-    discordNumber:
-      "Discord olmadan 7/24 Bulut açılmaz, Projects skinin ve forumdaki ekip etiketin de kalkar.",
-    discord: "Discord fotoğrafın ve forumdaki ekip etiketin de kalkar.",
+    /**
+     * What goes with Discord, however the account was opened (MS-REST: the skin needs a linked
+     * Discord; AFK-MS: 7/24 Bulut needs none).
+     */
+    discord: "Discord fotoğrafın, Projects skinin ve forumdaki ekip etiketin de kalkar.",
     confirm: "Kaldır",
     cancel: "Vazgeç",
   },
@@ -94,8 +94,6 @@ export const trIdentity = {
     open: "Bağlı hesaplara bak",
     ok: "Tamam",
   },
-  /** SKIN1 and 7/24 Bulut, for an account not opened with Discord. */
-  discordOnly: "Bu özellik şimdilik yalnız Discord ile açılmış hesaplarda var.",
   /** A limited account that is new itself (opened with Microsoft): its own words. */
   limited: {
     title: "Hesabın yeni olduğu için {{date}} tarihine kadar:",

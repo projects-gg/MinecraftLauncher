@@ -33,7 +33,6 @@ import { currentLanguage } from "@/lib/i18n";
 import { DiscordMark } from "./discord-button";
 import {
   cleanName,
-  discordIsAccount,
   failureKey,
   identitiesOf,
   linkableOf,
@@ -382,7 +381,7 @@ export function LinkedAccountsSection({ me }: { me: SocialMe }) {
       >
         {removal.provider === "discord" ? (
           <p className="text-[14px] leading-relaxed text-bone-100">
-            {t(discordIsAccount(me) ? "identity.remove.discordNumber" : "identity.remove.discord")}
+            {t("identity.remove.discord")}
           </p>
         ) : null}
       </Dialog>
