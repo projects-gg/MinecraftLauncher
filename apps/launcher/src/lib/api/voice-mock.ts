@@ -16,7 +16,8 @@
 //   `reconnecting`, `failed` (the stay ended:
 //   "Bağlanamadı"); `denied` / `missing` (the microphone); `weak` / `bad` (the player's
 //   connection); `modMuted`, `muted`, `deaf`; VOICE-ROOMS: `crewRooms`, `crewRoomsIn`,
-//   `crewRoomsOld` (`keptRooms`; `&change=<refusal>` refuses the crew page's changes).
+//   `crewRoomsOld`, `crewRoomsBusy` (`keptRooms`; `&change=<refusal>` refuses the crew page's
+//   changes).
 // - `speaking=<ids>|none`: who speaks (the scenario's own otherwise); `talking=1`: the player too.
 // - `call=answer|noAnswer|<refusal>`: what "Ara" gets (answered after 2.5 s by default).
 // - `join=ok|<refusal>`: what "Katıl" gets.
@@ -213,16 +214,22 @@ function crewRooms(full: boolean, inGeneral: boolean): VoiceCrewRooms {
  * VOICE-ROOMS' previews (`voice=crewRooms`, `crewRoomsIn`, `crewRoomsOld`; `&role=` as for `crew`):
  * the crew arranges its rooms ("Oda yönetimi" on): "Genel" empty, "Taş Ocağı" with two people and
  * a limit of 4, the player's own "Oda 3" empty; `crewRoomsIn` has the player in "Taş Ocağı";
- * `crewRoomsOld` is an older service's list without the empty "Genel" (it must still come first).
+ * `crewRoomsOld` is an older service's list without the empty "Genel" (it must still come first);
+ * `crewRoomsBusy` fills them (six in "Genel", "Taş Ocağı" at its 4) and adds a room with a long name.
  */
 function keptRooms(scenario: string): VoiceCrewRooms {
   const inside = scenario === "crewRoomsIn";
+  const busy = scenario === "crewRoomsBusy";
   const rooms = [
     {
       id: `g${CREW}`,
       name: "Genel",
       general: true,
-      people: scenario === "crewRoomsOld" ? ["301"] : [],
+      people: busy
+        ? ["301", "304", "305", "701", "702", "909"]
+        : scenario === "crewRoomsOld"
+          ? ["301"]
+          : [],
       max: null,
       own: false,
     },
@@ -230,7 +237,7 @@ function keptRooms(scenario: string): VoiceCrewRooms {
       id: "c00000000000000b2",
       name: "Taş Ocağı",
       general: false,
-      people: inside ? ["302", "703", ME] : ["302", "703"],
+      people: busy ? ["302", "703", "303", "911"] : inside ? ["302", "703", ME] : ["302", "703"],
       max: 4,
       own: false,
     },
@@ -242,6 +249,18 @@ function keptRooms(scenario: string): VoiceCrewRooms {
       max: null,
       own: true,
     },
+    ...(busy
+      ? [
+          {
+            id: "c00000000000000b4",
+            name: "Akşam Turnuvası Takımı",
+            general: false,
+            people: [],
+            max: null,
+            own: false,
+          },
+        ]
+      : []),
   ];
   return {
     crew: CREW,
@@ -310,6 +329,7 @@ function stateFor(scenario: string): VoiceState {
       };
     case "crewRooms":
     case "crewRoomsOld":
+    case "crewRoomsBusy":
       return { ...base, crews: [keptRooms(scenario)] };
     case "crewRoomsIn":
       return {
