@@ -239,7 +239,6 @@ export const trVoice = {
     moveDown: "Aşağı taşı",
     remove: "Odayı sil",
     removeAsk: "İçerideki herkes Genel'e geçer.",
-    removeConfirm: "Sil",
     removed: "{{room}} silindi.",
     notRemoved: "İçeride biri olduğu için oda silinmedi.",
     undo: "Geri al",

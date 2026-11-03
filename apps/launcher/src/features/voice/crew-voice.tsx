@@ -225,7 +225,7 @@ function RoomRow({
           "group/room relative min-h-[44px] rounded-[var(--radius-panel)] py-1.5 pr-2 pl-2 transition-colors duration-200",
           here || mode !== "view"
             ? "bg-white/[0.06]"
-            : "hover:bg-white/[0.045] has-[[data-state=open]]:bg-white/[0.06]",
+            : "hover:bg-white/[0.045] data-[state=open]:bg-white/[0.06] has-[[data-state=open]]:bg-white/[0.06]",
           dragControls && mode === "view" && "cursor-grab touch-none active:cursor-grabbing",
         )}
       >
@@ -256,7 +256,13 @@ function RoomRow({
               />
             </motion.div>
           ) : mode === "remove" ? (
-            <motion.div key="remove" className="relative" {...rise(reduce, 3, 0.2)}>
+            <motion.div
+              key="remove"
+              role="group"
+              aria-label={shown}
+              className="relative"
+              {...rise(reduce, 3, 0.2)}
+            >
               <RoomRemoveAsk crew={team.id} room={room} onDone={() => setMode("view")} />
             </motion.div>
           ) : (

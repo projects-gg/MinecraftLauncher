@@ -244,7 +244,7 @@ export function RoomRemoveAsk({
           onDone();
         }}
       >
-        {t("voice.rooms.removeConfirm")}
+        {t("voice.rooms.remove")}
       </Button>
     </div>
   );

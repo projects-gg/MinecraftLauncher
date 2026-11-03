@@ -237,7 +237,6 @@ export const enVoice = {
     moveDown: "Move down",
     remove: "Delete room",
     removeAsk: "Everyone inside moves to General.",
-    removeConfirm: "Delete",
     removed: "{{room}} was deleted.",
     notRemoved: "Someone's in the room, so it wasn't deleted.",
     undo: "Undo",
