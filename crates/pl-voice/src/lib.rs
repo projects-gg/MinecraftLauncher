@@ -20,6 +20,7 @@
 //!   (the noise suppressor), the main page's policy stays; [`lifecycle`]: the window opens on
 //!   joining a room, closes a minute after leaving, comes back after a crash (a few times);
 //! - [`gain`]: a person's volume, whose top depends on how the page plays people;
+//! - [`sight`]: whether the launcher's window is on screen, looked at with no lock held;
 //! - [`discord`]: Discord's own push-to-talk, mute and deafen keys on this computer, offered once
 //!   as the player first opens voice chat (read with [`leveldb`], nothing leaves the computer);
 //! - [`probe`]: VOICE-0's measurement run (debug builds).
@@ -42,6 +43,7 @@ pub mod permission;
 pub mod probe;
 pub mod room;
 pub mod settings;
+pub mod sight;
 pub mod socket;
 pub mod view;
 pub mod wire;
