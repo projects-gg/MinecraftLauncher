@@ -4,6 +4,8 @@ import com.mojang.blaze3d.platform.InputConstants;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.people.FriendMenu;
+import gg.projects.overlay.state.Presence;
+import gg.projects.overlay.ui.PresenceDot;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -75,6 +77,9 @@ public final class PersonMenu {
     }
 
     private static final int ROW_H = 14;
+    /** OVL-SOC 2: the quiet line over the rows, and its inset. */
+    private static final int NOTE_H = 13;
+    private static final int NOTE_X = 7;
     private static final int SEP_H = 7;
     private static final int PAD = 3;
     private static final int ICON_X = 5;
@@ -162,6 +167,11 @@ public final class PersonMenu {
      */
     private static final int REST = Integer.MAX_VALUE;
 
+    private String pendingNote;
+    private String noteWords;
+    private FormattedCharSequence noteLine;
+    private float noteH;
+
     public PersonMenu(Actions actions) {
         this.actions = actions;
     }
@@ -200,6 +210,14 @@ public final class PersonMenu {
         return isOpen() && mx >= x && mx < x + width && my >= y && my < y + height;
     }
 
+    /**
+     * OVL-SOC 2: a quiet line over the next menu's rows ("Asıl adı Kaan_07" under a nickname, "17:30'a kadar" for
+     * a timed status); null for none. Taken by the next {@link #open}.
+     */
+    public void noteNext(String words) {
+        pendingNote = words == null || words.isEmpty() ? null : words;
+    }
+
     /** Opens {@code rows} for a friend; {@code keys}: from the keyboard (its first row lit). */
     public void open(String friend, String name, List<FriendMenu.Row> rows, Anchor at, boolean fromKeys, int screenW,
         int screenH, long now) {
@@ -215,6 +233,9 @@ public final class PersonMenu {
         long now) {
         friendId = friend;
         friendName = name == null ? "" : name;
+        noteWords = pendingNote;
+        noteLine = pendingNote == null ? null : Texts.visual(pendingNote);
+        pendingNote = null;
         anchor = at;
         keys = fromKeys;
         asking = null;
@@ -231,6 +252,9 @@ public final class PersonMenu {
             }
         }
         Component said = Texts.tr("people.menu.narration", friendName, count);
+        if (noteWords != null) {
+            said = Component.empty().append(said).append(". ").append(Component.literal(noteWords));
+        }
         if (focus >= 0) {
             said = Component.empty().append(said).append(". ").append(Component.literal(lines.get(focus).words()));
         }
@@ -251,9 +275,10 @@ public final class PersonMenu {
                 continue;
             }
             String words = Texts.str(labelKey(row));
-            float w = ui.width(words);
-            widest = Math.max(widest, w);
             boolean checked = checked(row);
+            // A check beside a caret takes a second mark's room.
+            float w = ui.width(words) + (checked && row.sub() ? MARK_W : 0);
+            widest = Math.max(widest, w);
             marks |= checked || row.sub();
             lines.add(new Line(row, false, null, Texts.visual(words), w, icon(row), checked));
         }
@@ -306,9 +331,13 @@ public final class PersonMenu {
     }
 
     private void size(float widest, boolean marks, int screenW, int screenH) {
-        width = Math.max(MIN_W, (float) Math.ceil(TEXT_X + widest + 10 + (marks ? MARK_W : 0)));
+        // The note line shows over the menu's own rows only (a list in place has its way back on top).
+        noteH = noteLine != null && listOf == null ? NOTE_H : 0;
+        float noteRoom = noteH > 0 ? Fonts.small().width(noteWords) + 2 * NOTE_X : 0;
+        width = Math.max(MIN_W, (float) Math.ceil(Math.max(TEXT_X + widest + 10 + (marks ? MARK_W : 0),
+            noteRoom)));
         width = Math.min(width, screenW - 2 * EDGE);
-        height = PAD * 2;
+        height = PAD * 2 + noteH;
         for (Line line : lines) {
             height += line == null ? SEP_H : ROW_H;
         }
@@ -407,6 +436,11 @@ public final class PersonMenu {
             case VOICE_UNMOD -> "people.unmake_moderator";
             case CALL -> "voice.call.start";
             case CALL_INVITE -> row.done() ? "voice.ringing" : "voice.invite";
+            case ACCEPT_REQUEST -> "friend.accept";
+            case DECLINE_REQUEST -> "friend.decline";
+            case STATUS_ONLINE -> "status.online";
+            case STATUS_DND -> "status.dnd";
+            case STATUS_INVISIBLE -> "status.invisible";
         };
     }
 
@@ -437,13 +471,19 @@ public final class PersonMenu {
             case VOICE_MOD, VOICE_UNMOD -> Icon.SHIELD_STAR;
             case CALL -> Icon.PHONE;
             case CALL_INVITE -> Icon.PHONE_PLUS;
+            case ACCEPT_REQUEST -> Icon.USER_CHECK;
+            case DECLINE_REQUEST -> Icon.CLOSE;
+            // The status rows carry their presence dot instead (drawRows).
+            case STATUS_ONLINE, STATUS_DND, STATUS_INVISIBLE -> null;
         };
     }
 
     /** The launcher's check: a set online notice, a world invite that went, a friend request that went. */
     private static boolean checked(FriendMenu.Row row) {
         return switch (row.action()) {
-            case ALERT, MUTE_FOR_ME -> row.on();
+            case ALERT, MUTE_FOR_ME, STATUS_ONLINE -> row.on();
+            // The status now is checked, beside the caret of a status with durations (the launcher's).
+            case STATUS_DND, STATUS_INVISIBLE -> row.on();
             case WORLD_INVITE, ADD_FRIEND, CALL_INVITE -> row.done();
             default -> false;
         };
@@ -583,7 +623,7 @@ public final class PersonMenu {
         if (!contains(mx, my) || asking != null) {
             return -1;
         }
-        float ry = y + PAD;
+        float ry = y + PAD + noteH;
         for (int i = 0; i < lines.size(); i++) {
             Line line = lines.get(i);
             float h = line == null ? SEP_H : ROW_H;
@@ -955,6 +995,12 @@ public final class PersonMenu {
     private void drawRows(GuiGraphicsExtractor g) {
         Font ui = Fonts.ui();
         float ry = y + PAD;
+        if (noteH > 0) {
+            // OVL-SOC 2: the quiet line over the rows (who a nickname is, until when a status holds).
+            Draw.text(g, Fonts.small(), noteLine, x + NOTE_X, Fonts.centeredY(Fonts.Face.SMALL, ry + noteH / 2f),
+                Theme.ASH_400);
+            ry += noteH;
+        }
         for (int i = 0; i < lines.size(); i++) {
             Line line = lines.get(i);
             if (line == null) {
@@ -980,19 +1026,35 @@ public final class PersonMenu {
             }
             if (line.icon() != null) {
                 Draw.icon(g, line.icon(), 10, x + ICON_X, ry + (ROW_H - 10) / 2f, iconInk);
+            } else if (line.row() != null && !line.back()) {
+                drawStatusDot(g, line.row().action(), x + ICON_X + 5, ry + ROW_H / 2f);
             }
             Draw.text(g, ui, line.label(), x + TEXT_X, Fonts.centeredY(Fonts.Face.UI, ry + ROW_H / 2f), ink);
             float markX = x + width - PAD - 4 - 8;
+            boolean sub = line.row() != null && !line.back() && line.row().sub();
             if (line.checked()) {
-                // Bone, as checks are on every surface (design.md §2: a screen's one gold is its main action).
-                Draw.icon(g, Icon.CHECK, 8, markX, ry + (ROW_H - 8) / 2f, Theme.BONE_100);
-            } else if (line.row() != null && !line.back() && line.row().sub()) {
+                // Bone, as checks are on every surface (design.md §2: a screen's one gold is its main action); left
+                // of the caret on a row that also opens a list (OVL-SOC 2: the status now, with its durations).
+                Draw.icon(g, Icon.CHECK, 8, sub ? markX - MARK_W : markX, ry + (ROW_H - 8) / 2f, Theme.BONE_100);
+            }
+            if (sub) {
                 Draw.icon(g, Icon.NEXT, 8, markX, ry + (ROW_H - 8) / 2f, Theme.ASH_400);
             }
             if (soft) {
                 Draw.popAlpha();
             }
             ry += ROW_H;
+        }
+    }
+
+    /** A status row's presence dot (OVL-SOC 2), as the header's: jade, gold with its bar, ash. */
+    private static void drawStatusDot(GuiGraphicsExtractor g, FriendMenu.Action action, float cx, float cy) {
+        switch (action) {
+            case STATUS_ONLINE -> PresenceDot.dot(g, Presence.PLAYING, cx, cy);
+            case STATUS_DND -> PresenceDot.dot(g, Presence.DND, cx, cy);
+            case STATUS_INVISIBLE -> Draw.disc(g, PresenceDot.DOT, cx, cy, Theme.ASH_500);
+            default -> {
+            }
         }
     }
 

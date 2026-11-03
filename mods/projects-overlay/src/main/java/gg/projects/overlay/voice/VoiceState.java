@@ -120,9 +120,10 @@ public final class VoiceState {
 
     /**
      * One of a crew's voice rooms (OVL-SOC, V21): {@code name} null for the crew's "Genel" ({@code general}), who is in
-     * it (the player too, when there).
+     * it (the player too, when there); OVL-SOC 2 (VOICE-ROOMS): {@code max} its own people limit below the crew's (0:
+     * none, the pill says no count), {@code full} nobody more fits ("Oda dolu.").
      */
-    public record CrewRoom(String id, String name, boolean general, List<Named> people) {
+    public record CrewRoom(String id, String name, boolean general, List<Named> people, int max, boolean full) {
     }
 
     /**
@@ -577,8 +578,9 @@ public final class VoiceState {
                     }
                     boolean general = Protocol.bool(o, "general", false);
                     String name = name(o, "name");
+                    int max = (int) Math.max(0, Math.min(99, Protocol.num(o, "max", 0)));
                     rooms.add(new CrewRoom(id, general || name.isEmpty() ? null : name, general,
-                        Collections.unmodifiableList(people)));
+                        Collections.unmodifiableList(people), max, Protocol.bool(o, "full", false)));
                 }
             }
             out.add(new CrewRooms(crew, conv, Collections.unmodifiableList(rooms), Protocol.bool(c, "add", false)));

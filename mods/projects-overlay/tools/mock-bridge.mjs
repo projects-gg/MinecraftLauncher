@@ -69,6 +69,12 @@
 // of the room). OVL-SOC: a mod whose hello lists "voice-rooms" too hears "voice-crews" (Gece Kuşları: "Genel" with four,
 // "Oda 2" with one; Akıncılar: "Genel" alone) and its "voice-join" is answered (the player goes into that room; "new"
 // opens "Oda 3"); YildizTozu is on do-not-disturb ("dnd").
+// --next (with --people2, to a mod whose hello lists "people4") plays OVL-SOC 2: "people4" and "next" in the welcome
+// with the player's status ("dnd" frames carry it too), two friend requests in the lists ("request" answered with
+// "friend-result" and the lists again), PixelAvci shown by the player's nickname "Kanka" ("real"), MaviElmas ignored
+// (her crew lines "ignored"), a crew line that mentions the player ("mention"), "Oda 2" full at its own limit of one
+// ("max", "full") and "Oda 3" with two of five; "status" changes the status (a duration ends in an hour, at 08:00,
+// or never). Dev commands "streamer-on" / "streamer-off" (a new welcome with or without "streamer").
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -442,6 +448,36 @@ if (args.people) {
     state.me.badge = "t-gece";
   }
 }
+// OVL-SOC 2 (--next): two lines in a row of MaviElmas (ignored) and one that mentions the player in Gece Kuşları.
+if (args.next) {
+  const gece = state.history["crew:gece"];
+  const at = gece.findIndex((m) => m.from === "MaviElmas");
+  gece.splice(at + 1, 0, {
+    id: "m7b",
+    from: "MaviElmas",
+    text: "Harita da değişti, haberiniz olsun.",
+    at: minutes(79),
+    mine: false,
+  });
+  gece.push({
+    id: "m8b",
+    from: "NetherKral",
+    text: "@OVL2Test bu akşam sen de geliyor musun?",
+    at: minutes(5),
+    mine: false,
+  });
+}
+// OVL-SOC 2 (--next): the player's status, its end, streamer mode, and who asked to be friends.
+const next = {
+  on: false,
+  status: args.dnd ? "dnd" : "online",
+  until: null,
+  streamer: false,
+  requests: [
+    { id: "r-blok", name: "BlokUstasi" },
+    { id: "r-gece", name: "GeceKartali_" },
+  ],
+};
 // OVL-UX2: the person menu's lists, the friends' marks and crews, and a crewmate who is not a friend.
 const LISTS = {
   groups: [
@@ -525,8 +561,21 @@ if (args.team6) {
 }
 
 /** A conversation's messages as the launcher sends them now: crewmates' tags as they wear them today. */
+/** OVL-SOC 2: MaviElmas is ignored; a crew line that says "@OVL2Test" mentions the player. */
+function nextMarks(convId, m) {
+  if (!next.on || !convId.startsWith("crew:") || m.mine) {
+    return m;
+  }
+  return {
+    ...m,
+    ...(m.from === "MaviElmas" ? { ignored: true } : {}),
+    ...(/(^|\s)@OVL2Test\b/i.test(m.text ?? "") ? { mention: true } : {}),
+  };
+}
+
 function historyOf(convId) {
-  return (state.history[convId] ?? []).map((m) => {
+  return (state.history[convId] ?? []).map((plain) => {
+    const m = nextMarks(convId, plain);
     if (!args.team6 || !convId.startsWith("crew:")) {
       return m;
     }
@@ -536,10 +585,30 @@ function historyOf(convId) {
   });
 }
 
+/** OVL-SOC 2: the lists with the friend requests (to a mod that said "people4"). */
+function listsFrame() {
+  return {
+    t: "lists",
+    ...LISTS,
+    ...(next.on && next.requests.length ? { requests: next.requests } : {}),
+  };
+}
+
+/** OVL-SOC 2: the status as "welcome" and "dnd" carry it (none while "Çevrimiçi"). */
+function statusFields() {
+  return next.status === "online"
+    ? {}
+    : { status: next.status, ...(next.until ? { until: next.until } : {}) };
+}
+
+/** OVL-SOC 2: the friends the player gave a nickname (PixelAvci is "Kanka"), with the name they have. */
+const NICKNAMES = { "f-ayse": "Kanka" };
+
 /** What the friends' rows say now: their tags while tags are on. */
 function friendRows() {
   return state.friends.map((f) => ({
     ...f,
+    ...(next.on && NICKNAMES[f.id] ? { name: NICKNAMES[f.id], real: f.name } : {}),
     badge: tagsOn ? f.badge : undefined,
     // VOICE-O (V14): online friends may be called.
     voice: args.voice && f.where !== "offline" ? "ready" : undefined,
@@ -567,7 +636,26 @@ function voiceCrews() {
             { id: "u-3", name: "Ruzgar_12" },
           ],
         },
-        { id: "c1111111111111111", name: "Oda 2", people: [{ id: "u-4", name: "KumSaati" }] },
+        {
+          id: "c1111111111111111",
+          name: "Oda 2",
+          people: [{ id: "u-4", name: "KumSaati" }],
+          // OVL-SOC 2: its own limit of one, full.
+          ...(args.next ? { max: 1, full: true } : {}),
+        },
+        ...(args.next
+          ? [
+              {
+                id: "c2222222222222222",
+                name: "Taktik",
+                people: [
+                  { id: "u-5", name: "Ruzgar_12" },
+                  { id: "u-6", name: "DemirGolem_" },
+                ],
+                max: 5,
+              },
+            ]
+          : []),
       ],
     },
     { crew: "akinci", conv: "crew:akinci", rooms: [{ id: "gakinci", general: true }] },
@@ -929,6 +1017,7 @@ function onConnection(socket) {
         emojis.quiet = Array.isArray(frame.features) && frame.features.includes("panel-off");
         voiceMock.hears = Array.isArray(frame.features) && frame.features.includes("voice");
         voiceMock.rooms = voiceMock.hears && frame.features.includes("voice-rooms");
+        next.on = Boolean(args.next && args.people2) && frame.features.includes("people4");
         voiceMock.view = voiceFriendRoom();
         voiceMock.crews = voiceCrews();
         startSession(socket);
@@ -974,9 +1063,10 @@ function welcome(socket) {
     proto: PROTO,
     launcher: "mock",
     me: state.me,
-    dnd: Boolean(args.dnd),
+    dnd: next.on ? next.status === "dnd" : Boolean(args.dnd),
     reducedMotion: Boolean(args.reducedMotion),
     ...(langs.follows && overlayLang() ? { lang: overlayLang() } : {}),
+    ...(next.on ? statusFields() : {}),
     features: args.signedOut
       ? []
       : [
@@ -990,13 +1080,14 @@ function welcome(socket) {
           ...(args.people && args.people2 && args.people3 ? ["people3"] : []),
           ...(args.link ? ["link"] : []),
           ...(args.host ? ["host"] : []),
+          ...(next.on ? ["people4", "next", ...(next.streamer ? ["streamer"] : [])] : []),
         ],
   });
   if (args.team6) {
     send(socket, cardsFrame());
   }
   if (args.people && args.people2 && !args.signedOut) {
-    send(socket, { t: "lists", ...LISTS });
+    send(socket, listsFrame());
   }
   send(socket, {
     t: "snapshot",
@@ -1127,6 +1218,55 @@ function demo(socket) {
     incoming(socket, "dm:ayse", "PixelAvci", "Akşam bedwars var mı? Ekip toplanıyor."),
   );
   later(2500, () => startCall(socket, "c1", "Gece Kuşları", "NetherKral"));
+}
+
+/** OVL-SOC 2: a friend request answered, a status picked (as the launcher's page would). */
+function onNext(socket, frame) {
+  if (frame.t === "request") {
+    const asked = next.requests.find((r) => r.id === frame.id);
+    if (!asked) {
+      send(socket, {
+        t: "friend-result",
+        friend: frame.id,
+        action: frame.accept ? "accept" : "decline",
+        ok: false,
+        reason: "failed",
+      });
+      return;
+    }
+    next.requests = next.requests.filter((r) => r.id !== frame.id);
+    if (frame.accept) {
+      state.friends.unshift({ id: asked.id, name: asked.name, where: "launcher", joinable: false });
+      later(80, () => send(socket, { t: "friend", ...friendRows()[0] }));
+    }
+    later(60, () => {
+      send(socket, {
+        t: "friend-result",
+        friend: asked.id,
+        action: frame.accept ? "accept" : "decline",
+        ok: true,
+      });
+      send(socket, listsFrame());
+    });
+    return;
+  }
+  if (!["online", "dnd", "invisible"].includes(frame.status)) {
+    return;
+  }
+  next.status = frame.status;
+  const at = new Date();
+  if (frame.status === "online" || !frame.for || frame.for === "forever") {
+    next.until = null;
+  } else if (frame.for === "morning") {
+    const morning = new Date(at);
+    morning.setHours(8, 0, 0, 0);
+    if (morning <= at) morning.setDate(morning.getDate() + 1);
+    next.until = morning.getTime();
+  } else {
+    const minute = Math.ceil(at.getTime() / 60000) * 60000;
+    next.until = minute + (frame.for === "eightHours" ? 8 : 1) * 3600000;
+  }
+  later(120, () => send(socket, { t: "dnd", on: next.status === "dnd", ...statusFields() }));
 }
 
 function stack(socket) {
@@ -1270,6 +1410,12 @@ function onFrame(socket, frame) {
       break;
     case "typing":
       // The player writes in the panel: a launcher passes it to the friends service; the mock only logs it.
+      break;
+    case "request":
+    case "status":
+      if (next.on) {
+        onNext(socket, frame);
+      }
       break;
     case "dev":
       if (!(args.voice && voiceMock.hears && onVoiceDev(socket, frame))) {
@@ -1432,13 +1578,13 @@ function onPeople2(socket, frame) {
       state.friends.push(made);
       delete CREWMATES[frame.friend];
       later(120, () => {
-        send(socket, { t: "lists", ...LISTS });
+        send(socket, listsFrame());
         send(socket, { t: "friend", ...made });
       });
       result(true);
     } else {
       LISTS.asking.push(frame.friend);
-      later(120, () => send(socket, { t: "lists", ...LISTS }));
+      later(120, () => send(socket, listsFrame()));
       result(true, { queued: true });
     }
     return;
@@ -1472,7 +1618,7 @@ function onPeople2(socket, frame) {
         const id = `n${Date.now().toString(36).slice(-7)}`;
         LISTS.groups.push({ id, name: frame.name.trim().replace(/\s+/g, " ").slice(0, 24) });
         friend.group = id;
-        later(40, () => send(socket, { t: "lists", ...LISTS }));
+        later(40, () => send(socket, listsFrame()));
         later(60, () => send(socket, { t: "friend", ...friend }));
         result(true);
         break;
@@ -1553,7 +1699,7 @@ function onPeople3(socket, frame) {
     default:
       return;
   }
-  later(60, () => send(socket, { t: "lists", ...LISTS }));
+  later(60, () => send(socket, listsFrame()));
   result(true);
 }
 
@@ -1639,6 +1785,14 @@ function onReact(socket, frame) {
 
 function onDev(socket, frame) {
   switch (frame.cmd) {
+    case "streamer-on":
+    case "streamer-off":
+      // OVL-SOC 2: streamer mode came or went: a new greeting says so.
+      next.streamer = frame.cmd === "streamer-on";
+      if (next.on) {
+        welcome(socket);
+      }
+      break;
     case "emojis-off":
     case "emojis-on":
       // CHAT-EMOJI: the launcher's Settings switched the picker.

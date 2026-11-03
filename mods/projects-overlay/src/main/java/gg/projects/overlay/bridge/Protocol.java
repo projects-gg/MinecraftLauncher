@@ -92,6 +92,7 @@ public final class Protocol {
             features.add(PEOPLE3);
             features.add(VOICE);
             features.add(VOICE_ROOMS);
+            features.add(PEOPLE4);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -436,6 +437,37 @@ public final class Protocol {
         JsonObject o = message("voice-join");
         o.addProperty("crew", crew);
         o.addProperty("new", true);
+        return o;
+    }
+
+    // ---- OVL-SOC 2: friend requests, the status switcher and SOC-NEXT's marks -----------------------------------
+
+    /**
+     * The hello feature of a mod with OVL-SOC 2's people: it shows {@code lists}' {@code requests} ("İstekler") and
+     * sends {@code request}, has the status switcher ({@code status}; {@code status} and {@code until} in
+     * {@code welcome} and {@code dnd}) and reads SOC-NEXT's marks (a friend's {@code real}, a message's
+     * {@code ignored} and {@code mention}; {@code next} and {@code streamer} among the welcome's features).
+     */
+    public static final String PEOPLE4 = "people4";
+
+    /**
+     * The status switcher: {@code online}, {@code dnd} or {@code invisible}, with SOC-NEXT {@code for} one of the crew
+     * mute's durations ({@code hour}, {@code eightHours}, {@code morning}, {@code forever}; null: none).
+     */
+    public static JsonObject status(String status, String preset) {
+        JsonObject o = message("status");
+        o.addProperty("status", status);
+        if (preset != null) {
+            o.addProperty("for", preset);
+        }
+        return o;
+    }
+
+    /** "Kabul et" ({@code accept}) or "Reddet" on a friend request; answered with {@code friend-result}. */
+    public static JsonObject request(String id, boolean accept) {
+        JsonObject o = message("request");
+        o.addProperty("id", id);
+        o.addProperty("accept", accept);
         return o;
     }
 
