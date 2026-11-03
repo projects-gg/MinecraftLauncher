@@ -12,6 +12,7 @@
 //! others at once. World sharing (HOST1) follows one game's session alone: the first game's, until
 //! the launcher names another ([`Overlay::set_host`]); the others see no world sharing.
 
+use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -71,6 +72,31 @@ pub struct OverlayConfig {
     /// mod's jar goes into an instance while this or [`Self::enabled`] is on; with this one alone
     /// the mod runs the picker only (no panel, key, toasts or pause menu button).
     pub emoji: bool,
+    /// SOC-NEXT's choices for the game (OVL-SOC 2, SOC-GAP §3.12), only while the signed config's
+    /// `features.socNext` is on (the page's `useSocNext`); none: nothing of SOC-NEXT reaches the
+    /// game and everything is as before.
+    pub next: Option<SocNextPrefs>,
+}
+
+/// SOC-NEXT's choices the page keeps that the game follows (OVL-SOC 2): friends' nicknames (this
+/// computer only), the people the player ignores, "Yayıncı modu" as it stands now, and the end of
+/// a timed "Rahatsız etmeyin" or "Görünmez".
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SocNextPrefs {
+    /// Friend id → nickname ("Takma ad"): shown in place of their name, the real name beside it
+    /// in their menu.
+    pub nicknames: BTreeMap<String, String>,
+    /// User ids the player ignores ("Yok say"): no toast from them, their crew chat lines folded,
+    /// their voice chat ring quiet.
+    pub ignored: Vec<String>,
+    /// "Yayıncı modu" is on now: no message words in toasts, no server addresses.
+    pub streamer: bool,
+    /// When a timed status ends (Unix milliseconds), or none ("Ben açana kadar", or none set).
+    pub status_until: Option<i64>,
+    /// The status that timer was set for (`dnd`, `invisible`): its end shows only while it is
+    /// the status (another one chosen elsewhere has none).
+    pub timed_status: Option<String>,
 }
 
 impl Default for OverlayConfig {
@@ -80,6 +106,7 @@ impl Default for OverlayConfig {
             notify: NotifyPrefs::default(),
             reduced_motion: false,
             emoji: true,
+            next: None,
         }
     }
 }
@@ -793,14 +820,22 @@ impl Overlay {
                 return;
             }
             let notify = &mut inner.config.notify;
-            match &change {
-                PeopleChange::Favorite { friend, on } => notify.set_favorite(friend, *on),
+            let marked = match &change {
+                PeopleChange::Favorite { friend, on } => {
+                    notify.set_favorite(friend, *on);
+                    true
+                }
                 PeopleChange::Alert { friend, on } => {
                     notify.online_alerts.insert(friend.clone(), *on);
+                    true
                 }
+                // OVL-SOC 2: the page changes the status; every game hears it in the next view.
+                PeopleChange::Status { .. } => false,
+            };
+            if marked {
+                let config = inner.config.clone();
+                inner.tell_others(Some(session), || Msg::Config(config.clone()));
             }
-            let config = inner.config.clone();
-            inner.tell_others(Some(session), || Msg::Config(config.clone()));
         }
         let sink = self
             .shared

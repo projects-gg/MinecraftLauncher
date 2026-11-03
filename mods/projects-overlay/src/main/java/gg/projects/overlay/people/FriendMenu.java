@@ -86,7 +86,17 @@ public final class FriendMenu {
          */
         CALL,
         /** VOICE-O: "Odaya davet et"; soft while it rings ("Aranıyor…", done) or the room is full. */
-        CALL_INVITE;
+        CALL_INVITE,
+        /** OVL-SOC 2: "Kabul et" on a friend request (its menu: a right click, Enter on its row). */
+        ACCEPT_REQUEST,
+        /** OVL-SOC 2: "Reddet" on a friend request (no question: the launcher's × asks none either). */
+        DECLINE_REQUEST,
+        /** OVL-SOC 2: the status switcher's "Çevrimiçi" ({@code on}: the status now). */
+        STATUS_ONLINE,
+        /** OVL-SOC 2: "Rahatsız etmeyin"; with SOC-NEXT a list of durations ({@code sub}). */
+        STATUS_DND,
+        /** OVL-SOC 2: "Görünmez"; with SOC-NEXT a list of durations ({@code sub}). */
+        STATUS_INVISIBLE;
 
         /** One sentence is asked before it goes. */
         public boolean asks() {

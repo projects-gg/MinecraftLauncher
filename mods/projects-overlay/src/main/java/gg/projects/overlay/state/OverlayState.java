@@ -264,6 +264,10 @@ public final class OverlayState {
         public String by;
         /** BADGES-UI: the keys of its sender's profile badges (someone else's message in crew chat), else none. */
         public List<String> marks = List.of();
+        /** OVL-SOC 2 (SOC-NEXT §3.7): someone the player ignores wrote it (crew chat folds their lines). */
+        public boolean ignored;
+        /** OVL-SOC 2 (SOC-NEXT §3.1): it mentions the player (its bubble's quiet gold ring). */
+        public boolean mention;
 
         ChatLine(String id, String clientId, String from, String text, boolean mine, Delivery delivery, long at,
             long createdAt) {
@@ -324,6 +328,10 @@ public final class OverlayState {
         public ToastRequest(String kind, String key, String title, String body, String conversation, String crew) {
             this(kind, key, title, body, conversation, crew, null, null, List.of());
         }
+    }
+
+    /** Someone who asked the player to be friends (OVL-SOC 2). */
+    public record Request(String id, String name) {
     }
 
     private final Map<String, Friend> friends = new LinkedHashMap<>();
@@ -387,6 +395,17 @@ public final class OverlayState {
     private final Set<String> matesHere = new HashSet<>();
     /** Q15: crewmates who are not friends, whose Discord profile is known ("Discord'dan mesaj at"). */
     private final Set<String> matesDiscord = new HashSet<>();
+    // ---- OVL-SOC 2: friend requests, the status switcher, SOC-NEXT's nicknames ----
+    /** Who asked the player to be friends ("İstekler"), in the launcher's order. */
+    private List<Request> requests = List.of();
+    /** The player's status: {@code online}, {@code dnd} or {@code invisible}. */
+    private String presence = "online";
+    /** When a timed status ends (Unix ms, SOC-NEXT), 0 without one. */
+    private long presenceUntil;
+    /** Friend id → the name the friends service knows, when the list shows the player's nickname for them. */
+    private final Map<String, String> realNames = new HashMap<>();
+    /** Requests answered from the list whose answer has not come yet. */
+    private final Set<String> answering = new HashSet<>();
 
     public BridgeClient.Status status() {
         return status;
@@ -406,6 +425,52 @@ public final class OverlayState {
 
     public boolean dnd() {
         return dnd;
+    }
+
+    /** OVL-SOC 2: the player's status ({@code online}, {@code dnd} or {@code invisible}). */
+    public String presence() {
+        return presence;
+    }
+
+    /** OVL-SOC 2 (SOC-NEXT): when the timed status ends (Unix ms), 0 without one. */
+    public long presenceUntil() {
+        return presenceUntil;
+    }
+
+    /** OVL-SOC 2: the launcher takes {@code status} and {@code request} (it said {@code people4}). */
+    public boolean people4() {
+        return features.contains("people4");
+    }
+
+    /** OVL-SOC 2 (SOC-NEXT §3.4): streamer mode is on: no server address shows. */
+    public boolean streamer() {
+        return features.contains("streamer");
+    }
+
+    /** OVL-SOC 2: SOC-NEXT is on (the status switcher's durations). */
+    public boolean socNext() {
+        return features.contains("next");
+    }
+
+    /** OVL-SOC 2: who asked the player to be friends, in the launcher's order. */
+    public List<Request> requests() {
+        return requests;
+    }
+
+    /** OVL-SOC 2 (SOC-NEXT §3.6): the name the friends service knows for a friend shown by a nickname, or null. */
+    public String realName(String friendId) {
+        return friendId == null || !friends.containsKey(friendId) ? null : realNames.get(friendId);
+    }
+
+    /** A request answered from the list and not settled yet: its buttons wait (no second answer goes). */
+    public boolean answering(String requestId) {
+        return answering.contains(requestId);
+    }
+
+    /** "Kabul et" or "Reddet" went for {@code requestId} (its answer or the next lists settle it). */
+    public void answered(String requestId) {
+        answering.add(requestId);
+        revision++;
     }
 
     public boolean reducedMotion() {
@@ -846,6 +911,13 @@ public final class OverlayState {
         } else {
             voices.remove(id);
         }
+        // OVL-SOC 2 (SOC-NEXT §3.6): the name the service knows, under the player's nickname for them.
+        String real = name(o, "real");
+        if (real.isEmpty()) {
+            realNames.remove(id);
+        } else {
+            realNames.put(id, real);
+        }
     }
 
     /** VOICE-O: a friend's voice chat ({@code ready}, {@code in}), or null: no "Ara" for them. */
@@ -856,6 +928,9 @@ public final class OverlayState {
     /** Another account signed in: nothing of the previous one's menu stays. */
     private void forgetPeople() {
         voices.clear();
+        realNames.clear();
+        answering.clear();
+        requests = List.of();
         drafts.clear();
         draftFriends.clear();
         invitedAt.clear();
@@ -920,6 +995,15 @@ public final class OverlayState {
             case "crew-mod" -> ok ? ("off".equals(detail) ? "unmade_moderator" : "made_moderator") : "failed";
             case "crew-lead" -> ok ? "made_founder" : "failed";
             case "crew-remove" -> ok ? "removed_member" : "failed";
+            // OVL-SOC 2: a friend request answered (a declined one says nothing, as the launcher).
+            case "accept" -> {
+                answering.remove(friend);
+                yield ok ? "now_friends" : "failed";
+            }
+            case "decline" -> {
+                answering.remove(friend);
+                yield ok ? null : "failed";
+            }
             default -> null;
         };
         if (key != null) {
@@ -1015,6 +1099,7 @@ public final class OverlayState {
                 }
                 welcomed = true;
                 dnd = Protocol.bool(frame, "dnd", false);
+                putPresence(frame);
                 reducedMotion = Protocol.bool(frame, "reducedMotion", false);
                 features.clear();
                 JsonArray list = arr(frame, "features");
@@ -1029,6 +1114,7 @@ public final class OverlayState {
             }
             case "snapshot" -> {
                 friends.clear();
+                realNames.clear();
                 worlds.clear();
                 forEach(frame, "friends", this::putFriend);
                 LinkedHashMap<String, Conversation> next = new LinkedHashMap<>();
@@ -1050,12 +1136,16 @@ public final class OverlayState {
                 }
             }
             case "friend-gone" -> {
+                realNames.remove(Protocol.str(frame, "id", ""));
                 friends.remove(Protocol.str(frame, "id", ""));
                 worlds.remove(Protocol.str(frame, "id", ""));
             }
             case "host-state" -> putHost(frame);
             case "conv" -> putConversation(frame);
-            case "dnd" -> dnd = Protocol.bool(frame, "on", false);
+            case "dnd" -> {
+                dnd = Protocol.bool(frame, "on", false);
+                putPresence(frame);
+            }
             case "msg" -> putMessage(frame, now, true);
             case "msg-gone" -> {
                 // A line dropped (past the history's limit, an unsent message thrown away) leaves the list. A
@@ -1163,6 +1253,16 @@ public final class OverlayState {
         }
         revision++;
         return toast;
+    }
+
+    /**
+     * OVL-SOC 2: the status {@code welcome} and {@code dnd} name ({@code dnd}, {@code invisible}; absent: "Çevrimiçi",
+     * or an older launcher: as {@code dnd} says) and a timed one's end.
+     */
+    private void putPresence(JsonObject frame) {
+        String said = Protocol.str(frame, "status", "");
+        presence = said.equals("dnd") || said.equals("invisible") ? said : dnd ? "dnd" : "online";
+        presenceUntil = presence.equals("online") ? 0 : Math.max(0, Protocol.num(frame, "until", 0));
     }
 
     /** A reaction refusal's words ({@code chat.note.react.<key>}); one this build does not know reads general. */
@@ -1274,6 +1374,17 @@ public final class OverlayState {
         matesDiscord.clear();
         putIds(arr(frame, "projects"), matesHere);
         putIds(arr(frame, "discord"), matesDiscord);
+        // OVL-SOC 2: "İstekler" (at most 50, as the launcher sends them).
+        List<Request> nextRequests = new ArrayList<>();
+        forEach(frame, "requests", r -> {
+            String id = Protocol.str(r, "id", "");
+            if (!id.isEmpty() && id.length() <= 64 && nextRequests.size() < 50) {
+                nextRequests.add(new Request(id, name(r, "name")));
+            }
+        });
+        requests = List.copyOf(nextRequests);
+        // An answered request that is still asked waits for its answer; one gone is settled.
+        answering.removeIf(id -> nextRequests.stream().noneMatch(r -> r.id().equals(id)));
     }
 
     /**
@@ -1582,6 +1693,9 @@ public final class OverlayState {
         line.by = line.mine ? null : senderId(o);
         // BADGES-UI: so does its word on their badges.
         line.marks = line.mine ? List.of() : markKeys(arr(o, "marks"));
+        // OVL-SOC 2 (SOC-NEXT): someone ignored wrote it; it mentions the player.
+        line.ignored = !line.mine && Protocol.bool(o, "ignored", false);
+        line.mention = !line.mine && !line.deleted && Protocol.bool(o, "mention", false);
         if (line.deleted) {
             line.sticker = null;
             line.reply = null;

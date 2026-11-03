@@ -41,6 +41,11 @@ import org.slf4j.LoggerFactory;
  * picker's emoji tab (groups, a search, a pick into the message) and its sticker tab. Everything through the overlay's own
  * paths (frames from the mock launcher, the overlay's presses); no OS input. Results and screenshots go to
  * {@code -Dprojects.overlay.dev.out}.
+ *
+ * <p>OVL-SOC 2 ({@code -Dprojects.overlay.dev.script=social2}, the mock's {@code --next} besides): "İstekler" and a
+ * request's answers, the friend filter (a nickname, a real name, nothing), a nickname's real name over the friend's
+ * menu, the status switcher (its durations, "Rahatsız etmeyin" for an hour and its end), crew chat's folded lines of
+ * someone ignored and a mention's gold ring, a full room's "1/1" and its press, and streamer mode's friend list.
  */
 public final class SocialScenario implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("OVL-SOC scenario");
@@ -63,12 +68,17 @@ public final class SocialScenario implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        if (!"social".equals(System.getProperty("projects.overlay.dev.script"))) {
+        String which = System.getProperty("projects.overlay.dev.script");
+        if (!"social".equals(which) && !"social2".equals(which)) {
             return;
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "social-out")).toAbsolutePath();
         ToastLayer.pauseWhileAway = false;
-        script();
+        if ("social2".equals(which)) {
+            script2();
+        } else {
+            script();
+        }
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
         LOG.info("OVL-SOC scenario driver on; results in {}", out);
     }
@@ -211,6 +221,81 @@ public final class SocialScenario implements ClientModInitializer {
             need(mc).toggleStickers();
         });
         step(0.5, "shot stickers", mc -> shot(mc, "sticker-tab"));
+        step(0.1, "close", mc -> need(mc).close());
+    }
+
+    /** OVL-SOC 2's scenario (the mock's {@code --next}). */
+    private void script2() {
+        step(0.5, "open", mc -> OverlayClient.get().togglePanel());
+        step(0.6, "friends", mc -> need(mc).showPage(OverlayScreen.Page.FRIENDS));
+        step(0.6, "shot requests", mc -> {
+            results.addProperty("requests", OverlayClient.get().state().requests().size());
+            results.addProperty("nickname", OverlayClient.get().state().friend("f-ayse").name());
+            results.addProperty("realName", OverlayClient.get().state().realName("f-ayse"));
+            shot(mc, "friends-requests");
+        });
+        step(0.1, "request menu", mc -> results.addProperty("requestMenu",
+            need(mc).openRequestMenuForDriver("r-blok")));
+        step(0.5, "shot request menu", mc -> shot(mc, "request-menu"));
+        step(0.1, "accept", mc -> need(mc).pressMenu(FriendMenu.Action.ACCEPT_REQUEST));
+        step(0.8, "shot accepted", mc -> {
+            results.addProperty("requestsLeft", OverlayClient.get().state().requests().size());
+            results.addProperty("newFriend", OverlayClient.get().state().friend("r-blok") != null);
+            shot(mc, "request-accepted");
+        });
+        // The filter (eight friends now): a nickname, the real name under it, nothing.
+        step(0.1, "filter nickname", mc -> results.addProperty("filter", need(mc).filterFriends("kan")));
+        step(0.4, "shot filter nickname", mc -> shot(mc, "filter-nickname"));
+        step(0.1, "filter real name", mc -> need(mc).filterFriends("pixel"));
+        step(0.4, "shot filter real name", mc -> shot(mc, "filter-real-name"));
+        step(0.1, "filter nothing", mc -> need(mc).filterFriends("zzz"));
+        step(0.4, "shot filter nothing", mc -> shot(mc, "filter-none"));
+        step(0.1, "filter off", mc -> need(mc).filterFriends(""));
+        // A nickname's real name over the friend's menu.
+        step(0.3, "menu", mc -> need(mc).openFriendMenu("f-ayse", true));
+        step(0.5, "shot menu", mc -> shot(mc, "menu-real-name"));
+        // The status switcher: its durations, an hour of "Rahatsız etmeyin", its end.
+        step(0.1, "status menu", mc -> results.addProperty("statusMenu", need(mc).openStatusMenuForDriver()));
+        step(0.5, "shot status menu", mc -> shot(mc, "status-menu"));
+        step(0.1, "dnd row", mc -> need(mc).pressMenu(FriendMenu.Action.STATUS_DND));
+        step(0.5, "shot durations", mc -> {
+            results.addProperty("durations", String.valueOf(need(mc).menuListing()));
+            shot(mc, "status-durations");
+        });
+        step(0.1, "an hour", mc -> results.addProperty("hour", need(mc).chooseMenu("hour")));
+        step(0.8, "shot dnd", mc -> {
+            results.addProperty("presence", OverlayClient.get().state().presence());
+            results.addProperty("until", OverlayClient.get().state().presenceUntil() > 0);
+            shot(mc, "status-dnd");
+        });
+        step(0.1, "status menu again", mc -> need(mc).openStatusMenuForDriver());
+        step(0.5, "shot until", mc -> shot(mc, "status-until"));
+        step(0.1, "online", mc -> need(mc).pressMenu(FriendMenu.Action.STATUS_ONLINE));
+        // Crew chat: the folded lines of someone ignored, a mention, a full room.
+        step(0.6, "chats", mc -> need(mc).showPage(OverlayScreen.Page.CHATS));
+        step(0.3, "crew chat", mc -> need(mc).showConversation("crew:gece"));
+        step(0.8, "shot crew", mc -> {
+            results.addProperty("presenceAfter", OverlayClient.get().state().presence());
+            results.addProperty("folds", need(mc).ignoredFolds());
+            shot(mc, "crew-fold-mention");
+        });
+        step(0.1, "full room", mc -> need(mc).pressCrewRoom("c1111111111111111"));
+        step(0.4, "shot full", mc -> {
+            results.addProperty("inFullRoom", OverlayClient.get().voice().inRoom("c1111111111111111"));
+            shot(mc, "room-full");
+        });
+        step(0.1, "unfold", mc -> results.addProperty("unfolded", need(mc).unfoldIgnored()));
+        step(0.5, "shot unfolded", mc -> {
+            results.addProperty("foldsAfter", need(mc).ignoredFolds());
+            shot(mc, "fold-open");
+        });
+        // Streamer mode: no address in the friend list.
+        step(0.1, "streamer on", mc -> dev("streamer-on"));
+        step(0.6, "friends again", mc -> need(mc).showPage(OverlayScreen.Page.FRIENDS));
+        step(0.6, "shot streamer", mc -> {
+            results.addProperty("streamer", OverlayClient.get().state().streamer());
+            shot(mc, "streamer-friends");
+        });
         step(0.1, "close", mc -> need(mc).close());
     }
 

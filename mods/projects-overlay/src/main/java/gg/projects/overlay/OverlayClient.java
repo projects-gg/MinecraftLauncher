@@ -1173,6 +1173,28 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         personAction(id, name, null, Protocol.crewRemove(crew, id), "failed");
     }
 
+    /** "Kabul et" ({@code accept}) or "Reddet" on a friend request in the list (OVL-SOC 2). */
+    public void answerRequest(String id, String name, boolean accept) {
+        if (state.answering(id)) {
+            // One answer at a time (a double click): the first one's answer settles it.
+            return;
+        }
+        state.answered(id);
+        personAction(id, name, null, Protocol.request(id, accept), "failed");
+    }
+
+    /**
+     * The status switcher (OVL-SOC 2): {@code online}, {@code dnd} or {@code invisible}, with SOC-NEXT for one of the
+     * crew mute's durations ({@code preset}, null: none). The header shows it when the launcher says it is so (a
+     * status the service refused never shows).
+     */
+    public void chooseStatus(String status, String preset) {
+        if (!bridge.send(Protocol.status(status, preset))) {
+            state.personNoteText(Texts.str("people.note.failed"), true, System.currentTimeMillis());
+        }
+        refreshScreen();
+    }
+
     /**
      * The pause menu's Projects button (OVL-UX): opens the panel where it was last, as F7 does; closing it goes back to
      * the pause menu and the game stays paused.

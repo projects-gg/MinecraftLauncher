@@ -302,6 +302,25 @@ pub enum FromGame {
         #[serde(default)]
         new: bool,
     },
+    /// OVL-SOC 2 (from a mod whose hello lists `people4`): the status switcher in the panel's
+    /// header picked `status` (`online`, `dnd` or `invisible`); with SOC-NEXT on (`next` among
+    /// the welcome's features) `dnd` and `invisible` come `for` one of the crew mute's durations
+    /// (`hour`, `eightHours`, `morning`, `forever`). The launcher's page changes it as its own
+    /// menu does; the next `dnd` frame says how it stands.
+    Status {
+        #[serde(default)]
+        status: String,
+        #[serde(rename = "for", default)]
+        preset: Option<String>,
+    },
+    /// OVL-SOC 2 (`people4`): "Kabul et" (`accept`) or "Reddet" on a friend request the last
+    /// `lists` named. Answered with `friend-result` (`accept` or `decline`).
+    Request {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        accept: bool,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -382,6 +401,20 @@ pub const FEATURE_VOICE: &str = "voice";
 /// `voice-crews` and its `voice-join` is dropped.
 pub const FEATURE_VOICE_ROOMS: &str = "voice-rooms";
 
+/// OVL-SOC 2: the `hello` feature of a mod with the friend requests (`lists`' `requests`, the
+/// `request` frame), the status switcher (`status`; `status` and `until` in `welcome` and `dnd`)
+/// and SOC-NEXT's marks (a friend's `real`, a message's `ignored` and `mention`); the `welcome`
+/// feature that says this launcher takes `request` and `status` (signed in to friends).
+pub const FEATURE_PEOPLE4: &str = "people4";
+
+/// OVL-SOC 2: the `welcome` feature that says SOC-NEXT is on (Studio's `features.socNext`): the
+/// status switcher offers its durations. Only to a mod that said `people4`.
+pub const FEATURE_NEXT: &str = "next";
+
+/// OVL-SOC 2: the `welcome` feature that says streamer mode is on (SOC-NEXT §3.4): the mod shows
+/// no server address (it still knows them, to join). Only to a mod that said `people4`.
+pub const FEATURE_STREAMER: &str = "streamer";
+
 impl FromGame {
     /// One of VOICE-O's presses: they go to the launcher's voice chat, never to the friends
     /// feature.
@@ -445,6 +478,12 @@ pub enum ToGame {
         /// it. Only to a mod that said `lang`.
         #[serde(skip_serializing_if = "Option::is_none")]
         lang: Option<pl_lang::Lang>,
+        /// OVL-SOC 2: the player's status when it is not "Çevrimiçi" (`dnd`, `invisible`), and
+        /// with SOC-NEXT when a timed one ends (Unix ms). Only to a mod that said `people4`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        status: Option<&'static str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        until: Option<i64>,
     },
     Snapshot {
         friends: Vec<FriendView>,
@@ -505,8 +544,14 @@ pub enum ToGame {
         id: String,
     },
     Toast(ToastView),
+    /// "Rahatsız etmeyin" on or off; OVL-SOC 2 (to a mod that said `people4`): the status it
+    /// is now when not "Çevrimiçi" and when a timed one ends, as in `welcome`.
     Dnd {
         on: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        status: Option<&'static str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        until: Option<i64>,
     },
     /// TEAM6-O (T3): the cards of the crew tags friends and crewmates wear, by crew id; friends,
     /// messages and toasts name a crew with `badge`. With `all` the list is the whole set (it
@@ -629,6 +674,10 @@ pub enum ToGame {
         /// said `people3`.
         #[serde(skip_serializing_if = "BTreeMap::is_empty")]
         roles: BTreeMap<String, CrewRoles>,
+        /// OVL-SOC 2: who asked the player to be friends, the newest first ("İstekler": "Kabul
+        /// et", "Reddet"; never someone blocked). Only to a mod that said `people4`.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        requests: Vec<RequestItem>,
     },
     /// OVL-UX (P8): how a friend menu action went. `queued`: the invite waits for the friend
     /// (offline or on do-not-disturb); `reason` when it did not go. Only to a mod that said
@@ -709,6 +758,9 @@ pub enum FriendAction {
     CrewMod,
     CrewLead,
     CrewRemove,
+    /// OVL-SOC 2: a friend request answered; only to a mod that said `people4`.
+    Accept,
+    Decline,
 }
 
 /// Why a friend menu action did not go (OVL-UX).
@@ -812,6 +864,17 @@ pub struct FriendView {
     /// never for an offline one.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub dnd: bool,
+    /// OVL-SOC 2 (SOC-NEXT §3.6): the name the friends service knows, when `name` is the
+    /// player's nickname for them (their menu says it; mentions use it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real: Option<String>,
+}
+
+/// Someone who asked the player to be friends (OVL-SOC 2, `lists`' `requests`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RequestItem {
+    pub id: String,
+    pub name: String,
 }
 
 /// A friend in one of the crews the player may invite to (OVL-UX2, Q5).
@@ -996,6 +1059,14 @@ pub struct MsgView {
     /// of the name over their group).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub marks: Vec<String>,
+    /// OVL-SOC 2 (SOC-NEXT §3.7): someone the player ignores wrote it (crew chat folds their
+    /// lines into one with "Göster").
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub ignored: bool,
+    /// OVL-SOC 2 (SOC-NEXT §3.1): it mentions the player ("@Kaan_07" in crew chat; its bubble
+    /// has the quiet gold ring).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mention: bool,
 }
 
 /// The message a reply answers (CHAT2): the service keeps only the link, the words come from this
@@ -1378,6 +1449,13 @@ pub struct VoiceCrewRoomShown {
     /// not know is absent.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub people: Vec<VoicePersonRef>,
+    /// OVL-SOC 2 (VOICE-ROOMS): people at most, when the crew gave the room a limit below the
+    /// crew room maximum (the pill says "3/5").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<u16>,
+    /// OVL-SOC 2: nobody more fits ("Oda dolu.": a press says so and asks nothing).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub full: bool,
 }
 
 /// A voice chat moment for a note in the game (V4).
@@ -1540,6 +1618,8 @@ mod tests {
             reduced_motion: false,
             features: Vec::new(),
             lang,
+            status: None,
+            until: None,
         };
         assert_eq!(
             serde_json::to_value(welcome(Some(pl_lang::Lang::En))).unwrap()["lang"],
@@ -1852,6 +1932,7 @@ mod tests {
             projects: Vec::new(),
             discord: Vec::new(),
             roles: BTreeMap::new(),
+            requests: Vec::new(),
         })
         .unwrap();
         assert_eq!(
@@ -1869,6 +1950,7 @@ mod tests {
             projects: vec!["u-cem".into()],
             discord: vec!["u-cem".into(), "u-ali".into()],
             roles: BTreeMap::new(),
+            requests: Vec::new(),
         })
         .unwrap();
         assert_eq!(
@@ -1925,6 +2007,7 @@ mod tests {
                     },
                 ),
             ]),
+            requests: Vec::new(),
         })
         .unwrap();
         assert_eq!(
@@ -2005,6 +2088,7 @@ mod tests {
             marks: vec!["admin".into(), "premium".into()],
             voice: None,
             dnd: true,
+            real: None,
         })
         .unwrap();
         assert_eq!(marked["marks"], serde_json::json!(["admin", "premium"]));
@@ -2090,6 +2174,7 @@ mod tests {
             marks: Vec::new(),
             voice: None,
             dnd: false,
+            real: None,
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
@@ -2136,6 +2221,7 @@ mod tests {
             marks: Vec::new(),
             voice: None,
             dnd: false,
+            real: None,
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));

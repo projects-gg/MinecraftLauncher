@@ -43,6 +43,12 @@ public enum Frames {
     BUBBLE_THEIRS(FrameSpec.rounded(5, Theme.withAlpha(Theme.OBSIDIAN_800, 0.9f), Theme.withAlpha(0xFFFFFF, 0.07f))),
     BUBBLE_MINE(FrameSpec.rounded(5, Theme.withAlpha(Theme.BUBBLE_MINE, 0.96f), Theme.withAlpha(Theme.GOLD_400, 0.2f))),
     BUBBLE_FAILED(FrameSpec.rounded(5, Theme.withAlpha(Theme.BUBBLE_MINE, 0.96f), Theme.withAlpha(Theme.FLARE_400, 0.5f))),
+    /**
+     * OVL-SOC 2 (SOC-NEXT §3.1): someone else's message that mentions the player: their bubble with a faint gold
+     * base under a 1 px gold ring (the launcher's; never a coloured side stripe).
+     */
+    BUBBLE_MENTION(FrameSpec.rounded(5, Theme.withAlpha(Theme.mix(Theme.OBSIDIAN_800, Theme.GOLD_500, 0.08f), 0.92f),
+        Theme.withAlpha(Theme.GOLD_400, 0.5f))),
     BUBBLE_DELETED(FrameSpec.rounded(5, Theme.withAlpha(Theme.OBSIDIAN_800, 0.35f), Theme.withAlpha(0xFFFFFF, 0.06f))),
     FIELD(FrameSpec.rounded(5, Theme.withAlpha(Theme.OBSIDIAN_800, 0.82f), Theme.withAlpha(0xFFFFFF, 0.10f))),
     FIELD_HOVER(FrameSpec.rounded(5, Theme.withAlpha(Theme.OBSIDIAN_800, 0.82f), Theme.withAlpha(0xFFFFFF, 0.18f))),

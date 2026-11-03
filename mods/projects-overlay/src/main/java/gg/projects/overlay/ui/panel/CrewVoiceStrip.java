@@ -36,7 +36,9 @@ import net.minecraft.util.FormattedCharSequence;
  * 300 ms; opacity only). With nobody in any room the crew's "Genel" stands alone. A press on a room joins it ("Katıl");
  * the player's own room sits on the quiet plate with a jade headset (never gold: a chosen chip is never gold) and its
  * press opens the room page; "+ Yeni oda" ends the row while the crew may open one more. Renaming, closing and moving
- * rooms stay in the launcher.
+ * rooms stay in the launcher. A room the crew gave its own people limit says how full it is after the faces ("3/5",
+ * the crew page's count; OVL-SOC 2), and a full one says so: its words and headset quiet, its press says "Oda dolu."
+ * and asks nothing.
  *
  * <p>Keys as the conversation chips: ← and → pick a pill, Enter or Space presses it. Too many pills for the width scroll
  * sideways with the wheel, fading at the ends that have more. Nothing about it runs while it is hidden.
@@ -66,11 +68,15 @@ public final class CrewVoiceStrip extends PanelWidget {
 
         /** "Yeni oda" in {@code crew}. */
         void newRoom(String crew);
+
+        /** A full room was pressed (OVL-SOC 2): "Oda dolu.", nothing asked. */
+        void full();
     }
 
     /** A pill: a room ({@code add} false) or "Yeni oda". */
     private record Pill(String id, boolean add, boolean here, FormattedCharSequence label, int labelWidth,
-        List<String> faces, String more, int moreWidth, int width, Component narration) {
+        List<String> faces, String more, int moreWidth, String count, int countWidth, boolean full, int width,
+        Component narration) {
     }
 
     private final Actions actions;
@@ -134,23 +140,32 @@ public final class CrewVoiceStrip extends PanelWidget {
                 }
             }
             String more = room.people().size() > FACES ? "+" + (room.people().size() - FACES) : null;
+            // OVL-SOC 2: "3/5" where the crew gave the room its own limit (the crew page's count).
+            String count = room.max() > 0 ? room.people().size() + "/" + room.max() : null;
+            boolean full = room.full() && !here;
             int labelWidth = ui.width(fitted);
             int moreWidth = more == null ? 0 : small.width(more);
+            int countWidth = count == null ? 0 : small.width(count);
             int width = PAD + SIGN + SIGN_GAP + labelWidth
                 + (ids.isEmpty() ? 0 : 5 + ids.size() * (FACE + FACE_GAP) - FACE_GAP)
-                + (more == null ? 0 : 3 + moreWidth) + PAD;
-            // "Genel: Ayşe, Cem, Ece. Katılmak için Enter'a bas." ("Bu odadasın" for the player's own).
+                + (more == null ? 0 : 3 + moreWidth) + (count == null ? 0 : 5 + countWidth) + PAD;
+            // "Genel: Ayşe, Cem, Ece. Katılmak için Enter'a bas." ("Bu odadasın" for the player's own, "Oda dolu."
+            // for a full one; "3 kişi, en çok 5" with its own limit).
             String who = names.isEmpty() ? Texts.str("voice.crew.nobody") : VoiceState.names(names, words);
-            Component narration = Texts.tr(here ? "voice.crew.here.narration" : "voice.crew.room.narration", name,
-                who);
+            if (count != null) {
+                who = Texts.str("voice.crew.count.narration", who, room.people().size(), room.max());
+            }
+            String key = here ? "voice.crew.here.narration" : full ? "voice.crew.full.narration"
+                : "voice.crew.room.narration";
+            Component narration = Texts.tr(key, name, who);
             pills.add(new Pill(room.id(), false, here, Texts.visual(fitted), labelWidth, List.copyOf(ids), more,
-                moreWidth, width, narration));
+                moreWidth, count, countWidth, full, width, narration));
         }
         if (rooms.add()) {
             String label = Texts.str("voice.crew.new_room");
             int labelWidth = ui.width(label);
-            pills.add(new Pill(null, true, false, Texts.visual(label), labelWidth, List.of(), null, 0,
-                PAD + SIGN + SIGN_GAP + labelWidth + PAD, Texts.tr("voice.crew.new_room")));
+            pills.add(new Pill(null, true, false, Texts.visual(label), labelWidth, List.of(), null, 0, null, 0,
+                false, PAD + SIGN + SIGN_GAP + labelWidth + PAD, Texts.tr("voice.crew.new_room")));
         }
         faces.keySet().retainAll(drawn);
         rings.keySet().retainAll(present);
@@ -263,6 +278,8 @@ public final class CrewVoiceStrip extends PanelWidget {
             actions.newRoom(crew);
         } else if (p.here) {
             actions.open();
+        } else if (p.full) {
+            actions.full();
         } else {
             actions.join(crew, p.id);
         }
@@ -358,10 +375,13 @@ public final class CrewVoiceStrip extends PanelWidget {
                 if (hot) {
                     g.requestCursor(CursorTypes.POINTING_HAND);
                 }
-                int ink = p.here ? Theme.BONE_50 : hot ? Theme.BONE_100 : Theme.ASH_300;
+                // A full room is quiet (its press only says "Oda dolu."); hovered, it lights a step only.
+                int ink = p.here ? Theme.BONE_50 : p.full ? (hot ? Theme.ASH_300 : Theme.ASH_400)
+                    : hot ? Theme.BONE_100 : Theme.ASH_300;
                 float cx = x + PAD;
                 // The headset says "a voice room" (jade: the player is in it); "Yeni oda" has its plus.
-                int sign = p.add ? ink : p.here ? Theme.JADE_400 : hot ? Theme.BONE_100 : Theme.ASH_400;
+                int sign = p.add ? ink : p.here ? Theme.JADE_400 : p.full ? Theme.ASH_500
+                    : hot ? Theme.BONE_100 : Theme.ASH_400;
                 Draw.icon(g, p.add ? Icon.PLUS : Icon.HEADSET, SIGN, cx, y0 + (HEIGHT - SIGN) / 2f, sign);
                 cx += SIGN + SIGN_GAP;
                 Draw.text(g, ui, p.label, cx, textY, ink);
@@ -388,6 +408,11 @@ public final class CrewVoiceStrip extends PanelWidget {
                 if (p.more != null) {
                     Draw.text(g, small, p.more, cx + 3, Fonts.centeredY(Fonts.Face.SMALL, y0 + HEIGHT / 2f),
                         Theme.ASH_300);
+                    cx += 3 + p.moreWidth;
+                }
+                if (p.count != null) {
+                    Draw.text(g, small, p.count, cx + 5, Fonts.centeredY(Fonts.Face.SMALL, y0 + HEIGHT / 2f),
+                        Theme.ASH_400);
                 }
             }
             x += p.width + GAP;

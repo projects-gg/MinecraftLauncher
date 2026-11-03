@@ -219,10 +219,23 @@ public final class MessageList extends PanelWidget {
         float[] chipEmojiW;
         List<Texts.LinkSpan> links = List.of();
         boolean actionable;
+        /**
+         * OVL-SOC 2 (SOC-NEXT §3.7): the folded lines of someone the player ignores (their first line's key; null for
+         * any other row), and that first line (the keys land on it once shown).
+         */
+        String fold;
+        OverlayState.ChatLine foldLine;
+        FormattedCharSequence foldAction;
+        float foldActionX;
+        float foldActionW;
     }
 
     private final Actions actions;
     private final List<Row> rows = new ArrayList<>();
+    /** OVL-SOC 2: the folds of ignored lines the player opened in this conversation ("Göster"). */
+    private final Set<String> revealed = new HashSet<>();
+    /** The first line of a fold just opened: the keys go to it after the next layout. */
+    private OverlayState.ChatLine revealedLine;
     private final Spring scroll = Spring.snappy(0f);
     private final Set<String> known = new HashSet<>();
     private final float[] pose = new float[StickerMotion.SIZE];
@@ -432,6 +445,8 @@ public final class MessageList extends PanelWidget {
         laidOutRevision = -1;
         known.clear();
         rows.clear();
+        revealed.clear();
+        revealedLine = null;
         pinned = true;
         newBelow = false;
         selected = -1;
@@ -484,6 +499,11 @@ public final class MessageList extends PanelWidget {
         laidOutWidth = getWidth();
         laidOutSeen = seen;
         selected = keepSelected == null ? -1 : indexOf(keepSelected);
+        if (revealedLine != null) {
+            // A fold just opened: the keys stay on its first message.
+            selected = indexOf(revealedLine);
+            revealedLine = null;
+        }
         if (stripLine != null) {
             stripRow = indexOf(stripLine);
             if (stripRow < 0 || !rows.get(stripRow).actionable) {
@@ -610,6 +630,31 @@ public final class MessageList extends PanelWidget {
                     seenIds);
                 previous = rows.get(rows.size() - 1);
                 lastDay = day;
+            }
+            // SOC-NEXT §3.7 (OVL-SOC 2): the lines in a row of someone the player ignores fold into one quiet line
+            // with "Göster" (the launcher's crew chat); a fold opened shows them all.
+            boolean continuing = previous != null && previous.line != null && previous.line.ignored
+                && sameSender(previous.line, line);
+            if (crew && line.ignored && !continuing && !revealed.contains(foldKey(line))) {
+                int count = 1;
+                while (i + count < lines.size()) {
+                    OverlayState.ChatLine more = lines.get(i + count);
+                    if (!more.ignored || !sameSender(more, line) || ChatTime.day(more.at, zone) != day
+                        || nextJoin < joins.size() && joins.get(nextJoin).at() <= more.at) {
+                        break;
+                    }
+                    count++;
+                }
+                for (int k = 0; k < count; k++) {
+                    String key = foldKey(lines.get(i + k));
+                    if (key != null) {
+                        seenIds.add(key);
+                    }
+                }
+                y = addFold(line, count, y, previous != null, small, first, now, seenIds);
+                previous = rows.get(rows.size() - 1);
+                i += count - 1;
+                continue;
             }
             // A join line that comes before the next message ends this group.
             boolean joinNext = next != null && nextJoin < joins.size() && joins.get(nextJoin).at() <= next.at;
@@ -748,6 +793,79 @@ public final class MessageList extends PanelWidget {
         contentHeight = rows.isEmpty() ? 0f : y + 4f + floatRoom;
         lastNarration = rows.isEmpty() ? Texts.tr("chat.empty") : narrationOf(rows.get(rows.size() - 1));
         tooltipRow = -1;
+    }
+
+    /** Two lines by the same person: by their id where the launcher names it (crew chat), else by name. */
+    private static boolean sameSender(OverlayState.ChatLine a, OverlayState.ChatLine b) {
+        return a.by != null && b.by != null ? a.by.equals(b.by) : a.from.equals(b.from);
+    }
+
+    /** A line's key (its first one stands for a fold): the panel's own id first, as {@link #known} keeps them. */
+    private static String foldKey(OverlayState.ChatLine line) {
+        return line.clientId != null ? line.clientId : line.id;
+    }
+
+    /**
+     * OVL-SOC 2: "Yok saydığın birinin 3 mesajı" and "Göster" in the place of someone ignored's lines (the launcher's
+     * fold); returns where the next row starts.
+     */
+    private float addFold(OverlayState.ChatLine line, int count, float y, boolean gapBefore, Font small,
+        boolean first, long now, Set<String> seenIds) {
+        float top = y + (gapBefore ? GROUP_GAP - ROW_GAP : 0);
+        Row row = new Row();
+        String words = count == 1 ? Texts.str("chat.ignored.one") : Texts.str("chat.ignored.many", count);
+        String show = Texts.str("chat.ignored.show");
+        float showW = small.width(show) + 8;
+        String fitted = Texts.fit(small, words, Math.max(20, Math.round(getWidth() - showW - 10)));
+        row.arrival = Texts.visual(fitted);
+        row.arrivalW = small.width(fitted);
+        row.arrivalWords = Texts.tr("chat.ignored.narration", words);
+        row.fold = foldKey(line) == null ? "" : foldKey(line);
+        row.foldLine = line;
+        row.foldAction = Texts.visual(show);
+        row.foldActionW = showW;
+        row.foldActionX = 1 + row.arrivalW + 4;
+        row.y = top;
+        row.height = ARRIVAL_H;
+        String key = "fold:" + row.fold;
+        seenIds.add(key);
+        if (!known.contains(key) && !first) {
+            row.appearedAt = now;
+        }
+        rows.add(row);
+        return top + ARRIVAL_H + ROW_GAP;
+    }
+
+    /** The scenario driver: "Göster" on the first fold; false without one. */
+    public boolean unfoldFirst() {
+        for (Row row : rows) {
+            if (row.fold != null) {
+                unfold(row);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The folds of ignored lines laid out now (the scenario driver checks them). */
+    public int folds() {
+        int n = 0;
+        for (Row row : rows) {
+            if (row.fold != null) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** "Göster" on a fold: its lines show (the keys go to its first one). */
+    private void unfold(Row row) {
+        if (row.fold == null) {
+            return;
+        }
+        revealed.add(row.fold);
+        revealedLine = PanelInput.keyboardMode() ? row.foldLine : null;
+        laidOutWidth = -1;
     }
 
     /**
@@ -940,8 +1058,13 @@ public final class MessageList extends PanelWidget {
             return line.mine ? Texts.tr("narration.sticker.mine", name)
                 : Texts.tr("narration.sticker.theirs", from, name);
         }
-        return line.mine ? Texts.tr("narration.mine", line.text)
-            : Texts.tr("narration.theirs", from, line.text);
+        if (line.mine) {
+            return Texts.tr("narration.mine", line.text);
+        }
+        Component said = Texts.tr("narration.theirs", from, line.text);
+        // OVL-SOC 2: the gold ring is said too (never colour alone).
+        return line.mention ? Component.empty().append(said).append(". ").append(Texts.tr("chat.mention"))
+            : said;
     }
 
     /** Takes the list to its newest message. */
@@ -1072,7 +1195,9 @@ public final class MessageList extends PanelWidget {
                     return false;
                 }
                 Row row = rows.get(selected);
-                if (row.quote && row.quoteTarget != null && !row.actionable) {
+                if (row.fold != null) {
+                    unfold(row);
+                } else if (row.quote && row.quoteTarget != null && !row.actionable) {
                     jumpTo(row.quoteTarget);
                 } else if (row.actionable && (canReact || canReply)) {
                     openStrip(selected, canReact ? 0 : QUICK.length);
@@ -1091,7 +1216,8 @@ public final class MessageList extends PanelWidget {
     /** The first message row from {@code index} on in direction {@code dir} (quiet lines are passed over), or -1. */
     private int messageFrom(int index, int dir) {
         for (int i = index; i >= 0 && i < rows.size(); i += dir) {
-            if (rows.get(i).line != null) {
+            // A fold of ignored lines is picked too (Enter shows them).
+            if (rows.get(i).line != null || rows.get(i).fold != null) {
                 return i;
             }
         }
@@ -1212,6 +1338,14 @@ public final class MessageList extends PanelWidget {
                 continue;
             }
             float local = cy - row.y;
+            if (row.fold != null) {
+                // A fold's "Göster" (or its words): its lines show.
+                if (mx < getX() + row.foldActionX + row.foldActionW) {
+                    selected = i;
+                    unfold(row);
+                }
+                return;
+            }
             if (row.firstAction != null && cy >= row.actionsY && cy <= row.actionsY + 12) {
                 if (mx >= right - row.firstActionX && mx < right - row.firstActionX + row.firstActionW) {
                     if (row.rewrite) {
@@ -1691,6 +1825,17 @@ public final class MessageList extends PanelWidget {
                 Fonts.centeredY(Fonts.Face.SMALL, y + DAY_H / 2f), Theme.ASH_400);
             return;
         }
+        if (row.fold != null) {
+            // OVL-SOC 2: someone ignored's lines, folded: quiet words where their messages would start, "Göster".
+            float mid = y + ARRIVAL_H / 2f;
+            Draw.text(g, small, row.arrival, x0 + 1, Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.ASH_400);
+            float ax = x0 + row.foldActionX;
+            drawAction(g, row.foldAction, ax, y + 1, row.foldActionW, mouseX, mouseY, small);
+            if (index == selected && keyboardFocus()) {
+                Draw.frame(g, Frames.FOCUS_14, ax, y, row.foldActionW, 14);
+            }
+            return;
+        }
         if (row.line == null) {
             // "Ece ekibe katıldı": the launcher's quiet line, its waving hand in gold.
             float lineW = 8 + 4 + row.arrivalW;
@@ -1797,7 +1942,7 @@ public final class MessageList extends PanelWidget {
         Font small) {
         Frames frame = row.line.deleted ? Frames.BUBBLE_DELETED
             : row.delivery == OverlayState.Delivery.FAILED ? Frames.BUBBLE_FAILED
-            : row.mine ? Frames.BUBBLE_MINE : Frames.BUBBLE_THEIRS;
+            : row.mine ? Frames.BUBBLE_MINE : row.line.mention ? Frames.BUBBLE_MENTION : Frames.BUBBLE_THEIRS;
         Draw.pushAlpha(pending ? 0.7f : 1f);
         Draw.frame(g, frame, bx, by, row.bubbleW, row.bubbleH);
         float ty = by + BUBBLE_PAD_Y;
