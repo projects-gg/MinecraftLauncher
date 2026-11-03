@@ -493,8 +493,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 }
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
-/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk` and `voice`, which stay
-/// off until Studio turns them on.
+/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice` and `socNext`,
+/// which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -553,6 +553,11 @@ pub struct Features {
     /// on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub voice: bool,
+    /// SOC-NEXT's launcher screens inside the friends feature (needs `friends` too): the
+    /// conversation menu, friends' nicknames, ignoring, timed statuses, search in a conversation,
+    /// mentions and emoji suggestions, streamer mode. Off by default; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub soc_next: bool,
 }
 
 impl Default for Features {
@@ -572,6 +577,7 @@ impl Default for Features {
             overlay_jars: false,
             phone_afk: false,
             voice: false,
+            soc_next: false,
         }
     }
 }
@@ -819,6 +825,26 @@ mod tests {
         let older: LauncherConfig =
             serde_json::from_str(r#"{"features": {"afk": true, "overlayJars": true}}"#).unwrap();
         assert!(!older.features.phone_afk && older.features.overlay_jars);
+    }
+
+    #[test]
+    fn soc_next_is_off_by_default_and_written_only_when_on() {
+        let config: LauncherConfig = serde_json::from_str("{}").unwrap();
+        assert!(!config.features.soc_next);
+        let written = serde_json::to_value(&config).unwrap();
+        assert!(written["features"].get("socNext").is_none());
+
+        let on: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"friends": true, "socNext": true}}"#).unwrap();
+        assert!(on.features.soc_next && on.features.friends && !on.features.voice);
+        assert_eq!(
+            serde_json::to_value(&on).unwrap()["features"]["socNext"],
+            serde_json::Value::Bool(true)
+        );
+        // A config from before the flag still parses, with it off.
+        let older: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"friends": true, "voice": true}}"#).unwrap();
+        assert!(!older.features.soc_next && older.features.voice);
     }
 
     #[test]

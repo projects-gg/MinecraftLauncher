@@ -140,7 +140,12 @@ export type PersonAction =
   | "voiceMod"
   | "voiceUnmod"
   | "voiceCall"
-  | "voiceInvite";
+  | "voiceInvite"
+  // SOC-NEXT: a friend's nickname (only the player sees it) and ignoring someone.
+  | "nickname"
+  | "removeNickname"
+  | "ignore"
+  | "unignore";
 
 /** Someone in the player's voice room: the player's own choices, and what their role may do. */
 export interface PersonVoiceRoom {
@@ -224,6 +229,12 @@ export interface PersonInput {
    * "Sustur (yalnız sen)" lead the menu, then what the player's role may do to them.
    */
   voice?: { offer?: "call" | "invite" | "ringing" | "full" | null; room?: PersonVoiceRoom };
+  /** SOC-NEXT (friends): "Takma ad ver", or with one set "Takma adı değiştir" and "Takma adı
+   * kaldır"; absent: not offered. */
+  nickname?: "none" | "set";
+  /** SOC-NEXT (friends and crewmates): "Yok saymayı bırak" while ignoring them, else "Yok say";
+   * absent: not offered. */
+  ignore?: boolean;
 }
 
 /** The rows of one group that apply (a `null` in a plan is a separator, never a missing row). */
@@ -313,6 +324,8 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
     ...only<PersonAction>(
       friend && { action: "favorite" },
       friend && { action: "notifyOnline", checked: Boolean(input.notifyOnline) },
+      friend && input.nickname !== undefined && { action: "nickname" },
+      friend && input.nickname === "set" && { action: "removeNickname" },
       friend && Boolean(input.categories) && { action: "category" },
       friend &&
         Boolean(input.team) &&
@@ -339,6 +352,8 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
     null,
     ...only<PersonAction>(
       friend && { action: "removeFriend" },
+      // The softer way first: ignoring, then blocking.
+      input.ignore !== undefined && !blocked && { action: input.ignore ? "unignore" : "ignore" },
       { action: blocked ? "unblock" : "block" },
       Boolean(input.report) && { action: "report" },
     ),

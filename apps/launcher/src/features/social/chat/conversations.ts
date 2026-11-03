@@ -54,13 +54,23 @@ export function unreadAll(chat: ChatState | undefined): number {
 
 /**
  * Unread direct messages that wait for the player (the friends entry says so): crew chat only
- * counts in the list, and a conversation muted here says nothing.
+ * counts in the list, and a conversation muted here says nothing. SOC-NEXT: one the player marked
+ * unread here counts one while its message is the newest (`marks`).
  */
-export function unreadDirect(chat: ChatState | undefined, mutes: ChatMutes, nowMs: number): number {
+export function unreadDirect(
+  chat: ChatState | undefined,
+  mutes: ChatMutes,
+  nowMs: number,
+  marks: Readonly<Record<string, number>> = {},
+): number {
   if (!chat) return 0;
   return chat.conversations
     .filter((conv) => conv.peer && !chatMutedNow(conv.id, mutes, nowMs))
-    .reduce((sum, conv) => sum + conv.unread, 0);
+    .reduce((sum, conv) => {
+      if (conv.unread > 0) return sum + conv.unread;
+      const mark = marks[conv.id];
+      return sum + (mark !== undefined && conv.last && conv.last.at <= mark ? 1 : 0);
+    }, 0);
 }
 
 /** Who a conversation is with, as the lists know them now. */

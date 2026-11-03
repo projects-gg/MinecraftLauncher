@@ -273,6 +273,12 @@ function FriendCard({
             className="gap-2"
             nameClassName="font-display text-[18px] leading-tight font-semibold text-bone-50"
           />
+          {/* SOC-NEXT: under a nickname, the name the service knows, small and grey. */}
+          {friend.realName ? (
+            <p className="truncate text-[12.5px] text-ash-300" data-selectable>
+              {friend.realName}
+            </p>
+          ) : null}
           {/* SOC-ID: a Discord handle only for someone with Discord. */}
           {discordIdOf(friend) !== null ? (
             <p className="truncate text-[12.5px] text-ash-400" data-selectable>
@@ -638,7 +644,7 @@ export function FriendRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${badgeRowLabel(friend.name, badge, t, marks)}, ${spokenLine}`}
+              aria-label={`${badgeRowLabel(friend.name, badge, t, marks)}${friend.realName ? `, ${t("socNext.nick.real", { name: friend.realName })}` : ""}, ${spokenLine}`}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
             >
               <SocialAvatar source={friend} size={36} state={friend.state} dnd={friend.dnd} />

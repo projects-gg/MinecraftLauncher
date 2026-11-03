@@ -1550,3 +1550,14 @@ pub async fn social_notices_seen(state: State<'_, AppState>, ids: Vec<String>) -
     state.social.notices_seen(ids).await;
     Ok(())
 }
+
+/// SOC-NEXT's "Yayıncı modu: Yayın programı açıkken": whether OBS Studio, Streamlabs, XSplit or
+/// Twitch Studio runs now. One look at the process table, asked when the launcher opens, when its
+/// window shows and when a game starts (never on a timer).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_streaming_app() -> bool {
+    tauri::async_runtime::spawn_blocking(pl_desktop::process::streaming_app_running)
+        .await
+        .unwrap_or(false)
+}

@@ -556,6 +556,8 @@ function mockHome(): HomeContent {
     // Like the backend: Studio's maintenance notice wins over the status notice.
     status: maintenance ? undefined : mockStatus(),
     links: mockLinks(),
+    // SOC-NEXT's screens show in previews unless `?socNext=off`.
+    socNext: mockFlag("socNext") !== "off",
     banners:
       banners === "none"
         ? []

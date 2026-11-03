@@ -1,0 +1,73 @@
+// SOC-NEXT (SOC-GAP §3.1–§3.9): the conversation menu, friends' nicknames, ignoring, timed
+// statuses, search in a conversation, mentions and emoji suggestions, streamer mode. Short,
+// sentence case; a player's name never takes a suffix. The timed statuses' choices are the crew
+// mute's words (`teams.mute.presets`), one vocabulary.
+export const trSocNext = {
+  conv: {
+    markRead: "Okundu say",
+    markUnread: "Okunmadı say",
+    pin: "Başa sabitle",
+    unpin: "Sabitlemeyi kaldır",
+    pinsFull: "En çok 3 sohbet başa sabitlenir.",
+    allRead: "Hepsini okundu say",
+    pinned: "Başa sabitli",
+  },
+  nick: {
+    set: "Takma ad ver",
+    change: "Takma adı değiştir",
+    remove: "Takma adı kaldır",
+    title: "Takma ad",
+    hint: "Yalnız sen görürsün.",
+    save: "Kaydet",
+    tooLong: "En çok 24 karakter.",
+    saved: "Takma ad kaydedildi",
+    removed: "Takma ad kaldırıldı",
+    real: "Asıl adı {{name}}",
+  },
+  ignore: {
+    action: "Yok say",
+    stop: "Yok saymayı bırak",
+    done: "{{name}} yok sayılıyor, haberi olmaz.",
+    stopped: "{{name}} artık yok sayılmıyor",
+    fold_one: "Yok saydığın birinin mesajı",
+    fold_other: "Yok saydığın birinin {{count}} mesajı",
+    show: "Göster",
+    banner: "Yok sayıyorsun",
+    stopShort: "Bırak",
+    settingsTitle: "Yok saydıkların",
+    empty: "Kimseyi yok saymıyorsun.",
+  },
+  status: {
+    until: "{{status}}, {{until}}",
+    // The crew mute's "Ben açana kadar" is about sound: a status is turned off.
+    forever: "Ben kapatana kadar",
+    back: "Durumun Çevrimiçi oldu",
+  },
+  search: {
+    open: "Sohbette ara",
+    placeholder: "Sohbette ara",
+    none: "Sonuç yok",
+    older: "Önceki sonuç",
+    newer: "Sonraki sonuç",
+    close: "Aramayı kapat",
+    loading: "Aranıyor",
+    found_one: "{{count}} sonuç",
+    found_other: "{{count}} sonuç",
+  },
+  mention: {
+    members: "Üye önerileri",
+    emoji: "Emoji önerileri",
+    you: "Senden bahsedildi",
+  },
+  streamer: {
+    title: "Yayıncı modu",
+    off: "Kapalı",
+    on: "Açık",
+    auto: "Yayın programı açıkken",
+    help: "Arkadaş kodun, ekip davetleri, sunucu adresleri ve bildirimlerdeki mesajlar gizlenir.",
+    show: "Göster",
+    mark: "Yayıncı modu açık",
+    newMessage: "Yeni mesaj",
+    turnedOff: "Yayıncı modu kapandı",
+  },
+};
