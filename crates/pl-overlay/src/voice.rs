@@ -20,12 +20,12 @@ use std::pin::Pin;
 
 use pl_voice::view::{
     VoiceAnswer, VoiceLeftReason, VoiceMic, VoiceModAction, VoiceNotice, VoiceRefusal,
-    VoiceSpeaking, VoiceState,
+    VoiceSpeaking, VoiceState, shown_room_name,
 };
 
 use crate::protocol::{
-    FromGame, ToGame, VoiceCan, VoiceMeShown, VoiceNoticeView, VoicePersonRef, VoicePersonShown,
-    VoiceRingShown, VoiceRoomShown, VoiceView,
+    FromGame, ToGame, VoiceCan, VoiceCrewRoomShown, VoiceCrewShown, VoiceMeShown, VoiceNoticeView,
+    VoicePersonRef, VoicePersonShown, VoiceRingShown, VoiceRoomShown, VoiceView,
 };
 
 /// The top of a person's volume, in percent (the launcher's slider; an engine that plays through
@@ -59,6 +59,13 @@ pub enum VoiceAct {
     Call { friend: String },
     /// "Odaya davet et".
     Invite { friend: String },
+    /// "Katıl" on one of the player's crew rooms (`room`; none with `new`), or "Yeni oda" (`new`:
+    /// the player opens one and joins it) in crew chat's "Sesli" (OVL-SOC).
+    JoinCrew {
+        crew: String,
+        room: Option<String>,
+        new: bool,
+    },
 }
 
 impl VoiceAct {
@@ -66,7 +73,7 @@ impl VoiceAct {
     /// shows by itself (the microphone, deafening, leaving, a decline, volumes).
     pub fn result_name(&self) -> Option<&'static str> {
         match self {
-            Self::Accept { .. } => Some("join"),
+            Self::Accept { .. } | Self::JoinCrew { .. } => Some("join"),
             Self::Call { .. } => Some("call"),
             Self::Invite { .. } => Some("invite"),
             Self::Moderate(action) => moderation_name(action),
@@ -133,12 +140,13 @@ impl Refused {
 }
 
 /// The launcher's act for a mod's voice frame, after its checks against `state` (the newest; none
-/// before voice chat said anything) and the friend list (`is_friend`). `None`: the frame is not one
-/// of VOICE-O's.
+/// before voice chat said anything), the friend list (`is_friend`) and the player's crews
+/// (`is_crew`). `None`: the frame is not one of VOICE-O's.
 pub fn check(
     frame: &FromGame,
     state: Option<&VoiceState>,
     is_friend: impl Fn(&str) -> bool,
+    is_crew: impl Fn(&str) -> bool,
 ) -> Option<Result<VoiceAct, Refused>> {
     let room = state.and_then(|state| state.room.as_ref());
     let in_room =
@@ -207,8 +215,113 @@ pub fn check(
         FromGame::VoiceInvite { friend } => {
             Err(Refused::of("invite", friend, VoiceRefusal::Nothing))
         }
+        FromGame::VoiceJoin { crew, room, new } => join_crew(state, crew, room, *new, &is_crew),
         _ => return None,
     })
+}
+
+/// "Katıl" on a crew room or "Yeni oda" (V22): only in one of the player's crews while voice chat
+/// may be used, and only into a room `voice-crews` showed (one of the crew's live rooms, or its
+/// "Genel" by its own id while nobody is in any). Joining a room the player is in already does
+/// nothing.
+fn join_crew(
+    state: Option<&VoiceState>,
+    crew: &str,
+    room: &str,
+    new: bool,
+    is_crew: &impl Fn(&str) -> bool,
+) -> Result<VoiceAct, Refused> {
+    let Some(state) = state.filter(|state| state.available && state.enabled) else {
+        return Err(Refused::of("join", "", VoiceRefusal::Off));
+    };
+    if crew.is_empty() || !is_crew(crew) {
+        return Err(Refused::of("join", "", VoiceRefusal::NotMember));
+    }
+    if new {
+        return Ok(VoiceAct::JoinCrew {
+            crew: crew.to_owned(),
+            room: None,
+            new: true,
+        });
+    }
+    if state.room.as_ref().is_some_and(|here| here.id == room) {
+        return Err(Refused::quiet());
+    }
+    let live = state
+        .crews
+        .iter()
+        .find(|entry| entry.crew == crew)
+        .map(|entry| &entry.rooms[..])
+        .unwrap_or_default();
+    let shown = if live.is_empty() {
+        room == general_room(crew)
+    } else {
+        live.iter().any(|r| r.id == room)
+    };
+    if !shown {
+        return Err(Refused::of("join", "", VoiceRefusal::RoomGone));
+    }
+    Ok(VoiceAct::JoinCrew {
+        crew: crew.to_owned(),
+        room: Some(room.to_owned()),
+        new: false,
+    })
+}
+
+/// The crew's "Genel" while nobody is in any of its rooms: the friends service's own id for it
+/// (`g` + the crew id), as the launcher's crew page names it.
+fn general_room(crew: &str) -> String {
+    format!("g{crew}")
+}
+
+/// The voice rooms of the player's crews for `voice-crews` (V21): every crew of `crews` (the
+/// launcher's order), its live rooms in voice chat's order with who is in each (names from
+/// `name_of`, the friend lists), else its "Genel" alone; "Yeni oda" while the crew may open one
+/// more. `english`: the friends service's "Oda 2" is "Room 2" (the mod says "Genel" itself).
+/// Nothing while voice chat may not be used.
+pub fn crews_of<'a>(
+    state: &VoiceState,
+    crews: impl IntoIterator<Item = &'a str>,
+    english: bool,
+    name_of: impl Fn(&str) -> Option<String>,
+) -> Vec<VoiceCrewShown> {
+    if !(state.available && state.enabled) {
+        return Vec::new();
+    }
+    let person = |id: &String| VoicePersonRef {
+        id: id.clone(),
+        name: name_of(id).unwrap_or_default(),
+    };
+    crews
+        .into_iter()
+        .map(|crew| {
+            let entry = state.crews.iter().find(|entry| entry.crew == crew);
+            let rooms: Vec<VoiceCrewRoomShown> = match entry {
+                Some(entry) if !entry.rooms.is_empty() => entry
+                    .rooms
+                    .iter()
+                    .map(|room| VoiceCrewRoomShown {
+                        id: room.id.clone(),
+                        name: (!room.general).then(|| shown_room_name(&room.name, english)),
+                        general: room.general,
+                        people: room.people.iter().map(person).collect(),
+                    })
+                    .collect(),
+                _ => vec![VoiceCrewRoomShown {
+                    id: general_room(crew),
+                    name: None,
+                    general: true,
+                    people: Vec::new(),
+                }],
+            };
+            VoiceCrewShown {
+                crew: crew.to_owned(),
+                conv: pl_social::crew_conversation(crew),
+                rooms,
+                add: entry.map_or(state.crew_rooms_max > 1, |entry| entry.can_add),
+            }
+        })
+        .collect()
 }
 
 /// A refusal's name in `voice-result`.
@@ -402,9 +515,26 @@ pub fn notice_of(
 #[derive(Debug, Default)]
 pub struct VoiceMirror {
     view: Option<VoiceView>,
+    /// The crews' rooms the mod was told (V21), none before the first.
+    crews: Option<Vec<VoiceCrewShown>>,
 }
 
 impl VoiceMirror {
+    /// `voice-crews` when the crews' rooms differ from what the mod has (V21). A mod that heard
+    /// none hears nothing while there is nothing to show (voice chat off, or the player in no
+    /// crew); once it heard some, an empty list says they are gone.
+    pub fn update_crews(&mut self, crews: Vec<VoiceCrewShown>) -> Option<ToGame> {
+        if self.crews.as_ref() == Some(&crews) {
+            return None;
+        }
+        if self.crews.is_none() && crews.is_empty() {
+            self.crews = Some(crews);
+            return None;
+        }
+        self.crews = Some(crews.clone());
+        Some(ToGame::VoiceCrews { crews })
+    }
+
     /// `voice` when `view` differs from what the mod has. While voice chat has nothing to show
     /// (off, no room, no ring) a mod that heard nothing of it hears nothing: its settings show no
     /// voice chat row for a feature that is not on.
@@ -596,7 +726,9 @@ mod tests {
             percent: 150,
         };
         assert_eq!(
-            check(&press, Some(&state), |_| false).unwrap().unwrap(),
+            check(&press, Some(&state), |_| false, |_| false)
+                .unwrap()
+                .unwrap(),
             VoiceAct::Volume {
                 person: "u-x".into(),
                 percent: 100
@@ -753,7 +885,7 @@ mod tests {
         let state = in_room();
         let friends = |id: &str| matches!(id, "f-ayse" | "f-can");
         let frame = |value: serde_json::Value| serde_json::from_value::<FromGame>(value).unwrap();
-        let go = |value| check(&frame(value), Some(&state), friends).unwrap();
+        let go = |value| check(&frame(value), Some(&state), friends, |_| false).unwrap();
         assert_eq!(
             go(json!({"t":"voice-set","mute":true})),
             Ok(VoiceAct::Mute(true))
@@ -851,15 +983,20 @@ mod tests {
         );
         let invite = frame(json!({"t":"voice-invite","friend":"f-can"}));
         assert_eq!(
-            check(&invite, Some(&VoiceState::off()), friends),
+            check(&invite, Some(&VoiceState::off()), friends, |_| false),
             Some(Err(Refused::of("invite", "f-can", VoiceRefusal::Nothing)))
         );
         assert_eq!(
-            check(&frame(json!({"t":"voice-leave"})), None, friends),
+            check(&frame(json!({"t":"voice-leave"})), None, friends, |_| false),
             Some(Ok(VoiceAct::Leave))
         );
         assert_eq!(
-            check(&frame(json!({"t":"panel","open":true})), None, friends),
+            check(
+                &frame(json!({"t":"panel","open":true})),
+                None,
+                friends,
+                |_| false
+            ),
             None
         );
     }
@@ -937,5 +1074,175 @@ mod tests {
             None,
             "the ring's card said it; the launcher keeps the list"
         );
+    }
+
+    /// The player's crew "t-gk" with two live rooms (OVL-SOC).
+    fn crew_state() -> VoiceState {
+        use pl_voice::view::{VoiceCrewRoom, VoiceCrewRooms};
+        let mut state = in_room();
+        state.rings.clear();
+        state.calling = None;
+        state.crews = vec![VoiceCrewRooms {
+            crew: "t-gk".into(),
+            rooms: vec![
+                VoiceCrewRoom {
+                    id: "c0123456789abcdef".into(),
+                    name: "Genel".into(),
+                    general: true,
+                    people: vec!["u-kaan".into(), "u-x".into()],
+                },
+                VoiceCrewRoom {
+                    id: "c1111111111111111".into(),
+                    name: "Oda 2".into(),
+                    general: false,
+                    people: vec!["f-ayse".into()],
+                },
+            ],
+            can_add: true,
+        }];
+        state
+    }
+
+    #[test]
+    fn crews_rooms_go_in_the_launchers_order_and_an_empty_crew_shows_its_general() {
+        let state = crew_state();
+        let crews = crews_of(&state, ["t-gk", "t-empty"], false, names);
+        assert_eq!(
+            serde_json::to_value(ToGame::VoiceCrews {
+                crews: crews.clone()
+            })
+            .unwrap(),
+            json!({"t": "voice-crews", "crews": [
+                {"crew": "t-gk", "conv": "c:t-gk", "add": true, "rooms": [
+                    {"id": "c0123456789abcdef", "general": true,
+                     "people": [{"id": "u-kaan", "name": "Kaan_07"}, {"id": "u-x"}]},
+                    {"id": "c1111111111111111", "name": "Oda 2",
+                     "people": [{"id": "f-ayse", "name": "Ayşe"}]},
+                ]},
+                {"crew": "t-empty", "conv": "c:t-empty", "add": true, "rooms": [
+                    {"id": "gt-empty", "general": true},
+                ]},
+            ]})
+        );
+        // In English the friends service's "Oda 2" is "Room 2"; the mod says "Genel" itself.
+        let english = crews_of(&state, ["t-gk"], true, names);
+        assert_eq!(english[0].rooms[1].name.as_deref(), Some("Room 2"));
+        assert_eq!(english[0].rooms[0].name, None);
+        // A crew that may have one room only: no "Yeni oda".
+        let mut one = state.clone();
+        one.crew_rooms_max = 1;
+        assert!(!crews_of(&one, ["t-empty"], false, names)[0].add);
+        // Voice chat off: nothing at all.
+        let mut off = state.clone();
+        off.enabled = false;
+        assert!(crews_of(&off, ["t-gk"], false, names).is_empty());
+    }
+
+    #[test]
+    fn crew_joins_go_only_into_rooms_the_crews_showed() {
+        let state = crew_state();
+        let frame = |value: serde_json::Value| serde_json::from_value::<FromGame>(value).unwrap();
+        let crews = |id: &str| matches!(id, "t-gk" | "t-empty");
+        let go = |state: Option<&VoiceState>, value| {
+            check(&frame(value), state, |_| false, crews).unwrap()
+        };
+        let join = |crew: &str, room: Option<&str>, new: bool| {
+            Ok(VoiceAct::JoinCrew {
+                crew: crew.into(),
+                room: room.map(str::to_owned),
+                new,
+            })
+        };
+        assert_eq!(
+            go(
+                Some(&state),
+                json!({"t":"voice-join","crew":"t-gk","room":"c1111111111111111"})
+            ),
+            join("t-gk", Some("c1111111111111111"), false)
+        );
+        // Nobody in any room of the crew: its "Genel" by its own id, nothing else.
+        assert_eq!(
+            go(
+                Some(&state),
+                json!({"t":"voice-join","crew":"t-empty","room":"gt-empty"})
+            ),
+            join("t-empty", Some("gt-empty"), false)
+        );
+        assert_eq!(
+            go(
+                Some(&state),
+                json!({"t":"voice-join","crew":"t-gk","room":"c2222222222222222"})
+            ),
+            Err(Refused::of("join", "", VoiceRefusal::RoomGone))
+        );
+        // "Yeni oda".
+        assert_eq!(
+            go(
+                Some(&state),
+                json!({"t":"voice-join","crew":"t-gk","new":true})
+            ),
+            join("t-gk", None, true)
+        );
+        // Not one of the player's crews.
+        assert_eq!(
+            go(
+                Some(&state),
+                json!({"t":"voice-join","crew":"t-x","room":"gt-x"})
+            ),
+            Err(Refused::of("join", "", VoiceRefusal::NotMember))
+        );
+        // The room the player is in already: nothing to do, nothing to say.
+        let mut here = state.clone();
+        here.room.as_mut().unwrap().id = "c1111111111111111".into();
+        assert_eq!(
+            go(
+                Some(&here),
+                json!({"t":"voice-join","crew":"t-gk","room":"c1111111111111111"})
+            ),
+            Err(Refused::quiet())
+        );
+        // Voice chat off, or never heard of.
+        let mut off = state.clone();
+        off.available = false;
+        let press = json!({"t":"voice-join","crew":"t-gk","room":"c1111111111111111"});
+        assert_eq!(
+            go(Some(&off), press.clone()),
+            Err(Refused::of("join", "", VoiceRefusal::Off))
+        );
+        assert_eq!(
+            go(None, press),
+            Err(Refused::of("join", "", VoiceRefusal::Off))
+        );
+        // Its result is the ring's "Katıl"'s.
+        let act = VoiceAct::JoinCrew {
+            crew: "t-gk".into(),
+            room: None,
+            new: true,
+        };
+        assert_eq!(
+            serde_json::to_value(
+                result_of(&act, &VoiceAnswer::refused(VoiceRefusal::RoomsFull)).unwrap()
+            )
+            .unwrap(),
+            json!({"t":"voice-result","act":"join","ok":false,"reason":"rooms-full"})
+        );
+    }
+
+    #[test]
+    fn the_mirror_tells_the_crews_rooms_when_they_change_only() {
+        let mut mirror = VoiceMirror::default();
+        assert!(
+            mirror.update_crews(Vec::new()).is_none(),
+            "nothing to show a mod that heard nothing"
+        );
+        let crews = crews_of(&crew_state(), ["t-gk"], false, names);
+        assert!(mirror.update_crews(crews.clone()).is_some());
+        assert!(mirror.update_crews(crews).is_none(), "the same again");
+        assert_eq!(
+            serde_json::to_value(mirror.update_crews(Vec::new()).unwrap()).unwrap(),
+            json!({"t": "voice-crews", "crews": []}),
+            "gone: said once"
+        );
+        assert!(mirror.update_crews(Vec::new()).is_none());
     }
 }
