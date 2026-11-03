@@ -9,6 +9,13 @@ import { Toaster as Sonner } from "sonner";
  * Their buttons are secondary (`toast-action`, SMALL12): a toast rests right above OYNA, the one
  * gold thing. A button sits beside the sentence while the sentence keeps about 21 characters a
  * line, else on a row of its own at the right ("Discord ile giriş yap" fits a 280 px toast).
+ *
+ * Every card in the corner is one of these toasts (the Discord keys card, rings, calls, invites),
+ * so this list is the corner's one stack (TOAST-STACK): always laid out, 10 px apart, the newest at
+ * the foot over the command bar and older ones lifted above it (a transform, so nothing reflows).
+ * Sonner's folded stack shrinks the toasts behind the front one to its height and hides only its
+ * own styled toasts' contents: ours are unstyled, so a waiting card's rows and buttons spilled out
+ * under a short notice in front of it (BATCH-206).
  */
 export function Toaster() {
   return (
@@ -17,6 +24,7 @@ export function Toaster() {
       // The gutter where the app defines one (the launcher's pages), else 20 px (Studio).
       offset={{ bottom: 88, right: "var(--spacing-page, 20px)" }}
       gap={10}
+      expand
       toastOptions={{
         unstyled: true,
         classNames: {
