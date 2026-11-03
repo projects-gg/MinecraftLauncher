@@ -56,6 +56,8 @@ import type {
   SocialProfile,
   SocialSnapshot,
   SocialTeam,
+  SocNoteState,
+  StatusNote,
   TeamInvite,
   TeamLookup,
   TeamMember,
@@ -293,7 +295,31 @@ function chatState(v: ChatView): ChatState {
     extras: opt(v.extras),
     stickerSets: v.stickerSets,
     links: opt(v.links),
+    socNote: socNoteState(v),
   };
+}
+
+/** SOC-NOTE: status notes and pins as the chat view carries them. */
+function socNoteState(v: ChatView): SocNoteState {
+  const s = v.socNote;
+  return {
+    notes: s.notes,
+    note: s.note ? { text: s.note.text, until: s.note.until ?? 0 } : undefined,
+    pinsOn: s.pinsOn,
+    pins: Object.fromEntries(s.pins.map((chat) => [chat.conv, chat.pins])),
+    pinLines: s.pinLines,
+  };
+}
+
+/** SOC-NOTE: friends' notes by id, while notes are on. */
+function friendNotes(v: SocialView): Map<string, StatusNote> {
+  const notes = new Map<string, StatusNote>();
+  if (v.chat?.socNote.notes) {
+    for (const entry of v.chat.socNote.friendNotes) {
+      notes.set(entry.id, { text: entry.note.text, until: entry.note.until ?? 0 });
+    }
+  }
+  return notes;
 }
 
 function chatChange(v: ChatChangeView): ChatChange {
@@ -516,6 +542,8 @@ export function crewFeatures(list: readonly string[]): CrewFeatures {
 }
 
 export function snapshot(v: SocialView): SocialSnapshot {
+  // SOC-NOTE: a friend's note rides on their row.
+  const notes = friendNotes(v);
   return {
     seq: v.seq,
     enabled: v.enabled,
@@ -523,7 +551,11 @@ export function snapshot(v: SocialView): SocialSnapshot {
     connection: v.connection,
     me: v.me ? me(v.me) : undefined,
     loaded: v.loaded,
-    friends: v.friends.map(friend),
+    friends: v.friends.map((f) => {
+      const shown = friend(f);
+      const note = notes.get(f.id);
+      return note ? { ...shown, note } : shown;
+    }),
     incoming: v.incoming.map(request),
     outgoing: v.outgoing.map(request),
     blocked: v.blocked.map(profile),
@@ -914,6 +946,15 @@ export const tauriSocial: SocialApi = {
       : ok(commands.socialChatReply(conv, text, reply)),
   chatSendSticker: (conv, sticker, reply) =>
     ok(commands.socialChatSticker(conv, sticker, reply ?? null)),
+  async setStatusNote(text, until) {
+    await ok(commands.socialStatusNote(text, until));
+  },
+  async chatPin(conv, id, replace) {
+    await ok(commands.socialChatPin(conv, id, replace ?? null));
+  },
+  async chatUnpin(conv, id) {
+    await ok(commands.socialChatUnpin(conv, id));
+  },
   async chatReact(conv, id, emoji, on) {
     await ok(commands.socialChatReact(conv, id, emoji, on));
   },
@@ -963,14 +1004,17 @@ export const tauriSocial: SocialApi = {
             code: target.code ?? null,
             via: target.via ?? null,
           }
-        : target.kind === "player"
-          ? {
-              kind: "player" as const,
-              id: target.id,
-              plan: target.plan ?? null,
-              reaction: target.reaction ?? null,
-            }
-          : target;
+        : target.kind === "player" && target.note
+          ? // SOC-NOTE: a friend's status note goes along as the evidence.
+            { kind: "playerNote" as const, id: target.id }
+          : target.kind === "player"
+            ? {
+                kind: "player" as const,
+                id: target.id,
+                plan: target.plan ?? null,
+                reaction: target.reaction ?? null,
+              }
+            : target;
     await ok(commands.socialReport(wire, reason, note ?? null, block));
   },
   async noticesSeen(ids) {

@@ -578,7 +578,17 @@ export function planMenu(input: PlanInput): Plan<PlanAction> {
 
 // --- a chat message (CHAT1, FIX2, CHAT2) ---------------------------------------------------------
 
-export type MessageAction = "react" | "reply" | "copy" | "copyLink" | "edit" | "delete" | "report";
+export type MessageAction =
+  | "react"
+  | "reply"
+  | "copy"
+  | "copyLink"
+  // SOC-NOTE: a crew chat's leader and moderators pin and unpin.
+  | "pin"
+  | "unpin"
+  | "edit"
+  | "delete"
+  | "report";
 
 export interface MessageInput {
   /** It takes reactions now (CHAT2: sent, younger than a week, while the extra is on). The right
@@ -596,6 +606,8 @@ export interface MessageInput {
   deletable: boolean;
   /** Someone else's message: "Rapor et". */
   report: boolean;
+  /** SOC-NOTE: "Sabitle" or "Sabitlemeyi kaldır" (a crew chat's leader and moderators). */
+  pin?: "pin" | "unpin" | null;
 }
 
 /**
@@ -614,6 +626,8 @@ export function messageMenu(input: MessageInput): Plan<MessageAction> {
     ),
     null,
     ...only<MessageAction>(
+      input.pin === "pin" && { action: "pin" },
+      input.pin === "unpin" && { action: "unpin" },
       input.editable && { action: "edit" },
       input.deletable && { action: "delete" },
     ),

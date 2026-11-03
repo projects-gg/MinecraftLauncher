@@ -25,7 +25,10 @@ const PLAN_REASONS: readonly ReportReason[] = [
 
 /** The reasons a target takes, in the dialog's order. */
 export function reasonsFor(target: ReportTarget): readonly ReportReason[] {
-  if (target.kind === "player" && (target.plan || target.reaction)) return PLAN_REASONS;
+  // SOC-NOTE: a friend's status note also takes "Uygunsuz not".
+  if (target.kind === "player" && (target.plan || target.reaction || target.note)) {
+    return PLAN_REASONS;
+  }
   return REPORT_REASONS[target.kind];
 }
 

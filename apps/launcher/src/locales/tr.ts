@@ -62,6 +62,7 @@ import { trSmall7 } from "./tr-small7";
 import { trSmall9 } from "./tr-small9";
 import { trSmall10 } from "./tr-small10";
 import { trSocNext } from "./tr-soc-next";
+import { trSocNote } from "./tr-soc-note";
 import { trSocial } from "./tr-social";
 import { trStars } from "./tr-stars";
 import { trTeam6 } from "./tr-team6";
@@ -147,6 +148,7 @@ export const tr = {
   stars: trStars,
   voice: trVoice,
   socNext: trSocNext,
+  socNote: trSocNote,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",
