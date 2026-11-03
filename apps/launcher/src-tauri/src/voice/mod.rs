@@ -651,8 +651,11 @@ impl Platform for AppPlatform {
         // The tray's mute and leave items and the room in its tooltip (design §5.4).
         #[cfg(desktop)]
         {
+            // A crew's "Genel" and the service's "Oda 2" in the interface's language, as the page
+            // says them; a name its leader typed as typed.
+            let english = pl_lang::Lang::current() == pl_lang::Lang::En;
             let tray = state.room.as_ref().map(|room| {
-                let label = room.name.clone().unwrap_or_else(|| {
+                let label = room.shown_name(english).unwrap_or_else(|| {
                     room.people
                         .iter()
                         .map(|person| self.person_name(&person.id, &state.profiles))

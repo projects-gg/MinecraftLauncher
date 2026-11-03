@@ -1108,11 +1108,13 @@ impl<S: SocialActions> Session<S> {
 
     // --- voice chat (VOICE-O) ----------------------------------------------------------------------
 
-    /// `voice` to a mod that shows voice chat, when what it shows changed (the state, or a name).
+    /// `voice` to a mod that shows voice chat, when what it shows changed (the state, a name, or the
+    /// overlay's language: a crew's "Oda 2" is "Room 2" in English).
     fn refresh_voice(&mut self) {
         if !self.live.as_ref().is_some_and(|live| live.voice) {
             return;
         }
+        let english = self.listener().english;
         let Some((state, ring_in_game)) = &self.voice else {
             return;
         };
@@ -1121,6 +1123,7 @@ impl<S: SocialActions> Session<S> {
             state,
             *ring_in_game,
             self.voice_speaking.as_ref(),
+            english,
             |id| scene.name_of(id).map(str::to_owned),
             |id| scene.crew_name(id).map(str::to_owned),
         );

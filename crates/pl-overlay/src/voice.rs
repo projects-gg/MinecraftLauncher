@@ -264,11 +264,13 @@ fn volume_top(state: Option<&VoiceState>) -> u16 {
 /// cards (`profiles`: a friend's friend; none: "Bir oyuncu"), crew names from `crew_name`. `sound`:
 /// the mod rings for a ring (the launcher's window is away). `speaking`: who speaks now, when that
 /// changed after `state` (the state's flags are as of its own change; a speaking change comes
-/// alone).
+/// alone). `english`: the overlay's words are English, so the friends service's "Oda 2" is "Room 2"
+/// (the mod says the crew's "Genel" itself).
 pub fn view_of(
     state: &VoiceState,
     sound: bool,
     speaking: Option<&VoiceSpeaking>,
+    english: bool,
     name_of: impl Fn(&str) -> Option<String>,
     crew_name: impl Fn(&str) -> Option<String>,
 ) -> VoiceView {
@@ -290,7 +292,7 @@ pub fn view_of(
         name: if room.general {
             None
         } else {
-            room.name.clone()
+            room.shown_name(english)
         },
         general: room.general,
         crew: room.crew.as_deref().and_then(&crew_name),
@@ -540,7 +542,7 @@ mod tests {
 
     #[test]
     fn the_room_goes_with_names_and_only_what_is_set() {
-        let view = view_of(&in_room(), true, None, names, crews);
+        let view = view_of(&in_room(), true, None, false, names, crews);
         assert_eq!(
             serde_json::to_value(ToGame::Voice(Box::new(view))).unwrap(),
             json!({
@@ -576,7 +578,7 @@ mod tests {
         state.profiles = vec![card("u-x", "Zeyno_x"), card("u-kaan", "NotKaan")];
         state.volume_max = 100;
         let view = serde_json::to_value(ToGame::Voice(Box::new(view_of(
-            &state, false, None, names, crews,
+            &state, false, None, false, names, crews,
         ))))
         .unwrap();
         let people = &view["room"]["people"];
@@ -602,7 +604,10 @@ mod tests {
         );
         // Through WebAudio the top is the slider's own: nothing is said of it.
         state.volume_max = 200;
-        assert_eq!(view_of(&state, false, None, names, crews).volume_max, None);
+        assert_eq!(
+            view_of(&state, false, None, false, names, crews).volume_max,
+            None
+        );
     }
 
     #[test]
@@ -614,7 +619,7 @@ mod tests {
         room.name = Some("Genel".into());
         room.general = true;
         state.rings.clear();
-        let view = view_of(&state, true, None, names, crews);
+        let view = view_of(&state, true, None, false, names, crews);
         let room = view.room.as_ref().unwrap();
         assert_eq!(
             (room.name.as_deref(), room.general, room.crew.as_deref()),
@@ -623,15 +628,22 @@ mod tests {
         assert!(!view.sound, "nothing rings: nothing to ring for");
         state.room.as_mut().unwrap().general = false;
         state.room.as_mut().unwrap().name = Some("Oda 2".into());
-        let view = view_of(&state, false, None, names, crews);
+        let view = view_of(&state, false, None, false, names, crews);
         assert_eq!(view.room.unwrap().name.as_deref(), Some("Oda 2"));
+        // The service names new crew rooms in Turkish: an English overlay says "Room 2", a name
+        // its leader typed stays as typed.
+        let view = view_of(&state, false, None, true, names, crews);
+        assert_eq!(view.room.unwrap().name.as_deref(), Some("Room 2"));
+        state.room.as_mut().unwrap().name = Some("Taş Ocağı".into());
+        let view = view_of(&state, false, None, true, names, crews);
+        assert_eq!(view.room.unwrap().name.as_deref(), Some("Taş Ocağı"));
         // Voice chat switched off by the player: no "Ara" anywhere.
         let mut off = VoiceState::off();
         off.available = true;
         off.enabled = false;
         assert_eq!(
             serde_json::to_value(ToGame::Voice(Box::new(view_of(
-                &off, true, None, names, crews
+                &off, true, None, false, names, crews
             ))))
             .unwrap(),
             json!({"t": "voice"})
@@ -649,7 +661,7 @@ mod tests {
             mirror.speaking(&speaking).is_none(),
             "no room told yet: nothing"
         );
-        let view = view_of(&in_room(), false, None, names, crews);
+        let view = view_of(&in_room(), false, None, false, names, crews);
         assert!(mirror.update(view.clone()).is_some());
         assert!(mirror.update(view.clone()).is_none(), "the same again");
         assert_eq!(
@@ -671,7 +683,7 @@ mod tests {
         room.me.talking = true;
         assert!(
             mirror
-                .update(view_of(&state, false, None, names, crews))
+                .update(view_of(&state, false, None, false, names, crews))
                 .is_none()
         );
         // Nobody speaks: one last frame, then silence.
@@ -684,7 +696,14 @@ mod tests {
         // Out of the room: speakers are nobody's business.
         assert!(
             mirror
-                .update(view_of(&VoiceState::off(), false, None, names, crews))
+                .update(view_of(
+                    &VoiceState::off(),
+                    false,
+                    None,
+                    false,
+                    names,
+                    crews
+                ))
                 .is_some()
         );
         assert!(mirror.speaking(&speaking).is_none());
@@ -696,20 +715,27 @@ mod tests {
         let mut mirror = VoiceMirror::default();
         assert!(
             mirror
-                .update(view_of(&VoiceState::off(), false, None, names, crews))
+                .update(view_of(
+                    &VoiceState::off(),
+                    false,
+                    None,
+                    false,
+                    names,
+                    crews
+                ))
                 .is_none()
         );
         // The state says Kaan_07 speaks; a later change says nobody does: a whole view made after
         // it (a name changed) says the later one.
         let quiet = VoiceSpeaking::default();
-        let view = view_of(&in_room(), false, Some(&quiet), names, crews);
+        let view = view_of(&in_room(), false, Some(&quiet), false, names, crews);
         let room = view.room.as_ref().unwrap();
         assert!(room.people.iter().all(|p| !p.speaking) && !room.me.talking);
         let talking = VoiceSpeaking {
             ids: vec!["u-x".into()],
             me: true,
         };
-        let view = view_of(&in_room(), false, Some(&talking), names, crews);
+        let view = view_of(&in_room(), false, Some(&talking), false, names, crews);
         let room = view.room.as_ref().unwrap();
         assert_eq!(
             room.people

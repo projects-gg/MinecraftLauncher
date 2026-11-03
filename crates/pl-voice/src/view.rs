@@ -196,6 +196,41 @@ pub struct VoiceRoomView {
     pub can_close: bool,
 }
 
+impl VoiceRoomView {
+    /// The room's name as the tray and the in-game overlay say it (the page's own is `rules.ts`
+    /// `shownRoomName`): the crew's "Genel" and the friends service's "Oda 2" in the player's
+    /// language (`english`), a name its leader typed as typed; none for a friend room nobody named
+    /// (the people's names stand in).
+    pub fn shown_name(&self, english: bool) -> Option<String> {
+        if self.general {
+            return Some(if english { "General" } else { "Genel" }.to_owned());
+        }
+        self.name
+            .as_deref()
+            .map(|name| shown_room_name(name, english))
+    }
+}
+
+/// The number of a crew's room as the friends service names a new one ("Oda 2", "Oda 3"; social
+/// `voice-hub.ts` `crewNew`), or none for any other name: its leader's own words.
+pub fn numbered_room(name: &str) -> Option<u16> {
+    let digits = name.strip_prefix("Oda ")?;
+    if digits.is_empty() || digits.len() > 3 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+/// A room's own name in the player's language: the service's "Oda 2" is "Room 2" in English, any
+/// other name stays as named.
+pub fn shown_room_name(name: &str, english: bool) -> String {
+    match numbered_room(name) {
+        Some(n) if english => format!("Room {n}"),
+        Some(n) => format!("Oda {n}"),
+        None => name.to_owned(),
+    }
+}
+
 /// The player in the room.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -654,5 +689,65 @@ mod tests {
         assert_eq!(close, VoiceModAction::Close);
         assert_eq!(VoiceQuality::from_wire(1), VoiceQuality::Weak);
         assert_eq!(VoiceQuality::from_wire(9), VoiceQuality::Bad);
+    }
+
+    #[test]
+    fn rooms_are_named_in_the_players_language() {
+        assert_eq!(numbered_room("Oda 2"), Some(2));
+        assert_eq!(numbered_room("Oda 12"), Some(12));
+        for typed in [
+            "Oda",
+            "Oda ",
+            "Oda 2 ekibi",
+            "Oda +2",
+            "Oda 1234",
+            "oda 2",
+            "Taş Ocağı",
+        ] {
+            assert_eq!(numbered_room(typed), None, "{typed}");
+        }
+        assert_eq!(shown_room_name("Oda 3", true), "Room 3");
+        assert_eq!(shown_room_name("Oda 3", false), "Oda 3");
+        assert_eq!(shown_room_name("Taş Ocağı", true), "Taş Ocağı");
+
+        let room = |name: Option<&str>, general: bool| VoiceRoomView {
+            id: "c0123456789abcdef".into(),
+            kind: VoiceRoomKind::Crew,
+            crew: Some("t1".into()),
+            name: name.map(str::to_owned),
+            general,
+            max: 10,
+            phase: VoicePhase::Live,
+            me: VoiceMe {
+                id: "u1".into(),
+                role: VoiceRole::Member,
+                mute: false,
+                deaf: false,
+                muted_by_moderator: false,
+                talking: false,
+                quality: VoiceQuality::Good,
+            },
+            people: Vec::new(),
+            ringing: Vec::new(),
+            can_rename: false,
+            can_close: false,
+        };
+        assert_eq!(
+            room(Some("Genel"), true).shown_name(true).as_deref(),
+            Some("General")
+        );
+        assert_eq!(
+            room(Some("Genel"), true).shown_name(false).as_deref(),
+            Some("Genel")
+        );
+        assert_eq!(
+            room(Some("Oda 2"), false).shown_name(true).as_deref(),
+            Some("Room 2")
+        );
+        assert_eq!(
+            room(Some("Gece Ekibi"), false).shown_name(true).as_deref(),
+            Some("Gece Ekibi")
+        );
+        assert_eq!(room(None, false).shown_name(true), None);
     }
 }
