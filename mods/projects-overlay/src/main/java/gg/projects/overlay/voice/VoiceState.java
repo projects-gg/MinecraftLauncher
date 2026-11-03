@@ -19,7 +19,8 @@ import java.util.Set;
  * thread; no game classes, so it is tested on its own.
  *
  * <p>A {@code voice} frame replaces everything; {@code voice-speaking} changes only who speaks; {@code voice-notice} and
- * {@code voice-result} wait here until the game says them ({@link #takeNotice}, {@link #takeResult}).
+ * {@code voice-result} wait here until the game says them ({@link #takeNotice}, {@link #takeResult}). OVL-SOC:
+ * {@code voice-crews} replaces the player's crews' rooms (crew chat's "Sesli").
  */
 public final class VoiceState {
     /** A person's volume at most, in percent (the launcher's slider). */
@@ -33,6 +34,9 @@ public final class VoiceState {
     static final int MAX_NOTICES = 4;
     /** Room ids and person ids are short; anything longer is not the launcher's. */
     static final int MAX_ID = 64;
+    /** Crews and rooms a crew a {@code voice-crews} frame carries at most (the service: 5 crews, 5 rooms). */
+    static final int MAX_CREWS = 10;
+    static final int MAX_CREW_ROOMS = 8;
 
     /** Someone else in the player's room. */
     public record Person(String id, String name, String role, boolean mute, boolean deaf, boolean mutedByModerator,
@@ -114,6 +118,20 @@ public final class VoiceState {
         }
     }
 
+    /**
+     * One of a crew's voice rooms (OVL-SOC, V21): {@code name} null for the crew's "Genel" ({@code general}), who is in
+     * it (the player too, when there).
+     */
+    public record CrewRoom(String id, String name, boolean general, List<Named> people) {
+    }
+
+    /**
+     * One of the player's crews' rooms (V21): the crew, its chat ({@code c:<crew>}), its rooms in the launcher's order
+     * (with nobody in any, its "Genel" alone), and whether "Yeni oda" may show.
+     */
+    public record CrewRooms(String crew, String conv, List<CrewRoom> rooms, boolean add) {
+    }
+
     /** A voice chat moment the game says (V4). */
     public record Notice(String kind, String reason, String name) {
     }
@@ -140,6 +158,7 @@ public final class VoiceState {
     private Room room;
     private Named calling;
     private List<Ring> rings = List.of();
+    private List<CrewRooms> crews = List.of();
     private boolean sound;
     private int volumeMax = MAX_VOLUME;
     private int revision;
@@ -172,6 +191,7 @@ public final class VoiceState {
             }
             case "voice-result" -> result = new Result(id(frame, "act"), Protocol.bool(frame, "ok", false),
                 id(frame, "reason"), id(frame, "who"));
+            case "voice-crews" -> crews = crewsOf(arr(frame, "crews"));
             default -> {
                 return false;
             }
@@ -182,7 +202,7 @@ public final class VoiceState {
 
     /** The launcher went away: nothing of voice chat stays on screen until it speaks again. */
     public void clear() {
-        if (!heard && room == null && rings.isEmpty() && notices.isEmpty() && result == null) {
+        if (!heard && room == null && rings.isEmpty() && notices.isEmpty() && result == null && crews.isEmpty()) {
             return;
         }
         heard = false;
@@ -190,6 +210,7 @@ public final class VoiceState {
         room = null;
         calling = null;
         rings = List.of();
+        crews = List.of();
         sound = false;
         volumeMax = MAX_VOLUME;
         notices.clear();
@@ -259,6 +280,27 @@ public final class VoiceState {
     /** The game rings for a ring: the launcher's window is away, so nothing of the launcher's rings. */
     public boolean sound() {
         return sound;
+    }
+
+    /**
+     * The rooms of the crew whose chat is {@code conv} (OVL-SOC: crew chat's "Sesli"), or null: no crew chat, voice chat
+     * not on, or a launcher that says nothing of crews' rooms.
+     */
+    public CrewRooms crewRooms(String conv) {
+        if (!on || conv == null) {
+            return null;
+        }
+        for (CrewRooms c : crews) {
+            if (c.conv.equals(conv)) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /** Whether the player is in the room {@code id} (crew chat's "Sesli" lights it). */
+    public boolean inRoom(String id) {
+        return room != null && id != null && room.id.equals(id);
     }
 
     /** Who speaks now (the people of the room, by id). */
@@ -491,6 +533,57 @@ public final class VoiceState {
 
     private static Named named(JsonObject o) {
         return new Named(id(o, "id"), name(o, "name"));
+    }
+
+    /** {@code voice-crews}' list (V21): crews with an id and a chat, rooms with an id, people with an id. */
+    private static List<CrewRooms> crewsOf(JsonArray list) {
+        if (list == null) {
+            return List.of();
+        }
+        List<CrewRooms> out = new ArrayList<>();
+        for (JsonElement e : list) {
+            if (!e.isJsonObject() || out.size() >= MAX_CREWS) {
+                continue;
+            }
+            JsonObject c = e.getAsJsonObject();
+            String crew = id(c, "crew");
+            String conv = id(c, "conv");
+            if (crew.isEmpty() || conv.isEmpty()) {
+                continue;
+            }
+            List<CrewRoom> rooms = new ArrayList<>();
+            JsonArray roomList = arr(c, "rooms");
+            if (roomList != null) {
+                for (JsonElement r : roomList) {
+                    if (!r.isJsonObject() || rooms.size() >= MAX_CREW_ROOMS) {
+                        continue;
+                    }
+                    JsonObject o = r.getAsJsonObject();
+                    String id = id(o, "id");
+                    if (id.isEmpty()) {
+                        continue;
+                    }
+                    List<Named> people = new ArrayList<>();
+                    JsonArray who = arr(o, "people");
+                    if (who != null) {
+                        for (JsonElement p : who) {
+                            if (p.isJsonObject() && people.size() < MAX_PEOPLE) {
+                                Named n = named(p.getAsJsonObject());
+                                if (!n.id.isEmpty()) {
+                                    people.add(n);
+                                }
+                            }
+                        }
+                    }
+                    boolean general = Protocol.bool(o, "general", false);
+                    String name = name(o, "name");
+                    rooms.add(new CrewRoom(id, general || name.isEmpty() ? null : name, general,
+                        Collections.unmodifiableList(people)));
+                }
+            }
+            out.add(new CrewRooms(crew, conv, Collections.unmodifiableList(rooms), Protocol.bool(c, "add", false)));
+        }
+        return Collections.unmodifiableList(out);
     }
 
     /** At most {@code max} strings of a list, each plain and at most {@code chars} long. */

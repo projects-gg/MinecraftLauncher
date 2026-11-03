@@ -35,7 +35,8 @@ import org.joml.Matrix3x2fStack;
  * menu would cover the friend list, and at GUI 3 it would not fit.
  *
  * <p>A row that asks first ("Arkadaşlıktan çıkar", "Engelle") turns the popover into its question, one sentence (and
- * for a block what it means), "Vazgeç" and the action in the danger style; the keyboard starts on "Vazgeç". In: 120 ms,
+ * for a block what it means), "Vazgeç" and the action in the danger style; the keyboard starts on "Vazgeç" (OVL-SOC:
+ * "Sesli arama başlat" asks "Ayşe aransın mı?" with "Ara" in the primary style). In: 120 ms,
  * fading in as it moves 3 px away from what opened it; out: 80 ms, fading. Under reduced motion it only fades. Opaque
  * ({@link Frames#POPOVER}): text never shows through it. Nothing runs while it is closed.
  */
@@ -404,7 +405,7 @@ public final class PersonMenu {
             case VOICE_KICK -> "voice.person.kick";
             case VOICE_MOD -> "people.make_moderator";
             case VOICE_UNMOD -> "people.unmake_moderator";
-            case CALL -> "voice.call";
+            case CALL -> "voice.call.start";
             case CALL_INVITE -> row.done() ? "voice.ringing" : "voice.invite";
         };
     }
@@ -492,6 +493,8 @@ public final class PersonMenu {
             case MAKE_FOUNDER -> leadKeepsModerator ? "people.make_founder.ask_moderator" : "people.make_founder.ask";
             case REMOVE_MEMBER -> "people.remove_member.ask";
             case VOICE_KICK -> "voice.person.kick.ask";
+            // OVL-SOC: the lead's fixed words, as the launcher's ("{name} aransın mı?").
+            case CALL -> "voice.call.ask";
             default -> "people.unfriend.ask";
         };
         String bodyKey = switch (action) {
@@ -505,6 +508,7 @@ public final class PersonMenu {
             case MAKE_FOUNDER -> "people.make_founder";
             case REMOVE_MEMBER -> "people.remove_member";
             case VOICE_KICK -> "voice.person.kick";
+            case CALL -> "voice.call";
             default -> "people.unfriend";
         });
         cancelW = ui.width(cancelLabel) + BUTTON_PAD * 2;
@@ -522,7 +526,8 @@ public final class PersonMenu {
         }
         height = ASK_PAD + question.size() * 10 + (body.isEmpty() ? 0 : 3 + body.size() * 9) + 9 + BUTTON_H + ASK_PAD;
         place(screenW, screenH);
-        // A destructive answer never comes from a reflex: the keys start on "Vazgeç".
+        // An answer never comes from a reflex: the keys start on "Vazgeç" (a held Enter on "Sesli arama başlat" must not
+        // ring the friend; OVL-SOC).
         button = 0;
         litButton = -1;
         cancelHover.snap(0f);
@@ -1050,8 +1055,8 @@ public final class PersonMenu {
         float by = buttonsY();
         drawButton(g, cancelX(), by, cancelW, cancelLabel, Frames.BUTTON_SECONDARY, Frames.BUTTON_SECONDARY_HOVER,
             cancelHover.value(now), Theme.BONE_100, button == 0 && PanelInput.keyboardMode());
-        if (asking == FriendMenu.Action.MAKE_FOUNDER) {
-            // Handing the lead on loses nothing (the launcher's primary button there).
+        if (primary(asking)) {
+            // Handing the lead on and calling lose nothing (the launcher's primary button there).
             drawButton(g, confirmX(), by, confirmW, confirmLabel, Frames.BUTTON_PRIMARY, Frames.BUTTON_PRIMARY_HOVER,
                 confirmHover.value(now), Theme.GOLD_INK, button == 1 && PanelInput.keyboardMode());
         } else {
@@ -1059,6 +1064,11 @@ public final class PersonMenu {
                 confirmHover.value(now), Theme.mix(Theme.FLARE_300, Theme.BONE_50, confirmHover.value(now) * 0.35f),
                 button == 1 && PanelInput.keyboardMode());
         }
+    }
+
+    /** A question whose answer loses nothing: its action in the primary style (the others are danger). */
+    private static boolean primary(FriendMenu.Action action) {
+        return action == FriendMenu.Action.MAKE_FOUNDER || action == FriendMenu.Action.CALL;
     }
 
     private static void drawButton(GuiGraphicsExtractor g, float bx, float by, float bw, String label, Frames face,

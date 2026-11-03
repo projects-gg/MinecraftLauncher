@@ -190,6 +190,10 @@ fn wire_overlay(overlay: &pl_overlay::Overlay, voice: &Voice) {
             VoiceAct::Moderate(action) => Box::pin(async move { voice.moderate(action).await }),
             VoiceAct::Call { friend } => Box::pin(async move { voice.call(friend).await }),
             VoiceAct::Invite { friend } => Box::pin(async move { voice.invite(friend).await }),
+            // OVL-SOC: crew chat's "Sesli" in the game ("Katıl" on a crew room, "Yeni oda").
+            VoiceAct::JoinCrew { crew, room, new } => {
+                Box::pin(async move { voice.join_crew(crew, room, new).await })
+            }
         }
     });
 }

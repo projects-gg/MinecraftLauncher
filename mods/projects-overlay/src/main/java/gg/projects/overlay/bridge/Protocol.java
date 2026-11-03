@@ -91,6 +91,7 @@ public final class Protocol {
             features.add(PEOPLE2);
             features.add(PEOPLE3);
             features.add(VOICE);
+            features.add(VOICE_ROOMS);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -414,6 +415,28 @@ public final class Protocol {
     /** "Odaya davet et" (V13). */
     public static JsonObject voiceInvite(String friend) {
         return friendFrame("voice-invite", friend);
+    }
+
+    /**
+     * The crews' voice rooms in crew chat (OVL-SOC, V21-V22): beside {@link #VOICE} the mod hears {@code voice-crews}
+     * and sends {@link #voiceJoin}.
+     */
+    public static final String VOICE_ROOMS = "voice-rooms";
+
+    /** "Katıl" on a crew's room (V22): its id as {@code voice-crews} named it, the crew's "Genel" too. */
+    public static JsonObject voiceJoin(String crew, String room) {
+        JsonObject o = message("voice-join");
+        o.addProperty("crew", crew);
+        o.addProperty("room", room);
+        return o;
+    }
+
+    /** "Yeni oda" in a crew (V22): the player opens one and joins it. */
+    public static JsonObject voiceNewRoom(String crew) {
+        JsonObject o = message("voice-join");
+        o.addProperty("crew", crew);
+        o.addProperty("new", true);
+        return o;
     }
 
     private static JsonObject friendFrame(String type, String friend) {

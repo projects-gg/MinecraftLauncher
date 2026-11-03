@@ -52,15 +52,28 @@ public final class OverlayState {
      * is on for them; {@code group}, their category's id (null: "Arkadaşlar"); {@code crews}, where they stand in the
      * crews the player may invite to ({@code member} or {@code invited}, by crew id). {@code marks} (BADGES-UI): the
      * keys of their profile badges as the launcher sent them ({@link #marks(List)} names those the catalogue knows).
+     * {@code dnd} (OVL-SOC, V23): an online friend on "Rahatsız etmeyin" (the launcher's gold dot with its bar).
      */
     public record Friend(String id, String name, String where, boolean joinable, String host, String badge,
-        String seen, boolean fav, boolean alert, String group, Map<String, String> crews, List<String> marks) {
+        String seen, boolean fav, boolean alert, String group, Map<String, String> crews, List<String> marks,
+        boolean dnd) {
         public boolean onProjects() {
             return where.equals("projects");
         }
 
         public boolean online() {
             return !where.equals("offline");
+        }
+
+        /** Their presence dot ({@link Presence}): none offline. */
+        public Presence presence() {
+            if (!online()) {
+                return Presence.OFFLINE;
+            }
+            if (dnd) {
+                return Presence.DND;
+            }
+            return inGame() ? Presence.PLAYING : Presence.LAUNCHER;
         }
 
         /** In a game (Projects, another server, singleplayer or the game's menus). */
@@ -1177,7 +1190,7 @@ public final class OverlayState {
         friends.put(id, new Friend(id, name(o, "name"), Protocol.str(o, "where", "offline"),
             Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host, crewId(o), seenOf(o),
             Protocol.bool(o, "fav", false), Protocol.bool(o, "alert", false), groupId(o), crewPlaces(o),
-            markKeys(arr(o, "marks"))));
+            markKeys(arr(o, "marks")), Protocol.bool(o, "dnd", false)));
         // HOST1 (H13): only the launcher that got the invite sends it; gone with the next frame without it.
         JsonObject world = obj(o, "world");
         if (world == null) {

@@ -106,7 +106,17 @@ public enum Icon {
     /** A ring's "Reddet". */
     PHONE_X("PhoneX"),
     /** "Ayrıl" ("İptal" while the player's call rings). */
-    PHONE_OFF("PhoneDisconnect");
+    PHONE_OFF("PhoneDisconnect"),
+    // Crew chat's "Sesli" ("Yeni oda") and the chat's emoji picker (OVL-SOC), with the launcher's signs.
+    PLUS("Plus"),
+    SEARCH("MagnifyingGlass"),
+    RECENT("ClockCounterClockwise"),
+    PAW("PawPrint"),
+    FOOD("Hamburger"),
+    TRAVEL("AirplaneTilt"),
+    BALL("SoccerBall"),
+    BULB("Lightbulb"),
+    SHAPES("Shapes");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};

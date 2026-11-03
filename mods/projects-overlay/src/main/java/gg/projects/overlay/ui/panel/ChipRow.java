@@ -4,7 +4,9 @@ import com.mojang.blaze3d.platform.InputConstants;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.state.Presence;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.PresenceDot;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
@@ -31,6 +33,9 @@ import net.minecraft.network.chat.Component;
  *
  * <p>A friend's chip has their person menu (OVL-UX2; FIX2-D, as the launcher's conversation list): a right click opens
  * it at the pointer, Shift+F10 or the menu key under the chosen chip; the chip stays lit while it is open.
+ *
+ * <p>An online friend's chip carries their presence dot before the name (OVL-SOC, the owner: "çevrimiçi olanlarının
+ * yanında"; {@link PresenceDot}, the friend list's), as the launcher's conversation list shows their face's dot.
  */
 public final class ChipRow extends PanelWidget {
     /** A chip's person menu (the panel decides whether its conversation has one). */
@@ -43,8 +48,11 @@ public final class ChipRow extends PanelWidget {
     private static final int PAD = 6;
 
     private record Chip(String id, String title, int titleWidth, boolean crew, boolean muted, String unread,
-        int unreadWidth, int width) {
+        int unreadWidth, int width, Presence presence, String heard) {
     }
+
+    /** The dot before an online friend's name, and the gap after it. */
+    private static final int DOT_ROOM = PresenceDot.DOT + 4;
 
     private final Consumer<String> onPick;
     private final Menu onMenu;
@@ -117,13 +125,23 @@ public final class ChipRow extends PanelWidget {
             boolean showUnread = c.unread() > 0 && !id.equals(select);
             String unread = showUnread ? (c.unread() > 99 ? "99+" : Integer.toString(c.unread())) : null;
             int uw = unread == null ? 0 : small.width(unread) + 7;
-            int w = PAD * 2 + tw + (c.crew() ? 11 : 0) + (unread == null ? 0 : uw + 4);
-            chips.add(new Chip(id, title, tw, c.crew(), c.muted(), unread, uw, w));
+            OverlayState.Friend friend = c.crew() ? null : friendOf(state, id);
+            Presence presence = friend == null ? Presence.OFFLINE : friend.presence();
+            int w = PAD * 2 + tw + (c.crew() ? 11 : 0) + (presence.online() ? DOT_ROOM : 0)
+                + (unread == null ? 0 : uw + 4);
+            chips.add(new Chip(id, title, tw, c.crew(), c.muted(), unread, uw, w, presence,
+                PresenceDot.heard(friend)));
             x += w + GAP;
         }
         contentWidth = Math.max(0f, x - GAP);
         selected = select;
         reveal(select, false);
+    }
+
+    /** A direct conversation's friend (OVL-SOC: their dot), or null when they are no friend now. */
+    private static OverlayState.Friend friendOf(OverlayState state, String conversation) {
+        String friendId = state.friendOfDirect(conversation);
+        return friendId == null ? null : state.friend(friendId);
     }
 
     private float maxScroll() {
@@ -263,6 +281,9 @@ public final class ChipRow extends PanelWidget {
                 if (c.crew) {
                     Draw.icon(g, Icon.CREW, 8, cx, y0 + (HEIGHT - 8) / 2f, ink);
                     cx += 11;
+                } else if (c.presence.online()) {
+                    PresenceDot.dot(g, c.presence, cx + PresenceDot.DOT / 2f, y0 + HEIGHT / 2f);
+                    cx += DOT_ROOM;
                 }
                 Draw.text(g, strong, c.title, cx, textY, ink);
                 cx += c.titleWidth + 4;
@@ -290,8 +311,10 @@ public final class ChipRow extends PanelWidget {
         int i = indexOf(selected);
         if (i >= 0) {
             Chip c = chips.get(i);
-            output.add(NarratedElementType.TITLE, Texts.tr("narration.chat", Component.literal(c.title), i + 1,
-                chips.size()));
+            // "PixelAvci sohbeti, 1 / 3, Projects'te": the dot's meaning is said too (never colour alone).
+            Component said = Texts.tr("narration.chat", Component.literal(c.title), i + 1, chips.size());
+            output.add(NarratedElementType.TITLE, c.heard == null ? said
+                : Component.empty().append(said).append(", " + c.heard));
         } else {
             output.add(NarratedElementType.TITLE, getMessage());
         }

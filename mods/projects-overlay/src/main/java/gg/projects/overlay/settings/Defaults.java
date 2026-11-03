@@ -73,7 +73,8 @@ public final class Defaults {
      */
     public static void undo(Undo undo, Consumer<UnaryOperator<OverlaySettings>> apply, List<? extends Key> keys) {
         OverlaySettings back = undo.settings();
-        apply.accept(now -> back.withKeyUsed(now.keyUsed()).withRecentStickers(now.recentStickers()));
+        apply.accept(now -> back.withKeyUsed(now.keyUsed()).withRecentStickers(now.recentStickers())
+            .withRecentChatEmojis(now.recentChatEmojis()));
         for (int i = 0; i < keys.size() && i < undo.keys().size(); i++) {
             String saved = undo.keys().get(i);
             if (saved != null) {

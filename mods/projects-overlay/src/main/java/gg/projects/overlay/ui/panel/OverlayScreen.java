@@ -6,6 +6,8 @@ import gg.projects.overlay.OverlayClient;
 import gg.projects.overlay.Perf;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.chat.GameFont;
+import gg.projects.overlay.emoji.EmojiCatalog;
 import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.settings.OverlaySettings;
@@ -16,6 +18,7 @@ import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.toast.ToastLayer;
+import gg.projects.overlay.ui.EmojiGlyphs;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
@@ -29,6 +32,7 @@ import gg.projects.overlay.voice.VoiceState;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.IntPredicate;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -49,7 +53,8 @@ import net.minecraft.util.FormattedCharSequence;
  * settings page. Voice chat (VOICE-O) puts a ring for the player and the room's strip at the top of the chats and
  * friends pages, and its room page behind the strip.
  *
- * <p>Chat extras (CHAT2): a sticker button in the message field opens the sticker picker; "Yanıtla" puts a
+ * <p>Chat extras (CHAT2): the message field's button opens the picker, "Emoji" and "Çıkartmalar" (OVL-SOC: the
+ * launcher's one button and two tabs; it opens on the tab last used, "Emoji" first); "Yanıtla" puts a
  * strip over the field ("Yanıtlanıyor: Ayşe", Esc or ✕ takes it away); "Ayşe yazıyor…" floats at the bottom of
  * the conversation while someone writes (and the player's own writing is told, at most every 4 s); a reaction
  * that did not go says why in the same place for a moment. Esc closes what is open over the panel first.
@@ -103,10 +108,21 @@ public final class OverlayScreen extends Screen {
     private final IconButton stickerButton;
     private final IconButton replyClose;
     private final StickerPicker picker;
+    /** The picker's emoji tab (OVL-SOC), the tab it opens on, and a pick by the pointer hands the keys back. */
+    private final EmojiPanel emojiPicker;
+    /**
+     * Where the keys go once a press with the pointer is over (OVL-SOC): the game gives them to the widget pressed after
+     * its handler ran, so a handler that hands them elsewhere (the picker's button to its search, a tab to the other
+     * tab, an emoji back to the message) says so here.
+     */
+    private AbstractWidget pendingFocus;
     /** World sharing: its page and the card the other pages carry (HOST1). */
     private final HostPanel host;
     /** Voice chat: the ring and the room's strip on the list pages, and the room page (VOICE-O). */
     private final VoicePanel voice;
+    /** Crew chat's "Sesli": the crew's voice rooms under the conversation chips (OVL-SOC). */
+    private final CrewVoiceStrip crewVoice;
+    private int crewVoiceSpeaking = -1;
     /** The screen the panel came from (the pause menu), or null: closing goes back to it. */
     private final Screen parent;
     private final Tween lineAlpha = new Tween(0f);
@@ -223,6 +239,22 @@ public final class OverlayScreen extends Screen {
         back = new IconButton(Icon.BACK, Texts.tr("panel.back"), this::goBack);
         host = new HostPanel(this, overlay);
         voice = new VoicePanel(this, overlay);
+        crewVoice = new CrewVoiceStrip(new CrewVoiceStrip.Actions() {
+            @Override
+            public void join(String crew, String room) {
+                overlay.voiceJoinCrew(crew, room);
+            }
+
+            @Override
+            public void open() {
+                showPage(Page.VOICE);
+            }
+
+            @Override
+            public void newRoom(String crew) {
+                overlay.voiceNewRoom(crew);
+            }
+        });
         retry = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("retry"), null, overlay::retry);
         for (int i = 0; i < ANSWERS.length; i++) {
             String answer = ANSWERS[i];
@@ -310,10 +342,22 @@ public final class OverlayScreen extends Screen {
                 openFriendMenu(friendId, anchor, keys);
             }
         });
-        stickerButton = new IconButton(Icon.STICKER, Texts.tr("chat.stickers"), this::togglePicker);
+        stickerButton = new IconButton(Icon.SMILEY, Texts.tr("chat.picker"), this::togglePicker);
         replyClose = new IconButton(Icon.CLOSE, Texts.tr("chat.reply.cancel"), this::clearReply);
-        picker = new StickerPicker(this::sendSticker);
+        picker = new StickerPicker(this::sendSticker, (tab, keys) -> openPicker(tab, true, keys));
         picker.visible = false;
+        emojiPicker = new EmojiPanel(new EmojiPanel.Actions() {
+            @Override
+            public void pick(String emoji, boolean keys) {
+                insertEmoji(emoji, keys);
+            }
+
+            @Override
+            public void tab(int tab, boolean keys) {
+                openPicker(tab, true, keys);
+            }
+        });
+        emojiPicker.visible = false;
         languageRevision = Texts.language().revision();
         // "Kısayol": both keys of the Projects category in the game's Controls (the overlay's and the emoji picker's).
         Runnable controls = () -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options));
@@ -552,9 +596,32 @@ public final class OverlayScreen extends Screen {
         return quick.visible;
     }
 
-    /** Opens or closes the sticker picker, as its button does. */
+    /** Opens the picker on its sticker tab, or closes it (the scenario driver; the button opens the last tab). */
     public void toggleStickers() {
-        togglePicker();
+        if (pickerOpen()) {
+            togglePicker();
+        } else if (composerOpen() && stickersOn()) {
+            openPicker(PickerTabs.STICKERS, false, false);
+        }
+    }
+
+    /** Opens the picker on its emoji tab, or closes it (the scenario driver). */
+    public void toggleEmoji() {
+        if (pickerOpen()) {
+            togglePicker();
+        } else if (composerOpen()) {
+            openPicker(PickerTabs.EMOJI, false, false);
+        }
+    }
+
+    /** The emoji tab, while it is open (the scenario driver types into its search), or null. */
+    public EmojiPanel emojiPicker() {
+        return emojiPicker.isOpen() ? emojiPicker : null;
+    }
+
+    /** Presses a pill of crew chat's "Sesli" as a click would (the scenario driver; "+": "Yeni oda"); false without it. */
+    public boolean pressCrewRoom(String room) {
+        return crewVoice.visible && crewVoice.pressRoom(room);
     }
 
     /** Whether the conversation shows "Yeni mesajlar" (the scenario driver checks it). */
@@ -1276,8 +1343,10 @@ public final class OverlayScreen extends Screen {
             pageChangedAt = 0;
         }
         // The picker floats over the conversation: it is asked about a click before the list under it.
-        for (AbstractWidget w : new AbstractWidget[] {picker, gear, back, retry, answers[0], answers[1], answers[2],
-            callJoin, tabs, chips, messages, quick, replyClose, field, stickerButton, send, friends, settingsList}) {
+        for (AbstractWidget w : new AbstractWidget[] {emojiPicker, picker, gear, back, retry, answers[0], answers[1],
+            answers[2],
+            callJoin, tabs, chips, crewVoice, messages, quick, replyClose, field, stickerButton, send, friends,
+            settingsList}) {
             addWidget(w);
         }
         for (AbstractWidget w : host.widgets()) {
@@ -1392,7 +1461,7 @@ public final class OverlayScreen extends Screen {
         page = next;
         overlay.rememberPage(next);
         pageChangedAt = now();
-        picker.close();
+        closePickers();
         if (page == Page.CHATS && conversation != null && unreadOf(conversation) > 0) {
             // What came while another page was on screen is still unread: the list opens at it, under
             // "Yeni mesajlar", as when the panel opens.
@@ -1414,7 +1483,7 @@ public final class OverlayScreen extends Screen {
         conversation = id;
         overlay.rememberConversation(id);
         clearReply();
-        picker.close();
+        closePickers();
         messages.open(id, isCrew(id), unreadOf(id));
         if (page == Page.CHATS) {
             overlay.openConversation(id);
@@ -1484,7 +1553,7 @@ public final class OverlayScreen extends Screen {
         if (conversation == null || !composerOpen() || !state.has("stickers") || slowLeft() > 0) {
             return;
         }
-        picker.close();
+        closePickers();
         overlay.sendSticker(conversation, sticker, replying() ? replyTo : null);
         clearReply();
         messages.toBottom();
@@ -1532,14 +1601,99 @@ public final class OverlayScreen extends Screen {
     }
 
     private void togglePicker() {
-        if (picker.isOpen()) {
-            picker.close();
+        if (pickerOpen()) {
+            closePickers();
             setFocused(field);
-        } else if (composerOpen() && state.has("stickers") && !StickerSet.get().isEmpty()) {
-            messages.dismiss();
-            picker.open(overlay.settings().recentStickers(), now());
+        } else if (composerOpen()) {
+            openPicker(stickersOn() ? overlay.pickerTab() : PickerTabs.EMOJI, false, false);
+        }
+    }
+
+    private boolean stickersOn() {
+        return state.has("stickers") && !StickerSet.get().isEmpty();
+    }
+
+    private boolean pickerOpen() {
+        return picker.isOpen() || emojiPicker.isOpen();
+    }
+
+    private void closePickers() {
+        boolean hadKeys = getFocused() == picker || getFocused() == emojiPicker;
+        picker.close();
+        emojiPicker.close();
+        if (hadKeys) {
+            // The keys never stay with a closed picker (Enter there would still send or write).
+            setFocused(field.visible ? field : null);
+        }
+    }
+
+    /** Hands the keys to {@code w} now, and again once a press with the pointer that led here is over. */
+    private void focusAfterPress(AbstractWidget w) {
+        pendingFocus = w;
+        setFocused(w);
+    }
+
+    /** The open tab of the picker (its place on screen), or null. */
+    private PanelWidget openPicker() {
+        return picker.isOpen() ? picker : emojiPicker.isOpen() ? emojiPicker : null;
+    }
+
+    /** The emoji the panel's font draws now: the game's own at GUI scale 1, which lacks some (OVL-SOC). */
+    private static IntPredicate drawableEmoji() {
+        return Fonts.bundled() ? cp -> true : GameFont::draws;
+    }
+
+    /**
+     * Opens the picker on {@code tab} (OVL-SOC): stickers only while the service takes them, else emoji. {@code swap}:
+     * in place of the other tab, so it fades without rising; {@code keysOnTabs}: the arrows on the tabs asked, so the
+     * keys stay there. The emoji data is read on the emoji tab's first open only.
+     */
+    private void openPicker(int tab, boolean swap, boolean keysOnTabs) {
+        if (!composerOpen()) {
+            return;
+        }
+        long now = now();
+        messages.dismiss();
+        String lang = Texts.turkish() ? "tr" : "en";
+        boolean stickers = stickersOn();
+        boolean both = stickers && EmojiCatalog.available(lang);
+        if (stickers && (tab == PickerTabs.STICKERS || !EmojiCatalog.available(lang))) {
+            emojiPicker.close();
+            picker.open(overlay.settings().recentStickers(), both, swap, keysOnTabs, now);
+            overlay.rememberPickerTab(PickerTabs.STICKERS);
             layout();
-            setFocused(picker);
+            focusAfterPress(picker);
+            return;
+        }
+        EmojiCatalog emoji = EmojiCatalog.load(lang, EmojiGlyphs::colour);
+        if (emoji.entries().isEmpty()) {
+            return;
+        }
+        picker.close();
+        emojiPicker.open(emoji, drawableEmoji(), overlay.settings().recentChatEmojis(), both, swap, keysOnTabs, now);
+        overlay.rememberPickerTab(PickerTabs.EMOJI);
+        layout();
+        // As the launcher's picker: its search has the keys (letters find, the arrows pick, Enter writes).
+        focusAfterPress(emojiPicker);
+    }
+
+    /**
+     * An emoji picked in the picker (OVL-SOC): written where the caret is, the picker stays open (emoji come in runs).
+     * A pointer's pick hands the keys back to the message; Enter's keeps them in the picker.
+     */
+    private void insertEmoji(String emoji, boolean keys) {
+        if (!composerOpen() || emoji == null || emoji.isEmpty()) {
+            return;
+        }
+        String before = field.getValue();
+        field.insertText(emoji);
+        if (!field.getValue().equals(before)) {
+            // Only a written one counts as used (a full field writes nothing).
+            overlay.updateSettings(s -> s.withChatEmojiUsed(emoji));
+        }
+        draftChanged();
+        if (!keys) {
+            focusAfterPress(field);
         }
     }
 
@@ -1651,6 +1805,7 @@ public final class OverlayScreen extends Screen {
         settingsList.setReducedMotion(reduced);
         host.setReducedMotion(reduced);
         voice.setReducedMotion(reduced);
+        crewVoice.setReducedMotion(reduced);
         // 38 % of the screen between 220 and 300 GUI px, but never past the middle (GUI 3 at 720p and GUI 6 at 1440p
         // are 426 px wide): the aim point stays in the world, down to 200 px (CHAT2-O2 follow-up).
         panelW = Math.max(220, Math.min(300, Math.round(width * 0.38f)));
@@ -1723,6 +1878,16 @@ public final class OverlayScreen extends Screen {
             PanelWidget.place(chips, x0, y, cw, ChipRow.HEIGHT);
             y += ChipRow.HEIGHT + 6;
         }
+        // Crew chat's "Sesli" (OVL-SOC): the crew's voice rooms, while voice chat may be used and the launcher says them.
+        VoiceState.CrewRooms crewRooms = isCrew(conversation) && state.online()
+            ? overlay.voice().crewRooms(conversation) : null;
+        if (crewRooms != null && !crewRooms.rooms().isEmpty()) {
+            crewVoice.visible = true;
+            PanelWidget.place(crewVoice, x0, y, cw, CrewVoiceStrip.HEIGHT);
+            crewVoice.show(crewRooms, overlay.voice(), VoicePanel.WORDS, now);
+            crewVoiceSpeaking = overlay.voice().speakingRevision();
+            y += CrewVoiceStrip.HEIGHT + 6;
+        }
         composerY = height - P - COMPOSER_H;
         int listBottom = composerY - 6;
         composerNote = null;
@@ -1732,7 +1897,8 @@ public final class OverlayScreen extends Screen {
             field.visible = true;
             field.setEditable(true);
             send.visible = true;
-            boolean stickers = state.has("stickers") && !StickerSet.get().isEmpty();
+            // The picker's button: emoji always (the launcher's set is in the jar), stickers when the service takes them.
+            boolean stickers = true;
             int stickerRoom = stickers ? IconButton.SIZE + 2 : 0;
             PanelWidget.place(field, x0 + 8, composerY + (COMPOSER_H - 12) / 2,
                 cw - 8 - SendButton.SIZE - 6 - stickerRoom, 12);
@@ -1742,10 +1908,19 @@ public final class OverlayScreen extends Screen {
             if (stickers) {
                 PanelWidget.place(stickerButton, send.getX() - 2 - IconButton.SIZE,
                     composerY + (COMPOSER_H - IconButton.SIZE) / 2, IconButton.SIZE, IconButton.SIZE);
-                boolean open = picker.isOpen();
-                stickerButton.setColors(open ? Theme.GOLD_300 : Theme.ASH_400, open ? Theme.GOLD_200 : Theme.BONE_100);
+                boolean open = pickerOpen();
+                // Open, it is bone, never a second gold beside the send button (a chosen option is never gold).
+                stickerButton.setColors(open ? Theme.BONE_50 : Theme.ASH_400, Theme.BONE_100);
+                if (emojiPicker.isOpen() && emojiPicker.hasTabs() != stickersOn()) {
+                    emojiPicker.setTabs(stickersOn());
+                }
+                stickerButton.setMessage(Texts.tr(stickersOn() ? "chat.picker" : "chat.emoji"));
+                if (picker.isOpen() && !stickersOn()) {
+                    // The service stopped taking stickers: the sticker tab goes.
+                    picker.close();
+                }
             } else {
-                picker.close();
+                closePickers();
             }
             Component hint = composerHint();
             field.setPlaceholder(hint);
@@ -1764,26 +1939,29 @@ public final class OverlayScreen extends Screen {
             // (one would go as the reply; the launcher hides them too), not under the sticker picker, and only while
             // the conversation keeps room for a few messages.
             int qy = above - 6 - QuickReplies.HEIGHT;
-            if (isCrew(conversation) && !replying() && !picker.isOpen() && qy - 6 - y >= MIN_LIST_WITH_QUICK) {
+            if (isCrew(conversation) && !replying() && !pickerOpen() && qy - 6 - y >= MIN_LIST_WITH_QUICK) {
                 quick.visible = true;
                 PanelWidget.place(quick, x0, qy, cw, QuickReplies.HEIGHT);
                 quick.setHidden(!field.getValue().isEmpty(), now);
                 listBottom = qy - 6;
             }
-            if (picker.isOpen()) {
+            PanelWidget open = openPicker();
+            if (open != null) {
                 // Over the conversation, right above the field. When it needs the room it rises over the conversation
                 // chips and the tabs (they step aside while it is open), never over a card above them (a call, a
                 // notice) and never over its field: what does not fit scrolls (CHAT2-O2 follow-up).
-                int ph = StickerPicker.height(cw, !overlay.settings().recentStickers().isEmpty());
+                boolean both = stickersOn();
+                int ph = open == picker ? StickerPicker.height(cw, !overlay.settings().recentStickers().isEmpty(), both)
+                    : EmojiPanel.height(cw, both);
                 int py = Math.max(chatTop, above - 4 - ph);
-                PanelWidget.place(picker, x0, py, cw, Math.max(24, above - 4 - py));
+                PanelWidget.place(open, x0, py, cw, Math.max(24, above - 4 - py));
                 // The conversation ends above it (its newest message and edge fade stay in view): no sliver of a
                 // bubble shows over the picker's edge.
                 listBottom = Math.min(listBottom, py - 6);
             }
         } else {
             composerNote = composerReason();
-            picker.close();
+            closePickers();
             replyY = -1;
         }
         messages.visible = true;
@@ -1792,6 +1970,7 @@ public final class OverlayScreen extends Screen {
         messages.setFloatingLine(state.has("typing") || state.has("reactions") ? LINE_PLATE_H : 0);
         messages.refresh(state, now);
         picker.setReducedMotion(reduced);
+        emojiPicker.setReducedMotion(reduced);
     }
 
     private String composerReason() {
@@ -1806,13 +1985,13 @@ public final class OverlayScreen extends Screen {
 
     private void hideAll() {
         for (AbstractWidget w : new AbstractWidget[] {retry, answers[0], answers[1], answers[2], callJoin, tabs,
-            chips, messages, quick, field, send, friends, settingsList, stickerButton, replyClose}) {
+            chips, crewVoice, messages, quick, field, send, friends, settingsList, stickerButton, replyClose}) {
             w.visible = false;
         }
         host.hideAll();
         voice.hideAll();
         if (page != Page.CHATS || conversation == null) {
-            picker.close();
+            closePickers();
         }
 
         String menuFor = menu.friend();
@@ -1927,7 +2106,8 @@ public final class OverlayScreen extends Screen {
     public boolean keyPressed(KeyEvent event) {
         // A name typed into the menu's "Yeni kategori…" field types too (OVL-UX3).
         boolean typing = field.isFocused() && field.visible || menu.naming();
-        if (overlay.key().closes(event, typing)) {
+        // The emoji search types too (OVL-SOC): the panel's key bound to a letter types there.
+        if (overlay.key().closes(event, typing || emojiPicker.isFocused() && emojiPicker.isOpen())) {
             // Closes, unless this is the held press that opened the panel repeating (F7-OPEN).
             overlay.keyInPanel(this);
             return true;
@@ -1980,8 +2160,8 @@ public final class OverlayScreen extends Screen {
             // A tag's bubble first: it is the topmost thing.
             return true;
         }
-        if (picker.isOpen()) {
-            picker.close();
+        if (pickerOpen()) {
+            closePickers();
             layout();
             setFocused(field.visible ? field : chips);
             return true;
@@ -2048,14 +2228,26 @@ public final class OverlayScreen extends Screen {
             close();
             return true;
         }
-        if (picker.isOpen() && !picker.isMouseOver(event.x(), event.y())
-            && !stickerButton.isMouseOver(event.x(), event.y())) {
-            // A click beside the picker closes it, and only that.
-            picker.close();
+        PanelWidget open = openPicker();
+        if (open != null && !open.isMouseOver(event.x(), event.y()) && !stickerButton.isMouseOver(event.x(), event.y())
+            && !field.isMouseOver(event.x(), event.y())) {
+            // A click beside the picker closes it, and only that (the message field keeps it: emoji come in runs).
+            closePickers();
             layout();
             return true;
         }
-        return super.mouseClicked(event, doubleClick);
+        pendingFocus = null;
+        boolean handled = super.mouseClicked(event, doubleClick);
+        // The game handed the keys to the widget pressed; a handler that moved them on says where (OVL-SOC), and a
+        // widget the press hid (a closed picker, the crew strip under the room page) never keeps them.
+        AbstractWidget want = pendingFocus;
+        pendingFocus = null;
+        if (want != null && want.visible) {
+            setFocused(want);
+        } else if (getFocused() instanceof AbstractWidget w && !w.visible) {
+            setFocused(initialFocus());
+        }
+        return handled;
     }
 
     @Override
@@ -2109,7 +2301,7 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public void removed() {
-        picker.close();
+        closePickers();
         overlay.panelClosed();
     }
 
@@ -2234,10 +2426,16 @@ public final class OverlayScreen extends Screen {
         g.pose().translate(0f, reducedMotion() ? 0f : (1f - pe) * 4f);
         // Under an open sticker picker the tabs and the conversation chips step aside as it rises, so its edge never
         // cuts through them.
-        float underPicker = picker.visible ? picker.opacity(now) : 0f;
+        float underPicker = picker.visible ? picker.opacity(now) : emojiPicker.visible ? emojiPicker.opacity(now) : 0f;
         Draw.stratum(g);
         renderUnder(g, tabs, underPicker, mouseX, mouseY);
         renderUnder(g, chips, underPicker, mouseX, mouseY);
+        if (crewVoice.visible && overlay.voice().speakingRevision() != crewVoiceSpeaking) {
+            // Who speaks moved: only the rings of the player's own room follow, nothing is laid out again.
+            crewVoiceSpeaking = overlay.voice().speakingRevision();
+            crewVoice.speaking(overlay.voice(), now);
+        }
+        renderUnder(g, crewVoice, underPicker, mouseX, mouseY);
         Draw.stratum(g);
         messages.setFloatingShown(lineText == null ? 0f : lineAlpha.value(now));
         render(g, messages, mouseX, mouseY);
@@ -2253,6 +2451,10 @@ public final class OverlayScreen extends Screen {
         if (picker.visible) {
             Draw.stratum(g);
             render(g, picker, mouseX, mouseY);
+        }
+        if (emojiPicker.visible) {
+            Draw.stratum(g);
+            render(g, emojiPicker, mouseX, mouseY);
         }
         Draw.stratum(g);
         render(g, friends, mouseX, mouseY);
@@ -2292,7 +2494,8 @@ public final class OverlayScreen extends Screen {
         if (!w.visible) {
             return;
         }
-        boolean covered = underPicker > 0f && w.getY() + w.getHeight() > picker.getY();
+        PanelWidget open = openPicker();
+        boolean covered = underPicker > 0f && open != null && w.getY() + w.getHeight() > open.getY();
         if (covered && underPicker >= 0.99f) {
             return;
         }

@@ -7,8 +7,10 @@ import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.state.Presence;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.PresenceDot;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -63,6 +65,8 @@ public final class HostList extends PanelWidget {
         Face face;
         boolean online;
         boolean inGame;
+        /** The dot on the face's corner (OVL-SOC): a friend's presence, a guest's way in. */
+        Presence presence = Presence.OFFLINE;
         boolean dim;
         boolean removable;
         TagChip chip;
@@ -182,12 +186,14 @@ public final class HostList extends PanelWidget {
             row.sub = Texts.visual(Texts.fit(small, where, nameRoom));
             row.online = true;
             row.inGame = f.inGame();
+            row.presence = f.presence();
             row.dim = false;
             row.removable = false;
             row.guest = "";
             row.face = Face.of(row.label);
+            String heard = PresenceDot.spoken(row.presence);
             row.narration = Texts.tr("narration.friend", badge == null ? row.label
-                : Texts.str("row.badge", row.label, badge.tag()), where);
+                : Texts.str("row.badge", row.label, badge.tag()), heard == null ? where : where + ", " + heard);
             next.add(row);
         }
         Set<String> ids = new java.util.HashSet<>();
@@ -243,6 +249,8 @@ public final class HostList extends PanelWidget {
             row.sub = Texts.visual(Texts.fit(small, state, nameRoom));
             row.online = g.in() || g.joining();
             row.inGame = g.in();
+            // In the world bright jade, on the way the softer one (filled, as every dot).
+            row.presence = g.in() ? Presence.PLAYING : g.joining() ? Presence.LAUNCHER : Presence.OFFLINE;
             row.dim = !row.online;
             row.removable = !g.guest().isEmpty();
             row.face = Face.of(row.label);
@@ -490,14 +498,9 @@ public final class HostList extends PanelWidget {
             Draw.pushAlpha(row.dim ? 0.55f : 1f);
             row.face.draw(g, FACE, cx, cy);
             Draw.popAlpha();
-            if (row.online) {
-                // Filled jade in a game (in the world), a jade ring in the launcher (on the way).
-                Draw.disc(g, 8, cx + 6, cy + 6, Theme.OBSIDIAN_900);
-                Draw.disc(g, 5, cx + 6, cy + 6, Theme.JADE_400);
-                if (!row.inGame) {
-                    Draw.disc(g, 3, cx + 6, cy + 6, Theme.OBSIDIAN_900);
-                }
-            }
+            // The friend list's dot (OVL-SOC): bright jade in a game or the world, the softer jade in the launcher or
+            // on the way, gold with its bar on "Rahatsız etmeyin".
+            PresenceDot.onFace(g, row.presence, cx + 6, cy + 6, Theme.OBSIDIAN_900);
             float tx = fx + FACE + 8;
             if (row.chip != null) {
                 row.chip.draw(g, tx, y + NAME_MID);

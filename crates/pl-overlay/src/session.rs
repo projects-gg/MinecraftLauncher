@@ -28,8 +28,8 @@ use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
     ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST, FEATURE_LANG,
     FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
-    FEATURE_PEOPLE3, FEATURE_TAGS, FEATURE_VOICE, FriendAction, FriendRefusal, FromGame,
-    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
+    FEATURE_PEOPLE3, FEATURE_TAGS, FEATURE_VOICE, FEATURE_VOICE_ROOMS, FriendAction, FriendRefusal,
+    FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 use crate::voice::{self, VoiceAct, VoiceFuture, VoiceMirror};
@@ -670,6 +670,8 @@ struct Live {
     quiet: bool,
     /// The mod shows voice chat (VOICE-O: `voice` in its hello), and what it was told of it.
     voice: bool,
+    /// The mod shows the crews' voice rooms in crew chat (OVL-SOC: `voice-rooms` beside `voice`).
+    voice_rooms: bool,
     voice_mirror: VoiceMirror,
 }
 
@@ -1127,12 +1129,28 @@ impl<S: SocialActions> Session<S> {
             |id| scene.name_of(id).map(str::to_owned),
             |id| scene.crew_name(id).map(str::to_owned),
         );
-        let frame = self
+        // OVL-SOC (V21): the crews' rooms, worked out only for a mod that shows them.
+        let crews = self
             .live
-            .as_mut()
-            .and_then(|live| live.voice_mirror.update(view));
-        if let Some(frame) = frame {
-            self.send(vec![frame]);
+            .as_ref()
+            .is_some_and(|live| live.voice_rooms)
+            .then(|| {
+                voice::crews_of(
+                    state,
+                    scene.crews.iter().map(|crew| crew.id.as_str()),
+                    english,
+                    |id| scene.name_of(id).map(str::to_owned),
+                )
+            });
+        let mut frames = Vec::new();
+        if let Some(live) = self.live.as_mut() {
+            frames.extend(live.voice_mirror.update(view));
+            if let Some(crews) = crews {
+                frames.extend(live.voice_mirror.update_crews(crews));
+            }
+        }
+        if !frames.is_empty() {
+            self.send(frames);
         }
     }
 
@@ -1175,7 +1193,18 @@ impl<S: SocialActions> Session<S> {
         };
         let scene = &self.scene;
         let state = self.voice.as_ref().map(|(state, _)| state.as_ref());
-        let Some(checked) = voice::check(frame, state, |id| scene.friend(id).is_some()) else {
+        // OVL-SOC: a crew room's "Katıl" only from a mod that shows the crews' rooms.
+        if matches!(frame, FromGame::VoiceJoin { .. })
+            && !self.live.as_ref().is_some_and(|live| live.voice_rooms)
+        {
+            return;
+        }
+        let Some(checked) = voice::check(
+            frame,
+            state,
+            |id| scene.friend(id).is_some(),
+            |id| scene.crews.iter().any(|crew| crew.id == id),
+        ) else {
             return;
         };
         let act = match checked {
@@ -1275,6 +1304,8 @@ impl<S: SocialActions> Session<S> {
         live.listener.english = lang == Lang::En;
         live.mirror.set_lang(Some(lang));
         self.refresh();
+        // A crew's "Oda 2" is "Room 2" in English: the room's title and the crews' rooms follow.
+        self.refresh_voice();
     }
 
     /// SKIN1-O: a Projects server asked the game whether its launcher vouches for the player
@@ -1610,6 +1641,9 @@ impl<S: SocialActions> Session<S> {
                     quiet,
                     // A mod with the emoji picker alone shows nothing of voice chat.
                     voice: !quiet && features.iter().any(|f| f == FEATURE_VOICE),
+                    voice_rooms: !quiet
+                        && features.iter().any(|f| f == FEATURE_VOICE)
+                        && features.iter().any(|f| f == FEATURE_VOICE_ROOMS),
                     voice_mirror: VoiceMirror::default(),
                 }));
                 self.send(frames);
@@ -1797,7 +1831,9 @@ impl<S: SocialActions> Session<S> {
             | FromGame::VoiceLmute { .. }
             | FromGame::VoiceMod { .. }
             | FromGame::VoiceCall { .. }
-            | FromGame::VoiceInvite { .. }) => self.on_voice_press(&frame),
+            | FromGame::VoiceInvite { .. }
+            // OVL-SOC: "Katıl" and "Yeni oda" in crew chat's "Sesli".
+            | FromGame::VoiceJoin { .. }) => self.on_voice_press(&frame),
             FromGame::Hello { .. } | FromGame::Unknown => {}
         }
     }

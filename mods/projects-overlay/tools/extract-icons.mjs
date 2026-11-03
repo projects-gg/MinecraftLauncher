@@ -72,6 +72,17 @@ const ICONS = [
   ["PhonePlus", "regular"],
   ["PhoneX", "regular"],
   ["PhoneDisconnect", "regular"],
+  // Crew chat's "Sesli" ("Yeni oda") and the chat's emoji picker: its search and its groups, the launcher's signs
+  // (features/emoji/picker-panel.tsx GROUP_ICONS; OVL-SOC).
+  ["Plus", "bold"],
+  ["MagnifyingGlass", "regular"],
+  ["ClockCounterClockwise", "regular"],
+  ["PawPrint", "regular"],
+  ["Hamburger", "regular"],
+  ["AirplaneTilt", "regular"],
+  ["SoccerBall", "regular"],
+  ["Lightbulb", "regular"],
+  ["Shapes", "regular"],
 ];
 
 // The crew palette's emblems (crew-look.ts EMBLEMS) and the icons team-emblem.tsx draws them with.

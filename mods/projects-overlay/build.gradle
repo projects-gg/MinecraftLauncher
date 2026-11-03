@@ -206,6 +206,13 @@ processResources {
         rename 'chat-emojis.json', 'projects.json'
         into 'assets/projects_overlay/emojis'
     }
+
+    // The panel's emoji picker (OVL-SOC): the launcher's own picker data (Unicode Emoji 17.0, CLDR names and search
+    // words in both languages), the same files, so the two pickers keep one order and one search.
+    from(file('../../apps/launcher/src/features/emoji/data')) {
+        include 'emoji.tr.tsv', 'emoji.en.tsv'
+        into 'assets/projects_overlay/emoji'
+    }
 }
 
 // The mod is GPL-3.0-only: every jar carries the license text at its root, named as Fabric's mod template names it
