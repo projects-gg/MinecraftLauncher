@@ -248,6 +248,8 @@ pub struct HomeView {
     pub patch_notes_id: Option<String>,
     /// Studio's links (Settings → Hakkında, Home's community row).
     pub links: LinksView,
+    /// SOC-NEXT's screens in the friends feature: `features.socNext` with `features.friends`.
+    pub soc_next: bool,
     pub offline: bool,
     pub from_cache: bool,
 }
@@ -525,6 +527,7 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
         status,
         pack_notes: pack_notes(state, snapshot).await,
         links: LinksView::from_config(&snapshot.config.links),
+        soc_next: snapshot.config.features.friends && snapshot.config.features.soc_next,
         offline: snapshot.offline,
         from_cache: snapshot.from_cache,
     }

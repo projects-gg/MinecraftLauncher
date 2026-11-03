@@ -22,6 +22,9 @@
 // mod: 30 sn)"); after a message it says how long the next one waits ("Göndermek için 12 saniye
 // bekle"), and with words in the field the line under it counts the seconds down ("12 sn") while the
 // send button stays off; the text waits in the field.
+//
+// SOC-NEXT §3.1: "@" in crew chat and ":" with two letters anywhere open the suggestions over the
+// field (next/suggest-box.tsx): ↑/↓ move, Enter or Tab put the choice in, Esc closes them.
 import { Check, Info, LockSimple, PaperPlaneRight, PencilSimple, X } from "@phosphor-icons/react";
 import type { Sticker as StickerData } from "@pl/stickers";
 import { cn, IconButton } from "@pl/ui";
@@ -45,8 +48,10 @@ import { inside, leaveOnEscape } from "../edit-escape";
 import { newAccount } from "../identity";
 import { limitOf, opensIn } from "../limits";
 import { enter, leave, rise, useSocialMotion } from "../motion";
+import { SuggestBox, useSuggestions } from "../next/suggest-box";
 import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
+import { crewOf } from "./conversations";
 import { useChatExtras, useChatHasExtras, useLinkRules, useStickerSets } from "./extras";
 import { holdFocus } from "./focus";
 import { domainOf, ruleWords, SiteIcon, shapeOf } from "./link-ui";
@@ -198,7 +203,7 @@ export function Composer({
   /** CHAT-CALM: the crew's slow mode for the player (seconds; 0: none, or they lead it). */
   slow?: number;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { reduce } = useSocialMotion();
   const draft = useChat((s) => s.drafts[conv] ?? "");
   const setDraft = useChat((s) => s.setDraft);
@@ -337,9 +342,14 @@ export function Composer({
     };
   }, [cardUrl, editing]);
 
+  // SOC-NEXT: where the caret is (the suggestions read the word written at it).
+  const [caret, setCaret] = useState(0);
+  const [focused, setFocused] = useState(false);
   const remember = () => {
     const element = field.current;
-    if (element) selection.current = { start: element.selectionStart, end: element.selectionEnd };
+    if (!element) return;
+    selection.current = { start: element.selectionStart, end: element.selectionEnd };
+    setCaret(element.selectionStart === element.selectionEnd ? element.selectionEnd : -1);
   };
 
   const change = (value: string) => {
@@ -364,6 +374,21 @@ export function Composer({
     selection.current = { start: next.caret, end: next.caret };
     window.requestAnimationFrame(() => field.current?.setSelectionRange(next.caret, next.caret));
   };
+
+  // SOC-NEXT §3.1: "@Ad " or an emoji in place of what was written, the caret after it.
+  const suggestions = useSuggestions({
+    text,
+    caret,
+    crew: crew ? crewOf(conv) : null,
+    focused,
+    field,
+    put: (value, at) => {
+      change(value);
+      selection.current = { start: at, end: at };
+      setCaret(at);
+      window.requestAnimationFrame(() => field.current?.setSelectionRange(at, at));
+    },
+  });
 
   const sendSticker = async (sticker: StickerData) => {
     if (wait > 0) {
@@ -427,6 +452,7 @@ export function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (suggestions.onKey(event)) return;
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       sendNow();
@@ -576,12 +602,13 @@ export function Composer({
       </AnimatePresence>
       <div
         className={cn(
-          "flex items-end gap-0.5 rounded-[var(--radius-panel)] border bg-obsidian-800/80 pr-[3px] transition-[border-color,box-shadow] duration-150",
+          "relative flex items-end gap-0.5 rounded-[var(--radius-panel)] border bg-obsidian-800/80 pr-[3px] transition-[border-color,box-shadow] duration-150",
           "border-white/10 hover:border-white/18 focus-within:border-gold-400/60 focus-within:ring-2 focus-within:ring-gold-400/20",
           reason &&
             "border-flare-400/55 focus-within:border-flare-400/70 focus-within:ring-flare-400/20",
         )}
       >
+        <SuggestBox suggestions={suggestions} lang={i18n.language.startsWith("en") ? "en" : "tr"} />
         <textarea
           ref={field}
           rows={1}
@@ -594,7 +621,15 @@ export function Composer({
           onSelect={remember}
           onKeyUp={remember}
           onClick={remember}
-          onBlur={remember}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            remember();
+            setFocused(false);
+          }}
+          aria-controls={suggestions.token ? suggestions.listId : undefined}
+          aria-activedescendant={
+            suggestions.token ? `${suggestions.listId}-${suggestions.active}` : undefined
+          }
           aria-label={t("chat.composer.label")}
           aria-invalid={reason ? true : undefined}
           aria-describedby={

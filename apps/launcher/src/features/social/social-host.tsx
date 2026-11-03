@@ -7,6 +7,12 @@
 // and "Etiketi tak" on the toast of a request taken (TEAM6). CHAT-CALM: a conversation's messages
 // are told in one notice that changes in place (chat/notify.ts `ChatNotices`), gone once the player
 // read them; a crowded crew muted on joining says so once, with "Sesi aç".
+//
+// SOC-NEXT: nothing someone the player ignores does is told; a friend's notice says their
+// nickname; a crew chat message that mentions the player is heard as a reply to them is
+// (CHAT-CALM's rule; more than five members mentioned: nobody) and marks "@" in "Mesajlar"; under
+// "Yayıncı modu" notices say "Yeni mesaj" in place of the words (and a plan's note stays out).
+// Who is ignored and the pinned conversations travel with the settings backup.
 import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -66,6 +72,14 @@ import {
   wantsNotice,
 } from "./model";
 import { crewMutedNow, crewmateHeardIn, mutedNow } from "./mute";
+import { socNextOn } from "./next/flag";
+import { SocNextHost } from "./next/host";
+import { fromIgnored } from "./next/ignore";
+import { markMention } from "./next/mention-marks";
+import { mentionOf } from "./next/mentions";
+import { noticeName, realNameOf } from "./next/nickname";
+import { useSocNextPrefs } from "./next/prefs";
+import { shownHost, streamerOnNow } from "./next/streamer";
 import { NoticeDialog } from "./notice-dialog";
 import { MarkedSentence } from "./person-mark";
 import { PersonAskDialog } from "./person-menu";
@@ -232,6 +246,8 @@ function handleNotice(notice: SocialNotice) {
     handleAfkNotice(notice.notice);
     return;
   }
+  // SOC-NEXT: someone the player ignores is never told (their rows still show it).
+  if (socNextOn() && fromIgnored(notice, new Set(useSocNextPrefs.getState().ignored))) return;
   const prefs = useSocialPrefs.getState();
   if (
     !wantsNotice(
@@ -329,7 +345,7 @@ function handleNotice(notice: SocialNotice) {
       const { name } = callerIn(notice.call, useSocialUi.getState().view.crews);
       const where = callWhere(notice.call);
       const text =
-        where.kind === "server"
+        where.kind === "server" && shownHost(where.host)
           ? i18n.t("crews.call.arrivedAt", { name, host: where.host })
           : i18n.t("teams.call.arrived", { name });
       showCallToast(notice.call, true);
@@ -405,7 +421,8 @@ function handleNotice(notice: SocialNotice) {
           name: plan.byName ?? i18n.t("social.notices.someone"),
           when: planWhen(plan.at, Date.now(), i18n.t, true),
         }),
-        plan.note,
+        // SOC-NEXT "Yayıncı modu": a plan's note is the player's words, kept off a stream.
+        streamerOnNow() ? undefined : plan.note,
         i18n.t,
       );
       if (crewInView(plan.crew)) {
@@ -456,6 +473,17 @@ function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>)
   const now = Date.now();
   const crew = notice.crew ? ui.view.crews.find((c) => c.id === notice.crew) : undefined;
   const me = ui.view.me?.id;
+  // SOC-NEXT: a crew chat message that mentions the player (by the names the crew knows) is heard
+  // as a reply to them is; more than five members mentioned tells nobody (its "@" stays).
+  const mention =
+    socNextOn() && crew
+      ? mentionOf(
+          notice.message.text,
+          me,
+          crew.members.map((m) => ({ id: m.id, name: realNameOf(m) })),
+        )
+      : "none";
+  if (mention !== "none") markMention(notice.conv);
   const way = chatNoticeWay({
     kind: notice.crew ? "crew" : "direct",
     status: ui.view.me?.status,
@@ -465,13 +493,16 @@ function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>)
     mutedHere: chatMutedNow(notice.conv, prefs.chatMutes, now),
     crewMuted: crew ? crewMutedNow(crew, ui.view.crewNotifications, now) : false,
     crewChatOn: prefs.notifyCrewChat,
-    toMe: Boolean(me && notice.message.reply?.from === me),
+    toMe: Boolean(me && notice.message.reply?.from === me) || mention === "me",
   });
   if (way === "none") return;
+  const name = socNextOn() ? noticeName(notice.message.from, notice.name, ui.view) : notice.name;
   chatNotices.add(notice.conv, {
-    name: notice.name ?? i18n.t("chat.list.someone"),
-    // A sticker reads "Çıkartma: GG" (CHAT2).
-    text: preview(messageLine(notice.message, i18n.t, i18n.language)),
+    name: name ?? i18n.t("chat.list.someone"),
+    // A sticker reads "Çıkartma: GG" (CHAT2); under "Yayıncı modu" the words stay off a stream.
+    text: streamerOnNow()
+      ? i18n.t("socNext.streamer.newMessage")
+      : preview(messageLine(notice.message, i18n.t, i18n.language)),
     crew: crew?.name,
   });
 }
@@ -639,6 +670,9 @@ async function currentBackup() {
       notifyCrewChat: social.notifyCrewChat,
       notifyJoinRequests: social.notifyJoinRequests,
       notifyPlans: social.notifyPlans,
+      // SOC-NEXT: who the player ignores and the pinned conversations (ids only).
+      ignored: useSocNextPrefs.getState().ignored,
+      pinnedChats: useSocNextPrefs.getState().pinnedChats,
     },
     voice,
   );
@@ -698,6 +732,11 @@ function useBackupSync() {
         schedule(BACKUP_DEBOUNCE_MS);
       }
     });
+    const stopNext = useSocNextPrefs.subscribe((now, before) => {
+      if (now.ignored !== before.ignored || now.pinnedChats !== before.pinnedChats) {
+        schedule(BACKUP_DEBOUNCE_MS);
+      }
+    });
     // Voice chat's settings and per-person choices, changed here or in the game's overlay.
     const stopVoice = useVoiceUi.subscribe((now, before) => {
       if (now.state.backupRev !== before.state.backupRev) schedule(BACKUP_DEBOUNCE_MS);
@@ -706,6 +745,7 @@ function useBackupSync() {
       if (timer !== null) window.clearTimeout(timer);
       stopPrefs();
       stopSocial();
+      stopNext();
       stopVoice();
     };
   }, [ready, enabled]);
@@ -766,6 +806,11 @@ function RestoreDialog() {
       if (read.friends.notifyPlans !== undefined) {
         social.set("notifyPlans", read.friends.notifyPlans);
       }
+      // SOC-NEXT: who the player ignores and the pinned conversations.
+      useSocNextPrefs.getState().restore({
+        ignored: read.friends.ignored,
+        pinnedChats: read.friends.pinnedChats,
+      });
       // "Sesli sohbet": the launcher reads and bounds it (this computer's devices stay); a part it
       // cannot read leaves the rest applied.
       if (read.voice) await voiceApi.restore(read.voice).catch(() => undefined);
@@ -835,6 +880,8 @@ export function SocialHost() {
       <WorldShareHost />
       {/* "Sesli sohbet" (VOICE): its state, rings, notices and the room panel. */}
       <VoiceHost />
+      {/* SOC-NEXT: its switch, nicknames, the timed status, "Yayıncı modu". */}
+      <SocNextHost />
     </>
   );
 }

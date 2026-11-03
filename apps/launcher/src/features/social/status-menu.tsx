@@ -6,8 +6,12 @@
 // on, switches or takes it off ("Etiket yok"). The player's profile badges (BADGES-UI) show as
 // others see them: the first beside the name, its tooltip naming them all (the picker is for the
 // status; friends settings' "Rozetler" lists them with their switches).
+//
+// SOC-NEXT §3.3: "Rahatsız etmeyin" and "Görünmez" open a short list ("1 saat", "8 saat", "Yarın
+// sabaha kadar", "Ben açana kadar"; the crew mute's words); a timed one goes back to "Çevrimiçi"
+// by itself (next/host.tsx) and the status's tooltip says until when ("17:30'a kadar").
 import { CaretDown, CaretRight, Check, TagSimple } from "@phosphor-icons/react";
-import { cn, easeOutExpo, returnFocusAfterKeys } from "@pl/ui";
+import { cn, easeOutExpo, returnFocusAfterKeys, Tooltip } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useState } from "react";
@@ -21,9 +25,13 @@ import { attempt } from "./actions";
 import { useMyBadge, wearTag } from "./badge-actions";
 import { tagChoices } from "./badges";
 import { BadgedName } from "./crew-badge";
+import { untilText } from "./crew-notify";
 import { LimitedChip } from "./limited-chip";
 import { dayMonth } from "./limits";
 import { swap, useSocialMotion } from "./motion";
+import { useSocNext } from "./next/flag";
+import { useSocNextPrefs } from "./next/prefs";
+import { STATUS_PRESETS, statusUntil } from "./next/status-timer";
 import { PresenceDot, SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
@@ -52,6 +60,20 @@ export function changeStatus(next: StatusMode) {
 const itemClass =
   "flex h-11 cursor-pointer items-center gap-3 rounded-md px-2.5 text-[13.5px] text-bone-100 outline-none select-none data-[highlighted]:bg-white/8";
 
+/** SOC-NEXT: a status for a while ("Ben açana kadar": no end), shown at once as any status. */
+export function changeStatusFor(
+  next: "dnd" | "invisible",
+  preset: (typeof STATUS_PRESETS)[number],
+) {
+  changeStatus(next);
+  const until = statusUntil(preset, Date.now());
+  useSocNextPrefs.getState().setStatusTimer(until === null ? null : { status: next, until });
+}
+
+/** The menus' floating panel (the status picker's and its lists). */
+const panelClass =
+  "z-50 rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_24px_60px_rgb(34_6_6/0.55)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none";
+
 export function MeCard({ me }: { me: SocialMe }) {
   const { t } = useTranslation();
   const calm = useCalm();
@@ -59,7 +81,14 @@ export function MeCard({ me }: { me: SocialMe }) {
   const [open, setOpen] = useState(false);
   const pending = useSocialUi((s) => s.statusPending);
   const status = pending ?? me.status;
-  const choose = changeStatus;
+  const timed = useSocNext();
+  const timer = useSocNextPrefs((s) => (timed ? s.statusTimer : null));
+  // "17:30'a kadar" while a timed status holds.
+  const until = timer && timer.status === status ? untilText(t, timer.until, Date.now()) : null;
+  const choose = (next: StatusMode) => {
+    if (timed) useSocNextPrefs.getState().setStatusTimer(null);
+    changeStatus(next);
+  };
   const badge = useMyBadge();
   // "Ekip etiketi ▸" while the service has tags and the player is in a crew.
   const tags = useSocialUi((s) => s.view.crew.badges);
@@ -86,28 +115,34 @@ export function MeCard({ me }: { me: SocialMe }) {
         {/* A limited account's chip sits by the status, where the name keeps its whole width. */}
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
           <DropdownMenu.Root open={open} onOpenChange={setOpen}>
-            <DropdownMenu.Trigger asChild>
-              <button
-                type="button"
-                aria-label={t("social.status.change")}
-                className="group -ml-1.5 flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[12.5px] text-ash-300 outline-none transition-colors hover:bg-white/6 hover:text-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=open]:text-bone-100"
-              >
-                <PresenceDot kind={dotOf(status)} size={8} />
-                <span className="relative inline-flex">
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.span key={status} {...swap(reduce)}>
-                      {t(`social.status.${status}`)}
-                    </motion.span>
-                  </AnimatePresence>
-                </span>
-                <CaretDown
-                  size={10}
-                  weight="bold"
-                  aria-hidden
-                  className="text-ash-400 transition-transform duration-200 group-data-[state=open]:rotate-180"
-                />
-              </button>
-            </DropdownMenu.Trigger>
+            <Tooltip content={until ?? ""} disabled={!until || open}>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  aria-label={
+                    until
+                      ? `${t("social.status.change")}, ${t("socNext.status.until", { status: t(`social.status.${status}`), until })}`
+                      : t("social.status.change")
+                  }
+                  className="group -ml-1.5 flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[12.5px] text-ash-300 outline-none transition-colors hover:bg-white/6 hover:text-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=open]:text-bone-100"
+                >
+                  <PresenceDot kind={dotOf(status)} size={8} />
+                  <span className="relative inline-flex">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.span key={status} {...swap(reduce)}>
+                        {t(`social.status.${status}`)}
+                      </motion.span>
+                    </AnimatePresence>
+                  </span>
+                  <CaretDown
+                    size={10}
+                    weight="bold"
+                    aria-hidden
+                    className="text-ash-400 transition-transform duration-200 group-data-[state=open]:rotate-180"
+                  />
+                </button>
+              </DropdownMenu.Trigger>
+            </Tooltip>
             <AnimatePresence>
               {open ? (
                 <DropdownMenu.Portal forceMount>
@@ -138,17 +173,66 @@ export function MeCard({ me }: { me: SocialMe }) {
                         value={status}
                         onValueChange={(value) => choose(value as StatusMode)}
                       >
-                        {STATUSES.map((option) => (
-                          <DropdownMenu.RadioItem key={option} value={option} className={itemClass}>
-                            <span className="flex w-5 justify-center">
-                              <PresenceDot kind={dotOf(option)} size={10} />
-                            </span>
-                            <span className="flex-1">{t(`social.status.${option}`)}</span>
-                            <DropdownMenu.ItemIndicator>
-                              <Check size={15} weight="bold" className="text-bone-100" />
-                            </DropdownMenu.ItemIndicator>
-                          </DropdownMenu.RadioItem>
-                        ))}
+                        {STATUSES.map((option) =>
+                          timed && option !== "online" ? (
+                            // SOC-NEXT: the status for a while, its four choices to the side.
+                            <DropdownMenu.Sub key={option}>
+                              <DropdownMenu.SubTrigger
+                                className={cn(itemClass, "data-[state=open]:bg-white/8")}
+                              >
+                                <span className="flex w-5 justify-center">
+                                  <PresenceDot kind={dotOf(option)} size={10} />
+                                </span>
+                                <span className="flex-1">{t(`social.status.${option}`)}</span>
+                                {status === option ? (
+                                  <Check size={15} weight="bold" className="text-bone-100" />
+                                ) : null}
+                                <CaretRight
+                                  size={13}
+                                  weight="bold"
+                                  aria-hidden
+                                  className="shrink-0 text-ash-400"
+                                />
+                              </DropdownMenu.SubTrigger>
+                              <DropdownMenu.Portal>
+                                <DropdownMenu.SubContent
+                                  sideOffset={8}
+                                  alignOffset={-6}
+                                  collisionPadding={12}
+                                  className={cn("pop-motion w-[208px]", panelClass)}
+                                >
+                                  {STATUS_PRESETS.map((preset) => (
+                                    <DropdownMenu.Item
+                                      key={preset}
+                                      className={cn(itemClass, "h-10")}
+                                      onSelect={() =>
+                                        changeStatusFor(option as "dnd" | "invisible", preset)
+                                      }
+                                    >
+                                      {preset === "forever"
+                                        ? t("socNext.status.forever")
+                                        : t(`teams.mute.presets.${preset}`)}
+                                    </DropdownMenu.Item>
+                                  ))}
+                                </DropdownMenu.SubContent>
+                              </DropdownMenu.Portal>
+                            </DropdownMenu.Sub>
+                          ) : (
+                            <DropdownMenu.RadioItem
+                              key={option}
+                              value={option}
+                              className={itemClass}
+                            >
+                              <span className="flex w-5 justify-center">
+                                <PresenceDot kind={dotOf(option)} size={10} />
+                              </span>
+                              <span className="flex-1">{t(`social.status.${option}`)}</span>
+                              <DropdownMenu.ItemIndicator>
+                                <Check size={15} weight="bold" className="text-bone-100" />
+                              </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                          ),
+                        )}
                       </DropdownMenu.RadioGroup>
                       {choices.length ? (
                         <>

@@ -280,6 +280,7 @@ function home(v: HomeView): HomeContent {
       custom: v.links.custom,
       community: v.links.community,
     },
+    socNext: v.socNext,
     offline: v.offline,
   };
 }

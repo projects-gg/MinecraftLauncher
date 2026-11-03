@@ -22,6 +22,8 @@ import { unansweredCall } from "./calls";
 import { type ChatMutes, unreadDirect } from "./chat/conversations";
 import { waitingRequests } from "./crew-joining";
 import { callHeardIn, crewCallsHeard, crewMutedNow, crewmateHeardIn, mutedNow } from "./mute";
+import { cleanIgnored, cleanPinned } from "./next/prefs";
+import { shownHost } from "./next/streamer";
 
 const collator = new Intl.Collator("tr", { sensitivity: "base" });
 
@@ -197,6 +199,7 @@ export function whatWaits(
   localCrewCalls: boolean,
   nowMs: number,
   chatMutes: ChatMutes = {},
+  unreadMarks: Readonly<Record<string, number>> = {},
 ): Waiting {
   // The newest unanswered call of a crew that is not muted on its own.
   const call = crewCallsHeard(view.crewNotifications, localCrewCalls, nowMs)
@@ -211,7 +214,7 @@ export function whatWaits(
   return {
     asks: view.incoming.length > 0 || view.invites.length > 0,
     call: call ?? null,
-    messages: unreadDirect(view.chat, chatMutes, nowMs),
+    messages: unreadDirect(view.chat, chatMutes, nowMs, unreadMarks),
     joins,
   };
 }
@@ -261,10 +264,11 @@ function placeLine(friend: Friend, t: TFunction): string {
       return t("social.presence.projects");
     case "singleplayer":
       return t("social.presence.singleplayer");
-    case "other":
-      return friend.game.host
-        ? t("social.presence.otherHost", { host: friend.game.host })
-        : t("social.presence.other");
+    case "other": {
+      // SOC-NEXT "Yayıncı modu": no address on a stream ("Başka sunucuda").
+      const host = shownHost(friend.game.host);
+      return host ? t("social.presence.otherHost", { host }) : t("social.presence.other");
+    }
     default:
       return t("social.presence.playing");
   }
@@ -304,9 +308,9 @@ export function activityLine(snapshot: Pick<SocialSnapshot, "activity">, t: TFun
   if (activity.state === "singleplayer") return t("social.presence.singleplayer");
   if (activity.state === "playing") {
     if (!activity.host) return t("social.presence.playing");
-    return isProjectsHost(activity.host)
-      ? t("social.presence.projects")
-      : t("social.presence.otherHost", { host: activity.host });
+    if (isProjectsHost(activity.host)) return t("social.presence.projects");
+    const host = shownHost(activity.host);
+    return host ? t("social.presence.otherHost", { host }) : t("social.presence.other");
   }
   return t("social.presence.launcher");
 }
@@ -499,6 +503,10 @@ export interface BackupFriends {
   /** "Katılma istekleri" and "Plan hatırlatmaları" (TEAM5; older backups have none). */
   notifyJoinRequests?: boolean;
   notifyPlans?: boolean;
+  /** SOC-NEXT: who the player ignores (user ids, at most 200) and the conversations pinned to the
+   * top of "Mesajlar" (at most 3); left out while empty. Nicknames never travel (this computer). */
+  ignored?: string[];
+  pinnedChats?: string[];
 }
 
 /** Friend ids with a yes or no, at most 200 (what a backup may carry). */
@@ -590,6 +598,12 @@ function buildBackupBase(
         ? { notifyJoinRequests: friends.notifyJoinRequests }
         : {}),
       ...(typeof friends.notifyPlans === "boolean" ? { notifyPlans: friends.notifyPlans } : {}),
+      ...(friends.ignored && cleanIgnored(friends.ignored).length
+        ? { ignored: cleanIgnored(friends.ignored) }
+        : {}),
+      ...(friends.pinnedChats && cleanPinned(friends.pinnedChats).length
+        ? { pinnedChats: cleanPinned(friends.pinnedChats) }
+        : {}),
     },
   };
 }
@@ -666,6 +680,10 @@ export function readBackup(data: unknown): {
     }
     if (typeof friends.notifyPlans === "boolean") {
       out.friends.notifyPlans = friends.notifyPlans;
+    }
+    if (friends.ignored !== undefined) out.friends.ignored = cleanIgnored(friends.ignored);
+    if (friends.pinnedChats !== undefined) {
+      out.friends.pinnedChats = cleanPinned(friends.pinnedChats);
     }
   }
   return out;

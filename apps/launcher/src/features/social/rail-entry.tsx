@@ -22,6 +22,7 @@ import {
 } from "./entry";
 import { onlineFriends, whatWaits } from "./model";
 import { pop, swap, useSocialMotion } from "./motion";
+import { useWaitPrefs } from "./next/wait-prefs";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallClock } from "./use-call-clock";
 
@@ -50,12 +51,13 @@ function RailEntry() {
   const online = signedIn ? onlineFriends(view.friends, favorites).length : 0;
   const now = useCallClock((s) => s.now);
   const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
-  const chatMutes = useSocialPrefs((s) => s.chatMutes);
+  // SOC-NEXT: ignored friends' conversations wait for no one; marked ones count one.
+  const { mutes: chatMutes, marks } = useWaitPrefs();
   const missed = useMissedWaiting();
   // A request, an invite, a crewmate's call, an unread message or a missed voice call waits for
   // the player: the gold mark, named in the label and the tooltip.
   const waiting = signedIn
-    ? waitingWords(t, { ...whatWaits(view, crewCalls, now, chatMutes), missed }, view.crews)
+    ? waitingWords(t, { ...whatWaits(view, crewCalls, now, chatMutes, marks), missed }, view.crews)
     : [];
   const pending = waiting.length > 0;
   const open = () => openPanel({ from: trigger.current });

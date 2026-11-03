@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/social-types";
 import type { ChatMutes } from "./chat/conversations";
 import type { HomeHint } from "./model";
+import { shownView } from "./next/view";
 
 export type SocialPage = "list" | "add" | "settings" | "team" | "chat";
 
@@ -50,10 +51,15 @@ export type TeamIntent = "edit" | "invite" | "leave";
 const DEPTH: Record<SocialPage, number> = { list: 0, add: 1, settings: 1, team: 1, chat: 2 };
 
 interface SocialUi {
-  /** The latest snapshot from the backend (hidden until the first one arrives). */
+  /** The latest snapshot from the backend (hidden until the first one arrives), as shown: with
+   * SOC-NEXT, friends under the nicknames the player gave them (next/view.ts). */
   view: SocialSnapshot;
+  /** The same snapshot as the backend sent it. */
+  raw: SocialSnapshot;
   /** Keeps the newest snapshot: an older one (out-of-order event) is ignored. */
   setView: (view: SocialSnapshot) => void;
+  /** Shows the last snapshot again: a nickname or SOC-NEXT's switch changed. */
+  reshow: () => void;
 
   open: boolean;
   page: SocialPage;
@@ -191,20 +197,23 @@ function sameMarkDefs(a: readonly MarkDef[] | undefined, b: readonly MarkDef[] |
 
 export const useSocialUi = create<SocialUi>()((set, get) => ({
   view: HIDDEN_SNAPSHOT,
+  raw: HIDDEN_SNAPSHOT,
   setView: (next) => {
     if (next.seq < get().view.seq) return;
     // The same catalogue keeps the array already held: badges drawn from it stay as they are.
     const defs = get().view.markDefs;
-    const view =
+    const raw =
       defs !== next.markDefs && sameMarkDefs(defs, next.markDefs)
         ? { ...next, markDefs: defs }
         : next;
+    const view = shownView(raw);
     // A tag change under way ends once the list shows it.
     const pending = get().badgePending;
     const settled = pending !== undefined && (view.me?.badge?.crew ?? null) === pending;
-    set(settled ? { view, badgePending: undefined } : { view });
+    set(settled ? { view, raw, badgePending: undefined } : { view, raw });
     if (!view.enabled && get().open) set({ open: false });
   },
+  reshow: () => set((s) => ({ view: shownView(s.raw) })),
 
   open: false,
   page: "list",

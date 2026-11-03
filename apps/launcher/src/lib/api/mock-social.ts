@@ -65,6 +65,7 @@ import {
   startIdentity,
 } from "./mock-identity";
 import { pick } from "./mock-lang";
+import { seedSocNextPrefs } from "./mock-socnext";
 import type {
   BackupMeta,
   CallPlace,
@@ -980,6 +981,8 @@ function tell(notice: SocialNotice) {
 if (typeof window !== "undefined") {
   const name = scenario();
   chat.start();
+  // SOC-NEXT's preview choices (mock-socnext.ts).
+  seedSocNextPrefs(searchParam);
   startWave2(wave2Context());
   startBadges(badgesContext());
   startIdentity(identityContext());
@@ -1232,6 +1235,8 @@ export const mockSocial: SocialApi = {
     return () => noticeListeners.delete(listener);
   },
   ...chat.api,
+  // SOC-NEXT "Yayıncı modu": `?streamer=live` acts as if OBS were running.
+  streamingApp: async () => searchParam("streamer") === "live",
   async report(target, _reason, _note, block) {
     await delay(500);
     if (searchParam("reports") === "limit") {

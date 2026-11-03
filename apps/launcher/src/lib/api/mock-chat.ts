@@ -27,6 +27,7 @@
 // CHAT2 they see it first ("Görüldü") and write ("yazıyor…"). A message deleted for everyone stays
 // as its tombstone.
 import { pick } from "./mock-lang";
+import { socNextCrewLines, socNextDemo } from "./mock-socnext";
 import type {
   ChatCard,
   ChatChange,
@@ -349,7 +350,13 @@ export function mockChat(host: ChatHost) {
         t0 - 3 * HOUR + MINUTE,
       ),
       message(kor, "302", pick("Yılların tecrübesi :)", "Years of practice :)"), t0 - 2 * HOUR),
-      message(kor, ME, pick("Tamam, yarın bakarız", "Alright, let's see tomorrow"), t0 - 2 * HOUR),
+      // A moment after: two messages of one millisecond would share a key.
+      message(
+        kor,
+        ME,
+        pick("Tamam, yarın bakarız", "Alright, let's see tomorrow"),
+        t0 - 2 * HOUR + 30_000,
+      ),
     ]);
     // CHAT-UX: `&chatDays=1` gives KorAtesi's conversation a history over every kind of day line
     // (last year, a date, "3 gün önce", "Dün", "Bugün") and one long word; CHAT-UX2: and the list
@@ -441,6 +448,12 @@ export function mockChat(host: ChatHost) {
         t0 - 2 * MINUTE,
       ),
     );
+    // SOC-NEXT (mock-socnext.ts): an ignored member's two messages and a mention of the player.
+    if (socNextDemo(host.param)) {
+      crew.push(
+        ...socNextCrewLines(t0, (from, text, at) => message(CREW_CONV, from, text, at), pick),
+      );
+    }
     // CHAT-CALM: in the slow crew the player wrote 12 s ago, so the composer counts down.
     if (host.scenario === "chatCalm") {
       crew.push(message(CREW_CONV, ME, pick("Tamam, geliyorum", "Okay, coming"), t0 - 12_000));

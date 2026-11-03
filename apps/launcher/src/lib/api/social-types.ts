@@ -117,6 +117,9 @@ export interface SocialProfile {
    * with Discord). Read it with `discordIdOf` (features/social/identity.ts).
    */
   discordId?: string | null;
+  /** SOC-NEXT: a friend the player gave a nickname (this computer only): `name` is the nickname,
+   * this the name the service knows (features/social/next/nickname.ts). */
+  realName?: string;
 }
 
 /**
@@ -1257,6 +1260,9 @@ export interface SocialApi {
   chatRead(conv: string): Promise<void>;
   /** "Geçmişi temizle" (this computer only). */
   chatClear(conv: string): Promise<void>;
+  /** SOC-NEXT "Yayıncı modu": a streaming program (OBS Studio, Streamlabs, XSplit, Twitch Studio)
+   * runs now (one look; false where it cannot tell). */
+  streamingApp(): Promise<boolean>;
   /** "Rapor et". */
   report(
     target: ReportTarget,

@@ -44,6 +44,43 @@ pub fn started_by(pid: u32, root: u32) -> bool {
     })
 }
 
+/// The streaming programs whose window may show the launcher on a stream (SOC-NEXT's "Yayıncı
+/// modu: Yayın programı açıkken"): OBS Studio, Streamlabs Desktop (once Streamlabs OBS), XSplit
+/// Broadcaster and Twitch Studio, by their executables' names without `.exe`, in lower case.
+const STREAMING_APPS: &[&str] = &[
+    "obs64",
+    "obs32",
+    "obs",
+    "streamlabs obs",
+    "streamlabs desktop",
+    "xsplit.core",
+    "xsplitbroadcaster",
+    "twitch studio",
+    "twitchstudio",
+];
+
+/// Whether a process name (as the process table gives it, `obs64.exe`) is a streaming program's.
+pub fn is_streaming_app(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    let bare = lower.strip_suffix(".exe").unwrap_or(&lower);
+    STREAMING_APPS.contains(&bare)
+}
+
+/// Whether a streaming program runs now: one look at the process table's names (asked when the
+/// launcher opens, when its window shows and when a game starts; never on a timer).
+pub fn streaming_app_running() -> bool {
+    let mut system = sysinfo::System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        sysinfo::ProcessRefreshKind::nothing(),
+    );
+    system
+        .processes()
+        .values()
+        .any(|process| is_streaming_app(&process.name().to_string_lossy()))
+}
+
 /// Blocks until the process `pid` that started at `started` has ended; its exit code when the OS
 /// still tells it. Returns at once when that process does not run (any more). Windows waits on the
 /// process itself, so nothing wakes meanwhile; elsewhere it looks every [`LOOK_EVERY`].
@@ -156,6 +193,32 @@ mod tests {
 
     fn end(child: &mut std::process::Child) {
         drop(child.stdin.take());
+    }
+
+    #[test]
+    fn streaming_programs_are_told_by_name() {
+        for name in [
+            "obs64.exe",
+            "OBS64.EXE",
+            "obs",
+            "Streamlabs OBS.exe",
+            "Streamlabs Desktop.exe",
+            "XSplit.Core.exe",
+            "TwitchStudio.exe",
+        ] {
+            assert!(is_streaming_app(name), "{name}");
+        }
+        for name in [
+            "obsidian.exe",
+            "javaw.exe",
+            "obs-ffmpeg-mux.exe",
+            "Discord.exe",
+            "",
+        ] {
+            assert!(!is_streaming_app(name), "{name}");
+        }
+        // This test runs without one: the look itself answers.
+        let _ = streaming_app_running();
     }
 
     #[test]

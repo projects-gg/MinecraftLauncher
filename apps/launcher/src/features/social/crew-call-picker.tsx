@@ -17,6 +17,7 @@ import { callCrew, shareAndCall } from "./call-actions";
 import { type CallRefusal, callableCrews, crewsWithCall, refusalNow } from "./crews";
 import { isProjectsHost } from "./model";
 import { rise, useSocialMotion } from "./motion";
+import { HIDDEN, shownHost } from "./next/streamer";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
 import { teammatesOnline } from "./teams";
@@ -103,7 +104,7 @@ function useCallTarget(): string | null {
   if (activity.state !== "playing" || !activity.host) return null;
   return isProjectsHost(activity.host)
     ? t("crews.call.toProjects")
-    : t("crews.call.toServer", { host: activity.host });
+    : t("crews.call.toServer", { host: shownHost(activity.host) ?? HIDDEN });
 }
 
 export function CrewCallDialog() {

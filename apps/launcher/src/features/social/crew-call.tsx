@@ -20,6 +20,7 @@ import { type CallWhere, callerIn, callSentenceOf, callWhere, callWhereLine } fr
 import { joinCall, PROJECTS, useThere } from "./join-dialog";
 import { callMenu, rowsOf } from "./menus";
 import { pop, swap, useSocialMotion } from "./motion";
+import { shownHost } from "./next/streamer";
 import { MarkedSentence } from "./person-mark";
 import { usePeopleItems } from "./person-menu";
 import { type JoinTarget, joinTarget } from "./play-together";
@@ -371,7 +372,7 @@ function CallToast({
             <MarkedSentence
               text={(who) =>
                 joined
-                  ? where.kind === "server"
+                  ? where.kind === "server" && shownHost(where.host)
                     ? t("crews.call.arrivedAt", { name: who, host: where.host })
                     : t("teams.call.arrived", { name: who })
                   : callSentenceOf(live, crews, t, false, who)
