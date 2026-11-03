@@ -495,7 +495,7 @@ pub fn notice_of(
         name: String::new(),
     };
     Some(match notice {
-        VoiceNotice::Left { reason, friend } => VoiceNoticeView {
+        VoiceNotice::Left { reason, friend, .. } => VoiceNoticeView {
             kind: "left",
             reason: Some(match reason {
                 VoiceLeftReason::Closed => "closed",
@@ -507,6 +507,9 @@ pub fn notice_of(
                 VoiceLeftReason::Idle => "idle",
                 VoiceLeftReason::Unavailable => "unavailable",
                 VoiceLeftReason::Failed => "failed",
+                // BAN-TYPES: a voice chat ban reads as every mod's "unavailable" in the game; the
+                // launcher says the rest.
+                VoiceLeftReason::Restricted => "unavailable",
             }),
             name: friend.as_deref().and_then(&name_of).unwrap_or_default(),
         },
@@ -1045,14 +1048,16 @@ mod tests {
         assert_eq!(
             notice(VoiceNotice::Left {
                 reason: VoiceLeftReason::NoAnswer,
-                friend: Some("f-can".into())
+                friend: Some("f-can".into()),
+                until: None
             }),
             Some(json!({"t":"voice-notice","kind":"left","reason":"no-answer","name":"Can"}))
         );
         assert_eq!(
             notice(VoiceNotice::Left {
                 reason: VoiceLeftReason::Kicked,
-                friend: None
+                friend: None,
+                until: None
             }),
             Some(json!({"t":"voice-notice","kind":"left","reason":"kicked"}))
         );

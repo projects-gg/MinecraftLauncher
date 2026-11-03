@@ -99,6 +99,8 @@ pub enum ErrorCode {
     ChatOff,
     /// A moderator muted the player in chat.
     ChatMuted,
+    /// BAN-TYPES: Projects' moderators restricted the player's voice chat.
+    VoiceMuted,
     /// A link, a phone number or a listed word.
     ChatRejected,
     /// The message does not check out, or it was deleted.
@@ -237,6 +239,7 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("limit_blocks", ErrorCode::LimitBlocks),
     ("chat_off", ErrorCode::ChatOff),
     ("chat_muted", ErrorCode::ChatMuted),
+    ("voice_muted", ErrorCode::VoiceMuted),
     ("chat_rejected", ErrorCode::ChatRejected),
     ("message_not_found", ErrorCode::MessageNotFound),
     ("chat_not_permitted", ErrorCode::ChatNotPermitted),
@@ -369,6 +372,10 @@ pub enum SocialError {
     /// A moderator muted the player in chat until `until` (Unix seconds, the hub's clock).
     #[error("muted in chat")]
     ChatMuted { until: Option<i64> },
+    /// BAN-TYPES: the voice routes' `403 voice_muted`: a voice chat ban until `until` (Unix
+    /// seconds).
+    #[error("voice chat restricted")]
+    VoiceMuted { until: Option<i64> },
     /// The service turned a plan's note away (FIX2): chat's `reason` (a link, a phone number, a
     /// listed word), or None for its form (a line break, more than 80 characters).
     #[error("plan note refused: {reason:?}")]
@@ -386,6 +393,7 @@ impl SocialError {
             Self::TextLocked { .. } => Some(&ErrorCode::TeamTextLocked),
             Self::ChatRejected { .. } => Some(&ErrorCode::ChatRejected),
             Self::ChatMuted { .. } => Some(&ErrorCode::ChatMuted),
+            Self::VoiceMuted { .. } => Some(&ErrorCode::VoiceMuted),
             Self::PlanNoteRejected { .. } => Some(&ErrorCode::InvalidPlanNote),
             _ => None,
         }
@@ -452,7 +460,8 @@ struct ErrorBody {
     retry_after: Option<u64>,
     #[serde(default)]
     current: Option<SettingsMeta>,
-    /// Unix seconds, or null (a ban): `account_restricted`, `account_limited`, `team_text_locked`.
+    /// Unix seconds, or null (a ban): `account_restricted`, `account_limited`, `team_text_locked`,
+    /// `voice_muted` (BAN-TYPES).
     #[serde(default)]
     until: Option<i64>,
     /// `account_limited`: what is limited.
@@ -506,6 +515,9 @@ pub(crate) fn from_response(status: u16, retry_after: Option<&str>, body: &[u8])
         }
         (403, Some(body)) if body.code == "team_text_locked" => {
             SocialError::TextLocked { until: body.until }
+        }
+        (403, Some(body)) if body.code == "voice_muted" => {
+            SocialError::VoiceMuted { until: body.until }
         }
         (_, Some(body)) => SocialError::Refused {
             status,
@@ -631,6 +643,16 @@ mod tests {
         assert!(matches!(
             from_response(403, None, locked),
             SocialError::TextLocked {
+                until: Some(1_792_600_000)
+            }
+        ));
+        // BAN-TYPES: a voice chat ban keeps its end.
+        let voice = br#"{"error":{"code":"voice_muted","message":"x","until":1792600000}}"#;
+        let error = from_response(403, None, voice);
+        assert_eq!(error.code(), Some(&ErrorCode::VoiceMuted));
+        assert!(matches!(
+            error,
+            SocialError::VoiceMuted {
                 until: Some(1_792_600_000)
             }
         ));

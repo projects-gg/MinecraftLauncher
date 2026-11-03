@@ -554,7 +554,8 @@ fn a_connection_that_does_not_come_back_gives_up_and_may_retry() {
         if !machine.in_room() {
             assert!(notices(&effects).contains(&&VoiceNotice::Left {
                 reason: VoiceLeftReason::Failed,
-                friend: None
+                friend: None,
+                until: None
             }));
             break;
         }
@@ -572,7 +573,8 @@ fn close_codes() {
     assert!(!machine.in_room());
     assert!(notices(&effects).contains(&&VoiceNotice::Left {
         reason: VoiceLeftReason::Unavailable,
-        friend: None
+        friend: None,
+        until: None
     }));
 
     let mut machine = ready();
@@ -617,13 +619,15 @@ fn the_rooms_endings_tell_the_player() {
         generation,
         FromRoom::Closed {
             why: crate::wire::ClosedWhy::NoAnswer,
+            until: None,
         },
         30_000,
         UNIX,
     );
     assert!(notices(&effects).contains(&&VoiceNotice::Left {
         reason: VoiceLeftReason::NoAnswer,
-        friend: Some("friend".into())
+        friend: Some("friend".into()),
+        until: None
     }));
     assert!(effects.contains(&Effect::Window(lifecycle::Action::None)) || !machine.in_room());
 
@@ -632,7 +636,8 @@ fn the_rooms_endings_tell_the_player() {
     let effects = machine.socket_message(generation, FromRoom::Kicked, 5_000, UNIX);
     assert!(notices(&effects).contains(&&VoiceNotice::Left {
         reason: VoiceLeftReason::Kicked,
-        friend: None
+        friend: None,
+        until: None
     }));
     assert!(effects.iter().any(|e| matches!(
         e,
@@ -648,6 +653,56 @@ fn the_rooms_endings_tell_the_player() {
     let effects = machine.tick(5_000 + lifecycle::LINGER_MS, UNIX, 0);
     assert!(effects.contains(&Effect::Window(lifecycle::Action::Close)));
     assert_eq!(machine.next_deadline(5_000 + lifecycle::LINGER_MS), None);
+}
+
+#[test]
+fn a_voice_chat_ban_takes_the_player_out_until_its_end() {
+    // BAN-TYPES: `closed` `muted` ends the stay at once and says until when.
+    let mut machine = ready();
+    let generation = live_call(&mut machine, vec![person("me", 1), person("x", 2)]);
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Closed {
+            why: crate::wire::ClosedWhy::Muted,
+            until: Some(UNIX + 3_600),
+        },
+        5_000,
+        UNIX,
+    );
+    assert!(!machine.in_room());
+    assert!(notices(&effects).contains(&&VoiceNotice::Left {
+        reason: VoiceLeftReason::Restricted,
+        friend: None,
+        until: Some(UNIX + 3_600)
+    }));
+    assert!(effects.contains(&Effect::System(SystemNotice::Left {
+        reason: VoiceLeftReason::Restricted
+    })));
+
+    // Coming back meets the ban (`voice_muted`, no end in the refusal): no "Tekrar dene".
+    let mut machine = ready();
+    let generation = live_call(&mut machine, vec![person("me", 1), person("x", 2)]);
+    machine.socket_closed(generation, None, 5_000);
+    let mut now = 5_000;
+    let again = loop {
+        now = machine.next_deadline(now).expect("a deadline while away");
+        assert!(now <= 5_000 + GIVE_UP_MS, "no reconnect");
+        let effects = machine.tick(now, UNIX, now);
+        if let Some(generation) = effects.iter().find_map(|effect| match effect {
+            Effect::Connect { generation, .. } => Some(*generation),
+            _ => None,
+        }) {
+            break generation;
+        }
+    };
+    let effects = machine.socket_refused(again, Some(403), Some("voice_muted"), now + 100);
+    assert!(!machine.in_room());
+    assert!(notices(&effects).contains(&&VoiceNotice::Left {
+        reason: VoiceLeftReason::Restricted,
+        friend: None,
+        until: None
+    }));
+    assert!(machine.retry_ticket().is_none());
 }
 
 #[test]
@@ -886,7 +941,8 @@ fn the_inactivity_rule_ends_a_quiet_stay() {
     assert!(!machine.in_room());
     assert!(notices(&effects).contains(&&VoiceNotice::Left {
         reason: VoiceLeftReason::Idle,
-        friend: None
+        friend: None,
+        until: None
     }));
     assert!(effects.contains(&Effect::Send {
         generation,
@@ -1067,7 +1123,8 @@ fn a_crashed_page_comes_back_a_few_times() {
     assert!(!machine.in_room());
     assert!(notices(&effects).contains(&&VoiceNotice::Left {
         reason: VoiceLeftReason::Failed,
-        friend: None
+        friend: None,
+        until: None
     }));
 }
 

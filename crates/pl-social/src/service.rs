@@ -4141,11 +4141,27 @@ impl SocialService {
             .as_deref()
             .filter(|_| block)
             .and_then(|id| self.lock().state.profile(id));
-        let (_, generation) = self
+        // BAN-TYPES: "Sesli sohbet ihlali" goes only with its room, and a service from before it
+        // refuses it (400): then the same report goes once more as "Diğer", the room still its
+        // evidence.
+        let reason = report_reason(reason, wire.get("voice").is_some());
+        let again = (reason == ReportReason::Voice).then(|| (wire.clone(), note.clone()));
+        let sent = self
             .call(
                 |session| async move { session.report(wire, reason, note.as_deref(), block).await },
             )
-            .await?;
+            .await;
+        let (_, generation) = match (sent, again) {
+            (Err(error), Some((wire, note))) if reason_refused(&error) => {
+                self.call(|session| async move {
+                    session
+                        .report(wire, ReportReason::Other, note.as_deref(), block)
+                        .await
+                })
+                .await?
+            }
+            (sent, _) => sent?,
+        };
         if let (true, Some(id)) = (block, blocked) {
             self.update(generation, |core| match profile {
                 Some(profile) => core.state.blocked(profile),
@@ -4410,6 +4426,28 @@ fn badge_refusal(error: &SocialError, now: i64) -> Option<BadgeRefusal> {
         ErrorCode::AlreadyMember => BadgeRefusal::Member,
         _ => return None,
     })
+}
+
+/// BAN-TYPES: a report's reason as it goes: "Sesli sohbet ihlali" only with its voice room, else
+/// "Diğer" (the service refuses it without one).
+fn report_reason(reason: ReportReason, with_room: bool) -> ReportReason {
+    if reason == ReportReason::Voice && !with_room {
+        ReportReason::Other
+    } else {
+        reason
+    }
+}
+
+/// BAN-TYPES: the service did not take a report's reason (one from before it answers 400).
+fn reason_refused(error: &SocialError) -> bool {
+    matches!(
+        error,
+        SocialError::Refused {
+            status: 400,
+            code: ErrorCode::BadRequest,
+            ..
+        }
+    )
 }
 
 /// Back to signed out for good (a sign-out here or elsewhere, a suspension, "Verilerimi sil"):
@@ -5267,6 +5305,33 @@ mod tests {
     const FRIENDS: &str = r#"{"friends":[{"id":"223456789012345678","username":"bora","displayName":"Bora",
         "avatar":"preset:fox","avatarHash":null,"since":"2026-10-01","lastSeen":"today"}],
         "incoming":[],"outgoing":[],"blocked":[],"limits":{"friends":200,"outgoingRequests":50}}"#;
+
+    #[test]
+    fn a_voice_report_goes_with_its_room_or_as_other() {
+        // BAN-TYPES: without the room "Sesli sohbet ihlali" is "Diğer"; an older service's 400
+        // sends it again as "Diğer", nothing else does.
+        assert_eq!(
+            report_reason(ReportReason::Voice, true),
+            ReportReason::Voice
+        );
+        assert_eq!(
+            report_reason(ReportReason::Voice, false),
+            ReportReason::Other
+        );
+        assert_eq!(report_reason(ReportReason::Spam, false), ReportReason::Spam);
+        let refused = |status, code| SocialError::Refused {
+            status,
+            code,
+            message: String::new(),
+            detail: None,
+        };
+        assert!(reason_refused(&refused(400, ErrorCode::BadRequest)));
+        assert!(!reason_refused(&refused(404, ErrorCode::TargetNotFound)));
+        assert!(!reason_refused(&SocialError::RateLimited {
+            retry_after: None,
+            item: None
+        }));
+    }
 
     struct Harness {
         service: SocialService,

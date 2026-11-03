@@ -478,6 +478,15 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
             )
             .to_owned(),
         ),
+        // BAN-TYPES: a voice chat ban (voice chat's own words say its end).
+        E::VoiceMuted { .. } => (
+            "SOSYAL-SES-KISITLAMA",
+            lang.pick(
+                "Sesli sohbet kullanman kısıtlandı.",
+                "Your voice chat is restricted.",
+            )
+            .to_owned(),
+        ),
         // A crew plan's note (FIX2): chat's reasons, or its form.
         E::PlanNoteRejected { reason } => (
             "SOSYAL-PLAN-NOT",
@@ -632,6 +641,7 @@ impl From<pl_social::SocialError> for CmdError {
             | E::TextLocked { .. }
             | E::ChatRejected { .. }
             | E::ChatMuted { .. }
+            | E::VoiceMuted { .. }
             | E::PlanNoteRejected { .. } => (
                 "SOSYAL",
                 pick(

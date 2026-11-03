@@ -510,6 +510,9 @@ pub enum VoiceLeftReason {
     Unavailable,
     /// The connection did not come back: "Bağlanamadı." with "Tekrar dene" (`voice_retry`).
     Failed,
+    /// BAN-TYPES: Projects' moderators restricted the player's voice chat (the notice's `until`):
+    /// "Sesli sohbet kullanman … kısıtlandı."
+    Restricted,
 }
 
 /// A moment worth a toast (`voice-notice`). The launcher shows the Windows notification itself
@@ -522,6 +525,9 @@ pub enum VoiceNotice {
         reason: VoiceLeftReason,
         /// `noAnswer`: the friend who did not join (for "Tekrar ara").
         friend: Option<String>,
+        /// BAN-TYPES: `restricted`'s end, when the service said (Unix seconds).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        until: Option<i64>,
     },
     /// A leader or moderator moved the player to another room of the crew.
     Moved { room: String, name: String },
@@ -754,10 +760,20 @@ mod tests {
         assert_eq!(
             serde_json::to_value(VoiceNotice::Left {
                 reason: VoiceLeftReason::NoAnswer,
-                friend: Some("u1".into())
+                friend: Some("u1".into()),
+                until: None
             })
             .unwrap(),
             json!({"kind":"left","reason":"noAnswer","friend":"u1"})
+        );
+        assert_eq!(
+            serde_json::to_value(VoiceNotice::Left {
+                reason: VoiceLeftReason::Restricted,
+                friend: None,
+                until: Some(1_700_000_000)
+            })
+            .unwrap(),
+            json!({"kind":"left","reason":"restricted","friend":null,"until":1_700_000_000})
         );
         assert_eq!(
             serde_json::to_value(VoiceNotice::MutedByModerator).unwrap(),
