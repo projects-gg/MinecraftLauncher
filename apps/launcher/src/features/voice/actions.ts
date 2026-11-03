@@ -220,9 +220,14 @@ export async function orderCrewRooms(crew: string, rooms: readonly string[]): Pr
   return done;
 }
 
-/** "Odayı sil" of a room with people in it (after its one sentence): they go to "Genel". */
-export function removeCrewRoom(crew: string, room: string): Promise<boolean> {
-  return ask(() => voiceApi.crewChange({ op: "remove", crew, room, empty: false }));
+/**
+ * "Odayı sil" of a room with people in it (after its one sentence): they go to "Genel". Done, the
+ * room leaves the list at once (the service's list follows).
+ */
+export async function removeCrewRoom(crew: string, room: string): Promise<boolean> {
+  const done = await ask(() => voiceApi.crewChange({ op: "remove", crew, room, empty: false }));
+  if (done) useCrewRoomsUi.getState().hide(room);
+  return done;
 }
 
 /**

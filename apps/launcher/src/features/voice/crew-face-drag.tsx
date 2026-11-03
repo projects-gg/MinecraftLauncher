@@ -82,7 +82,15 @@ export function DraggableFace({
   const [open, setOpen] = useState(false);
   // Where the face was when it lifted (the layer starts there), while it is dragged.
   const [lift, setLift] = useState<DOMRect | null>(null);
-  const press = useRef<{ x: number; y: number; id: number; rect: DOMRect } | null>(null);
+  // `dx`/`dy`: where in the face it was pressed (the lifted face keeps that point under the pointer).
+  const press = useRef<{
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+    id: number;
+    rect: DOMRect;
+  } | null>(null);
   const ghost = useRef<HTMLDivElement | null>(null);
   const frame = useRef(0);
   const dragging = useRef(false);
@@ -137,12 +145,12 @@ export function DraggableFace({
   }, [lift]);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
-  const follow = (x: number, y: number) => {
+  const follow = (left: number, top: number) => {
     cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(() => {
       const layer = ghost.current;
       if (!layer) return;
-      layer.style.transform = `translate3d(${x - size / 2}px, ${y - size / 2}px, 0)`;
+      layer.style.transform = `translate3d(${left}px, ${top}px, 0)`;
     });
   };
 
@@ -151,11 +159,14 @@ export function DraggableFace({
     event.preventDefault();
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = event.currentTarget.getBoundingClientRect();
     press.current = {
       x: event.clientX,
       y: event.clientY,
+      dx: event.clientX - rect.left,
+      dy: event.clientY - rect.top,
       id: event.pointerId,
-      rect: event.currentTarget.getBoundingClientRect(),
+      rect,
     };
   };
   const onPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
@@ -167,7 +178,7 @@ export function DraggableFace({
       setLift(start.rect);
       begin({ person: member.id, from: room.id, target: null });
     }
-    follow(event.clientX, event.clientY);
+    follow(event.clientX - start.dx, event.clientY - start.dy);
     aim(takes(roomAt(event.clientX, event.clientY)));
   };
   const onPointerUp = (event: PointerEvent<HTMLButtonElement>) => {

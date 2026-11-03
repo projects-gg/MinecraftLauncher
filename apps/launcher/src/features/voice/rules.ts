@@ -562,6 +562,20 @@ export function crewRoomFull(
   return room.people.length + joining > Math.min(crewMax, room.max ?? crewMax);
 }
 
+/** A face in a room's row and the gap after it, and "+N" with its gap (px). */
+const FACE_STEP = 28;
+const MORE_PX = 30;
+
+/**
+ * How many of a room's `count` faces its row shows in `width` px; the rest go into "+N". Before
+ * the row is measured (`null`): four.
+ */
+export function facesThatFit(count: number, width: number | null): number {
+  if (width === null) return Math.min(count, 4);
+  if (count * FACE_STEP - 4 <= width) return count;
+  return Math.max(1, Math.min(count, Math.floor((width - MORE_PX + 4) / FACE_STEP)));
+}
+
 /** A room name as typed is one the service takes (3–24 characters; the filter is the service's). */
 export function roomNameFits(name: string): boolean {
   const size = [...name.trim()].length;

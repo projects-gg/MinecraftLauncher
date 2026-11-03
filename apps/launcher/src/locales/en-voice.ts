@@ -231,10 +231,12 @@ export const enVoice = {
   },
   // VOICE-ROOMS: the crew page's room menu, editing, ordering, deleting and moving people.
   rooms: {
-    more: "Room options",
+    more: "{{room}} options",
     edit: "Edit room",
     moveUp: "Move up",
     moveDown: "Move down",
+    moveLeft: "Move left",
+    moveRight: "Move right",
     remove: "Delete room",
     removeAsk: "Everyone inside moves to General.",
     removed: "{{room}} was deleted.",
@@ -247,7 +249,8 @@ export const enVoice = {
     save: "Save",
     cancel: "Cancel",
     count: "{{count}}/{{max}}",
-    countLabel: "{{count}} people, {{max}} at most",
+    countLabel_one: "{{count}} person, {{max}} at most",
+    countLabel_other: "{{count}} people, {{max}} at most",
     move: "Move",
     moved: "{{name}} was moved to another room.",
     dragging: "Moving {{name}}",

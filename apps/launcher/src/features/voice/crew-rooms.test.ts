@@ -10,6 +10,7 @@ import {
   type CrewStanding,
   crewRoomFull,
   crewRoomList,
+  facesThatFit,
   limitChoices,
   mayMovePerson,
   moveRoom,
@@ -121,6 +122,19 @@ describe("the edit dialog and the order", () => {
   });
 });
 
+describe("a row's faces", () => {
+  it("shows as many as the row's width takes, then +N", () => {
+    expect(facesThatFit(3, null)).toBe(3);
+    expect(facesThatFit(6, null)).toBe(4);
+    // Five faces are 5 × 24 px with 4 px between them.
+    expect(facesThatFit(5, 136)).toBe(5);
+    expect(facesThatFit(6, 136)).toBe(3);
+    expect(facesThatFit(6, 160)).toBe(4);
+    expect(facesThatFit(2, 20)).toBe(1);
+    expect(facesThatFit(0, 20)).toBe(0);
+  });
+});
+
 describe("the room's menu", () => {
   const words = (items: ReturnType<typeof roomMenuItems>) =>
     items.map((item) => (item === null ? "—" : `${item.label}${item.disabled ? " (off)" : ""}`));
@@ -151,6 +165,25 @@ describe("the room's menu", () => {
     ]);
     expect(menu[6]?.danger).toBe(true);
     expect(menu[4]?.shortcut).toBe("Alt ↓");
+  });
+
+  it("names the room panel's tabs' steps left and right, with no keys", () => {
+    const kept = room("c00000000000000aa");
+    const menu = roomMenuItems(
+      {
+        crew: CREW,
+        room: kept,
+        here: false,
+        powers: { ...roomPowers(leader, kept, true), edit: false, remove: false },
+        order: [kept.id, "c00000000000000bb"],
+        across: true,
+        onEdit: noop,
+        onRemove: noop,
+      },
+      t,
+    );
+    expect(words(menu)).toEqual(["Katıl", "—", "Sola taşı (off)", "Sağa taşı"]);
+    expect(menu.every((item) => item === null || item.shortcut === undefined)).toBe(true);
   });
 
   it("gives Genel and a crewmate's room only their own action; the opener edit and delete", () => {

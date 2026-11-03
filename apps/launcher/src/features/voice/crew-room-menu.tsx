@@ -4,9 +4,18 @@
 // its own action). Editing and the one sentence before deleting a room with people in it happen in
 // the row itself, as the crew page's plan form and the room panel's rename do (no dialog: neither
 // needs to interrupt anything); an empty room goes at once with "Geri al".
-import { ArrowDown, ArrowUp, Headset, PencilSimple, SignOut, Trash } from "@phosphor-icons/react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Headset,
+  PencilSimple,
+  SignOut,
+  Trash,
+} from "@phosphor-icons/react";
 import { Button, Input, type MenuItem, Select } from "@pl/ui";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { VoiceCrewRoom } from "@/lib/api/voice-types";
 import { editCrewRoom, joinCrewRoom, leaveRoom, orderCrewRooms, removeCrewRoom } from "./actions";
@@ -32,6 +41,8 @@ export interface RoomMenuInput {
   powers: RoomPowers;
   /** The crew's rooms ("Genel" aside) in the order shown, for "Yukarı taşı" / "Aşağı taşı". */
   order: readonly string[];
+  /** The rooms stand side by side (the room panel's tabs): "Sola taşı" / "Sağa taşı", no keys. */
+  across?: boolean;
   onEdit: () => void;
   onRemove: () => void;
 }
@@ -45,6 +56,7 @@ export function roomMenuItems(
   t: (key: string) => string,
 ): Array<MenuItem | null> {
   const { crew, room, here, powers, order } = input;
+  const across = input.across === true;
   const at = order.indexOf(room.id);
   const move = (step: -1 | 1) => {
     const next = moveRoom(order, room.id, step);
@@ -68,18 +80,18 @@ export function roomMenuItems(
       : null,
     powers.order
       ? {
-          label: t("voice.rooms.moveUp"),
-          icon: <ArrowUp size={16} />,
-          shortcut: MOVE_UP_KEYS,
+          label: t(across ? "voice.rooms.moveLeft" : "voice.rooms.moveUp"),
+          icon: across ? <ArrowLeft size={16} /> : <ArrowUp size={16} />,
+          ...(across ? {} : { shortcut: MOVE_UP_KEYS }),
           disabled: at <= 0,
           onSelect: () => move(-1),
         }
       : null,
     powers.order
       ? {
-          label: t("voice.rooms.moveDown"),
-          icon: <ArrowDown size={16} />,
-          shortcut: MOVE_DOWN_KEYS,
+          label: t(across ? "voice.rooms.moveRight" : "voice.rooms.moveDown"),
+          icon: across ? <ArrowRight size={16} /> : <ArrowDown size={16} />,
+          ...(across ? {} : { shortcut: MOVE_DOWN_KEYS }),
           disabled: at < 0 || at >= order.length - 1,
           onSelect: () => move(1),
         }
@@ -101,18 +113,26 @@ export function hasRoomPowers(powers: RoomPowers): boolean {
   return powers.edit || powers.order || powers.remove;
 }
 
-/** Esc leaves the row's form, not the page or panel around it (as the room panel's rename). */
-function useEscape(onEscape: () => void) {
+/**
+ * Esc leaves the row's form, not the page or panel around it (as the room panel's rename). A list
+ * opened from the form (its "4 kişi") lies outside it: its Esc closes only the list.
+ */
+function useEscape(within: RefObject<HTMLElement | null>, onEscape: () => void) {
+  const latest = useRef(onEscape);
+  latest.current = onEscape;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      const target = event.target;
+      const loose = target === document.body || target === document.documentElement;
+      if (!loose && !(target instanceof Node && within.current?.contains(target))) return;
       event.preventDefault();
       event.stopPropagation();
-      onEscape();
+      latest.current();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onEscape]);
+  }, [within]);
 }
 
 /**
@@ -138,7 +158,8 @@ export function RoomEditForm({
   const [limit, setLimit] = useState(String(Math.min(room.max ?? crewMax, crewMax)));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEscape(onDone);
+  const box = useRef<HTMLFormElement>(null);
+  useEscape(box, onDone);
   const choices = limitChoices(crewMax)
     .filter((value): value is number => value !== null)
     .map((value) => ({
@@ -167,7 +188,7 @@ export function RoomEditForm({
   };
 
   return (
-    <form onSubmit={(event) => void save(event)} className="flex flex-col gap-2 py-1">
+    <form ref={box} onSubmit={(event) => void save(event)} className="flex flex-col gap-2 py-1">
       <div className="flex items-center gap-2">
         <Input
           id={`${ids}-name`}
@@ -211,7 +232,10 @@ export function RoomEditForm({
   );
 }
 
-/** "Odayı sil" of a room with people in it, in the row: one sentence, they go to "Genel". */
+/**
+ * "Odayı sil" of a room with people in it, in the row: one sentence, they go to "Genel". `onDone`
+ * says whether the room went.
+ */
 export function RoomRemoveAsk({
   crew,
   room,
@@ -219,29 +243,32 @@ export function RoomRemoveAsk({
 }: {
   crew: string;
   room: VoiceCrewRoom;
-  onDone: () => void;
+  onDone: (removed: boolean) => void;
 }) {
   const { t } = useTranslation();
+  const ids = useId();
   const [busy, setBusy] = useState(false);
-  useEscape(onDone);
+  const box = useRef<HTMLDivElement>(null);
+  useEscape(box, () => onDone(false));
   return (
-    <div className="flex min-h-8 items-center gap-2">
-      <p className="min-w-0 flex-1 text-[13px] leading-snug text-bone-100">
+    <div ref={box} className="flex min-h-8 items-center gap-2">
+      <p id={`${ids}-ask`} className="min-w-0 flex-1 text-[13px] leading-snug text-bone-100">
         {t("voice.rooms.removeAsk")}
       </p>
       {/* The safe answer takes the focus: Enter never deletes by accident. */}
-      <Button size="sm" variant="ghost" autoFocus onClick={onDone}>
+      <Button size="sm" variant="ghost" autoFocus onClick={() => onDone(false)}>
         {t("voice.rooms.cancel")}
       </Button>
       <Button
         size="sm"
         variant="danger"
         disabled={busy}
+        aria-describedby={`${ids}-ask`}
         onClick={async () => {
           setBusy(true);
-          await removeCrewRoom(crew, room.id);
+          const removed = await removeCrewRoom(crew, room.id);
           setBusy(false);
-          onDone();
+          onDone(removed);
         }}
       >
         {t("voice.rooms.remove")}

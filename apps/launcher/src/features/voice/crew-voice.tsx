@@ -3,23 +3,26 @@
 // "Yeni oda" while the crew may open one more. Written as the page's other sections are: no box of
 // its own; the heading and every row's words start on one line with the members' faces (8 px in
 // from the plates' edge), and the buttons end where "Plan yap" and the members' "Katıl" end (8 px
-// in, then the place of a row's "⋯").
+// in, then the place of a row's "⋯"). A row shows as many faces as its width takes, then "+N".
 //
 // While the crew arranges its rooms (Studio's "Oda yönetimi", `manage`): a right click on a room
 // (Shift+F10, the menu key) or its "⋯" (shown under the pointer and the focus) opens the room's
 // menu by role; editing and the question before deleting a room with people in it take the row's
-// place. The leader and moderators drag rooms into a new order (Alt+↑/↓ from the keyboard) and
-// crewmates' faces from one room to another (a face's menu says "Taşı" too). Rows that come and go
-// fade where they are; the others glide; a dragged row lifts (transform and opacity only; fades
-// only with less motion).
+// place (one row at a time; the focus comes back to the row, or to the next one when it went). The
+// leader and moderators drag rooms into a new order (Alt+↑/↓ from the keyboard) and crewmates'
+// faces from one room to another (a face's menu says "Taşı" too). Rows that come and go fade where
+// they are; the others and the sections below glide; a dragged row lifts (transform and opacity
+// only; fades only with less motion).
 import { DotsThree, Headset, Plus } from "@phosphor-icons/react";
-import { Button, ContextMenu, cn, IconButton, Menu } from "@pl/ui";
+import { Button, ContextMenu, cn, IconButton, Menu, OverflowTooltip } from "@pl/ui";
 import { AnimatePresence, type DragControls, motion, Reorder, useDragControls } from "motion/react";
 import {
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
+  type RefObject,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -37,13 +40,14 @@ import {
   orderCrewRooms,
   removeEmptyCrewRoom,
 } from "./actions";
-import { DraggableFace, useDropTarget } from "./crew-face-drag";
+import { DraggableFace, useDropTarget, useFaceDrag } from "./crew-face-drag";
 import { hasRoomPowers, RoomEditForm, RoomRemoveAsk, roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
 import {
   type CrewStanding,
   crewRoomList,
   crewRoomName,
+  facesThatFit,
   mayMovePerson,
   moveRoom,
   namesLine,
@@ -52,12 +56,35 @@ import {
 } from "./rules";
 import { useFaces, useVoiceUi, voiceOn } from "./store";
 
-/** Faces a row shows before "+N". */
-const FACES = 5;
-
 /** Whether a press starts on something of its own (a button, a face) rather than the row. */
 const onControl = (target: EventTarget | null) =>
   target instanceof Element && target.closest("button, [data-voice-face]") !== null;
+
+/** A room row's "⋯", else its first button: where the keyboard comes back to in a row. */
+function focusRow(room: string) {
+  const row = document.querySelector<HTMLElement>(`[data-voice-room="${room}"]`);
+  const target =
+    row?.querySelector<HTMLElement>("[data-room-more]") ??
+    row?.querySelector<HTMLElement>("button");
+  target?.focus();
+}
+
+/** An element's width, again whenever it changes (nothing is watched in between). */
+function useWidth(ref: RefObject<HTMLElement | null>): number | null {
+  const [width, setWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    // The box's own width: a lifted row's scale does not change what fits. None while hidden.
+    const read = () => setWidth(element.clientWidth || null);
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(read);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
+}
 
 function Faces({
   team,
@@ -76,11 +103,13 @@ function Faces({
 }) {
   const { t } = useTranslation();
   const faces = useFaces(room.people);
-  if (!faces.length) return null;
-  const shown = faces.slice(0, FACES);
+  const box = useRef<HTMLSpanElement>(null);
+  const width = useWidth(box);
+  const shown = faces.slice(0, facesThatFit(faces.length, width));
   const more = faces.length - shown.length;
+  // There when empty too: it takes the row's free width, so a limit's "2/4" keeps its place.
   return (
-    <span className="flex min-w-0 items-center gap-1">
+    <span ref={box} className="flex min-w-0 flex-1 items-center gap-1">
       {shown.map((face) => {
         const member = team.members.find((m) => m.id === face.id);
         // A face the player may move is a button (a press drags it, a click opens its menu).
@@ -106,10 +135,10 @@ function Faces({
       })}
       {more > 0 ? (
         <span
-          className="pl-1 text-[12.5px] font-medium text-ash-300 tabular-nums"
+          className="shrink-0 pl-1 text-[12.5px] font-medium text-ash-300 tabular-nums"
           role="img"
           aria-label={namesLine(
-            faces.slice(FACES).map((f) => f.name),
+            faces.slice(shown.length).map((f) => f.name),
             t,
           )}
         >
@@ -119,6 +148,8 @@ function Faces({
     </span>
   );
 }
+
+type RowMode = "view" | "edit" | "remove";
 
 interface RowProps {
   team: SocialTeam;
@@ -131,13 +162,14 @@ interface RowProps {
   crewMax: number;
   /** The rooms' order ("Genel" aside), for the menu and Alt+↑/↓. */
   order: readonly string[];
+  /** The room, its form or the question before deleting it (one row at a time, the list's). */
+  mode: RowMode;
+  onMode: (mode: RowMode) => void;
   /** The row is being dragged into a new place. */
   lifted?: boolean;
   /** Starts a drag of the row (the leader's and moderators'). */
   dragControls?: DragControls;
 }
-
-type RowMode = "view" | "edit" | "remove";
 
 function RoomRow({
   team,
@@ -149,20 +181,32 @@ function RoomRow({
   manage,
   crewMax,
   order,
+  mode,
+  onMode,
   lifted = false,
   dragControls,
 }: RowProps) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const drop = useDropTarget(room.id);
+  // A face dragged out of this row keeps the pointer's hover: only the room it would go to lights.
+  const faceDrag = useFaceDrag((s) => s.drag !== null);
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<RowMode>("view");
+  const rowRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLSpanElement>(null);
   // A form that takes the row's place keeps the focus the closing menu would give back.
   const keepFocus = useRef(false);
+  // The form closed with the focus in it (or nowhere): the focus comes back to the row's "⋯".
+  const refocus = useRef(false);
   const shown = crewRoomName(room, t);
   const later = (next: RowMode) => {
     keepFocus.current = true;
-    window.setTimeout(() => setMode(next), 0);
+    window.setTimeout(() => onMode(next), 0);
+  };
+  // The room after this one (else before it, else "Genel") takes the focus when this one goes.
+  const neighbour = () => {
+    const at = order.indexOf(room.id);
+    return order[at + 1] ?? order[at - 1] ?? rooms[0]?.id ?? null;
   };
   const items = roomMenuItems(
     {
@@ -173,8 +217,14 @@ function RoomRow({
       order,
       onEdit: () => later("edit"),
       onRemove: () => {
-        if (room.people.length > 0) later("remove");
-        else removeEmptyCrewRoom(team.id, room.id, shown);
+        if (room.people.length > 0) {
+          later("remove");
+          return;
+        }
+        removeEmptyCrewRoom(team.id, room.id, shown);
+        const next = neighbour();
+        keepFocus.current = true;
+        if (next) window.setTimeout(() => focusRow(next), 0);
       },
     },
     t,
@@ -184,11 +234,30 @@ function RoomRow({
     keepFocus.current = false;
     event.preventDefault();
   };
+  const close = () => {
+    const active = document.activeElement;
+    refocus.current =
+      active === null || active === document.body || (rowRef.current?.contains(active) ?? false);
+    onMode("view");
+  };
+  const removed = (gone: boolean) => {
+    if (!gone) {
+      close();
+      return;
+    }
+    onMode("view");
+    const next = neighbour();
+    if (next) focusRow(next);
+  };
+  useEffect(() => {
+    if (mode !== "view" || !refocus.current) return;
+    refocus.current = false;
+    focusRow(room.id);
+  }, [mode, room.id]);
   // Rights taken away meanwhile (a role changed, the switch went off) close the form.
   useEffect(() => {
-    if (mode === "edit" && !powers.edit) setMode("view");
-    if (mode === "remove" && !powers.remove) setMode("view");
-  }, [mode, powers.edit, powers.remove]);
+    if ((mode === "edit" && !powers.edit) || (mode === "remove" && !powers.remove)) onMode("view");
+  }, [mode, powers.edit, powers.remove, onMode]);
 
   const more = hasRoomPowers(powers);
   const limited = room.max !== null && room.max < crewMax;
@@ -201,7 +270,13 @@ function RoomRow({
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
     const next = moveRoom(order, room.id, event.key === "ArrowUp" ? -1 : 1);
-    if (next) void orderCrewRooms(team.id, next);
+    if (!next) return;
+    // The row's node moves in the page and the browser drops its focus: it comes back.
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    void orderCrewRooms(team.id, next);
+    window.requestAnimationFrame(() => {
+      if (active?.isConnected && document.activeElement !== active) active.focus();
+    });
   };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (!dragControls || mode !== "view" || event.button !== 0 || onControl(event.target)) return;
@@ -217,15 +292,19 @@ function RoomRow({
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the row's keys reach it from its buttons */}
       <div
+        ref={rowRef}
         data-voice-room={room.id}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
-        aria-keyshortcuts={powers.order ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
         className={cn(
           "group/room relative min-h-[44px] rounded-[var(--radius-panel)] py-1.5 pr-2 pl-2 transition-colors duration-200",
+          // A closing form fades inside the row, not over the next one (a lifted row casts its shadow).
+          !lifted && "overflow-hidden",
           here || mode !== "view"
             ? "bg-white/[0.06]"
-            : "hover:bg-white/[0.045] data-[state=open]:bg-white/[0.06] has-[[data-state=open]]:bg-white/[0.06]",
+            : faceDrag
+              ? undefined
+              : "hover:bg-white/[0.045] data-[state=open]:bg-white/[0.06] has-[[data-state=open]]:bg-white/[0.06]",
           dragControls && mode === "view" && "cursor-grab touch-none active:cursor-grabbing",
         )}
       >
@@ -248,12 +327,7 @@ function RoomRow({
         <AnimatePresence mode="popLayout" initial={false}>
           {mode === "edit" ? (
             <motion.div key="edit" className="relative" {...rise(reduce, 3, 0.2)}>
-              <RoomEditForm
-                crew={team.id}
-                crewMax={crewMax}
-                room={room}
-                onDone={() => setMode("view")}
-              />
+              <RoomEditForm crew={team.id} crewMax={crewMax} room={room} onDone={close} />
             </motion.div>
           ) : mode === "remove" ? (
             <motion.div
@@ -263,7 +337,7 @@ function RoomRow({
               className="relative"
               {...rise(reduce, 3, 0.2)}
             >
-              <RoomRemoveAsk crew={team.id} room={room} onDone={() => setMode("view")} />
+              <RoomRemoveAsk crew={team.id} room={room} onDone={removed} />
             </motion.div>
           ) : (
             <motion.div
@@ -271,9 +345,15 @@ function RoomRow({
               className="relative flex min-h-8 items-center gap-2"
               {...rise(reduce, 3, 0.2)}
             >
-              <span className="w-[112px] shrink-0 truncate text-[14px] font-semibold text-bone-50">
-                {shown}
-              </span>
+              {/* A long name takes up to half the row (the faces make way), cut beyond it. */}
+              <OverflowTooltip text={shown} of={nameRef}>
+                <span
+                  ref={nameRef}
+                  className="max-w-[50%] min-w-[112px] shrink-0 truncate text-[14px] font-semibold text-bone-50"
+                >
+                  {shown}
+                </span>
+              </OverflowTooltip>
               <span className="flex min-w-0 flex-1 items-center gap-2">
                 <Faces
                   team={team}
@@ -285,7 +365,7 @@ function RoomRow({
                 />
                 {limited ? (
                   <span
-                    className="shrink-0 text-[12px] font-medium text-ash-400 tabular-nums"
+                    className="shrink-0 font-display text-[12px] font-semibold text-ash-400 tabular-nums"
                     role="img"
                     aria-label={t("voice.rooms.countLabel", {
                       count: room.people.length,
@@ -321,13 +401,16 @@ function RoomRow({
                   trigger={
                     <IconButton
                       size="sm"
-                      label={t("voice.rooms.more")}
+                      data-room-more
+                      label={t("voice.rooms.more", { room: shown })}
                       icon={<DotsThree size={18} weight="bold" />}
                       className={cn(
                         "transition-opacity duration-150",
                         open
                           ? "opacity-100"
-                          : "opacity-0 group-hover/room:opacity-100 group-focus-within/room:opacity-100 focus-visible:opacity-100",
+                          : faceDrag
+                            ? "opacity-0"
+                            : "opacity-0 group-hover/room:opacity-100 group-focus-within/room:opacity-100 focus-visible:opacity-100",
                       )}
                     />
                   }
@@ -399,6 +482,8 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
   const [dragOrder, setDragOrder] = useState<string[] | null>(null);
   const dragging = useRef(false);
   const latest = useRef<string[] | null>(null);
+  // The one row showing its form or its question (here, so the rows below glide as it opens).
+  const [editing, setEditing] = useState<{ room: string; mode: "edit" | "remove" } | null>(null);
 
   const rooms = crewRoomList(team.id, entry, hidden);
   const [general, ...rest] = rooms;
@@ -429,6 +514,8 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
       manage={manage}
       crewMax={crewMax}
       order={order}
+      mode={editing?.room === room.id ? editing.mode : "view"}
+      onMode={(next) => setEditing(next === "view" ? null : { room: room.id, mode: next })}
       {...extra}
     />
   );
@@ -441,9 +528,11 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
     if (next && next.join() !== (pending ?? saved).join()) void orderCrewRooms(team.id, next);
   };
 
+  // One list ("Genel" first, never dragged): a screen reader hears all the rooms together.
+  const generalRow = <li>{row(general)}</li>;
   return (
-    <section className="mt-5" aria-labelledby={`voice-${team.id}`}>
-      <div className="mb-1.5 flex min-h-8 items-center gap-2 pr-2 pl-2">
+    <section className="mt-6" aria-labelledby={`voice-${team.id}`}>
+      <div className="flex min-h-8 items-center gap-2 pr-2 pl-2">
         <h3
           id={`voice-${team.id}`}
           className="min-w-0 flex-1 text-[13px] font-semibold text-ash-300"
@@ -462,9 +551,6 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
         ) : null}
         <span aria-hidden className="size-8 shrink-0" />
       </div>
-      <ul className="flex flex-col gap-0.5">
-        <li>{row(general)}</li>
-      </ul>
       {reorders ? (
         <Reorder.Group
           as="ul"
@@ -475,8 +561,9 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
             latest.current = next;
             setDragOrder(next);
           }}
-          className="mt-0.5 flex flex-col gap-0.5"
+          className="flex flex-col gap-0.5"
         >
+          {generalRow}
           <AnimatePresence initial={false}>
             {others.map((room) => (
               <OrderedRoom key={room.id} id={room.id} onDragEnd={endDrag}>
@@ -491,7 +578,8 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
           </AnimatePresence>
         </Reorder.Group>
       ) : (
-        <ul className="mt-0.5 flex flex-col gap-0.5">
+        <ul className="flex flex-col gap-0.5">
+          {generalRow}
           <AnimatePresence initial={false} mode="popLayout">
             {others.map((room) => (
               <motion.li

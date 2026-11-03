@@ -233,10 +233,12 @@ export const trVoice = {
   },
   // VOICE-ROOMS: ekip sayfasında odaların menüsü, düzenleme, sıralama, silme ve kişi taşıma.
   rooms: {
-    more: "Oda seçenekleri",
+    more: "{{room}} seçenekleri",
     edit: "Odayı düzenle",
     moveUp: "Yukarı taşı",
     moveDown: "Aşağı taşı",
+    moveLeft: "Sola taşı",
+    moveRight: "Sağa taşı",
     remove: "Odayı sil",
     removeAsk: "İçerideki herkes Genel'e geçer.",
     removed: "{{room}} silindi.",
@@ -249,7 +251,8 @@ export const trVoice = {
     save: "Kaydet",
     cancel: "Vazgeç",
     count: "{{count}}/{{max}}",
-    countLabel: "{{count}} kişi, en çok {{max}}",
+    countLabel_one: "{{count}} kişi, en çok {{max}}",
+    countLabel_other: "{{count}} kişi, en çok {{max}}",
     move: "Taşı",
     moved: "{{name}} başka odaya taşındı.",
     dragging: "{{name}} taşınıyor",

@@ -528,6 +528,7 @@ function CrewRooms({ room }: { room: VoiceRoomView }) {
             here,
             powers: { ...powers, edit: false, remove: false },
             order,
+            across: true,
             onEdit: () => {},
             onRemove: () => {},
           },
