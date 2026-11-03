@@ -37,6 +37,8 @@ import {
   LinkSimple,
   PencilSimple,
   Prohibit,
+  PushPin,
+  PushPinSlash,
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
@@ -54,11 +56,18 @@ import { AnimatePresence, motion } from "motion/react";
 import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bigEmojiCount, Sticker, UnknownSticker } from "@/features/emoji";
-import type { ChatExtras, ChatLinkRules, ChatMessage, ChatReaction } from "@/lib/api/social-types";
+import type {
+  ChatExtras,
+  ChatLinkRules,
+  ChatMessage,
+  ChatPin,
+  ChatReaction,
+} from "@/lib/api/social-types";
 import { copyText } from "../actions";
 import { type MessageAction, messageMenu } from "../menus";
 import { enter, leave, rise, swap, useSocialMotion } from "../motion";
 import { type Mentionable, mentionSpans } from "../next/mentions";
+import { pinChoice } from "../note/pins";
 import { PersonContextMenu, type PersonPlace } from "../person-menu";
 import { SocialFace } from "../social-face";
 import { clockTime } from "./chat-time";
@@ -96,6 +105,8 @@ export interface RowActions {
   /** CHAT2: the message came on screen with a link and no card yet. */
   /** Asks for the message's card; false when it could not be asked (the plain card shows). */
   onUnfurl: (message: ChatMessage) => Promise<boolean>;
+  /** SOC-NOTE: "Sabitle" (`on`) or "Sabitlemeyi kaldır". */
+  onPin?: (message: ChatMessage, on: boolean) => void;
 }
 
 /** What CHAT2 adds to every row of a conversation (all off for chat without the extras). */
@@ -112,6 +123,8 @@ export interface RowShared {
   people: (id: string) => ChatPerson;
   /** SOC-NEXT, crew chat: the members by the names the crew knows (mentions). */
   members?: readonly Mentionable[];
+  /** SOC-NOTE, crew chat: its pins, and whether the player pins (its leader and moderators). */
+  pins?: { list: readonly ChatPin[]; manage: boolean };
 }
 
 /** Failures the same text would meet again: the player writes it another way. */
@@ -434,6 +447,16 @@ function MessageRowView({
       icon: <Flag size={16} />,
       onSelect: () => actions.onReport(message),
     },
+    pin: {
+      label: t("socNote.pins.pin"),
+      icon: <PushPin size={16} />,
+      onSelect: () => actions.onPin?.(message, true),
+    },
+    unpin: {
+      label: t("socNote.pins.unpin"),
+      icon: <PushPinSlash size={16} />,
+      onSelect: () => actions.onPin?.(message, false),
+    },
   };
   const plan = gone
     ? []
@@ -445,6 +468,9 @@ function MessageRowView({
         editable: mine && editable,
         deletable,
         report: !mine && message.id !== undefined,
+        pin: shared.pins
+          ? pinChoice(message, shared.pins.list, shared.pins.manage, Date.now())
+          : null,
       });
   // The quick reactions are the right click's top row; the rows follow.
   const items = plan

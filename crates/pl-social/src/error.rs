@@ -135,6 +135,15 @@ pub enum ErrorCode {
     /// The player has 5 different reactions on the message (`detail` `mine`), or the message has 10
     /// kinds (`kinds`; CHAT2).
     ChatReactionsFull,
+    /// SOC-NOTE: a status note is not one line of at most 40 characters, or chat's checks turned
+    /// it away.
+    InvalidNote,
+    /// SOC-NOTE: Studio switched status notes off.
+    NoteOff,
+    /// SOC-NOTE: Studio switched pinned messages off.
+    PinsOff,
+    /// SOC-NOTE: a crew chat has 3 pins already.
+    PinsFull,
     /// Nothing to show for a link (CHAT2; `detail`: the link rule, when the link leads somewhere
     /// the rules refuse).
     UnfurlFailed,
@@ -258,6 +267,10 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("invalid_plan_note", ErrorCode::InvalidPlanNote),
     ("chat_feature_off", ErrorCode::ChatFeatureOff),
     ("chat_reactions_full", ErrorCode::ChatReactionsFull),
+    ("invalid_note", ErrorCode::InvalidNote),
+    ("note_off", ErrorCode::NoteOff),
+    ("pins_off", ErrorCode::PinsOff),
+    ("pins_full", ErrorCode::PinsFull),
     ("unfurl_failed", ErrorCode::UnfurlFailed),
     ("unfurl_busy", ErrorCode::UnfurlBusy),
     ("team_hidden", ErrorCode::TeamHidden),
@@ -380,6 +393,10 @@ pub enum SocialError {
     /// listed word), or None for its form (a line break, more than 80 characters).
     #[error("plan note refused: {reason:?}")]
     PlanNoteRejected { reason: Option<ChatRejection> },
+    /// The service turned a status note away (SOC-NOTE): chat's `reason`, or None for its form (a
+    /// line break, more than 40 characters).
+    #[error("status note refused: {reason:?}")]
+    NoteRejected { reason: Option<ChatRejection> },
 }
 
 impl SocialError {
@@ -395,6 +412,7 @@ impl SocialError {
             Self::ChatMuted { .. } => Some(&ErrorCode::ChatMuted),
             Self::VoiceMuted { .. } => Some(&ErrorCode::VoiceMuted),
             Self::PlanNoteRejected { .. } => Some(&ErrorCode::InvalidPlanNote),
+            Self::NoteRejected { .. } => Some(&ErrorCode::InvalidNote),
             _ => None,
         }
     }

@@ -1076,5 +1076,8 @@ export function mockChat(host: ChatHost) {
     },
   };
 
-  return { prepare, start, api };
+  /** SOC-NOTE (mock-soc-note.ts): a conversation's messages as this preview holds them. */
+  const messages = (conv: string): readonly ChatMessage[] => threads.get(conv) ?? [];
+
+  return { prepare, start, api, messages };
 }

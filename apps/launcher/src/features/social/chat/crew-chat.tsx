@@ -9,10 +9,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { friendlyError } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
-import type { ChatMessage, CrewJoin, SocialTeam } from "@/lib/api/social-types";
+import type { ChatMessage, CrewJoin, PinLine, SocialTeam } from "@/lib/api/social-types";
 import { currentLanguage } from "@/lib/i18n";
 import { canGreet, nextGreetEnd } from "../badges";
 import { planWhen, withPlanNote } from "../crew-plans";
+import { usePinsOn } from "../note/pins";
 import { useSocialUi } from "../store";
 import { useComposerNotice, useComposerState, usePeople } from "./chat-page";
 import { type ChatLine, Conversation, useUnreadAtOpen } from "./conversation";
@@ -20,6 +21,7 @@ import { crewConversation } from "./conversations";
 import { messageLine } from "./preview";
 
 const NO_JOINS: CrewJoin[] = [];
+const NO_PIN_LINES: PinLine[] = [];
 
 /** "Bugün 21:00 için plan yaptın": the line starts with its time, so it starts with a capital. */
 function capitalized(text: string): string {
@@ -46,6 +48,10 @@ export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boole
   const blocked = useSocialUi((s) => s.view.blocked);
   const allJoins = useSocialUi((s) => s.view.crewJoins ?? NO_JOINS);
   const joins = useMemo(() => allJoins.filter((join) => join.crew === team.id), [allJoins, team]);
+  // SOC-NOTE: "Kaan_07 bir mesajı sabitledi." of this run.
+  const pinsOn = usePinsOn();
+  const allPinLines = useSocialUi((s) => s.view.chat?.socNote?.pinLines ?? NO_PIN_LINES);
+  const me = useSocialUi((s) => s.view.me?.id);
   const writable = composer.kind === "open";
   // "Selam ver" goes by itself after its ten minutes: one timer, for the next one only.
   const [tick, setTick] = useState(0);
@@ -97,8 +103,23 @@ export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boole
               : undefined,
         }),
       );
-    return [...planLines, ...joinLines];
-  }, [plans, team, t, joins, blocked, writable, tick]);
+    const pinLines = pinsOn
+      ? allPinLines
+          .filter((line) => line.conv === conv && !shut(line.by))
+          .map(
+            (line): ChatLine => ({
+              key: `pin:${line.id}:${line.at}`,
+              at: line.at,
+              kind: "pin",
+              text:
+                line.by === me
+                  ? t("socNote.pins.pinnedByYou")
+                  : t("socNote.pins.pinned", { name: people(line.by).name }),
+            }),
+          )
+      : [];
+    return [...planLines, ...joinLines, ...pinLines];
+  }, [plans, team, t, joins, blocked, writable, tick, pinsOn, allPinLines, conv, me, people]);
   const report = (message: ChatMessage) => {
     if (message.id === undefined) return;
     const sender = people(message.from);

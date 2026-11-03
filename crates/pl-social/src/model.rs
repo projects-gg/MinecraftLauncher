@@ -1417,6 +1417,8 @@ pub enum LimitedKey {
     ChatReactions,
     /// Changing the Projects skin (SKIN1; linking is fine).
     SkinChange,
+    /// Setting a status note (SOC-NOTE).
+    StatusNote,
     Other,
 }
 
@@ -1434,6 +1436,7 @@ impl LimitedKey {
             "chat_stickers" => Self::ChatStickers,
             "chat_reactions" => Self::ChatReactions,
             "skin_change" => Self::SkinChange,
+            "status_note" => Self::StatusNote,
             _ => Self::Other,
         }
     }
@@ -1766,6 +1769,12 @@ pub struct ChatStatus {
     /// The link rules and Studio's lists, while links are on (CHAT2).
     #[serde(default)]
     pub links: Option<ChatLinkRules>,
+    /// SOC-NOTE: Studio's "Durum notu" is on (only to a socket that took `note1`).
+    #[serde(default)]
+    pub notes: bool,
+    /// SOC-NOTE: Studio's "Sabitlenen mesajlar" is on and chat works (only with `pins1`).
+    #[serde(default)]
+    pub pins: bool,
     /// The extras this connection's socket took (`hello.caps`; the presence task fills it in).
     #[serde(skip)]
     pub caps: ChatCaps,
@@ -1822,6 +1831,8 @@ pub struct ChatCaps {
     pub reactions: bool,
     pub typing: bool,
     pub reads: bool,
+    /// SOC-NOTE: pinned messages (`pins1`); not one of CHAT2's (`any` leaves it out).
+    pub pins: bool,
 }
 
 impl ChatCaps {
@@ -1928,6 +1939,10 @@ pub enum ChatQuota {
     NameChanges,
     /// SOC-ID: the day's ways in linked or removed (5), named by a REST answer's `item`.
     IdentityChanges,
+    /// SOC-NOTE: the day's status notes (10).
+    StatusNote,
+    /// SOC-NOTE: the day's pin changes (30).
+    Pins,
     Other,
 }
 
@@ -1939,6 +1954,8 @@ impl ChatQuota {
             "links" => Self::Links,
             "unfurls" => Self::Unfurls,
             "slow" => Self::Slow,
+            "status_note" => Self::StatusNote,
+            "pins" => Self::Pins,
             _ => Self::Other,
         }
     }

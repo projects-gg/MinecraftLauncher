@@ -61,7 +61,7 @@ use crate::model::{
 use crate::presence::{
     ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, RelVersion, StopReason,
 };
-use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer, is_projects_host};
+use crate::protocol::{CallAnswer, ChatPin, LocalStatus, PlanAnswer, StatusNote, is_projects_host};
 use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
 use crate::stickers;
@@ -70,9 +70,10 @@ use crate::together::{Periods, Together, TogetherLog};
 use crate::view::{
     ActivityView, AuthPhase, BadgeRefusal, BadgeRequestResult, CallOutcome, CallPlace,
     ChatCardView, ChatChangeView, ChatExtrasView, ChatLinksView, ChatPage, ChatTypingView,
-    ChatView, ConversationView, CrewNotificationsView, GroupMember, InviteResult, JoinResult,
-    LastMessageView, LookupView, ProfileView, ReportTarget, RestrictionView, SendFailure,
-    SendOutcome, SignInFailure, SocialNotice, SocialView, TagOffView, TeamLookupView, me_view,
+    ChatView, ConversationView, CrewNotificationsView, CrewPinsView, FriendNoteView, GroupMember,
+    InviteResult, JoinResult, LastMessageView, LookupView, PinLineView, PinView, ProfileView,
+    ReportTarget, RestrictionView, SendFailure, SendOutcome, SignInFailure, SocNoteView,
+    SocialNotice, SocialView, TagOffView, TeamLookupView, me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -236,6 +237,13 @@ struct Core {
     chat_backlog: Vec<PresenceEvent>,
     /// Chat changes for the UI, sent with the next view.
     chat_outbox: Vec<ChatChangeView>,
+    /// SOC-NOTE: the player's own status note on this connection (None: none, or no notes).
+    own_note: Option<StatusNote>,
+    /// SOC-NOTE: crew chats' pins on this connection (only chats that have some).
+    chat_pins: HashMap<String, Vec<ChatPin>>,
+    /// SOC-NOTE: "… bir mesajı sabitledi." of this run: conversation, who, which message, when
+    /// (local ms).
+    pin_lines: Vec<(String, String, i64, i64)>,
     /// Waiting messages are being sent (one at a time).
     sending: bool,
     /// Messages that met "too fast" once (they go again by themselves once).
@@ -3465,6 +3473,104 @@ impl SocialService {
     /// "Herkesten sil": the player's own message (7 days), or any in a crew they lead or
     /// moderate. It turns into its tombstone once the service took it (the launcher shows that
     /// at once; it comes back if the service refuses).
+    /// SOC-NOTE: sets the player's status note for their friends ("Not ekle"): one line of at
+    /// most 40 characters, until `until` (Unix seconds, at most two days ahead) or, with 0, until
+    /// taken off; an empty `text` takes it off. Fails with `NoteRejected` (its form here, or the
+    /// service's filter), `ChatMuted`, `Limited` (`status_note`), `RateLimited` (`status_note`:
+    /// the day's 10) or `Refused` (`note_off`).
+    pub async fn set_status_note(&self, text: &str, until: i64) -> Result<()> {
+        let text = crate::chat::prepare_status_note(text)?.unwrap_or_default();
+        let (control, generation) = {
+            let core = self.lock();
+            if core.auth != AuthPhase::SignedIn {
+                return Err(SocialError::Unauthorized);
+            }
+            let control = core
+                .presence
+                .clone()
+                .ok_or(SocialError::Unavailable { retry_after: None })?;
+            (control, core.generation)
+        };
+        // The end on the hub's clock (the service checks it against its own: a computer whose
+        // clock is off still gets "1 saat").
+        let skew_s = self.lock().chat_skew_ms / 1_000;
+        let until = if text.is_empty() || until == 0 {
+            0
+        } else {
+            until - skew_s
+        };
+        let note = control.set_note(&text, until).await?;
+        {
+            let mut core = self.lock();
+            if core.generation != generation {
+                return Ok(());
+            }
+            core.own_note = note;
+        }
+        self.emit_view();
+        Ok(())
+    }
+
+    /// SOC-NOTE: pins message `id` of a crew chat ("Sabitle"; its leader and moderators), in place
+    /// of pin `replace` when three are there. Fails with `Refused` (`pins_full`, `pins_off`,
+    /// `chat_not_permitted`, `message_not_found`, `chat_too_old`) or `RateLimited` (`pins`).
+    pub async fn chat_pin(&self, conv: &str, id: i64, replace: Option<i64>) -> Result<()> {
+        let (control, message, generation) = {
+            let mut core = self.lock();
+            if core.auth != AuthPhase::SignedIn {
+                return Err(SocialError::Unauthorized);
+            }
+            let message = core
+                .history
+                .as_mut()
+                .and_then(|history| history.message(conv, id))
+                .ok_or(SocialError::InvalidInput("chat message"))?;
+            let control = core
+                .presence
+                .clone()
+                .ok_or(SocialError::Unavailable { retry_after: None })?;
+            (control, message, core.generation)
+        };
+        let pins = control.pin_message(&message, replace).await?;
+        self.set_pins(generation, conv, pins);
+        Ok(())
+    }
+
+    /// SOC-NOTE: takes pin `id` of a crew chat off ("Sabitlemeyi kaldır"; its leader and
+    /// moderators).
+    pub async fn chat_unpin(&self, conv: &str, id: i64) -> Result<()> {
+        let (control, generation) = {
+            let core = self.lock();
+            if core.auth != AuthPhase::SignedIn {
+                return Err(SocialError::Unauthorized);
+            }
+            let control = core
+                .presence
+                .clone()
+                .ok_or(SocialError::Unavailable { retry_after: None })?;
+            (control, core.generation)
+        };
+        let pins = control.unpin_message(conv, id).await?;
+        self.set_pins(generation, conv, pins);
+        Ok(())
+    }
+
+    /// A crew chat's pins as the service answered (SOC-NOTE).
+    fn set_pins(&self, generation: u64, conv: &str, pins: Vec<ChatPin>) {
+        {
+            let mut core = self.lock();
+            if core.generation != generation {
+                return;
+            }
+            if pins.is_empty() {
+                core.chat_pins.remove(conv);
+            } else {
+                core.chat_pins.insert(conv.to_owned(), pins);
+            }
+        }
+        self.emit_view();
+    }
+
     pub async fn chat_delete(&self, conv: &str, id: i64) -> Result<()> {
         let (control, message, generation, me) = {
             let mut core = self.lock();
@@ -4089,6 +4195,14 @@ impl SocialService {
                     }
                     (wire, Some(id.clone()))
                 }
+                // SOC-NOTE: their status note goes along, only to a service with notes on (an
+                // older one hears a report about the player).
+                ReportTarget::PlayerNote { id } => {
+                    // The launcher offers it only from a service with notes, which keeps the note
+                    // as evidence whatever Studio's switch says now.
+                    let wire = serde_json::json!({ "kind": "player", "id": id, "note": true });
+                    (wire, Some(id.clone()))
+                }
                 ReportTarget::Crew { id, code, via } => {
                     let mut wire = serde_json::json!({ "kind": "crew", "id": id });
                     // From a tag's card (TEAM6): whose tag it was (the service checks it and keeps
@@ -4519,6 +4633,9 @@ fn reset(core: &mut Core) {
     core.chat_synced = false;
     core.chat_backlog.clear();
     core.chat_outbox.clear();
+    core.own_note = None;
+    core.chat_pins.clear();
+    core.pin_lines.clear();
     core.sending = false;
     core.too_fast.clear();
     core.typing_sent.clear();
@@ -4730,12 +4847,64 @@ fn mark_now(core: &mut Core, conv: &str, id: i64) {
 fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
     let mut outcome = ChatOutcome::default();
     let now_ms = unix_now_ms();
+    // SOC-NOTE: a deleted message's pin goes here at once (its `chat_pins` may not reach this
+    // device when the one deleting had no socket).
+    if let PresenceEvent::ChatDeleted { conv, id, .. } = event
+        && let Some(pins) = core.chat_pins.get_mut(conv)
+    {
+        pins.retain(|pin| pin.id != *id);
+        if pins.is_empty() {
+            core.chat_pins.remove(conv);
+        }
+    }
     match event {
-        PresenceEvent::Connected { chat, clock, .. } => {
+        PresenceEvent::Connected {
+            chat,
+            clock,
+            note,
+            pins,
+            ..
+        } => {
             core.chat_status = chat.clone();
             core.chat_synced = false;
             if let Some(clock) = clock {
                 core.chat_skew_ms = now_ms - clock * 1_000;
+            }
+            // SOC-NOTE: the player's note and the crews' pins as this connection has them.
+            core.own_note = note.clone().flatten();
+            core.chat_pins = pins
+                .iter()
+                .flatten()
+                .filter(|chat| !chat.pins.is_empty())
+                .map(|chat| (chat.conv.clone(), chat.pins.clone()))
+                .collect();
+            return outcome;
+        }
+        PresenceEvent::OwnNote(note) => {
+            core.own_note = note.clone();
+            return outcome;
+        }
+        PresenceEvent::ChatPins {
+            conv,
+            pins,
+            added,
+            by,
+            ..
+        } => {
+            if pins.is_empty() {
+                core.chat_pins.remove(conv);
+            } else {
+                core.chat_pins.insert(conv.clone(), pins.clone());
+            }
+            // "… bir mesajı sabitledi.": this run only, at most 10 a chat.
+            if let (Some(id), Some(by)) = (added, by) {
+                core.pin_lines.push((conv.clone(), by.clone(), *id, now_ms));
+                let mine = core.pin_lines.iter().filter(|line| line.0 == *conv).count();
+                if mine > PIN_LINES_MAX
+                    && let Some(first) = core.pin_lines.iter().position(|line| line.0 == *conv)
+                {
+                    core.pin_lines.remove(first);
+                }
             }
             return outcome;
         }
@@ -5033,7 +5202,64 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
             .map(ChatLinksView::from),
         extras: extras.map(ChatExtrasView::from),
         sticker_sets,
+        soc_note: SocNoteView {
+            notes: status.notes,
+            note: core.own_note.clone().filter(|_| status.notes),
+            friend_notes: if status.notes {
+                core.state
+                    .friend_notes()
+                    .into_iter()
+                    .map(|(id, note)| FriendNoteView { id, note })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            pins_on: pins_on(&status),
+            pins: if pins_on(&status) {
+                let mut pins: Vec<CrewPinsView> = core
+                    .chat_pins
+                    .iter()
+                    .map(|(conv, pins)| CrewPinsView {
+                        conv: conv.clone(),
+                        pins: pins
+                            .iter()
+                            .map(|pin| PinView {
+                                id: pin.id,
+                                from: pin.from.clone(),
+                                text: pin.text.clone(),
+                                pinned_at: pin.at + skew,
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                pins.sort_by(|a, b| a.conv.cmp(&b.conv));
+                pins
+            } else {
+                Vec::new()
+            },
+            pin_lines: if pins_on(&status) {
+                core.pin_lines
+                    .iter()
+                    .map(|(conv, by, id, at)| PinLineView {
+                        conv: conv.clone(),
+                        by: by.clone(),
+                        id: *id,
+                        at: *at,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+        },
     })
+}
+
+/// SOC-NOTE: "… bir mesajı sabitledi." lines kept per crew chat in a run.
+const PIN_LINES_MAX: usize = 10;
+
+/// SOC-NOTE: pinned messages show: Studio's switch, the connection took them, chat works.
+fn pins_on(status: &ChatStatus) -> bool {
+    status.on && status.pins && status.caps.pins
 }
 
 fn unix_now_ms() -> i64 {
@@ -5521,6 +5747,8 @@ mod tests {
             rel: None,
             chat: None,
             plans: None,
+            note: None,
+            pins: None,
         };
         let signed_in = |view: &SocialView| view.loaded && view.auth == AuthPhase::SignedIn;
 
@@ -5612,6 +5840,8 @@ mod tests {
             rel: rel.map(str::to_owned),
             chat: None,
             plans: None,
+            note: None,
+            pins: None,
         };
         // A reconnect long after the last read (the minute's rule is not what holds it back).
         let reconnect = |rel: Option<&str>| {
@@ -5798,6 +6028,8 @@ mod tests {
                 rel: rel.map(str::to_owned),
                 chat: None,
                 plans: None,
+                note: None,
+                pins: None,
             },
         );
     }
@@ -8501,6 +8733,8 @@ mod tests {
             rel: None,
             chat: None,
             plans: None,
+            note: None,
+            pins: None,
         };
         // A connect within ten minutes of the last read reads nothing; a later one asks by the
         // ETag and keeps the catalogue on a 304.

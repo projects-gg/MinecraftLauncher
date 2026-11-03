@@ -9,6 +9,7 @@ import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import { useWindowAway } from "@/lib/window-away";
 import { useLaunch } from "@/stores/launch";
+import { SocNoteHost } from "../note/host";
 import { changeStatus } from "../status-menu";
 import { useSocialUi } from "../store";
 import { socNextOn, useSocNext, useSocNextFlag } from "./flag";
@@ -125,5 +126,11 @@ export function SocNextHost() {
   useMentionPrune();
   useStatusTimer();
   useStreamerLook();
-  return <NicknameDialog />;
+  return (
+    <>
+      <NicknameDialog />
+      {/* SOC-NOTE: the notes' clock, "Not ekle" and "Sabitler dolu". */}
+      <SocNoteHost />
+    </>
+  );
 }

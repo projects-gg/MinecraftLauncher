@@ -64,6 +64,8 @@ import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { isJoinable, notifiesOnline, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { CardNote } from "./note/note-ui";
+import { useShownNote } from "./note/notes";
 import { PersonMarkList, useMarks } from "./person-mark";
 import { usePersonItems } from "./person-menu";
 import { canInvite } from "./play-together";
@@ -235,6 +237,8 @@ function FriendCard({
   const joinable = friend.state === "playing" && isJoinable(friend.game);
   const coolingDown = inviteCoolingDown(friend.id, cooldown);
   const openChat = useOpenChat(friend);
+  // SOC-NOTE: their status note, under where they are.
+  const note = useShownNote(friend);
 
   const run = async (action: "remove" | "block") => {
     setBusy(true);
@@ -303,6 +307,7 @@ function FriendCard({
             )}
             {friend.dnd ? <span> ({t("social.presence.dnd")})</span> : null}
           </p>
+          <CardNote note={note} />
         </div>
       </div>
       {/* Every badge with its name (BADGES-UI), under the name block at the card's full width. */}
@@ -594,14 +599,24 @@ export function FriendRow({
   // the line holds a game to join; then a quiet mark beside the name says it.
   const missed = useMissedCall(friend.id);
   const missedLine = missed && !world && !joinable;
+  // SOC-NOTE: while not playing, their status note takes the line (the card shows both).
+  const note = useShownNote(friend);
+  const noteLine =
+    note && !world && !missedLine && !voiceLine && friend.state === "launcher" ? note.text : null;
   const line = world
     ? t("host.invite.inWorld")
     : missedLine
       ? t("voice.missed.title")
       : voiceLine
         ? t("voice.presence.inVoice")
-        : presenceLine(friend, t);
-  const spokenLine = inVoice && !voiceLine ? `${line}, ${t("voice.presence.inVoice")}` : line;
+        : noteLine
+          ? `note:${noteLine}`
+          : presenceLine(friend, t);
+  const shownLine = noteLine
+    ? `${presenceLine(friend, t)}, ${t("socNote.note.theirs", { text: noteLine })}`
+    : line;
+  const spokenLine =
+    inVoice && !voiceLine ? `${shownLine}, ${t("voice.presence.inVoice")}` : shownLine;
   const badge = useShownBadge(friend.badge);
   const marks = useMarks(friend.marks);
 
@@ -676,7 +691,7 @@ export function FriendRow({
                       key={line}
                       className={cn(
                         "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
-                        missedLine
+                        missedLine || noteLine
                           ? "text-bone-100"
                           : joinable || world
                             ? "text-jade-400"
@@ -686,6 +701,8 @@ export function FriendRow({
                     >
                       {missedLine ? (
                         <MissedLine />
+                      ) : noteLine ? (
+                        noteLine
                       ) : (
                         <>
                           <InVoiceMark friend={friend.id} />

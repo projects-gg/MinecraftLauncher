@@ -667,6 +667,10 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_plan_answer,
             commands::social::social_plan_cancel,
             commands::social::social_plan_note,
+            // SOC-NOTE.
+            commands::social::social_status_note,
+            commands::social::social_chat_pin,
+            commands::social::social_chat_unpin,
             commands::social::social_together,
             commands::social::social_together_clear,
             commands::social::social_chat_page,
