@@ -15,7 +15,9 @@
 //   in his room (`ringLong`: a 16-character tag calls); `missed` two missed calls; `joining`,
 //   `reconnecting`, `failed` (the stay ended:
 //   "Bağlanamadı"); `denied` / `missing` (the microphone); `weak` / `bad` (the player's
-//   connection); `modMuted`, `muted`, `deaf`.
+//   connection); `modMuted`, `muted`, `deaf`; VOICE-ROOMS: `crewRooms`, `crewRoomsIn`,
+//   `crewRoomsOld`, `crewRoomsBusy` (`keptRooms`; `&change=<refusal>` refuses the crew page's
+//   changes).
 // - `speaking=<ids>|none`: who speaks (the scenario's own otherwise); `talking=1`: the player too.
 // - `call=answer|noAnswer|<refusal>`: what "Ara" gets (answered after 2.5 s by default).
 // - `join=ok|<refusal>`: what "Katıl" gets.
@@ -200,12 +202,78 @@ function crewRoom(role: VoiceRole): VoiceRoomView {
 
 function crewRooms(full: boolean, inGeneral: boolean): VoiceCrewRooms {
   const general = inGeneral ? [ME, "301", "302", "701", "702"] : ["301", "302", "701", "702"];
+  const room = (id: string, name: string, people: string[]) => ({
+    id,
+    name,
+    general: id.startsWith("g"),
+    people,
+    max: null,
+    own: false,
+  });
+  const rooms = [room(`g${CREW}`, "Genel", general), room("c00000000000000b2", "Oda 2", ["703"])];
+  if (full) rooms.push(room("c00000000000000b3", "Taş Ocağı", []));
+  return { crew: CREW, rooms, canAdd: !full, manage: false, crewMax: 15 };
+}
+
+/**
+ * VOICE-ROOMS' previews (`voice=crewRooms`, `crewRoomsIn`, `crewRoomsOld`; `&role=` as for `crew`):
+ * the crew arranges its rooms ("Oda yönetimi" on): "Genel" empty, "Taş Ocağı" with two people and
+ * a limit of 4, the player's own "Oda 3" empty; `crewRoomsIn` has the player in "Taş Ocağı";
+ * `crewRoomsOld` is an older service's list without the empty "Genel" (it must still come first);
+ * `crewRoomsBusy` fills them (six in "Genel", "Taş Ocağı" at its 4) and adds a room with a long name.
+ */
+function keptRooms(scenario: string): VoiceCrewRooms {
+  const inside = scenario === "crewRoomsIn";
+  const busy = scenario === "crewRoomsBusy";
   const rooms = [
-    { id: `g${CREW}`, name: "Genel", general: true, people: general },
-    { id: "c00000000000000b2", name: "Oda 2", general: false, people: ["703"] },
+    {
+      id: `g${CREW}`,
+      name: "Genel",
+      general: true,
+      people: busy
+        ? ["301", "304", "305", "701", "702", "909"]
+        : scenario === "crewRoomsOld"
+          ? ["301"]
+          : [],
+      max: null,
+      own: false,
+    },
+    {
+      id: "c00000000000000b2",
+      name: "Taş Ocağı",
+      general: false,
+      people: busy ? ["302", "703", "303", "911"] : inside ? ["302", "703", ME] : ["302", "703"],
+      max: 4,
+      own: false,
+    },
+    {
+      id: "c00000000000000b3",
+      name: "Oda 3",
+      general: false,
+      people: [],
+      max: null,
+      own: true,
+    },
+    ...(busy
+      ? [
+          {
+            id: "c00000000000000b4",
+            name: "Akşam Turnuvası Takımı",
+            general: false,
+            people: [],
+            max: null,
+            own: false,
+          },
+        ]
+      : []),
   ];
-  if (full) rooms.push({ id: "c00000000000000b3", name: "Taş Ocağı", general: false, people: [] });
-  return { crew: CREW, rooms, canAdd: !full };
+  return {
+    crew: CREW,
+    rooms: scenario === "crewRoomsOld" ? rooms.filter((r) => !r.general || r.people.length) : rooms,
+    canAdd: false,
+    manage: scenario !== "crewRoomsOld",
+    crewMax: 15,
+  };
 }
 
 function stateFor(scenario: string): VoiceState {
@@ -284,6 +352,26 @@ function stateFor(scenario: string): VoiceState {
         ...base,
         room: crewRoom(crewRole()),
         crews: [crewRooms(scenario === "crewFull", true)],
+      };
+    case "crewRooms":
+    case "crewRoomsOld":
+    case "crewRoomsBusy":
+      return { ...base, crews: [keptRooms(scenario)] };
+    case "crewRoomsIn":
+      return {
+        ...base,
+        room: {
+          ...crewRoom(crewRole()),
+          id: "c00000000000000b2",
+          name: "Taş Ocağı",
+          general: false,
+          max: 4,
+          people: [
+            person("302", { role: "moderator", joinedAt: nowSec() - 900 }),
+            person("703", { joinedAt: nowSec() - 600, speaking: true }),
+          ],
+        },
+        crews: [keptRooms(scenario)],
       };
     case "ring":
     case "ringLong":
@@ -735,10 +823,70 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
                 ...c,
                 rooms: [
                   ...c.rooms.map((r) => ({ ...r, people: r.people.filter((p) => p !== ME) })),
-                  { id, name, general: false, people: [ME] },
+                  { id, name, general: false, people: [ME], max: null, own: c.manage },
                 ],
                 canAdd: c.rooms.length + 1 < state.crewRoomsMax,
               }
+            : c,
+        ),
+      });
+      return VOICE_OK;
+    },
+    // VOICE-ROOMS: the crew page's changes, as the service would make them (the role is the
+    // page's to show; `voice=crewRooms&change=<refusal>` refuses).
+    async crewChange(op) {
+      const no = refusalOf(param("change"));
+      if (no) return refused(no);
+      const entry = state.crews.find((c) => c.crew === op.crew);
+      if (!entry?.manage) return refused("off");
+      const general = entry.rooms.find((r) => r.general);
+      const rest = entry.rooms.filter((r) => !r.general);
+      let rooms = entry.rooms;
+      let room = state.room;
+      switch (op.op) {
+        case "edit":
+          rooms = entry.rooms.map((r) =>
+            r.id === op.room ? { ...r, name: op.name.trim(), max: op.max } : r,
+          );
+          if (room?.id === op.room) room = { ...room, name: op.name.trim(), max: op.max ?? 15 };
+          break;
+        case "order": {
+          const sorted = op.rooms
+            .map((id) => rest.find((r) => r.id === id))
+            .filter((r): r is (typeof rest)[number] => r !== undefined);
+          rooms = [
+            ...(general ? [general] : []),
+            ...sorted,
+            ...rest.filter((r) => !sorted.includes(r)),
+          ];
+          break;
+        }
+        case "remove": {
+          const gone = rest.find((r) => r.id === op.room);
+          if (!gone) return refused("roomGone");
+          if (op.empty && gone.people.length) return refused("nothing");
+          rooms = entry.rooms
+            .filter((r) => r.id !== op.room)
+            .map((r) => (r.general ? { ...r, people: [...r.people, ...gone.people] } : r));
+          if (room?.id === op.room && general) room = { ...room, id: general.id, name: "Genel" };
+          break;
+        }
+        case "move":
+          rooms = entry.rooms.map((r) => ({
+            ...r,
+            people:
+              r.id === op.room
+                ? [...r.people.filter((id) => id !== op.person), op.person]
+                : r.people.filter((id) => id !== op.person),
+          }));
+          break;
+      }
+      commit({
+        ...state,
+        room,
+        crews: state.crews.map((c) =>
+          c.crew === op.crew
+            ? { ...c, rooms, canAdd: rooms.length < state.crewRoomsMax && c.manage }
             : c,
         ),
       });

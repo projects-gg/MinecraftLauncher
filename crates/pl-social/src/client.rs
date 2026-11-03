@@ -1246,6 +1246,14 @@ impl Session {
         .json()
     }
 
+    /// VOICE-ROOMS: a change of the crew's rooms from the crew page (`POST /v1/voice/crew/room`,
+    /// `…/order`, `…/remove`, `…/move`; `204`). The service checks the role, the switch and the
+    /// day's count; a refusal is the service's error.
+    pub async fn voice_crew_change(&self, change: &crate::voice::VoiceCrewChange) -> Result<()> {
+        let (path, body) = change.request();
+        self.call(Method::POST, path, Some(body)).await.map(drop)
+    }
+
     /// VOICE: the service's address, this session's token and the user agent, for the room
     /// socket (`GET /v1/voice?ticket=…`, `pl-voice`).
     pub fn voice_socket(&self) -> (Url, String, String) {

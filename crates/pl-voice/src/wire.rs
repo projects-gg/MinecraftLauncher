@@ -390,7 +390,8 @@ pub enum FromRoom {
         #[serde(default, deserialize_with = "quality_option")]
         q: Option<u8>,
     },
-    /// The room's name or roles changed.
+    /// The room's name or roles changed (VOICE-ROOMS: a crew room's `max` too, which the crew may
+    /// change; none from an older service).
     Room {
         #[serde(default)]
         name: Option<String>,
@@ -398,6 +399,8 @@ pub enum FromRoom {
         leader: Option<String>,
         #[serde(default)]
         mods: Vec<String>,
+        #[serde(default)]
+        max: Option<u16>,
     },
     /// The player's role changed.
     Me {
@@ -732,7 +735,18 @@ mod tests {
             FromRoom::Room {
                 name: Some("Gece".into()),
                 leader: None,
-                mods: vec!["u2".into()]
+                mods: vec!["u2".into()],
+                max: None,
+            }
+        );
+        // VOICE-ROOMS: a crew room's limit the crew changed.
+        assert_eq!(
+            FromRoom::parse(r#"{"t":"room","name":"Gece","leader":"u1","mods":[],"max":4}"#),
+            FromRoom::Room {
+                name: Some("Gece".into()),
+                leader: Some("u1".into()),
+                mods: Vec::new(),
+                max: Some(4),
             }
         );
         assert_eq!(

@@ -33,7 +33,7 @@ use pl_voice::manager::BoxFuture;
 use pl_voice::settings::{Store, VoiceKey};
 use pl_voice::socket::SocketTarget;
 use pl_voice::view::{
-    VoiceAnswer, VoiceLeftReason, VoiceLevel, VoiceLevels, VoiceNotice, VoiceRefusal,
+    VoiceAnswer, VoiceCrewOp, VoiceLeftReason, VoiceLevel, VoiceLevels, VoiceNotice, VoiceRefusal,
     VoiceShortcut, VoiceSpeaking, VoiceState,
 };
 use pl_voice::wire::Ticket;
@@ -281,6 +281,7 @@ fn service_voice(status: pl_social::VoiceStatus) -> ServiceVoice {
         ring_seconds: status.ring_seconds,
         idle_minutes: status.idle_minutes,
         kbps: status.kbps,
+        manage: status.manage,
     }
 }
 
@@ -294,9 +295,35 @@ fn crew_rooms(rooms: pl_social::VoiceCrewRooms) -> (String, Vec<CrewRoom>) {
                 id: room.id,
                 name: room.name,
                 ids: room.ids,
+                max: room.max,
+                own: room.own,
             })
             .collect(),
     )
+}
+
+/// VOICE-ROOMS: the page's crew room change as the friends service's request.
+fn crew_change_of(op: VoiceCrewOp) -> pl_social::VoiceCrewChange {
+    match op {
+        VoiceCrewOp::Edit {
+            crew,
+            room,
+            name,
+            max,
+        } => pl_social::VoiceCrewChange::Edit {
+            crew,
+            room,
+            name: Some(name.trim().to_owned()),
+            max: Some(max),
+        },
+        VoiceCrewOp::Order { crew, rooms } => pl_social::VoiceCrewChange::Order { crew, rooms },
+        VoiceCrewOp::Remove { crew, room, empty } => {
+            pl_social::VoiceCrewChange::Remove { crew, room, empty }
+        }
+        VoiceCrewOp::Move { crew, person, room } => {
+            pl_social::VoiceCrewChange::Move { crew, person, room }
+        }
+    }
 }
 
 /// The friends service as voice chat uses it.
@@ -367,6 +394,15 @@ impl Service for SocialLink {
             bearer,
             user_agent,
             tls,
+        })
+    }
+
+    fn crew_change(&self, op: VoiceCrewOp) -> BoxFuture<'_, Result<(), VoiceAnswer>> {
+        Box::pin(async move {
+            self.0
+                .voice_crew_change(&crew_change_of(op))
+                .await
+                .map_err(|error| refusal_of(&error))
         })
     }
 }

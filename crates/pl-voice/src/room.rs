@@ -178,10 +178,19 @@ impl Room {
                     applied.playback = person.sm != before.sm;
                 }
             }
-            FromRoom::Room { name, leader, mods } => {
+            FromRoom::Room {
+                name,
+                leader,
+                mods,
+                max,
+            } => {
                 self.name = name.clone();
                 self.leader = leader.clone();
                 self.mods = mods.clone();
+                // VOICE-ROOMS: the crew changed the room's limit ("Oda dolu." follows it).
+                if let Some(max) = max {
+                    self.max = *max;
+                }
                 applied.changed = true;
             }
             FromRoom::Me { role } => {
@@ -341,13 +350,24 @@ mod tests {
         );
         room.apply(&FromRoom::Me { role: Role::Member });
         assert_eq!(room.role_of("me"), Role::Member);
+        let max = room.max;
         room.apply(&FromRoom::Room {
             name: Some("Gece".into()),
             leader: Some("a".into()),
             mods: vec![],
+            max: None,
         });
         assert_eq!(room.role_of("a"), Role::Leader);
         assert_eq!(room.name.as_deref(), Some("Gece"));
+        assert_eq!(room.max, max, "an older service's message keeps the limit");
+        // VOICE-ROOMS: the crew changed the room's limit.
+        room.apply(&FromRoom::Room {
+            name: Some("Gece".into()),
+            leader: Some("a".into()),
+            mods: vec![],
+            max: Some(4),
+        });
+        assert_eq!(room.max, 4);
     }
 
     #[test]

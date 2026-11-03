@@ -50,6 +50,9 @@ pub struct VoiceStatus {
     pub ring_seconds: u32,
     pub idle_minutes: u32,
     pub kbps: u16,
+    /// VOICE-ROOMS: crews arrange their rooms (Studio's "Oda yönetimi"): rooms stay until deleted
+    /// and the crew page changes them ([`VoiceCrewChange`]). Absent (an older service): no.
+    pub manage: bool,
 }
 
 impl Default for VoiceStatus {
@@ -62,11 +65,12 @@ impl Default for VoiceStatus {
             ring_seconds: 30,
             idle_minutes: 30,
             kbps: 24,
+            manage: false,
         }
     }
 }
 
-/// One of a crew's live rooms.
+/// One of a crew's rooms, in the order the service lists them ("Genel" first).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct VoiceCrewRoom {
     pub id: String,
@@ -75,6 +79,76 @@ pub struct VoiceCrewRoom {
     /// Who is in it now (the player's blocks left out).
     #[serde(default)]
     pub ids: Vec<String>,
+    /// VOICE-ROOMS: people at most, when the crew set fewer than the crew room maximum.
+    #[serde(default)]
+    pub max: Option<u16>,
+    /// VOICE-ROOMS: the player opened this room (they may change and delete it).
+    #[serde(default)]
+    pub own: bool,
+}
+
+/// VOICE-ROOMS: a change of the crew's rooms from the crew page (README "Voice (VOICE-ROOMS)").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VoiceCrewChange {
+    /// A room's name and people at most (`Some(None)`: the crew room maximum again).
+    Edit {
+        crew: String,
+        room: String,
+        name: Option<String>,
+        max: Option<Option<u16>>,
+    },
+    /// The crew's rooms ("Genel" aside) in this order.
+    Order { crew: String, rooms: Vec<String> },
+    /// Deletes a room (its people go to "Genel"); `empty`: only while nobody is in it.
+    Remove {
+        crew: String,
+        room: String,
+        empty: bool,
+    },
+    /// Moves a crewmate from the crew room they are in to `room`.
+    Move {
+        crew: String,
+        person: String,
+        room: String,
+    },
+}
+
+impl VoiceCrewChange {
+    /// The route and its body.
+    pub(crate) fn request(&self) -> (&'static str, serde_json::Value) {
+        match self {
+            Self::Edit {
+                crew,
+                room,
+                name,
+                max,
+            } => {
+                let mut body = serde_json::json!({ "crew": crew, "room": room });
+                if let Some(name) = name {
+                    body["name"] = name.as_str().into();
+                }
+                if let Some(max) = max {
+                    body["max"] = max.map_or(serde_json::Value::Null, Into::into);
+                }
+                ("v1/voice/crew/room", body)
+            }
+            Self::Order { crew, rooms } => (
+                "v1/voice/crew/order",
+                serde_json::json!({ "crew": crew, "rooms": rooms }),
+            ),
+            Self::Remove { crew, room, empty } => {
+                let mut body = serde_json::json!({ "crew": crew, "room": room });
+                if *empty {
+                    body["empty"] = true.into();
+                }
+                ("v1/voice/crew/remove", body)
+            }
+            Self::Move { crew, person, room } => (
+                "v1/voice/crew/move",
+                serde_json::json!({ "crew": crew, "person": person, "room": room }),
+            ),
+        }
+    }
 }
 
 /// One crew's live rooms (`hello.voiceRooms[]`, `voice_rooms`).
@@ -260,6 +334,77 @@ mod tests {
             serde_json::from_str::<PresenceVoice>(r#""in""#).unwrap(),
             PresenceVoice::In
         );
+    }
+
+    /// VOICE-ROOMS: the switch, a room's own limit and opener, and the crew page's changes as the
+    /// service's README writes them.
+    #[test]
+    fn reads_kept_rooms_and_writes_the_crew_pages_changes() {
+        let status: VoiceStatus = serde_json::from_str(r#"{"on":true,"manage":true}"#).unwrap();
+        assert!(status.manage);
+        assert!(!VoiceStatus::default().manage);
+        let rooms: VoiceCrewRooms = serde_json::from_str(
+            r#"{"crew":"0123456789abcdef","rooms":[{"id":"g0123456789abcdef","name":"Genel","ids":[]},
+                {"id":"c0123456789abcdef","name":"Taş Ocağı","ids":["7"],"max":4,"own":true}]}"#,
+        )
+        .unwrap();
+        assert_eq!(rooms.rooms[0].max, None);
+        assert!(!rooms.rooms[0].own);
+        assert_eq!(rooms.rooms[1].max, Some(4));
+        assert!(rooms.rooms[1].own);
+        let crew = "0123456789abcdef".to_owned();
+        let room = "c0123456789abcdef".to_owned();
+        let cases = [
+            (
+                VoiceCrewChange::Edit {
+                    crew: crew.clone(),
+                    room: room.clone(),
+                    name: Some("Antrenman".into()),
+                    max: Some(None),
+                },
+                "v1/voice/crew/room",
+                serde_json::json!({"crew": crew, "room": room, "name": "Antrenman", "max": null}),
+            ),
+            (
+                VoiceCrewChange::Edit {
+                    crew: crew.clone(),
+                    room: room.clone(),
+                    name: None,
+                    max: Some(Some(6)),
+                },
+                "v1/voice/crew/room",
+                serde_json::json!({"crew": crew, "room": room, "max": 6}),
+            ),
+            (
+                VoiceCrewChange::Order {
+                    crew: crew.clone(),
+                    rooms: vec![room.clone()],
+                },
+                "v1/voice/crew/order",
+                serde_json::json!({"crew": crew, "rooms": [room]}),
+            ),
+            (
+                VoiceCrewChange::Remove {
+                    crew: crew.clone(),
+                    room: room.clone(),
+                    empty: true,
+                },
+                "v1/voice/crew/remove",
+                serde_json::json!({"crew": crew, "room": room, "empty": true}),
+            ),
+            (
+                VoiceCrewChange::Move {
+                    crew: crew.clone(),
+                    person: "7".into(),
+                    room: room.clone(),
+                },
+                "v1/voice/crew/move",
+                serde_json::json!({"crew": crew, "person": "7", "room": room}),
+            ),
+        ];
+        for (change, path, body) in cases {
+            assert_eq!(change.request(), (path, body));
+        }
     }
 
     #[test]

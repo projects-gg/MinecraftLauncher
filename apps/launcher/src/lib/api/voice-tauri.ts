@@ -101,6 +101,8 @@ export const tauriVoice: VoiceApi = {
   dismissMissed: (room) => done(commands.voiceDismissMissed(room)),
   joinCrew: (crew, room) => ok(commands.voiceJoinCrew(crew, room)),
   newCrewRoom: (crew) => ok(commands.voiceNewCrewRoom(crew)),
+  // VOICE-ROOMS: the crew page's room changes.
+  crewChange: (op) => ok(commands.voiceCrewChange(op)),
   leave: () => done(commands.voiceLeave()),
   retry: () => ok(commands.voiceRetry()),
   setMute: (mute) => done(commands.voiceSetMute(mute)),

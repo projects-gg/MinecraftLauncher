@@ -340,6 +340,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::voice::voice_dismiss_missed,
             commands::voice::voice_join_crew,
             commands::voice::voice_new_crew_room,
+            commands::voice::voice_crew_change,
             commands::voice::voice_leave,
             commands::voice::voice_retry,
             commands::voice::voice_set_mute,
