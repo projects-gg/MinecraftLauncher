@@ -1,5 +1,6 @@
 // Sesli sohbet (VOICE; voice.md §1 sözlük, §5.6 metinler, §7.10 hatalar). Tek kavram oda; eylemler
-// Ara, Katıl, Reddet, Ayrıl, Davet et. Kısa ve açıklamasız: açıklama cümlesi yalnız "Odayı kapat"ın
+// Sesli arama başlat (VOICE-CALL: sorusu "{name} aransın mı?" / "Ara" / "Vazgeç"), Katıl, Reddet,
+// Ayrıl, Davet et. Kısa ve açıklamasız: açıklama cümlesi yalnız "Odayı kapat"ın
 // sorusunda ve iki ayarın altında (kapalıyken kimsenin arayamayacağı, denemede sesi yalnız
 // oyuncunun duyduğu). Oyuncu adı ek almaz: cümleler adı eksiz kullanacak biçimde kurulur.
 export const trVoice = {
@@ -10,7 +11,7 @@ export const trVoice = {
     more: "{{names}} ve {{count}} kişi daha",
   },
   call: {
-    action: "Ara",
+    action: "Sesli arama başlat",
     inviteToRoom: "Odaya davet et",
     ringing: "Aranıyor…",
     ringingName: "{{name}} aranıyor…",
@@ -18,6 +19,19 @@ export const trVoice = {
     cancelLabel: "Aramayı iptal et",
     noAnswer: "Cevap yok",
     again: "Tekrar ara",
+    ask: "{{name}} aransın mı?",
+    askYes: "Ara",
+    askNo: "Vazgeç",
+    askFirst: "Aramadan önce sor",
+    unreachable: "Şu an aranamıyor.",
+    together: "Zaten seninle aynı odada.",
+    time: "Arama süresi {{time}}",
+  },
+  sounds: {
+    title: "Sesli sohbet sesleri",
+  },
+  level: {
+    output: "Ses seviyesi",
   },
   ring: {
     calling: "{{name}} arıyor",
@@ -172,7 +186,6 @@ export const trVoice = {
     shortcuts: "Kısayollar",
     muteKey: "Mikrofonu kapat/aç",
     deafenKey: "Sağırlaştır",
-    sounds: "Katılma ve ayrılma sesleri",
     advanced: "Gelişmiş",
     sensitivity: "Hassasiyet",
     sensitivityAuto: "Otomatik hassasiyet",

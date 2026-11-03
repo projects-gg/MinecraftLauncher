@@ -7,6 +7,12 @@
 // is off. A change is saved at once (a slider after its drag settles); the launcher's answer is
 // what stays (it holds values to their ranges and a key to one shortcut). The voice engine runs
 // for the devices and the level bar only while this page is open.
+//
+// VOICE-CALL: "Ses seviyesi" under the output (everyone at once, 0–200 %, to the engine's top),
+// "Sesli sohbet sesleri" in the place of "Katılma ve ayrılma sesleri" (the same choice), "Aramadan
+// önce sor", and the microphone's meter as the call's (meter.tsx): in the test row, and as the
+// sensitivity itself, whose line sits on the meter (bars past it go out: Discord's and Steam's way,
+// so the line and what lights agree; it moved from "how much it hears" to "how loud to speak").
 import { CaretDown, Warning } from "@phosphor-icons/react";
 import {
   Button,
@@ -21,7 +27,8 @@ import {
   useMotionPrefs,
 } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Slider as RadixSlider } from "radix-ui";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Row } from "@/features/settings/row";
 import { enter, leave } from "@/features/social/motion";
@@ -38,6 +45,8 @@ import { formatPercent } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { askDiscord, DiscordInline, useDiscordAsk } from "./discord-offer";
 import { KeyPicker, useKeyLine } from "./key-picker";
+import { FULL_RANGE, VoiceMeter } from "./meter";
+import { keptVoicePrefs, meterThreshold, useVoicePrefs } from "./prefs";
 import { useVoiceUi } from "./store";
 
 /** A slider's value is saved this long after it stops moving. */
@@ -70,6 +79,8 @@ function useVoiceSettings(): [VoiceSettings | null, Change] {
         if (pending.current) return;
         current.current = kept;
         setSettings(kept);
+        // The meters and the room panel read them too (VOICE-CALL).
+        keptVoicePrefs(kept);
       })
       .catch(() => toast.error(i18n.t("voice.refused.failed")));
   }, []);
@@ -104,6 +115,18 @@ function useVoiceSettings(): [VoiceSettings | null, Change] {
       }),
     [],
   );
+  // "Ses seviyesi" set from the room panel meanwhile (VOICE-CALL): the page shows it and keeps it.
+  useEffect(
+    () =>
+      useVoicePrefs.subscribe((now) => {
+        const there = now.settings;
+        const here = current.current;
+        if (!there || !here || pending.current || there.outputVolume === here.outputVolume) return;
+        current.current = { ...here, outputVolume: there.outputVolume };
+        setSettings(current.current);
+      }),
+    [],
+  );
 
   const change = useCallback<Change>(
     (patch, later = false) => {
@@ -121,37 +144,76 @@ function useVoiceSettings(): [VoiceSettings | null, Change] {
   return [settings, change];
 }
 
-/** The microphone's level while the engine hears it: drawn straight from each frame, no render. */
-function LevelBar() {
+/**
+ * The microphone's level while the engine hears it (the call's meter, long: VOICE-CALL), drawn
+ * straight from each frame with no render; jade where it would go out. A hand-set sensitivity
+ * shows as its step.
+ */
+function LevelBar({ threshold }: { threshold: number | null }) {
   const { t } = useTranslation();
-  const fill = useRef<HTMLSpanElement>(null);
-  const testing = useVoiceUi((s) => s.state.testing);
-  useEffect(
-    () =>
-      voiceApi.onLevel(({ level, open }) => {
-        const element = fill.current;
-        if (!element) return;
-        element.style.transform = `scaleX(${Math.max(0, Math.min(1, level))})`;
-        element.toggleAttribute("data-open", open);
-      }),
-    [],
-  );
-  useEffect(() => {
-    if (!testing && fill.current) fill.current.style.transform = "scaleX(0)";
-  }, [testing]);
   return (
-    <span
-      role="img"
-      aria-label={t("voice.settings.level")}
-      className="relative block h-1.5 w-28 overflow-hidden rounded-full bg-white/10"
-    >
-      {/* The fill follows the frames on the compositor; above the sensitivity it turns jade. */}
-      <span
-        ref={fill}
-        className="absolute inset-0 origin-left bg-bone-100/70 transition-[transform,background-color] duration-75 ease-linear data-[open]:bg-jade-400"
-        style={{ transform: "scaleX(0)" }}
+    <span role="img" aria-label={t("voice.settings.level")} className="flex w-28">
+      <VoiceMeter
+        source="settings"
+        bars={24}
+        range={FULL_RANGE}
+        threshold={threshold}
+        className="w-full justify-between"
       />
     </span>
+  );
+}
+
+/**
+ * "Hassasiyet" on the meter itself (VOICE-CALL; Discord's and Steam's way): the bone line is how
+ * loud the player must be, the bars past it light jade as they speak. Left of the line nothing
+ * goes out; dragging it left hears quieter sounds ("Çok"), right only louder ones ("Az"). The
+ * launcher keeps the threshold (0: everything goes) as before.
+ */
+function SensitivityMeter({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number, later: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-2 py-3" data-voice-sensitivity="">
+      <span id={id} className="text-[13px] font-medium text-bone-100">
+        {t("voice.settings.sensitivity")}
+      </span>
+      <RadixSlider.Root
+        value={[value]}
+        min={0}
+        max={100}
+        step={1}
+        onValueChange={([v]) => v !== undefined && onChange(v, true)}
+        onValueCommit={([v]) => v !== undefined && onChange(v, false)}
+        className="relative flex h-6 w-full cursor-pointer touch-none items-center select-none"
+      >
+        <RadixSlider.Track className="relative flex h-full grow items-center">
+          <VoiceMeter
+            source="settings"
+            bars={48}
+            range={FULL_RANGE}
+            threshold={value / 100}
+            className="w-full justify-between"
+            barClassName="h-[14px] w-[3px]"
+          />
+        </RadixSlider.Track>
+        <RadixSlider.Thumb
+          aria-labelledby={id}
+          aria-valuetext={formatPercent(value)}
+          className="block h-6 w-[4px] rounded-full bg-bone-50 shadow-[0_0_0_2px_rgb(18_16_22/0.85)] outline-none transition-[transform,scale] duration-150 hover:scale-y-110 focus-visible:ring-2 focus-visible:ring-gold-300"
+        />
+      </RadixSlider.Root>
+      <div className="flex justify-between text-[11px] text-ash-400">
+        <span>{t("voice.settings.sensitivityHigh")}</span>
+        <span>{t("voice.settings.sensitivityLow")}</span>
+      </div>
+    </div>
   );
 }
 
@@ -248,13 +310,13 @@ function KeyRow({
   );
 }
 
-function MicTest() {
+function MicTest({ threshold }: { threshold: number | null }) {
   const { t } = useTranslation();
   const testing = useVoiceUi((s) => s.state.testing);
   return (
     <Row title={t("voice.settings.test")} help={t("voice.settings.testHelp")}>
       <div className="flex items-center gap-3">
-        <LevelBar />
+        <LevelBar threshold={threshold} />
         <Button size="sm" variant="secondary" onClick={() => void voiceApi.testMic(!testing)}>
           <SwapLabel
             labels={[t("voice.settings.testStart"), t("voice.settings.testStop")]}
@@ -302,24 +364,12 @@ function Advanced({ settings, change }: { settings: VoiceSettings; change: Chang
                 hideLabel
               />
             </Row>
-            {/* The launcher keeps a threshold (0: everything goes); the slider says how much it
-                hears, so right is more sensitive. */}
+            {/* The launcher keeps a threshold (0: everything goes), drawn on the meter. */}
             {auto ? null : (
-              <div className="py-3">
-                <Slider
-                  label={t("voice.settings.sensitivity")}
-                  value={100 - (settings.sensitivity ?? MANUAL_SENSITIVITY)}
-                  min={0}
-                  max={100}
-                  // Which way hears more, at the two ends.
-                  marks={[
-                    { value: 4, label: t("voice.settings.sensitivityLow") },
-                    { value: 96, label: t("voice.settings.sensitivityHigh") },
-                  ]}
-                  onValueChange={(v) => change({ sensitivity: 100 - v }, true)}
-                  format={formatPercent}
-                />
-              </div>
+              <SensitivityMeter
+                value={settings.sensitivity ?? MANUAL_SENSITIVITY}
+                onChange={(sensitivity, later) => change({ sensitivity }, later)}
+              />
             )}
             <Row title={t("voice.settings.echo")}>
               <Switch
@@ -362,6 +412,8 @@ export function VoiceSettingsSection() {
   const { layout } = useMotionPrefs();
   const [settings, change] = useVoiceSettings();
   const devices = useVoiceUi((s) => s.state.devices);
+  // "Ses seviyesi" stops at the engine's top (200 %, or 100 % through `<audio>`).
+  const volumeMax = useVoiceUi((s) => s.state.volumeMax ?? 200);
 
   // The engine runs for the devices and the level only while the page is open; a test the player
   // left running ends with it.
@@ -417,13 +469,27 @@ export function VoiceSettingsSection() {
                 value={settings.inputDevice}
                 onChange={(inputDevice) => change({ inputDevice })}
               />
-              <MicTest />
+              <MicTest threshold={meterThreshold(settings)} />
               <DeviceRow
                 title={t("voice.settings.output")}
                 devices={devices.outputs}
                 value={settings.outputDevice}
                 onChange={(outputDevice) => change({ outputDevice })}
               />
+              {/* Everyone at once (VOICE-CALL), on top of each person's own volume. */}
+              <div className="py-3">
+                <Slider
+                  label={t("voice.level.output")}
+                  value={Math.min(settings.outputVolume, volumeMax)}
+                  min={0}
+                  max={volumeMax}
+                  step={5}
+                  // Where they arrive as they are (the person menu's notch).
+                  marks={volumeMax > 100 ? [{ value: 100, label: formatPercent(100) }] : undefined}
+                  onValueChange={(outputVolume) => change({ outputVolume }, true)}
+                  format={formatPercent}
+                />
+              </div>
               <Row title={t("voice.settings.mode")}>
                 <Segmented<VoiceTalkMode>
                   value={settings.mode}
@@ -452,12 +518,21 @@ export function VoiceSettingsSection() {
                   hideLabel
                 />
               </Row>
-              {/* Above "Kısayollar": under it the switch read as one more shortcut. */}
-              <Row title={t("voice.settings.sounds")}>
+              {/* Above "Kısayollar": under it the switch read as one more shortcut. The same
+                  choice "Katılma ve ayrılma sesleri" was, for all of voice chat's sounds now. */}
+              <Row title={t("voice.sounds.title")}>
                 <Switch
                   checked={settings.sounds}
                   onCheckedChange={(on) => change({ sounds: on })}
-                  label={t("voice.settings.sounds")}
+                  label={t("voice.sounds.title")}
+                  hideLabel
+                />
+              </Row>
+              <Row title={t("voice.call.askFirst")}>
+                <Switch
+                  checked={settings.askBeforeCall}
+                  onCheckedChange={(on) => change({ askBeforeCall: on })}
+                  label={t("voice.call.askFirst")}
                   hideLabel
                 />
               </Row>

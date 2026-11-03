@@ -46,12 +46,12 @@ import { inviteFriends, pressJoin } from "@/features/host/actions";
 import { hostMenuKey, inviteFrom, personWorld, retryWithCopy } from "@/features/host/rules";
 import { useHostUi } from "@/features/host/store";
 import {
-  callFriend,
   inviteToRoom,
   moderate,
   setMutedForMe,
   setVolume as setVoiceVolume,
 } from "@/features/voice/actions";
+import { askToCall } from "@/features/voice/call-confirm";
 import { callOffer, crewRoomName } from "@/features/voice/rules";
 import { recentRoom, useVoiceUi } from "@/features/voice/store";
 import { api } from "@/lib/api";
@@ -508,10 +508,11 @@ export function personItems(
             void moderate({ act: row.action === "voiceMod" ? "mod" : "unmod", person: person.id }),
         };
       case "voiceCall":
+        // "Sesli arama başlat", asked first as on the card (VOICE-CALL).
         return {
           label: t("voice.call.action"),
           icon: <Phone size={16} />,
-          onSelect: () => void callFriend(person.id),
+          onSelect: () => askToCall(person.id),
         };
       case "voiceInvite":
         return {

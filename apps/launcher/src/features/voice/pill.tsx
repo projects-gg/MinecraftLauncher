@@ -8,6 +8,10 @@
 // come back as "Bağlanamadı" with "Tekrar dene" (8 s, held while the pointer or the focus is on it).
 // The pill glides to its new width (transform, on the drawer's spring; Performance mode: in place);
 // words that change cross-fade in place. Nothing moves while nothing changes.
+//
+// VOICE-CALL: the microphone's meter before its button (its bars move with the player's voice while
+// the window is in front: meter.tsx), and in a call with one friend the call's time after the name
+// (call-time.tsx). Both keep their room, so nothing beside them shifts.
 import {
   Headset,
   Microphone,
@@ -22,8 +26,11 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enter, leave, swap } from "@/features/social/motion";
 import { callFriend, leaveRoom, retryRoom, toggleDeaf, toggleMute } from "./actions";
+import { CallTime, callStart } from "./call-time";
 import { QualityBars, SpeakingFace } from "./faces";
 import { HeadphonesSlash } from "./icons";
+import { VoiceMeter } from "./meter";
+import { meterThreshold, useVoicePrefs } from "./prefs";
 import { faceMark, pillPeople, roomTitle } from "./rules";
 import { useFace, useFaces, useVoiceUi, voiceOn } from "./store";
 
@@ -133,6 +140,8 @@ function Pill() {
 
   const room = state.room;
   const calling = state.calling;
+  const since = callStart(state);
+  const threshold = useVoicePrefs((s) => meterThreshold(s.settings));
   const people = room ? pillPeople(room) : [];
   const faces = useFaces(people.map((p) => p.id));
   const others = useFaces(room?.people.map((p) => p.id) ?? []);
@@ -236,7 +245,8 @@ function Pill() {
             </span>
           )}
         </span>
-        <span className="relative grid min-w-0 max-w-[clamp(84px,11vw,160px)]">
+        {/* A little narrower since the meter came (VOICE-CALL): the pill keeps its width at 1024. */}
+        <span className="relative grid min-w-0 max-w-[clamp(72px,9vw,150px)]">
           <AnimatePresence initial={false} mode="popLayout">
             <motion.span
               key={`${mode}:${mode === "live" ? words : ""}`}
@@ -252,6 +262,10 @@ function Pill() {
             </motion.span>
           </AnimatePresence>
         </span>
+        {/* A call with one friend: how long it has been on (VOICE-CALL). */}
+        {mode === "live" && since !== null ? (
+          <CallTime since={since} className="shrink-0 text-[12px] leading-[18px] text-ash-300" />
+        ) : null}
         {weak ? (
           <Tooltip content={t("voice.room.weak")}>
             <span className="flex shrink-0">
@@ -302,6 +316,8 @@ function Pill() {
                 </motion.span>
               ) : null}
             </AnimatePresence>
+            {/* What the microphone hears (VOICE-CALL); still while it is off. */}
+            <VoiceMeter threshold={threshold} className={cn("mx-1", micOff && "opacity-60")} />
             <RoundButton
               label={micLabel}
               tone={micOff ? "off" : "quiet"}

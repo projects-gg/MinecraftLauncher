@@ -19,6 +19,7 @@ import {
   type VoiceBackup,
   type VoiceKey,
   type VoiceLevel,
+  type VoiceLevels,
   type VoiceNotice,
   type VoiceSettings,
   type VoiceSpeaking,
@@ -77,6 +78,8 @@ function asSettings(s: BindingSettings): VoiceSettings {
     sensitivity: s.sensitivity ?? null,
     micVolume: s.micVolume ?? d.micVolume,
     sounds: s.sounds ?? d.sounds,
+    askBeforeCall: s.askBeforeCall ?? d.askBeforeCall,
+    outputVolume: s.outputVolume ?? d.outputVolume,
   };
 }
 
@@ -86,6 +89,8 @@ export const tauriVoice: VoiceApi = {
   onSpeaking: (listener) => on<VoiceSpeaking>("voice-speaking", listener),
   onNotice: (listener) => on<VoiceNotice>("voice-notice", listener),
   onLevel: (listener) => on<VoiceLevel>("voice-level", listener),
+  onLevels: (listener) => on<VoiceLevels>("voice-levels", listener),
+  setLevels: (shown) => done(commands.voiceLevels(shown)),
 
   call: (friend) => ok(commands.voiceCall(friend)),
   answer: (room) => ok(commands.voiceAccept(room)),

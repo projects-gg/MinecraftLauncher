@@ -1,5 +1,6 @@
 // Voice chat (VOICE). The same short, friendly words as the Turkish ones (tr-voice.ts), British
-// English: one idea, the room; Call, Join, Decline, Leave, Invite; no explanations but the one before
+// English: one idea, the room; Start voice call (asked as "Call {name}?"), Join, Decline, Leave,
+// Invite; no explanations but the one before
 // "Close room" and the two under settings.
 export const enVoice = {
   title: "Voice chat",
@@ -9,7 +10,7 @@ export const enVoice = {
     more: "{{names}} and {{count}} more",
   },
   call: {
-    action: "Call",
+    action: "Start voice call",
     inviteToRoom: "Invite to room",
     ringing: "Calling…",
     ringingName: "Calling {{name}}…",
@@ -17,6 +18,19 @@ export const enVoice = {
     cancelLabel: "Cancel the call",
     noAnswer: "No answer",
     again: "Call again",
+    ask: "Call {{name}}?",
+    askYes: "Call",
+    askNo: "Cancel",
+    askFirst: "Ask before calling",
+    unreachable: "Can't be called right now.",
+    together: "Already in your room.",
+    time: "Call time {{time}}",
+  },
+  sounds: {
+    title: "Voice chat sounds",
+  },
+  level: {
+    output: "Volume",
   },
   ring: {
     calling: "{{name}} is calling",
@@ -170,7 +184,6 @@ export const enVoice = {
     shortcuts: "Shortcuts",
     muteKey: "Mute or unmute",
     deafenKey: "Deafen",
-    sounds: "Join and leave sounds",
     advanced: "Advanced",
     sensitivity: "Sensitivity",
     sensitivityAuto: "Automatic sensitivity",

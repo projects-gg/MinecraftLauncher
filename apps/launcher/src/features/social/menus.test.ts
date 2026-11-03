@@ -717,15 +717,19 @@ describe("personMenu: voice chat (VOICE)", () => {
   const none = { mute: false, kick: false, moveTo: false, moderator: false };
   const all = { mute: true, kick: true, moveTo: true, moderator: true };
 
-  it('puts "Ara" beside "Mesaj gönder"', () => {
-    expect(words(personMenu({ ...friend, voice: { offer: "call" } })).slice(0, 3)).toEqual([
-      "chat",
+  it('leads with "Sesli arama başlat" in a voice group of its own (VOICE-CALL)', () => {
+    expect(words(personMenu({ ...friend, voice: { offer: "call" } })).slice(0, 4)).toEqual([
       "voiceCall",
+      "-",
+      "chat",
       "message",
     ]);
+    // Nothing to offer: no voice group at all.
+    expect(words(personMenu({ ...friend, voice: { offer: null } }))[0]).toBe("chat");
   });
 
   it('offers "Odaya davet et", off while it rings or the room is full', () => {
+    expect(words(personMenu({ ...friend, voice: { offer: "invite" } }))[0]).toBe("voiceInvite");
     expect(words(personMenu({ ...friend, voice: { offer: "invite" } }))).toContain("voiceInvite");
     expect(words(personMenu({ ...friend, voice: { offer: "ringing" } }))).toContain(
       "voiceInvite(off)✓",

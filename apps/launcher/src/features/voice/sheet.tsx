@@ -17,6 +17,7 @@ import {
   PencilSimple,
   PhoneDisconnect,
   Plus,
+  SpeakerHigh,
   SpeakerSimpleSlash,
   User,
   UserPlus,
@@ -25,6 +26,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
+  ContextMenu,
   cn,
   EntranceGate,
   focusPanel,
@@ -32,6 +34,7 @@ import {
   IconButton,
   Input,
   Menu,
+  type MenuItem,
   ReducedMotionConfig,
   SearchInput,
   SwapLabel,
@@ -52,6 +55,7 @@ import { usePersonItems } from "@/features/social/person-menu";
 import { SocialFace } from "@/features/social/social-face";
 import { useSocialUi } from "@/features/social/store";
 import type { VoicePerson, VoiceRoomView } from "@/lib/api/voice-types";
+import { formatPercent } from "@/lib/format";
 import {
   cancelInvite,
   closeRoom,
@@ -66,6 +70,8 @@ import {
 } from "./actions";
 import { QualityBars, SpeakingFace } from "./faces";
 import { HeadphonesSlash } from "./icons";
+import { VoiceMeter } from "./meter";
+import { meterThreshold, setOutputVolume, useVoicePrefs } from "./prefs";
 import {
   crewRoomName,
   invitables,
@@ -77,6 +83,7 @@ import {
   type VoiceFace,
   voiceMark,
 } from "./rules";
+import { CallStage, isOneToOne } from "./stage";
 import { useFace, useFaces, useVoiceUi } from "./store";
 
 // --- marks beside a person --------------------------------------------------------------------
@@ -250,7 +257,33 @@ function RingingRow({ id, onCancel }: { id: string; onCancel: () => void }) {
   );
 }
 
+/**
+ * Who is in the room: a call with one friend as the call's stage (VOICE-CALL), else the list. The
+ * two cross-fade where they are when a third person comes or goes.
+ */
 function People({ room }: { room: VoiceRoomView }) {
+  const { t } = useTranslation();
+  const calling = useVoiceUi((s) => s.state.calling);
+  const stage = isOneToOne({ room, calling });
+  return (
+    <AnimatePresence initial={false} mode="popLayout">
+      <motion.div
+        key={stage ? "stage" : "list"}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1, transition: enter(0.22) }}
+        exit={{ opacity: 0, transition: leave(0.14) }}
+      >
+        {stage ? (
+          <CallStage room={room} marksOf={(person) => <Marks marks={marksOf(person, t)} />} />
+        ) : (
+          <PeopleList room={room} />
+        )}
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+function PeopleList({ room }: { room: VoiceRoomView }) {
   const { reduce, layout } = useMotionPrefs();
   const calling = useVoiceUi((s) => s.state.calling);
   const rows: Array<{ key: string; node: ReactNode }> = [
@@ -632,6 +665,34 @@ function CloseRoom() {
   );
 }
 
+/**
+ * "Ses seviyesi" (VOICE-CALL, SOC-GAP §3.11): everyone's voice at once, the person menu's slider
+ * (its notch at 100 %, to the engine's top). A right click on "Sağırlaştır" opens it, as Discord's
+ * headphones do; Settings → Sesli sohbet has it too.
+ */
+function useOutputVolumeItem(): MenuItem[] {
+  const { t } = useTranslation();
+  const settings = useVoicePrefs((s) => s.settings);
+  const max = useVoiceUi((s) => s.state.volumeMax ?? 200);
+  if (!settings) return [];
+  return [
+    {
+      label: t("voice.level.output"),
+      icon: <SpeakerHigh size={16} />,
+      onSelect: () => {},
+      slider: {
+        value: Math.min(settings.outputVolume, max),
+        min: 0,
+        max,
+        step: 5,
+        notch: max > 100 ? 100 : undefined,
+        format: formatPercent,
+        onChange: setOutputVolume,
+      },
+    },
+  ];
+}
+
 function RoomFooter({ room }: { room: VoiceRoomView }) {
   const { t } = useTranslation();
   const { me } = room;
@@ -642,6 +703,8 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
       ? t("voice.room.unmuteMic")
       : t("voice.room.muteMic");
   const deafLabel = me.deaf ? t("voice.room.deafenOff") : t("voice.room.deafenOn");
+  const volume = useOutputVolumeItem();
+  const threshold = useVoicePrefs((s) => meterThreshold(s.settings));
   return (
     <footer className="shrink-0 border-t border-white/8 px-4 pt-3 pb-3.5">
       <div className="grid grid-cols-3 gap-2">
@@ -659,12 +722,20 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
                 <Microphone size={17} weight="bold" />
               )
             }
+            // What the microphone hears, beside its word (VOICE-CALL); still while it is off.
+            iconRight={
+              <VoiceMeter threshold={threshold} className={cn("ml-0.5", micOff && "opacity-60")} />
+            }
             onClick={me.mutedByModerator ? undefined : () => void toggleMute()}
           >
             {t("voice.room.mic")}
           </Button>
         </Tooltip>
-        <Tooltip content={deafLabel}>
+        <ContextMenu
+          items={volume}
+          disabled={!volume.length}
+          wrapTrigger={(trigger) => <Tooltip content={deafLabel}>{trigger}</Tooltip>}
+        >
           <Button
             size="lg"
             variant="secondary"
@@ -681,7 +752,7 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
           >
             {t("voice.room.deafen")}
           </Button>
-        </Tooltip>
+        </ContextMenu>
         <Button
           size="lg"
           variant="secondary"
