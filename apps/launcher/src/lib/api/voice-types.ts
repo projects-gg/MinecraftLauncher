@@ -296,11 +296,14 @@ export type VoiceLeftReason =
   | "crew"
   | "idle"
   | "unavailable"
-  | "failed";
+  | "failed"
+  /** BAN-TYPES: Projects' moderators restricted the player's voice chat (`until`). */
+  | "restricted";
 
 /** A moment worth a toast (`voice-notice`). */
 export type VoiceNotice =
-  | { kind: "left"; reason: VoiceLeftReason; friend: string | null }
+  /** `until`: `restricted`'s end (Unix seconds), when the service said (BAN-TYPES). */
+  | { kind: "left"; reason: VoiceLeftReason; friend: string | null; until?: number }
   | { kind: "moved"; room: string; name: string }
   | { kind: "mutedByModerator" }
   | { kind: "missed"; from: string; room: string }

@@ -18,6 +18,8 @@ export const enReports = {
     spam: "Spam",
     scam: "Scam",
     other: "Something else",
+    // BAN-TYPES: offered only for a player reported from a voice room.
+    voice: "Voice chat violation",
   },
   note: "Note",
   notePlaceholder: "Tell us briefly, if you like",

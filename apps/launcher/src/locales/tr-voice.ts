@@ -126,6 +126,9 @@ export const trVoice = {
     idle: "Uzun süre hareketsiz kaldığın için ayrıldın.",
     unavailable: "Sesli sohbet şu an kullanılamıyor.",
     failed: "Bağlanamadı.",
+    // BAN-TYPES: a voice chat ban took the player out ({{until}}: "5 Kasım 14:00'e kadar").
+    restricted: "Sesli sohbet kullanman kısıtlandı.",
+    restrictedUntil: "Sesli sohbet kullanman {{until}} kısıtlandı.",
   },
   mic: {
     denied: "Mikrofona izin verilmedi.",
@@ -149,6 +152,8 @@ export const trVoice = {
     invalidName: "Oda adı 3 ile 24 karakter arasında olmalı.",
     nameRejected: "Bu ad kullanılamaz.",
     failed: "Bağlanamadı.",
+    // BAN-TYPES: a voice chat ban, with its end.
+    staffMutedUntil: "Sesli sohbet kullanman {{until}} kısıtlandı.",
   },
   invite: {
     title: "Davet et",

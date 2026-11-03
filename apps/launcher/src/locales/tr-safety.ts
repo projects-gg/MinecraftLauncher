@@ -26,6 +26,9 @@ export const trSafety = {
   restricted: {
     until: "Hesabın {{date}} tarihine kadar kısıtlandı.",
     forever: "Hesabın kalıcı olarak kısıtlandı.",
+    // BAN-TYPES: what still works (the game, offline and on servers).
+    play: "Oyunu oynamaya devam edebilirsin. Arkadaşlar, sohbet ve sesli sohbet bu sürede kapalı.",
+    playForever: "Oyunu oynamaya devam edebilirsin. Arkadaşlar, sohbet ve sesli sohbet kapalı.",
     rules: "Topluluk kuralları",
   },
   signupsClosed: "Şu an yeni hesap açılamıyor. Yarın tekrar dene.",
@@ -43,6 +46,8 @@ export const trSafety = {
       spam: "Spam",
       scam: "Dolandırıcılık",
       other: "Diğer",
+      // BAN-TYPES: a warning for a voice room report.
+      voice: "Sesli sohbet ihlali",
     },
     ok: "Anladım",
   },

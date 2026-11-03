@@ -19,6 +19,8 @@ export const trReports = {
     spam: "Spam",
     scam: "Dolandırıcılık",
     other: "Diğer",
+    // BAN-TYPES: offered only for a player reported from a voice room.
+    voice: "Sesli sohbet ihlali",
   },
   note: "Not",
   notePlaceholder: "İstersen kısaca anlat",

@@ -34,6 +34,15 @@ describe("reports", () => {
     expect(reasonKey("player", "inappropriate", false, true)).toBe("chat2.report.reactionReason");
   });
 
+  it("offer a voice chat violation first, only with the voice room (BAN-TYPES)", () => {
+    const fromRoom = { kind: "player" as const, id: "1", voice: "c0123456789abcdef" };
+    expect(reasonsFor(fromRoom)[0]).toBe("voice");
+    expect(reasonsFor({ kind: "player", id: "1" })).not.toContain("voice");
+    expect(reasonsFor({ kind: "crew", id: "c" })).not.toContain("voice");
+    expect(reasonsFor({ kind: "message", conv: "d:1:2", id: 7 })).not.toContain("voice");
+    expect(reasonKey("player", "voice")).toBe("reports.reasons.voice");
+  });
+
   it("count the note as the service does", () => {
     expect(noteLength("  çok   kötü \n söz  ")).toBe(12);
     expect(noteOf("   ")).toBeUndefined();

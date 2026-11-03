@@ -3,6 +3,7 @@
 // who "Davet et" lists, the words for a refusal or an ended stay, and a shortcut key's label.
 import { matchesQuery } from "@pl/ui";
 import type { TFunction } from "i18next";
+import { untilText } from "@/features/social/crew-notify";
 import type { Friend, SocialSnapshot, SocialTeam, TeamMember } from "@/lib/api/social-types";
 import type {
   VoiceAnswer,
@@ -269,9 +270,15 @@ export const DAILY_LIMIT_SECONDS = 600;
 
 /**
  * The words for a refused action, or null when it went through (or there was nothing to say:
- * `nothing`). `name` is who the action was about ("… şu an aranamıyor.").
+ * `nothing`). `name` is who the action was about ("… şu an aranamıyor."). BAN-TYPES: a voice chat
+ * ban with its end says until when ("5 Kasım 14:00'e kadar", as of `nowMs`).
  */
-export function refusalText(answer: VoiceAnswer, t: TFunction, name?: string): string | null {
+export function refusalText(
+  answer: VoiceAnswer,
+  t: TFunction,
+  name?: string,
+  nowMs = Date.now(),
+): string | null {
   switch (answer.refused) {
     case null:
     case "nothing":
@@ -284,15 +291,29 @@ export function refusalText(answer: VoiceAnswer, t: TFunction, name?: string): s
         : t("voice.refused.rateLimited");
     case "accountLimited":
       return t("voice.refused.daily");
+    case "staffMuted":
+      return answer.until
+        ? t("voice.refused.staffMutedUntil", { until: untilText(t, answer.until * 1000, nowMs) })
+        : t("voice.refused.staffMuted");
     default:
       return t(`voice.refused.${answer.refused}`);
   }
 }
 
-/** The words for a stay that ended on its own (the toast). */
-export function leftText(reason: VoiceLeftReason, t: TFunction): string {
+/**
+ * The words for a stay that ended on its own (the toast). BAN-TYPES: `restricted` with `until`
+ * (Unix seconds) says until when, as of `nowMs`.
+ */
+export function leftText(
+  reason: VoiceLeftReason,
+  t: TFunction,
+  until?: number | null,
+  nowMs = Date.now(),
+): string {
   // "Cevap yok" is the pill's own (with "Tekrar ara"), as is "Bağlanamadı" (with "Tekrar dene").
   if (reason === "noAnswer") return t("voice.call.noAnswer");
+  if (reason === "restricted" && until)
+    return t("voice.left.restrictedUntil", { until: untilText(t, until * 1000, nowMs) });
   return t(`voice.left.${reason}`);
 }
 

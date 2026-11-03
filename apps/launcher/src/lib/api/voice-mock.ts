@@ -17,7 +17,8 @@
 //   "Bağlanamadı"); `denied` / `missing` (the microphone); `weak` / `bad` (the player's
 //   connection); `modMuted`, `muted`, `deaf`; VOICE-ROOMS: `crewRooms`, `crewRoomsIn`,
 //   `crewRoomsOld`, `crewRoomsBusy` (`keptRooms`; `&change=<refusal>` refuses the crew page's
-//   changes).
+//   changes); BAN-TYPES: `restricted` the crew's "Genel", left a moment later for a voice chat ban
+//   (two days, on the hour; `staffMuted` refusals carry the same end).
 // - `speaking=<ids>|none`: who speaks (the scenario's own otherwise); `talking=1`: the player too.
 // - `call=answer|noAnswer|<refusal>`: what "Ara" gets (answered after 2.5 s by default).
 // - `join=ok|<refusal>`: what "Katıl" gets.
@@ -84,10 +85,13 @@ const REFUSALS: readonly VoiceRefusal[] = [
 const refusalOf = (value: string | null | undefined): VoiceRefusal | null =>
   REFUSALS.find((r) => r === value) ?? null;
 
+/** BAN-TYPES: a voice chat ban's end in the previews: two days on, on the hour. */
+const banEnd = () => Math.ceil(nowSec() / 3600) * 3600 + 2 * 86_400;
+
 const refused = (why: VoiceRefusal, retryAfter: number | null = null): VoiceAnswer => ({
   refused: why,
   retryAfter,
-  until: null,
+  until: why === "staffMuted" ? banEnd() : null,
 });
 
 function person(id: string, extra: Partial<VoicePerson> = {}): VoicePerson {
@@ -348,6 +352,7 @@ function stateFor(scenario: string): VoiceState {
       };
     case "crew":
     case "crewFull":
+    case "restricted":
       return {
         ...base,
         room: crewRoom(crewRole()),
@@ -638,6 +643,13 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
   }
   if (scenario === "failed") {
     later(300, () => notice({ kind: "left", reason: "failed", friend: null }));
+  }
+  // BAN-TYPES: a voice chat ban takes the player out of the room.
+  if (scenario === "restricted") {
+    later(1200, () => {
+      commit({ ...state, room: null });
+      notice({ kind: "left", reason: "restricted", friend: null, until: banEnd() });
+    });
   }
 
   const joinAnswer = (): VoiceAnswer | null => {

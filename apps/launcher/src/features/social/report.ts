@@ -23,10 +23,12 @@ const PLAN_REASONS: readonly ReportReason[] = [
   "other",
 ];
 
-/** The reasons a target takes, in the dialog's order. */
+/** The reasons a target takes, in the dialog's order. BAN-TYPES: a player reported from a voice
+ * room (`voice`) is offered "Sesli sohbet ihlali" first; nothing else is. */
 export function reasonsFor(target: ReportTarget): readonly ReportReason[] {
-  if (target.kind === "player" && (target.plan || target.reaction)) return PLAN_REASONS;
-  return REPORT_REASONS[target.kind];
+  if (target.kind !== "player") return REPORT_REASONS[target.kind];
+  const reasons = target.plan || target.reaction ? PLAN_REASONS : REPORT_REASONS.player;
+  return target.voice ? ["voice", ...reasons] : reasons;
 }
 
 /** The words of a reason for a target ("Uygunsuz ad" for a player, "… ya da slogan" for a crew,
