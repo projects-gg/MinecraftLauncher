@@ -13,9 +13,10 @@ import java.util.List;
  * the friend list (favourite, online notice, category, crew invite), the crew the menu opened from (moderator,
  * leadership, remove from the crew; OVL-UX3, a sender in crew chat), the player's open world (send off), the
  * relationship (unfriend, block, report). Someone in the player's voice room (VOICE-O) gets their volume and "Benim için
- * sustur" first, then what the player's role may do to them in the room, as the launcher's menu leads with them; "Ara"
- * or "Odaya davet et" stands beside "Mesaj gönder". A row shows only where the rules allow it. Pure, so it is tested on
- * its own.
+ * sustur" first, then what the player's role may do to them in the room, as the launcher's menu leads with them; a
+ * friend's menu leads with "Sesli arama başlat" (OVL-SOC, the owner: "arkadaşlarda sağ tıklayıp sesli arama başlat"),
+ * asked first, or "Odaya davet et" in its place while the player's room may take them. A row shows only where the rules
+ * allow it. Pure, so it is tested on its own.
  */
 public final class FriendMenu {
     /** A row's action. */
@@ -79,7 +80,10 @@ public final class FriendMenu {
         VOICE_MOD,
         /** VOICE-O: "Moderatörlükten al". */
         VOICE_UNMOD,
-        /** VOICE-O: "Ara". */
+        /**
+         * "Sesli arama başlat" (OVL-SOC; VOICE-O's "Ara"), asked first ("Ayşe aransın mı?": the call rings at the friend,
+         * so a slip of the hand never calls anyone).
+         */
         CALL,
         /** VOICE-O: "Odaya davet et"; soft while it rings ("Aranıyor…", done) or the room is full. */
         CALL_INVITE;
@@ -87,7 +91,7 @@ public final class FriendMenu {
         /** One sentence is asked before it goes. */
         public boolean asks() {
             return this == MAKE_FOUNDER || this == REMOVE_MEMBER || this == REMOVE_FROM_WORLD || this == UNFRIEND
-                || this == BLOCK || this == VOICE_KICK;
+                || this == BLOCK || this == VOICE_KICK || this == CALL;
         }
 
         /** Drawn in the error colour (the launcher's danger row). */
@@ -262,7 +266,19 @@ public final class FriendMenu {
             }
             out.add(null);
         }
-        // Being together.
+        // Being together, led by voice chat's row for a friend (OVL-SOC): "Sesli arama başlat", or "Odaya davet et"
+        // while the player's room may take them (soft while it rings or the room is full).
+        if (in.friend()) {
+            VoiceState.Offer offer = voice == null || voice.offer() == null ? VoiceState.Offer.NONE : voice.offer();
+            switch (offer) {
+                case CALL -> out.add(new Row(Action.CALL, !in.online(), false));
+                case INVITE -> out.add(new Row(Action.CALL_INVITE, !in.online(), false));
+                case RINGING -> out.add(new Row(Action.CALL_INVITE, true, true));
+                case FULL -> out.add(new Row(Action.CALL_INVITE, true, false));
+                case NONE -> {
+                }
+            }
+        }
         if (in.joinable()) {
             out.add(new Row(Action.JOIN, false, false));
         }
@@ -277,16 +293,6 @@ public final class FriendMenu {
             if (in.message()) {
                 // Opens even while the launcher is away: the conversation says why it cannot be written to.
                 out.add(new Row(Action.MESSAGE, false, false));
-            }
-            // "Ara" beside "Mesaj gönder"; "Odaya davet et" while the player's room may take them (VOICE-O).
-            VoiceState.Offer offer = voice == null || voice.offer() == null ? VoiceState.Offer.NONE : voice.offer();
-            switch (offer) {
-                case CALL -> out.add(new Row(Action.CALL, !in.online(), false));
-                case INVITE -> out.add(new Row(Action.CALL_INVITE, !in.online(), false));
-                case RINGING -> out.add(new Row(Action.CALL_INVITE, true, true));
-                case FULL -> out.add(new Row(Action.CALL_INVITE, true, false));
-                case NONE -> {
-                }
             }
         }
         if (launcher && in.discord()) {

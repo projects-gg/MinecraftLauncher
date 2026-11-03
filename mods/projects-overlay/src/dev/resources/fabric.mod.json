@@ -21,7 +21,8 @@
       "gg.projects.overlay.dev.EmojiScenario",
       "gg.projects.overlay.dev.H1eScenario",
       "gg.projects.overlay.dev.F7Scenario",
-      "gg.projects.overlay.dev.VoiceScenario"
+      "gg.projects.overlay.dev.VoiceScenario",
+      "gg.projects.overlay.dev.SocialScenario"
     ]
   },
   "mixins": [

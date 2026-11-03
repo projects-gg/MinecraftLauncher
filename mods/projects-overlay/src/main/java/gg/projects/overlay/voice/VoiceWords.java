@@ -103,6 +103,8 @@ public final class VoiceWords {
             case "account-limited" -> "voice.refused.account_limited";
             case "staff-muted" -> "voice.refused.staff_muted";
             case "room-full" -> "voice.refused.room_full";
+            // OVL-SOC: "Yeni oda" in a crew that has all its rooms (the launcher's words).
+            case "rooms-full" -> "voice.refused.rooms_full";
             case "room-gone" -> "voice.refused.room_gone";
             case "kicked" -> "voice.refused.kicked";
             case "not-allowed" -> "voice.refused.not_allowed";
