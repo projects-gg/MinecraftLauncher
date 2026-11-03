@@ -209,9 +209,10 @@ function SensitivityMeter({
           className="block h-6 w-[4px] rounded-full bg-bone-50 shadow-[0_0_0_2px_rgb(18_16_22/0.85)] outline-none transition-[transform,scale] duration-150 hover:scale-y-110 focus-visible:ring-2 focus-visible:ring-gold-300"
         />
       </RadixSlider.Root>
+      {/* The meter's own axis, how loud: a voice right of the line goes out. */}
       <div className="flex justify-between text-[11px] text-ash-400">
-        <span>{t("voice.settings.sensitivityHigh")}</span>
-        <span>{t("voice.settings.sensitivityLow")}</span>
+        <span>{t("voice.level.quiet")}</span>
+        <span>{t("voice.level.loud")}</span>
       </div>
     </div>
   );

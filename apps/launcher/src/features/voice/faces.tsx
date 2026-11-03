@@ -3,11 +3,12 @@
 // all while nobody speaks; the store holds no speaker while the window is away). Round inside a
 // pill, the list's rounded square elsewhere (design.md §4, "round inside round").
 //
-// VOICE-CALL: the speaking indicator follows the voice. Outside the ring a second, softer ring
-// grows with how loud they speak and settles back between words (transform scale and opacity
-// only, written by the live levels: no render, no frame loop), the same on the pill's faces, the
-// panel's rows and the call's large faces, where it reaches furthest. The player's own face does
-// it only while what they say goes out. Reduced motion and Performance mode: the plain ring.
+// VOICE-CALL: the speaking indicator follows the voice. A second, softer ring brightens with how
+// loud they speak and settles back between words (transform scale and opacity only, written by the
+// live levels: no render, no frame loop). On the pill's faces and the call's large faces it grows a
+// few pixels outside the ring; the panel's rows have no room between neighbours, so there it fills
+// the gap inside the ring instead and never leaves the ring's box. The player's own face does it
+// only while what they say goes out. Reduced motion and Performance mode: the plain ring.
 import { MicrophoneSlash } from "@phosphor-icons/react";
 import { cn, SignalBars, useMotionPrefs } from "@pl/ui";
 import { useRef } from "react";
@@ -23,11 +24,14 @@ export function haloStrength(level: number): number {
   return Math.max(0, Math.min(1, (level - 0.35) / 0.5));
 }
 
-/** How far the halo grows at full strength, by the face's size: furthest on the call's faces. */
+/**
+ * How far the halo grows past the ring at full strength, by the face's size; 0 where it stays
+ * inside the ring. The call's faces: about 3 px, clear of the names under them.
+ */
 export function haloReach(size: number): number {
-  if (size >= 64) return 0.22;
-  // The panel's rows: a dense list, a little less.
-  if (size >= 32) return 0.13;
+  if (size >= 64) return 0.08;
+  // The panel's rows: neighbours' rings are a few pixels apart, so nothing grows there.
+  if (size >= 32) return 0;
   // The pill's 20 px faces: a few pixels, or it would not show at all.
   return 0.2;
 }
@@ -37,6 +41,7 @@ function Halo({ id, size, round }: { id: string; size: number; round: boolean })
   const ref = useRef<HTMLSpanElement>(null);
   const shown = useRef(0);
   const isMe = useVoiceUi((s) => s.state.room?.me.id === id);
+  const reach = haloReach(size);
   usePainter(isMe ? MIC : id, (level, open) => {
     const element = ref.current;
     if (!element) return;
@@ -47,7 +52,7 @@ function Halo({ id, size, round }: { id: string; size: number; round: boolean })
     shown.current = strength;
     // Softer than the ring itself: it says how loud, the ring says who.
     element.style.opacity = String(strength * 0.7);
-    element.style.transform = `scale(${1 + strength * haloReach(size)})`;
+    if (reach) element.style.transform = `scale(${1 + strength * reach})`;
   });
   return (
     <span
@@ -57,7 +62,9 @@ function Halo({ id, size, round }: { id: string; size: number; round: boolean })
       style={{ opacity: 0, transform: "scale(1)" }}
       className={cn(
         // A layer of its own (a few pixels): its steps never repaint the face or the glass around.
-        "pointer-events-none absolute -inset-[3px] ring-[1.5px] ring-jade-400/60 transition-[transform,opacity] ease-out will-change-[transform,opacity]",
+        "pointer-events-none absolute -inset-[3px] transition-[transform,opacity] ease-out will-change-[transform,opacity]",
+        // Inside the ring's box (the rows): the gap between the face and the ring fills with the voice.
+        reach ? "ring-[1.5px] ring-jade-400/60" : "ring-2 ring-jade-400/80 ring-inset",
         round ? "rounded-full" : "rounded-[calc(var(--radius-head)+3px)]",
       )}
     />

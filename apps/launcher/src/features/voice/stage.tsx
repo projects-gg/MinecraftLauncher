@@ -2,16 +2,16 @@
 // instead of a list of two, both faces large side by side, the friend first, each with the speaking
 // ring and the ring that follows the voice (it reaches furthest here), the name and what they
 // turned off under it, and the call's time under the two. While the player's call rings the
-// friend's face waits faded with "Aranıyor…" ("Sesli sohbette" when they are in another room: §3.2)
-// and "İptal". A press or a right click on the friend opens their menu, as a row's does. Faces at 72
-// px (a multiple of 8: the pixel heads stay square).
-import { Button, Menu, Tooltip } from "@pl/ui";
+// friend's face waits faded with "Aranıyor…" ("Başka bir odada" when they are in another room:
+// §3.2); the one way out is the footer's button, which says "İptal" then. A press or a right click
+// on the friend opens their menu, as a row's does. Faces at 72 px (a multiple of 8: the pixel heads
+// stay square), their names clear of the ring that follows the voice.
+import { Menu } from "@pl/ui";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePersonItems } from "@/features/social/person-menu";
 import { useSocialUi } from "@/features/social/store";
 import type { VoicePerson, VoiceRoomView, VoiceState } from "@/lib/api/voice-types";
-import { leaveRoom } from "./actions";
 import { CallTime, callStart } from "./call-time";
 import { SpeakingFace } from "./faces";
 import { presenceOf, roleWord, type VoiceFace } from "./rules";
@@ -43,7 +43,7 @@ function Seat({
 }) {
   const art = <SpeakingFace face={face} size={FACE} dim={dim} speaking={dim ? false : undefined} />;
   return (
-    <div className="flex w-[132px] min-w-0 flex-col items-center gap-2.5 text-center">
+    <div className="flex w-[132px] min-w-0 flex-col items-center gap-3.5 text-center">
       {children ? children(art) : art}
       <div className="flex min-w-0 max-w-full flex-col items-center">
         <span className="flex max-w-full items-center gap-1.5">
@@ -98,15 +98,13 @@ function FriendSeat({ person, marks }: { person: VoicePerson; marks: ReactNode }
   );
 }
 
-/** The friend being called: faded, "Aranıyor…" (or in voice elsewhere) and "İptal". */
+/** The friend being called: faded, "Aranıyor…" (or "Başka bir odada"). */
 function CallingSeat({ friend }: { friend: string }) {
   const { t } = useTranslation();
   const face = useFace(friend);
   const friends = useSocialUi((s) => s.view.friends);
   const busy = useVoiceUi((s) => presenceOf(friend, s.state, friends) === "in");
-  return (
-    <Seat face={face} dim line={busy ? t("voice.presence.inVoice") : t("voice.room.ringing")} />
-  );
+  return <Seat face={face} dim line={busy ? t("voice.call.elsewhere") : t("voice.room.ringing")} />;
 }
 
 export function CallStage({
@@ -146,16 +144,10 @@ export function CallStage({
         ) : null}
         <Seat face={meFace} line={t("voice.room.you")} marks={marksOf(room.me)} />
       </div>
-      {/* The call's time, or the way out of a call that still rings; the same height either way. */}
+      {/* The call's time; its room is kept while the call still rings, so nothing moves on an answer. */}
       <div className="mt-5 flex h-8 items-center">
         {since !== null ? (
           <CallTime since={since} className="text-[15px] font-semibold text-ash-300" />
-        ) : calling ? (
-          <Tooltip content={t("voice.call.cancelLabel")}>
-            <Button size="sm" variant="secondary" onClick={() => void leaveRoom()}>
-              {t("voice.room.cancelRing")}
-            </Button>
-          </Tooltip>
         ) : null}
       </div>
     </section>

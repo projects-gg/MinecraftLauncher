@@ -25,12 +25,16 @@ export const enVoice = {
     unreachable: "Can't be called right now.",
     together: "Already in your room.",
     time: "Call time {{time}}",
+    kind: "Voice call",
+    elsewhere: "In another room",
   },
   sounds: {
     title: "Voice chat sounds",
   },
   level: {
-    output: "Volume",
+    output: "Everyone's volume",
+    quiet: "Quiet",
+    loud: "Loud",
   },
   ring: {
     calling: "{{name}} is calling",
@@ -187,10 +191,8 @@ export const enVoice = {
     advanced: "Advanced",
     sensitivity: "Sensitivity",
     sensitivityAuto: "Automatic sensitivity",
-    sensitivityLow: "Low",
-    sensitivityHigh: "High",
     echo: "Echo cancellation",
-    autoGain: "Automatic volume",
+    autoGain: "Auto-adjust mic volume",
     micVolume: "Microphone volume",
   },
   key: {

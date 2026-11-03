@@ -26,12 +26,16 @@ export const trVoice = {
     unreachable: "Şu an aranamıyor.",
     together: "Zaten seninle aynı odada.",
     time: "Arama süresi {{time}}",
+    kind: "Sesli arama",
+    elsewhere: "Başka bir odada",
   },
   sounds: {
     title: "Sesli sohbet sesleri",
   },
   level: {
-    output: "Ses seviyesi",
+    output: "Herkesin sesi",
+    quiet: "Kısık",
+    loud: "Yüksek",
   },
   ring: {
     calling: "{{name}} arıyor",
@@ -189,10 +193,8 @@ export const trVoice = {
     advanced: "Gelişmiş",
     sensitivity: "Hassasiyet",
     sensitivityAuto: "Otomatik hassasiyet",
-    sensitivityLow: "Az",
-    sensitivityHigh: "Çok",
     echo: "Yankı önleme",
-    autoGain: "Otomatik ses seviyesi",
+    autoGain: "Mikrofon sesini otomatik ayarla",
     micVolume: "Mikrofon sesi",
   },
   key: {

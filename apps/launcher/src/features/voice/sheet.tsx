@@ -576,6 +576,8 @@ function RoomHeader({ room, title }: { room: VoiceRoomView; title: string }) {
   const [editing, setEditing] = useState(false);
   const full = roomFull(room);
   const count = room.people.length + 1;
+  // VOICE-CALL: the call's stage says what it is ("1 kişi" read wrong above two faces while ringing).
+  const stage = useVoiceUi((s) => isOneToOne(s.state));
   return (
     <header className="shrink-0 border-b border-white/8 pt-4 pr-3 pb-3 pl-5">
       <div className="flex items-start gap-1.5">
@@ -584,7 +586,9 @@ function RoomHeader({ room, title }: { room: VoiceRoomView; title: string }) {
           <p className="mt-0.5 truncate text-[12.5px] text-ash-400">
             {room.kind === "crew" && crew
               ? t("voice.room.crewOf", { crew: crew.name })
-              : t("voice.room.count", { count })}
+              : stage
+                ? t("voice.call.kind")
+                : t("voice.room.count", { count })}
           </p>
         </div>
         {editing ? null : (
@@ -668,7 +672,7 @@ function CloseRoom() {
 }
 
 /**
- * "Ses seviyesi" (VOICE-CALL, SOC-GAP §3.11): everyone's voice at once, the person menu's slider
+ * "Herkesin sesi" (VOICE-CALL, SOC-GAP §3.11): everyone's voice at once, the person menu's slider
  * (its notch at 100 %, to the engine's top). A right click on "Sağırlaştır" opens it, as Discord's
  * headphones do; Settings → Sesli sohbet has it too.
  */
@@ -707,6 +711,10 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
   const deafLabel = me.deaf ? t("voice.room.deafenOff") : t("voice.room.deafenOn");
   const volume = useOutputVolumeItem();
   const threshold = useVoicePrefs((s) => meterThreshold(s.settings));
+  // VOICE-CALL: on the call's stage the footer is its only way out ("İptal" while it rings) and a
+  // call of two has nothing to close for the other (leaving is hanging up, as on Discord).
+  const stage = useVoiceUi((s) => isOneToOne(s.state));
+  const ringing = useVoiceUi((s) => Boolean(s.state.calling)) && stage;
   return (
     <footer className="shrink-0 border-t border-white/8 px-4 pt-3 pb-3.5">
       {/* "Mikrofon" a little wider: its meter beside the word ("Microphone" in English). */}
@@ -762,13 +770,14 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
           className="w-full px-2"
           // Leaving ends nothing for the others: a plate with a red glyph; "Odayı kapat" alone is red.
           icon={<PhoneDisconnect size={17} weight="bold" className="text-flare-400" />}
+          aria-label={ringing ? t("voice.call.cancelLabel") : undefined}
           onClick={() => void leaveRoom()}
         >
-          {t("voice.room.leave")}
+          {ringing ? t("voice.room.cancelRing") : t("voice.room.leave")}
         </Button>
       </div>
       {/* Alone, closing is leaving: "Ayrıl" says it. */}
-      {room.canClose && room.people.length ? <CloseRoom /> : null}
+      {room.canClose && room.people.length > 0 && !stage ? <CloseRoom /> : null}
     </footer>
   );
 }
