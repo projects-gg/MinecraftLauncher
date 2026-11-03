@@ -270,10 +270,10 @@ export const DAILY_LIMIT_SECONDS = 600;
 
 const NO_BREAK = String.fromCharCode(0xa0);
 
-/** BAN-TYPES: a voice chat ban's end (Unix seconds) as one phrase a line never splits ("5 Kasım
- * 14:00'e kadar": a toast's line break once fell between the day and the month). */
+/** BAN-TYPES: a voice chat ban's end (Unix seconds) with its date on one line ("5 Kasım 14:00'e
+ * kadar": a toast's line break once fell between the day and the month). */
 function banEnd(t: TFunction, until: number, nowMs: number): string {
-  return untilText(t, until * 1000, nowMs).replaceAll(" ", NO_BREAK);
+  return untilText(t, until * 1000, nowMs).replace(/(\d) (\p{L})/gu, `$1${NO_BREAK}$2`);
 }
 
 /**

@@ -341,9 +341,9 @@ describe("words", () => {
       ({ refused: "staffMuted", retryAfter: null, until: end }) as Parameters<
         typeof refusalText
       >[0];
-    // The end is one phrase a line never splits (no-break spaces inside it).
+    // The date stays on one line (a no-break space between the day and the month).
     const nb = String.fromCharCode(0xa0);
-    const line = `Sesli sohbet kullanman 5${nb}Kasım${nb}14:00'e${nb}kadar kısıtlandı.`;
+    const line = `Sesli sohbet kullanman 5${nb}Kasım 14:00'e kadar kısıtlandı.`;
     expect(refusalText(muted(until), t, undefined, now)).toBe(line);
     expect(refusalText(muted(null), t, undefined, now)).toBe(
       "Susturulduğun için şu an bunu yapamazsın.",
