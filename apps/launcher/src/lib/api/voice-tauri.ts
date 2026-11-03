@@ -50,11 +50,32 @@ async function done(promise: Promise<Res<null>>): Promise<void> {
   await ok(promise);
 }
 
+/**
+ * The page's subscribers to each voice event, behind one Tauri listener per event for the page's
+ * life. A listener let go while the launcher's next payloads were on their way left them no
+ * callback (BATCH-206: "[TAURI] Couldn't find callback id", 46 at once in a call, the live meters'
+ * levels at sixteen a second queued while the window was busy); these events come only while the
+ * page asks for them (levels, the settings meter) or its window is in sight (who speaks), so the
+ * one listener costs nothing meanwhile.
+ */
+const subscribers = new Map<string, Set<(payload: unknown) => void>>();
+
 /** One event's payloads; returns its stop. */
 function on<T>(event: string, listener: (payload: T) => void): () => void {
-  const unlisten = listen<T>(event, (e) => listener(e.payload));
+  let set = subscribers.get(event);
+  if (!set) {
+    const fresh = new Set<(payload: unknown) => void>();
+    subscribers.set(event, fresh);
+    void listen<unknown>(event, (e) => {
+      for (const one of [...fresh]) one(e.payload);
+    });
+    set = fresh;
+  }
+  const mine = listener as (payload: unknown) => void;
+  set.add(mine);
+  const owner = set;
   return () => {
-    void unlisten.then((stop) => stop());
+    owner.delete(mine);
   };
 }
 
