@@ -26,6 +26,7 @@ mod host;
 mod hub;
 pub mod install;
 pub mod links;
+pub mod mention;
 pub mod policy;
 pub mod protocol;
 mod route;
@@ -39,7 +40,8 @@ pub mod voice;
 pub use feed::{MAX_CONVS, MAX_FRIENDS};
 pub use host::{HostSignal, HostSink, WorldsShown};
 pub use hub::{
-    LANGUAGE_FILE, Overlay, OverlayConfig, OverlayStatus, read_language_pick, write_language_pick,
+    LANGUAGE_FILE, Overlay, OverlayConfig, OverlayStatus, SocNextPrefs, read_language_pick,
+    write_language_pick,
 };
 pub use route::{RouteLaunch, route_pick};
 pub use server::{

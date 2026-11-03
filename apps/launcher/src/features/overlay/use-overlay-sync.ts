@@ -1,20 +1,29 @@
 import { useMotionPrefs } from "@pl/ui";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import type { PeopleChange } from "@/bindings";
+import { useSocNext } from "@/features/social/next/flag";
+import { useSocNextPrefs } from "@/features/social/next/prefs";
+import { useStreamerOn } from "@/features/social/next/streamer";
 import { useWaitPrefs } from "@/features/social/next/wait-prefs";
+import { changeStatus, changeStatusFor } from "@/features/social/status-menu";
 import { useSocialPrefs } from "@/features/social/store";
 import { usePrefs } from "@/stores/prefs";
 import { overlayApi } from "./api";
 import { useOverlay } from "./store";
+
+/** The crew mute's durations a status may come for from the game (SOC-NEXT §3.3). */
+const PRESETS = ["hour", "eightHours", "morning", "forever"] as const;
 
 /**
  * Keeps the launcher's in-game overlay in step with the page (mounted once, with the friends
  * feature's host): the switch, the chat's emoji picker (CHAT-EMOJI), the friends notification
  * choices its toasts follow (crew calls, crew chat, conversations muted here), the friend list's
  * favourites and "Çevrimiçi olunca bildir" (the game's person menu shows and changes them,
- * OVL-UX2) and reduced motion go to Rust at the start and on every change, since the page may
- * rest while a game runs. Whether the game's mod is connected comes back (`shownInGame`), and so
- * do a switch the crash help turned off, the emoji picker switched in the game and the marks the
- * game's person menu changed.
+ * OVL-UX2), reduced motion and, with SOC-NEXT on (OVL-SOC 2), the nicknames, who is ignored,
+ * streamer mode as it stands and a timed status's end go to Rust at the start and on every
+ * change, since the page may rest while a game runs. Whether the game's mod is connected comes
+ * back (`shownInGame`), and so do a switch the crash help turned off, the emoji picker switched
+ * in the game, the marks the game's person menu changed and the status its switcher picked.
  */
 export function useOverlaySync() {
   const enabled = usePrefs((s) => s.inGameOverlay);
@@ -29,6 +38,24 @@ export function useOverlaySync() {
   // "Animasyonları azalt", Performance mode or the system's reduced motion: the overlay's panel
   // and toasts appear in place too (its own "Animasyonları azalt" adds to it).
   const reducedMotion = !useMotionPrefs().layout;
+  const socNext = useSocNext();
+  const nicknames = useSocNextPrefs((s) => s.nicknames);
+  const ignored = useSocNextPrefs((s) => s.ignored);
+  const timer = useSocNextPrefs((s) => s.statusTimer);
+  const streamer = useStreamerOn();
+  const next = useMemo(
+    () =>
+      socNext
+        ? {
+            nicknames: { ...nicknames },
+            ignored: [...ignored],
+            streamer,
+            statusUntil: timer?.until ?? null,
+            timedStatus: timer?.status ?? null,
+          }
+        : null,
+    [socNext, nicknames, ignored, streamer, timer],
+  );
 
   useEffect(() => {
     overlayApi
@@ -44,6 +71,7 @@ export function useOverlaySync() {
           onlineAlerts: { ...onlineAlerts },
           favoritesOnline,
         },
+        next,
       })
       .catch(() => {
         // The next change (or the next start) tells it again.
@@ -58,6 +86,7 @@ export function useOverlaySync() {
     onlineAlerts,
     favoritesOnline,
     reducedMotion,
+    next,
   ]);
 
   useEffect(() => {
@@ -66,16 +95,7 @@ export function useOverlaySync() {
     const stopEnabled = overlayApi.onEnabled((on) => usePrefs.getState().set("inGameOverlay", on));
     const stopEmoji = overlayApi.onEmoji((on) => usePrefs.getState().set("chatEmoji", on));
     // The game's person menu (OVL-UX2): the same marks as the list's star and its menu's row.
-    const stopPeople = overlayApi.onPeople((change) => {
-      const prefs = useSocialPrefs.getState();
-      if (change.kind === "favorite") {
-        if (prefs.favorites.includes(change.friend) !== change.on) {
-          prefs.toggleFavorite(change.friend);
-        }
-      } else {
-        prefs.setOnlineAlert(change.friend, change.on);
-      }
-    });
+    const stopPeople = overlayApi.onPeople(onPeopleChange);
     overlayApi.state().then(
       (state) => setConnected(state.connected),
       () => {},
@@ -87,4 +107,32 @@ export function useOverlaySync() {
       stopPeople();
     };
   }, []);
+}
+
+/** A mark or the status changed in the game: the page keeps it as its own buttons would. */
+function onPeopleChange(change: PeopleChange) {
+  if (change.kind === "status") {
+    // OVL-SOC 2: the panel's status switcher, as the launcher's own (status-menu.tsx).
+    const preset = PRESETS.find((one) => one === change.preset);
+    if ((change.status === "dnd" || change.status === "invisible") && preset) {
+      changeStatusFor(change.status, preset);
+    } else if (
+      change.status === "online" ||
+      change.status === "dnd" ||
+      change.status === "invisible"
+    ) {
+      // A status without an end drops the timer (as the launcher's own menu does).
+      useSocNextPrefs.getState().setStatusTimer(null);
+      changeStatus(change.status);
+    }
+    return;
+  }
+  const prefs = useSocialPrefs.getState();
+  if (change.kind === "favorite") {
+    if (prefs.favorites.includes(change.friend) !== change.on) {
+      prefs.toggleFavorite(change.friend);
+    }
+  } else {
+    prefs.setOnlineAlert(change.friend, change.on);
+  }
 }
