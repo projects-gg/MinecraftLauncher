@@ -88,12 +88,22 @@ export function namesLine(names: readonly string[], t: TFunction): string {
   return t("voice.names.more", { names: names.slice(0, 2).join(", "), count: names.length - 2 });
 }
 
+/**
+ * A room's own name as shown. The friends service names a crew's new rooms in Turkish ("Oda 2",
+ * "Oda 3"; social `voice-hub.ts` `crewNew`): a name of that form is said in the player's language
+ * ("Room 2"); any other name is the leader's own words.
+ */
+export function shownRoomName(name: string, t: TFunction): string {
+  const numbered = /^Oda (\d{1,3})$/.exec(name);
+  return numbered ? t("voice.room.numbered", { n: Number(numbered[1]) }) : name;
+}
+
 /** A crew room's name as shown: the crew's "Genel" in the player's language, else its own. */
 export function crewRoomName(
   room: { name: string | null; general: boolean },
   t: TFunction,
 ): string {
-  return room.general ? t("voice.room.general") : (room.name ?? "");
+  return room.general ? t("voice.room.general") : shownRoomName(room.name ?? "", t);
 }
 
 /**
@@ -107,7 +117,7 @@ export function roomTitle(
   calling?: string | null,
 ): string {
   if (room.general) return t("voice.room.general");
-  if (room.name) return room.name;
+  if (room.name) return shownRoomName(room.name, t);
   if (room.people.length)
     return namesLine(
       room.people.map((p) => nameOf(p.id)),

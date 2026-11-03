@@ -4,7 +4,7 @@ import "@/lib/i18n";
 import type { Friend, SocialTeam, TeamMember } from "@/lib/api/social-types";
 import type { VoicePerson, VoiceRoomView, VoiceState } from "@/lib/api/voice-types";
 import { HIDDEN_VOICE_STATE } from "@/lib/api/voice-types";
-import i18n from "@/lib/i18n";
+import i18n, { loadEnglish } from "@/lib/i18n";
 import { skippedLine } from "./discord-offer";
 import {
   callOffer,
@@ -27,6 +27,7 @@ import {
   refusalText,
   roomFull,
   roomTitle,
+  shownRoomName,
   snapVolume,
   toneNow,
   voiceMark,
@@ -171,6 +172,18 @@ describe("room titles", () => {
   it("keeps lines of three names whole", () => {
     expect(namesLine(["A", "B", "C"], t)).toBe("A, B, C");
     expect(crewRoomName({ name: "Oda 2", general: false }, t)).toBe("Oda 2");
+  });
+
+  it("says the crew's numbered rooms in the player's language, other names as named", async () => {
+    await loadEnglish();
+    const en = i18n.getFixedT("en") as TFunction;
+    expect(crewRoomName({ name: "Oda 2", general: false }, en)).toBe("Room 2");
+    expect(crewRoomName({ name: "Genel", general: true }, en)).toBe("General");
+    expect(crewRoomName({ name: "Taş Ocağı", general: false }, en)).toBe("Taş Ocağı");
+    expect(crewRoomName({ name: "Oda 2 ekibi", general: false }, en)).toBe("Oda 2 ekibi");
+    expect(roomTitle(room({ kind: "crew", name: "Oda 3" }), nameOf, en)).toBe("Room 3");
+    expect(roomTitle(room({ kind: "crew", name: "Oda 3" }), nameOf, t)).toBe("Oda 3");
+    expect(shownRoomName("Oda 12", en)).toBe("Room 12");
   });
 });
 

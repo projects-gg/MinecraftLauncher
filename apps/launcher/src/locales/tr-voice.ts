@@ -67,6 +67,8 @@ export const trVoice = {
     settings: "Sesli sohbet ayarları",
     newRoom: "Yeni oda",
     general: "Genel",
+    /** A crew's new room as the service names it ("Oda 2"), in the player's language. */
+    numbered: "Oda {{n}}",
     rooms: "Ekibin odaları",
     ringing: "Aranıyor…",
     cancelRing: "İptal",

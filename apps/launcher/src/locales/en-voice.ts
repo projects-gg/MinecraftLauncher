@@ -66,6 +66,7 @@ export const enVoice = {
     settings: "Voice chat settings",
     newRoom: "New room",
     general: "General",
+    numbered: "Room {{n}}",
     rooms: "The crew's rooms",
     ringing: "Calling…",
     cancelRing: "Cancel",

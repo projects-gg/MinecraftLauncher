@@ -107,14 +107,16 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
             marks={marks}
             className="text-[14px] font-semibold text-bone-50"
           />
-          <span className="flex items-center gap-2 text-[12.5px] text-ash-300">
+          {/* The count goes under the line when both do not fit beside "Katıl": the English
+              ("Invited you to their world") was cut to "Invited you to th…". */}
+          <span className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-ash-300">
             {failed ? (
-              <span className={calm ? "truncate" : "truncate text-flare-300"}>
+              <span className={calm ? "max-w-full truncate" : "max-w-full truncate text-flare-300"}>
                 {t(failed, { name: invite.name })}
               </span>
             ) : (
               <>
-                <span className="truncate">{t("host.invite.line")}</span>
+                <span className="max-w-full truncate">{t("host.invite.line")}</span>
                 <InviteCount invite={invite} className="shrink-0 text-ash-400" />
               </>
             )}

@@ -73,6 +73,7 @@ import {
   roleWord,
   roomFull,
   roomTitle,
+  shownRoomName,
   type VoiceFace,
   voiceMark,
 } from "./rules";
@@ -391,7 +392,14 @@ function RoomName({
     if (!room.canRename) setEditing(false);
   }, [room.canRename, setEditing]);
 
+  // The field starts with the name as shown ("Room 2" for the service's "Oda 2").
+  const shown = room.name ? shownRoomName(room.name, t) : "";
   const save = async () => {
+    // Unchanged: nothing to send (an English "Room 2" would rename the crew's "Oda 2").
+    if (draft.trim() === shown) {
+      setEditing(false);
+      return;
+    }
     setBusy(true);
     const refused = await renameRoom(draft);
     setBusy(false);
@@ -448,7 +456,7 @@ function RoomName({
                 label={t("voice.room.rename")}
                 icon={<PencilSimple size={15} />}
                 onClick={() => {
-                  setDraft(room.name ?? "");
+                  setDraft(shown);
                   setError(null);
                   setEditing(true);
                 }}
