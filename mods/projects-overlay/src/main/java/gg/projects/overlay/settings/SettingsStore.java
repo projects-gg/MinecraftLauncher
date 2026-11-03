@@ -152,7 +152,9 @@ public final class SettingsStore {
             stickers(root, "recentStickers"),
             emojis(root, "recentEmojis"),
             // VOICE-O: "Konuşanları göster" (a file from before voice chat has it on).
-            bool(root, "showSpeakers", d.showSpeakers()));
+            bool(root, "showSpeakers", d.showSpeakers()),
+            // OVL-SOC: the panel picker's recent emoji (a file from before it has none).
+            chatEmojis(root, "recentChatEmojis"));
     }
 
     static String format(OverlaySettings s) {
@@ -186,6 +188,11 @@ public final class SettingsStore {
             emojis.add(emoji);
         }
         root.add("recentEmojis", emojis);
+        JsonArray chatEmojis = new JsonArray();
+        for (String emoji : s.recentChatEmojis()) {
+            chatEmojis.add(emoji);
+        }
+        root.add("recentChatEmojis", chatEmojis);
         return new GsonBuilder().setPrettyPrinting().create().toJson(root) + "\n";
     }
 
@@ -251,6 +258,23 @@ public final class SettingsStore {
             if (item instanceof JsonPrimitive p && p.isString() && !p.getAsString().isEmpty()
                 && p.getAsString().length() <= 64 && !out.contains(p.getAsString())
                 && out.size() < OverlaySettings.RECENT_EMOJIS) {
+                out.add(p.getAsString());
+            }
+        }
+        return out;
+    }
+
+    /** What the panel's emoji picker wrote last (OVL-SOC): one emoji each, at most 8 characters; anything else goes. */
+    private static List<String> chatEmojis(JsonObject o, String key) {
+        JsonElement e = o.get(key);
+        if (e == null || !e.isJsonArray()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (JsonElement item : e.getAsJsonArray()) {
+            if (item instanceof JsonPrimitive p && p.isString() && !p.getAsString().isEmpty()
+                && p.getAsString().length() <= 8 && !out.contains(p.getAsString())
+                && out.size() < OverlaySettings.RECENT_CHAT_EMOJIS) {
                 out.add(p.getAsString());
             }
         }

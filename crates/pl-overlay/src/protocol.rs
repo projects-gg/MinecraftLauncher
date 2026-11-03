@@ -291,6 +291,17 @@ pub enum FromGame {
         #[serde(default)]
         friend: String,
     },
+    /// OVL-SOC (V22; from a mod whose hello lists `voice` and `voice-rooms`): "Katıl" on one of the
+    /// player's crew rooms in crew chat (`room`: its id from the last `voice-crews`, the crew's
+    /// "Genel" by its own id too), or "Yeni oda" (`new`: the player opens one and joins it).
+    VoiceJoin {
+        #[serde(default)]
+        crew: String,
+        #[serde(default)]
+        room: String,
+        #[serde(default)]
+        new: bool,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -366,6 +377,11 @@ pub const FEATURE_SLOW: &str = "slow";
 /// `voice-*` presses. A mod without it hears none of them and its `voice-*` frames are dropped.
 pub const FEATURE_VOICE: &str = "voice";
 
+/// The `hello` feature of a mod that shows the player's crew voice rooms in crew chat (OVL-SOC,
+/// V21: beside `voice` it hears `voice-crews` and sends `voice-join`). A mod without it hears no
+/// `voice-crews` and its `voice-join` is dropped.
+pub const FEATURE_VOICE_ROOMS: &str = "voice-rooms";
+
 impl FromGame {
     /// One of VOICE-O's presses: they go to the launcher's voice chat, never to the friends
     /// feature.
@@ -380,6 +396,7 @@ impl FromGame {
                 | Self::VoiceMod { .. }
                 | Self::VoiceCall { .. }
                 | Self::VoiceInvite { .. }
+                | Self::VoiceJoin { .. }
         )
     }
 
@@ -661,6 +678,13 @@ pub enum ToGame {
         #[serde(skip_serializing_if = "String::is_empty")]
         who: String,
     },
+    /// OVL-SOC (V21): the voice rooms of the player's crews, whole, for crew chat's "Sesli": every
+    /// crew in the launcher's order with its rooms in the launcher's order and who is in each.
+    /// After the greeting and whenever it changes, only while voice chat may be used (an empty
+    /// list once it may not). Only to a mod that said `voice` and `voice-rooms`.
+    VoiceCrews {
+        crews: Vec<VoiceCrewShown>,
+    },
     Bye {
         reason: ByeReason,
     },
@@ -784,6 +808,10 @@ pub struct FriendView {
     /// rings); absent: no "Ara".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub voice: Option<pl_social::PresenceVoice>,
+    /// OVL-SOC (V23): an online friend on "Rahatsız etmeyin" (the launcher's gold dot with its bar);
+    /// never for an offline one.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub dnd: bool,
 }
 
 /// A friend in one of the crews the player may invite to (OVL-UX2, Q5).
@@ -1319,6 +1347,37 @@ pub struct VoiceRingShown {
     pub with: Vec<String>,
     /// Unix milliseconds: it stops ringing then (no frame says so).
     pub until: i64,
+}
+
+/// One of the player's crews in `voice-crews` (V21).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoiceCrewShown {
+    /// The crew, by id (what `voice-join` names).
+    pub crew: String,
+    /// Its chat (`c:<crew>`): the mod shows the rooms there.
+    pub conv: String,
+    /// Its rooms in the launcher's order; with nobody in any, its "Genel" alone.
+    pub rooms: Vec<VoiceCrewRoomShown>,
+    /// "Yeni oda" may show: the crew has fewer rooms than it may.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub add: bool,
+}
+
+/// A crew's room in `voice-crews` (V21).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoiceCrewRoomShown {
+    /// What `voice-join` names (the crew's "Genel" with nobody in it: the service's `g` + crew id).
+    pub id: String,
+    /// Its name in the overlay's language; none for the crew's "Genel" (`general`: the mod says
+    /// it in its language).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub general: bool,
+    /// Who is in it, as voice chat lists them (the player too, when there); a name the lists do
+    /// not know is absent.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub people: Vec<VoicePersonRef>,
 }
 
 /// A voice chat moment for a note in the game (V4).
@@ -1945,9 +2004,11 @@ mod tests {
             crews: BTreeMap::from([("t1".to_owned(), CrewPlace::Invited)]),
             marks: vec!["admin".into(), "premium".into()],
             voice: None,
+            dnd: true,
         })
         .unwrap();
         assert_eq!(marked["marks"], serde_json::json!(["admin", "premium"]));
+        assert_eq!(marked["dnd"], true, "OVL-SOC: the gold dot with its bar");
         assert_eq!(
             (
                 marked["seen"].clone(),
@@ -2028,11 +2089,13 @@ mod tests {
             crews: BTreeMap::new(),
             marks: Vec::new(),
             voice: None,
+            dnd: false,
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
         assert_eq!(friend["t"], "friend");
         assert!(friend.get("host").is_none() && friend.get("world").is_none());
+        assert!(friend.get("dnd").is_none(), "only while true");
         assert!(friend.get("badge").is_none() && friend.get("marks").is_none());
         assert!(friend.get("dm").is_none() && friend.get("discord").is_none());
         // BADGES-UI: the badge catalogue, names in both languages.
@@ -2072,6 +2135,7 @@ mod tests {
             crews: BTreeMap::new(),
             marks: Vec::new(),
             voice: None,
+            dnd: false,
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));

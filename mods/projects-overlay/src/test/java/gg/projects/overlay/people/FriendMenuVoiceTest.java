@@ -18,7 +18,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * VOICE-O: voice chat's rows (the launcher's menus.ts personMenu): someone in the player's room gets their volume and
- * "Benim için sustur" first, then the player's role's rows; "Ara" or "Odaya davet et" stands beside "Mesaj gönder".
+ * "Benim için sustur" first, then the player's role's rows. OVL-SOC: a friend's menu leads with "Sesli arama başlat"
+ * (asked first), or "Odaya davet et" in its place.
  */
 class FriendMenuVoiceTest {
     /** A friend on Projects with chat on and a Discord profile. */
@@ -69,7 +70,8 @@ class FriendMenuVoiceTest {
         assertEquals(expected, actions(plan));
         assertTrue(row(plan, Action.VOLUME).sub(), "the steps open as a list");
         assertTrue(Action.VOICE_KICK.asks(), "one sentence first");
-        assertFalse(Action.VOICE_MUTE.asks() || Action.CALL.asks());
+        assertTrue(Action.CALL.asks(), "OVL-SOC: \"Ayşe aransın mı?\" before it rings");
+        assertFalse(Action.VOICE_MUTE.asks() || Action.CALL_INVITE.asks());
     }
 
     @Test
@@ -87,11 +89,15 @@ class FriendMenuVoiceTest {
     }
 
     @Test
-    void callingStandsBesideTheMessage() {
+    void callingLeadsAFriendsMenu() {
         List<Action> call = actions(FriendMenu.plan(friend(
             new Voice(VoiceState.Offer.CALL, false, false, false, false, false, false, false), true)));
-        assertEquals(List.of(Action.JOIN, Action.INVITE, Action.MESSAGE, Action.CALL, Action.DISCORD),
+        assertEquals(List.of(Action.CALL, Action.JOIN, Action.INVITE, Action.MESSAGE, Action.DISCORD),
             call.subList(0, 5));
+        // "Odaya davet et" takes its place while the player's room may take them.
+        List<Action> inviting = actions(FriendMenu.plan(friend(
+            new Voice(VoiceState.Offer.INVITE, false, false, false, false, false, false, false), true)));
+        assertEquals(Action.CALL_INVITE, inviting.get(0));
         List<Row> ringing = FriendMenu.plan(friend(
             new Voice(VoiceState.Offer.RINGING, false, false, false, false, false, false, false), true));
         Row invite = row(ringing, Action.CALL_INVITE);

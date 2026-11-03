@@ -652,6 +652,8 @@ impl Scene {
                         .collect(),
                     marks: marks.get(&friend.id).cloned().unwrap_or_default(),
                     voice: friend.voice,
+                    // OVL-SOC: the launcher's do-not-disturb dot; an offline friend has no dot.
+                    dnd: friend.dnd && place != Place::Offline,
                 }
             })
             .collect();
@@ -3557,6 +3559,27 @@ pub(crate) mod tests {
         assert!(Scene::from_view(&v, &prefs, NOW).may_invite());
         v.activity = pl_social::ActivityView::Singleplayer;
         assert!(!Scene::from_view(&v, &prefs, NOW).may_invite());
+    }
+
+    #[test]
+    fn do_not_disturb_rides_on_online_friends_only() {
+        // OVL-SOC: the launcher's gold dot with its bar; an offline friend shows no dot at all.
+        let prefs = NotifyPrefs::default();
+        let mut v = view();
+        v.friends[0].dnd = true;
+        v.friends[1].dnd = true;
+        v.friends[3].dnd = true;
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert!(scene.friend("f-ayse").unwrap().dnd, "in game");
+        assert!(scene.friend("f-mert").unwrap().dnd, "in the launcher");
+        assert!(!scene.friend("f-can").unwrap().dnd, "offline");
+        assert!(!scene.friend("f-zey").unwrap().dnd);
+        let frame =
+            serde_json::to_value(ToGame::Friend(scene.friend("f-mert").unwrap().clone())).unwrap();
+        assert_eq!(frame["dnd"], true);
+        let frame =
+            serde_json::to_value(ToGame::Friend(scene.friend("f-zey").unwrap().clone())).unwrap();
+        assert!(frame.get("dnd").is_none());
     }
 
     #[test]

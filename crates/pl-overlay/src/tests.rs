@@ -2515,3 +2515,92 @@ async fn without_voice_chat_wired_a_press_hears_it_cannot_go() {
     assert!(voice.get("sound").is_none(), "the launcher rings itself");
     overlay.stop(ByeReason::LauncherExit).await;
 }
+
+#[tokio::test]
+async fn the_crews_rooms_reach_a_mod_that_shows_them_and_its_joins_reach_the_launcher() {
+    use pl_voice::view::{VoiceAnswer, VoiceCrewRoom, VoiceCrewRooms, VoiceState};
+    use serde_json::json;
+
+    use crate::VoiceAct;
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let presses: Arc<Mutex<Vec<VoiceAct>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&presses);
+    overlay.on_voice(move |act| {
+        sink.lock().unwrap().push(act);
+        Box::pin(std::future::ready(VoiceAnswer::OK))
+    });
+    let mut state = VoiceState::off();
+    state.available = true;
+    state.crews = vec![VoiceCrewRooms {
+        crew: "t1".into(),
+        rooms: vec![VoiceCrewRoom {
+            id: "c0123456789abcdef".into(),
+            name: "Oda 2".into(),
+            general: false,
+            people: vec!["u-cem".into()],
+        }],
+        can_add: false,
+    }];
+    overlay.set_voice(&state, false);
+    let endpoint = overlay.start(social, "t").await.unwrap();
+
+    // A mod with voice chat but not the crews' rooms hears none of them, and its join goes nowhere.
+    let mut plain = MockMod::connect_with(&endpoint, &["people", "voice"]).await;
+    assert_eq!(plain.next_of("voice").await["on"], true);
+    plain
+        .send(json!({"t":"voice-join","crew":"t1","room":"c0123456789abcdef"}))
+        .await;
+    plain
+        .send(json!({"t":"open-conv","conv":"d:f-ayse:me"}))
+        .await;
+    loop {
+        let frame = plain.next().await.expect("the bridge closed");
+        assert!(
+            frame["t"] != "voice-crews" && frame["t"] != "voice-result",
+            "{frame}"
+        );
+        if frame["t"] == "history" {
+            break;
+        }
+    }
+    assert!(presses.lock().unwrap().is_empty());
+    drop(plain);
+
+    let mut game = MockMod::connect_with(&endpoint, &["people", "voice", "voice-rooms"]).await;
+    assert_eq!(
+        game.next_of("voice-crews").await,
+        json!({"t": "voice-crews", "crews": [{"crew": "t1", "conv": "c:t1", "rooms": [
+            {"id": "c0123456789abcdef", "name": "Oda 2", "people": [{"id": "u-cem", "name": "Cem"}]},
+        ]}]})
+    );
+    game.send(json!({"t":"voice-join","crew":"t1","room":"c0123456789abcdef"}))
+        .await;
+    assert_eq!(
+        game.next_of("voice-result").await,
+        json!({"t":"voice-result","act":"join","ok":true})
+    );
+    // Never a crew the player is not in.
+    game.send(json!({"t":"voice-join","crew":"t9","room":"gt9"}))
+        .await;
+    assert_eq!(game.next_of("voice-result").await["reason"], "not-member");
+    assert_eq!(
+        *presses.lock().unwrap(),
+        [VoiceAct::JoinCrew {
+            crew: "t1".into(),
+            room: Some("c0123456789abcdef".into()),
+            new: false,
+        }]
+    );
+    // The room emptied: the crew's "Genel" alone, and "Yeni oda" may show again.
+    state.crews.clear();
+    overlay.set_voice(&state, false);
+    let crews = game.next_of("voice-crews").await;
+    assert_eq!(
+        crews["crews"][0]["rooms"],
+        json!([{"id": "gt1", "general": true}])
+    );
+    assert_eq!(crews["crews"][0]["add"], true);
+    overlay.stop(ByeReason::LauncherExit).await;
+}
