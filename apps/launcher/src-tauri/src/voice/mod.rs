@@ -23,7 +23,7 @@ mod window;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use pl_social::{SocialService, VoiceError, VoiceEvent, VoiceFrame};
 use pl_voice::engine::EngineCommand;
@@ -440,7 +440,7 @@ pub struct AppPlatform {
     /// Names for notifications: friends and crewmates.
     names: Mutex<HashMap<String, String>>,
     /// Whether the main window was on screen, and when that was looked at.
-    in_sight: Mutex<Option<(bool, Instant)>>,
+    in_sight: pl_voice::sight::SightCache,
     input: Mutex<Option<input::Watch>>,
     /// What the tray shows of the room (its label, the microphone off).
     tray: Mutex<Option<(String, bool)>>,
@@ -455,25 +455,21 @@ impl AppPlatform {
             channel: Mutex::new(None),
             me: Mutex::new(String::new()),
             names: Mutex::new(HashMap::new()),
-            in_sight: Mutex::new(None),
+            in_sight: pl_voice::sight::SightCache::new(),
             input: Mutex::new(None),
             tray: Mutex::new(None),
         }
     }
 
-    /// The main window is on screen (shown, not minimized); looked at once a second at most.
+    /// The main window is on screen (shown, not minimized); looked at once a second at most, with
+    /// the cache's lock let go meanwhile: the window answers from the main thread, which asks this
+    /// too (the live levels of `voice_page_report`), so holding it froze the launcher in a call.
     fn window_in_sight(&self) -> bool {
-        let mut cached = lock(&self.in_sight);
-        if let Some((seen, at)) = *cached
-            && at.elapsed() < Duration::from_secs(1)
-        {
-            return seen;
-        }
-        let seen = self.app.get_webview_window("main").is_some_and(|window| {
-            window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
-        });
-        *cached = Some((seen, Instant::now()));
-        seen
+        self.in_sight.get(|| {
+            self.app.get_webview_window("main").is_some_and(|window| {
+                window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
+            })
+        })
     }
 
     /// A game's mod shows voice chat now: its cards stand in for this launcher's notifications.
