@@ -1573,6 +1573,15 @@ export const commands = {
 	 *  leader and moderators).
 	 */
 	socialPlanNote: (plan: string, note: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_plan_note", { plan, note })),
+	/**
+	 *  SOC-NOTE: the player's status note for their friends ("Not ekle"): one line of at most 40
+	 *  characters until `until` (Unix seconds; 0: until taken off); `""` takes it off.
+	 */
+	socialStatusNote: (text: string, until: number) => typedError<null, CmdError>(__TAURI_INVOKE("social_status_note", { text, until })),
+	/**  SOC-NOTE: pins a crew chat's message ("Sabitle"), in place of pin `replace` when three are there. */
+	socialChatPin: (conv: string, id: number, replace: number | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_chat_pin", { conv, id, replace })),
+	/**  SOC-NOTE: takes a crew chat's pin off ("Sabitlemeyi kaldır"). */
+	socialChatUnpin: (conv: string, id: number) => typedError<null, CmdError>(__TAURI_INVOKE("social_chat_unpin", { conv, id })),
 	/**  "Birlikte oynanan süre" on or off on this computer (off deletes what was kept). */
 	socialTogether: (on: boolean) => __TAURI_INVOKE<void>("social_together", { on }),
 	/**  Deletes the time played together kept on this computer. */
@@ -2504,6 +2513,8 @@ export type ChatView = {
 	 *  with them, and a link in a message may be pressed only while it passes them.
 	 */
 	links: ChatLinksView | null,
+	/**  SOC-NOTE: status notes and pinned messages. */
+	socNote: SocNoteView,
 };
 
 /**  One row of the troubleshooter, in the order the rows are shown. */
@@ -4587,6 +4598,13 @@ export type CrewNotificationsView = {
 	muteUntil: number | null,
 };
 
+/**  One crew chat's pinned messages (SOC-NOTE), the oldest pin first. */
+export type CrewPinsView = {
+	/**  `c:<team id>`. */
+	conv: string,
+	pins: PinView[],
+};
+
 /**  A mod name and page from `modlist.html`, to show the user what is missing. */
 export type CurseForgeModLink = {
 	name: string,
@@ -4956,6 +4974,12 @@ export type FriendGroupsView = {
 	groups: FriendGroup[],
 	/**  Friends without an entry are in the implicit "Arkadaşlar" category. */
 	members: GroupMember[],
+};
+
+/**  A friend's status note (SOC-NOTE): whose, and the note. */
+export type FriendNoteView = {
+	id: string,
+	note: StatusNote,
 };
 
 export type FriendView = FriendView_Serialize | FriendView_Deserialize;
@@ -6166,7 +6190,9 @@ export type LimitedKey =
 /**  Reaction changes a day (CHAT2). */
 "chatReactions" | 
 /**  Changing the Projects skin (SKIN1; linking is fine). */
-"skinChange" | "other";
+"skinChange" | 
+/**  Setting a status note (SOC-NOTE). */
+"statusNote" | "other";
 
 /**
  *  Why an account is limited ("Sınırlı hesap", `me.limited.reason`): its Discord account is new
@@ -7482,6 +7508,28 @@ export type PermissionsEdit_Serialize = {
 	kick?: PermissionLevel | null,
 	edit?: PermissionLevel | null,
 	admit?: PermissionLevel | null,
+};
+
+/**
+ *  "… bir mesajı sabitledi." (SOC-NOTE): who pinned which message of a crew chat, and when (Unix
+ *  milliseconds on this computer's clock).
+ */
+export type PinLineView = {
+	conv: string,
+	by: string,
+	id: number,
+	at: number,
+};
+
+/**
+ *  A pinned message (SOC-NOTE): the message's id (its key in the chat), author and text, and when
+ *  it was pinned (Unix milliseconds on this computer's clock).
+ */
+export type PinView = {
+	id: number,
+	from: string,
+	text: string,
+	pinnedAt: number,
 };
 
 /**  An answer to a crew plan: "Geliyorum", "Belki", "Gelemem" (TEAM5). */
@@ -9584,6 +9632,11 @@ export type ReportTarget =
  */
 voice?: string | null } | 
 /**
+ *  SOC-NOTE: a friend reported for their status note ("Uygunsuz not", reason
+ *  `inappropriate`): the service keeps the note as the moderators' evidence.
+ */
+{ kind: "playerNote"; id: string } | 
+/**
  *  A crew; `code` when it was looked up by code, `via` (TEAM6) when it is reported from the
  *  card of the tag that friend or crewmate wears ("Ekibi rapor et").
  */
@@ -10144,6 +10197,35 @@ export type SkinHistoryView = {
 /**  Player model of a skin: classic (Steve, 4 px arms) or slim (Alex, 3 px arms). */
 export type SkinVariant = "classic" | "slim";
 
+/**  SOC-NOTE's part of the chat view: status notes and the pins of crew chats. */
+export type SocNoteView = {
+	/**
+	 *  Status notes are on (Studio's switch, and this connection took them): the status menu
+	 *  offers "Not ekle", friends' notes show.
+	 */
+	notes: boolean,
+	/**
+	 *  SOC-NOTE: the player's own status note while notes are on (`until`: Unix seconds, 0: until
+	 *  taken off; the launcher hides it once over).
+	 */
+	note: StatusNote | null,
+	/**
+	 *  SOC-NOTE: the status notes of the player's friends who are online and have one, while notes
+	 *  are on (the friend list, cards and crew pages show them; over ones the launcher hides).
+	 */
+	friendNotes: FriendNoteView[],
+	/**  SOC-NOTE: pinned messages are on (Studio's switch, this connection took them, chat works). */
+	pinsOn: boolean,
+	/**  SOC-NOTE: the pins of the player's crews' chats that have some, while pins are on. */
+	pins: CrewPinsView[],
+	/**
+	 *  SOC-NOTE: "Kaan_07 bir mesajı sabitledi." lines of the player's crews' chats, oldest first:
+	 *  pins made while this launcher was connected, in this run only (nothing keeps them), at most
+	 *  10 a chat.
+	 */
+	pinLines: PinLineView[],
+};
+
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice = SocialNotice_Serialize | SocialNotice_Deserialize;
 
@@ -10576,6 +10658,15 @@ export type StatusMode = "online" |
 "dnd" | 
 /**  Friends see the player as offline; the player still sees friends. */
 "invisible";
+
+/**
+ *  A status note (SOC-NOTE): one line of at most 40 characters a player shows their friends, until
+ *  `until` (Unix seconds; 0: until they take it off).
+ */
+export type StatusNote = {
+	text: string,
+	until?: number,
+};
 
 /**
  *  The news feed's status notice (`pl_content::home_status`): an active problem on the status

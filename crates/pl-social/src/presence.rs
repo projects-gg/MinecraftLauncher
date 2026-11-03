@@ -54,9 +54,9 @@ use crate::model::{
     TeamInvite, TeamNotifications,
 };
 use crate::protocol::{
-    AFK_CAP, BADGES_CAP, CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, CrewPlan,
-    Invite, LocalStatus, MARKS_CAP, MARKS2_CAP, PLANS_CAP, PlanAnswer, Presence, ServerMessage,
-    chat_caps,
+    AFK_CAP, BADGES_CAP, CHAT_CAP, CallAnswer, CallEndReason, ChatPin, ClientMessage, ConvPins,
+    CrewCall, CrewPlan, Invite, LocalStatus, MARKS_CAP, MARKS2_CAP, NOTES_CAP, PLANS_CAP,
+    PlanAnswer, Presence, ServerMessage, StatusNote, chat_caps,
 };
 use crate::tls;
 use crate::voice::{VOICE_CAP, VoiceAck, VoiceError, VoiceEvent, VoiceFrame};
@@ -189,6 +189,23 @@ pub enum PresenceEvent {
         /// Every plan of the player's crews they see, when the service took `plans` (keep
         /// exactly these); None: no plans on this connection.
         plans: Option<Vec<CrewPlan>>,
+        /// SOC-NOTE: the player's own status note (`Some(None)`: none), when the service took
+        /// `note1`; None: no notes on this connection.
+        note: Option<Option<StatusNote>>,
+        /// SOC-NOTE: the pins of the player's crews' chats that have some, when the service took
+        /// `pins1` and pins are on (keep exactly these); None: no pins on this connection.
+        pins: Option<Vec<ConvPins>>,
+    },
+    /// SOC-NOTE: the player's status note changed on another device or moderators reset it.
+    OwnNote(Option<StatusNote>),
+    /// SOC-NOTE: one crew chat's pins now (replace them); `added` and `by` when someone the player
+    /// sees pinned one ("… bir mesajı sabitledi."), `removed` when one went.
+    ChatPins {
+        conv: String,
+        pins: Vec<ChatPin>,
+        added: Option<i64>,
+        by: Option<String>,
+        removed: Option<i64>,
     },
     /// The waiting join requests of one of the player's crews they may answer for (replace
     /// them); `added` is the player who just asked.
@@ -464,6 +481,16 @@ enum ChatRequest {
     Unfurl {
         url: String,
     },
+    /// SOC-NOTE: pins a crew chat's message as held, in place of pin `replace` when three are there.
+    Pin {
+        msg: serde_json::Value,
+        replace: Option<i64>,
+    },
+    /// SOC-NOTE: takes a crew chat's pin off.
+    Unpin {
+        conv: String,
+        id: i64,
+    },
 }
 
 impl ChatRequest {
@@ -476,6 +503,7 @@ impl ChatRequest {
             } if !caps.stickers => Some("stickers"),
             Self::Send { reply: Some(_), .. } if !caps.replies => Some("replies"),
             Self::React { .. } if !caps.reactions => Some("reactions"),
+            Self::Pin { .. } | Self::Unpin { .. } if !caps.pins => Some("pins"),
             _ => None,
         }
     }
@@ -488,6 +516,8 @@ struct ChatAnswer {
     msg: Option<ChatMessage>,
     reactions: Option<Vec<Reaction>>,
     card: Option<LinkCard>,
+    /// SOC-NOTE: a crew chat's pins after a pin or an unpin.
+    pins: Option<Vec<ChatPin>>,
 }
 
 /// A chat frame that is never answered (CHAT2).
@@ -524,6 +554,13 @@ enum Command {
         request: PlanRequest,
         reply: oneshot::Sender<Result<Option<CrewPlan>>>,
     },
+    /// SOC-NOTE: the player's status note (`text` empty: none); answered with the note as it
+    /// stands.
+    Note {
+        text: String,
+        until: i64,
+        reply: oneshot::Sender<Result<Option<StatusNote>>>,
+    },
     /// A world frame (HOST1); `reply` for one the service answers by `rid`.
     World {
         frame: WorldFrame,
@@ -546,6 +583,7 @@ impl Command {
             Self::Crew { reply, .. } => drop(reply.send(Err(error()))),
             Self::Chat { reply, .. } => drop(reply.send(Err(error()))),
             Self::Plan { reply, .. } => drop(reply.send(Err(error()))),
+            Self::Note { reply, .. } => drop(reply.send(Err(error()))),
             Self::World {
                 reply: Some(reply), ..
             } => drop(reply.send(Err(WorldError::Unavailable))),
@@ -959,6 +997,57 @@ impl PresenceControl {
         .map(drop)
     }
 
+    /// SOC-NOTE: sets the player's status note (`until`: Unix seconds, at most two days ahead, or
+    /// 0: until taken off), or takes it off (`text` empty). Returns the note as the service keeps
+    /// it. Fails with `NoteRejected`, `ChatMuted`, `Limited` (`status_note`), `RateLimited`
+    /// (`status_note`: the day's 10) or `Refused` (`note_off`).
+    pub async fn set_note(&self, text: &str, until: i64) -> Result<Option<StatusNote>> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Note {
+                text: text.to_owned(),
+                until,
+                reply,
+            })
+            .await
+            .map_err(|_| SocialError::Unavailable { retry_after: None })?;
+        match timeout(self.invite_timeout, answer).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err(SocialError::Network("presence connection closed".into())),
+            Err(_) => Err(SocialError::Network("no answer from the service".into())),
+        }
+    }
+
+    /// SOC-NOTE: pins a crew chat's message as held (its seal; the crew's leader and moderators),
+    /// in place of pin `replace` when three are there. Returns the chat's pins. Fails with
+    /// `Refused` (`pins_full`, `pins_off`, `chat_not_permitted`, `message_not_found`,
+    /// `chat_too_old`) or `RateLimited` (`pins`).
+    pub async fn pin_message(
+        &self,
+        message: &ChatMessage,
+        replace: Option<i64>,
+    ) -> Result<Vec<ChatPin>> {
+        let answer = self
+            .chat(ChatRequest::Pin {
+                msg: message.sealed(),
+                replace,
+            })
+            .await?;
+        Ok(answer.pins.unwrap_or_default())
+    }
+
+    /// SOC-NOTE: takes a crew chat's pin off (the crew's leader and moderators). Returns the
+    /// chat's pins.
+    pub async fn unpin_message(&self, conv: &str, id: i64) -> Result<Vec<ChatPin>> {
+        let answer = self
+            .chat(ChatRequest::Unpin {
+                conv: conv.to_owned(),
+                id,
+            })
+            .await?;
+        Ok(answer.pins.unwrap_or_default())
+    }
+
     async fn plan(&self, request: PlanRequest) -> Result<Option<CrewPlan>> {
         let (reply, answer) = oneshot::channel();
         self.commands
@@ -1292,6 +1381,8 @@ enum Reply {
     Crew(oneshot::Sender<Result<()>>),
     Chat(oneshot::Sender<Result<ChatAnswer>>),
     Plan(oneshot::Sender<Result<Option<CrewPlan>>>),
+    /// SOC-NOTE.
+    Note(oneshot::Sender<Result<Option<StatusNote>>>),
     /// HOST1.
     World(oneshot::Sender<WorldResult>),
     /// VOICE.
@@ -1305,6 +1396,7 @@ impl Reply {
             Self::Crew(reply) => drop(reply.send(Err(error))),
             Self::Chat(reply) => drop(reply.send(Err(error))),
             Self::Plan(reply) => drop(reply.send(Err(error))),
+            Self::Note(reply) => drop(reply.send(Err(error))),
             Self::World(reply) => drop(reply.send(Err(WorldError::Unavailable))),
             Self::Voice(reply) => drop(reply.send(Err(VoiceError::Unavailable))),
         }
@@ -1339,6 +1431,7 @@ async fn session(
         worlds_on: false,
         voice_on: false,
         afk_on: false,
+        notes_on: false,
         sync: None,
         sync_again: None,
         restricted: None,
@@ -1445,6 +1538,15 @@ async fn session(
                                 continue;
                             }
                             (plan_message(request, rid), Reply::Plan(reply))
+                        }
+                        Command::Note { text, until, reply } => {
+                            if !state.notes_on {
+                                // No notes on this connection (an older service): as when Studio
+                                // has them off.
+                                let _ = reply.send(Err(notes_off()));
+                                continue;
+                            }
+                            (ClientMessage::Note { text, until, rid }, Reply::Note(reply))
                         }
                         Command::World { frame, reply } => {
                             if !state.worlds_on {
@@ -1564,6 +1666,8 @@ fn chat_message(request: ChatRequest, rid: u32) -> ClientMessage {
             rid,
         },
         ChatRequest::Unfurl { url } => ClientMessage::ChatUnfurl { url, rid },
+        ChatRequest::Pin { msg, replace } => ClientMessage::ChatPin { msg, replace, rid },
+        ChatRequest::Unpin { conv, id } => ClientMessage::ChatUnpin { conv, id, rid },
     }
 }
 
@@ -1603,6 +1707,16 @@ fn plan_message(request: PlanRequest, rid: u32) -> ClientMessage {
             note,
             rid,
         },
+    }
+}
+
+/// SOC-NOTE: notes are not on this connection: as when Studio switched them off.
+fn notes_off() -> SocialError {
+    SocialError::Refused {
+        status: 403,
+        code: ErrorCode::NoteOff,
+        message: String::new(),
+        detail: None,
     }
 }
 
@@ -1647,6 +1761,8 @@ struct SessionState {
     voice_on: bool,
     /// The service took Cloud AFK's notices on this connection (AFKPLUS).
     afk_on: bool,
+    /// The service took status notes on this connection (SOC-NOTE).
+    notes_on: bool,
     /// The sync under way: its `rid`, where it started (ms) and whether it is the week-long one
     /// that catches up with chat extras (CHAT2).
     sync: Option<(u32, i64, bool)>,
@@ -1755,6 +1871,8 @@ async fn on_text(
             rel,
             voice,
             voice_rooms,
+            note,
+            pins,
         } => {
             tracing::debug!(?caps, "presence connected");
             state.greeted = true;
@@ -1783,6 +1901,8 @@ async fn on_text(
             state.marks_on = caps.iter().any(|cap| cap == MARKS_CAP);
             state.marks2_on = caps.iter().any(|cap| cap == MARKS2_CAP);
             state.afk_on = caps.iter().any(|cap| cap == AFK_CAP);
+            // SOC-NOTE: notes flow only when the service took them; pins with chat's extras.
+            state.notes_on = caps.iter().any(|cap| cap == NOTES_CAP);
             state.sync = None;
             state.sync_again = None;
             // Everyone online the player may see: friends, then teammates who are not friends.
@@ -1797,6 +1917,16 @@ async fn on_text(
                 chat: chat.filter(|_| chat_on),
                 plans: if state.plans_on {
                     Some(plans.unwrap_or_default())
+                } else {
+                    None
+                },
+                note: if state.notes_on {
+                    Some(note.flatten())
+                } else {
+                    None
+                },
+                pins: if chat_on && state.chat_caps.pins {
+                    Some(pins.unwrap_or_default())
                 } else {
                     None
                 },
@@ -1970,6 +2100,21 @@ async fn on_text(
             chat.caps = state.chat_caps;
             PresenceEvent::ChatState(chat)
         }
+        // SOC-NOTE: only on a connection that took notes, and pins with chat.
+        ServerMessage::Note { note } if state.notes_on => PresenceEvent::OwnNote(note),
+        ServerMessage::ChatPins {
+            conv,
+            pins,
+            added,
+            by,
+            removed,
+        } if state.chat_on && state.chat_caps.pins => PresenceEvent::ChatPins {
+            conv,
+            pins,
+            added,
+            by,
+            removed,
+        },
         ServerMessage::ChatReacted {
             conv,
             id,
@@ -2085,6 +2230,8 @@ async fn on_text(
             e4mc,
             room,
             ticket,
+            note,
+            pins,
         } => {
             match rid.and_then(|rid| pending.remove(&rid)) {
                 Some(Reply::Voice(reply)) => {
@@ -2122,10 +2269,14 @@ async fn on_text(
                         msg: msg.clone(),
                         reactions,
                         card: card.map(|card| *card),
+                        pins,
                     }));
                 }
                 Some(Reply::Plan(reply)) => {
                     let _ = reply.send(Ok(plan));
+                }
+                Some(Reply::Note(reply)) => {
+                    let _ = reply.send(Ok(note.flatten()));
                 }
                 None => {}
             }
@@ -2213,6 +2364,8 @@ async fn on_text(
         | ServerMessage::ChatDeleted { .. }
         | ServerMessage::ChatSync { .. }
         | ServerMessage::ChatState { .. }
+        | ServerMessage::Note { .. }
+        | ServerMessage::ChatPins { .. }
         | ServerMessage::ChatReacted { .. }
         | ServerMessage::ChatTyping { .. }
         | ServerMessage::ChatRead { .. }
@@ -2284,6 +2437,12 @@ fn socket_error(refusal: &SocketRefusal<'_>) -> SocialError {
                 reason: reason.map(ChatRejection::parse),
             };
         }
+        // A status note (SOC-NOTE): the same.
+        "invalid_note" => {
+            return SocialError::NoteRejected {
+                reason: reason.map(ChatRejection::parse),
+            };
+        }
         "chat_muted" => return SocialError::ChatMuted { until },
         // A new Discord account may not do this (a plan); the limits end at `until`.
         "account_limited" => {
@@ -2299,13 +2458,15 @@ fn socket_error(refusal: &SocketRefusal<'_>) -> SocialError {
         "internal" => return SocialError::Unavailable { retry_after: None },
         "friend_not_found" | "team_not_found" | "call_not_found" | "message_not_found"
         | "plan_not_found" => 404,
-        "team_not_permitted" | "chat_off" | "chat_not_permitted" | "chat_feature_off" => 403,
+        "team_not_permitted" | "chat_off" | "chat_not_permitted" | "chat_feature_off"
+        | "note_off" | "pins_off" => 403,
         "call_active"
         | "call_needs_server"
         | "call_server_hidden"
         | "chat_too_old"
         | "plan_exists"
-        | "chat_reactions_full" => 409,
+        | "chat_reactions_full"
+        | "pins_full" => 409,
         "plan_time" | "limit_team_plans" | "unfurl_failed" => 422,
         _ => 400,
     };
@@ -3481,7 +3642,7 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|(k, v)| k == ":uri"
-                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,marks2,chat,replies,stickers,reactions,typing,reads"),
+                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,marks,profile,marks2,chat,replies,stickers,reactions,typing,reads,note1,pins1"),
             "chat and its extras are asked for"
         );
         // A service from before CHAT2 takes chat alone.
@@ -3694,6 +3855,179 @@ mod tests {
         // The next frame the server reads is the status, not a sync.
         handle.set_status(LocalStatus::Singleplayer);
         assert_eq!(next_json(&mut server).await["t"], "status");
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn status_notes_and_pins_flow_only_where_the_service_took_them() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client
+            .session(token())
+            .connect_presence_with_chat(fast(), ChatSetup::from_since(1_792_520_000_000));
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        let mut greeting = hello();
+        greeting["caps"] = serde_json::json!(["callServer", "crews", "chat", "note1", "pins1"]);
+        greeting["chat"] = serde_json::json!({"on": true, "mailbox": true, "perDay": 500,
+            "notes": true, "pins": true});
+        greeting["note"] = serde_json::json!({"text": "Sınavım var", "until": 0});
+        greeting["pins"] = serde_json::json!([{"conv": "c:0a1b2c3d4e5f6a7b",
+            "pins": [{"id": 5, "from": "2", "text": "Kurallar", "at": 9}]}]);
+        send_json(&mut server, greeting).await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::Connected {
+                chat: Some(chat),
+                note: Some(Some(note)),
+                pins: Some(pins),
+                ..
+            } => {
+                assert!(chat.notes && chat.pins && chat.caps.pins);
+                assert_eq!(note.text, "Sınavım var");
+                assert_eq!(pins[0].pins[0].text, "Kurallar");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let sync = next_json(&mut server).await;
+        assert_eq!(sync["t"], "chat_sync");
+        let control = handle.control();
+        // A note goes out by its rid and comes back as the service keeps it.
+        let set = tokio::spawn({
+            let control = control.clone();
+            async move { control.set_note("Az sonra", 1_792_525_000).await }
+        });
+        let frame = next_json(&mut server).await;
+        assert_eq!(
+            frame,
+            serde_json::json!({"t": "note", "text": "Az sonra", "until": 1_792_525_000,
+                "rid": frame["rid"]})
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": frame["rid"],
+                "note": {"text": "Az sonra", "until": 1_792_525_000}}),
+        )
+        .await;
+        assert_eq!(
+            set.await.unwrap().unwrap().map(|note| note.until),
+            Some(1_792_525_000)
+        );
+        // The filter's refusal comes back with its reason.
+        let refused = tokio::spawn({
+            let control = control.clone();
+            async move { control.set_note("0532 123 45 67", 0).await }
+        });
+        let frame = next_json(&mut server).await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": frame["rid"], "code": "invalid_note",
+                "reason": "phone"}),
+        )
+        .await;
+        assert!(matches!(
+            refused.await.unwrap(),
+            Err(SocialError::NoteRejected {
+                reason: Some(ChatRejection::Phone)
+            })
+        ));
+        // A pin goes out with the message as held; three pins answer `pins_full`.
+        let held = ChatMessage {
+            conv: "c:0a1b2c3d4e5f6a7b".into(),
+            id: 7,
+            from: "2".into(),
+            text: "Buluşma 21:00".into(),
+            mac: "m".into(),
+            ..ChatMessage::default()
+        };
+        let pin = tokio::spawn({
+            let control = control.clone();
+            let held = held.clone();
+            async move { control.pin_message(&held, Some(5)).await }
+        });
+        let frame = next_json(&mut server).await;
+        assert_eq!(frame["t"], "chat_pin");
+        assert_eq!(frame["replace"], 5);
+        assert_eq!(frame["msg"]["text"], "Buluşma 21:00");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": frame["rid"], "code": "pins_full"}),
+        )
+        .await;
+        assert_eq!(
+            pin.await.unwrap().unwrap_err().code(),
+            Some(&ErrorCode::PinsFull)
+        );
+        let unpin = tokio::spawn({
+            let control = control.clone();
+            async move { control.unpin_message("c:0a1b2c3d4e5f6a7b", 5).await }
+        });
+        let frame = next_json(&mut server).await;
+        assert_eq!(
+            frame,
+            serde_json::json!({"t": "chat_unpin", "conv": "c:0a1b2c3d4e5f6a7b", "id": 5,
+                "rid": frame["rid"]})
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": frame["rid"], "pins": []}),
+        )
+        .await;
+        assert!(unpin.await.unwrap().unwrap().is_empty());
+        // Someone pins: the crew chat's pins come live with who and which.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_pins", "conv": "c:0a1b2c3d4e5f6a7b",
+                "pins": [{"id": 7, "from": "2", "text": "Buluşma 21:00", "at": 11}],
+                "added": 7, "by": "3"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatPins {
+                conv: "c:0a1b2c3d4e5f6a7b".into(),
+                pins: vec![ChatPin {
+                    id: 7,
+                    from: "2".into(),
+                    text: "Buluşma 21:00".into(),
+                    at: 11,
+                }],
+                added: Some(7),
+                by: Some("3".into()),
+                removed: None,
+            }
+        );
+        send_json(&mut server, serde_json::json!({"t": "note", "note": null})).await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::OwnNote(None)
+        );
+        handle.shutdown().await;
+
+        // A service that did not take them: no note goes out, a pin is refused here.
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client
+            .session(token())
+            .connect_presence_with_chat(fast(), ChatSetup::from_since(1_792_520_000_000));
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        let mut greeting = hello();
+        greeting["caps"] = serde_json::json!(["callServer", "crews", "chat"]);
+        greeting["chat"] = serde_json::json!({"on": true, "mailbox": true, "perDay": 500});
+        send_json(&mut server, greeting).await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Connected {
+                note: None,
+                pins: None,
+                ..
+            }
+        ));
+        let _sync = next_json(&mut server).await;
+        let control = handle.control();
+        assert!(control.set_note("Selam", 0).await.is_err());
+        assert_eq!(
+            control.pin_message(&held, None).await.unwrap_err().code(),
+            Some(&ErrorCode::ChatFeatureOff)
+        );
         handle.shutdown().await;
     }
 

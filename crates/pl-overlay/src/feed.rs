@@ -2009,6 +2009,8 @@ pub(crate) mod tests {
                 extras: None,
                 sticker_sets: Vec::new(),
                 links: None,
+                // SOC-NOTE (status notes, pins): none here.
+                soc_note: Default::default(),
             }),
             notices: Vec::new(),
             restriction: None,

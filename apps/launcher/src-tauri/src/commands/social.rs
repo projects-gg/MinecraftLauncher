@@ -1021,6 +1021,37 @@ pub async fn social_plan_note(
     }
 }
 
+/// SOC-NOTE: the player's status note for their friends ("Not ekle"): one line of at most 40
+/// characters until `until` (Unix seconds; 0: until taken off); `""` takes it off.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_status_note(
+    state: State<'_, AppState>,
+    text: String,
+    until: i64,
+) -> CmdResult<()> {
+    Ok(state.social.set_status_note(&text, until).await?)
+}
+
+/// SOC-NOTE: pins a crew chat's message ("Sabitle"), in place of pin `replace` when three are there.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_chat_pin(
+    state: State<'_, AppState>,
+    conv: String,
+    id: i64,
+    replace: Option<i64>,
+) -> CmdResult<()> {
+    Ok(state.social.chat_pin(&conv, id, replace).await?)
+}
+
+/// SOC-NOTE: takes a crew chat's pin off ("Sabitlemeyi kaldır").
+#[tauri::command]
+#[specta::specta]
+pub async fn social_chat_unpin(state: State<'_, AppState>, conv: String, id: i64) -> CmdResult<()> {
+    Ok(state.social.chat_unpin(&conv, id).await?)
+}
+
 /// "Birlikte oynanan süre" on or off on this computer (off deletes what was kept).
 #[tauri::command]
 #[specta::specta]

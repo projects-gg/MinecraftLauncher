@@ -61,10 +61,22 @@ pub const CHAT_EXTRA_CAPS: [&str; 5] = [
     READS_CAP,
 ];
 
-/// The capabilities to ask for: [`PRESENCE_CAPS`], with chat and its extras when it may show.
+/// SOC-NOTE: friends' status notes (`presence.note`), the player's own (`hello.note`, `note`),
+/// and setting one (`note`); Studio's switch rides with the chat state (`chat.notes`).
+pub const NOTES_CAP: &str = "note1";
+
+/// SOC-NOTE: pinned messages of crew chats (`hello.pins`, `chat_pins`, `chat_pin`, `chat_unpin`);
+/// Studio's switch rides with the chat state (`chat.pins`).
+pub const PINS_CAP: &str = "pins1";
+
+/// The capabilities to ask for: [`PRESENCE_CAPS`], with chat and its extras when it may show (and
+/// SOC-NOTE's notes and pins, whose switches ride with the chat state).
 pub fn presence_caps(chat: bool) -> String {
     if chat {
-        format!("{PRESENCE_CAPS},{CHAT_CAP},{}", CHAT_EXTRA_CAPS.join(","))
+        format!(
+            "{PRESENCE_CAPS},{CHAT_CAP},{},{NOTES_CAP},{PINS_CAP}",
+            CHAT_EXTRA_CAPS.join(",")
+        )
     } else {
         PRESENCE_CAPS.to_owned()
     }
@@ -79,7 +91,44 @@ pub(crate) fn chat_caps(caps: &[String]) -> ChatCaps {
         reactions: has(REACTIONS_CAP),
         typing: has(TYPING_CAP),
         reads: has(READS_CAP),
+        pins: has(PINS_CAP),
     }
+}
+
+/// A status note (SOC-NOTE): one line of at most 40 characters a player shows their friends, until
+/// `until` (Unix seconds; 0: until they take it off).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct StatusNote {
+    pub text: String,
+    #[serde(default)]
+    pub until: i64,
+}
+
+impl StatusNote {
+    /// Whether it still shows at `now` (Unix seconds).
+    pub fn shows(&self, now: i64) -> bool {
+        self.until == 0 || self.until > now
+    }
+}
+
+/// A pinned message of a crew chat (SOC-NOTE): the message's id (ms) and author, a copy of its text,
+/// and when it was pinned (ms, the hub's clock).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct ChatPin {
+    pub id: i64,
+    pub from: String,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub at: i64,
+}
+
+/// One crew chat's pins in `hello.pins` (SOC-NOTE).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ConvPins {
+    pub conv: String,
+    #[serde(default)]
+    pub pins: Vec<ChatPin>,
 }
 
 /// projects.gg or one of its subdomains, with or without a port (`play.projects.gg:25565`).
@@ -178,6 +227,9 @@ pub struct Presence {
     /// is in a room; None: "Ara" is not offered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub voice: Option<crate::voice::PresenceVoice>,
+    /// SOC-NOTE (only to a connection that took `note1`, from a mutual friend): their status note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<StatusNote>,
 }
 
 /// A field that may be absent (None), `null` (`Some(None)`) or a value: the outer `Option` says
@@ -525,6 +577,27 @@ pub(crate) enum ClientMessage {
     AfkSeen {
         id: String,
     },
+    /// SOC-NOTE: the player's status note (`text` empty takes it off; `until` Unix seconds, 0:
+    /// until taken off).
+    Note {
+        text: String,
+        until: i64,
+        rid: u32,
+    },
+    /// SOC-NOTE: pins a crew chat's message as held (its seal), in place of pin `replace` when
+    /// three are there.
+    ChatPin {
+        msg: serde_json::Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        replace: Option<i64>,
+        rid: u32,
+    },
+    /// SOC-NOTE: takes a crew chat's pin off.
+    ChatUnpin {
+        conv: String,
+        id: i64,
+        rid: u32,
+    },
 }
 
 impl ClientMessage {
@@ -608,6 +681,14 @@ pub(crate) enum ServerMessage {
         voice: Option<crate::voice::VoiceStatus>,
         #[serde(default, rename = "voiceRooms")]
         voice_rooms: Option<Vec<crate::voice::VoiceCrewRooms>>,
+        /// SOC-NOTE (only with `note1` in the capabilities): the player's own status note; `null`:
+        /// none (absent: the service did not take notes).
+        #[serde(default, deserialize_with = "present")]
+        note: Option<Option<StatusNote>>,
+        /// SOC-NOTE (only with `pins1`, while pins are on): the pins of the player's crews' chats
+        /// that have some.
+        #[serde(default)]
+        pins: Option<Vec<ConvPins>>,
     },
     /// A crew call, new or changed (its server or kind, its crews, or answers that went away):
     /// replaces the one with the same id. `quiet`: show it, never announce it.
@@ -826,6 +907,25 @@ pub(crate) enum ServerMessage {
     ChatState {
         chat: ChatStatus,
     },
+    /// SOC-NOTE: the player's status note changed on another device, or moderators reset it
+    /// (`null`: none).
+    Note {
+        #[serde(default)]
+        note: Option<StatusNote>,
+    },
+    /// SOC-NOTE: a crew chat's pins now; `added` and `by` when someone the player sees pinned one,
+    /// `removed` when one went.
+    ChatPins {
+        conv: String,
+        #[serde(default)]
+        pins: Vec<ChatPin>,
+        #[serde(default)]
+        added: Option<i64>,
+        #[serde(default)]
+        by: Option<String>,
+        #[serde(default)]
+        removed: Option<i64>,
+    },
     /// A one-time note from moderators.
     Notice {
         notice: ModNotice,
@@ -954,6 +1054,12 @@ pub(crate) enum ServerMessage {
         room: Option<String>,
         #[serde(default)]
         ticket: Option<crate::world::Hidden<String>>,
+        /// A `note` answer (SOC-NOTE): the note as it stands (`null`: none).
+        #[serde(default, deserialize_with = "present")]
+        note: Option<Option<StatusNote>>,
+        /// A `chat_pin` / `chat_unpin` answer (SOC-NOTE): the chat's pins as the player sees them.
+        #[serde(default)]
+        pins: Option<Vec<ChatPin>>,
     },
     Error {
         #[serde(default)]
@@ -990,6 +1096,94 @@ pub(crate) enum ServerMessage {
 mod tests {
     use super::*;
     use crate::model::ChatReplyRef;
+
+    #[test]
+    fn status_notes_and_pins_both_ways() {
+        let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
+        assert_eq!(
+            json(&ClientMessage::Note {
+                text: "Sınavım var".into(),
+                until: 1_792_525_000,
+                rid: 3,
+            }),
+            r#"{"t":"note","text":"Sınavım var","until":1792525000,"rid":3}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::ChatPin {
+                msg: serde_json::json!({"conv": "c:0a1b2c3d4e5f6a7b", "id": 5}),
+                replace: None,
+                rid: 4,
+            }),
+            r#"{"t":"chat_pin","msg":{"conv":"c:0a1b2c3d4e5f6a7b","id":5},"rid":4}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::ChatUnpin {
+                conv: "c:0a1b2c3d4e5f6a7b".into(),
+                id: 5,
+                rid: 6,
+            }),
+            r#"{"t":"chat_unpin","conv":"c:0a1b2c3d4e5f6a7b","id":5,"rid":6}"#
+        );
+        let parse = |text: &str| serde_json::from_str::<ServerMessage>(text).unwrap();
+        // A friend's note with their presence; an older service's presence has none.
+        assert!(matches!(
+            parse(r#"{"t":"presence","presence":{"id":"1","state":"launcher","note":{"text":"Az sonra","until":0}}}"#),
+            ServerMessage::Presence { presence } if presence.note == Some(StatusNote { text: "Az sonra".into(), until: 0 })
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"presence","presence":{"id":"1","state":"launcher"}}"#),
+            ServerMessage::Presence { presence } if presence.note.is_none()
+        ));
+        // `hello.note`: absent (no notes), null (none), a note.
+        assert!(matches!(
+            parse(r#"{"t":"hello","status":"online"}"#),
+            ServerMessage::Hello {
+                note: None,
+                pins: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"hello","status":"online","note":null,"pins":[{"conv":"c:0a1b2c3d4e5f6a7b","pins":[{"id":5,"from":"1","text":"Kural","at":9}]}]}"#),
+            ServerMessage::Hello { note: Some(None), pins: Some(pins), .. } if pins[0].pins[0].text == "Kural"
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"note","note":{"text":"Az sonra","until":1792525000}}"#),
+            ServerMessage::Note { note: Some(note) } if note.until == 1_792_525_000
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"note","note":null}"#),
+            ServerMessage::Note { note: None }
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"chat_pins","conv":"c:0a1b2c3d4e5f6a7b","pins":[],"removed":5}"#),
+            ServerMessage::ChatPins { pins, removed: Some(5), added: None, .. } if pins.is_empty()
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"ack","rid":3,"note":null}"#),
+            ServerMessage::Ack {
+                note: Some(None),
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse(r#"{"t":"ack","rid":4,"pins":[{"id":5,"from":"1","text":"Kural","at":9}]}"#),
+            ServerMessage::Ack { pins: Some(pins), note: None, .. } if pins.len() == 1
+        ));
+        // A note ends by itself; 0 never does.
+        let note = StatusNote {
+            text: "x".into(),
+            until: 100,
+        };
+        assert!(note.shows(99) && !note.shows(100));
+        assert!(
+            StatusNote {
+                text: "x".into(),
+                until: 0
+            }
+            .shows(i64::MAX)
+        );
+    }
 
     #[test]
     fn status_messages() {
@@ -1402,7 +1596,7 @@ mod tests {
         );
         assert_eq!(
             presence_caps(true),
-            "callServer,crews,plans,badges,mc,afk,marks,profile,marks2,chat,replies,stickers,reactions,typing,reads"
+            "callServer,crews,plans,badges,mc,afk,marks,profile,marks2,chat,replies,stickers,reactions,typing,reads,note1,pins1"
         );
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(
