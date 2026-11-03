@@ -390,7 +390,7 @@ cache file extension.
 
 Every field is optional (`{}` is a valid config). Defaults: no maintenance, no banners, bundled
 hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`,
-`teams`, `chat`, `skins`, `worlds`, `subServers`, `overlayJars` and `phoneAfk` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
+`teams`, `chat`, `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk` and `voice` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
 news feed, the launcher's built-in recommended Minecraft version.
 
 - `banners[].level`: `info | warning | event | critical`; a banner is shown while
@@ -523,6 +523,15 @@ news feed, the launcher's built-in recommended Minecraft version.
   Do not turn it on before the agreement's bot exception is live. Writers omit it while it is
   `false`; launchers and apps that do not know the field ignore it. Publishing it needs a Studio
   that knows the field (AFK-M-GATE).
+- `features.voice`: "Sesli sohbet" (VOICE): friends call each other and crews talk in their rooms,
+  in the launcher and the in-game overlay. Off by default and only shown while `features.friends`
+  is on too. Launchers (2.0.4 and later) also need the friends service to offer `voice1` on its
+  presence socket with Studio's switch on (Sosyal → Sesli sohbet); otherwise nothing of it shows.
+  While it is `false` (or missing) launchers show nothing of it. Turn it on only after the service's
+  voice rooms and secrets and the privacy page's voice lines are live. Writers omit it while it is
+  `false`; launchers that do not know the field ignore it. Publishing it needs Studio
+  2.0.1-beta.1.21 or later, which warns when it is on without `friends` or when the service's voice
+  is not set up or switched off.
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte
