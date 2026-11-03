@@ -96,6 +96,8 @@ export const commands = {
 	patchNotesId: string | null,
 	/**  Studio's links (Settings → Hakkında, Home's community row). */
 	links: LinksView,
+	/**  SOC-NEXT's screens in the friends feature: `features.socNext` with `features.friends`. */
+	socNext: boolean,
 	offline: boolean,
 	fromCache: boolean,
 } | null, CmdError>(__TAURI_INVOKE("content_home")),
@@ -1581,6 +1583,12 @@ export const commands = {
 	socialChatRead: (conv: string) => __TAURI_INVOKE<void>("social_chat_read", { conv }),
 	/**  "Geçmişi temizle": the conversation's messages leave this computer. */
 	socialChatClear: (conv: string) => __TAURI_INVOKE<void>("social_chat_clear", { conv }),
+	/**
+	 *  SOC-NEXT's "Yayıncı modu: Yayın programı açıkken": whether OBS Studio, Streamlabs, XSplit or
+	 *  Twitch Studio runs now. One look at the process table, asked when the launcher opens, when its
+	 *  window shows and when a game starts (never on a timer).
+	 */
+	socialStreamingApp: () => __TAURI_INVOKE<boolean>("social_streaming_app"),
 	/**
 	 *  Sends a message as a reply to message `reply` (its id) of the same conversation. Returns its
 	 *  key, as `social_chat_send`.
@@ -5112,6 +5120,8 @@ export type HomeView = {
 	patchNotesId: string | null,
 	/**  Studio's links (Settings → Hakkında, Home's community row). */
 	links: LinksView,
+	/**  SOC-NEXT's screens in the friends feature: `features.socNext` with `features.friends`. */
+	socNext: boolean,
 	offline: boolean,
 	fromCache: boolean,
 };
