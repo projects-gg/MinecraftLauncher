@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { useSocialUi } from "@/features/social/store";
 import { HIDDEN_VOICE_STATE, type VoiceSpeaking, type VoiceState } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
+import { toldMissed } from "./quiet";
 import { faceOf, type VoiceFace } from "./rules";
 
 /** The panel's pages: the room, and "Davet et" sliding in over it. */
@@ -113,7 +114,8 @@ export const useVoiceUi = create<VoiceUi>()((set, get) => ({
  * things that wait (a request, an unread message). */
 export function unseenMissed(s: Pick<VoiceUi, "state" | "seenMissed">): number {
   if (!voiceOn(s.state)) return 0;
-  return s.state.missed.filter((m) => !s.seenMissed.includes(m.room)).length;
+  // An ignored person's call waits in the list without lighting anything (SOC-NEXT §3.7).
+  return toldMissed(s.state.missed).filter((m) => !s.seenMissed.includes(m.room)).length;
 }
 
 export function useMissedWaiting(): number {

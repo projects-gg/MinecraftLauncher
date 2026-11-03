@@ -418,6 +418,12 @@ export const commands = {
 	 */
 	voiceLevels: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("voice_levels", { on })),
 	/**
+	 *  Whom the player ignores on this computer (SOC-NEXT §3.7, VOICE-CALL; empty while its switch is
+	 *  off): their rings stay quiet here, in Windows' notifications and in the game, and wait in the
+	 *  missed list without a word.
+	 */
+	voiceIgnored: (ids: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("voice_ignored", { ids })),
+	/**
 	 *  The voice page (the hidden `voice` window only): hands over its channel for the launcher's
 	 *  commands; the launcher configures it and, in a room, starts the call.
 	 */

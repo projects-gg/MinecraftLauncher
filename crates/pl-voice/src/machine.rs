@@ -41,6 +41,9 @@ pub const RATE_LIMITED_WAIT_MS: u64 = 60_000;
 pub const REJOIN_MAX_MS: u64 = 8_000;
 /// Missed calls kept at most.
 pub const MISSED_MAX: usize = 10;
+/// SOC-NEXT §3.7 (VOICE-CALL): at most this many ignored people (the page keeps 200), ids this long.
+pub const IGNORED_MAX: usize = 200;
+const IGNORED_ID_MAX: usize = 64;
 /// Studio's defaults until `hello.voice` says otherwise.
 const DEFAULT_KBPS: u16 = 24;
 const DEFAULT_RING_SECONDS: u32 = 30;
@@ -307,6 +310,9 @@ pub struct Machine {
     meters: bool,
     /// What the attached page measures for the meters (`me`, `people`); a fresh page: neither.
     meters_sent: (bool, bool),
+    /// SOC-NEXT §3.7 (VOICE-CALL): whom the player ignores on this computer (the page's list,
+    /// sorted; empty while its switch is off). Their rings stay quiet.
+    ignored: Vec<String>,
 }
 
 impl std::fmt::Debug for Machine {
@@ -349,6 +355,7 @@ impl Machine {
             },
             meters: false,
             meters_sent: (false, false),
+            ignored: Vec::new(),
         }
     }
 
@@ -593,7 +600,9 @@ impl Machine {
         }
     }
 
-    /// A ring for the player (`voice_ring`); `quiet` on do-not-disturb.
+    /// A ring for the player (`voice_ring`); `quiet` on do-not-disturb. Someone the player ignores
+    /// (SOC-NEXT §3.7) rings quieter still: their call waits in the missed list without a word (no
+    /// card, no tone, no Windows notification, nothing in the game).
     pub fn ring(&mut self, ring: IncomingRing, quiet: bool, now: u64, unix: i64) -> Vec<Effect> {
         if !self.available() || !self.store.settings().enabled || !wire::is_room_id(&ring.room) {
             return Vec::new();
@@ -607,6 +616,11 @@ impl Machine {
         }
         self.rings.retain(|(old, _)| old.room != ring.room);
         let mut out = vec![Effect::Changed];
+        if self.ignores(&ring.from) {
+            self.keep_missed(&ring);
+            self.sync_ring(&mut out);
+            return out;
+        }
         if quiet || ring.until <= unix {
             self.add_missed(&ring, &mut out);
             return out;
@@ -657,6 +671,19 @@ impl Machine {
     }
 
     fn add_missed(&mut self, ring: &IncomingRing, out: &mut Vec<Effect>) {
+        self.keep_missed(ring);
+        out.push(Effect::Notice(VoiceNotice::Missed {
+            from: ring.from.clone(),
+            room: ring.room.clone(),
+        }));
+        out.push(Effect::System(SystemNotice::Missed {
+            room: ring.room.clone(),
+            from: ring.from.clone(),
+        }));
+    }
+
+    /// The missed list keeps the call (the friend's row says "Cevapsız arama"), without a word.
+    fn keep_missed(&mut self, ring: &IncomingRing) {
         self.missed.retain(|missed| missed.room != ring.room);
         self.missed.insert(
             0,
@@ -669,14 +696,40 @@ impl Machine {
             },
         );
         self.missed.truncate(MISSED_MAX);
-        out.push(Effect::Notice(VoiceNotice::Missed {
-            from: ring.from.clone(),
-            room: ring.room.clone(),
-        }));
-        out.push(Effect::System(SystemNotice::Missed {
-            room: ring.room.clone(),
-            from: ring.from.clone(),
-        }));
+    }
+
+    fn ignores(&self, user: &str) -> bool {
+        self.ignored
+            .binary_search_by(|id| id.as_str().cmp(user))
+            .is_ok()
+    }
+
+    /// Whom the player ignores here (`voice_ignored`: the page's SOC-NEXT list, empty while its
+    /// switch is off). A ring of theirs that rings now goes quiet at once, into the missed list.
+    pub fn set_ignored(&mut self, mut ids: Vec<String>) -> Vec<Effect> {
+        ids.retain(|id| !id.is_empty() && id.len() <= IGNORED_ID_MAX);
+        ids.sort_unstable();
+        ids.dedup();
+        ids.truncate(IGNORED_MAX);
+        if ids == self.ignored {
+            return Vec::new();
+        }
+        self.ignored = ids;
+        let (quiet, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.rings)
+            .into_iter()
+            .partition(|(ring, _)| self.ignores(&ring.from));
+        self.rings = kept;
+        let mut out = Vec::new();
+        for (ring, _) in quiet {
+            out.push(Effect::System(SystemNotice::RingGone {
+                room: ring.room.clone(),
+            }));
+            self.keep_missed(&ring);
+            out.push(Effect::Changed);
+        }
+        self.sync_ring(&mut out);
+        dedup_changed(&mut out);
+        out
     }
 
     /// "Reddet": the ring stops on every device and the caller hears nothing more than a time-out.

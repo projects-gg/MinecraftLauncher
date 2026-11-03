@@ -640,6 +640,12 @@ impl Voice {
         self.effects(|machine, _, _| machine.set_meters(on));
     }
 
+    /// SOC-NEXT §3.7 (VOICE-CALL): whom the player ignores on this computer; their rings stay
+    /// quiet (the page's list, sent whenever it changes).
+    pub fn set_ignored(&self, ids: Vec<String>) {
+        self.effects(|machine, _, _| machine.set_ignored(ids));
+    }
+
     // -------------------------------------------------------------------------------------------
     // The voice window's side
 

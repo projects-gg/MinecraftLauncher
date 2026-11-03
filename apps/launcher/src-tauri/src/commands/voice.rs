@@ -247,6 +247,16 @@ pub fn voice_levels(state: State<'_, AppState>, on: bool) -> CmdResult<()> {
     Ok(())
 }
 
+/// Whom the player ignores on this computer (SOC-NEXT §3.7, VOICE-CALL; empty while its switch is
+/// off): their rings stay quiet here, in Windows' notifications and in the game, and wait in the
+/// missed list without a word.
+#[tauri::command]
+#[specta::specta]
+pub fn voice_ignored(state: State<'_, AppState>, ids: Vec<String>) -> CmdResult<()> {
+    state.voice.set_ignored(ids);
+    Ok(())
+}
+
 /// "Ayarları aç" under "Mikrofona izin verilmedi.": Windows' microphone privacy page.
 #[tauri::command]
 #[specta::specta]

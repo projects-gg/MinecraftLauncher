@@ -16,6 +16,7 @@ import { CallConfirm } from "./call-confirm";
 import { askDiscord } from "./discord-offer";
 import { useLevelStream } from "./levels";
 import { loadVoicePrefs } from "./prefs";
+import { heardRings, useIgnoredSync } from "./quiet";
 import { playTone } from "./ring-sound";
 import { dismissRingToast, showRingToast } from "./ring-toast";
 import { leftText, peopleChanges, toneNow } from "./rules";
@@ -73,11 +74,16 @@ export function handleVoiceNotice(notice: VoiceNotice) {
   }
 }
 
-/** What changed between two states that the page says itself: ring cards, joins and leaves. */
+/**
+ * What changed between two states that the page says itself: ring cards, joins and leaves. An
+ * ignored person's ring has no card (SOC-NEXT §3.7; the launcher keeps it out once it knows).
+ */
 export function onVoiceState(before: VoiceState, after: VoiceState) {
+  const heard = heardRings(after.rings);
   const was = new Set(before.rings.map((r) => r.room));
-  const is = new Set(after.rings.map((r) => r.room));
-  for (const ring of after.rings) {
+  // A card goes as soon as its ring is gone or no longer heard (ignored while it rang).
+  const is = new Set(heard.map((r) => r.room));
+  for (const ring of heard) {
     if (was.has(ring.room)) continue;
     showRingToast(ring);
     announce(i18n.t("voice.ring.calling", { name: faceNow(ring.from).name }));
@@ -154,7 +160,8 @@ function useVoiceTones() {
     // sounds in the tray and in the game; the page's own one doubled it while the window was in
     // front.
     const decide = () => {
-      const tone = toneNow(useVoiceUi.getState().state, isWindowAway());
+      const state = useVoiceUi.getState().state;
+      const tone = toneNow({ ...state, rings: heardRings(state.rings) }, isWindowAway());
       playTone(tone === "ring" ? tone : null);
     };
     decide();
@@ -241,6 +248,7 @@ export function VoiceHost() {
   useDiscordOnRoom();
   useVoicePrefsSync();
   useLevelStream();
+  useIgnoredSync();
   return (
     <>
       <RoomSheet />
