@@ -91,6 +91,7 @@ export const tauriVoice: VoiceApi = {
   onLevel: (listener) => on<VoiceLevel>("voice-level", listener),
   onLevels: (listener) => on<VoiceLevels>("voice-levels", listener),
   setLevels: (shown) => done(commands.voiceLevels(shown)),
+  setIgnored: (ids) => done(commands.voiceIgnored(ids)),
 
   call: (friend) => ok(commands.voiceCall(friend)),
   answer: (room) => ok(commands.voiceAccept(room)),
