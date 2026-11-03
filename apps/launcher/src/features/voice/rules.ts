@@ -268,6 +268,14 @@ export function invitables(
 /** A rate limit this long is the day's quota ("Bugünlük arama hakkın doldu."). */
 export const DAILY_LIMIT_SECONDS = 600;
 
+const NO_BREAK = String.fromCharCode(0xa0);
+
+/** BAN-TYPES: a voice chat ban's end (Unix seconds) as one phrase a line never splits ("5 Kasım
+ * 14:00'e kadar": a toast's line break once fell between the day and the month). */
+function banEnd(t: TFunction, until: number, nowMs: number): string {
+  return untilText(t, until * 1000, nowMs).replaceAll(" ", NO_BREAK);
+}
+
 /**
  * The words for a refused action, or null when it went through (or there was nothing to say:
  * `nothing`). `name` is who the action was about ("… şu an aranamıyor."). BAN-TYPES: a voice chat
@@ -293,7 +301,7 @@ export function refusalText(
       return t("voice.refused.daily");
     case "staffMuted":
       return answer.until
-        ? t("voice.refused.staffMutedUntil", { until: untilText(t, answer.until * 1000, nowMs) })
+        ? t("voice.refused.staffMutedUntil", { until: banEnd(t, answer.until, nowMs) })
         : t("voice.refused.staffMuted");
     default:
       return t(`voice.refused.${answer.refused}`);
@@ -313,7 +321,7 @@ export function leftText(
   // "Cevap yok" is the pill's own (with "Tekrar ara"), as is "Bağlanamadı" (with "Tekrar dene").
   if (reason === "noAnswer") return t("voice.call.noAnswer");
   if (reason === "restricted" && until)
-    return t("voice.left.restrictedUntil", { until: untilText(t, until * 1000, nowMs) });
+    return t("voice.left.restrictedUntil", { until: banEnd(t, until, nowMs) });
   return t(`voice.left.${reason}`);
 }
 
