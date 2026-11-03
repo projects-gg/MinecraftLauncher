@@ -55,6 +55,8 @@ struct Calls {
     crew_invites: Vec<(String, String)>,
     crewmates_asked: Vec<String>,
     accepted: Vec<String>,
+    /// OVL-SOC 2: friend requests declined.
+    declined: Vec<String>,
     /// OVL-UX3: crew rows taken: (crew, member, what: `mod`, `unmod`, `lead` or `remove`).
     crew_rows: Vec<(String, String, &'static str)>,
 }
@@ -284,6 +286,12 @@ impl SocialActions for FakeSocial {
     fn accept(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
         let mut calls = self.calls();
         calls.accepted.push(user.to_owned());
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
+
+    fn decline(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.declined.push(user.to_owned());
         std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
     }
 
@@ -2607,4 +2615,116 @@ async fn the_crews_rooms_reach_a_mod_that_shows_them_and_its_joins_reach_the_lau
     );
     assert_eq!(crews["crews"][0]["add"], true);
     overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn friend_requests_and_the_status_switcher_from_the_game() {
+    use serde_json::json;
+
+    let mut v = people2_view();
+    v.incoming.push(pl_social::RequestView {
+        id: "r-kaan".into(),
+        name: "Kaan_07".into(),
+        username: "kaan".into(),
+        avatar: "discord".into(),
+        avatar_url: None,
+        marks: Vec::new(),
+        discord_id: None,
+        sent_at: 2,
+    });
+    let social = FakeSocial::new(v);
+    let overlay = Overlay::new(OverlayConfig::default());
+    let changes = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&changes);
+    overlay.on_people(move |change| sink.lock().unwrap().push(change));
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod (OVL-UX3's menu): no requests in its lists, and its `request` and `status`
+    // do nothing.
+    let mut old = MockMod::connect_with(&endpoint, &["people", "people2", "people3"]).await;
+    let welcome = old.next_of("welcome").await;
+    assert!(!lists(&welcome, "people4"));
+    assert!(old.next_of("lists").await.get("requests").is_none());
+    old.next_of("snapshot").await;
+    old.send(json!({"t":"request","id":"r-kaan","accept":true}))
+        .await;
+    old.send(json!({"t":"status","status":"dnd"})).await;
+    old.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    assert_eq!(old.next().await.unwrap()["t"], "history", "nothing first");
+    assert!(social.calls().accepted.is_empty());
+    assert!(changes.lock().unwrap().is_empty());
+    drop(old);
+
+    let mut game =
+        MockMod::connect_with(&endpoint, &["people", "people2", "people3", "people4"]).await;
+    let welcome = game.next_of("welcome").await;
+    assert!(lists(&welcome, "people4") && !lists(&welcome, "next"));
+    let lists_frame = game.next_of("lists").await;
+    assert_eq!(
+        lists_frame["requests"],
+        json!([{"id":"u-cem","name":"Cem"},{"id":"r-kaan","name":"Kaan_07"}])
+    );
+    game.next_of("snapshot").await;
+
+    // "Kabul et" and "Reddet": the friends service hears them, the mod how they went.
+    game.send(json!({"t":"request","id":"r-kaan","accept":true}))
+        .await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"r-kaan","action":"accept","ok":true})
+    );
+    game.send(json!({"t":"request","id":"u-cem","accept":false}))
+        .await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"u-cem","action":"decline","ok":true})
+    );
+    // Someone who never asked: refused at once, nothing asked of the service.
+    game.send(json!({"t":"request","id":"x-bad","accept":true}))
+        .await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"x-bad","action":"accept","ok":false,"reason":"failed"})
+    );
+    assert_eq!(social.calls().accepted, ["r-kaan"]);
+    assert_eq!(social.calls().declined, ["u-cem"]);
+
+    // The status switcher: the page changes it; without SOC-NEXT no duration goes along.
+    game.send(json!({"t":"status","status":"dnd","for":"hour"}))
+        .await;
+    game.send(json!({"t":"status","status":"away"})).await;
+    // Both are taken before the switch below (the socket and the hub's channel race otherwise).
+    game.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    game.next_of("history").await;
+    overlay.configure(OverlayConfig {
+        next: Some(crate::SocNextPrefs::default()),
+        ..OverlayConfig::default()
+    });
+    assert!(lists(&game.next_of("welcome").await, "next"));
+    game.send(json!({"t":"status","status":"invisible","for":"morning"}))
+        .await;
+    game.send(json!({"t":"status","status":"online","for":"hour"}))
+        .await;
+    game.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    game.next_of("history").await;
+    assert_eq!(
+        changes.lock().unwrap().as_slice(),
+        [
+            crate::PeopleChange::Status {
+                status: "dnd".into(),
+                preset: None
+            },
+            crate::PeopleChange::Status {
+                status: "invisible".into(),
+                preset: Some("morning".into())
+            },
+            crate::PeopleChange::Status {
+                status: "online".into(),
+                preset: None
+            },
+        ]
+    );
 }

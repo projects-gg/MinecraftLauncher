@@ -41,6 +41,8 @@ public final class JoinScreen extends Screen {
     private int cardY;
     private int cardH;
     private long openedAt;
+    /** The address chip shows (not for Projects, never in streamer mode: OVL-SOC 2, SOC-NEXT §3.4). */
+    private boolean showHost;
 
     public JoinScreen(OverlayScreen panel, Target target) {
         super(Texts.tr(target.projects() ? "join.title.projects" : "join.title.server"));
@@ -61,7 +63,9 @@ public final class JoinScreen extends Screen {
         body = Texts.wrap(ui, text, WIDTH - 2 * PAD, 4);
         saved = minecraft.hasSingleplayerServer() ? Texts.str("join.saved") : null;
         int h = PAD + 14 + 4 + body.size() * 10;
-        if (!target.projects()) {
+        OverlayClient overlay = OverlayClient.get();
+        showHost = !target.projects() && !(overlay != null && overlay.state().streamer());
+        if (showHost) {
             h += 6 + 14;
         }
         if (saved != null) {
@@ -134,7 +138,7 @@ public final class JoinScreen extends Screen {
             Draw.text(g, Fonts.ui(), line, x, Fonts.centeredY(Fonts.Face.UI, y + 5), Theme.ASH_300);
             y += 10;
         }
-        if (!target.projects()) {
+        if (showHost) {
             y += 6;
             Font display = Fonts.display();
             String host = Texts.fit(display, target.host(), WIDTH - 2 * PAD - 12);

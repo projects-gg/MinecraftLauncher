@@ -28,8 +28,9 @@ use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
     ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST, FEATURE_LANG,
     FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
-    FEATURE_PEOPLE3, FEATURE_TAGS, FEATURE_VOICE, FEATURE_VOICE_ROOMS, FriendAction, FriendRefusal,
-    FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
+    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_TAGS, FEATURE_VOICE, FEATURE_VOICE_ROOMS,
+    FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure,
+    ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 use crate::voice::{self, VoiceAct, VoiceFuture, VoiceMirror};
@@ -78,6 +79,14 @@ pub enum PeopleChange {
     Favorite { friend: String, on: bool },
     /// "Çevrimiçi olunca bildir" on or off.
     Alert { friend: String, on: bool },
+    /// OVL-SOC 2: the status switcher in the game's panel picked `status` (`online`, `dnd`,
+    /// `invisible`): the page changes it as its own menu does; `preset` (SOC-NEXT on, `dnd` and
+    /// `invisible` only): one of the crew mute's durations (`hour`, `eightHours`, `morning`,
+    /// `forever`), for its timer.
+    Status {
+        status: String,
+        preset: Option<String>,
+    },
 }
 
 /// A "Bağlan" the game has not answered yet.
@@ -180,8 +189,11 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
         &self,
         user: &str,
     ) -> impl Future<Output = pl_social::Result<SendOutcome>> + Send + 'static;
-    /// OVL-UX2: "İsteği kabul et" on a crewmate who asked first.
+    /// OVL-UX2: "İsteği kabul et" on a crewmate who asked first; OVL-SOC 2: "Kabul et" on a
+    /// friend request.
     fn accept(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-SOC 2: "Reddet" on a friend request.
+    fn decline(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
     /// OVL-UX3: "Moderatör yap" (`moderator`) or "Moderatörlükten al" in a crew the player leads.
     fn set_team_moderator(
         &self,
@@ -376,6 +388,12 @@ impl SocialActions for SocialService {
         let service = self.clone();
         let user = user.to_owned();
         async move { SocialService::accept(&service, &user).await }
+    }
+
+    fn decline(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let user = user.to_owned();
+        async move { SocialService::decline(&service, &user).await }
     }
 
     fn set_team_moderator(
@@ -660,6 +678,10 @@ struct Live {
     /// The mod has OVL-UX3's crew rows and "Yeni kategori…" (`people3` in its hello): it hears
     /// `roles` in `lists` and sends `crew-mod`, `crew-lead`, `crew-remove` and named `move`s.
     people3: bool,
+    /// The mod has OVL-SOC 2's friend requests and status switcher (`people4` in its hello): it
+    /// hears `requests` in `lists` and the status in `welcome` and `dnd`, and sends `request`
+    /// and `status`.
+    people4: bool,
     /// The mod's words follow the launcher (OVL-LANG: `lang` in its hello): its welcome names the
     /// overlay's language and the player picks it there.
     langs: bool,
@@ -768,7 +790,9 @@ fn now_ms() -> i64 {
 /// to their world, and `host` among the features while the player may open theirs. With `link`
 /// (SKIN1-O, K2) the launcher can vouch for the player in game now.
 fn scene_of(view: &SocialView, config: &OverlayConfig, worlds: &WorldsShown, link: bool) -> Scene {
-    let mut scene = Scene::from_view(view, &config.notify, now_ms());
+    let now = now_ms();
+    let mut scene = Scene::from_view(view, &config.notify, now);
+    scene.apply_next(view, config.next.as_ref(), now);
     if scene.signed_in {
         scene.mark_worlds(&worlds.marks);
         if worlds.may_host {
@@ -987,7 +1011,9 @@ impl<S: SocialActions> Session<S> {
         self.codeless = self.social.codeless_offered();
         let link = self.codeless && self.game.is_some();
         let scene = scene_of(&view, &self.config, &self.worlds, link);
-        let senders_changed = scene.wears_differ(&self.scene) || scene.marks_differ(&self.scene);
+        let senders_changed = scene.wears_differ(&self.scene)
+            || scene.marks_differ(&self.scene)
+            || scene.next_differs(&self.scene);
         self.scene = scene;
         self.view = view;
         senders_changed
@@ -1003,7 +1029,7 @@ impl<S: SocialActions> Session<S> {
         };
         // Only crew chat names its senders.
         let Some(conv) = live.open.as_deref().filter(|conv| {
-            live.panel && (live.tags || live.marks) && self.scene.is_crew_conv(conv)
+            live.panel && (live.tags || live.marks || live.people4) && self.scene.is_crew_conv(conv)
         }) else {
             return;
         };
@@ -1065,8 +1091,14 @@ impl<S: SocialActions> Session<S> {
                 // Conversation mutes and the reduced-motion choice show in the panel.
                 let emoji_changed = self.config.emoji != config.emoji;
                 self.config = config;
-                self.set_view(Arc::clone(&self.view));
+                let senders_changed = self.set_view(Arc::clone(&self.view));
                 self.refresh();
+                if senders_changed {
+                    // OVL-SOC 2: someone ignored (or not any more), a nickname: the lines on
+                    // screen come again, and voice chat's names and rings follow.
+                    self.reshow_open_conversation();
+                    self.refresh_voice();
+                }
                 if emoji_changed {
                     self.send_emojis();
                 }
@@ -1121,7 +1153,7 @@ impl<S: SocialActions> Session<S> {
             return;
         };
         let scene = &self.scene;
-        let view = voice::view_of(
+        let mut view = voice::view_of(
             state,
             *ring_in_game,
             self.voice_speaking.as_ref(),
@@ -1129,6 +1161,10 @@ impl<S: SocialActions> Session<S> {
             |id| scene.name_of(id).map(str::to_owned),
             |id| scene.crew_name(id).map(str::to_owned),
         );
+        // SOC-NEXT §3.7 (OVL-SOC 2): someone the player ignores rings nowhere in the game (the
+        // launcher's ring keeps quiet for them too).
+        view.rings.retain(|ring| !scene.is_ignored(&ring.from));
+        view.sound &= !view.rings.is_empty();
         // OVL-SOC (V21): the crews' rooms, worked out only for a mod that shows them.
         let crews = self
             .live
@@ -1604,10 +1640,13 @@ impl<S: SocialActions> Session<S> {
                 let people2 = features.iter().any(|f| f == FEATURE_PEOPLE2);
                 // The crew rows build on the whole person menu.
                 let people3 = people2 && features.iter().any(|f| f == FEATURE_PEOPLE3);
+                // OVL-SOC 2's requests and status switcher build on it too.
+                let people4 = people3 && features.iter().any(|f| f == FEATURE_PEOPLE4);
                 let langs = features.iter().any(|f| f == FEATURE_LANG);
                 let marks = features.iter().any(|f| f == FEATURE_MARKS);
                 let mut mirror = Mirror::for_mod(tags, people2)
                     .with_people3(people3)
+                    .with_people4(people4)
                     .with_marks(marks);
                 mirror.set_lang(langs.then_some(self.lang));
                 let frames = mirror.greet(&self.scene, &self.launcher, self.config.reduced_motion);
@@ -1636,6 +1675,7 @@ impl<S: SocialActions> Session<S> {
                     people: features.iter().any(|f| f == FEATURE_PEOPLE),
                     people2,
                     people3,
+                    people4,
                     langs,
                     emojis,
                     quiet,
@@ -1834,7 +1874,82 @@ impl<S: SocialActions> Session<S> {
             | FromGame::VoiceInvite { .. }
             // OVL-SOC: "Katıl" and "Yeni oda" in crew chat's "Sesli".
             | FromGame::VoiceJoin { .. }) => self.on_voice_press(&frame),
+            // OVL-SOC 2: the status switcher and the friend requests.
+            FromGame::Status { status, preset } => self.on_status(&status, preset.as_deref()),
+            FromGame::Request { id, accept } => self.on_request(id, accept),
             FromGame::Hello { .. } | FromGame::Unknown => {}
+        }
+    }
+
+    /// The status switcher in the game's panel (OVL-SOC 2): the launcher's page changes it as its
+    /// own menu does (and keeps SOC-NEXT's timer); the next view tells the mod how it stands.
+    /// SOC-NEXT's durations only while it is on, only for the two statuses that end.
+    fn on_status(&mut self, status: &str, preset: Option<&str>) {
+        if !self.live.as_ref().is_some_and(|live| live.people4) || !self.scene.signed_in {
+            return;
+        }
+        if !matches!(status, "online" | "dnd" | "invisible") {
+            return;
+        }
+        let preset = preset
+            .filter(|_| self.config.next.is_some() && status != "online")
+            .filter(|preset| matches!(*preset, "hour" | "eightHours" | "morning" | "forever"));
+        let now = Instant::now();
+        if full(&mut self.recent_people, now, PEOPLE_WINDOW, PEOPLE_BURST) {
+            tracing::debug!("the overlay's status switch came too often");
+            return;
+        }
+        self.recent_people.push_back(now);
+        tracing::info!(
+            status,
+            ?preset,
+            "the player's status from the in-game overlay"
+        );
+        (self.people)(PeopleChange::Status {
+            status: status.to_owned(),
+            preset: preset.map(str::to_owned),
+        });
+    }
+
+    /// "Kabul et" or "Reddet" on a friend request in the game's list (OVL-SOC 2): only one the
+    /// last `lists` named, while the friends service is connected.
+    fn on_request(&mut self, id: String, accept: bool) {
+        if !self.live.as_ref().is_some_and(|live| live.people4) {
+            return;
+        }
+        let action = if accept {
+            FriendAction::Accept
+        } else {
+            FriendAction::Decline
+        };
+        let now = Instant::now();
+        let refused = if full(&mut self.recent_people, now, PEOPLE_WINDOW, PEOPLE_BURST) {
+            Some(FriendRefusal::Rate)
+        } else if !self
+            .scene
+            .lists
+            .requests
+            .iter()
+            .any(|request| request.id == id)
+        {
+            Some(FriendRefusal::Failed)
+        } else if !self.scene.online {
+            Some(FriendRefusal::Offline)
+        } else {
+            None
+        };
+        if let Some(reason) = refused {
+            self.friend_result(&id, action, false, Some(reason));
+            return;
+        }
+        self.recent_people.push_back(now);
+        tracing::info!(accept, "a friend request answered from the in-game overlay");
+        if accept {
+            let doing = self.social.accept(&id);
+            self.settle(id, action, doing);
+        } else {
+            let doing = self.social.decline(&id);
+            self.settle(id, action, doing);
         }
     }
 

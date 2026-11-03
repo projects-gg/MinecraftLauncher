@@ -628,6 +628,8 @@ mod tests {
             reduced_motion: false,
             features: vec!["chat".into()],
             lang: None,
+            status: None,
+            until: None,
         }
     }
 
@@ -835,7 +837,11 @@ mod tests {
         h.control
             .send(Control::Send {
                 conn: one,
-                frames: vec![ToGame::Dnd { on: true }],
+                frames: vec![ToGame::Dnd {
+                    on: true,
+                    status: None,
+                    until: None,
+                }],
             })
             .unwrap();
         h.control
@@ -1048,6 +1054,14 @@ mod tests {
             ],
         };
         assert!(encode(&frame).is_err());
-        assert!(encode(&ToGame::Dnd { on: true }).unwrap().ends_with(b"\n"));
+        assert!(
+            encode(&ToGame::Dnd {
+                on: true,
+                status: None,
+                until: None,
+            })
+            .unwrap()
+            .ends_with(b"\n")
+        );
     }
 }

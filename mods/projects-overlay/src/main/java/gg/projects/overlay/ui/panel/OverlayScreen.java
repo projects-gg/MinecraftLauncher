@@ -18,6 +18,7 @@ import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.toast.ToastLayer;
+import gg.projects.overlay.ui.ClockWords;
 import gg.projects.overlay.ui.EmojiGlyphs;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.TagChip;
@@ -149,6 +150,11 @@ public final class OverlayScreen extends Screen {
     });
     /** Whom the open menu is about, as the place that opened it named them (OVL-UX2: a crewmate is no friend). */
     private String menuName = "";
+    /** The person menu's id for the status switcher (no person's id starts so). */
+    private static final String STATUS_MENU = "@status";
+    /** The launcher's list shows its search from this many friends ({@code SEARCH_FROM}). */
+    private static final int SEARCH_FROM = 8;
+    private static final int FILTER_H = 18;
     private OverlayState.Badge menuBadge;
     /** OVL-UX3: the player's rights in the crew chat the open menu came from, while it carries crew rows. */
     private OverlayState.CrewRights menuCrew;
@@ -157,6 +163,11 @@ public final class OverlayScreen extends Screen {
     /** VOICE-O: voice chat's rows of the open menu as it was planned (it closes once they would differ), or null. */
     private FriendMenu.Voice menuVoice;
     private final BadgeBubble identityBubble = new BadgeBubble();
+    /** OVL-SOC 2: the status switcher on the player's dot and name in the header. */
+    private final StatusButton statusButton = new StatusButton(this::openStatusMenu);
+    /** OVL-SOC 2: "Arkadaşlarında ara" over the friend list (from eight friends, as the launcher's). */
+    private final ComposerField friendFilter = new ComposerField(Texts.tr("friends.search"));
+    private int filterY = -1;
     private int identityRevision = -1;
     private int identityBadges = -1;
     private int identityPanelX = -1;
@@ -254,6 +265,11 @@ public final class OverlayScreen extends Screen {
             public void newRoom(String crew) {
                 overlay.voiceNewRoom(crew);
             }
+
+            @Override
+            public void full() {
+                state.personNoteText(Texts.str("voice.refused.room_full"), true, System.currentTimeMillis());
+            }
         });
         retry = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("retry"), null, overlay::retry);
         for (int i = 0; i < ANSWERS.length; i++) {
@@ -340,6 +356,25 @@ public final class OverlayScreen extends Screen {
             @Override
             public void menu(String friendId, PersonMenu.Anchor anchor, boolean keys) {
                 openFriendMenu(friendId, anchor, keys);
+            }
+
+            @Override
+            public void answer(String requestId, String name, boolean accept) {
+                overlay.answerRequest(requestId, name, accept);
+            }
+
+            @Override
+            public void requestMenu(String requestId, String name, PersonMenu.Anchor anchor, boolean keys) {
+                openRequestMenu(requestId, name, anchor, keys);
+            }
+        });
+        friendFilter.setMaxLength(32);
+        friendFilter.setPlaceholder(Texts.tr("friends.search"));
+        friendFilter.setResponder(text -> {
+            // Typing filters at once (the list lays itself out again only in a layout otherwise).
+            friends.setFilter(text);
+            if (friends.visible) {
+                friends.refresh(state, this::canJoin);
             }
         });
         stickerButton = new IconButton(Icon.SMILEY, Texts.tr("chat.picker"), this::togglePicker);
@@ -807,6 +842,9 @@ public final class OverlayScreen extends Screen {
         menuBadge = badge;
         menu.setReducedMotion(reducedMotion());
         menu.setPanelLeft(panelX);
+        // OVL-SOC 2 (SOC-NEXT §3.6): under a nickname, the name the service knows ("Asıl adı Kaan_07").
+        String real = state.realName(id);
+        menu.noteNext(real == null ? null : Texts.str("people.real_name", real));
         menu.open(id, menuName, rows, action -> choicesFor(id, action), anchor, keys, width, height, now);
         return true;
     }
@@ -1017,6 +1055,16 @@ public final class OverlayScreen extends Screen {
                 }
             }
             case REPORT -> openReport(friendId);
+            // OVL-SOC 2: a friend request's answers and the status switcher (without SOC-NEXT's durations).
+            case ACCEPT_REQUEST, DECLINE_REQUEST -> {
+                String name = requestName(friendId);
+                if (name != null) {
+                    overlay.answerRequest(friendId, name, action == FriendMenu.Action.ACCEPT_REQUEST);
+                }
+            }
+            case STATUS_ONLINE -> overlay.chooseStatus("online", null);
+            case STATUS_DND -> overlay.chooseStatus("dnd", null);
+            case STATUS_INVISIBLE -> overlay.chooseStatus("invisible", null);
         }
     }
 
@@ -1035,6 +1083,11 @@ public final class OverlayScreen extends Screen {
             if (p != null && percent != p.volume()) {
                 overlay.voiceVolume(friendId, menuName, percent);
             }
+            return;
+        }
+        if (action == FriendMenu.Action.STATUS_DND || action == FriendMenu.Action.STATUS_INVISIBLE) {
+            // SOC-NEXT: a status for a while (the launcher keeps the timer).
+            overlay.chooseStatus(action == FriendMenu.Action.STATUS_DND ? "dnd" : "invisible", choice);
             return;
         }
         if (action == FriendMenu.Action.MOVE) {
@@ -1151,7 +1204,9 @@ public final class OverlayScreen extends Screen {
         Font ui = Fonts.ui();
         float right = panelX + panelW - P - IconButton.SIZE - 1;
         float titleRight = panelX + P + Fonts.display().width(titleText) + 12;
-        int room = Math.round(right - titleRight - TagChip.room(chip));
+        // OVL-SOC 2: the status switcher's dot before the tag and the name (a launcher that takes `status`).
+        int dot = state.people4() ? StatusButton.DOT_ROOM : 0;
+        int room = Math.round(right - titleRight - TagChip.room(chip) - dot);
         if (room < 28) {
             // A very narrow panel keeps its title and the gear.
             return;
@@ -1160,6 +1215,103 @@ public final class OverlayScreen extends Screen {
         identityName = Texts.visual(fitted);
         identityChip = chip;
         identityX = Draw.snap(right - ui.width(fitted) - TagChip.room(chip));
+        statusX = dot > 0 ? identityX - dot : -1;
+        statusRight = right;
+    }
+
+    /** OVL-SOC 2: where the status switcher starts (its dot), -1 without it; and where the name ends. */
+    private float statusX = -1;
+    private float statusRight;
+    /** The status (and its end) the switcher was last worded for; null: word it again (a layout, a language). */
+    private String statusShown;
+    private long statusShownUntil;
+
+    /** The status as the header says it: "Rahatsız etmeyin", with SOC-NEXT's end "…, 17:30'a kadar". */
+    private String statusWords() {
+        String status = Texts.str("status." + state.presence());
+        long until = state.presenceUntil();
+        return until > 0 ? Texts.str("status.until", status, ClockWords.until(until, System.currentTimeMillis()))
+            : status;
+    }
+
+    /**
+     * The status switcher (OVL-SOC 2): "Çevrimiçi", "Rahatsız etmeyin", "Görünmez" in the person menu under the
+     * header's name, the one now checked; with SOC-NEXT the last two open the crew mute's durations ("1 saat", "8
+     * saat", "Yarın sabaha kadar", "Ben kapatana kadar"), and a timed one says until when over the rows.
+     */
+    private void openStatusMenu() {
+        if (!state.people4() || !state.signedIn()) {
+            return;
+        }
+        boolean timed = state.socNext();
+        String now = state.presence();
+        List<FriendMenu.Row> rows = List.of(
+            new FriendMenu.Row(FriendMenu.Action.STATUS_ONLINE, false, false, now.equals("online"), false, false),
+            new FriendMenu.Row(FriendMenu.Action.STATUS_DND, false, false, now.equals("dnd"), timed, false),
+            new FriendMenu.Row(FriendMenu.Action.STATUS_INVISIBLE, false, false, now.equals("invisible"), timed,
+                false));
+        // "Rahatsız etmeyin, 17:30'a kadar": the row of a status with durations has a caret, not the check.
+        menu.noteNext(now.equals("online") ? null : statusWords());
+        float top = statusButton.getY() + StatusButton.HEIGHT + 1;
+        PersonMenu.Anchor at = new PersonMenu.Anchor(statusButton.getX(), statusButton.getY(),
+            statusButton.getWidth(), top - statusButton.getY(), false);
+        openRows(STATUS_MENU, Texts.str("status.title"), rows, action -> switch (action) {
+            case STATUS_DND, STATUS_INVISIBLE -> timed ? presets() : List.of();
+            default -> List.of();
+        }, at, PanelInput.keyboardMode());
+    }
+
+    /** SOC-NEXT's durations for a status, the crew mute's (one vocabulary; "Ben kapatana kadar" for a status). */
+    private static List<PersonMenu.Choice> presets() {
+        return List.of(
+            new PersonMenu.Choice("hour", Texts.str("status.preset.hour"), false, false),
+            new PersonMenu.Choice("eightHours", Texts.str("status.preset.eight_hours"), false, false),
+            new PersonMenu.Choice("morning", Texts.str("status.preset.morning"), false, false),
+            new PersonMenu.Choice("forever", Texts.str("status.preset.forever"), false, false));
+    }
+
+    /** OVL-SOC 2: a friend request's two answers ("Kabul et" first) at {@code anchor}. */
+    private void openRequestMenu(String id, String name, PersonMenu.Anchor anchor, boolean keys) {
+        if (requestName(id) == null) {
+            return;
+        }
+        List<FriendMenu.Row> rows = List.of(new FriendMenu.Row(FriendMenu.Action.ACCEPT_REQUEST, false, false),
+            new FriendMenu.Row(FriendMenu.Action.DECLINE_REQUEST, false, false));
+        menu.noteNext(Texts.str("friend.wants_to_add"));
+        if (openRows(id, name, rows, action -> List.of(), anchor, keys)) {
+            friends.setMenuFor(id, !anchor.pointer());
+        }
+    }
+
+    /** The name of whoever asked to be friends with {@code id}, or null when no such request is listed. */
+    private String requestName(String id) {
+        for (OverlayState.Request r : state.requests()) {
+            if (r.id().equals(id)) {
+                return r.name();
+            }
+        }
+        return null;
+    }
+
+    /** Opens a menu of {@code rows} that is no person's plan (the status switcher, a request's answers). */
+    private boolean openRows(String id, String name, List<FriendMenu.Row> rows,
+        java.util.function.Function<FriendMenu.Action, List<PersonMenu.Choice>> lists, PersonMenu.Anchor anchor,
+        boolean keys) {
+        menuCrew = null;
+        menuVoice = null;
+        long now = now();
+        friends.dismissBubble();
+        messages.dismissBubble();
+        identityBubble.dismiss(now);
+        friends.setMenuFor(null);
+        chips.setMenuFor(null);
+        menuChip = null;
+        menuName = name == null ? "" : name;
+        menuBadge = null;
+        menu.setReducedMotion(reducedMotion());
+        menu.setPanelLeft(panelX);
+        menu.open(id, menuName, rows, lists, anchor, keys, width, height, now);
+        return true;
     }
 
     /** The header's "[GK] Ece" on the list pages; the chip opens its bubble as every chip does. */
@@ -1174,6 +1326,19 @@ public final class OverlayScreen extends Screen {
             return;
         }
         float mid = HEADER_H / 2f;
+        if (statusX >= 0) {
+            // OVL-SOC 2: the switcher under the dot, the tag and the name (its plate under the pointer).
+            statusButton.visible = true;
+            PanelWidget.place(statusButton, Math.round(statusX) - 3, Math.round(mid - StatusButton.HEIGHT / 2f),
+                Math.round(statusRight - statusX) + 6, StatusButton.HEIGHT);
+            if (!state.presence().equals(statusShown) || state.presenceUntil() != statusShownUntil) {
+                // Worded only when the status or its end changes (nothing is made per frame).
+                statusShown = state.presence();
+                statusShownUntil = state.presenceUntil();
+                statusButton.show(statusShown, statusWords());
+            }
+            render(g, statusButton, mouseX, mouseY);
+        }
         float x = identityX;
         BadgeBubble.Target target = null;
         if (identityChip != null) {
@@ -1280,6 +1445,48 @@ public final class OverlayScreen extends Screen {
         return menu.naming();
     }
 
+    /** OVL-SOC 2 (the scenario driver): the status switcher's menu, as Enter on it would open it. */
+    public boolean openStatusMenuForDriver() {
+        if (!statusButton.visible) {
+            return false;
+        }
+        PanelInput.usedKeyboard();
+        openStatusMenu();
+        return menu.isOpen();
+    }
+
+    /** OVL-SOC 2 (the scenario driver): a friend request's answers, as Enter on its row would open them. */
+    public boolean openRequestMenuForDriver(String id) {
+        String name = requestName(id);
+        PersonMenu.Anchor at = friends.dotsOf(id);
+        if (name == null || at == null) {
+            return false;
+        }
+        PanelInput.usedKeyboard();
+        openRequestMenu(id, name, at, true);
+        return menu.isOpen();
+    }
+
+    /** OVL-SOC 2 (the scenario driver): types into "Arkadaşlarında ara" as the keys would; false while it is hidden. */
+    public boolean filterFriends(String text) {
+        if (!friendFilter.visible) {
+            return false;
+        }
+        setFocused(friendFilter);
+        friendFilter.setValue(text);
+        return true;
+    }
+
+    /** OVL-SOC 2 (the scenario driver): "Göster" on the first fold of ignored lines; false without one. */
+    public boolean unfoldIgnored() {
+        return messages.visible && messages.unfoldFirst();
+    }
+
+    /** OVL-SOC 2 (the scenario driver checks it): the folds of ignored lines the conversation shows. */
+    public int ignoredFolds() {
+        return messages.visible ? messages.folds() : 0;
+    }
+
     /** A friend's chip menu as a right click on it (or, {@code keys}, Shift+F10) would open it (the scenario driver). */
     public void openChipMenu(String conv, boolean keys) {
         PersonMenu.Anchor chip = chips.anchorOf(conv);
@@ -1345,8 +1552,8 @@ public final class OverlayScreen extends Screen {
         // The picker floats over the conversation: it is asked about a click before the list under it.
         for (AbstractWidget w : new AbstractWidget[] {emojiPicker, picker, gear, back, retry, answers[0], answers[1],
             answers[2],
-            callJoin, tabs, chips, crewVoice, messages, quick, replyClose, field, stickerButton, send, friends,
-            settingsList}) {
+            callJoin, tabs, chips, crewVoice, messages, quick, replyClose, field, stickerButton, send, statusButton,
+            friendFilter, friends, settingsList}) {
             addWidget(w);
         }
         for (AbstractWidget w : host.widgets()) {
@@ -1798,6 +2005,7 @@ public final class OverlayScreen extends Screen {
         worldTitle = host.title();
         voiceTitle = voice.title();
         dndText = Texts.str("dnd");
+        statusShown = null;
         tabs.setReducedMotion(reduced);
         chips.setReducedMotion(reduced);
         messages.setReducedMotion(reduced);
@@ -1868,6 +2076,15 @@ public final class OverlayScreen extends Screen {
             y += Segmented.HEIGHT + 8;
         }
         if (page == Page.FRIENDS || !chat) {
+            // OVL-SOC 2: "Arkadaşlarında ara" from eight friends (the launcher's list); fewer, nobody is filtered.
+            if (state.signedIn() && state.friends().size() >= SEARCH_FROM) {
+                friendFilter.visible = true;
+                filterY = y;
+                PanelWidget.place(friendFilter, x0 + 18, y + (FILTER_H - 12) / 2 + 1, cw - 18 - 6, 12);
+                y += FILTER_H + 6;
+            } else if (!friendFilter.getValue().isEmpty()) {
+                friendFilter.setValue("");
+            }
             friends.visible = true;
             PanelWidget.place(friends, x0, y, cw, Math.max(30, height - P - y));
             friends.refresh(state, this::canJoin);
@@ -1985,9 +2202,11 @@ public final class OverlayScreen extends Screen {
 
     private void hideAll() {
         for (AbstractWidget w : new AbstractWidget[] {retry, answers[0], answers[1], answers[2], callJoin, tabs,
-            chips, crewVoice, messages, quick, field, send, friends, settingsList, stickerButton, replyClose}) {
+            chips, crewVoice, messages, quick, field, send, friends, settingsList, stickerButton, replyClose,
+            statusButton, friendFilter}) {
             w.visible = false;
         }
+        filterY = -1;
         host.hideAll();
         voice.hideAll();
         if (page != Page.CHATS || conversation == null) {
@@ -1997,6 +2216,9 @@ public final class OverlayScreen extends Screen {
         String menuFor = menu.friend();
         boolean keep = menuFor != null && (page == Page.FRIENDS ? state.friend(menuFor) != null
             : page == Page.VOICE && voice.has(menuFor)) && Objects.equals(menuVoice, voiceFor(menuFor));
+        // OVL-SOC 2: the status switcher's menu on the list pages, a request's while it is still asked.
+        keep |= STATUS_MENU.equals(menuFor) && (page == Page.CHATS || page == Page.FRIENDS) && state.people4();
+        keep |= menuFor != null && page == Page.FRIENDS && requestName(menuFor) != null;
         if (menuFor != null && !keep) {
             // A friend's menu belongs to the friend list (and to a friend still on it); a room's to its page (and to
             // someone still in the room); neither outlives the voice chat rows it was planned with (VOICE-O: a
@@ -2104,8 +2326,9 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        // A name typed into the menu's "Yeni kategori…" field types too (OVL-UX3).
-        boolean typing = field.isFocused() && field.visible || menu.naming();
+        // A name typed into the menu's "Yeni kategori…" field types too (OVL-UX3), and the friend filter (OVL-SOC 2).
+        boolean filtering = friendFilter.visible && friendFilter.isFocused();
+        boolean typing = field.isFocused() && field.visible || menu.naming() || filtering;
         // The emoji search types too (OVL-SOC): the panel's key bound to a letter types there.
         if (overlay.key().closes(event, typing || emojiPicker.isFocused() && emojiPicker.isOpen())) {
             // Closes, unless this is the held press that opened the panel repeating (F7-OPEN).
@@ -2124,7 +2347,21 @@ public final class OverlayScreen extends Screen {
             // Esc closes what is open over the panel first: the picker, the quick reactions, the reply.
             return true;
         }
-        if (typing && event.isConfirmation()) {
+        if (filtering && (event.isConfirmation() || event.isDown())) {
+            // Enter or ↓ from the filter goes on to the first friend it left (the launcher's field).
+            PanelInput.usedKeyboard();
+            setFocused(friends);
+            friends.selectFirst();
+            return true;
+        }
+        if (friendFilter.visible && !typing && event.key() == InputConstants.KEY_F && event.hasControlDown()
+            && !event.hasAltDown()) {
+            // Ctrl+F finds a friend (not with Alt: Windows reports AltGr as Ctrl+Alt).
+            PanelInput.usedKeyboard();
+            setFocused(friendFilter);
+            return true;
+        }
+        if (typing && !filtering && event.isConfirmation()) {
             sendDraft();
             return true;
         }
@@ -2153,6 +2390,11 @@ public final class OverlayScreen extends Screen {
         if (menu.close(now())) {
             // A friend's menu (OVL-UX) is the topmost thing when it is open.
             syncMenu();
+            return true;
+        }
+        if (friendFilter.visible && friendFilter.isFocused() && !friendFilter.getValue().isEmpty()) {
+            // Esc in the friend filter empties it first (OVL-SOC 2).
+            friendFilter.setValue("");
             return true;
         }
         if ((friends.visible && friends.closeBubble()) || (messages.visible && messages.closeBubble())
@@ -2457,6 +2699,9 @@ public final class OverlayScreen extends Screen {
             render(g, emojiPicker, mouseX, mouseY);
         }
         Draw.stratum(g);
+        if (filterY >= 0) {
+            drawFilter(g, mouseX, mouseY);
+        }
         render(g, friends, mouseX, mouseY);
         render(g, settingsList, mouseX, mouseY);
         if (page == Page.WORLD) {
@@ -2562,6 +2807,20 @@ public final class OverlayScreen extends Screen {
             render(g, b, mouseX, mouseY);
         }
         render(g, callJoin, mouseX, mouseY);
+    }
+
+    /** OVL-SOC 2: "Arkadaşlarında ara": the composer's field box, the search sign before the words. */
+    private void drawFilter(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        int x0 = panelX + P;
+        int cw = panelW - 2 * P;
+        // Its ring only while the keys are there: an open menu takes them.
+        boolean focused = friendFilter.isFocused() && !menu.isOpen();
+        boolean lit = mouseX >= x0 && mouseX < x0 + cw && mouseY >= filterY && mouseY < filterY + FILTER_H;
+        Draw.frame(g, focused ? Frames.FIELD_FOCUS : lit ? Frames.FIELD_HOVER : Frames.FIELD, x0, filterY, cw,
+            FILTER_H);
+        Draw.icon(g, Icon.SEARCH, 8, x0 + 6, filterY + (FILTER_H - 8) / 2f, focused ? Theme.BONE_100
+            : Theme.ASH_400);
+        render(g, friendFilter, mouseX, mouseY);
     }
 
     private void drawComposer(GuiGraphicsExtractor g, int mouseX, int mouseY) {

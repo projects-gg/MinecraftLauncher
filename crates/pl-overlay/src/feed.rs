@@ -27,20 +27,24 @@ use pl_social::{
     TEAM_FEATURE_ROLES, TeamMemberView, TeamRole, TeamView,
 };
 
+use crate::hub::SocNextPrefs;
 use crate::links::{self, LinkLists};
+use crate::mention::{self, Mention};
 use crate::policy::{self, CrewMute, CrewSettings, Mute, Notice, NotifyPrefs, Situation};
 use crate::protocol::{
     AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, CrewItem,
-    CrewPlace, CrewRoles, FEATURE_INVITE, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_PEOPLE3,
-    FEATURE_TAGS, FriendView, GroupItem, LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME,
-    MAX_QUOTE_CHARS, MateRights, Me, MsgView, NoteKind, PROTO, Place, ReactionView, ReplyView,
-    SendFailure, ToGame, ToastView, WorldMark,
+    CrewPlace, CrewRoles, FEATURE_INVITE, FEATURE_NEXT, FEATURE_PEOPLE, FEATURE_PEOPLE2,
+    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_STREAMER, FEATURE_TAGS, FriendView, GroupItem,
+    LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, MateRights, Me, MsgView, NoteKind,
+    PROTO, Place, ReactionView, ReplyView, RequestItem, SendFailure, ToGame, ToastView, WorldMark,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
 pub const MAX_CONVS: usize = 50;
 /// Friends a snapshot lists at most (in game and online first).
 pub const MAX_FRIENDS: usize = 400;
+/// Friend requests `lists` names at most (OVL-SOC 2).
+pub const MAX_REQUESTS: usize = 50;
 /// The snapshot stays this far below the frame limit.
 const SNAPSHOT_BUDGET: usize = MAX_LAUNCHER_FRAME - 16 * 1024;
 
@@ -54,6 +58,12 @@ pub struct Scene {
     pub me: String,
     /// "Rahatsız etmeyin".
     pub dnd: bool,
+    /// OVL-SOC 2: the player's status when it is not "Çevrimiçi" (`dnd`, `invisible`).
+    pub status: Option<&'static str>,
+    /// OVL-SOC 2 (SOC-NEXT §3.3): when the timed status ends (Unix ms), while it holds.
+    pub status_until: Option<i64>,
+    /// OVL-SOC 2 (SOC-NEXT §3.4): streamer mode is on: cards never say a message's words.
+    pub streamer: bool,
     /// The presence connection is up: a message can go now.
     pub online: bool,
     pub features: Vec<String>,
@@ -100,6 +110,15 @@ pub struct Scene {
     /// as [`server_address`] reads them: the only places besides Projects the launcher would
     /// send the game to.
     shared: HashSet<(String, u16)>,
+    /// Call id → who started it, and a direct conversation → whose it is (a nickname reaches the
+    /// call's name and the conversation's title, OVL-SOC 2).
+    call_from: HashMap<String, String>,
+    peers: HashMap<String, String>,
+    /// OVL-SOC 2 (SOC-NEXT §3.7): who the player ignores (only while SOC-NEXT is on).
+    ignored: HashSet<String>,
+    /// OVL-SOC 2 (SOC-NEXT §3.1): each crew conversation's members by the names the crew
+    /// knows, folded ([`mention::roster`]; only while SOC-NEXT is on).
+    rosters: HashMap<String, Vec<(String, String)>>,
 }
 
 /// `host[:port]` as a server address: the host in lower case, the port (25565 when none). None
@@ -203,6 +222,31 @@ fn may_invite(view: &SocialView, me: &MeView) -> bool {
     }
 }
 
+/// The player's status as `welcome` and `dnd` name it when it is not "Çevrimiçi" (OVL-SOC 2).
+fn status_name(status: StatusMode) -> Option<&'static str> {
+    match status {
+        StatusMode::Online => None,
+        StatusMode::Dnd => Some("dnd"),
+        StatusMode::Invisible => Some("invisible"),
+    }
+}
+
+/// A nickname as the game shows it (the page keeps them clean; SOC-NEXT's `cleanNickname`):
+/// spaces collapsed, no control characters, at most [`NICKNAME_MAX`] characters; None when
+/// nothing is left or it is longer.
+fn nickname(text: &str) -> Option<String> {
+    let name = text
+        .split(|c: char| c.is_whitespace() || c.is_control())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    (!name.is_empty() && name.chars().count() <= NICKNAME_MAX).then_some(name)
+}
+
+/// A nickname's characters at most (SOC-NEXT's `NICKNAME_MAX` counts what people see as one;
+/// an emoji with its tone is several here, so this is roomier).
+const NICKNAME_MAX: usize = 48;
+
 /// A Discord profile the launcher would open: on the web, over `https` (OVL-UX).
 fn discord_profile(url: &str) -> bool {
     url.starts_with("https://")
@@ -256,11 +300,14 @@ pub struct PeopleLists {
     pub discord: Vec<String>,
     /// OVL-UX3 (U1): the player's rights over crewmates, by crew ([`crew_roles`]).
     pub roles: BTreeMap<String, CrewRoles>,
+    /// OVL-SOC 2: who asked the player to be friends ("İstekler"), in the launcher's order.
+    pub requests: Vec<RequestItem>,
 }
 
 impl PeopleLists {
-    /// The frame, with the crews' rights only for a mod that has the crew rows (`people3`).
-    fn frame(&self, people3: bool) -> ToGame {
+    /// The frame, with the crews' rights only for a mod that has the crew rows (`people3`) and
+    /// the friend requests only for one that shows them (`people4`).
+    fn frame(&self, people3: bool, people4: bool) -> ToGame {
         ToGame::Lists {
             groups: self.groups.clone(),
             crews: self.crews.clone(),
@@ -273,6 +320,11 @@ impl PeopleLists {
                 self.roles.clone()
             } else {
                 BTreeMap::new()
+            },
+            requests: if people4 {
+                self.requests.clone()
+            } else {
+                Vec::new()
             },
         }
     }
@@ -610,6 +662,17 @@ impl Scene {
                 .map(|mate| mate.id.clone())
                 .collect(),
             roles: crew_roles(view),
+            // OVL-SOC 2: "İstekler" (the launcher's list never shows a blocked one's).
+            requests: view
+                .incoming
+                .iter()
+                .filter(|request| !blocked_ids.contains(request.id.as_str()))
+                .take(MAX_REQUESTS)
+                .map(|request| RequestItem {
+                    id: request.id.clone(),
+                    name: request.name.clone(),
+                })
+                .collect(),
         };
 
         let mut friends: Vec<FriendView> = view
@@ -654,6 +717,7 @@ impl Scene {
                     voice: friend.voice,
                     // OVL-SOC: the launcher's do-not-disturb dot; an offline friend has no dot.
                     dnd: friend.dnd && place != Place::Offline,
+                    real: None,
                 }
             })
             .collect();
@@ -797,12 +861,33 @@ impl Scene {
 
         let blocked: HashSet<String> = view.blocked.iter().map(|b| b.id.clone()).collect();
         let joins = join_lines(view, &blocked);
+        let call_from: HashMap<String, String> = view
+            .calls
+            .iter()
+            .map(|call| (call.id.clone(), call.from.clone()))
+            .collect();
+        let peers: HashMap<String, String> = view
+            .chat
+            .iter()
+            .flat_map(|chat| chat.conversations.iter())
+            .filter(|conv| conv.crew.is_none())
+            .filter_map(|conv| {
+                conv.peer
+                    .as_ref()
+                    .map(|peer| (conv.id.clone(), peer.clone()))
+            })
+            .collect();
+        // OVL-SOC 2: the status switcher's word (the friends feature is on and signed in).
+        features.push(FEATURE_PEOPLE4.to_owned());
 
         Self {
             signed_in: true,
             me_id: me.id.clone(),
             me: me.name.clone(),
             dnd: me.status == StatusMode::Dnd,
+            status: status_name(me.status),
+            status_until: None,
+            streamer: false,
             online: view.connection == Connection::Online,
             features,
             friends,
@@ -827,7 +912,112 @@ impl Scene {
             blocked,
             invites,
             shared,
+            call_from,
+            peers,
+            ignored: HashSet::new(),
+            rosters: HashMap::new(),
         }
+    }
+
+    /// SOC-NEXT's choices for the game (OVL-SOC 2, SOC-GAP §3.12) on a signed-in scene: the
+    /// player's nicknames for friends (rows, conversations, senders, calls and cards; the real
+    /// name rides along), who they ignore (no card of theirs, their crew lines folded, their
+    /// ring quiet), streamer mode (no address shown, no message words in cards), a timed
+    /// status's end and the mentions in crew chat (by the names the crew knows). None (SOC-NEXT
+    /// off): the scene stays as it was.
+    pub fn apply_next(&mut self, view: &SocialView, next: Option<&SocNextPrefs>, now_ms: i64) {
+        let Some(next) = next.filter(|_| self.signed_in) else {
+            return;
+        };
+        self.features.push(FEATURE_NEXT.to_owned());
+        if next.streamer {
+            self.streamer = true;
+            self.features.push(FEATURE_STREAMER.to_owned());
+        }
+        // The end only of the status its timer was set for (a config may come before the view).
+        self.status_until = next.status_until.filter(|until| {
+            *until > now_ms && self.status.is_some() && next.timed_status.as_deref() == self.status
+        });
+        self.ignored = next
+            .ignored
+            .iter()
+            .filter(|id| !id.is_empty() && **id != self.me_id)
+            .cloned()
+            .collect();
+        // A nickname holds while they are the player's friend (a crewmate keeps their name).
+        for friend in &mut self.friends {
+            let Some(nick) = next
+                .nicknames
+                .get(&friend.id)
+                .and_then(|nick| nickname(nick))
+            else {
+                continue;
+            };
+            if nick == friend.name {
+                continue;
+            }
+            self.names.insert(friend.id.clone(), nick.clone());
+            for conv in &mut self.convs {
+                if self.peers.get(&conv.id) == Some(&friend.id) {
+                    conv.title.clone_from(&nick);
+                }
+            }
+            for call in &mut self.calls {
+                if self.call_from.get(&call.id) == Some(&friend.id) {
+                    call.from.clone_from(&nick);
+                }
+            }
+            friend.real = Some(std::mem::replace(&mut friend.name, nick));
+        }
+        // Mentions: each crew chat's members by the names the crew knows (a crew's chat by its id,
+        // listed or not yet, as the launcher goes by the notice's crew).
+        if view.teams {
+            for crew in &view.crews {
+                let members = crew
+                    .members
+                    .iter()
+                    .map(|member| (member.id.as_str(), member.name.as_str()));
+                self.rosters.insert(
+                    pl_social::crew_conversation(&crew.id),
+                    mention::roster(members),
+                );
+            }
+        }
+    }
+
+    /// The player's nickname for friend `id` (SOC-NEXT §3.6), when they gave one: a card names them
+    /// so, whatever name the notice carries.
+    pub fn nickname_of(&self, id: &str) -> Option<&str> {
+        self.friend(id)
+            .filter(|friend| friend.real.is_some())
+            .map(|friend| friend.name.as_str())
+    }
+
+    /// SOC-NEXT's marks on messages may differ (someone ignored or not any more, a nickname, the
+    /// names a mention is matched by): the conversation on screen comes again (OVL-SOC 2).
+    pub fn next_differs(&self, other: &Self) -> bool {
+        let on = |scene: &Self| scene.features.iter().any(|f| f == FEATURE_NEXT);
+        if !on(self) && !on(other) {
+            // SOC-NEXT off: nothing of it rides on the lines.
+            return false;
+        }
+        on(self) != on(other)
+            || self.ignored != other.ignored
+            || self.rosters != other.rosters
+            || self.names != other.names
+    }
+
+    /// The player ignores `id` (SOC-NEXT §3.7; nobody while SOC-NEXT is off).
+    pub fn is_ignored(&self, id: &str) -> bool {
+        self.ignored.contains(id)
+    }
+
+    /// How `text` in conversation `conv` is heard by the player (SOC-NEXT §3.1): only crew chat
+    /// mentions, only while SOC-NEXT is on.
+    pub fn mention_in(&self, conv: &str, text: &str) -> Mention {
+        self.rosters.get(conv).map_or(Mention::None, |roster| {
+            mention::mention_of(text, &self.me_id, roster)
+        })
     }
 
     /// A friend's Discord web profile ("Discord'dan mesaj at" from the game; OVL-UX), or None.
@@ -977,6 +1167,11 @@ pub struct Mirror {
     /// The mod draws profile badges (`marks` in its hello): it hears the catalogue (BADGES-UI).
     marks: bool,
     mark_defs: Option<Vec<pl_social::MarkDef>>,
+    /// The mod has OVL-SOC 2's people (`people4` in its hello): the requests in `lists`, the
+    /// player's status and its end in `welcome` and `dnd`.
+    people4: bool,
+    status: Option<&'static str>,
+    until: Option<i64>,
 }
 
 impl Mirror {
@@ -1002,6 +1197,31 @@ impl Mirror {
         self
     }
 
+    /// For a mod that also has OVL-SOC 2's people (`people4` in its hello), or not.
+    pub fn with_people4(mut self, people4: bool) -> Self {
+        self.people4 = people4;
+        self
+    }
+
+    /// The lists as this mod hears them: without the friend requests for one that does not show
+    /// them (a new request then changes nothing for it).
+    fn lists_for(&self, scene: &Scene) -> PeopleLists {
+        let mut lists = scene.lists.clone();
+        if !self.people4 {
+            lists.requests.clear();
+        }
+        lists
+    }
+
+    /// The status and its end as this mod hears them (none for an older mod).
+    fn status_of(&self, scene: &Scene) -> (Option<&'static str>, Option<i64>) {
+        if self.people4 && scene.signed_in {
+            (scene.status, scene.status_until)
+        } else {
+            (None, None)
+        }
+    }
+
     /// The language the mod's words follow from now on (OVL-LANG; a mod whose hello lists
     /// `lang`): another one than the greeting named greets again in the next update.
     pub fn set_lang(&mut self, lang: Option<Lang>) {
@@ -1016,13 +1236,19 @@ impl Mirror {
             me: scene.me.clone(),
             me_badge: scene.me_badge.clone(),
             features: if scene.signed_in {
-                scene.features.clone()
+                scene
+                    .features
+                    .iter()
+                    .filter(|feature| self.people4 || !people4_only(feature))
+                    .cloned()
+                    .collect()
             } else {
                 Vec::new()
             },
             reduced_motion,
             lang: self.lang,
         };
+        let (status, until) = self.status_of(scene);
         let welcome = ToGame::Welcome {
             proto: PROTO,
             launcher: launcher.to_owned(),
@@ -1034,11 +1260,14 @@ impl Mirror {
             reduced_motion,
             features: identity.features.clone(),
             lang: identity.lang,
+            status,
+            until,
         };
         let (friends, convs, calls) = fitting_snapshot(scene);
         let tags = self.tags;
         let people2 = self.people2;
         let people3 = self.people3;
+        let people4 = self.people4;
         let marks = self.marks;
         let lang = self.lang;
         *self = Self {
@@ -1056,6 +1285,9 @@ impl Mirror {
             lists: None,
             marks,
             mark_defs: None,
+            people4,
+            status,
+            until,
         };
         let snapshot = ToGame::Snapshot {
             friends,
@@ -1075,8 +1307,9 @@ impl Mirror {
         }
         // The lists before the friends that name their categories and crews (OVL-UX2).
         if people2 && scene.signed_in {
-            self.lists = Some(scene.lists.clone());
-            frames.push(scene.lists.frame(people3));
+            let lists = self.lists_for(scene);
+            frames.push(lists.frame(people3, people4));
+            self.lists = Some(lists);
         }
         // The badge catalogue before the friends that name its badges (BADGES-UI).
         if marks && scene.signed_in {
@@ -1104,7 +1337,10 @@ impl Mirror {
                 || known.reduced_motion != reduced_motion
                 || known.lang != self.lang
                 || (if scene.signed_in {
-                    known.features != scene.features
+                    !known.features.iter().eq(scene
+                        .features
+                        .iter()
+                        .filter(|feature| self.people4 || !people4_only(feature)))
                 } else {
                     !known.features.is_empty()
                 })
@@ -1113,9 +1349,16 @@ impl Mirror {
             return self.greet(scene, launcher, reduced_motion);
         }
         let mut frames = Vec::new();
-        if scene.dnd != self.dnd {
+        let (status, until) = self.status_of(scene);
+        if scene.dnd != self.dnd || status != self.status || until != self.until {
             self.dnd = scene.dnd;
-            frames.push(ToGame::Dnd { on: scene.dnd });
+            self.status = status;
+            self.until = until;
+            frames.push(ToGame::Dnd {
+                on: scene.dnd,
+                status,
+                until,
+            });
         }
         if self.tags && self.badges != scene.badges {
             // The cards first: the friends that follow may name a new one.
@@ -1133,9 +1376,12 @@ impl Mirror {
             self.badges = scene.badges.clone();
             frames.push(ToGame::Badges { all: false, cards });
         }
-        if self.people2 && scene.signed_in && self.lists.as_ref() != Some(&scene.lists) {
-            self.lists = Some(scene.lists.clone());
-            frames.push(scene.lists.frame(self.people3));
+        if self.people2 && scene.signed_in {
+            let lists = self.lists_for(scene);
+            if self.lists.as_ref() != Some(&lists) {
+                frames.push(lists.frame(self.people3, self.people4));
+                self.lists = Some(lists);
+            }
         }
         if self.marks && scene.signed_in && self.mark_defs.as_ref() != Some(&scene.mark_defs) {
             self.mark_defs = Some(scene.mark_defs.clone());
@@ -1176,6 +1422,12 @@ impl Mirror {
         }
         frames
     }
+}
+
+/// OVL-SOC 2's `welcome` features: only a mod that said `people4` hears them (an older one would
+/// greet again for nothing it shows).
+fn people4_only(feature: &str) -> bool {
+    matches!(feature, FEATURE_PEOPLE4 | FEATURE_NEXT | FEATURE_STREAMER)
 }
 
 /// Upserts for new and changed entries, removals for the ones gone; `known` follows.
@@ -1417,6 +1669,12 @@ pub fn msg_view(
             })
             .collect()
     };
+    // SOC-NEXT (OVL-SOC 2): it mentions the player (the ring stays when it mentions too many to
+    // tell); `ignored` below: someone the player ignores wrote it.
+    let mention = !message.mine
+        && !deleted
+        && sticker.is_none()
+        && scene.mention_in(conv, &message.text) != Mention::None;
     MsgView {
         conv: Some(conv.to_owned()),
         id: message.key.clone(),
@@ -1452,6 +1710,8 @@ pub fn msg_view(
         } else {
             scene.marks_of(&message.from).to_vec()
         },
+        ignored: !message.mine && scene.is_ignored(&message.from),
+        mention,
     }
 }
 
@@ -1658,8 +1918,12 @@ pub fn toast_of(
         now_ms,
     };
     match notice {
-        // A tombstone is never news.
-        SocialNotice::ChatMessage { message, .. } if message.deleted.is_some() => None,
+        // A tombstone is never news; someone ignored sends no card (SOC-NEXT §3.7).
+        SocialNotice::ChatMessage { message, .. }
+            if message.deleted.is_some() || scene.is_ignored(&message.from) =>
+        {
+            None
+        }
         SocialNotice::ChatMessage {
             conv,
             message,
@@ -1669,14 +1933,28 @@ pub fn toast_of(
             let crew_name = crew
                 .as_deref()
                 .map(|id| (id, scene.crew_name(id).unwrap_or_default()));
-            let from = name
-                .clone()
+            let from = scene
+                .nickname_of(&message.from)
+                .map(str::to_owned)
+                .or_else(|| name.clone())
                 .unwrap_or_else(|| scene.sender(conv, &message.from, listener.english));
             // A sticker is told in words ("Çıkartma · GG"); a mod that knows it draws it too.
+            // Streamer mode (SOC-NEXT §3.4): only "Yeni mesaj" under the sender.
             let text = match &message.sticker {
+                _ if scene.streamer => if listener.english {
+                    "New message"
+                } else {
+                    "Yeni mesaj"
+                }
+                .to_owned(),
                 Some(sticker) => sticker_words(sticker, listener.english),
                 None => message.text.clone(),
             };
+            // SOC-NEXT §3.1: a crew chat message that mentions the player is heard as a reply to
+            // them is (more than five mentioned: nobody).
+            let mentioned = !message.mine
+                && message.sticker.is_none()
+                && scene.mention_in(conv, &message.text) == Mention::Me;
             policy::toast_for(
                 &Notice::Message {
                     conv,
@@ -1687,15 +1965,18 @@ pub fn toast_of(
                     blocked: scene.is_blocked(&message.from),
                     // CHAT-CALM: a reply to one of the player's messages reaches them in a muted
                     // crew too.
-                    to_me: message
-                        .reply
-                        .as_ref()
-                        .is_some_and(|reply| !scene.me_id.is_empty() && reply.from == scene.me_id),
+                    to_me: mentioned
+                        || message.reply.as_ref().is_some_and(|reply| {
+                            !scene.me_id.is_empty() && reply.from == scene.me_id
+                        }),
                 },
                 &situation,
             )
             .map(|toast| ToastView {
-                sticker: message.sticker.clone().filter(|_| listener.chat2),
+                sticker: message
+                    .sticker
+                    .clone()
+                    .filter(|_| listener.chat2 && !scene.streamer),
                 // "[GK] Ayşe" in the card's title: a friend's or a crewmate's tag.
                 badge: scene.badge_of(&message.from).map(str::to_owned),
                 // Their badges right of it (BADGES-UI).
@@ -1703,7 +1984,7 @@ pub fn toast_of(
                 ..toast
             })
         }
-        SocialNotice::CrewCall { call } if !call.mine => {
+        SocialNotice::CrewCall { call } if !call.mine && !scene.is_ignored(&call.from) => {
             let crew = call
                 .crews
                 .first()
@@ -1715,9 +1996,10 @@ pub fn toast_of(
                         .and_then(|first| scene.crew_name(&first.id))
                 })
                 .unwrap_or_default();
-            let from = call
-                .name
-                .clone()
+            let from = scene
+                .nickname_of(&call.from)
+                .map(str::to_owned)
+                .or_else(|| call.name.clone())
                 .or_else(|| scene.name_of(&call.from).map(str::to_owned))
                 .unwrap_or_default();
             policy::toast_for(
@@ -1730,10 +2012,11 @@ pub fn toast_of(
                 &situation,
             )
         }
-        SocialNotice::Invite { invite } => {
-            let from = invite
-                .name
-                .clone()
+        SocialNotice::Invite { invite } if !scene.is_ignored(&invite.from) => {
+            let from = scene
+                .nickname_of(&invite.from)
+                .map(str::to_owned)
+                .or_else(|| invite.name.clone())
                 .or_else(|| scene.name_of(&invite.from).map(str::to_owned))
                 .unwrap_or_default();
             policy::toast_for(
@@ -2065,7 +2348,9 @@ pub(crate) mod tests {
         assert_eq!(scene.me, "Ece");
         assert_eq!(
             scene.features,
-            ["friends", "chat", "calls", "people", "people2", "people3"]
+            [
+                "friends", "chat", "calls", "people", "people2", "people3", "people4"
+            ]
         );
         // In game first, then the launcher, then offline.
         let order: Vec<&str> = scene.friends.iter().map(|f| f.name.as_str()).collect();
@@ -2707,7 +2992,8 @@ pub(crate) mod tests {
                 "links",
                 "people",
                 "people2",
-                "people3"
+                "people3",
+                "people4"
             ]
         );
         assert!(scene.offers(|e| e.typing));
@@ -2732,7 +3018,9 @@ pub(crate) mod tests {
         let scene = Scene::from_view(&off, &NotifyPrefs::default(), NOW);
         assert_eq!(
             scene.features,
-            ["friends", "calls", "people", "people2", "people3"]
+            [
+                "friends", "calls", "people", "people2", "people3", "people4"
+            ]
         );
     }
 
@@ -3246,7 +3534,7 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "chat", "calls", "tags", "people", "people2", "people3"
+                "friends", "chat", "calls", "tags", "people", "people2", "people3", "people4"
             ]
         );
         assert_eq!(
@@ -3550,7 +3838,7 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "chat", "calls", "people", "people2", "people3", "invite"
+                "friends", "chat", "calls", "people", "people2", "people3", "invite", "people4"
             ]
         );
         v.activity = pl_social::ActivityView::Playing {
@@ -3773,5 +4061,344 @@ pub(crate) mod tests {
         // A mod without it never hears them.
         let frames = Mirror::for_mod(false, false).greet(&later, "2.0.0", false);
         assert!(!frames.iter().any(|f| matches!(f, ToGame::Lists { .. })));
+    }
+
+    // ---- OVL-SOC 2: SOC-NEXT in the game, the requests, the status ----------------------------------
+
+    fn next_prefs() -> SocNextPrefs {
+        SocNextPrefs {
+            nicknames: BTreeMap::from([
+                ("f-ayse".to_owned(), "  Kanka  ".to_owned()),
+                ("u-cem".to_owned(), "Cemo".to_owned()),
+            ]),
+            ignored: vec!["f-mert".into()],
+            streamer: false,
+            status_until: Some(NOW + 3_600_000),
+            timed_status: Some("dnd".into()),
+        }
+    }
+
+    fn next_scene(v: &SocialView, next: &SocNextPrefs) -> Scene {
+        let mut scene = Scene::from_view(v, &NotifyPrefs::default(), NOW);
+        scene.apply_next(v, Some(next), NOW);
+        scene
+    }
+
+    fn crew_line(key: &str, from: &str, text: &str) -> ChatMessageView {
+        ChatMessageView {
+            text: text.into(),
+            ..message(key, from, false, MessageState::Sent)
+        }
+    }
+
+    #[test]
+    fn soc_next_reaches_the_scene_only_while_it_is_on() {
+        let v = view();
+        let plain = Scene::from_view(&v, &NotifyPrefs::default(), NOW);
+        let mut off = plain.clone();
+        off.apply_next(&v, None, NOW);
+        assert_eq!(off, plain, "SOC-NEXT off: nothing changes");
+
+        let scene = next_scene(&v, &next_prefs());
+        assert!(scene.features.iter().any(|f| f == FEATURE_NEXT));
+        assert!(!scene.features.iter().any(|f| f == FEATURE_STREAMER) && !scene.streamer);
+        // A friend's nickname wherever their name shows, the service's beside it.
+        let ayse = scene.friend("f-ayse").unwrap();
+        assert_eq!(
+            (ayse.name.as_str(), ayse.real.as_deref()),
+            ("Kanka", Some("Ayşe"))
+        );
+        assert_eq!(scene.name_of("f-ayse"), Some("Kanka"));
+        assert_eq!(
+            scene
+                .convs
+                .iter()
+                .find(|c| c.id == "d:f-ayse:me")
+                .unwrap()
+                .title,
+            "Kanka"
+        );
+        // A crewmate who is no friend keeps their own name; the others have no `real`.
+        assert_eq!(scene.name_of("u-cem"), Some("Cem"));
+        assert!(scene.friend("f-can").unwrap().real.is_none());
+        // "Çevrimiçi" has no end to tell.
+        assert_eq!((scene.status, scene.status_until), (None, None));
+        let mut dnd = v.clone();
+        dnd.me.as_mut().unwrap().status = StatusMode::Dnd;
+        let timed = next_scene(&dnd, &next_prefs());
+        assert_eq!(
+            (timed.status, timed.status_until),
+            (Some("dnd"), Some(NOW + 3_600_000))
+        );
+        // An end already past is none, and so is one set for another status.
+        let mut past = next_prefs();
+        past.status_until = Some(NOW - 1);
+        assert_eq!(next_scene(&dnd, &past).status_until, None);
+        let mut invisible = v.clone();
+        invisible.me.as_mut().unwrap().status = StatusMode::Invisible;
+        assert_eq!(next_scene(&invisible, &next_prefs()).status_until, None);
+        assert!(scene.is_ignored("f-mert") && !scene.is_ignored("f-ayse"));
+    }
+
+    #[test]
+    fn someone_ignored_sends_no_card_and_their_lines_say_so() {
+        let v = view();
+        let prefs = NotifyPrefs::default();
+        let plain = Scene::from_view(&v, &prefs, NOW);
+        let scene = next_scene(&v, &next_prefs());
+        let dm = SocialNotice::ChatMessage {
+            conv: "d:f-mert:me".into(),
+            message: Box::new(message("i:7", "f-mert", false, MessageState::Sent)),
+            name: Some("Mert".into()),
+            crew: None,
+        };
+        assert!(toast_of(&dm, &plain, &prefs, NOW, Listener::default()).is_some());
+        assert!(toast_of(&dm, &scene, &prefs, NOW, Listener::default()).is_none());
+        let line = msg_view(
+            "c:t1",
+            &message("i:7", "f-mert", false, MessageState::Sent),
+            &scene,
+            Listener::default(),
+        );
+        assert!(line.ignored && !line.mention);
+        // Nobody else's lines are marked, nor anyone's without SOC-NEXT.
+        let other = msg_view(
+            "c:t1",
+            &message("i:8", "u-cem", false, MessageState::Sent),
+            &scene,
+            Listener::default(),
+        );
+        assert!(!other.ignored);
+        let unmarked = msg_view(
+            "c:t1",
+            &message("i:7", "f-mert", false, MessageState::Sent),
+            &plain,
+            Listener::default(),
+        );
+        assert!(!unmarked.ignored);
+        // Their crew call and their invite stay quiet too.
+        let mut ignoring_cem = next_prefs();
+        ignoring_cem.ignored = vec!["u-cem".into(), "f-ayse".into()];
+        let quiet = next_scene(&v, &ignoring_cem);
+        let call = SocialNotice::CrewCall {
+            call: Box::new(v.calls[0].clone()),
+        };
+        assert!(toast_of(&call, &plain, &prefs, NOW, Listener::default()).is_some());
+        assert!(toast_of(&call, &quiet, &prefs, NOW, Listener::default()).is_none());
+        let invite = SocialNotice::Invite {
+            invite: v.invites[0].clone(),
+        };
+        assert!(toast_of(&invite, &quiet, &prefs, NOW, Listener::default()).is_none());
+    }
+
+    #[test]
+    fn a_card_names_a_friend_by_their_nickname_and_streamer_mode_hides_the_words() {
+        let v = view();
+        let prefs = NotifyPrefs::default();
+        let dm = SocialNotice::ChatMessage {
+            conv: "d:f-ayse:me".into(),
+            message: Box::new(message("i:7", "f-ayse", false, MessageState::Sent)),
+            name: Some("Ayşe".into()),
+            crew: None,
+        };
+        let scene = next_scene(&v, &next_prefs());
+        let toast = toast_of(&dm, &scene, &prefs, NOW, Listener::default()).unwrap();
+        assert_eq!(
+            (toast.title.as_str(), toast.body.as_str()),
+            ("Kanka", "metin i:7")
+        );
+        let invite = SocialNotice::Invite {
+            invite: v.invites[0].clone(),
+        };
+        assert_eq!(
+            toast_of(&invite, &scene, &prefs, NOW, Listener::default())
+                .unwrap()
+                .title,
+            "Kanka"
+        );
+        let mut streaming = next_prefs();
+        streaming.streamer = true;
+        let live = next_scene(&v, &streaming);
+        assert!(live.features.iter().any(|f| f == FEATURE_STREAMER));
+        let toast = toast_of(&dm, &live, &prefs, NOW, Listener::default()).unwrap();
+        assert_eq!(
+            (toast.title.as_str(), toast.body.as_str()),
+            ("Kanka", "Yeni mesaj")
+        );
+        let english = Listener {
+            english: true,
+            ..Listener::default()
+        };
+        assert_eq!(
+            toast_of(&dm, &live, &prefs, NOW, english).unwrap().body,
+            "New message"
+        );
+        // A sticker is told the same way, and never drawn.
+        let sticker = SocialNotice::ChatMessage {
+            conv: "d:f-ayse:me".into(),
+            message: Box::new(ChatMessageView {
+                sticker: Some("pl1/gg".into()),
+                text: String::new(),
+                ..message("i:9", "f-ayse", false, MessageState::Sent)
+            }),
+            name: Some("Ayşe".into()),
+            crew: None,
+        };
+        let chat2 = Listener {
+            chat2: true,
+            ..Listener::default()
+        };
+        let toast = toast_of(&sticker, &live, &prefs, NOW, chat2).unwrap();
+        assert_eq!((toast.body.as_str(), toast.sticker), ("Yeni mesaj", None));
+    }
+
+    #[test]
+    fn a_crew_message_that_mentions_the_player_reaches_them_and_rings_its_bubble() {
+        let v = view();
+        let prefs = NotifyPrefs::default();
+        let scene = next_scene(&v, &next_prefs());
+        let mention = SocialNotice::ChatMessage {
+            conv: "c:t1".into(),
+            message: Box::new(crew_line("i:8", "u-cem", "@ece gel bakalım")),
+            name: None,
+            crew: Some("t1".into()),
+        };
+        // Crew chat is quiet by default; a mention is heard as a reply to the player is.
+        let toast = toast_of(&mention, &scene, &prefs, NOW, Listener::default()).unwrap();
+        assert_eq!(toast.title, "Cem");
+        let plain = Scene::from_view(&v, &prefs, NOW);
+        assert!(toast_of(&mention, &plain, &prefs, NOW, Listener::default()).is_none());
+        let line = msg_view(
+            "c:t1",
+            &crew_line("i:8", "u-cem", "@Ece gel"),
+            &scene,
+            Listener::default(),
+        );
+        assert!(line.mention);
+        // No mention without the "@", nor by a word that only starts with the name.
+        for text in ["Ece gel", "@Ecem gel", "ece@mail.com"] {
+            let line = msg_view(
+                "c:t1",
+                &crew_line("i:8", "u-cem", text),
+                &scene,
+                Listener::default(),
+            );
+            assert!(!line.mention, "{text}");
+        }
+        // More than five members mentioned: nobody hears it, the ring stays.
+        let mut crowd = v.clone();
+        let names = ["Ana1", "Bob2", "Cey3", "Dor4", "Eda5"];
+        let template = crowd.crews[0].members[1].clone();
+        crowd.crews[0].members.extend(names.iter().map(|name| {
+            let mut member = template.clone();
+            member.id = format!("u-{name}");
+            member.name = (*name).into();
+            member
+        }));
+        let busy = next_scene(&crowd, &next_prefs());
+        let text = "@Ece @Ana1 @Bob2 @Cey3 @Dor4 @Eda5 hadi";
+        let all = SocialNotice::ChatMessage {
+            conv: "c:t1".into(),
+            message: Box::new(crew_line("i:9", "u-cem", text)),
+            name: None,
+            crew: Some("t1".into()),
+        };
+        assert!(toast_of(&all, &busy, &prefs, NOW, Listener::default()).is_none());
+        let line = msg_view(
+            "c:t1",
+            &crew_line("i:9", "u-cem", text),
+            &busy,
+            Listener::default(),
+        );
+        assert!(line.mention);
+    }
+
+    #[test]
+    fn a_people4_mod_hears_the_requests_and_the_status_an_older_one_nothing_new() {
+        let mut v = view();
+        v.incoming = vec![pl_social::RequestView {
+            id: "r-kaan".into(),
+            name: "Kaan_07".into(),
+            username: "kaan".into(),
+            avatar: "discord".into(),
+            avatar_url: None,
+            marks: Vec::new(),
+            discord_id: None,
+            sent_at: 1,
+        }];
+        v.me.as_mut().unwrap().status = StatusMode::Invisible;
+        let mut timed = next_prefs();
+        timed.timed_status = Some("invisible".into());
+        let scene = next_scene(&v, &timed);
+        let mut mirror = Mirror::for_mod(false, true)
+            .with_people3(true)
+            .with_people4(true);
+        let frames = mirror.greet(&scene, "2.0.7", false);
+        let welcome = serde_json::to_value(&frames[0]).unwrap();
+        assert_eq!(welcome["status"], "invisible");
+        assert_eq!(welcome["until"], NOW + 3_600_000);
+        let features = welcome["features"].as_array().unwrap();
+        assert!(features.iter().any(|f| f == "people4") && features.iter().any(|f| f == "next"));
+        let lists = frames
+            .iter()
+            .find(|f| matches!(f, ToGame::Lists { .. }))
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(lists).unwrap()["requests"],
+            serde_json::json!([{"id": "r-kaan", "name": "Kaan_07"}])
+        );
+        // The status changes: one `dnd` frame says so.
+        v.me.as_mut().unwrap().status = StatusMode::Online;
+        let online = next_scene(&v, &timed);
+        let frames = mirror.update(&online, "2.0.7", false);
+        assert_eq!(
+            frames,
+            [ToGame::Dnd {
+                on: false,
+                status: None,
+                until: None
+            }]
+        );
+        // An older mod: no status, no requests, no new features (and no greeting again for them).
+        let mut old = Mirror::for_mod(false, true).with_people3(true);
+        let frames = old.greet(&scene, "2.0.7", false);
+        let welcome = serde_json::to_value(&frames[0]).unwrap();
+        assert!(welcome.get("status").is_none() && welcome.get("until").is_none());
+        assert!(
+            !welcome["features"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f == "people4" || f == "next")
+        );
+        let lists = frames
+            .iter()
+            .find(|f| matches!(f, ToGame::Lists { .. }))
+            .unwrap();
+        assert!(
+            serde_json::to_value(lists)
+                .unwrap()
+                .get("requests")
+                .is_none()
+        );
+        assert!(
+            !old.update(&online, "2.0.7", false)
+                .iter()
+                .any(|f| matches!(f, ToGame::Welcome { .. }))
+        );
+        // A new request changes nothing for it, while the new mod hears the lists again.
+        v.incoming.push(pl_social::RequestView {
+            id: "r-gece".into(),
+            name: "GeceKartali_".into(),
+            ..v.incoming[0].clone()
+        });
+        let asked = next_scene(&v, &timed);
+        assert!(old.update(&asked, "2.0.7", false).is_empty());
+        assert!(
+            mirror
+                .update(&asked, "2.0.7", false)
+                .iter()
+                .any(|f| matches!(f, ToGame::Lists { requests, .. } if requests.len() == 2))
+        );
     }
 }

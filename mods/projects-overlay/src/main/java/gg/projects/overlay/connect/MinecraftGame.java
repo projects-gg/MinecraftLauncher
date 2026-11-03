@@ -93,8 +93,14 @@ public final class MinecraftGame implements Connector.Game, WorldResume.Game {
         // A friend's world says so without a name ("Arkadaşının dünyasına bağlanılıyor…", as the launcher): the label
         // would need a suffix after the name.
         String text = target.label() != null ? Texts.str("connect.travel.world")
+            : hidden(target) ? Texts.str("connect.travel.hidden")
             : Texts.str("connect.travel", target.displayName());
         overlay.toasts().travel(ToastCard.travel(text), overlay.reducedMotion());
+    }
+
+    /** Streamer mode (OVL-SOC 2, SOC-NEXT §3.4): a server's address stays off the screen ("Projects" may show). */
+    private boolean hidden(ServerTarget target) {
+        return !target.projects() && overlay.state().streamer();
     }
 
     @Override
@@ -111,6 +117,7 @@ public final class MinecraftGame implements Connector.Game, WorldResume.Game {
     @Override
     public void showAlready(ServerTarget target) {
         String text = target.label() != null ? Texts.str("connect.already.world")
+            : hidden(target) ? Texts.str("connect.already.hidden")
             : Texts.str("connect.already", target.displayName());
         overlay.toasts().notice(ToastCard.travel(text), overlay.settings(), overlay.reducedMotion());
     }

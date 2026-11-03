@@ -300,11 +300,20 @@ pub fn crews_of<'a>(
                 Some(entry) if !entry.rooms.is_empty() => entry
                     .rooms
                     .iter()
-                    .map(|room| VoiceCrewRoomShown {
-                        id: room.id.clone(),
-                        name: (!room.general).then(|| shown_room_name(&room.name, english)),
-                        general: room.general,
-                        people: room.people.iter().map(person).collect(),
+                    .map(|room| {
+                        // VOICE-ROOMS: a room's own limit below the crew's (the crew page's
+                        // "3/5"); full at the lower of the two (its `crewRoomFull`).
+                        let limit = room
+                            .max
+                            .map_or(entry.crew_max, |max| max.min(entry.crew_max));
+                        VoiceCrewRoomShown {
+                            id: room.id.clone(),
+                            name: (!room.general).then(|| shown_room_name(&room.name, english)),
+                            general: room.general,
+                            people: room.people.iter().map(person).collect(),
+                            max: room.max.filter(|max| *max < entry.crew_max),
+                            full: limit > 0 && room.people.len() >= usize::from(limit),
+                        }
                     })
                     .collect(),
                 _ => vec![VoiceCrewRoomShown {
@@ -312,6 +321,8 @@ pub fn crews_of<'a>(
                     name: None,
                     general: true,
                     people: Vec::new(),
+                    max: None,
+                    full: false,
                 }],
             };
             VoiceCrewShown {
@@ -1142,6 +1153,30 @@ mod tests {
         let mut off = state.clone();
         off.enabled = false;
         assert!(crews_of(&off, ["t-gk"], false, names).is_empty());
+    }
+
+    #[test]
+    fn a_crew_room_with_its_own_limit_says_how_full_it_is() {
+        let mut state = crew_state();
+        // OVL-SOC 2 (VOICE-ROOMS): "Oda 2" takes one person, Genel the crew's fifteen.
+        state.crews[0].rooms[1].max = Some(1);
+        let crews = crews_of(&state, ["t-gk"], false, names);
+        let rooms = serde_json::to_value(&crews[0].rooms).unwrap();
+        assert_eq!(rooms[1]["max"], 1);
+        assert_eq!(rooms[1]["full"], true);
+        assert!(rooms[0].get("max").is_none() && rooms[0].get("full").is_none());
+        // A limit at the crew's maximum is no limit of its own (no "15/15" pill).
+        state.crews[0].rooms[1].max = Some(15);
+        let crews = crews_of(&state, ["t-gk"], false, names);
+        assert_eq!(
+            (crews[0].rooms[1].max, crews[0].rooms[1].full),
+            (None, false)
+        );
+        // The crew's maximum fills a room without its own limit.
+        state.crews[0].crew_max = 2;
+        state.crews[0].rooms[1].max = None;
+        let crews = crews_of(&state, ["t-gk"], false, names);
+        assert!(crews[0].rooms[0].full && !crews[0].rooms[1].full);
     }
 
     #[test]

@@ -7286,6 +7286,12 @@ export type OverlayConfig = {
 	 *  the mod runs the picker only (no panel, key, toasts or pause menu button).
 	 */
 	emoji?: boolean,
+	/**
+	 *  SOC-NEXT's choices for the game (OVL-SOC 2, SOC-GAP §3.12), only while the signed config's
+	 *  `features.socNext` is on (the page's `useSocNext`); none: nothing of SOC-NEXT reaches the
+	 *  game and everything is as before.
+	 */
+	next?: SocNextPrefs | null,
 };
 
 /**  What the page shows at its start. */
@@ -7477,7 +7483,14 @@ export type PeopleChange =
 /**  "Favorilere ekle" (`on`) or "Favorilerden çıkar". */
 { kind: "favorite"; friend: string; on: boolean } | 
 /**  "Çevrimiçi olunca bildir" on or off. */
-{ kind: "alert"; friend: string; on: boolean };
+{ kind: "alert"; friend: string; on: boolean } | 
+/**
+ *  OVL-SOC 2: the status switcher in the game's panel picked `status` (`online`, `dnd`,
+ *  `invisible`): the page changes it as its own menu does; `preset` (SOC-NEXT on, `dnd` and
+ *  `invisible` only): one of the crew mute's durations (`hour`, `eightHours`, `morning`,
+ *  `forever`), for its timer.
+ */
+{ kind: "status"; status: string; preset: string | null };
 
 /**
  *  Who may do something in a crew: the lowest role that may (every role above it may too).
@@ -10202,6 +10215,33 @@ export type SkinHistoryView = {
 
 /**  Player model of a skin: classic (Steve, 4 px arms) or slim (Alex, 3 px arms). */
 export type SkinVariant = "classic" | "slim";
+
+/**
+ *  SOC-NEXT's choices the page keeps that the game follows (OVL-SOC 2): friends' nicknames (this
+ *  computer only), the people the player ignores, "Yayıncı modu" as it stands now, and the end of
+ *  a timed "Rahatsız etmeyin" or "Görünmez".
+ */
+export type SocNextPrefs = {
+	/**
+	 *  Friend id → nickname ("Takma ad"): shown in place of their name, the real name beside it
+	 *  in their menu.
+	 */
+	nicknames?: { [key in string]: string },
+	/**
+	 *  User ids the player ignores ("Yok say"): no toast from them, their crew chat lines folded,
+	 *  their voice chat ring quiet.
+	 */
+	ignored?: string[],
+	/**  "Yayıncı modu" is on now: no message words in toasts, no server addresses. */
+	streamer?: boolean,
+	/**  When a timed status ends (Unix milliseconds), or none ("Ben açana kadar", or none set). */
+	statusUntil?: number | null,
+	/**
+	 *  The status that timer was set for (`dnd`, `invisible`): its end shows only while it is
+	 *  the status (another one chosen elsewhere has none).
+	 */
+	timedStatus?: string | null,
+};
 
 /**  SOC-NOTE's part of the chat view: status notes and the pins of crew chats. */
 export type SocNoteView = {

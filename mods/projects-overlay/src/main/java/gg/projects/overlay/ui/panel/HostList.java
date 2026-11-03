@@ -180,7 +180,8 @@ public final class HostList extends PanelWidget {
             row.chip = TagChip.of(badge, TagChip.ROW);
             row.name = Texts.visual(Texts.fit(strong, row.label, Math.round(nameRoom - TagChip.room(row.chip))));
             String where = Texts.str("friend.where." + whereKey(f.where()));
-            if (f.where().equals("server") && f.host() != null) {
+            // Streamer mode (OVL-SOC 2, SOC-NEXT §3.4): "Başka sunucuda", the address never on screen.
+            if (f.where().equals("server") && f.host() != null && !state.streamer()) {
                 where = Texts.str("friend.where.server_at", f.host());
             }
             row.sub = Texts.visual(Texts.fit(small, where, nameRoom));

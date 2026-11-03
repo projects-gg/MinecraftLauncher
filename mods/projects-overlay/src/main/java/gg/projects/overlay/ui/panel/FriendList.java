@@ -2,6 +2,7 @@ package gg.projects.overlay.ui.panel;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import gg.projects.overlay.compat.Compat;
+import gg.projects.overlay.emoji.EmojiCatalog;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
@@ -60,6 +61,12 @@ import net.minecraft.util.FormattedCharSequence;
  * <p>As the launcher's list (OVL-UX2, its {@code groupFriends}): favourites lead each section and carry a small gold
  * star after the name; then, in a game, the ones the player can join; offline, the ones seen most recently; then names
  * in Turkish order.
+ *
+ * <p>OVL-SOC 2: "İstekler" leads the list while someone asked the player to be friends (the launcher's rows: their face,
+ * "Seni eklemek istiyor", "Kabul et" and the × that declines); the row's own press, Enter, a right click or Shift+F10
+ * opens their two answers in the person menu. With a filter ({@link #setFilter}; the panel's "Arkadaşlarında ara")
+ * only the friends whose name, or real name under a nickname, has it show, at once, the requests staying; none left
+ * says "Aramana uyan arkadaş yok.".
  */
 public final class FriendList extends PanelWidget {
     private static final int ROW_H = 24;
@@ -87,6 +94,14 @@ public final class FriendList extends PanelWidget {
 
         /** Their menu: at the pointer (a right click) or under the "…" ({@code anchor}). */
         void menu(String friendId, PersonMenu.Anchor anchor, boolean keys);
+
+        /** OVL-SOC 2: "Kabul et" ({@code accept}) or the × ("Reddet") on a friend request. */
+        default void answer(String requestId, String name, boolean accept) {
+        }
+
+        /** OVL-SOC 2: a request's two answers in the person menu, at the pointer or under its × ({@code anchor}). */
+        default void requestMenu(String requestId, String name, PersonMenu.Anchor anchor, boolean keys) {
+        }
     }
 
     private static final class Row {
@@ -116,9 +131,15 @@ public final class FriendList extends PanelWidget {
         TagChip chip;
         /** BADGES-UI: their profile badges the catalogue knows, the most important (the one drawn) first. */
         List<OverlayState.MarkDef> marks = List.of();
+        /** OVL-SOC 2: a friend request ("Kabul et" and the ×), not a friend. */
+        boolean request;
+        /** The person's name as the list knows it (a request's answer names them). */
+        String person = "";
     }
 
     private final Actions actions;
+    /** The state the list was last laid out from (a request's answer on its way, OVL-SOC 2). */
+    private OverlayState state;
     private final BadgeBubble bubble = new BadgeBubble();
     private final MarkTip markTip = new MarkTip();
     private final List<Row> rows = new ArrayList<>();
@@ -135,6 +156,13 @@ public final class FriendList extends PanelWidget {
     private long lastFrame;
     private String joinLabel = "";
     private String emptyText = "";
+    // OVL-SOC 2: "Kabul et" on a request, and the filter (folded; empty: everyone).
+    private FormattedCharSequence acceptLine = FormattedCharSequence.EMPTY;
+    private float acceptWidth;
+    private String filter = "";
+    private boolean filterChanged;
+    /** The filter found no friend (requests may still show above its line). */
+    private boolean noMatch;
     // The "…": on which row it shows, the one it is leaving, and the row whose menu is open.
     private String dotsRow;
     private String dotsLeaving;
@@ -159,6 +187,19 @@ public final class FriendList extends PanelWidget {
     public void setReducedMotion(boolean value) {
         reducedMotion = value;
         bubble.setReducedMotion(value);
+    }
+
+    /**
+     * OVL-SOC 2: only the friends whose name (or real name under a nickname) has {@code query} show (folded as the
+     * launcher's search: no case, no Turkish marks); empty shows everyone.
+     */
+    public void setFilter(String query) {
+        String next = query == null ? "" : EmojiCatalog.fold(query.trim());
+        if (!next.equals(filter)) {
+            filter = next;
+            filterChanged = true;
+            scroll.snap(0f);
+        }
     }
 
     /** Closes the tag's bubble and a badge's tooltip (the panel shows another page). */
@@ -197,11 +238,14 @@ public final class FriendList extends PanelWidget {
      * @param canJoin whether "Katıl" makes sense for a friend now (not already on their server, connected)
      */
     public void refresh(OverlayState state, Predicate<OverlayState.Friend> canJoin) {
-        if (state.revision() == revision && getWidth() == laidOutWidth && state.badgeRevision() == badgeRevision) {
+        if (state.revision() == revision && getWidth() == laidOutWidth && state.badgeRevision() == badgeRevision
+            && !filterChanged) {
             return;
         }
+        filterChanged = false;
         revision = state.revision();
         badgeRevision = state.badgeRevision();
+        this.state = state;
         laidOutWidth = getWidth();
         Font small = Fonts.small();
         joinLabel = Texts.str("friend.join");
@@ -212,11 +256,19 @@ public final class FriendList extends PanelWidget {
         emptyLine = Texts.visual(emptyText);
         emptyWidth = small.width(emptyText);
         float joinWidth = small.width(joinLabel) + 14;
+        String acceptLabel = Texts.str("friend.accept");
+        acceptLine = Texts.visual(acceptLabel);
+        acceptWidth = small.width(acceptLabel) + 14;
         rows.clear();
+        float y = requests(state, 0f);
         List<OverlayState.Friend> game = new ArrayList<>();
         List<OverlayState.Friend> launcher = new ArrayList<>();
         List<OverlayState.Friend> offline = new ArrayList<>();
+        int all = state.friends().size();
         for (OverlayState.Friend f : state.friends()) {
+            if (!matches(state, f)) {
+                continue;
+            }
             if (f.inGame()) {
                 game.add(f);
             } else if (f.online()) {
@@ -225,7 +277,13 @@ public final class FriendList extends PanelWidget {
                 offline.add(f);
             }
         }
-        float y = 0f;
+        noMatch = !filter.isEmpty() && all > 0 && game.isEmpty() && launcher.isEmpty() && offline.isEmpty();
+        if (noMatch) {
+            // The filter found nobody: the list says so where the friends would be.
+            emptyText = Texts.str("friends.no_match");
+            emptyLine = Texts.visual(emptyText);
+            emptyWidth = small.width(emptyText);
+        }
         y = section(state, y, "friends.in_game", game, canJoin, joinWidth);
         y = section(state, y, "friends.online", launcher, canJoin, joinWidth);
         y = section(state, y, "friends.offline", offline, canJoin, joinWidth);
@@ -234,6 +292,53 @@ public final class FriendList extends PanelWidget {
             selected = null;
         }
         scroll.snap(Math.max(0f, Math.min(maxScroll(), scroll.target())));
+    }
+
+    /** The filter lets {@code f} show: their name, or their real name under a nickname, has it. */
+    private boolean matches(OverlayState state, OverlayState.Friend f) {
+        if (filter.isEmpty()) {
+            return true;
+        }
+        String real = state.realName(f.id());
+        return EmojiCatalog.fold(f.name()).contains(filter)
+            || real != null && EmojiCatalog.fold(real).contains(filter);
+    }
+
+    /** OVL-SOC 2: "İstekler" and its rows, before everyone (the launcher's order). */
+    private float requests(OverlayState state, float y) {
+        List<OverlayState.Request> asked = state.requests();
+        if (asked.isEmpty() || !state.people4()) {
+            return y;
+        }
+        Row header = new Row();
+        header.header = true;
+        header.title = Texts.visual(Texts.str("friends.requests", asked.size()));
+        header.y = y;
+        rows.add(header);
+        y += HEADER_H;
+        Font strong = Fonts.strong();
+        Font small = Fonts.small();
+        // "Kabul et" and the × keep their places on every request row.
+        int nameRoom = getWidth() - FACE - 8 - (int) acceptWidth - 6 - DOTS - DOTS_GAP;
+        String wants = Texts.str("friend.wants_to_add");
+        for (OverlayState.Request r : asked) {
+            Row row = new Row();
+            row.id = r.id();
+            row.request = true;
+            row.person = r.name();
+            String name = Texts.fit(strong, r.name().isEmpty() ? Texts.str("toast.someone") : r.name(), nameRoom);
+            row.name = Texts.visual(name);
+            row.nameW = strong.width(name);
+            row.where = Texts.visual(Texts.fit(small, wants, nameRoom));
+            row.online = true;
+            row.face = Face.of(r.name());
+            row.joinWidth = acceptWidth;
+            row.y = y;
+            row.narration = Texts.tr("narration.request", name);
+            rows.add(row);
+            y += ROW_H;
+        }
+        return y + 4;
     }
 
     private float section(OverlayState state, float y, String titleKey, List<OverlayState.Friend> friends,
@@ -255,6 +360,7 @@ public final class FriendList extends PanelWidget {
         for (OverlayState.Friend f : friends) {
             Row row = new Row();
             row.id = f.id();
+            row.person = f.name();
             OverlayState.Badge badge = state.badge(f.badge());
             row.chip = TagChip.of(badge, TagChip.ROW);
             row.fav = f.fav();
@@ -269,7 +375,8 @@ public final class FriendList extends PanelWidget {
             row.joinable = f.joinable() && canJoin.test(f);
             row.message = state.dm(f.id()) != null;
             String where = Texts.str("friend.where." + whereKey(f.where()));
-            if (f.where().equals("server") && f.host() != null) {
+            if (f.where().equals("server") && f.host() != null && !state.streamer()) {
+                // Streamer mode (SOC-NEXT §3.4): "Başka sunucuda", the address never on screen.
                 where = Texts.str("friend.where.server_at", f.host());
             } else if (!f.online() && f.seen() != null) {
                 // OVL-UX2: as the launcher's list, when they were last seen rather than the section's word again.
@@ -425,6 +532,19 @@ public final class FriendList extends PanelWidget {
         return null;
     }
 
+    /** The keyboard's pick on the first friend the filter left (Enter or ↓ from it, OVL-SOC 2), else the first row. */
+    public void selectFirst() {
+        for (Row row : rows) {
+            if (!row.header && !row.request) {
+                selected = row.id;
+                reveal(row);
+                return;
+            }
+        }
+        selected = null;
+        move(1);
+    }
+
     /** Puts the keyboard's pick on a friend's row (the scenario driver uses it). */
     public void select(String friendId) {
         for (Row row : rows) {
@@ -450,6 +570,13 @@ public final class FriendList extends PanelWidget {
         }
         int i = selectedIndex();
         Row row = i < 0 ? null : rows.get(i);
+        if (row != null && row.request && (event.isSelection() || event.isConfirmation()
+            || event.key() == Compat.KEY_MENU || (event.key() == InputConstants.KEY_F10 && event.hasShiftDown()))) {
+            // A request: its two answers under its ×, "Kabul et" lit.
+            PanelInput.usedKeyboard();
+            actions.requestMenu(row.id, row.person, dotsAnchor(row), true);
+            return true;
+        }
         if (row != null && (event.key() == Compat.KEY_MENU || (event.key() == InputConstants.KEY_F10
             && event.hasShiftDown()))) {
             // Shift+F10 or the menu key: the row's menu, its first row lit.
@@ -500,6 +627,22 @@ public final class FriendList extends PanelWidget {
                 continue;
             }
             selected = row.id;
+            if (row.request) {
+                if (doubleClick || state != null && state.answering(row.id)) {
+                    // A double click answers once; an answer on its way takes no second one.
+                    return;
+                }
+                if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+                    actions.requestMenu(row.id, row.person, PersonMenu.Anchor.at(event.x(), event.y()), false);
+                } else if (event.x() >= dotsX() - 1) {
+                    actions.answer(row.id, row.person, false);
+                } else if (event.x() >= joinX(row)) {
+                    actions.answer(row.id, row.person, true);
+                } else if (!doubleClick) {
+                    actions.requestMenu(row.id, row.person, dotsAnchor(row), false);
+                }
+                return;
+            }
             if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
                 actions.menu(row.id, PersonMenu.Anchor.at(event.x(), event.y()), false);
             } else if (event.x() >= dotsX() - 1) {
@@ -601,7 +744,9 @@ public final class FriendList extends PanelWidget {
             row.face.draw(g, FACE, cx, cy);
             Draw.popAlpha();
             // Every state a filled disc (docs/design.md, Friends; the owner, 3 Nov: "çember yerine daire").
-            PresenceDot.onFace(g, row.presence, cx + 6, cy + 6, Theme.OBSIDIAN_900);
+            if (!row.request) {
+                PresenceDot.onFace(g, row.presence, cx + 6, cy + 6, Theme.OBSIDIAN_900);
+            }
             float tx = x0 + FACE + 8;
             // A name without a place line sits in the middle of its row (the face's middle).
             float nameMid = row.lone ? ROW_H / 2f : NAME_MID;
@@ -631,6 +776,35 @@ public final class FriendList extends PanelWidget {
             if (!row.lone) {
                 Draw.text(g, small, row.where, tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
                     ? Theme.ASH_300 : Theme.ASH_400);
+            }
+            if (row.request) {
+                // OVL-SOC 2: "Kabul et" (gold words while lit, as "Katıl") and the × that declines, always there;
+                // quiet while its answer is on its way.
+                boolean waiting = state != null && state.answering(row.id);
+                if (waiting) {
+                    lit = false;
+                    Draw.pushAlpha(0.45f);
+                }
+                float jx = joinX(row);
+                float jy = y + (ROW_H - JOIN_H) / 2f;
+                boolean acceptLit = lit && mouseX >= jx && mouseX < jx + row.joinWidth;
+                Draw.frame(g, acceptLit ? Frames.CHIP_SELECTED : Frames.CHIP, jx, jy, row.joinWidth, JOIN_H);
+                Draw.text(g, small, acceptLine, jx + 7, Fonts.centeredY(Fonts.Face.SMALL, jy + JOIN_H / 2f),
+                    acceptLit ? Theme.GOLD_200 : Theme.BONE_100);
+                float dy = y + (ROW_H - DOTS) / 2f;
+                boolean declineLit = lit && mouseX >= dotsX - 1;
+                if (declineLit) {
+                    Draw.frame(g, Frames.CHIP_HOVER, dotsX, dy, DOTS, DOTS);
+                }
+                Draw.icon(g, Icon.CLOSE, 10, dotsX + (DOTS - 10) / 2f, dy + (DOTS - 10) / 2f,
+                    declineLit ? Theme.BONE_100 : Theme.ASH_300);
+                if (waiting) {
+                    Draw.popAlpha();
+                }
+                if (lit) {
+                    g.requestCursor(com.mojang.blaze3d.platform.cursor.CursorTypes.POINTING_HAND);
+                }
+                continue;
             }
             if (row.joinable) {
                 float jx = joinX(row);
@@ -668,6 +842,11 @@ public final class FriendList extends PanelWidget {
             Draw.pushAlpha(below);
             Draw.column(g, ShapeSet.FADE_BOTTOM, x0 - 2, y0 + h - ShapeSet.LIST_FADE, w + 4, ShapeSet.LIST_FADE);
             Draw.popAlpha();
+        }
+        if (noMatch) {
+            // Requests above, no friend for the filter: its line under them.
+            Draw.text(g, small, emptyLine, x0 + (w - emptyWidth) / 2f,
+                Fonts.centeredY(Fonts.Face.SMALL, y0 + contentHeight - top + 14), Theme.ASH_400);
         }
         g.disableScissor();
         drawNote(g, now);
@@ -707,7 +886,8 @@ public final class FriendList extends PanelWidget {
         if (want == null && isHovered()) {
             for (Row row : rows) {
                 float y = getY() + row.y - top;
-                if (!row.header && mouseY >= y && mouseY < y + ROW_H) {
+                // A request has its × in the "…"'s place (always there).
+                if (!row.header && !row.request && mouseY >= y && mouseY < y + ROW_H) {
                     want = row.id;
                     break;
                 }
@@ -817,8 +997,8 @@ public final class FriendList extends PanelWidget {
         int i = selectedIndex();
         if (i >= 0) {
             output.add(NarratedElementType.HINT, rows.get(i).narration);
-            output.add(NarratedElementType.USAGE, Texts.tr(rows.get(i).message ? "narration.friend.usage"
-                : "narration.friend.usage.menu"));
+            output.add(NarratedElementType.USAGE, Texts.tr(rows.get(i).request ? "narration.request.usage"
+                : rows.get(i).message ? "narration.friend.usage" : "narration.friend.usage.menu"));
         }
     }
 }
