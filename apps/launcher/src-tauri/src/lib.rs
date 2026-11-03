@@ -361,6 +361,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::voice::voice_backup,
             commands::voice::voice_restore,
             commands::voice::voice_levels,
+            commands::voice::voice_ignored,
             // the hidden voice window's page only (`pl_voice::guard`)
             commands::voice::voice_page_attach,
             commands::voice::voice_page_report,

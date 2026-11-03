@@ -373,6 +373,74 @@ fn do_not_disturb_only_leaves_a_missed_call() {
     assert_eq!(machine.view(0, UNIX).missed.len(), 1);
 }
 
+fn ring_from(from: &str, room: &str) -> IncomingRing {
+    IncomingRing {
+        room: room.into(),
+        from: from.into(),
+        at: UNIX,
+        until: UNIX + 30,
+        ticket: Ticket::new("t"),
+        with: Vec::new(),
+    }
+}
+
+/// Anything the player would see or hear of a ring: a card, a tone, a notification, a notice.
+fn told(effects: &[Effect]) -> bool {
+    effects.iter().any(|e| {
+        matches!(
+            e,
+            Effect::Ring(true)
+                | Effect::Notice(_)
+                | Effect::System(SystemNotice::Ring { .. } | SystemNotice::Missed { .. })
+        )
+    })
+}
+
+#[test]
+fn an_ignored_persons_ring_waits_quietly_in_the_missed_list() {
+    let mut machine = ready();
+    let long = "k".repeat(65);
+    assert!(
+        machine
+            .set_ignored(vec!["kaan".into(), "kaan".into(), String::new(), long])
+            .is_empty()
+    );
+    let effects = machine.ring(ring_from("kaan", ROOM), false, 0, UNIX);
+    assert!(!told(&effects));
+    let view = machine.view(0, UNIX);
+    assert!(view.rings.is_empty());
+    assert_eq!(view.missed.len(), 1);
+    assert!(view.missed[0].joinable);
+    // Nothing is due for it later either.
+    assert_eq!(machine.next_deadline(0), None);
+    // Someone else still rings.
+    let effects = machine.ring(ring_from("ece", "f00000000000000aa"), false, 0, UNIX);
+    assert!(effects.contains(&Effect::Ring(true)));
+    assert_eq!(machine.view(0, UNIX).rings.len(), 1);
+}
+
+#[test]
+fn ignoring_someone_whose_ring_rings_quiets_it_at_once() {
+    let mut machine = ready();
+    machine.ring(ring_from("kaan", ROOM), false, 0, UNIX);
+    let effects = machine.set_ignored(vec!["kaan".into()]);
+    assert!(effects.contains(&Effect::Ring(false)));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::System(SystemNotice::RingGone { room }) if room == ROOM))
+    );
+    assert!(!told(&effects));
+    let view = machine.view(0, UNIX);
+    assert!(view.rings.is_empty());
+    assert_eq!(view.missed.len(), 1);
+    // The same list again changes nothing; an empty one (SOC-NEXT's switch off) rings again.
+    assert!(machine.set_ignored(vec!["kaan".into()]).is_empty());
+    machine.set_ignored(Vec::new());
+    let effects = machine.ring(ring_from("kaan", "f00000000000000aa"), false, 0, UNIX);
+    assert!(effects.contains(&Effect::Ring(true)));
+}
+
 #[test]
 fn declining_tells_the_hub_and_stops_the_ring() {
     let mut machine = ready();
