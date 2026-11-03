@@ -254,6 +254,24 @@ public final class SocialScenario implements ClientModInitializer {
         // A nickname's real name over the friend's menu.
         step(0.3, "menu", mc -> need(mc).openFriendMenu("f-ayse", true));
         step(0.5, "shot menu", mc -> shot(mc, "menu-real-name"));
+        // OVL-FIX 2.0.7: a right click near the row's left end, "Sesli arama başlat": the question stays over the
+        // panel (BATCH-206 saw it half over the game).
+        step(0.1, "leave the room", mc -> OverlayClient.get().voiceLeave());
+        step(0.4, "menu at the pointer", mc -> {
+            float[] row = need(mc).friendRow("f-ayse");
+            if (row != null) {
+                need(mc).openFriendMenuAt("f-ayse", row[0] - 30, row[1]);
+            }
+        });
+        step(0.4, "call row", mc -> {
+            results.addProperty("menuOverPanel", need(mc).menuOverPanel());
+            need(mc).pressMenu(FriendMenu.Action.CALL);
+        });
+        step(0.5, "shot question", mc -> {
+            results.addProperty("askOverPanel", need(mc).menuOverPanel());
+            shot(mc, "call-ask-pointer");
+        });
+        step(0.1, "cancel", mc -> need(mc).answerMenu(false));
         // The status switcher: its durations, an hour of "Rahatsız etmeyin", its end.
         step(0.1, "status menu", mc -> results.addProperty("statusMenu", need(mc).openStatusMenuForDriver()));
         step(0.5, "shot status menu", mc -> shot(mc, "status-menu"));

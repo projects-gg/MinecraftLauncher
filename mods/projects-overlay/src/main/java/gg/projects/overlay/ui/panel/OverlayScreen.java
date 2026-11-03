@@ -1445,6 +1445,18 @@ public final class OverlayScreen extends Screen {
         return menu.naming();
     }
 
+    /**
+     * The open menu (or its question) lies over the panel, whole (the scenario driver checks it at every GUI scale);
+     * false while none is open.
+     */
+    public boolean menuOverPanel() {
+        if (!menu.isOpen()) {
+            return false;
+        }
+        float[] b = menu.bounds();
+        return b[0] >= panelX - 0.5f && b[0] + b[2] <= width + 0.5f && b[1] >= 0 && b[1] + b[3] <= height + 0.5f;
+    }
+
     /** OVL-SOC 2 (the scenario driver): the status switcher's menu, as Enter on it would open it. */
     public boolean openStatusMenuForDriver() {
         if (!statusButton.visible) {

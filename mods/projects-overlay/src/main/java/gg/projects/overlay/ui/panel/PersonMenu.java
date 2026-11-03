@@ -399,8 +399,18 @@ public final class PersonMenu {
                 below = false;
             }
         }
-        x = Draw.snap(Math.max(EDGE, Math.min(screenW - EDGE - width, x)));
+        // Over the panel, never over the game (BATCH-206: "PixelAvci aransın mı?", wider than the menu it came from,
+        // flipped left of the pointer into the game): from the panel's left edge to the screen's right one, or
+        // against the screen's right edge when the panel is narrower than it.
+        float left = Math.max(EDGE, panelLeft + EDGE);
+        float right = screenW - EDGE - width;
+        x = Draw.snap(right >= left ? Math.max(left, Math.min(right, x)) : Math.max(EDGE, right));
         y = Draw.snap(Math.max(EDGE, Math.min(screenH - EDGE - height, y)));
+    }
+
+    /** Where it stands now (GUI pixels: left, top, width, height; the scenario driver checks it). */
+    public float[] bounds() {
+        return new float[] {x, y, width, height};
     }
 
     private static String labelKey(FriendMenu.Row row) {
@@ -555,6 +565,11 @@ public final class PersonMenu {
         confirmW = ui.width(confirmLabel) + BUTTON_PAD * 2;
         float buttons = cancelW + BUTTON_GAP + confirmW;
         float maxW = Math.min(ASK_MAX_W, screenW - 2 * EDGE);
+        // As wide as the panel at most where the panel takes it (GUI 4's narrow panel): the words wrap instead.
+        float panelRoom = screenW - Math.max(0f, panelLeft) - 2 * EDGE;
+        if (panelRoom >= ASK_MIN_W) {
+            maxW = Math.min(maxW, panelRoom);
+        }
         width = Math.min(maxW, Math.max(ASK_MIN_W, buttons + ASK_PAD * 2));
         int textW = Math.round(width - ASK_PAD * 2);
         String title = Texts.str(titleKey, friendName.isEmpty() ? Texts.str("toast.someone") : friendName);
