@@ -19,6 +19,7 @@ import { attempt, copyText } from "./actions";
 import { discordIdOf } from "./identity";
 import { formatCodeInput, normalizeCode } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { HiddenTile, HiddenValue, useReveal } from "./next/streamer-ui";
 import { NameWithMark } from "./person-mark";
 import { QrCode } from "./qr-code";
 import { SocialAvatar } from "./social-face";
@@ -88,12 +89,18 @@ function CodeCard({ me }: { me: SocialMe }) {
     setAsking(false);
     if (code) announce(t("social.add.rotated"));
   };
+  // SOC-NEXT "Yayıncı modu": the code and its QR stay off a stream until "Göster".
+  const streamer = useReveal();
 
   return (
     <section className="rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
       <div className="flex gap-4">
         <AnimatePresence mode="popLayout" initial={false}>
-          {me.qr ? (
+          {me.qr && streamer.hidden ? (
+            <motion.div key="hidden" {...swap(reduce, 0.24)}>
+              <HiddenTile size={112} onShow={streamer.reveal} />
+            </motion.div>
+          ) : me.qr ? (
             <motion.div key={me.friendCode} {...swap(reduce, 0.24)}>
               <QrCode qr={me.qr} size={112} label={t("social.add.qr")} />
             </motion.div>
@@ -111,7 +118,7 @@ function CodeCard({ me }: { me: SocialMe }) {
                 data-selectable
                 {...swap(reduce, 0.28)}
               >
-                {me.friendCode}
+                {streamer.hidden ? <HiddenValue onShow={streamer.reveal} /> : me.friendCode}
               </motion.span>
             </AnimatePresence>
           </p>

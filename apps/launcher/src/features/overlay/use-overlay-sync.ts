@@ -1,5 +1,6 @@
 import { useMotionPrefs } from "@pl/ui";
 import { useEffect } from "react";
+import { useWaitPrefs } from "@/features/social/next/wait-prefs";
 import { useSocialPrefs } from "@/features/social/store";
 import { usePrefs } from "@/stores/prefs";
 import { overlayApi } from "./api";
@@ -20,7 +21,8 @@ export function useOverlaySync() {
   const emoji = usePrefs((s) => s.chatEmoji);
   const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
   const crewChat = useSocialPrefs((s) => s.notifyCrewChat);
-  const chatMutes = useSocialPrefs((s) => s.chatMutes);
+  // SOC-NEXT: a friend the player ignores sends no card (their conversation counts as muted).
+  const { mutes: chatMutes } = useWaitPrefs();
   const favorites = useSocialPrefs((s) => s.favorites);
   const onlineAlerts = useSocialPrefs((s) => s.onlineAlerts);
   const favoritesOnline = useSocialPrefs((s) => s.notifyFavoriteOnline);

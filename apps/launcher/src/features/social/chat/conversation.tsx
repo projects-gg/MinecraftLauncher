@@ -35,6 +35,13 @@
 // the rows under the top edge floats there on a quiet plate (floating-day.ts), gone at the newest
 // messages and over a day line that shows, and fading when the scroll ends; read at a scroll, a
 // fade only.
+//
+// SOC-NEXT: Ctrl+F (or the header's magnifier) opens the search bar over the messages
+// (next/search-bar.tsx); a conversation marked unread here opens at "Yeni mesajlar" over its
+// newest message and the mark goes once it was read on screen; in crew chat an ignored person's
+// messages fold into one quiet line each run ("Göster" opens it; a search result in it opens it
+// too), and a direct conversation with someone ignored is faded; the crew's names reach the rows
+// for mentions.
 import { ArrowDown, CalendarBlank, HandWaving } from "@phosphor-icons/react";
 import { cn, scrollBehavior, toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
@@ -57,6 +64,14 @@ import { formatPercent } from "@/lib/format";
 import { detectOs } from "@/lib/platform";
 import { useWindowAway } from "@/lib/window-away";
 import { enter, glide, leave, useSocialMotion } from "../motion";
+import { useMarkedUnread, useMarkSeen } from "../next/conv-hooks";
+import { SearchMarksContext } from "../next/decorate";
+import { useSocNext } from "../next/flag";
+import { type Folded, foldRuns } from "../next/ignore";
+import { FoldItem } from "../next/ignore-ui";
+import type { Mentionable } from "../next/mentions";
+import { useSocNextPrefs } from "../next/prefs";
+import { ChatSearchBar, useChatSearch, useSearchShortcut } from "../next/search-bar";
 import type { PersonPlace } from "../person-menu";
 import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
@@ -103,9 +118,15 @@ const PAGE_SHARE = 0.85;
 const DIVIDER_GAP = 8;
 /** More messages than this arriving at once are told as a count, not one by one. */
 const TOLD_ONE_BY_ONE = 3;
+/** A search result older than the pages shown loads at most this many older pages (5,000
+ * messages); a quote's press, ten. */
+const SEARCH_PAGES = 90;
+const NO_FOLDS: ReadonlyMap<string, Folded> = new Map();
+const NO_MEMBERS: readonly Mentionable[] = [];
 /** The webview says when a scroll ends (`scrollend`: WebView2 does; WKWebView and WebKitGTK may
  * not): the floating day line fades then (CHAT-UX2). */
 const SCROLL_ENDS = typeof window !== "undefined" && "onscrollend" in window;
+const NO_IGNORED: string[] = [];
 
 /** The row across the middle of the list, and where its top is (a share of the list's height). */
 function middleRow(list: HTMLElement): { row: HTMLElement; at: number } | null {
@@ -500,6 +521,11 @@ export function Conversation({
   });
   // CHAT-CALM: the crew's "Yavaş mod" for the player (none for its leader and moderators).
   const slow = slowFor(liveTeam);
+  // SOC-NEXT's parts of the conversation.
+  const next = useSocNext();
+  const ignored = useSocNextPrefs((s) => (next ? s.ignored : NO_IGNORED));
+  const searchQueryNow = useChatSearch((s) => (s.conv === conv ? s.query : null));
+  const searchCurrent = useChatSearch((s) => (s.conv === conv ? s.current : null));
 
   // Every snapshot of the friends service brings new objects: what the rows read of it stays the
   // same object while it says the same, so a presence change or a new unread count draws no row.
@@ -512,6 +538,15 @@ export function Conversation({
   const linksKey = JSON.stringify(liveLinkRules ?? null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the key says when they changed
   const linkRules = useMemo(() => liveLinkRules, [linksKey]);
+  // SOC-NEXT: the crew's names as the crew knows them (a nickname is the player's own).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key says when the crew changed
+  const members = useMemo<readonly Mentionable[]>(
+    () =>
+      next && liveTeam
+        ? liveTeam.members.map((m) => ({ id: m.id, name: m.realName ?? m.name }))
+        : NO_MEMBERS,
+    [next, teamKey],
+  );
   const peopleNow = useRef(people);
   peopleNow.current = people;
   const stablePeople = useCallback((id: string) => peopleNow.current(id), []);
@@ -839,23 +874,28 @@ export function Conversation({
   };
 
   const [flash, setFlash] = useState<{ key: string; n: number } | null>(null);
-  const jumping = useRef<{ key: string; pages: number } | null>(null);
+  const jumping = useRef<{ key: string; pages: number; search: boolean } | null>(null);
+  // A quote's press glides there and lights the message once; a search result (SOC-NEXT, a
+  // keyboard tool) is simply there, its words marked.
   const jumpTo = useCallback(
-    (key: string) => {
+    (key: string, search = false) => {
       const element = scroller.current?.querySelector<HTMLElement>(
         `[data-key="${CSS.escape(key)}"]`,
       );
       if (element) {
         jumping.current = null;
-        element.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
-        setFlash((f) => ({ key, n: (f?.n ?? 0) + 1 }));
+        element.scrollIntoView({
+          block: "center",
+          behavior: reduce || search ? "auto" : "smooth",
+        });
+        if (!search) setFlash((f) => ({ key, n: (f?.n ?? 0) + 1 }));
         return;
       }
-      // Not shown yet: an older page (at most ten of them) and try again.
+      // Not shown yet: an older page (at most ten of them, a search's whole history) and again.
       const state = useChat.getState().threads[conv];
       const pages = jumping.current?.key === key ? jumping.current.pages : 0;
-      if (!state?.more || pages >= 10) return;
-      jumping.current = { key, pages: pages + 1 };
+      if (!state?.more || pages >= (search ? SEARCH_PAGES : 10)) return;
+      jumping.current = { key, pages: pages + 1, search };
       void loadOlder(conv);
     },
     [conv, loadOlder, reduce],
@@ -863,7 +903,7 @@ export function Conversation({
   // biome-ignore lint/correctness/useExhaustiveDependencies: tries again when a page came
   useEffect(() => {
     const waiting = jumping.current;
-    if (waiting && !thread?.older) jumpTo(waiting.key);
+    if (waiting && !thread?.older) jumpTo(waiting.key, waiting.search);
   }, [messages, thread?.older, jumpTo]);
 
   const toBottom = useCallback(
@@ -982,8 +1022,9 @@ export function Conversation({
       writable,
       quick: quickReactions(recentEmoji),
       people: stablePeople,
+      members: crew ? members : undefined,
     }),
-    [conv, extras, linkRules, me, writable, recentEmoji, stablePeople],
+    [conv, extras, linkRules, me, writable, recentEmoji, stablePeople, crew, members],
   );
   const byId = useMemo(() => {
     const map = new Map<number, ChatMessage>();
@@ -1014,7 +1055,10 @@ export function Conversation({
   const writersHere = useTyping((s) => s.writers[conv]);
   const online = onlineIn(friends, crews);
   const writers = extras.typing
-    ? writersOf({ [conv]: writersHere ?? {} }, conv, online).filter((id) => id !== me)
+    ? // SOC-NEXT: someone ignored is not told writing either.
+      writersOf({ [conv]: writersHere ?? {} }, conv, online).filter(
+        (id) => id !== me && !ignored.includes(id),
+      )
     : [];
   // "Yazıyor…" goes only while someone else there is online.
   const crewId = crewOf(conv);
@@ -1045,6 +1089,42 @@ export function Conversation({
       .find((m) => m.mine && readable(m) && !deleting[m.key] && (m.editUntil ?? 0) > Date.now());
     if (mine) setEditing(mine);
   };
+
+  // SOC-NEXT §3.7: in crew chat, each run of an ignored person's messages folds into one line
+  // (a run the player opened stays open; a search result inside one opens it).
+  const [openRuns, setOpenRuns] = useState<ReadonlySet<string>>(() => new Set());
+  const folds = useMemo(
+    () =>
+      crew && ignored.length
+        ? foldRuns(
+            items.map((item) =>
+              item.kind === "message"
+                ? { key: item.message.key, from: item.message.from }
+                : { key: item.line.key },
+            ),
+            new Set(ignored),
+            openRuns,
+          )
+        : NO_FOLDS,
+    [crew, ignored, items, openRuns],
+  );
+  const openRun = useCallback((run: string) => setOpenRuns((runs) => new Set(runs).add(run)), []);
+  useEffect(() => {
+    const folded = searchCurrent ? folds.get(searchCurrent) : undefined;
+    if (folded) openRun(folded.run);
+  }, [searchCurrent, folds, openRun]);
+  // A direct conversation with someone ignored is faded (still readable).
+  const peer = crew ? null : peerOf(conv, me ?? "");
+  const faded = Boolean(peer && ignored.includes(peer));
+  useSearchShortcut(root, conv, next && onScreen);
+  useMarkSeen(conv, next && onScreen && open && !away && Boolean(thread?.loaded));
+  const searchValue = useMemo(
+    () => ({ query: searchQueryNow, current: searchCurrent }),
+    [searchQueryNow, searchCurrent],
+  );
+  const textOf = useCallback((message: ChatMessage) => edits[message.key] ?? message.text, [edits]);
+  const toSearchResult = useCallback((key: string) => jumpTo(key, true), [jumpTo]);
+  const backToField = useCallback(() => setFocusRequest((n) => n + 1), []);
 
   const dividerWords = t("chat.divider");
   const dayWords = useMemo(
@@ -1085,6 +1165,23 @@ export function Conversation({
                 );
               }
               const { message } = item;
+              // SOC-NEXT: a folded run shows one line at its first message, nothing for the rest.
+              const folded = folds.get(message.key);
+              if (folded) {
+                // "Yeni mesajlar" over a folded run's first unread goes over its line.
+                const foldDivided =
+                  dividerKey !== null && folds.get(dividerKey)?.run === folded.run;
+                return folded.lead ? (
+                  <FoldItem
+                    key={message.key}
+                    count={folded.count}
+                    dayLine={dayText ? <DayLine text={dayText} /> : null}
+                    divider={foldDivided ? dividerWords : null}
+                    layout={layout}
+                    onShow={() => openRun(folded.run)}
+                  />
+                ) : null;
+              }
               // A line between two messages starts a new group, as "Yeni mesajlar" does.
               const previous = previousItem?.kind === "message" ? previousItem.message : undefined;
               const next = nextItem?.kind === "message" ? nextItem.message : undefined;
@@ -1150,6 +1247,8 @@ export function Conversation({
       t,
       crew,
       peopleKey,
+      folds,
+      openRun,
     ],
   );
 
@@ -1166,21 +1265,34 @@ export function Conversation({
           {/* With "yazıyor…" on, the list keeps a line free under its newest message for it. */}
           <div
             ref={content}
-            className={cn("flex min-h-full flex-col justify-end", extras.typing && "pb-7")}
+            className={cn(
+              "flex min-h-full flex-col justify-end transition-opacity duration-200",
+              extras.typing && "pb-7",
+              faded && "opacity-80",
+            )}
           >
             {thread?.loaded && !items.length ? (
               <div className="flex flex-1 items-center justify-center px-6 py-10">
                 <Unzoomed>{empty}</Unzoomed>
               </div>
             ) : null}
-            {list}
+            <SearchMarksContext.Provider value={searchValue}>{list}</SearchMarksContext.Provider>
           </div>
         </motion.div>
       </MotionConfig>
+      {next ? (
+        <ChatSearchBar
+          conv={conv}
+          shown={messages}
+          textOf={textOf}
+          onJump={toSearchResult}
+          onClosed={backToField}
+        />
+      ) : null}
       {/* CHAT-UX2: reading back, the day under the top edge on a quiet plate over the list while it
           moves (its own size at any text size; a fade, nothing moves). */}
       <AnimatePresence initial={false}>
-        {floatingAt !== null && !settled ? (
+        {floatingAt !== null && !settled && !searchQueryNow ? (
           <motion.div
             key="day"
             aria-hidden
@@ -1254,11 +1366,14 @@ function LineAction({ action }: { action: NonNullable<ChatLine["action"]> }) {
   );
 }
 
-/** How many messages of a conversation were unread when it came on screen. */
+/** How many messages of a conversation were unread when it came on screen (SOC-NEXT: one marked
+ * unread here counts its newest message). */
 export function useUnreadAtOpen(conv: string | null): number {
-  const unread = useSocialUi(
+  const counted = useSocialUi(
     (s) => s.view.chat?.conversations.find((c) => c.id === conv)?.unread ?? 0,
   );
+  const marked = useMarkedUnread(conv);
+  const unread = counted || marked;
   const [at, setAt] = useState({ conv, count: unread });
   if (at.conv !== conv) setAt({ conv, count: unread });
   return at.conv === conv ? at.count : unread;

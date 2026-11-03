@@ -69,6 +69,7 @@ import { REST } from "./groups";
 import { joinOrAsk, PROJECTS } from "./join-dialog";
 import { type PersonAction, peopleMenu, personMenu, rowsOf, without } from "./menus";
 import { isJoinable, notifiesOnline } from "./model";
+import { socNextItem, socNextPersonInput } from "./next/person-rows";
 import { canInvite, onTarget } from "./play-together";
 import { SocialFace } from "./social-face";
 import { type SocialPage, useSocialPrefs, useSocialUi } from "./store";
@@ -425,6 +426,8 @@ export function personItems(
           }
         : undefined,
     },
+    // SOC-NEXT: a friend's nickname, ignoring a friend or crewmate (next/person-rows.tsx).
+    ...socNextPersonInput(person.id, Boolean(friend), crewmate),
   });
   const plan = place.skip?.length ? without(full, place.skip) : full;
 
@@ -769,6 +772,12 @@ export function personItems(
               }
             }),
         };
+      // SOC-NEXT's rows (next/person-rows.tsx).
+      case "nickname":
+      case "removeNickname":
+      case "ignore":
+      case "unignore":
+        return socNextItem(row.action, friend ?? person, t);
       case "report":
         return {
           label: t("reports.action"),
@@ -829,10 +838,17 @@ export function usePeopleItems(
 export function PersonContextMenu({
   person,
   place,
+  lead,
+  title,
   children,
 }: {
   person: PersonRef;
   place?: PersonPlace;
+  /** SOC-NEXT: the line's own rows before the person's (a conversation in "Mesajlar"), worked
+   * out while the menu is open; a separator between. */
+  lead?: () => Array<MenuItem | null>;
+  /** SOC-NEXT: whose menu it is, at its top (a long menu may cover the row it opened from). */
+  title?: string;
   /** One element: it gets the right click's handlers. */
   children: ReactElement;
 }) {
@@ -842,9 +858,17 @@ export function PersonContextMenu({
   const me = useSocialUi((s) => s.view.me?.id);
   const env = usePersonEnvWhile(open);
   const rows = useRef<Array<MenuItem | null>>([]);
-  if (env) rows.current = personItems(person, place ?? {}, env);
+  if (env) {
+    const own = personItems(person, place ?? {}, env);
+    rows.current = lead ? [...lead(), ...(own.length ? [null, ...own] : [])] : own;
+  }
   return (
-    <ContextMenu items={rows.current} disabled={person.id === me} onOpenChange={setOpen}>
+    <ContextMenu
+      items={rows.current}
+      title={title}
+      disabled={person.id === me}
+      onOpenChange={setOpen}
+    >
       {children}
     </ContextMenu>
   );

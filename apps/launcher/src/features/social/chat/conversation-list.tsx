@@ -10,15 +10,36 @@
 // CHAT-UX2: "when" is chat-time.ts's list stamp ("14:05", "Dün", "Pzt", "28 Eki", "28 Eki 2025"),
 // in calendar days of this computer's zone; an unread row's stamp is bone with its line, the count
 // beside it stays the row's one gold (design.md §2: words are never gold).
-import { BellSlash, ChatsCircle, Prohibit, UsersThree, WarningCircle } from "@phosphor-icons/react";
+//
+// SOC-NEXT §3.9: the right click starts with the conversation's own rows ("Okundu say", "Başa
+// sabitle", "Sessize al", "Geçmişi temizle"; next/conv-actions.tsx), then the friend's or the
+// crew's. Up to three pinned conversations lead the list (a quiet pin by their time); one marked
+// unread here counts one. A direct conversation with someone the player ignores is faded.
+import {
+  At,
+  BellSlash,
+  ChatsCircle,
+  EyeSlash,
+  Prohibit,
+  PushPin,
+  UsersThree,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { ContentIcon, ContextMenu, cn, EmptyState, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Conversation, SocialTeam } from "@/lib/api/social-types";
 import { BadgedName, badgeRowLabel, useShownBadge } from "../crew-badge";
 import { openMenuFromKey } from "../menu-key";
 import { enter, glide, leave, useSocialMotion } from "../motion";
+import { conversationItems, ListClearDialog } from "../next/conv-actions";
+import { livePins, shownUnread, withPinsFirst } from "../next/conv-menu";
+import { useSocNext } from "../next/flag";
+import { useMentionMarks } from "../next/mention-marks";
+import { mentionOf } from "../next/mentions";
+import { realNameOf } from "../next/nickname";
+import { useSocNextPrefs } from "../next/prefs";
 import { useMarks } from "../person-mark";
 import { PersonContextMenu, type PersonRef } from "../person-menu";
 import { SocialAvatar } from "../social-face";
@@ -34,14 +55,19 @@ import { onlineIn, useTyping, useTypingFeed, writersOf } from "./typing";
 function CrewRowMenu({
   conv,
   crew,
+  lead,
   children,
 }: {
   conv: string;
   crew: SocialTeam;
+  /** SOC-NEXT: the conversation's own rows first. */
+  lead?: () => Array<MenuItem | null>;
   children: ReactElement;
 }) {
   const { t } = useTranslation();
-  const items: MenuItem[] = [
+  const [open, setOpen] = useState(false);
+  const items: Array<MenuItem | null> = [
+    ...(lead && open ? [...lead(), null] : []),
     {
       label: t("fix2.menu.crewChat"),
       icon: <ChatsCircle size={16} />,
@@ -53,7 +79,11 @@ function CrewRowMenu({
       onSelect: () => useSocialUi.getState().openTeam(undefined, crew.id),
     },
   ];
-  return <ContextMenu items={items}>{children}</ContextMenu>;
+  return (
+    <ContextMenu items={items} title={lead ? crew.name : undefined} onOpenChange={setOpen}>
+      {children}
+    </ContextMenu>
+  );
 }
 
 /** The row's right click: the friend's menu (the same as in the list), or the crew's. */
@@ -68,24 +98,54 @@ function RowMenu({
   person?: PersonRef;
   children: ReactElement;
 }) {
+  const { t } = useTranslation();
+  const next = useSocNext();
+  // SOC-NEXT: the conversation's own rows, worked out while the menu is open.
+  const lead = next
+    ? () =>
+        conversationItems(
+          conversation,
+          useSocialUi.getState().view.chat?.conversations ?? [conversation],
+          t,
+        )
+    : undefined;
   if (crew) {
     return (
-      <CrewRowMenu conv={conversation.id} crew={crew}>
+      <CrewRowMenu conv={conversation.id} crew={crew} lead={lead}>
         {children}
       </CrewRowMenu>
     );
   }
   if (!person?.id) return children;
   return (
-    <PersonContextMenu person={person} place={{ from: "list" }}>
+    <PersonContextMenu
+      person={person}
+      place={{ from: "list" }}
+      lead={lead}
+      title={lead ? person.name : undefined}
+    >
       {children}
     </PersonContextMenu>
   );
 }
 
-function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: number }) {
+function Row({
+  conversation,
+  nowMs,
+  pinned,
+}: {
+  conversation: Conversation;
+  nowMs: number;
+  /** SOC-NEXT: pinned to the top. */
+  pinned: boolean;
+}) {
   const { t, i18n } = useTranslation();
   const extras = useChatExtras();
+  const next = useSocNext();
+  const mark = useSocNextPrefs((s) => (next ? s.unreadMarks[conversation.id] : undefined));
+  const ignoredPeer = useSocNextPrefs(
+    (s) => next && Boolean(conversation.peer && s.ignored.includes(conversation.peer)),
+  );
   // Someone writes there now (a writer who went offline stops at once).
   const writersHere = useTyping((s) => s.writers[conversation.id]);
   const friends = useSocialUi((s) => s.view.friends);
@@ -102,7 +162,11 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
   const muted =
     chatMutedNow(conversation.id, mutes, nowMs) ||
     Boolean(face.crew?.mute.muted && (face.crew.mute.muteUntil ?? Infinity) * 1000 > nowMs);
-  const unread = conversation.unread > 0;
+  const count =
+    mark === undefined
+      ? conversation.unread
+      : shownUnread(conversation, { [conversation.id]: mark });
+  const unread = count > 0;
   const last = conversation.last;
   // The newest one was deleted for everyone: its tombstone's words, never its text (FIX2).
   const gone = last?.deletedBy !== undefined;
@@ -122,9 +186,31 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
   const typingNow = extras.typing && writing && !conversation.failed;
   const badge = useShownBadge(face.person?.badge);
   const marks = useMarks(face.person?.marks);
+  // SOC-NEXT §3.1: an unread crew message that mentions the player puts "@" by the count (one
+  // that came live, or the newest when the launcher was closed meanwhile).
+  const markedMention = useMentionMarks((s) => next && Boolean(s.convs[conversation.id]));
+  const me = view.me?.id;
+  const mentioned =
+    next &&
+    unread &&
+    (markedMention ||
+      Boolean(
+        face.crew &&
+          last &&
+          !last.mine &&
+          !gone &&
+          mentionOf(
+            last.text,
+            me,
+            face.crew.members.map((m) => ({ id: m.id, name: realNameOf(m) })),
+          ) !== "none",
+      ));
   const label = [
     badgeRowLabel(name, badge, t, marks),
-    unread ? t("chat.list.unread", { count: conversation.unread }) : null,
+    unread ? t("chat.list.unread", { count }) : null,
+    mentioned ? t("socNext.mention.you") : null,
+    pinned ? t("socNext.conv.pinned") : null,
+    ignoredPeer ? t("socNext.ignore.banner") : null,
     preview,
   ]
     .filter(Boolean)
@@ -145,7 +231,9 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
         onKeyDown={(event) => {
           openMenuFromKey(event);
         }}
-        className="group/conv flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-2.5 pl-2 text-left outline-none transition-colors duration-150 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-gold-300 active:bg-white/[0.06]"
+        className={cn(
+          "group/conv flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-2.5 pl-2 text-left outline-none transition-[background-color,opacity] duration-150 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-gold-300 active:bg-white/[0.06]",
+        )}
       >
         {face.crew ? (
           <CrewMark look={face.crew} size={36} />
@@ -170,6 +258,10 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
             )}
           >
             {muted ? <BellSlash size={12} className="shrink-0 text-ash-400" aria-hidden /> : null}
+            {/* SOC-NEXT: someone the player ignores, as quietly as a muted conversation. */}
+            {ignoredPeer ? (
+              <EyeSlash size={12} className="shrink-0 text-ash-400" aria-hidden />
+            ) : null}
           </BadgedName>
           <span
             className={cn(
@@ -209,14 +301,17 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
-          {last ? (
+          {last || pinned ? (
             <span
               className={cn(
-                "text-[11.5px] tabular-nums",
+                "flex items-center gap-1 text-[11.5px] tabular-nums",
                 unread ? "text-bone-100" : "text-ash-400",
               )}
             >
-              {listStamp(last.at, nowMs, t("chat.day.yesterday"))}
+              {pinned ? (
+                <PushPin size={11} weight="fill" className="shrink-0 text-ash-400" aria-hidden />
+              ) : null}
+              {last ? listStamp(last.at, nowMs, t("chat.day.yesterday")) : null}
             </span>
           ) : null}
           <AnimatePresence initial={false}>
@@ -224,12 +319,13 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
               <motion.span
                 key="unread"
                 aria-hidden
-                className="chamfer flex h-[18px] min-w-[18px] items-center justify-center bg-gold-500 px-1 font-display text-[11px] font-semibold text-gold-ink tabular-nums [--cut:4px]"
+                className="chamfer flex h-[18px] min-w-[18px] items-center justify-center gap-px bg-gold-500 px-1 font-display text-[11px] font-semibold text-gold-ink tabular-nums [--cut:4px]"
                 initial={{ opacity: 0, transform: "scale(0.8)" }}
                 animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
                 exit={{ opacity: 0, transform: "scale(0.8)", transition: leave(0.14) }}
               >
-                {conversation.unread > 99 ? "99+" : conversation.unread}
+                {mentioned ? <At size={11} weight="bold" aria-hidden /> : null}
+                {count > 99 ? "99+" : count}
               </motion.span>
             ) : null}
           </AnimatePresence>
@@ -239,11 +335,18 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
   );
 }
 
+const NO_PINS: string[] = [];
+const NO_CONVS: Conversation[] = [];
+
 export function ConversationList() {
   const { t } = useTranslation();
   useTypingFeed();
   const { layout } = useSocialMotion();
-  const conversations = useSocialUi((s) => s.view.chat?.conversations ?? []);
+  const listed = useSocialUi((s) => s.view.chat?.conversations);
+  const next = useSocNext();
+  const pinnedChats = useSocNextPrefs((s) => s.pinnedChats);
+  const pins = next && listed ? livePins(pinnedChats, listed) : NO_PINS;
+  const conversations = listed ? (pins.length ? withPinsFirst(listed, pins) : listed) : NO_CONVS;
   const now = Date.now();
   if (!conversations.length) {
     return (
@@ -257,21 +360,28 @@ export function ConversationList() {
     );
   }
   return (
-    <ul aria-label={t("chat.list.label")} className="flex flex-col pt-1">
-      <AnimatePresence initial={false}>
-        {conversations.map((conversation) => (
-          <motion.li
-            key={conversation.id}
-            layout={layout ? "position" : false}
-            transition={{ layout: glide }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: enter(0.22) }}
-            exit={{ opacity: 0, transition: leave(0.16) }}
-          >
-            <Row conversation={conversation} nowMs={now} />
-          </motion.li>
-        ))}
-      </AnimatePresence>
-    </ul>
+    <>
+      <ul aria-label={t("chat.list.label")} className="flex flex-col pt-1">
+        <AnimatePresence initial={false}>
+          {conversations.map((conversation) => (
+            <motion.li
+              key={conversation.id}
+              layout={layout ? "position" : false}
+              transition={{ layout: glide }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: enter(0.22) }}
+              exit={{ opacity: 0, transition: leave(0.16) }}
+            >
+              <Row
+                conversation={conversation}
+                nowMs={now}
+                pinned={pins.includes(conversation.id)}
+              />
+            </motion.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+      {next ? <ListClearDialog /> : null}
+    </>
   );
 }

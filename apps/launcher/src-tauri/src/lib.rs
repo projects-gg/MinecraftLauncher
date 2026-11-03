@@ -672,6 +672,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_chat_delete,
             commands::social::social_chat_read,
             commands::social::social_chat_clear,
+            // SOC-NEXT: "Yayıncı modu" asks whether a streaming program runs
+            commands::social::social_streaming_app,
             commands::social::social_chat_reply,
             commands::social::social_chat_sticker,
             commands::social::social_chat_react,

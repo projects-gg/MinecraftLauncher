@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { AccountSwitcher } from "@/features/accounts/account-switcher";
 import { AccountsHost } from "@/features/accounts/accounts-host";
 import { FriendsPill } from "@/features/social/friends-pill";
+import { StreamerMark } from "@/features/social/next/streamer-ui";
 import { SocialHost } from "@/features/social/social-host";
 import { UpdatePill } from "@/features/updates/update-ui";
 import { VoicePill } from "@/features/voice/pill";
@@ -225,6 +226,8 @@ export function TitleBar({ search = true }: { search?: boolean }) {
             <>
               {/* Voice chat's room (VOICE), beside the friends it is with; only while in one. */}
               <VoicePill />
+              {/* SOC-NEXT: "Yayıncı modu" says it is on; a press turns it off. */}
+              <StreamerMark />
               <FriendsPill />
               <AccountSwitcher />
               <AccountsHost />

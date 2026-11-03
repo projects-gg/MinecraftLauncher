@@ -1,11 +1,19 @@
 import { WarningCircle } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
 import { Tabs as RadixTabs } from "radix-ui";
-import { type ReactNode, useEffect, useLayoutEffect, useRef, type WheelEvent } from "react";
+import {
+  type ReactElement,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type WheelEvent,
+} from "react";
 import { type Glide, glideUnderline } from "../glide";
 import { focusTabQuietly } from "../input-modality";
 import { cn } from "../lib/cn";
 import { enter, leave } from "../motion";
+import { ContextMenu, type MenuItem } from "./menu";
 
 export interface TabItem<T extends string> {
   value: T;
@@ -21,6 +29,9 @@ export interface TabItem<T extends string> {
    * count's place, read out as this text, so the row neither drops a number silently nor shifts.
    */
   alert?: string;
+  /** Its right click (Shift+F10, the menu key): a few rows about the tab's content ("Mesajlar":
+   * "Hepsini okundu say"). */
+  menu?: Array<MenuItem | null>;
 }
 
 /**
@@ -90,59 +101,74 @@ export function Tabs<T extends string>({
         className="flex shrink-0 gap-0.5 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_rgb(255_255_255/0.08)] [scrollbar-width:none]"
       >
         {items.map((item) => (
-          <RadixTabs.Trigger
-            key={item.value}
-            value={item.value}
-            data-tab={item.value}
-            onMouseDown={focusTabQuietly}
-            className="group relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[13px] font-medium whitespace-nowrap text-ash-300 transition-colors duration-150 hover:text-bone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-inset data-[state=active]:text-bone-50"
-          >
-            {item.label}
-            {item.alert ? (
-              <span className="flex">
-                <WarningCircle size={14} weight="fill" className="text-flare-400" aria-hidden />
-                <span className="sr-only">{item.alert}</span>
-              </span>
-            ) : typeof item.count === "number" ? (
-              // Chamfered like every small chip (design.md: the rounded corner is for containers),
-              // in the bone of Studio's sidebar counts, so a count reads the same everywhere.
-              <span className="chamfer flex h-[18px] min-w-[18px] items-center justify-center bg-white/10 px-1 text-[11px] font-semibold text-bone-100 tabular-nums [--cut:4px]">
-                {item.count}
-              </span>
-            ) : null}
-            <AnimatePresence initial={false}>
-              {item.marker ? (
-                <motion.span
-                  key="marker"
-                  // Beside a count it sits a little higher and further out, clear of the
-                  // count's corner (MODHUB2: "Modlar 12" with unapplied choices).
-                  className={cn(
-                    "pointer-events-none absolute flex",
-                    typeof item.count === "number" ? "top-[5px] right-px" : "top-[7px] right-[3px]",
-                  )}
-                  initial={{ opacity: 0, transform: "scale(0.6)" }}
-                  animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
-                  exit={{ opacity: 0, transform: "scale(0.6)", transition: leave(0.2) }}
-                >
-                  <span aria-hidden className="size-1.5 rounded-full bg-gold-400" />
-                  <span className="sr-only">{item.marker}</span>
-                </motion.span>
+          <TabMenu key={item.value} items={item.menu}>
+            <RadixTabs.Trigger
+              value={item.value}
+              data-tab={item.value}
+              onMouseDown={focusTabQuietly}
+              className="group relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[13px] font-medium whitespace-nowrap text-ash-300 transition-colors duration-150 hover:text-bone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-inset data-[state=active]:text-bone-50"
+            >
+              {item.label}
+              {item.alert ? (
+                <span className="flex">
+                  <WarningCircle size={14} weight="fill" className="text-flare-400" aria-hidden />
+                  <span className="sr-only">{item.alert}</span>
+                </span>
+              ) : typeof item.count === "number" ? (
+                // Chamfered like every small chip (design.md: the rounded corner is for containers),
+                // in the bone of Studio's sidebar counts, so a count reads the same everywhere.
+                <span className="chamfer flex h-[18px] min-w-[18px] items-center justify-center bg-white/10 px-1 text-[11px] font-semibold text-bone-100 tabular-nums [--cut:4px]">
+                  {item.count}
+                </span>
               ) : null}
-            </AnimatePresence>
-            {/* Every tab has its underline; only the chosen one shows (glide.ts measures the
+              <AnimatePresence initial={false}>
+                {item.marker ? (
+                  <motion.span
+                    key="marker"
+                    // Beside a count it sits a little higher and further out, clear of the
+                    // count's corner (MODHUB2: "Modlar 12" with unapplied choices).
+                    className={cn(
+                      "pointer-events-none absolute flex",
+                      typeof item.count === "number"
+                        ? "top-[5px] right-px"
+                        : "top-[7px] right-[3px]",
+                    )}
+                    initial={{ opacity: 0, transform: "scale(0.6)" }}
+                    animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
+                    exit={{ opacity: 0, transform: "scale(0.6)", transition: leave(0.2) }}
+                  >
+                    <span aria-hidden className="size-1.5 rounded-full bg-gold-400" />
+                    <span className="sr-only">{item.marker}</span>
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
+              {/* Every tab has its underline; only the chosen one shows (glide.ts measures the
                 hidden one of the tab it leaves). */}
-            <span
-              aria-hidden
-              data-underline=""
-              data-on={value === item.value ? "" : undefined}
-              className="pointer-events-none invisible absolute inset-x-2 bottom-0 h-[2px] origin-left bg-gold-400 data-[on]:visible"
-            />
-          </RadixTabs.Trigger>
+              <span
+                aria-hidden
+                data-underline=""
+                data-on={value === item.value ? "" : undefined}
+                className="pointer-events-none invisible absolute inset-x-2 bottom-0 h-[2px] origin-left bg-gold-400 data-[on]:visible"
+              />
+            </RadixTabs.Trigger>
+          </TabMenu>
         ))}
       </RadixTabs.List>
       {children}
     </RadixTabs.Root>
   );
+}
+
+/** A tab with rows of its own takes them on a right click; the others stay as they are. */
+function TabMenu({
+  items,
+  children,
+}: {
+  items: Array<MenuItem | null> | undefined;
+  children: ReactElement;
+}) {
+  if (!items?.length) return children;
+  return <ContextMenu items={items}>{children}</ContextMenu>;
 }
 
 export function TabPanel({

@@ -23,6 +23,10 @@
 //
 // CHAT-UX: the bubble carries its time (`data-at`) for the conversation's one tip, which shows the
 // full time while the pointer rests on it (time-tip.tsx); the group's clock time is chat-time.ts's.
+//
+// SOC-NEXT §3.1: in crew chat a mention ("@Kaan_07") is semi-bold on a quiet plate, and a message
+// that mentions the player wears a thin gold ring and a faint gold fill (no stripe beside it:
+// projects-taste). §3.2: the open search marks its matches in the words (next/decorate.tsx).
 import {
   ArrowBendUpLeft,
   ArrowClockwise,
@@ -54,6 +58,7 @@ import type { ChatExtras, ChatLinkRules, ChatMessage, ChatReaction } from "@/lib
 import { copyText } from "../actions";
 import { type MessageAction, messageMenu } from "../menus";
 import { enter, leave, rise, swap, useSocialMotion } from "../motion";
+import { type Mentionable, mentionSpans } from "../next/mentions";
 import { PersonContextMenu, type PersonPlace } from "../person-menu";
 import { SocialFace } from "../social-face";
 import { clockTime } from "./chat-time";
@@ -105,6 +110,8 @@ export interface RowShared {
   /** The quick reactions' six. */
   quick: readonly string[];
   people: (id: string) => ChatPerson;
+  /** SOC-NEXT, crew chat: the members by the names the crew knows (mentions). */
+  members?: readonly Mentionable[];
 }
 
 /** Failures the same text would meet again: the player writes it another way. */
@@ -136,6 +143,8 @@ function selectedIn(element: HTMLElement | null): string | null {
   const words = selection.toString().trim();
   return words || null;
 }
+
+const NO_MENTIONS: ReturnType<typeof mentionSpans> = [];
 
 /** Cards are asked for once per message and session (the backend keeps them with the message). */
 const unfurled = new Set<string>();
@@ -185,6 +194,7 @@ function Bubble({
   failed,
   sending,
   gone,
+  mentioned = false,
   sizeKey,
   children,
 }: {
@@ -192,6 +202,8 @@ function Bubble({
   failed: boolean;
   sending: boolean;
   gone: boolean;
+  /** SOC-NEXT: it mentions the player. */
+  mentioned?: boolean;
   /** Changes whenever the words inside change (the bubble measures itself only then). */
   sizeKey: string;
   children: ReactNode;
@@ -226,7 +238,9 @@ function Bubble({
           "absolute inset-0 -z-10 ring-1 ring-inset transition-[box-shadow] duration-200",
           mine
             ? "bg-[color-mix(in_oklab,var(--color-gold-500)_17%,var(--color-obsidian-800))] ring-gold-400/20"
-            : "bg-obsidian-800/85 ring-white/7",
+            : mentioned
+              ? "bg-[color-mix(in_oklab,var(--color-gold-500)_9%,var(--color-obsidian-800))] ring-gold-400/45"
+              : "bg-obsidian-800/85 ring-white/7",
           failed && "ring-flare-400/45",
         )}
         {...layer(!gone)}
@@ -347,6 +361,13 @@ function MessageRowView({
     [found, refused],
   );
   const firstLink = links.find((link) => link.ok);
+  // SOC-NEXT: the crew's names this message mentions, and whether the player is one of them.
+  const members = shared.members;
+  const mentions = useMemo(
+    () => (members && !gone && !sticker ? mentionSpans(text, members) : NO_MENTIONS),
+    [members, gone, sticker, text],
+  );
+  const mentioned = !mine && mentions.some((span) => span.id === shared.me);
   const reactable = !gone && extras.reactions && shared.writable && reactOpen;
   const repliable = !gone && sent && extras.replies && shared.writable;
   const big = !gone && !sticker && !message.reply ? bigEmojiCount(text) : 0;
@@ -490,7 +511,7 @@ function MessageRowView({
           exit={{ opacity: 0, transition: { duration: 0.1, ease: easeOutExpo } }}
         >
           <span className="sr-only select-none">{speaker}</span>
-          <MessageText text={text} links={links} />
+          <MessageText text={text} links={links} mentions={mentions} searchKey={message.key} />
           {cardLink && extras.links ? (
             <LinkCard
               link={cardLink}
@@ -539,6 +560,7 @@ function MessageRowView({
         failed={failed}
         sending={message.state === "sending"}
         gone={gone}
+        mentioned={mentioned}
         sizeKey={gone ? `gone:${tombstone}` : `text:${text}:${message.card?.state ?? ""}`}
       >
         {quote}

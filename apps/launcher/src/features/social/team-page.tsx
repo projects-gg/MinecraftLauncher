@@ -94,6 +94,10 @@ import { dayMonth, limitOf, opensIn } from "./limits";
 import { openMenuFromKey } from "./menu-key";
 import { type Leaving, leavingOf } from "./menus";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
+import { useMarkedUnread } from "./next/conv-hooks";
+import { useSocNext } from "./next/flag";
+import { openChatSearch } from "./next/search-bar";
+import { Hidden } from "./next/streamer-ui";
 import { NameWithMark } from "./person-mark";
 import { PersonContextMenu } from "./person-menu";
 import { SocialAvatar, SocialFace } from "./social-face";
@@ -531,7 +535,8 @@ function CodeRow({ team }: { team: SocialTeam }) {
                 data-selectable
                 {...swap(reduce, 0.26)}
               >
-                {team.code}
+                {/* SOC-NEXT "Yayıncı modu": off a stream until "Göster". */}
+                <Hidden>{team.code}</Hidden>
               </motion.span>
             </AnimatePresence>
           </p>
@@ -1403,23 +1408,38 @@ function CrewPanes({ team }: { team: SocialTeam }) {
     (s) => s.view.chat?.conversations.find((c) => c.id === `c:${team.id}`)?.unread ?? 0,
   );
   const open = useSocialUi((s) => s.open && s.page === "team");
+  // SOC-NEXT: one marked unread here counts one; the chat's search sits at the tabs' end.
+  const next = useSocNext();
+  const marked = useMarkedUnread(`c:${team.id}`);
+  const count = unread || marked;
   return (
-    <Tabs<CrewPane>
-      value={pane}
-      onValueChange={setPane}
-      label={team.name}
-      items={[
-        { value: "crew", label: t("chat.tabs.crew") },
-        { value: "chat", label: t("chat.tabs.chat"), count: unread > 0 ? unread : undefined },
-      ]}
-    >
-      <TabPanel value="crew" className="overflow-visible pt-3">
-        <CrewView team={team} />
-      </TabPanel>
-      <TabPanel value="chat" className="flex flex-col overflow-hidden pt-0">
-        <CrewChat team={team} onScreen={open && pane === "chat"} />
-      </TabPanel>
-    </Tabs>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <Tabs<CrewPane>
+        value={pane}
+        onValueChange={setPane}
+        label={team.name}
+        items={[
+          { value: "crew", label: t("chat.tabs.crew") },
+          { value: "chat", label: t("chat.tabs.chat"), count: count > 0 ? count : undefined },
+        ]}
+      >
+        <TabPanel value="crew" className="overflow-visible pt-3">
+          <CrewView team={team} />
+        </TabPanel>
+        <TabPanel value="chat" className="flex flex-col overflow-hidden pt-0">
+          <CrewChat team={team} onScreen={open && pane === "chat"} />
+        </TabPanel>
+      </Tabs>
+      {next && pane === "chat" ? (
+        <IconButton
+          label={t("socNext.search.open")}
+          icon={<MagnifyingGlass size={17} />}
+          size="sm"
+          className="absolute top-px right-0"
+          onClick={() => openChatSearch(`c:${team.id}`)}
+        />
+      ) : null}
+    </div>
   );
 }
 

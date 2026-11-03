@@ -27,6 +27,7 @@ import { managesLink } from "./crew-joining";
 import { newAccount } from "./identity";
 import { limitOf, opensIn } from "./limits";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
+import { Hidden } from "./next/streamer-ui";
 import { useSocialUi } from "./store";
 
 /** The link's page as players read it: the address without its scheme. */
@@ -77,7 +78,8 @@ function LinkRow({ team }: { team: SocialTeam }) {
                   data-selectable
                   {...swap(reduce, 0.26)}
                 >
-                  {shown(url)}
+                  {/* SOC-NEXT "Yayıncı modu": off a stream until "Göster". */}
+                  <Hidden>{shown(url)}</Hidden>
                 </motion.span>
               </AnimatePresence>
             </p>

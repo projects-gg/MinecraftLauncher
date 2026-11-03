@@ -952,6 +952,7 @@ export const tauriSocial: SocialApi = {
   async chatClear(conv) {
     await commands.socialChatClear(conv);
   },
+  streamingApp: () => commands.socialStreamingApp().catch(() => false),
   async report(target, reason, note, block) {
     const wire =
       target.kind === "crew"

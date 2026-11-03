@@ -82,6 +82,8 @@ import { canJoinInvite, joinInvite } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
 import { groupFriends } from "./model";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
+import { HIDDEN } from "./next/streamer";
+import { useReveal } from "./next/streamer-ui";
 import { NameWithMark } from "./person-mark";
 import { PersonContextMenu, PersonMoreButton, usePeopleItems } from "./person-menu";
 import { PresenceText } from "./presence-text";
@@ -359,10 +361,12 @@ function CodeChip({ code }: { code: string }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const [copied, setCopied] = useState(false);
+  // SOC-NEXT "Yayıncı modu": the code stays off a stream (pressing still copies it).
+  const { hidden } = useReveal();
   return (
     <button
       type="button"
-      aria-label={`${t("social.add.copy")}, ${code}`}
+      aria-label={hidden ? t("social.add.copy") : `${t("social.add.copy")}, ${code}`}
       onClick={() =>
         void copyText(code).then((ok) => {
           if (!ok) return;
@@ -378,7 +382,7 @@ function CodeChip({ code }: { code: string }) {
         className="font-display text-[15px] font-semibold tracking-[0.05em] text-bone-50 tabular-nums"
         data-selectable
       >
-        {code}
+        {hidden ? HIDDEN : code}
       </span>
       <span className="relative flex size-4 items-center justify-center">
         <AnimatePresence mode="popLayout" initial={false}>
@@ -674,7 +678,12 @@ export function ListPage() {
       }
     }
 
-    const friends = view.friends.filter((friend) => hit(friend.name, friend.username));
+    // SOC-NEXT: a friend with a nickname is found by both names.
+    const friends = view.friends.filter(
+      (friend) =>
+        hit(friend.name, friend.username) ||
+        (friend.realName !== undefined && hit(friend.realName)),
+    );
     const rows = (entries: Friend[], group: string | null): Item[] =>
       entries.map((friend) => ({ key: `f:${friend.id}`, kind: "friend", friend, group }));
     if (grouped && doc) {
