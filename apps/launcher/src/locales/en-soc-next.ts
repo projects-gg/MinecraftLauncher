@@ -14,7 +14,7 @@ export const enSocNext = {
     change: "Change nickname",
     remove: "Remove nickname",
     title: "Nickname",
-    hint: "Only you see it.",
+    hint: "Only you can see it.",
     save: "Save",
     tooLong: "24 characters at most.",
     saved: "Nickname saved",
@@ -36,6 +36,7 @@ export const enSocNext = {
   },
   status: {
     until: "{{status}}, {{until}}",
+    forever: "Until I turn it off",
     back: "You're Online again",
   },
   search: {

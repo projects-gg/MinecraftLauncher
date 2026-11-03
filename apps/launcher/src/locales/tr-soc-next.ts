@@ -39,6 +39,8 @@ export const trSocNext = {
   },
   status: {
     until: "{{status}}, {{until}}",
+    // The crew mute's "Ben açana kadar" is about sound: a status is turned off.
+    forever: "Ben kapatana kadar",
     back: "Durumun Çevrimiçi oldu",
   },
   search: {
