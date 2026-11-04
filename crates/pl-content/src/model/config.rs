@@ -493,8 +493,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 }
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
-/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice` and `socNext`,
-/// which stay off until Studio turns them on.
+/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext` and
+/// `telemetry`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -558,6 +558,12 @@ pub struct Features {
     /// mentions and emoji suggestions, streamer mode. Off by default; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub soc_next: bool,
+    /// "Kullanım verisi" (TELEMETRY): launchers count anonymous usage and crash data and send it
+    /// once a day to the Studio gate (`pl-telemetry`); players turn it off in Settings → Veri.
+    /// Outside the friends feature. Off by default: nothing is counted or sent until it is on, and
+    /// off again forgets what waits; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub telemetry: bool,
 }
 
 impl Default for Features {
@@ -578,6 +584,7 @@ impl Default for Features {
             phone_afk: false,
             voice: false,
             soc_next: false,
+            telemetry: false,
         }
     }
 }
@@ -845,6 +852,26 @@ mod tests {
         let older: LauncherConfig =
             serde_json::from_str(r#"{"features": {"friends": true, "voice": true}}"#).unwrap();
         assert!(!older.features.soc_next && older.features.voice);
+    }
+
+    #[test]
+    fn telemetry_is_off_by_default_and_written_only_when_on() {
+        let config: LauncherConfig = serde_json::from_str("{}").unwrap();
+        assert!(!config.features.telemetry);
+        let written = serde_json::to_value(&config).unwrap();
+        assert!(written["features"].get("telemetry").is_none());
+
+        // Outside the friends feature: on by itself.
+        let on: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"telemetry": true}}"#).unwrap();
+        assert!(on.features.telemetry && !on.features.friends);
+        assert_eq!(
+            serde_json::to_value(&on).unwrap()["features"]["telemetry"],
+            serde_json::Value::Bool(true)
+        );
+        let older: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"afk": true, "socNext": true}}"#).unwrap();
+        assert!(!older.features.telemetry);
     }
 
     #[test]

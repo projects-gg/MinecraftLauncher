@@ -1,0 +1,18 @@
+[package]
+name = "pl-telemetry"
+description = "Anonymous usage data of Projects Launcher: counted on the computer, sent once a day, off with one switch"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+parking_lot = { workspace = true }
+# The batch goes out gzipped; already built for pl-mc, pl-import and pl-cloud-afk.
+flate2 = "1.1"
+
+[dev-dependencies]
+tempfile = { workspace = true }

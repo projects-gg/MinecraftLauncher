@@ -1080,12 +1080,14 @@ pub async fn cleanup_summary(
 }
 
 /// Starts the automatic tidy-up: shortly after start, then once a day while the launcher stays
-/// open. A round that finds the launcher busy (game, install, data job) tries again later.
+/// open. A round that finds the launcher busy (game, install, data job) tries again later. Usage
+/// data's daily batch rides on the same rounds (TELEMETRY: no timer of its own).
 pub fn start_housekeeping(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_TIDY).await;
         loop {
+            crate::telemetry::tick(&app);
             let wait = if tidy(&app).await {
                 TIDY_EVERY
             } else {

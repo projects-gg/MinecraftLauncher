@@ -14,6 +14,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useImportJob } from "@/features/import/import-job";
 import { glide, useMotionPrefs } from "@/features/modcenter/motion";
+import { UsageDataRow } from "@/features/telemetry/settings-row";
 import { api, type MovePlan, type MoveProgress } from "@/lib/api";
 import { formatBytes, formatCount, formatPercent } from "@/lib/format";
 import { useUi } from "@/stores/ui";
@@ -206,6 +207,9 @@ export function DataSection() {
             />
           ) : null}
         </Item>
+
+        {/* Usage data (TELEMETRY; only while Studio's flag is on), beside the support bundle. */}
+        <UsageDataRow />
 
         <Item
           title={t("dataSettings.legacy")}

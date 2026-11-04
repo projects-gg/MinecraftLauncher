@@ -390,7 +390,7 @@ cache file extension.
 
 Every field is optional (`{}` is a valid config). Defaults: no maintenance, no banners, bundled
 hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`,
-`teams`, `chat`, `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk` and `voice` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
+`teams`, `chat`, `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext` and `telemetry` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
 news feed, the launcher's built-in recommended Minecraft version.
 
 - `banners[].level`: `info | warning | event | critical`; a banner is shown while
@@ -532,6 +532,14 @@ news feed, the launcher's built-in recommended Minecraft version.
   `false`; launchers that do not know the field ignore it. Publishing it needs Studio
   2.0.1-beta.1.21 or later, which warns when it is on without `friends` or when the service's voice
   is not set up or switched off.
+- `features.telemetry`: "Kullanım verisi" (TELEMETRY): launchers count anonymous usage and crash
+  data on the computer and send it about once a day to the Studio team gate (`pl-telemetry`;
+  `POST https://studio-team.projects.gg/v1/telemetry`), unless the player turned "Kullanım verisi
+  gönder" off in Settings → Veri. Off by default, outside the friends feature: while it is `false`
+  (or missing) launchers count nothing, send nothing and show no switch, and a launcher that saw it
+  on forgets what it had not sent. Turn it on only after the privacy page says it. Writers omit it
+  while it is `false`; launchers that do not know the field ignore it. Publishing it needs a Studio
+  that knows the field (TELEMETRY).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte
