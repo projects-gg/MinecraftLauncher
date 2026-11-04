@@ -70,6 +70,14 @@ export interface MenuStripItem {
 const contentClass =
   "glass-strong pop-motion z-50 min-w-[190px] rounded-[var(--radius-panel)] p-1 shadow-[0_24px_60px_rgb(34_6_6/0.55)]";
 
+/**
+ * A menu never runs past the window (QOL-209): taller than the room Radix found on its side (a
+ * short window, a trigger low on the screen), its rows scroll inside it with the app's thin bar.
+ * Menus that fit are unchanged.
+ */
+const dropdownFits = "max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto";
+const contextFits = "max-h-[var(--radix-context-menu-content-available-height)] overflow-y-auto";
+
 /** The strip of small actions and the line under it. */
 function stripRow(strip: readonly MenuStripItem[] | undefined, parts: MenuParts): ReactNode {
   if (!strip?.length) return null;
@@ -501,7 +509,7 @@ export function Menu({
           side={at ? at.side : side}
           sideOffset={sideOffset}
           collisionPadding={at && at.side !== "bottom" ? MENU_MARGIN : collisionPadding}
-          className={cn(contentClass, className)}
+          className={cn(contentClass, dropdownFits, className)}
           // Radix names the menu after its trigger; a label of its own replaces that name.
           {...(name ? { "aria-label": name, "aria-labelledby": undefined } : {})}
           onCloseAutoFocus={(event) => focusBackAfterKeys(event, onCloseAutoFocus)}
@@ -573,7 +581,7 @@ export function ContextMenu({
       <RadixContextMenu.Portal>
         <RadixContextMenu.Content
           collisionPadding={8}
-          className={contentClass}
+          className={cn(contentClass, contextFits)}
           {...(title ? { "aria-label": title } : {})}
           onCloseAutoFocus={(event) => focusBackAfterKeys(event, onCloseAutoFocus)}
         >

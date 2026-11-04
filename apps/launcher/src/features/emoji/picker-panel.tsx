@@ -62,6 +62,8 @@ export interface PickerPanelProps {
   onSticker: (sticker: StickerData) => void;
   /** The search field, for the layer to focus when it opens. */
   searchRef?: (node: HTMLInputElement | null) => void;
+  /** The panel's height: less than `PANEL_HEIGHT` in a short window (`panelHeightFor`). */
+  height?: number;
 }
 
 /** The rows of the panel, in pixels: tabs, search, rail, footer. */
@@ -104,6 +106,7 @@ export default function PickerPanel({
   onEmoji,
   onSticker,
   searchRef,
+  height = PANEL_HEIGHT,
 }: PickerPanelProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<PickerTab>(stickers ? initialTab : "emoji");
@@ -126,9 +129,14 @@ export default function PickerPanel({
         <AnimatePresence initial={false}>
           <motion.div key={tab} className="absolute inset-0 flex flex-col" {...crossfade}>
             {tab === "emoji" ? (
-              <EmojiTab onEmoji={onEmoji} searchRef={searchRef} top={stickers ? TABS : 0} />
+              <EmojiTab
+                onEmoji={onEmoji}
+                searchRef={searchRef}
+                top={stickers ? TABS : 0}
+                panel={height}
+              />
             ) : (
-              <StickerTab onSticker={onSticker} />
+              <StickerTab onSticker={onSticker} panel={height} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -156,11 +164,14 @@ function EmojiTab({
   onEmoji,
   searchRef,
   top,
+  panel,
 }: {
   onEmoji: (emoji: string) => void;
   searchRef?: (node: HTMLInputElement | null) => void;
   /** Height above the tab (the segmented control, when there are stickers). */
   top: number;
+  /** The panel's height. */
+  panel: number;
 }) {
   const { t, i18n } = useTranslation();
   const lang = languageOf(i18n.language);
@@ -247,7 +258,7 @@ function EmojiTab({
     }
   };
 
-  const height = PANEL_HEIGHT - top - SEARCH - RAIL - FOOTER;
+  const height = panel - top - SEARCH - RAIL - FOOTER;
   // The rail stays while searching (a press leaves the search for the group).
   const railIds = useMemo(() => browse.map((s) => s.id), [browse]);
   // Nothing under the pointer: the first emoji of the group in view.
@@ -471,7 +482,14 @@ function GridSkeleton({
   );
 }
 
-function StickerTab({ onSticker }: { onSticker: (sticker: StickerData) => void }) {
+function StickerTab({
+  onSticker,
+  panel,
+}: {
+  onSticker: (sticker: StickerData) => void;
+  /** The panel's height. */
+  panel: number;
+}) {
   const { t, i18n } = useTranslation();
   const lang = languageOf(i18n.language);
   const [preview, setPreview] = useState<StickerData | null>(null);
@@ -504,7 +522,7 @@ function StickerTab({ onSticker }: { onSticker: (sticker: StickerData) => void }
     [onSticker, usedSticker],
   );
   const shown = preview ?? sections[0]?.items[0] ?? null;
-  const height = PANEL_HEIGHT - TABS - FOOTER - 6;
+  const height = panel - TABS - FOOTER - 6;
 
   return (
     <>

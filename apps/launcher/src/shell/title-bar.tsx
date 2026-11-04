@@ -75,7 +75,7 @@ function ServerPill() {
         type="button"
         onClick={() => void copy()}
         aria-label={t("server.copy", { address })}
-        className="relative flex h-8 cursor-pointer items-center rounded-full bg-obsidian-950/45 px-3 text-[12.5px] ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform,scale] duration-150 ease-out hover:bg-obsidian-950/65 hover:ring-white/14 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
+        className="relative flex h-8 cursor-pointer items-center rounded-full bg-obsidian-950/45 px-3 text-[12.5px] whitespace-nowrap ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform,scale] duration-150 ease-out hover:bg-obsidian-950/65 hover:ring-white/14 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
       >
         <motion.span
           className="flex items-center gap-2"
@@ -89,10 +89,11 @@ function ServerPill() {
             state={isPending ? "pending" : online ? "online" : "offline"}
             latencyMs={data?.latencyMs}
           />
-          <span className="font-display font-semibold text-bone-50">
+          {/* A crowded bar keeps the bars alone (styles.css, QOL-209). */}
+          <span className="font-display font-semibold text-bone-50 titlebar-crowded:hidden">
             {data?.name ?? "Projects"}
           </span>
-          <span className="text-ash-300 tabular-nums">{label}</span>
+          <span className="text-ash-300 tabular-nums titlebar-crowded:hidden">{label}</span>
         </motion.span>
         <AnimatePresence>
           {copied ? (
@@ -112,7 +113,7 @@ function ServerPill() {
               }}
             >
               <Check size={14} weight="bold" aria-hidden />
-              {t("server.copied")}
+              <span className="titlebar-crowded:hidden">{t("server.copied")}</span>
             </motion.span>
           ) : null}
         </AnimatePresence>
@@ -150,7 +151,7 @@ function WindowControls() {
   const base =
     "flex h-titlebar w-[46px] items-center justify-center text-ash-300 transition-colors duration-150 hover:text-bone-50";
   return (
-    <div className="flex">
+    <div className="flex shrink-0">
       <button
         type="button"
         aria-label={t("window.minimize")}
@@ -186,12 +187,14 @@ function PaletteButton() {
     <button
       type="button"
       onClick={() => setOpen(true)}
+      // Its name also when a crowded bar folds it to the glass (styles.css, QOL-209).
+      aria-label={t("palette.open")}
       aria-keyshortcuts={ariaKeyShortcuts("palette", detectOs())}
-      className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12.5px] text-ash-300 transition-[background-color,color,transform,scale] duration-150 ease-out hover:bg-white/8 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
+      className="flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12.5px] whitespace-nowrap text-ash-300 transition-[background-color,color,transform,scale] duration-150 ease-out hover:bg-white/8 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
     >
       <MagnifyingGlass size={14} aria-hidden />
-      {t("palette.open")}
-      <ShortcutKeys id="palette" />
+      <span className="titlebar-crowded:hidden">{t("palette.open")}</span>
+      <ShortcutKeys id="palette" className="titlebar-crowded:hidden" />
     </button>
   );
 }
@@ -220,12 +223,25 @@ export function TitleBar({ search = true }: { search?: boolean }) {
       <div data-tauri-drag-region inert={updateLocked} className={cn(aside, "gap-3")}>
         <ServerPill />
       </div>
-      <div className="flex items-center gap-2.5">
-        <div inert={updateLocked} className={cn(aside, "gap-2.5")}>
+      {/* The window's own buttons are never pushed out of the window (QOL-209: a call, an update
+          and the friends at 1024 px did). A crowded bar folds its quiet parts first
+          (`titlebar-crowded`, styles.css); past that, the pills give way at their start. */}
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div
+          inert={updateLocked}
+          className={cn(
+            aside,
+            "min-w-0 justify-end gap-2.5 overflow-x-clip [overflow-clip-margin:4px]",
+          )}
+        >
           {search ? (
             <>
-              {/* Voice chat's room (VOICE), beside the friends it is with; only while in one. */}
-              <VoicePill />
+              {/* Voice chat's room (VOICE), beside the friends it is with; only while in one.
+                  The marks tell the bar whether a call and an update share it (no box of their
+                  own: `contents`). */}
+              <span data-voice-pill="" className="contents">
+                <VoicePill />
+              </span>
               {/* SOC-NEXT: "Yayıncı modu" says it is on; a press turns it off. */}
               <StreamerMark />
               <FriendsPill />
@@ -235,7 +251,9 @@ export function TitleBar({ search = true }: { search?: boolean }) {
             </>
           ) : null}
           {search ? <PaletteButton /> : null}
-          <UpdatePill />
+          <span data-update-pill="" className="contents">
+            <UpdatePill />
+          </span>
         </div>
         {mac ? null : <WindowControls />}
       </div>

@@ -86,8 +86,9 @@ function ServerStatusLine({ address }: { address: string }) {
       ? "offline"
       : "pending";
   return (
-    // Fixed width: the line below never shifts when the answer arrives.
-    <span className="flex h-5 w-[172px] shrink-0 items-center justify-end gap-2 text-[12.5px] whitespace-nowrap text-ash-300 tabular-nums">
+    // A fixed width, so the line below never shifts when the answer arrives; a big server's count
+    // ("45.123 / 200.000 oyuncu") widens it instead of running over the name (QOL-209).
+    <span className="flex h-5 min-w-[172px] shrink-0 items-center justify-end gap-2 text-[12.5px] whitespace-nowrap text-ash-300 tabular-nums">
       <span className="relative flex min-w-0 justify-end">
         <AnimatePresence initial={false} mode="popLayout">
           {state === "pending" ? null : (

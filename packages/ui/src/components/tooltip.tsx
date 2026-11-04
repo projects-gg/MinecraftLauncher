@@ -45,7 +45,9 @@ export function Tooltip({
           sideOffset={6}
           // Never flush with the window's edge (a tooltip over a control in a corner touched it).
           collisionPadding={8}
-          className="glass-strong pop-motion z-50 rounded-md px-2 py-1 text-[12px] font-medium text-bone-100 shadow-[0_12px_32px_rgb(34_6_6/0.45)]"
+          // Long words wrap within the window (QOL-209): a link's address, a long instance name or
+          // every name of "who is in game" drew one line wider than a 1024 px window.
+          className="glass-strong pop-motion z-50 max-w-[min(360px,var(--radix-tooltip-content-available-width))] rounded-md px-2 py-1 text-[12px] font-medium text-bone-100 shadow-[0_12px_32px_rgb(34_6_6/0.45)] [overflow-wrap:anywhere]"
         >
           {content}
         </RadixTooltip.Content>

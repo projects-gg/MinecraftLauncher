@@ -652,9 +652,11 @@ function AutoJoinSwitch({
       ) : (
         <label htmlFor={id} className="cursor-pointer whitespace-nowrap select-none">
           {words}
+          {/* As wide as the route picker's line at most (QOL-209: a long address pushed the bar's
+              middle under OYNA); the instance's settings show it whole. */}
           <span
             id={`${id}-address`}
-            className="block text-[12px] text-ash-400 @max-[560px]/bar:hidden"
+            className="block max-w-[280px] truncate text-[12px] text-ash-400 @max-[560px]/bar:hidden"
           >
             {address}
           </span>

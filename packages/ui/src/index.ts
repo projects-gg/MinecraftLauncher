@@ -128,6 +128,7 @@ export {
   swallowDismissClick,
 } from "./layer-dismiss";
 export { cn } from "./lib/cn";
+export { MORE_BELOW_MASK, useMoreBelow } from "./more-below";
 export * from "./motion";
 export {
   fromPortal,

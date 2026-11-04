@@ -13,6 +13,19 @@
   --font-sans: "Figtree Variable", "PL Emoji", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* A crowded title bar (QOL-209): a voice call and a ready update beside the friends, the account
+   and the search pushed the window's own buttons out of a window under 1280 px (1024 px: by
+   130 px). Then the search keeps its glass and the server pill its bars; their words stay in the
+   accessible names and the pill's tooltip. The marks are title-bar.tsx's `contents` wrappers,
+   which hold a child only while their pill shows. */
+@custom-variant titlebar-crowded {
+  @media (width < 1280px) {
+    header[data-titlebar]:has([data-voice-pill] > *):has([data-update-pill] > *) & {
+      @slot;
+    }
+  }
+}
+
 /* One gold (QA-FIX-L; docs/design.md §6): a segmented control's chosen option sits on a quiet
    plate in the text colour everywhere in the launcher, as in Studio and on the site (the AFK panels
    had it first). The gold stays the main action's, the progress's and the active nav's. */

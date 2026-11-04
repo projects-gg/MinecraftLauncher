@@ -23,6 +23,7 @@ import {
   easeOutExpo,
   Field,
   Input,
+  MORE_BELOW_MASK,
   SEGMENTED_GLIDE_MS,
   Segmented,
   Select,
@@ -30,6 +31,7 @@ import {
   Switch,
   toast,
   useInteractionMotion,
+  useMoreBelow,
   useMotionPrefs,
   useReduceMotion,
   useSystemReducedMotion,
@@ -38,7 +40,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
 import { FastPackRow } from "@/features/fastpack/settings-row";
@@ -95,6 +97,10 @@ const sections = [
 ] as const;
 
 type SectionId = (typeof sections)[number]["id"];
+
+/** The section list's room above its first row (the focus ring) and its fade at the bottom, px. */
+const LIST_TOP = 5;
+const LIST_FADE = 28;
 
 /**
  * A section's name: "Grafik ve FPS" and "Sorun yardımcısı" keep their words in their own modules
@@ -708,6 +714,36 @@ export function SettingsPage() {
   const arrival = useSettingLanding(search.focus, () => {
     void navigate({ to: "/settings", search: { section: active }, replace: true });
   });
+  // The chosen section stays in view when the list scrolls (a short window, and Ctrl+K or a link
+  // opening "Hakkında"): the list moves just enough, at once, clear of the top edge's focus ring
+  // room and of the fade at the bottom. Again when sections come later (friends and voice chat
+  // join the list once their services answer, and pushed "Hakkında" out of sight).
+  const list = useRef<HTMLUListElement | null>(null);
+  const [moreBelow, watchMore] = useMoreBelow();
+  const listRef = useCallback(
+    (el: HTMLUListElement | null) => {
+      list.current = el;
+      watchMore(el);
+    },
+    [watchMore],
+  );
+  const shownKey = shown.map((s) => s.id).join(" ");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the list's rows change too
+  useLayoutEffect(() => {
+    const box = list.current;
+    const row = box?.querySelector<HTMLElement>(`[data-section="${active}"]`);
+    if (!box || !row) return;
+    const top = row.offsetTop - LIST_TOP;
+    const bottom = row.offsetTop + row.offsetHeight + LIST_FADE;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (bottom > box.scrollTop + box.clientHeight) {
+      // Whole rows leave at the top: no sliver of one is left under the title.
+      const need = bottom - box.clientHeight;
+      const rows = [...box.querySelectorAll<HTMLElement>("[data-section]")];
+      const first = rows.find((r) => r.offsetTop - LIST_TOP >= need);
+      box.scrollTop = first ? first.offsetTop - LIST_TOP : need;
+    }
+  }, [active, shownKey]);
 
   const body: Record<SectionId, ReactNode> = {
     general: <General />,
@@ -728,9 +764,21 @@ export function SettingsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 gap-6 px-page pt-3 pb-5">
-      <nav aria-label={t("settings.title")} className="w-[184px] shrink-0">
-        <h1 className="page-title mb-4">{t("settings.title")}</h1>
-        <ul className="space-y-0.5">
+      {/* The title stays; the sections scroll under it when the window is short (QOL-209: at
+          1280 × 633 "Hakkında" ran under the command bar with no scroll). `page-scroll` puts the
+          app's thin bar beside the rows (they keep their width whether it shows or not), the
+          padding keeps the focus rings of the first and last rows, and while more follows the
+          last visible row fades out as a dialog's body does (keyboard focus stops clear of it). */}
+      <nav aria-label={t("settings.title")} className="flex w-[184px] shrink-0 flex-col">
+        <h1 className="page-title mb-[9px]">{t("settings.title")}</h1>
+        <motion.ul
+          ref={listRef}
+          layoutScroll
+          className={cn(
+            "page-scroll relative min-h-0 flex-1 space-y-0.5 py-[5px] [scroll-padding-block:5px_28px]",
+            moreBelow && MORE_BELOW_MASK,
+          )}
+        >
           {shown.map((s) => {
             const Icon = s.icon;
             const on = s.id === active;
@@ -738,6 +786,7 @@ export function SettingsPage() {
               <li key={s.id}>
                 <button
                   type="button"
+                  data-section={s.id}
                   aria-current={on ? "page" : undefined}
                   onClick={() =>
                     void navigate({ to: "/settings", search: { section: s.id }, replace: true })
@@ -766,7 +815,7 @@ export function SettingsPage() {
               </li>
             );
           })}
-        </ul>
+        </motion.ul>
       </nav>
       <section className="glass min-h-0 max-w-[740px] flex-1 overflow-y-auto rounded-[var(--radius-panel)] px-6 py-4">
         {/* A new section rises into place; the panel itself stays. */}
