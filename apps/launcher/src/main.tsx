@@ -12,6 +12,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { commands } from "@/bindings";
+import { telemetryApi } from "@/features/telemetry/api";
+import { watchPageErrors } from "@/features/telemetry/page-errors";
 import { api } from "@/lib/api";
 import i18n, { currentLanguage, startLanguage } from "@/lib/i18n";
 import { detectOs, isTauri } from "@/lib/platform";
@@ -43,6 +45,8 @@ if (isTauri()) {
     handleFocus(!isWindowAway());
     return onWindowAwayChange((away) => handleFocus(!away));
   });
+  // Usage data (TELEMETRY): the page's uncaught errors, kept only while it is on.
+  watchPageErrors();
 }
 
 // Ambient motion plays while somebody uses the window (lib/player-idle.ts); the window coming
@@ -148,7 +152,12 @@ async function start(rootElement: HTMLElement) {
   if (isTauri()) {
     requestAnimationFrame(() => {
       void commands.appInfo().then(async (info) => {
-        if (!info.startMinimized) await getCurrentWindow().show();
+        if (!info.startMinimized) {
+          await getCurrentWindow().show();
+          // Usage data's start and its time, process start to the window showing (once per run;
+          // a start at login into the tray is not timed: the busy login would skew it).
+          void telemetryApi.pageReady().catch(() => {});
+        }
         await refreshWindowAway();
       });
     });

@@ -286,6 +286,8 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     );
     // "Hızlı kaynak paketi yükleme" (FASTPACK): the next pack sync follows the flag.
     crate::fastpack::apply_flag(&state.root, snapshot.config.features.fast_packs);
+    // Usage data (TELEMETRY): counted and sent only while it is on; off forgets what waits.
+    crate::telemetry::apply_flag(snapshot.config.features.telemetry);
     state
         .afk
         .set_client_release(afk_client_release(state, snapshot));

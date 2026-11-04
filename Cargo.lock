@@ -4516,6 +4516,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pl-telemetry"
+version = "2.0.0"
+dependencies = [
+ "flate2",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "pl-voice"
 version = "2.0.0"
 dependencies = [
@@ -4778,6 +4789,7 @@ dependencies = [
  "dirs 7.0.0",
  "fs4",
  "jiff",
+ "os_info",
  "parking_lot",
  "pl-afk",
  "pl-auth",
@@ -4794,6 +4806,7 @@ dependencies = [
  "pl-net",
  "pl-overlay",
  "pl-social",
+ "pl-telemetry",
  "pl-voice",
  "pl-worlds",
  "semver",

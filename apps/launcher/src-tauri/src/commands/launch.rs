@@ -440,10 +440,15 @@ pub async fn launch_instance(
         }
         Err(error) => {
             let error = out_of_room(error, &state, &instance_id);
+            // Usage data: only the error's code (TELEMETRY).
+            crate::telemetry::launch_ended(Err(error.code.as_str()));
             let _ = on_event.send(LaunchEventView::Error(error.clone()));
             Err(error)
         }
-        Ok(()) => Ok(()),
+        Ok(()) => {
+            crate::telemetry::launch_ended(Ok(()));
+            Ok(())
+        }
     }
 }
 
@@ -1363,7 +1368,10 @@ async fn prepare_and_spawn(
                 first_start,
                 account: started_account.clone(),
             }),
-            GameEvent::WindowShown => Some(LaunchEventView::WindowShown),
+            GameEvent::WindowShown => {
+                crate::telemetry::game_shown();
+                Some(LaunchEventView::WindowShown)
+            }
             // Sent after the exit, once the suspects are found in the mods folder.
             GameEvent::Crashed(_) => None,
             GameEvent::Line(line) => {
@@ -1538,6 +1546,8 @@ async fn prepare_and_spawn(
             crate::prepare::game_exited(&app);
         }
         if let Some(diagnosis) = exit.crash.clone() {
+            // Usage data: only the crash's kind (TELEMETRY).
+            crate::telemetry::game_crashed(diagnosis.kind);
             let view = modhealth::crash_view(
                 &app,
                 &state,

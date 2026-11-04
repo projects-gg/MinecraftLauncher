@@ -691,6 +691,8 @@ impl Platform for AppPlatform {
     }
 
     fn state(&self, state: VoiceState) {
+        // Usage data reads a stay's phase and quality mark from it (TELEMETRY; only while on).
+        crate::telemetry::voice_state(&state);
         // The in-game overlay (VOICE-O): a ring rings in the game while the window is away (in
         // front, the page rings).
         if let Some(overlay) = self.overlay.get() {

@@ -71,6 +71,7 @@ pl-host = { workspace = true }
 pl-worlds = { workspace = true }
 pl-items = { workspace = true }
 pl-voice = { workspace = true }
+pl-telemetry = { workspace = true }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { workspace = true }
@@ -88,6 +89,9 @@ tauri-plugin-updater = { workspace = true }
 # same.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
+# Windows' version for usage data (TELEMETRY: 10 or 11, from RtlGetVersion; no program runs):
+# the build tauri-plugin-os makes already.
+os_info = { workspace = true }
 windows = { version = "0.62", features = [
     "Data_Xml_Dom",
     "Foundation",

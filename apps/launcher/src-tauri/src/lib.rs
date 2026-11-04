@@ -14,12 +14,15 @@ mod shot_copy;
 #[cfg(target_os = "macos")]
 mod single_instance_macos;
 mod state;
+mod telemetry;
 mod voice;
 mod webview_rest;
 
 use tauri::Manager;
 
 pub fn run() {
+    // Usage data's startup time counts from here (TELEMETRY; nothing is counted while it is off).
+    telemetry::process_started();
     // Debug builds run under an identity of their own (identifier, keychain service, data
     // folder): they never forward to, read from or write over an installed launcher.
     identity::check();
@@ -114,6 +117,8 @@ pub fn run() {
                 invoke.resolver.reject("not allowed");
                 return true;
             }
+            // Usage data counts the feature commands (TELEMETRY, `pl_telemetry::feature`).
+            telemetry::command(invoke.message.command());
             handler(invoke)
         })
         .setup(move |app| {
@@ -130,6 +135,8 @@ pub fn run() {
             specta.mount_events(app);
             let version = app.package_info().version.to_string();
             let state = state::AppState::init(app.handle(), &version)?;
+            // Usage data's recorder, before the content (and its flag) is applied (TELEMETRY).
+            telemetry::open(app.handle(), &state.root);
             // Cached news art and instance files are shown through the asset protocol.
             app.asset_protocol_scope()
                 .allow_directory(state.root.join("cache"), true)?;
@@ -179,9 +186,13 @@ pub fn run() {
         })
         .build(identity::context())
         .expect("error while running Projects Launcher")
-        .run(|_app, _event| {
+        .run(|_app, event| {
+            // A voice stay in progress ends and usage data's waiting counts are written.
+            if matches!(event, tauri::RunEvent::Exit) {
+                telemetry::flush();
+            }
             #[cfg(target_os = "macos")]
-            single_instance_macos::on_run_event(_app, &_event, shell::focus_main_window);
+            single_instance_macos::on_run_event(_app, &event, shell::focus_main_window);
         });
 }
 
@@ -317,6 +328,12 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             // config's features.fastPacks is on)
             fastpack::fast_packs_configure,
             fastpack::fast_packs_state,
+            // Settings → Veri "Kullanım verisi gönder" (TELEMETRY; shown only while the signed
+            // config's features.telemetry is on), the start's time and the page's errors
+            telemetry::telemetry_state,
+            telemetry::telemetry_configure,
+            telemetry::telemetry_page_ready,
+            telemetry::telemetry_page_error,
             // world sharing (HOST1; shown only while the signed config and the service offer it)
             commands::host::host_state,
             commands::host::host_place,
@@ -763,10 +780,12 @@ fn init_logging() {
         .with(stdout)
         .try_init();
 
-    // Panics reach the log file too (the default hook only prints to stderr).
+    // Panics reach the log file too (the default hook only prints to stderr), and usage data as a
+    // scrubbed summary while it is on (TELEMETRY).
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         tracing::error!(panic = %info, "the launcher panicked");
+        telemetry::panicked(info);
         default_hook(info);
     }));
 }
