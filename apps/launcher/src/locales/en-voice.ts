@@ -1,7 +1,7 @@
 // Voice chat (VOICE). The same short, friendly words as the Turkish ones (tr-voice.ts), British
 // English: one idea, the room; Start voice call (asked as "Call {name}?"), Join, Decline, Leave,
 // Invite; no explanations but the one before
-// "Close room" and the two under settings.
+// "Close room", the two under settings and the call question's line for a friend in do not disturb.
 export const enVoice = {
   title: "Voice chat",
   someone: "A player",
@@ -21,6 +21,7 @@ export const enVoice = {
     ask: "Call {{name}}?",
     askYes: "Call",
     askNo: "Cancel",
+    askDnd: "Do not disturb is on: no ring, they'll see it later.",
     askFirst: "Ask before calling",
     unreachable: "Can't be called right now.",
     together: "Already in your room.",
