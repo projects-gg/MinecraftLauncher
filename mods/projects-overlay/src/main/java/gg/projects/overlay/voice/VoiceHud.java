@@ -57,7 +57,7 @@ public final class VoiceHud implements HudElement {
     private final Map<String, String> names = new HashMap<>();
     private int linesScale = -1;
 
-    private record Line(FormattedCharSequence text, int width, Face face) {
+    private record Line(String name, FormattedCharSequence text, int width, Face face) {
     }
 
     public VoiceHud(Supplier<VoiceState> state, BooleanSupplier showSpeakers) {
@@ -142,7 +142,11 @@ public final class VoiceHud implements HudElement {
                 }
                 VoiceState.Person person = room.person(row.id());
                 String name = person != null ? person.name() : names.getOrDefault(row.id(), "");
-                Line line = lines.computeIfAbsent(name, k -> line(font, k));
+                Line line = lines.get(row.id());
+                if (line == null || !line.name().equals(name)) {
+                    line = line(font, row.id(), name);
+                    lines.put(row.id(), line);
+                }
                 int w = PAD + FACE + NAME_GAP + line.width + END_PAD;
                 Draw.pushAlpha(row.alpha());
                 Draw.frame(g, Frames.SPEAKER, MARGIN, y, w, ROW_H);
@@ -167,10 +171,10 @@ public final class VoiceHud implements HudElement {
         Perf.toast(started);
     }
 
-    private static Line line(Font font, String name) {
+    private static Line line(Font font, String id, String name) {
         String shown = name.isEmpty() ? Texts.str("voice.someone") : name;
         String fitted = Texts.fit(font, shown, 120);
-        return new Line(Texts.visual(fitted), font.width(fitted), Face.of(shown));
+        return new Line(name, Texts.visual(fitted), font.width(fitted), Face.of(shown, id));
     }
 
     private static long now() {

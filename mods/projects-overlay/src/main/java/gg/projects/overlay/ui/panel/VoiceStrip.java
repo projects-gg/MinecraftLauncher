@@ -85,8 +85,8 @@ public final class VoiceStrip extends PanelWidget {
             if (i < shown) {
                 ids.add(p.id);
                 Face face = faces.get(p.id);
-                if (face == null || !Texts.initial(p.name).equals(face.letter())) {
-                    faces.put(p.id, Face.of(p.name));
+                if (face == null || !face.is(p.name, p.id)) {
+                    faces.put(p.id, Face.of(p.name, p.id));
                 }
                 if (p.mark != null) {
                     marks.put(p.id, p.mark);

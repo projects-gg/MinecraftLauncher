@@ -103,7 +103,7 @@ public final class ToastCard {
         this.conversation = b.conversation;
         this.crewChat = b.crewChat;
         this.face = b.crewChat ? Face.sign(Icon.CREW)
-            : b.initial == null || b.initial.isEmpty() ? null : Face.of(b.initial);
+            : b.initial == null || b.initial.isEmpty() ? null : Face.of(b.initial, b.by);
         this.title = b.title;
         this.titleWidth = b.titleWidth;
         this.chip = b.chip;
@@ -275,6 +275,8 @@ public final class ToastCard {
         String conversation;
         boolean crewChat;
         String initial;
+        /** OVL-AVATARS: whose picture the face shows (a user id), or null for the letter. */
+        String by;
         FormattedCharSequence title;
         int titleWidth;
         TagChip chip;
@@ -344,6 +346,7 @@ public final class ToastCard {
         b.title = Texts.visual(titleText);
         b.titleWidth = strong.width(titleText);
         b.initial = Texts.initial(name);
+        b.by = request.by();
         String crewName = request.crew() == null || request.crew().isEmpty() ? null : request.crew();
         if (b.kind == Kind.MESSAGE && crewName != null) {
             b.crew = Texts.visual(Texts.fit(small, crewName, TEXT_W));
@@ -419,9 +422,10 @@ public final class ToastCard {
     /**
      * A voice chat ring (VOICE-O): the caller's face, "{@code name} arıyor" in bold (the name gives way to the verb), who
      * else is in the room under it ("Odada: Ece_x, Mert"; else "Sesli sohbet"), and the hint to answer in the panel
-     * ("Yanıtlamak için [F7] tuşuna bas", with {@code fnTip} the Fn line).
+     * ("Yanıtlamak için [F7] tuşuna bas", with {@code fnTip} the Fn line). {@code from}: the caller's user id, for
+     * their picture.
      */
-    public static ToastCard ring(String name, String others, String keyName, boolean fnTip) {
+    public static ToastCard ring(String name, String from, String others, String keyName, boolean fnTip) {
         Builder b = new Builder();
         b.kind = Kind.RING;
         Font strong = Fonts.strong();
@@ -432,6 +436,7 @@ public final class ToastCard {
         b.title = Texts.visual(titleText);
         b.titleWidth = strong.width(titleText);
         b.initial = Texts.initial(who);
+        b.by = from;
         String line = others == null || others.isEmpty() ? Texts.str("voice.title")
             : Texts.str("voice.ring.others", others);
         b.body = Texts.wrap(Fonts.ui(), line, TEXT_W, 1);

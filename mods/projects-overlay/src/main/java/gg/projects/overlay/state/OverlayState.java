@@ -321,17 +321,23 @@ public final class OverlayState {
      * A toast the launcher asked for; the mod may still skip it (hidden GUI, conversation already open). {@code badge}
      * (TEAM6): the card of the tag a message's sender wears, while tags are on. {@code marks} (BADGES-UI): the profile
      * badges of the person the title names (a message's sender, the friend of an invite or a world invite) that the
-     * catalogue knows, the most important first.
+     * catalogue knows, the most important first. {@code by} (OVL-AVATARS): that person's user id, for their picture on
+     * the card's face, or null.
      */
     public record ToastRequest(String kind, String key, String title, String body, String conversation,
-        String crew, String sticker, Badge badge, List<MarkDef> marks) {
+        String crew, String sticker, Badge badge, List<MarkDef> marks, String by) {
         public ToastRequest(String kind, String key, String title, String body, String conversation, String crew) {
-            this(kind, key, title, body, conversation, crew, null, null, List.of());
+            this(kind, key, title, body, conversation, crew, null, null, List.of(), null);
         }
     }
 
     /** Someone who asked the player to be friends (OVL-SOC 2). */
     public record Request(String id, String name) {
+    }
+
+    /** A user id from a launcher frame, or null when there is none (or no id could be that long). */
+    private static String person(String id) {
+        return id == null || id.isEmpty() || id.length() > 64 ? null : id;
     }
 
     private final Map<String, Friend> friends = new LinkedHashMap<>();
@@ -1245,6 +1251,11 @@ public final class OverlayState {
                     switch (kind) {
                         case "message", "invite", "world" -> marks(markKeys(arr(frame, "marks")));
                         default -> List.of();
+                    },
+                    // OVL-AVATARS: whose picture the card's face shows (the person the title names).
+                    switch (kind) {
+                        case "message", "invite", "world" -> person(Protocol.str(frame, "by", null));
+                        default -> null;
                     });
             }
             default -> {
