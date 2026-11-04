@@ -8,7 +8,7 @@ import java.util.List;
  * page. The launcher decides whether a toast is sent; these decide how (or whether) the game shows it.
  * {@code keyUsed} and {@code fnNeeded} are no preferences: what this computer taught the toasts' key hint (KEY-HINT,
  * {@link gg.projects.overlay.keys.KeyHint}): the overlay key has opened the panel here, and its F-key reaches the game
- * only with Fn ("Açmak için [Fn + F7] tuşlarına bas"). {@code showKeyHint}: "Açma ipucunu göster", the toasts' one
+ * only with Fn ("Açmak için [Fn] + [F7] tuşlarına bas"). {@code showKeyHint}: "Açma ipucunu göster", the toasts' one
  * line that says which key opens the panel. {@code showSpeakers} (VOICE-O): "Konuşanları göster", the HUD's corner of
  * who speaks in the player's voice room. {@code recentChatEmojis} (OVL-SOC): the panel picker's recent emoji, no
  * preference either. Immutable; the {@code with…} methods return a changed copy.

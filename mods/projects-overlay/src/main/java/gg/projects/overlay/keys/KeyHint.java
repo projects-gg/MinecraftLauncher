@@ -3,7 +3,7 @@ package gg.projects.overlay.keys;
 /**
  * The one line a toast's key hint says on this computer (KEY-HINT; the owner, 4 Nov: "tek satır bulundurmak lazım 2
  * satır yerine", and "gerçekten f7 mi gerekli fn 7 mi gerekli onu anlamamız lazım"): "Açmak için [F7] tuşuna bas", or,
- * where this computer gives F1 to F12 only with Fn held, "Açmak için [Fn + F7] tuşlarına bas". Never both; none while
+ * where this computer gives F1 to F12 only with Fn held, "Açmak için [Fn] + [F7] tuşlarına bas". Never both; none while
  * the player turned "Açma ipucunu göster" off.
  *
  * <p>What the game's window hears of a laptop's top row (GLFW's key callback as the game gets it, nothing from the
@@ -38,7 +38,7 @@ public final class KeyHint {
         NONE,
         /** "Açmak için [F7] tuşuna bas". */
         KEY,
-        /** "Açmak için [Fn + F7] tuşlarına bas". */
+        /** "Açmak için [Fn] + [F7] tuşlarına bas". */
         FN
     }
 

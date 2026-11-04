@@ -40,7 +40,7 @@ class ToastHintTest {
         int s = ToastCard.HINT_SPACE;
         // "Açmak için [F7] tuşuna bas": words, a cap, words.
         assertEquals(37 + s + 14 + s + 36, ToastCard.lineWidth(new int[] {37, 36}, new int[] {14}));
-        // A sentence that starts with its key ("[Fn + F7] tuşlarına bas"), and words alone.
+        // A sentence that starts with its key ("[F7] tuşuna bas"), and words alone.
         assertEquals(14 + s + 40, ToastCard.lineWidth(new int[] {0, 40}, new int[] {14}));
         assertEquals(83, ToastCard.lineWidth(new int[] {83}, new int[] {}));
     }
@@ -56,10 +56,13 @@ class ToastHintTest {
     }
 
     @Test
-    void fnAndTheKeyShareOneCap() {
-        assertEquals("Fn + F7", ToastCard.fnCap("F7"));
+    void fnHasACapOfItsOwn() {
         assertEquals("Fn", ToastCard.FN);
         assertEquals(".fn", ToastCard.FN_FORM);
+        // "Açmak için [Fn] + [F7] tuşlarına bas": the "+" between the caps is a word of its own.
+        assertEquals(List.of("Açmak için", "+", "tuşlarına bas"),
+            ToastCard.split("Açmak için \u0000 + \u0000 tuşlarına bas"));
+        assertEquals(List.of("", "+", "tuşlarına bas"), ToastCard.split("\u0000 + \u0000 tuşlarına bas"));
     }
 
     @Test
@@ -75,16 +78,17 @@ class ToastHintTest {
             String en = words.template(Language.ENGLISH, key);
             assertTrue(tr.endsWith(" için %s tuşuna bas"), key + ": " + tr);
             assertTrue(en.startsWith("Press %s to "), key + ": " + en);
-            // The Fn form: both keys on one cap, "tuşlarına" for the two; English says it the same way.
+            // The Fn form: both keys on caps with "+" between, "tuşlarına" for the two, as laptop makers write it.
             String fn = key + ToastCard.FN_FORM;
-            assertEquals(tr.replace(" tuşuna bas", " tuşlarına bas"), words.template(Language.TURKISH, fn), fn);
-            assertEquals(en, words.template(Language.ENGLISH, fn), fn);
+            assertEquals(tr.replace(" %s tuşuna bas", " %s + %s tuşlarına bas"), words.template(Language.TURKISH, fn),
+                fn);
+            assertEquals(en.replace("Press %s ", "Press %s + %s "), words.template(Language.ENGLISH, fn), fn);
         }
         // Too wide for the card in the current letters (the game's pixel font at GUI 1): the keys alone.
         assertEquals("%s tuşuna bas", words.template(Language.TURKISH, SHORT));
-        assertEquals("%s tuşlarına bas", words.template(Language.TURKISH, SHORT + ToastCard.FN_FORM));
+        assertEquals("%s + %s tuşlarına bas", words.template(Language.TURKISH, SHORT + ToastCard.FN_FORM));
         assertEquals("Press %s", words.template(Language.ENGLISH, SHORT));
-        assertEquals("Press %s", words.template(Language.ENGLISH, SHORT + ToastCard.FN_FORM));
+        assertEquals("Press %s + %s", words.template(Language.ENGLISH, SHORT + ToastCard.FN_FORM));
         assertEquals("Açmak için Kontroller'den bir tuş ata", words.template(Language.TURKISH, UNBOUND));
         assertEquals("To open, set a key in Controls", words.template(Language.ENGLISH, UNBOUND));
     }
@@ -100,11 +104,12 @@ class ToastHintTest {
                 fits(font, language, template, "F7");
                 // A long name (a rebound key) still shows whole beside the words.
                 assertTrue(width(font, "Sağ Shift") <= room(font, template, 0, "Sağ Shift"), template);
-                // The Fn form shows for F1 to F12 only: F12 is its widest key.
-                fits(font, language, words.template(language, key + ToastCard.FN_FORM), ToastCard.fnCap("F12"));
             }
+            // The Fn form shows for F1 to F12 only (F12 its widest key): "Açmak için [Fn] + [F12] tuşlarına bas" fits
+            // the card; a longer sentence ("Yanıtlamak için …") gives way to the keys alone, which always fit.
+            fits(font, language, words.template(language, KEY_HINTS.get(0) + ToastCard.FN_FORM), ToastCard.FN, "F12");
             fits(font, language, words.template(language, SHORT), "Sağ Shift");
-            fits(font, language, words.template(language, SHORT + ToastCard.FN_FORM), ToastCard.fnCap("F12"));
+            fits(font, language, words.template(language, SHORT + ToastCard.FN_FORM), ToastCard.FN, "F12");
             fits(font, language, words.template(language, UNBOUND));
         }
     }

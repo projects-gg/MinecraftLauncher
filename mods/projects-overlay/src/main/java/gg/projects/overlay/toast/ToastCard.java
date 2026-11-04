@@ -37,9 +37,10 @@ import net.minecraft.util.FormattedCharSequence;
  * için [F7] tuşuna bas"; it stands under the call's gold hairline for as long as it rings.
  *
  * <p>The hint is one line that says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked
- * it): "Açmak için [F7] tuşuna bas", or where this computer gives the key only with Fn, "Açmak için [Fn + F7] tuşlarına
- * bas" (KEY-HINT, {@link KeyHint}); a line too wide for the card in the current letters (the game's pixel font at GUI
- * scale 1) says the keys alone ("[Fn + F7] tuşlarına bas"). None while "Açma ipucunu göster" is off.
+ * it): "Açmak için [F7] tuşuna bas", or where this computer gives the key only with Fn, "Açmak için [Fn] + [F7]
+ * tuşlarına bas" (KEY-HINT, {@link KeyHint}); a line too wide for the card in the current letters (the game's pixel font
+ * at GUI scale 1, the long "Yanıtlamak için") says the keys alone ("[Fn] + [F7] tuşlarına bas"). None while "Açma
+ * ipucunu göster" is off.
  */
 public final class ToastCard {
     public static final int WIDTH = Frames.TOAST_WIDTH;
@@ -214,7 +215,7 @@ public final class ToastCard {
     }
 
     /**
-     * One hint line, laid out once: words with key caps among them ("Açmak için [F7] tuşuna bas", "Açmak için [Fn + F7]
+     * One hint line, laid out once: words with key caps among them ("Açmak için [F7] tuşuna bas", "Açmak için [Fn] + [F7]
      * tuşlarına bas"), or words alone.
      */
     static final class Hint {
@@ -301,7 +302,8 @@ public final class ToastCard {
                 if (i < keys.length) {
                     cx += first ? 0 : HINT_SPACE;
                     Draw.frame(g, Frames.KEYCAP, cx, y, capWidths[i], HINT_H);
-                    Draw.text(g, small, keys[i], cx + KEY_PAD, textY - 0.5f, Theme.BONE_100);
+                    // Centred on the cap like the words beside it (half a pixel higher touched its top at GUI 1).
+                    Draw.text(g, small, keys[i], cx + KEY_PAD, textY, Theme.BONE_100);
                     cx += capWidths[i];
                     first = false;
                 }
@@ -430,9 +432,10 @@ public final class ToastCard {
 
     /**
      * The key hint, one line: the overlay's key where the sentence has it ("Açmak için [F7] tuşuna bas", "Press [F7] to
-     * open"); for {@link KeyHint.Line#FN} Fn on the same cap, as laptop makers print it, in the sentence's Fn form
-     * ("Açmak için [Fn + F7] tuşlarına bas"); the keys alone ("[Fn + F7] tuşlarına bas") when the sentence is wider than
-     * the card in the current letters; with no key bound, where to bind one; null for {@link KeyHint.Line#NONE}.
+     * open"); for {@link KeyHint.Line#FN} Fn on a cap of its own before it, as laptop makers print it, in the sentence's
+     * Fn form ("Açmak için [Fn] + [F7] tuşlarına bas"); the keys alone ("[Fn] + [F7] tuşlarına bas") when the sentence is
+     * wider than the card in the current letters; with no key bound, where to bind one; null for {@link
+     * KeyHint.Line#NONE}.
      */
     static Hint hintOf(String template, String keyName, KeyHint.Line line) {
         if (line == KeyHint.Line.NONE) {
@@ -442,15 +445,10 @@ public final class ToastCard {
             return Hint.plain(Texts.str("toast.hint.unbound"));
         }
         boolean fn = line == KeyHint.Line.FN;
-        String cap = fn ? fnCap(keyName) : keyName;
-        Hint full = Hint.of(fn ? template + FN_FORM : template, cap);
+        String[] caps = fn ? new String[] {FN, keyName} : new String[] {keyName};
+        Hint full = Hint.of(fn ? template + FN_FORM : template, caps);
         // The whole sentence with the key's whole name, or the keys alone (a cut "F…" names no key).
-        return !full.cut && full.width <= TEXT_W ? full : Hint.of(fn ? SHORT_HINT + FN_FORM : SHORT_HINT, cap);
-    }
-
-    /** Fn and the key on one cap ("Fn + F7"). */
-    static String fnCap(String keyName) {
-        return FN + " + " + keyName;
+        return !full.cut && full.width <= TEXT_W ? full : Hint.of(fn ? SHORT_HINT + FN_FORM : SHORT_HINT, caps);
     }
 
     /**
