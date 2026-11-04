@@ -1,0 +1,48 @@
+# source: the JVM error log (hs_err_pid*.log) of the same run, trimmed and anonymized
+# note: the module list names the graphics driver's file (loaded, not crashing)
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x00007ffeed8749dd, pid=23664, tid=1280
+#
+# JRE version: OpenJDK Runtime Environment Microsoft-12574223 (25.0.1+8) (build 25.0.1+8-LTS)
+# Java VM: OpenJDK 64-Bit Server VM Microsoft-12574223 (25.0.1+8-LTS, mixed mode, tiered, compressed oops, compressed class ptrs, g1 gc, windows-amd64)
+# Problematic frame:
+# C  [freetype.dll+0x49dd]
+#
+# No core dump will be written. Minidumps are not enabled by default on client versions of Windows
+#
+# The crash happened outside the Java Virtual Machine in native code.
+# See problematic frame for where to report the bug.
+#
+
+---------------  S U M M A R Y ------------
+
+Time: Wed Nov  4 15:17:24 2026 Turkey Standard Time elapsed time: 2697.939146 seconds (0d 0h 44m 57s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x000002c5d440d770):  JavaThread "Worker-Main-54" daemon [_thread_in_native, id=1280, stack(0x000000f677c00000,0x000000f677d00000) (1024K)]
+
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  [freetype.dll+0x49dd]  (no source info available)
+C  0x000002c5af5733a4  (no source info available)
+
+Java frames: (J=compiled Java code, j=interpreted, Vv=VM code)
+v  ~RuntimeStub::nep_invoker_blob 0x000002c5af573368
+J 58293 c2 org.lwjgl.util.freetype.FreeType.nFT_Load_Glyph(JII)I (14 bytes) @ 0x000002c5b0d45cbc [0x000002c5b0d45c80+0x000000000000003c]
+J 58136 c1 org.lwjgl.util.freetype.FreeType.FT_Load_Glyph(Lorg/lwjgl/util/freetype/FT_Face;II)I (10 bytes) @ 0x000002c5a814184c [0x000002c5a8141800+0x000000000000004c]
+j  com.mojang.blaze3d.font.TrueTypeGlyphProvider.loadGlyph(ILorg/lwjgl/util/freetype/FT_Face;I)Lcom/mojang/blaze3d/font/UnbakedGlyph;+4
+j  com.mojang.blaze3d.font.TrueTypeGlyphProvider.getOrLoadGlyphInfo(ILcom/mojang/blaze3d/font/TrueTypeGlyphProvider$GlyphEntry;)Lcom/mojang/blaze3d/font/UnbakedGlyph;+38
+j  com.mojang.blaze3d.font.TrueTypeGlyphProvider.getGlyph(I)Lcom/mojang/blaze3d/font/UnbakedGlyph;+19
+J 58173 c2 net.minecraft.client.gui.font.FontManager.finalizeProviderLoading(Ljava/util/List;Lcom/mojang/blaze3d/font/GlyphProvider$Conditional;)V (138 bytes) @ 0x000002c5b0418008 [0x000002c5b0417920+0x00000000000006e8]
+J 58741 c1 java.util.concurrent.CompletableFuture$AsyncRun.run()V java.base@25.0.1 (61 bytes) @ 0x000002c5a878abd4 [0x000002c5a878ab00+0x00000000000000d4]
+j  java.util.concurrent.ForkJoinWorkerThread.run()V+31 java.base@25.0.1
+
+siginfo: EXCEPTION_ACCESS_VIOLATION (0xc0000005), reading address 0xffffffffffffffff
+
+---------------  P R O C E S S  ---------------
+
+Dynamic libraries:
+0x00007ffeed870000 - 0x00007ffeed91c000 	C:\Users\********\AppData\Roaming\ProjectsLauncher\natives\freetype.dll
+0x00007ffeb15c0000 - 0x00007ffeb3ee5000 	C:\WINDOWS\System32\DriverStore\FileRepository\nvtfi.inf_amd64_c5e1059a3383ed21\nvoglv64.dll

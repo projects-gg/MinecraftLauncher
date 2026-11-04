@@ -25,8 +25,8 @@ use tokio::task::JoinHandle;
 use crate::error::{Error, Result};
 use crate::launch::command::{LaunchCommand, java_argfile};
 use crate::launch::crash::{
-    CrashDiagnosis, CrashInput, SHORT_RUN, analyze_crash, crash_report_for, is_failure,
-    jvm_error_log_for,
+    CrashDiagnosis, CrashInput, SHORT_RUN, analyze_crash, crash_report_for, failed_after_quit,
+    is_failure, jvm_error_log_for,
 };
 use crate::launch::log::{Log4jParser, LogLine};
 use crate::launch::window::{GIVE_UP_AFTER, ShownBy, WindowProbe, log_marker, probe_interval};
@@ -897,7 +897,18 @@ async fn supervise(mut s: Supervision) {
     let jvm_log = may_have_failed
         .then(|| jvm_error_log_for(&s.game_dir, s.started_at, pid, shared_folder))
         .flatten();
-    let crash = if may_have_failed && is_failure(code, runtime, crash_report.is_some()) {
+    let failed = may_have_failed && is_failure(code, runtime, crash_report.is_some());
+    let crash = if failed && quit_before_failing(&output, on_screen) {
+        // The player quit and the game failed only while closing (CRASH-EXIT): nothing to show.
+        // Its log and the JVM's error log stay.
+        let report = crash_report.or(jvm_log);
+        tracing::info!(
+            ?code,
+            report = ?report.as_deref().and_then(Path::file_name),
+            "the game failed while closing after the player quit; not shown as a crash"
+        );
+        None
+    } else if failed {
         let report_path = crash_report.or(jvm_log);
         let report_text = report_path.as_deref().and_then(read_report);
         let mut diagnosis = analyze_crash(&CrashInput {
@@ -909,6 +920,7 @@ async fn supervise(mut s: Supervision) {
             required_java: s.options.required_java,
             max_memory_mb: s.options.max_memory_mb,
             player_jvm_args: &s.player_jvm_args,
+            window_shown: on_screen.is_some(),
         });
         diagnosis.crash_report = report_path;
         diagnosis.log_file = log_file.clone();
@@ -926,6 +938,13 @@ async fn supervise(mut s: Supervision) {
         crash,
         log_file,
     }));
+}
+
+/// A failed run the player had ended themselves (CRASH-EXIT): they played (the window was on
+/// screen past [`LOADING_GRACE`]: a start quit from a loading or error screen is still told) and
+/// the game failed only after its normal shutdown began ([`failed_after_quit`]).
+fn quit_before_failing(output: &str, on_screen: Option<Duration>) -> bool {
+    on_screen.is_some_and(|time| time >= LOADING_GRACE) && failed_after_quit(output)
 }
 
 fn read_report(path: &Path) -> Option<String> {
@@ -1307,6 +1326,7 @@ mod tests {
             required_java: None,
             max_memory_mb: None,
             player_jvm_args: &[],
+            window_shown: false,
         });
         let run = |runtime_secs, on_screen_secs, crashed: bool, killed| GameExit {
             code: Some(i32::from(crashed)),
@@ -1340,6 +1360,23 @@ mod tests {
         assert_eq!(run(27, None, true, false).play_time(), None);
         assert_eq!(run(15, None, false, true).play_time(), None);
         assert_eq!(run(70, Some(grace - 1), true, false).play_time(), None);
+    }
+
+    /// CRASH-EXIT: a failure after the player quit a session is not a crash; one after quitting
+    /// a start that never got to play (a loading or error screen) still is.
+    #[test]
+    fn failing_after_the_player_quit_a_session_is_no_crash() {
+        let output = "[15:17:23] [Render thread/INFO] [net.minecraft.client.Minecraft]: Stopping!\n\
+                      #  EXCEPTION_ACCESS_VIOLATION (0xc0000005)\n";
+        let secs = Duration::from_secs;
+        assert!(quit_before_failing(output, Some(secs(2690))));
+        assert!(quit_before_failing(output, Some(LOADING_GRACE)));
+        assert!(!quit_before_failing(output, Some(secs(20))));
+        assert!(!quit_before_failing(output, None));
+        assert!(!quit_before_failing(
+            "#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)\n",
+            Some(secs(2690))
+        ));
     }
 
     #[test]

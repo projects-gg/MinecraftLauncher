@@ -1,0 +1,36 @@
+# source: a Projects Launcher game log (Fabric 26.1.2, a 45-minute multiplayer session), trimmed to its end and anonymized
+# note: the player quit ("Stopping!"); while the game closed, a font worker loaded a glyph from a closed font and the JVM died in freetype.dll (exit code 1)
+[15:16:59] [Render thread/ERROR] [xaero.lib.XaeroLib]: Suppressed ZIP exception loading PNG minecraft:textures/block/dead_fire_coral_block.png: incorrect data check
+[15:16:59] [Render thread/INFO] [xaero.hud.minimap.MinimapLogs]: Exception when loading minecraft:dead_horn_coral_wall_fan texture, using material colour.
+[15:17:00] [Render thread/INFO] [xaero.hud.minimap.MinimapLogs]: Black texture 16
+[15:17:06] [Render thread/INFO] [ShulkerBoxTooltip]: [ShulkerBoxTooltip] checking EC...
+[15:17:23] [CullThread/INFO] [net.minecraft.server.LoggedPrintStream]: [STDOUT]: Shutting down culling task!
+[15:17:23] [Render thread/INFO] [net.minecraft.client.Minecraft]: Stopping!
+[15:17:23] [Render thread/INFO] [IAS]: IAS: Closing IAS...
+[15:17:23] [Render thread/INFO] [IAS]: IAS: IAS has been unloaded.
+[15:17:23] [Render thread/INFO] [voicechat]: [voicechat] Clearing audio channels
+[15:17:24] [Render thread/INFO] [voicechat]: [voicechat] Disconnecting voicechat
+[15:17:24] [Render thread/INFO] [xaero.hud.minimap.MinimapLogs]: Xaero hud session finalized.
+[15:17:24] [Render thread/INFO] [EMF]: [EMF]: Clearing data for reload.
+[15:17:24] [Render thread/INFO] [net.minecraft.server.packs.resources.ReloadableResourceManager]: Reloading ResourceManager: vanilla, appleskin, badoptimizations, fabric
+[15:17:24] [Render thread/INFO] [ChunkBuilder]: Stopping worker threads
+[15:17:24] [Worker-Main-58/INFO] [net.minecraft.client.gui.font.providers.UnihexProvider]: Found unifont_all_no_pua-17.0.01.hex, loading
+[15:17:24] [Worker-Main-47/INFO] [net.minecraft.client.gui.font.providers.UnihexProvider]: Found unifont_pua-17.0.01.hex, loading
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x00007ffeed8749dd, pid=23664, tid=1280
+#
+# JRE version: OpenJDK Runtime Environment Microsoft-12574223 (25.0.1+8) (build 25.0.1+8-LTS)
+# Java VM: OpenJDK 64-Bit Server VM Microsoft-12574223 (25.0.1+8-LTS, mixed mode, tiered, compressed oops, compressed class ptrs, g1 gc, windows-amd64)
+# Problematic frame:
+# C  [freetype.dll+0x49dd]
+#
+# No core dump will be written. Minidumps are not enabled by default on client versions of Windows
+#
+# An error report file with more information is saved as:
+# C:\Users\********\AppData\Roaming\ProjectsLauncher\instances\projects\minecraft\hs_err_pid23664.log
+#
+# The crash happened outside the Java Virtual Machine in native code.
+# See problematic frame for where to report the bug.
+#

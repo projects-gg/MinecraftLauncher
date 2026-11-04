@@ -256,6 +256,10 @@ pub struct CrashInput<'a> {
     /// did not start because of one of them is fixed by resetting them, not by changing the
     /// launcher's memory.
     pub player_jvm_args: &'a [String],
+    /// The game's window had shown ([`crate::launch::process::GameEvent::WindowShown`]). A native
+    /// crash with no graphics driver frame is a graphics driver failure only before that: once
+    /// the window is up the driver works, and the crash is the game's or a mod's (CRASH-EXIT).
+    pub window_shown: bool,
 }
 
 /// The legacy rule: a non-zero exit, or a short run that left a crash report.
@@ -290,6 +294,56 @@ pub fn reported_crash_file(output: &str) -> Option<String> {
         let name = path.trim().rsplit(['/', '\\']).next()?.trim();
         (name.starts_with("crash-") && name.ends_with(".txt")).then(|| name.to_owned())
     })
+}
+
+/// What the game's client logs once it begins its normal shutdown (`Minecraft.stop`): the player
+/// pressed "Quit Game" or closed the window. A crashing game never gets there: its crash handler
+/// saves the report and exits at once.
+static CLIENT_STOPPING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^(?:\[[^\]]*\] )?\[(?:Render thread|Client thread|main)/INFO\](?: \[[^\]]*\])?: Stopping!\s*$",
+    )
+    .expect("valid regex")
+});
+/// The world the game hosts (single player, LAN) starts being saved as its server stops.
+static WORLD_SAVE_STARTED: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^(?:\[[^\]]*\] )?\[Server thread/INFO\](?: \[[^\]]*\])?: (?:Stopping server|Saving worlds)\s*$",
+    )
+    .expect("valid regex")
+});
+/// ... and is on disk once this is logged (`MinecraftServer.saveAllChunks`, 1.16+).
+const WORLD_SAVED: &str = "All dimensions are saved";
+
+/// The run failed only after the player quit (CRASH-EXIT): the output shows the game's normal
+/// shutdown, no crash report saved before it, and no world save left unfinished (a version that
+/// does not log the save's end counts as unfinished). A failure while the game closes (a mod or
+/// the game tripping over something it already let go of, as Minecraft 26.1's font workers in
+/// `freetype.dll`) costs the player nothing: they asked to quit and their worlds are saved. The
+/// caller also checks that the player had played ([`crate::launch::process::LOADING_GRACE`]).
+pub fn failed_after_quit(output: &str) -> bool {
+    let lines: Vec<&str> = output.lines().collect();
+    let Some(stopping) = lines
+        .iter()
+        .rposition(|line| CLIENT_STOPPING.is_match(line))
+    else {
+        return false;
+    };
+    if lines[..stopping]
+        .iter()
+        .any(|line| line.contains(CRASH_SAVED_MARK))
+    {
+        return false;
+    }
+    match lines
+        .iter()
+        .rposition(|line| WORLD_SAVE_STARTED.is_match(line))
+    {
+        None => true,
+        Some(started) => lines[started..]
+            .iter()
+            .any(|line| line.contains(WORLD_SAVED)),
+    }
 }
 
 /// The crash report of one run (PLAY-AGAIN): the one its output names when that file is in the
@@ -733,10 +787,12 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         "glfw error 65542",
         "glfw error 65543",
         "glfw error 65545",
-        "exception_access_violation",
     ]) || GPU_DRIVER_FRAME.is_match(&text)
         || graphics_device_missing(&lower)
-        || input.exit_code == Some(-1073741819)
+        // A native crash with no frame in a driver: while the window opens that is most often
+        // the driver; after it showed, the game's own (freetype.dll, jvm.dll, a mod's library).
+        || (!input.window_shown
+            && (has("exception_access_violation") || input.exit_code == Some(-1073741819)))
     {
         (CrashKind::GraphicsDriver, Vec::new(), None)
     } else if any(&[
@@ -785,7 +841,15 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         (CrashKind::Unknown, Vec::new(), None)
     };
 
-    let suspects = collect_suspects(&text, kind);
+    let mut suspects = collect_suspects(&text, kind);
+    // The JVM died in native code: Java stack traces in the output are of earlier errors the game
+    // lived through, not of this crash.
+    if has("a fatal error has been detected by the java runtime environment")
+        || has("exception_access_violation")
+        || input.exit_code == Some(-1073741819)
+    {
+        suspects.retain(|suspect| suspect.reason != SuspectReason::InStackTrace);
+    }
     let mods = if kind == CrashKind::ModError {
         mod_error_names(&suspects)
     } else {
@@ -3386,6 +3450,156 @@ Stacktrace:\n\tat TRANSFORMER/create@0.5.1.f/com.simibubi.create.content.Foo.tic
             "[Render thread/ERROR]: Unreported exception thrown!\njava.lang.IllegalStateException: Can't getDevice() before it was initialized\n",
         );
         assert_eq!(d.kind, CrashKind::GraphicsDriver);
+    }
+
+    /// A run whose window showed, with this output and JVM error log.
+    fn analyze_shown(output: &str, report: Option<&str>, exit_code: Option<i32>) -> CrashDiagnosis {
+        analyze_crash(&CrashInput {
+            output,
+            crash_report: report,
+            exit_code,
+            runtime: Duration::from_secs(2699),
+            java_major: Some(25),
+            required_java: Some(25),
+            window_shown: true,
+            ..CrashInput::default()
+        })
+    }
+
+    /// CRASH-EXIT: the player quit after 45 minutes and the JVM died in `freetype.dll` while the
+    /// game closed (a font worker loading a glyph from a closed font). Not a crash to show, and
+    /// not a graphics driver problem even when it is analyzed.
+    #[test]
+    fn a_native_crash_after_quitting_is_not_shown_nor_a_driver_crash() {
+        let log = sample!("fabric-26.1.2-freetype-after-stopping-latest-log.txt");
+        let hs_err = sample!("fabric-26.1.2-freetype-after-stopping-hs-err.txt");
+        assert!(failed_after_quit(&log));
+        let d = analyze_shown(&log, Some(&hs_err), Some(1));
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert!(d.suspects.is_empty(), "{:?}", d.suspects);
+        assert!(
+            !d.suggested_actions
+                .contains(&SuggestedAction::UpdateGraphicsDriver)
+        );
+        // The same crash while the game played (no "Stopping!") is shown, as a crash of the game.
+        let playing = log.replace(
+            "[net.minecraft.client.Minecraft]: Stopping!",
+            "[net.minecraft.client.Minecraft]: Loaded 12 advancements",
+        );
+        assert!(!failed_after_quit(&playing));
+        // A Java error the game lived through earlier in the session names no mod for it.
+        let playing = format!(
+            "[14:40:00] [Render thread/ERROR]: Error rendering tooltip\njava.lang.IllegalStateException: boom\n\
+             \tat net.minecraft.class_332.handler$zza000$shulkerboxtooltip$onTooltip(class_332.java:1)\n{playing}"
+        );
+        let d = analyze_shown(&playing, Some(&hs_err), Some(1));
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert!(d.suspects.is_empty(), "{:?}", d.suspects);
+    }
+
+    #[test]
+    fn driver_crashes_need_a_driver_frame_once_the_window_showed() {
+        // Real driver crashes stay driver crashes, window or not.
+        for frame in [
+            "[nvoglv64.dll+0xd5c3a]",
+            "[atio6axx.dll+0x1b8a0f]",
+            "[ig9icd64.dll+0x2a1b3]",
+        ] {
+            let report = format!(
+                "#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x00007ffe1b2c3d4e\n# Problematic frame:\n# C  {frame}\n"
+            );
+            for shown in [false, true] {
+                let d = analyze_crash(&CrashInput {
+                    output: "[12:00:00] [Render thread/INFO]: Loaded 12 advancements",
+                    crash_report: Some(&report),
+                    exit_code: Some(1),
+                    window_shown: shown,
+                    ..CrashInput::default()
+                });
+                assert_eq!(d.kind, CrashKind::GraphicsDriver, "{frame} shown={shown}");
+            }
+        }
+        // So do the explicit OpenGL / GLFW messages.
+        let d = analyze_shown(
+            "[12:00:00] [Render thread/ERROR]: GLFW error 65542: WGL: The driver does not appear to support OpenGL",
+            None,
+            Some(1),
+        );
+        assert_eq!(d.kind, CrashKind::GraphicsDriver);
+        // A native crash elsewhere before the window showed: most often the driver.
+        let report = "#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)\n# Problematic frame:\n# C  [jvm.dll+0x3e1f20]\n";
+        let d = analyze_crash(&CrashInput {
+            output: "[12:00:00] [main/INFO]: Backend library: LWJGL version 3.3.3",
+            crash_report: Some(report),
+            exit_code: Some(1),
+            ..CrashInput::default()
+        });
+        assert_eq!(d.kind, CrashKind::GraphicsDriver);
+        // ... and after it: the game's or a mod's crash, not the driver.
+        let d = analyze_shown(
+            "[12:00:00] [Render thread/INFO]: Saving and pausing game...",
+            Some(report),
+            Some(1),
+        );
+        assert_eq!(d.kind, CrashKind::Unknown);
+        let d = analyze_shown("some output", None, Some(-1073741819));
+        assert_eq!(d.kind, CrashKind::Unknown);
+        for text in [&d.title_tr, &d.hint_tr] {
+            assert!(
+                !text.contains("0x") && !text.contains("-1073741819"),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn quitting_counts_only_once_the_world_is_saved() {
+        let fatal = "#\n# A fatal error has been detected by the Java Runtime Environment:\n#\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)\n";
+        // Closed the window in a single player world: the save finished before the JVM died.
+        let saved = format!(
+            "[20:10:00] [Render thread/INFO] [net.minecraft.client.Minecraft]: Stopping!\n\
+             [20:10:00] [Server thread/INFO] [net.minecraft.server.MinecraftServer]: Stopping server\n\
+             [20:10:00] [Server thread/INFO] [net.minecraft.server.MinecraftServer]: Saving players\n\
+             [20:10:00] [Server thread/INFO] [net.minecraft.server.MinecraftServer]: Saving worlds\n\
+             [20:10:01] [Server thread/INFO] [net.minecraft.server.MinecraftServer]: Saving chunks for level 'ServerLevel[New World]'/minecraft:overworld\n\
+             [20:10:02] [Server thread/INFO] [net.minecraft.server.MinecraftServer]: ThreadedAnvilChunkStorage: All dimensions are saved\n\
+             {fatal}"
+        );
+        assert!(failed_after_quit(&saved));
+        // The JVM died while the world was being saved: that may have cost the player something.
+        let saving = saved.replace(
+            "[20:10:02] [Server thread/INFO] [net.minecraft.server.MinecraftServer]: ThreadedAnvilChunkStorage: All dimensions are saved\n",
+            "",
+        );
+        assert!(!failed_after_quit(&saving));
+        // A world left earlier and saved, then "Quit Game" from the title screen.
+        let left = format!(
+            "[19:00:00] [Server thread/INFO]: Stopping server\n\
+             [19:00:00] [Server thread/INFO]: Saving worlds\n\
+             [19:00:01] [Server thread/INFO]: ThreadedAnvilChunkStorage: All dimensions are saved\n\
+             [19:05:00] [Render thread/INFO]: Stopping!\n{fatal}"
+        );
+        assert!(failed_after_quit(&left));
+        // An older version that does not log the save's end: shown, as before.
+        let old = "[19:00:00] [Server thread/INFO]: Stopping server\n\
+             [19:00:00] [Server thread/INFO]: Saving worlds\n\
+             [19:00:01] [Client thread/INFO]: Stopping!\n";
+        assert!(!failed_after_quit(old));
+        // Multiplayer, old plain log format.
+        assert!(failed_after_quit(
+            "[19:00:00] [Client thread/INFO]: Connecting to example.org, 25565\n[19:30:00] [Client thread/INFO]: Stopping!\n"
+        ));
+        // A crash report saved before the shutdown is a real crash.
+        assert!(!failed_after_quit(
+            "#@!@# Game crashed! Crash report saved to: #@!@# C:\\game\\crash-reports\\crash-2026-11-04_20.00.00-client.txt\n\
+             [20:00:01] [Render thread/INFO]: Stopping!\n"
+        ));
+        // A mod's own "Stopping!" on another thread, or none at all, is not the game quitting.
+        assert!(!failed_after_quit(
+            "[20:00:00] [Worker-Main-3/INFO] [somemod]: Stopping!\n"
+        ));
+        assert!(!failed_after_quit(fatal));
+        assert!(!failed_after_quit(""));
     }
 
     #[test]
