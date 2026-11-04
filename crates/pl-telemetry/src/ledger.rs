@@ -242,7 +242,7 @@ impl Ledger {
     /// The summaries a batch carries: the most frequent first.
     pub fn crashes_to_send(&self) -> Vec<CrashNote> {
         let mut notes = self.crashes.clone();
-        notes.sort_by(|a, b| b.n.cmp(&a.n));
+        notes.sort_by_key(|note| std::cmp::Reverse(note.n));
         notes.truncate(CRASHES_SENT);
         notes
     }

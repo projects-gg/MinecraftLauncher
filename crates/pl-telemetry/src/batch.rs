@@ -168,7 +168,7 @@ pub fn crash_only(ledger: &Ledger, facts: &AppFacts) -> Outgoing {
         .filter(|note| note.kind == CrashKind::Panic)
         .cloned()
         .collect();
-    notes.sort_by(|a, b| b.n.cmp(&a.n));
+    notes.sort_by_key(|note| std::cmp::Reverse(note.n));
     notes.truncate(crate::ledger::CRASHES_SENT);
     let wire = Wire {
         v: WIRE_VERSION,

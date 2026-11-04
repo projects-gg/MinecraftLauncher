@@ -382,7 +382,7 @@ pub fn location(file: &str, line: u32) -> String {
 /// files say `inline`).
 pub fn page_source(url: &str, line: u32, column: u32) -> String {
     let path = match url.split_once("://") {
-        Some((scheme, rest)) if matches!(scheme, "http" | "https" | "tauri" | "asset") => rest
+        Some(("http" | "https" | "tauri" | "asset", rest)) => rest
             .split_once('/')
             .map_or("", |(_, path)| path)
             .split(['?', '#'])
