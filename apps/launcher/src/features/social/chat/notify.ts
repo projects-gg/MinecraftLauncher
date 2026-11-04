@@ -15,7 +15,7 @@ export interface ChatNoticeContext {
   status: StatusMode | undefined;
   /** A game is being prepared or played. */
   gameBusy: boolean;
-  /** The launcher's window has the focus. */
+  /** The launcher's window is in front: shown, not minimized, and its page has the focus (`windowAway`). */
   inFront: boolean;
   /** The conversation is open and shows its newest messages. */
   onScreen: boolean;

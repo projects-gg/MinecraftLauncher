@@ -32,7 +32,7 @@ import type {
   TeamMember,
 } from "@/lib/api/social-types";
 import { voiceApi } from "@/lib/api/voice-api";
-import { clearNotification } from "@/lib/attention";
+import { clearNotification, windowAway } from "@/lib/attention";
 import { formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
@@ -488,7 +488,9 @@ function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>)
     kind: notice.crew ? "crew" : "direct",
     status: ui.view.me?.status,
     gameBusy: gameBusy(useLaunch.getState().phase.kind),
-    inFront: document.hasFocus(),
+    // FIX-209: shown, not minimized and the page focused, as every other notice asks it: WebView2's page can keep the
+    // focus while the window waits in the tray or minimized, and a direct message went to a toast nobody saw.
+    inFront: !windowAway(),
     onScreen: chatOnScreen(notice.conv),
     mutedHere: chatMutedNow(notice.conv, prefs.chatMutes, now),
     crewMuted: crew ? crewMutedNow(crew, ui.view.crewNotifications, now) : false,
@@ -518,7 +520,7 @@ function chatWayNow(conv: string): ChatNoticeWay {
   ) {
     return "none";
   }
-  if (document.hasFocus()) return chatOnScreen(conv) ? "none" : "toast";
+  if (!windowAway()) return chatOnScreen(conv) ? "none" : "toast";
   return "system";
 }
 
@@ -583,7 +585,7 @@ function settleChatNotices() {
     const before = noticeUnread.get(conv);
     noticeUnread.set(conv, unread);
     const read = before !== undefined && before > 0 && unread === 0;
-    if (read || (chatOnScreen(conv) && document.hasFocus())) {
+    if (read || (chatOnScreen(conv) && !windowAway())) {
       noticeUnread.delete(conv);
       chatNotices.seen(conv);
     }
