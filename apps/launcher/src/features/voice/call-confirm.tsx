@@ -4,13 +4,16 @@
 // then Enter calls); Esc or a press outside lets it be. Wherever a call starts (the friend's card,
 // a person menu, the chat's header) it asks the same, unless the player turned "Aramadan önce sor"
 // off in Settings → Sesli sohbet. "Tekrar ara" right after "Cevap yok" and "Odaya davet et" do not
-// ask: the one repeats a call just asked about, the other starts none.
+// ask: the one repeats a call just asked about, the other starts none. A friend in do not disturb
+// hears no ring (their launcher keeps it as a missed call), so the question says so in one line
+// instead of leaving "aranıyor…" to run out unexplained (BATCH-206).
 import { Phone } from "@phosphor-icons/react";
 import { Button, Dialog } from "@pl/ui";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { SocialFace } from "@/features/social/social-face";
+import { useSocialUi } from "@/features/social/store";
 import { callFriend } from "./actions";
 import { useFace, useVoiceUi } from "./store";
 
@@ -42,6 +45,7 @@ export function CallConfirm() {
   if (friend) last.current = friend;
   const shown = friend ?? last.current;
   const face = useFace(shown ?? "");
+  const dnd = useSocialUi((s) => s.view.friends.some((f) => f.id === shown && f.dnd));
 
   if (!shown) return null;
   return (
@@ -50,6 +54,7 @@ export function CallConfirm() {
       onOpenChange={(open) => {
         if (!open) answerCallAsk(false);
       }}
+      description={dnd ? t("voice.call.askDnd") : undefined}
       title={
         <span className="flex min-w-0 items-center gap-3">
           <SocialFace

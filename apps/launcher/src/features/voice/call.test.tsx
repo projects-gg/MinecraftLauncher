@@ -94,6 +94,7 @@ describe("asking before a call", () => {
     await settle();
     // The friends list does not know 302 here: "Bir oyuncu".
     expect(screen.getByText("Bir oyuncu aransın mı?")).toBeTruthy();
+    expect(screen.queryByText(/Rahatsız etmeyin/)).toBeNull();
     expect(call).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Ara" }));
     await settle();
@@ -123,6 +124,41 @@ describe("asking before a call", () => {
     act(() => askToCall("302"));
     await settle();
     expect(call).toHaveBeenCalledWith("302");
+  });
+
+  it("says in one line that a friend in do not disturb hears no ring (BATCH-206)", async () => {
+    const before = useSocialUi.getState().view;
+    useSocialUi.setState((s) => ({
+      view: {
+        ...s.view,
+        friends: [
+          {
+            ...s.view.friends[0],
+            id: "302",
+            name: "KorAtesi",
+            username: "koratesi",
+            avatar: "",
+            dnd: true,
+          } as never,
+        ],
+      },
+    }));
+    try {
+      act(() => useVoiceUi.getState().setState(scenario("ready")));
+      render(
+        <TooltipProvider>
+          <CallConfirm />
+        </TooltipProvider>,
+      );
+      act(() => askToCall("302"));
+      await settle();
+      expect(screen.getByText("KorAtesi aransın mı?")).toBeTruthy();
+      expect(
+        screen.getByText("Rahatsız etmeyin açık: zil çalmaz, aradığını sonra görür."),
+      ).toBeTruthy();
+    } finally {
+      useSocialUi.setState({ view: before });
+    }
   });
 });
 
