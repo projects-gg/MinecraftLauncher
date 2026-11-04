@@ -24,6 +24,9 @@ pl-content = { workspace = true }
 # same WebSocket and TLS stack as pl-social, so nothing new is compiled.
 pl-voice = { workspace = true }
 base64 = { workspace = true }
+# OVL-AVATARS: people's pictures prepared once for the faces (the same crate and features as pl-mc's, so nothing
+# new is compiled).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

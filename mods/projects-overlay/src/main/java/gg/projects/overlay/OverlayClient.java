@@ -32,6 +32,7 @@ import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.toast.ToastCard;
 import gg.projects.overlay.toast.ToastLayer;
+import gg.projects.overlay.ui.Avatars;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.Sounds;
 import gg.projects.overlay.ui.Texts;
@@ -665,6 +666,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         if (hadLevel && !hasLevel) {
             toasts.reset();
             StickerArt.releaseAll();
+            Avatars.releaseAll();
             // The ring's card went with the world's toasts: it comes back above the menus.
             ringShown = null;
         }
@@ -687,6 +689,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         tickLink(mc);
         Shapes.prepare();
         StickerArt.tick(monotonicMs());
+        // OVL-AVATARS: the faces' asks go out, unseen pictures give their textures back (nothing while none shows).
+        Avatars.tick(bridge);
         warmFonts(mc);
     }
 
@@ -1289,6 +1293,11 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
                 link.onClear();
                 return;
             }
+            // OVL-AVATARS: someone's picture for their face.
+            case "avatar" -> {
+                Avatars.onFrame(frame);
+                return;
+            }
             default -> {
             }
         }
@@ -1330,6 +1339,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             ringsSeen.clear();
             // No permit can come now: a server waiting for one hears there is none.
             link.onClear();
+            // Every face asks for its picture again once the launcher is back.
+            Avatars.offline();
         }
         refreshScreen();
     }
@@ -1430,7 +1441,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             }
             ringShown = null;
             if (want != null && toasts.ringable()) {
-                ToastCard card = ToastCard.ring(want.name(), want.with().isEmpty() ? null
+                ToastCard card = ToastCard.ring(want.name(), want.from(), want.with().isEmpty() ? null
                     : VoiceWords.names(want.with()), key.keyName(), fnTipWanted());
                 if (toasts.ring(card, RING_KEY + want.room(), want.until() - wall, settings.get(), reducedMotion())) {
                     ringShown = want.room();

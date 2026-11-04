@@ -27,6 +27,7 @@ use pl_social::{
     TEAM_FEATURE_ROLES, TeamMemberView, TeamRole, TeamView,
 };
 
+use crate::avatar::{self, Picture};
 use crate::hub::SocNextPrefs;
 use crate::links::{self, LinkLists};
 use crate::mention::{self, Mention};
@@ -110,6 +111,9 @@ pub struct Scene {
     /// as [`server_address`] reads them: the only places besides Projects the launcher would
     /// send the game to.
     shared: HashSet<(String, u16)>,
+    /// OVL-AVATARS: user id → their picture by the launcher's rule, None for the letter (the player, friends,
+    /// crewmates, those who asked to be friends; the friend list's word wins, the player's own card for them).
+    pictures: HashMap<String, Option<Picture>>,
     /// Call id → who started it, and a direct conversation → whose it is (a nickname reaches the
     /// call's name and the conversation's title, OVL-SOC 2).
     call_from: HashMap<String, String>,
@@ -861,6 +865,22 @@ impl Scene {
 
         let blocked: HashSet<String> = view.blocked.iter().map(|b| b.id.clone()).collect();
         let joins = join_lines(view, &blocked);
+        // OVL-AVATARS: everyone's picture by the launcher's rule, the friend list's word winning as for names. The
+        // player's own card comes last: their row in a crew's member list may still show the picture they had.
+        let mut pictures: HashMap<String, Option<Picture>> = HashMap::new();
+        let mut picture = |id: &str, chosen: &str, url: Option<&str>| {
+            pictures.insert(id.to_owned(), avatar::picture_of(chosen, url));
+        };
+        for member in view.crews.iter().flat_map(|crew| crew.members.iter()) {
+            picture(&member.id, &member.avatar, member.avatar_url.as_deref());
+        }
+        for request in &view.incoming {
+            picture(&request.id, &request.avatar, request.avatar_url.as_deref());
+        }
+        for friend in &view.friends {
+            picture(&friend.id, &friend.avatar, friend.avatar_url.as_deref());
+        }
+        picture(&me.id, &me.avatar, me.avatar_url.as_deref());
         let call_from: HashMap<String, String> = view
             .calls
             .iter()
@@ -912,6 +932,7 @@ impl Scene {
             blocked,
             invites,
             shared,
+            pictures,
             call_from,
             peers,
             ignored: HashSet::new(),
@@ -1005,6 +1026,12 @@ impl Scene {
             || self.ignored != other.ignored
             || self.rosters != other.rosters
             || self.names != other.names
+    }
+
+    /// OVL-AVATARS: `id`'s picture by the launcher's rule (the player, a friend, a crewmate, a request's sender):
+    /// `Some(None)` for the letter, None for someone the lists do not know.
+    pub fn picture(&self, id: &str) -> Option<Option<&Picture>> {
+        self.pictures.get(id).map(Option::as_ref)
     }
 
     /// The player ignores `id` (SOC-NEXT §3.7; nobody while SOC-NEXT is off).
@@ -1981,6 +2008,8 @@ pub fn toast_of(
                 badge: scene.badge_of(&message.from).map(str::to_owned),
                 // Their badges right of it (BADGES-UI).
                 marks: scene.marks_of(&message.from).to_vec(),
+                // OVL-AVATARS: their picture on the card's face.
+                by: (!message.from.is_empty()).then(|| message.from.clone()),
                 ..toast
             })
         }
@@ -2030,6 +2059,7 @@ pub fn toast_of(
             // The friend's badges right of their name (BADGES-UI).
             .map(|toast| ToastView {
                 marks: scene.marks_of(&invite.from).to_vec(),
+                by: (!invite.from.is_empty()).then(|| invite.from.clone()),
                 ..toast
             })
         }

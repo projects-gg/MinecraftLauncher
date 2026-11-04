@@ -134,8 +134,8 @@ public final class CrewVoiceStrip extends PanelWidget {
                     ids.add(person.id());
                     drawn.add(person.id());
                     Face face = faces.get(person.id());
-                    if (face == null || !Texts.initial(shown).equals(face.letter())) {
-                        faces.put(person.id(), Face.of(shown));
+                    if (face == null || !face.is(shown, person.id())) {
+                        faces.put(person.id(), Face.of(shown, person.id()));
                     }
                 }
             }

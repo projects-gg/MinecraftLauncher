@@ -2125,6 +2125,8 @@ impl Worlds {
                     sticker: None,
                     badge: None,
                     marks: host.marks,
+                    // OVL-AVATARS: the friend's picture on the card's face.
+                    by: (!invite.from.is_empty()).then(|| invite.from.clone()),
                 })
             });
             (view, toast)

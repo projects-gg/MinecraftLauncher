@@ -4,11 +4,13 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import gg.projects.overlay.OverlayClient;
+import gg.projects.overlay.Perf;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.people.FriendMenu;
 import gg.projects.overlay.toast.ToastLayer;
+import gg.projects.overlay.ui.Avatars;
 import gg.projects.overlay.ui.panel.EmojiPanel;
 import gg.projects.overlay.ui.panel.OverlayScreen;
 import gg.projects.overlay.voice.VoiceState;
@@ -46,6 +48,12 @@ import org.slf4j.LoggerFactory;
  * request's answers, the friend filter (a nickname, a real name, nothing), a nickname's real name over the friend's
  * menu, the status switcher (its durations, "Rahatsız etmeyin" for an hour and its end), crew chat's folded lines of
  * someone ignored and a mention's gold ring, a full room's "1/1" and its press, and streamer mode's friend list.
+ *
+ * <p>OVL-AVATARS ({@code -Dprojects.overlay.dev.script=avatars}, the mock's {@code --avatars <dir>} besides, with
+ * {@code -Dprojects.overlay.perf=true}): people's pictures on the friend list, the room page, crew chat's rooms, the
+ * HUD's speakers, a message toast and a ring; what their first coming costs (the panel opened with letters only, then
+ * with the pictures), and pictures and letters taking turns in slices on the friend list, the room page and the HUD:
+ * frame times and the overlay's own drawing time for each.
  */
 public final class SocialScenario implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("OVL-SOC scenario");
@@ -69,13 +77,15 @@ public final class SocialScenario implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         String which = System.getProperty("projects.overlay.dev.script");
-        if (!"social".equals(which) && !"social2".equals(which)) {
+        if (!"social".equals(which) && !"social2".equals(which) && !"avatars".equals(which)) {
             return;
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "social-out")).toAbsolutePath();
         ToastLayer.pauseWhileAway = false;
         if ("social2".equals(which)) {
             script2();
+        } else if ("avatars".equals(which)) {
+            script3();
         } else {
             script();
         }
@@ -315,6 +325,99 @@ public final class SocialScenario implements ClientModInitializer {
             shot(mc, "streamer-friends");
         });
         step(0.1, "close", mc -> need(mc).close());
+    }
+
+    /** OVL-AVATARS' scenario (the mock's {@code --avatars <dir>}). */
+    private void script3() {
+        // The panel's first opening with letters only (nothing asked yet), then again with the pictures: what their
+        // first coming costs (the asks, the decoding off the render thread, the uploads).
+        step(0.5, "open with letters", mc -> {
+            Avatars.shown = false;
+            FrameClock.clear();
+            FrameClock.record(1);
+            OverlayClient.get().togglePanel();
+        });
+        step(0.3, "friends with letters", mc -> need(mc).showPage(OverlayScreen.Page.FRIENDS));
+        step(1.5, "shot letters", mc -> {
+            FrameClock.record(-1);
+            shot(mc, "friends-letters");
+            need(mc).close();
+        });
+        step(0.8, "open with pictures", mc -> {
+            Avatars.shown = true;
+            FrameClock.record(0);
+            OverlayClient.get().togglePanel();
+        });
+        step(0.3, "friends with pictures", mc -> need(mc).showPage(OverlayScreen.Page.FRIENDS));
+        step(1.5, "shot pictures", mc -> {
+            FrameClock.record(-1);
+            JsonObject first = new JsonObject();
+            first.add("pictures", FrameClock.summary(0));
+            first.add("letters", FrameClock.summary(1));
+            results.add("firstOpen", first);
+            results.addProperty("peopleKept", Avatars.kept());
+            shot(mc, "friends-pictures");
+        });
+        compare("friends", 6);
+        step(0.1, "room page", mc -> need(mc).showPage(OverlayScreen.Page.VOICE));
+        step(1.0, "shot room", mc -> shot(mc, "room-pictures"));
+        compare("room", 6);
+        step(0.1, "chats", mc -> need(mc).showPage(OverlayScreen.Page.CHATS));
+        step(0.3, "crew chat", mc -> need(mc).showConversation("crew:gece"));
+        step(1.0, "shot crew rooms", mc -> shot(mc, "crew-rooms-pictures"));
+        step(0.1, "close", mc -> need(mc).close());
+        step(0.3, "speak", mc -> devIds("voice-speak", "f-ayse", "u-gk"));
+        step(1.2, "shot hud", mc -> shot(mc, "hud-speakers"));
+        compare("hud", 6);
+        step(0.1, "quiet", mc -> dev("voice-quiet"));
+        step(0.5, "message", mc -> dev("one"));
+        step(1.2, "shot toast", mc -> shot(mc, "toast-picture"));
+        step(5.0, "ring", mc -> dev("voice-ring"));
+        step(1.2, "shot ring", mc -> {
+            results.addProperty("peopleKeptAfter", Avatars.kept());
+            shot(mc, "ring-picture");
+        });
+    }
+
+    /**
+     * OVL-AVATARS: pictures (slot 0) and letters (slot 1) take turns in {@code pairs} pairs of slices on what shows now;
+     * each slice settles 0.4 s before it records 0.8 s. Frame times and the overlay's own drawing time for each.
+     */
+    private void compare(String name, int pairs) {
+        long[][] perf = new long[2][7];
+        step(0.1, name + " compare", mc -> FrameClock.clear());
+        for (int i = 0; i < 2 * pairs; i++) {
+            int mode = i % 2;
+            step(0.05, name + (mode == 0 ? " pictures" : " letters"), mc -> Avatars.shown = mode == 0);
+            step(0.4, name + " record", mc -> {
+                Perf.drain();
+                FrameClock.record(mode);
+            });
+            step(0.8, name + " slice end", mc -> {
+                FrameClock.record(-1);
+                long[] drained = Perf.drain();
+                for (int k = 0; k < Math.min(drained.length, perf[mode].length); k++) {
+                    perf[mode][k] += drained[k];
+                }
+            });
+        }
+        step(0.05, name + " results", mc -> {
+            Avatars.shown = true;
+            JsonObject o = new JsonObject();
+            o.add("pictures", withPerf(FrameClock.summary(0), perf[0]));
+            o.add("letters", withPerf(FrameClock.summary(1), perf[1]));
+            results.add(name, o);
+        });
+    }
+
+    /** A slot's frame times with the overlay's own time (the panel's, the HUD's and the toasts') per frame. */
+    private static JsonObject withPerf(JsonObject frames, long[] drained) {
+        frames.addProperty("toastCalls", drained[1]);
+        frames.addProperty("toastAvgMicros", drained[1] == 0 ? 0 : Math.round(drained[0] / 10.0 / drained[1]) / 100.0);
+        frames.addProperty("panelCalls", drained[3]);
+        frames.addProperty("panelAvgMicros", drained[3] == 0 ? 0 : Math.round(drained[2] / 10.0 / drained[3]) / 100.0);
+        frames.addProperty("panelBytesPerCall", drained[3] == 0 ? 0 : Math.round(drained[6] / (double) drained[3]));
+        return frames;
     }
 
     private void dev(String cmd) {

@@ -6,6 +6,7 @@ import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.ui.Avatars;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.Texts;
@@ -124,7 +125,7 @@ public final class VoiceList extends PanelWidget {
         // "Sen", and the player's role beside it ("Sen · Lider").
         String you = Texts.str("voice.room.you");
         String role = roleOr(me.role(), null);
-        fill(mine, own, role == null ? you : you + " · " + role, strong, small, textW);
+        fill(mine, own, Avatars.ME, role == null ? you : you + " · " + role, strong, small, textW);
         mine.marks.clear();
         mine.markInks.clear();
         voiceMarks(mine, me.mute(), me.deaf(), me.mutedByModerator());
@@ -135,7 +136,7 @@ public final class VoiceList extends PanelWidget {
         for (VoiceState.Person p : room.people()) {
             Row row = old.getOrDefault(p.id(), new Row(p.id()));
             String name = VoiceState.shown(p.name(), words);
-            fill(row, name, roleOr(p.role(), null), strong, small, textW);
+            fill(row, name, p.id(), roleOr(p.role(), null), strong, small, textW);
             row.marks.clear();
             row.markInks.clear();
             voiceMarks(row, p.mute(), p.deaf(), p.mutedByModerator());
@@ -151,7 +152,7 @@ public final class VoiceList extends PanelWidget {
             Row row = old.getOrDefault("~" + ring.id(), new Row(ring.id()));
             row.ringing = true;
             String name = VoiceState.shown(ring.name(), words);
-            fill(row, name, Texts.str("voice.ringing"), strong, small, textW);
+            fill(row, name, ring.id(), Texts.str("voice.ringing"), strong, small, textW);
             row.marks.clear();
             row.markInks.clear();
             row.bars = 0;
@@ -196,12 +197,13 @@ public final class VoiceList extends PanelWidget {
         return state.isEmpty() ? Component.literal(name) : Texts.tr("voice.person.narration", name, state);
     }
 
-    private static void fill(Row row, String label, String sub, Font strong, Font small, int textW) {
+    /** A row's name, the line under it and the face of {@code person} (a user id; {@link Avatars#ME} the player). */
+    private static void fill(Row row, String label, String person, String sub, Font strong, Font small, int textW) {
         row.label = label;
         row.name = Texts.visual(Texts.fit(strong, label, textW));
         row.sub = sub == null ? null : Texts.visual(Texts.fit(small, sub, textW));
-        if (row.face == null || !Texts.initial(label).equals(row.face.letter())) {
-            row.face = Face.of(label);
+        if (row.face == null || !row.face.is(label, person)) {
+            row.face = Face.of(label, person);
         }
     }
 

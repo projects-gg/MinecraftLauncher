@@ -208,6 +208,7 @@ pub(crate) fn afk_toast(notice: &AfkNotice, english: bool) -> Option<ToastView> 
         sticker: None,
         badge: None,
         marks: Vec::new(),
+        by: None,
     })
 }
 

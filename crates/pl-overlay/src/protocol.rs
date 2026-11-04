@@ -321,6 +321,13 @@ pub enum FromGame {
         #[serde(default)]
         accept: bool,
     },
+    /// OVL-AVATARS (from a mod whose hello lists `avatars`): the people whose faces it draws now and holds no
+    /// picture for (first seen, let go of, or one that could not be had a while ago), by user id (at most 32 a
+    /// frame; `@me` is the player). Each is answered with `avatar`; a change comes by itself later.
+    AvatarWant {
+        #[serde(default)]
+        ids: Vec<String>,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -406,6 +413,10 @@ pub const FEATURE_VOICE_ROOMS: &str = "voice-rooms";
 /// and SOC-NEXT's marks (a friend's `real`, a message's `ignored` and `mention`); the `welcome`
 /// feature that says this launcher takes `request` and `status` (signed in to friends).
 pub const FEATURE_PEOPLE4: &str = "people4";
+
+/// OVL-AVATARS: the `hello` feature of a mod that draws people's pictures on their faces: it sends `avatar-want`
+/// for the people it draws and hears `avatar`.
+pub const FEATURE_AVATARS: &str = "avatars";
 
 /// OVL-SOC 2: the `welcome` feature that says SOC-NEXT is on (Studio's `features.socNext`): the
 /// status switcher offers its durations. Only to a mod that said `people4`.
@@ -733,6 +744,18 @@ pub enum ToGame {
     /// list once it may not). Only to a mod that said `voice` and `voice-rooms`.
     VoiceCrews {
         crews: Vec<VoiceCrewShown>,
+    },
+    /// OVL-AVATARS: a person's picture for their face, the answer to `avatar-want` and again when it changes:
+    /// `v` its version (the mod keeps a picture by person and this; `-` for none), `n` this connection's count of
+    /// them (pictures are prepared side by side: an older one after a newer one is dropped), `png` the picture
+    /// (64 px square on the launcher's face colour, the player head's corners, base64), absent for the letter
+    /// (no picture, or none to be had now). Only to a mod that said `avatars`.
+    Avatar {
+        id: String,
+        v: String,
+        n: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        png: Option<String>,
     },
     Bye {
         reason: ByeReason,
@@ -1184,6 +1207,9 @@ pub struct ToastView {
     /// of an invite), right of the title.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub marks: Vec<String>,
+    /// OVL-AVATARS: the person `title` names (a message's sender, an invite's friend), for their picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1521,6 +1547,40 @@ mod tests {
     }
 
     #[test]
+    fn avatar_frames() {
+        let want: FromGame =
+            serde_json::from_str(r#"{"t":"avatar-want","ids":["f-ayse","u-cem"]}"#).unwrap();
+        assert_eq!(
+            want,
+            FromGame::AvatarWant {
+                ids: vec!["f-ayse".into(), "u-cem".into()]
+            }
+        );
+        let none: FromGame = serde_json::from_str(r#"{"t":"avatar-want"}"#).unwrap();
+        assert_eq!(none, FromGame::AvatarWant { ids: Vec::new() });
+        let picture = ToGame::Avatar {
+            id: "f-ayse".into(),
+            v: "0123456789abcdef".into(),
+            n: 2,
+            png: Some("iVBO".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(&picture).unwrap(),
+            serde_json::json!({"t":"avatar","id":"f-ayse","v":"0123456789abcdef","n":2,"png":"iVBO"})
+        );
+        let letter = ToGame::Avatar {
+            id: "f-can".into(),
+            v: "-".into(),
+            n: 3,
+            png: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&letter).unwrap(),
+            serde_json::json!({"t":"avatar","id":"f-can","v":"-","n":3})
+        );
+    }
+
+    #[test]
     fn unknown_frames_parse_as_unknown() {
         let frame: FromGame = serde_json::from_str(r#"{"t":"screenshot-share","x":1}"#).unwrap();
         assert_eq!(frame, FromGame::Unknown);
@@ -1804,6 +1864,7 @@ mod tests {
             sticker: None,
             badge: None,
             marks: Vec::new(),
+            by: None,
         }))
         .unwrap();
         assert_eq!(toast["kind"], "world");
@@ -2140,6 +2201,7 @@ mod tests {
             sticker: None,
             badge: None,
             marks: Vec::new(),
+            by: None,
         });
         let json = serde_json::to_value(&toast).unwrap();
         assert_eq!(json["t"], "toast");

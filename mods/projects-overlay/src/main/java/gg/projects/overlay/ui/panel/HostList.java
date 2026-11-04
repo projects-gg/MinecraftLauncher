@@ -61,7 +61,7 @@ public final class HostList extends PanelWidget {
         public String label = "";
         FormattedCharSequence name;
         FormattedCharSequence sub;
-        /** Their face: the launcher's player head with their first letter (OVL-UX2). */
+        /** Their face: the launcher's player head, their picture or first letter (OVL-UX2, OVL-AVATARS). */
         Face face;
         boolean online;
         boolean inGame;
@@ -191,7 +191,7 @@ public final class HostList extends PanelWidget {
             row.dim = false;
             row.removable = false;
             row.guest = "";
-            row.face = Face.of(row.label);
+            row.face = Face.of(row.label, row.id);
             String heard = PresenceDot.spoken(row.presence);
             row.narration = Texts.tr("narration.friend", badge == null ? row.label
                 : Texts.str("row.badge", row.label, badge.tag()), heard == null ? where : where + ", " + heard);
@@ -254,7 +254,7 @@ public final class HostList extends PanelWidget {
             row.presence = g.in() ? Presence.PLAYING : g.joining() ? Presence.LAUNCHER : Presence.OFFLINE;
             row.dim = !row.online;
             row.removable = !g.guest().isEmpty();
-            row.face = Face.of(row.label);
+            row.face = Face.of(row.label, row.id);
             row.narration = Texts.tr("narration.friend", row.label, state);
             next.add(row);
         }

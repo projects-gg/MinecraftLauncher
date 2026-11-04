@@ -36,11 +36,23 @@ pub struct Http {
 
 impl Http {
     pub fn new(config: HttpConfig) -> Result<Self> {
+        Self::build(config, reqwest::redirect::Policy::default())
+    }
+
+    /// Like [`Self::new`], but no redirect is followed (it comes back as an error status): for
+    /// addresses that must stay on the host they name (OVL-AVATARS: the overlay's pictures stay on
+    /// the launcher's picture hosts, as the page's CSP keeps its own).
+    pub fn new_without_redirects(config: HttpConfig) -> Result<Self> {
+        Self::build(config, reqwest::redirect::Policy::none())
+    }
+
+    fn build(config: HttpConfig, redirects: reqwest::redirect::Policy) -> Result<Self> {
         let client = reqwest::Client::builder()
             .user_agent(config.user_agent)
             .connect_timeout(config.connect_timeout)
             .read_timeout(config.read_timeout)
             .pool_idle_timeout(Duration::from_secs(60))
+            .redirect(redirects)
             .build()
             .map_err(|e| NetError::Setup(e.to_string()))?;
         Ok(Self {
@@ -416,5 +428,41 @@ mod tests {
         assert!(is_retryable_status(StatusCode::TOO_MANY_REQUESTS));
         assert!(!is_retryable_status(StatusCode::NOT_FOUND));
         assert!(!is_retryable_status(StatusCode::OK));
+    }
+
+    /// A local server: `/moved` redirects to `/here`, which answers "ok".
+    async fn redirecting_server() -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 2048];
+                    let n = socket.read(&mut buf).await.unwrap_or(0);
+                    let reply = if buf[..n].starts_with(b"GET /moved ") {
+                        "HTTP/1.1 302 Found\r\nLocation: /here\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    } else {
+                        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+                    };
+                    let _ = socket.write_all(reply.as_bytes()).await;
+                });
+            }
+        });
+        format!("http://{addr}/moved")
+    }
+
+    #[tokio::test]
+    async fn a_client_without_redirects_stays_on_the_address() {
+        let url = redirecting_server().await;
+        let mut config = HttpConfig::new("test");
+        config.retries = 0;
+        let follows = Http::new(config.clone()).unwrap();
+        assert_eq!(follows.get_text(&url).await.unwrap(), "ok");
+        let stays = Http::new_without_redirects(config).unwrap();
+        assert!(matches!(
+            stays.get(&url).await,
+            Err(NetError::Status { status: 302, .. })
+        ));
     }
 }

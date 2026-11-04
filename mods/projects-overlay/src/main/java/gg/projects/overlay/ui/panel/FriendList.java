@@ -331,7 +331,7 @@ public final class FriendList extends PanelWidget {
             row.nameW = strong.width(name);
             row.where = Texts.visual(Texts.fit(small, wants, nameRoom));
             row.online = true;
-            row.face = Face.of(r.name());
+            row.face = Face.of(r.name(), r.id());
             row.joinWidth = acceptWidth;
             row.y = y;
             row.narration = Texts.tr("narration.request", name);
@@ -392,7 +392,7 @@ public final class FriendList extends PanelWidget {
             row.lone = world == null && (f.where().equals("game") && f.inGame()
                 || f.where().equals("offline") && !f.online() && f.seen() == null);
             row.where = Texts.visual(row.lone ? "" : Texts.fit(small, where, nameRoom));
-            row.face = Face.of(f.name());
+            row.face = Face.of(f.name(), f.id());
             row.joinWidth = joinWidth;
             row.y = y;
             // "Ayşe, Projects yöneticisi, etiket GK, Projects'te": the badge and the chip are drawn, the row says every

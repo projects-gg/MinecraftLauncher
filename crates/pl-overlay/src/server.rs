@@ -745,6 +745,7 @@ mod tests {
             sticker: None,
             badge: None,
             marks: Vec::new(),
+            by: None,
         });
         h.control
             .send(Control::Send {

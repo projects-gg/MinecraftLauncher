@@ -75,6 +75,10 @@
 // (her crew lines "ignored"), a crew line that mentions the player ("mention"), "Oda 2" full at its own limit of one
 // ("max", "full") and "Oda 3" with two of five; "status" changes the status (a duration ends in an hour, at 08:00,
 // or never). Dev commands "streamer-on" / "streamer-off" (a new welcome with or without "streamer").
+// --avatars <dir> plays OVL-AVATARS to a mod whose hello lists "avatars": its "avatar-want" is answered for each id with
+// <dir>/<id>.png (a picture as the launcher prepares them: 64 px square on the face colour, the player head's corners),
+// its version the file's hash, else the letter ("v": "-"); "@me" is the player (<dir>/@me.png). Message toasts name
+// their sender ("by").
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -617,6 +621,8 @@ function friendRows() {
 
 // VOICE-O: voice chat as the launcher shows it, and whether the connected mod shows it (its hello lists "voice").
 const voiceMock = { hears: false, view: null, rooms: false, crews: null };
+// OVL-AVATARS: whether the mod draws pictures, and the connection's count of "avatar" frames.
+const avatarsMock = { hears: false, n: 0 };
 
 // OVL-SOC (V21): the crews' rooms, in the launcher's order (the mock's crew chats are "crew:gece" and "crew:akinci").
 function voiceCrews() {
@@ -1018,6 +1024,8 @@ function onConnection(socket) {
         voiceMock.hears = Array.isArray(frame.features) && frame.features.includes("voice");
         voiceMock.rooms = voiceMock.hears && frame.features.includes("voice-rooms");
         next.on = Boolean(args.next && args.people2) && frame.features.includes("people4");
+        avatarsMock.hears = typeof args.avatars === "string" && frame.features.includes("avatars");
+        avatarsMock.n = 0;
         voiceMock.view = voiceFriendRoom();
         voiceMock.crews = voiceCrews();
         startSession(socket);
@@ -1148,6 +1156,10 @@ function incoming(socket, convId, from, text, sticker) {
   }
   const body = sticker ? `${inEnglish() ? "Sticker" : "Çıkartma"} · ${stickerName(sticker)}` : text;
   const toast = { t: "toast", kind: "message", key: convId, title: from, body, conv: convId };
+  if (NAMES[from]) {
+    // OVL-AVATARS: the sender, for their picture on the card's face.
+    toast.by = NAMES[from];
+  }
   if (sticker) {
     toast.sticker = sticker;
   }
@@ -1277,8 +1289,35 @@ function stack(socket) {
   later(700, () => incoming(socket, "crew:gece", "MaviElmas", "Ben de geliyorum, bekleyin beni!"));
 }
 
+// OVL-AVATARS: each person's picture from --avatars <dir>, else the letter; the version follows the file.
+function onAvatarWant(socket, frame) {
+  if (!avatarsMock.hears || !Array.isArray(frame.ids)) {
+    return;
+  }
+  for (const id of frame.ids.slice(0, 32)) {
+    if (typeof id !== "string" || !/^@?[A-Za-z0-9_-]{1,64}$/.test(id)) {
+      continue;
+    }
+    let png = null;
+    try {
+      png = readFileSync(join(args.avatars, `${id}.png`));
+    } catch {
+      png = null;
+    }
+    const answer = { t: "avatar", id, v: "-", n: ++avatarsMock.n };
+    if (png) {
+      answer.v = createHash("sha256").update(png).digest("hex").slice(0, 16);
+      answer.png = png.toString("base64");
+    }
+    send(socket, answer);
+  }
+}
+
 function onFrame(socket, frame) {
   switch (frame.t) {
+    case "avatar-want":
+      onAvatarWant(socket, frame);
+      break;
     case "link-want": {
       // A made-up permit: "i" and 24 random bytes in base64url, 30 minutes, for the name the mod asked for.
       if (!args.link || frame.name === "Nobody") {

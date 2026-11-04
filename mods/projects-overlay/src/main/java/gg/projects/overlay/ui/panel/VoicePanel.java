@@ -257,7 +257,9 @@ final class VoicePanel {
             ringRoom = ring.room();
             ringY = y;
             String name = VoiceState.shown(ring.name(), WORDS);
-            ringFace = Face.of(name);
+            if (ringFace == null || !ringFace.is(name, ring.from())) {
+                ringFace = Face.of(name, ring.from());
+            }
             int jw = ringJoin.preferredWidth();
             ringJoin.visible = true;
             PanelWidget.place(ringJoin, x + width - 6 - jw, y + (RING_H - ActionButton.HEIGHT) / 2, jw,

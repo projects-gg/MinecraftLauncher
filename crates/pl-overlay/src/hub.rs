@@ -234,6 +234,8 @@ struct Shared {
     voice: Mutex<Option<VoiceSink>>,
     /// A game's mod shows voice chat now (VOICE-O).
     voice_shown: AtomicBool,
+    /// OVL-AVATARS: people's pictures, prepared once for every game.
+    pictures: Arc<crate::avatar::Pictures>,
 }
 
 /// Cheap to clone; the launcher keeps one.
@@ -275,6 +277,7 @@ impl Overlay {
                 emoji: Mutex::new(None),
                 voice: Mutex::new(None),
                 voice_shown: AtomicBool::new(false),
+                pictures: Arc::default(),
             }),
         }
     }
@@ -600,6 +603,7 @@ impl Overlay {
                 act,
                 shown,
             },
+            Arc::clone(&self.shared.pictures),
         );
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));
@@ -798,6 +802,19 @@ impl Overlay {
             .discord
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// OVL-AVATARS: how people's pictures are fetched (the launcher's HTTP client; only addresses on
+    /// `pl_content::LAUNCHER_IMAGE_HOSTS` are asked for, and only bytes up to
+    /// [`crate::avatar::MAX_SOURCE`] are used). Without it the faces keep their letters, presets aside.
+    pub fn on_pictures<F, Fut>(&self, fetch: F)
+    where
+        F: Fn(String) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Option<Vec<u8>>> + Send + 'static,
+    {
+        self.shared
+            .pictures
+            .set_fetch(crate::avatar::fetch_fn(fetch));
     }
 
     /// Favourites and "Çevrimiçi olunca bildir" changed from the game's person menu (OVL-UX2):

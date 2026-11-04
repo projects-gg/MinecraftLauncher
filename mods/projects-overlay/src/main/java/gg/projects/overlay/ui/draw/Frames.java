@@ -98,6 +98,11 @@ public enum Frames {
      * hairline, with the player head's 4 px corners (2 GUI pixels). Any size.
      */
     FACE(FrameSpec.rounded(2, Theme.withAlpha(Theme.GOLD_700, 0.4f), Theme.withAlpha(0xFFFFFF, 0.10f))),
+    /**
+     * Over a person's picture (OVL-AVATARS): the face's white hairline alone, as the launcher's {@code ring-1
+     * ring-white/10} around its pictures.
+     */
+    FACE_RING(FrameSpec.rounded(2, 0, Theme.withAlpha(0xFFFFFF, 0.10f))),
     /** A report reason picked (OVL-UX): the launcher's radio row, a touch of gold under a gold hairline. */
     CHOICE_PICKED(FrameSpec.rounded(4, Theme.withAlpha(Theme.mix(Theme.OBSIDIAN_800, Theme.GOLD_500, 0.09f), 0.9f),
         Theme.withAlpha(Theme.GOLD_400, 0.4f))),

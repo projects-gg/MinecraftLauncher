@@ -2728,3 +2728,133 @@ async fn friend_requests_and_the_status_switcher_from_the_game() {
         ]
     );
 }
+
+/// A 64 × 64 skin, grey, for the pictures' fetch.
+fn skin_png() -> Vec<u8> {
+    use image::ImageEncoder;
+    let skin = image::RgbaImage::from_pixel(64, 64, image::Rgba([90, 90, 90, 255]));
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new(std::io::Cursor::new(&mut out))
+        .write_image(skin.as_raw(), 64, 64, image::ExtendedColorType::Rgba8)
+        .unwrap();
+    out
+}
+
+#[tokio::test]
+async fn faces_get_the_launchers_pictures_and_their_changes() {
+    use base64::Engine;
+    use serde_json::json;
+
+    let mut v = view();
+    // Ayşe: a preset; Can: a skin's head; Zeynep: a photo the fetch cannot have; Mert: Discord's
+    // stand-in (the letter).
+    v.friends[0].avatar = "preset:fox".into();
+    v.friends[1].avatar = format!("minecraft:{}", "a".repeat(64));
+    v.friends[2].avatar_url = Some("https://cdn.discordapp.com/avatars/9/zz.png?size=128".into());
+    v.friends[3].avatar_url = Some("https://cdn.discordapp.com/embed/avatars/1.png".into());
+    // The player: a preset too (their own row in a voice room asks as `@me`); their row in the crew's member list
+    // still shows the letter they had, and their own card wins.
+    v.me.as_mut().unwrap().avatar = "preset:wolf".into();
+    assert_eq!(v.crews[0].members[0].id, "me");
+    let social = FakeSocial::new(v.clone());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let fetched = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen = Arc::clone(&fetched);
+    overlay.on_pictures(move |url: String| {
+        seen.lock().unwrap().push(url.clone());
+        async move { url.contains("textures.minecraft.net").then(skin_png) }
+    });
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod: its `avatar-want` is not heard.
+    let mut old =
+        MockMod::connect_with(&endpoint, &["people", "people2", "people3", "people4"]).await;
+    old.next_of("snapshot").await;
+    old.send(json!({"t":"avatar-want","ids":["f-ayse"]})).await;
+    old.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    loop {
+        let frame = old.next().await.expect("the bridge closed");
+        assert_ne!(frame["t"], "avatar", "{frame}");
+        if frame["t"] == "history" {
+            break;
+        }
+    }
+    drop(old);
+
+    let mut game = MockMod::connect_with(
+        &endpoint,
+        &["people", "people2", "people3", "people4", "avatars"],
+    )
+    .await;
+    game.next_of("snapshot").await;
+    game.send(
+        json!({"t":"avatar-want","ids":["f-ayse","f-can","f-zey","f-mert","x-nobody","","@me"]}),
+    )
+    .await;
+    let mut answers = std::collections::HashMap::new();
+    while answers.len() < 6 {
+        let frame = game.next_of("avatar").await;
+        answers.insert(frame["id"].as_str().unwrap().to_owned(), frame);
+    }
+    let picture = |frame: &serde_json::Value| {
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(frame["png"].as_str().expect("a picture"))
+            .unwrap();
+        let face = image::load_from_memory(&png).unwrap().to_rgba8();
+        (face.width(), face.height())
+    };
+    // The presets and the skin's head come as pictures, the faces' size.
+    assert_eq!(picture(&answers["f-ayse"]), (64, 64));
+    assert_eq!(picture(&answers["f-can"]), (64, 64));
+    assert_eq!(picture(&answers["@me"]), (64, 64));
+    // The photo that could not be had keeps the letter for now, with its version; the stand-in and
+    // someone the launcher does not know have none.
+    assert!(answers["f-zey"].get("png").is_none());
+    assert_eq!(answers["f-zey"]["v"].as_str().unwrap().len(), 16);
+    for id in ["f-mert", "x-nobody"] {
+        assert_eq!(answers[id]["v"], "-", "{id}");
+        assert!(answers[id].get("png").is_none(), "{id}");
+    }
+    // Only the skin and the photo went to the network, the photo at the faces' size.
+    let mut asked = fetched.lock().unwrap().clone();
+    asked.sort();
+    assert_eq!(
+        asked,
+        [
+            "https://cdn.discordapp.com/avatars/9/zz.png?size=64".to_owned(),
+            format!("https://textures.minecraft.net/texture/{}", "a".repeat(64)),
+        ]
+    );
+    let newest = answers
+        .values()
+        .map(|frame| frame["n"].as_u64().unwrap())
+        .max()
+        .unwrap();
+
+    // Asked again (the mod let it go): the same picture, from the launcher's cache.
+    game.send(json!({"t":"avatar-want","ids":["f-can"]})).await;
+    let again = game.next_of("avatar").await;
+    assert_eq!(again["id"], "f-can");
+    assert_eq!(again["v"], answers["f-can"]["v"]);
+    assert!(again["n"].as_u64().unwrap() > newest);
+    assert_eq!(fetched.lock().unwrap().len(), 2);
+
+    // Ayşe picks another picture: the mod hears it by itself, nobody else's.
+    let mut changed = v.clone();
+    changed.friends[0].avatar = "preset:owl".into();
+    overlay.on_social(SocialUpdate::View(Box::new(changed)));
+    let told = game.next_of("avatar").await;
+    assert_eq!(told["id"], "f-ayse");
+    assert_ne!(told["v"], answers["f-ayse"]["v"]);
+    assert_eq!(picture(&told), (64, 64));
+    game.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    loop {
+        let frame = game.next().await.expect("the bridge closed");
+        assert_ne!(frame["t"], "avatar", "{frame}");
+        if frame["t"] == "history" {
+            break;
+        }
+    }
+}

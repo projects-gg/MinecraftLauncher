@@ -93,6 +93,7 @@ public final class Protocol {
             features.add(VOICE);
             features.add(VOICE_ROOMS);
             features.add(PEOPLE4);
+            features.add(AVATARS);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -468,6 +469,25 @@ public final class Protocol {
         JsonObject o = message("request");
         o.addProperty("id", id);
         o.addProperty("accept", accept);
+        return o;
+    }
+
+    // ---- OVL-AVATARS: people's pictures on their faces ------------------------------------------------------------
+
+    /**
+     * The hello feature of a mod that draws people's pictures on their faces: it sends {@link #avatarWant} for the
+     * people it draws and holds no picture for, and hears {@code avatar} ({@code id}, {@code v} the picture's version,
+     * {@code -} for none, {@code n} the connection's count of them, {@code png} the picture: 64 px square, base64; absent
+     * for the letter).
+     */
+    public static final String AVATARS = "avatars";
+    /** People one {@link #avatarWant} names at most (the launcher hears no more). */
+    public static final int MAX_AVATAR_WANT = 32;
+
+    /** The pictures of these people, please (at most {@link #MAX_AVATAR_WANT}); each is answered with {@code avatar}. */
+    public static JsonObject avatarWant(List<String> ids) {
+        JsonObject o = message("avatar-want");
+        o.add("ids", ids(ids.size() > MAX_AVATAR_WANT ? ids.subList(0, MAX_AVATAR_WANT) : ids));
         return o;
     }
 

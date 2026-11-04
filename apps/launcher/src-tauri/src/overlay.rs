@@ -148,7 +148,44 @@ pub fn create(app: &AppHandle, root: &Path) -> Overlay {
             }
         });
     });
+    // People's pictures on the game's faces (OVL-AVATARS): fetched once each (pl_overlay keeps
+    // them, and asks only the launcher's picture hosts) by a client of their own that follows no
+    // redirect, so nothing off those hosts is ever contacted (as the page's CSP keeps its own).
+    let mut config = pl_net::HttpConfig::new(format!(
+        "ProjectsLauncher/{} (+https://projects.gg)",
+        app.package_info().version
+    ));
+    config.retries = 1;
+    config.read_timeout = Duration::from_secs(10);
+    match pl_net::Http::new_without_redirects(config) {
+        Ok(http) => overlay.on_pictures(move |url| {
+            let http = http.clone();
+            async move { fetch_picture(&http, &url).await }
+        }),
+        Err(error) => tracing::warn!(%error, "the overlay's faces keep their letters"),
+    }
     overlay
+}
+
+/// A picture's bytes for the overlay's faces, none past [`pl_overlay::avatar::MAX_SOURCE`] or on
+/// any failure (the face keeps its letter; nothing is logged: the address names the person).
+async fn fetch_picture(http: &pl_net::Http, url: &str) -> Option<Vec<u8>> {
+    let max = pl_overlay::avatar::MAX_SOURCE;
+    let mut response = http.get(url).await.ok()?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > max as u64)
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if bytes.len() + chunk.len() > max {
+            return None;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Some(bytes)
 }
 
 /// The resources' `overlay/` folder (`scripts/release/overlay-jars.mjs` fills it before a build).
