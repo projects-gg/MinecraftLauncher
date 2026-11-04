@@ -67,6 +67,7 @@ import { trSocial } from "./tr-social";
 import { trStars } from "./tr-stars";
 import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
+import { trTelemetry } from "./tr-telemetry";
 import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
 import { trUpdates } from "./tr-updates";
@@ -149,6 +150,7 @@ export const tr = {
   voice: trVoice,
   socNext: trSocNext,
   socNote: trSocNote,
+  telemetry: trTelemetry,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",
