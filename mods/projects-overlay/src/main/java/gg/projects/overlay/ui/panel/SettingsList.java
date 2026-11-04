@@ -152,21 +152,36 @@ public final class SettingsList extends PanelWidget {
         BooleanSupplier enabledIf;
         boolean placed;
         float optionWidth;
+        /** The GUI scale and font the widths were measured in (LABEL-FIT: they change with them). */
+        private int measuredFor = -1;
 
         Choice(String label, String[] options, Function<OverlaySettings, Integer> get,
             java.util.function.BiFunction<OverlaySettings, Integer, OverlaySettings> set) {
             this.label = label;
             this.options = options;
             this.widths = new int[options.length];
-            Font small = Fonts.small();
-            int widest = 0;
-            for (int i = 0; i < options.length; i++) {
-                widths[i] = small.width(options[i]);
-                widest = Math.max(widest, widths[i]);
-            }
-            this.optionWidth = widest + 12;
             this.get = get;
             this.set = set;
+            measure();
+        }
+
+        /**
+         * The options measured again when the GUI scale or the font changed (the game's pixel font at GUI 1 is wider
+         * than ours): each option's box always holds its words.
+         */
+        Choice measure() {
+            int key = Draw.scale() * 2 + (Fonts.bundled() ? 1 : 0);
+            if (key != measuredFor) {
+                measuredFor = key;
+                Font small = Fonts.small();
+                int widest = 0;
+                for (int i = 0; i < options.length; i++) {
+                    widths[i] = small.width(options[i]);
+                    widest = Math.max(widest, widths[i]);
+                }
+                optionWidth = widest + 12;
+            }
+            return this;
         }
 
         @Override
@@ -344,6 +359,9 @@ public final class SettingsList extends PanelWidget {
             s -> s.withShowMessageText(!s.showMessageText()));
         text.enabledIf = OverlaySettings::messageToasts;
         items.add(text);
+        // KEY-HINT: the toasts' one line that says which key opens the panel (the owner: a switch to hide it).
+        items.add(new Toggle(Texts.str("settings.key_hint"), OverlaySettings::showKeyHint,
+            s -> s.withShowKeyHint(!s.showKeyHint())));
         items.add(new Choice(Texts.str("settings.duration"), new String[] {Texts.str("settings.duration.short"),
             Texts.str("settings.duration.normal"), Texts.str("settings.duration.long")},
             s -> s.duration().ordinal(), (s, i) -> s.withDuration(OverlaySettings.Duration.values()[i])));
@@ -404,6 +422,7 @@ public final class SettingsList extends PanelWidget {
     public float[] languageOption(int index) {
         for (Item item : items) {
             if (item instanceof Choice c && c.pick != null) {
+                c.measure();
                 float wellX = getX() + getWidth() - (c.optionWidth * c.options.length + 4);
                 return new float[] {wellX + 2 + (index + 0.5f) * c.optionWidth,
                     getY() + c.y - scroll.value() + c.height / 2f};
@@ -528,7 +547,7 @@ public final class SettingsList extends PanelWidget {
         } else if (item instanceof Slider) {
             return SLIDER_W + 6 + small.width(Texts.percent(OverlaySettings.MAX_VOLUME));
         } else if (item instanceof Choice c) {
-            return c.optionWidth * c.options.length + 4;
+            return c.measure().optionWidth * c.options.length + 4;
         } else if (item instanceof KeyRow k) {
             String shown = k.shown == null ? k.noneLabel : k.shown;
             return changeWidth(k) + 6 + small.width(shown) + 6;
@@ -764,6 +783,7 @@ public final class SettingsList extends PanelWidget {
         }
         float right = getX() + getWidth();
         if (item instanceof Choice c) {
+            c.measure();
             float start = right - c.optionWidth * c.options.length - 2;
             int option = (int) ((event.x() - start - 2) / c.optionWidth);
             if (option >= 0 && option < c.options.length && option != c.get.apply(s)) {
@@ -950,6 +970,7 @@ public final class SettingsList extends PanelWidget {
     private void drawChoice(GuiGraphicsExtractor g, Choice c, OverlaySettings s, float right, float mid, float dt,
         Font small, int mouseX, boolean lit) {
         int chosen = c.get.apply(s);
+        c.measure();
         float wellW = c.optionWidth * c.options.length + 4;
         float wx = right - wellW;
         float wy = mid - 7;

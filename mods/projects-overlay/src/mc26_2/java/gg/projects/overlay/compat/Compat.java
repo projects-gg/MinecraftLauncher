@@ -87,4 +87,9 @@ public final class Compat {
             }
         };
     }
+
+    /** A key event's scancode as GLFW passed it (KEY-HINT). */
+    public static int scancode(net.minecraft.client.input.KeyEvent event) {
+        return event.scancode();
+    }
 }

@@ -1,11 +1,11 @@
 package gg.projects.overlay.ui.panel;
 
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.LabelFit;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /**
@@ -22,6 +22,8 @@ final class PickerTabs {
     static final int EMOJI = 0;
     static final int STICKERS = 1;
     private static final int INSET = 1;
+    /** Each side of a tab's words inside it. */
+    private static final int LABEL_PAD = 5;
     private static final String[] KEYS = {"chat.emoji", "chat.stickers"};
 
     /** A tab asked for: by the pointer, or by the keys ({@code keys}: they stay on the tabs). */
@@ -50,14 +52,17 @@ final class PickerTabs {
         if (focus) {
             Draw.frame(g, Frames.FOCUS_14, px, y + INSET, slot, HEIGHT - 2 * INSET);
         }
-        Font font = Fonts.ui();
-        float textY = Fonts.centeredY(Fonts.Face.UI, y + HEIGHT / 2f);
         int lit = at(mouseX, mouseY, x, y, w);
         for (int i = 0; i < 2; i++) {
             String label = Texts.str(KEYS[i]);
             float ox = x + INSET + i * slot;
             int ink = i == chosen ? Theme.BONE_50 : i == lit ? Theme.BONE_100 : Theme.ASH_300;
-            Draw.text(g, font, label, ox + (slot - font.width(label)) / 2f, textY, ink);
+            // LABEL-FIT: the words inside their tab, smaller or cut only when they must be.
+            LabelFit.Fit fit = LabelFit.fit(label, Fonts.Face.UI, 0, Math.round(slot) - 2 * LABEL_PAD,
+                Fonts.bundled(), LabelFit.FONTS);
+            LabelFit.noteForDriver(label, Fonts.Face.UI, false, Draw.scale(), fit);
+            Draw.text(g, Fonts.get(fit.face()), fit.text(), ox + (slot - fit.width()) / 2f,
+                Fonts.centeredY(fit.face(), y + HEIGHT / 2f), ink);
         }
     }
 }

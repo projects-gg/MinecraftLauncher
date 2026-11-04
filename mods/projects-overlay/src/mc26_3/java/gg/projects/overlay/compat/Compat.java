@@ -90,4 +90,9 @@ public final class Compat {
             }
         };
     }
+
+    /** A key event's scancode as GLFW passed it (KEY-HINT; 26.3 calls it the keycode). */
+    public static int scancode(net.minecraft.client.input.KeyEvent event) {
+        return event.keycode();
+    }
 }

@@ -3,6 +3,7 @@ package gg.projects.overlay.toast;
 import gg.projects.overlay.chat.ChatEmojiBar;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.Perf;
+import gg.projects.overlay.keys.KeyHint;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
@@ -115,11 +116,11 @@ public final class ToastLayer implements HudElement {
      * @param crewChat the message is from a crew conversation
      * @param panelConversation the conversation the open panel shows, or null when it is closed
      * @param panelOpen the panel is open (it shows everything itself; only the sound tells of others)
-     * @param fnTip its key hint gets the Fn line (F7-OPEN)
+     * @param line what its key hint says (KEY-HINT)
      * @return the card now on screen (new or updated in place), or null when none went up
      */
     public ToastCard show(OverlayState.ToastRequest request, boolean crewChat, String panelConversation,
-        boolean panelOpen, OverlaySettings settings, String keyName, boolean fnTip, boolean reducedMotion) {
+        boolean panelOpen, OverlaySettings settings, String keyName, KeyHint.Line line, boolean reducedMotion) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || !settings.showsKind(request.kind())) {
             return null;
@@ -143,7 +144,7 @@ public final class ToastLayer implements HudElement {
         Shapes.prepare();
         ToastStack.Entry<ToastCard> existing = find(request.key());
         int count = existing == null ? 1 : existing.count() + 1;
-        ToastCard card = ToastCard.of(request, crewChat, count, settings.showMessageText(), keyName, fnTip);
+        ToastCard card = ToastCard.of(request, crewChat, count, settings.showMessageText(), keyName, line);
         stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
         stack.setReducedMotion(reducedMotion);
         stack.push(request.key(), card, card.height(), duration(kind, settings, mc), now);
@@ -364,6 +365,27 @@ public final class ToastLayer implements HudElement {
             }
         }
         markTip.track(null, null, 0f, 0f, now);
+    }
+
+    /**
+     * KEY-HINT: a card with the overlay key's hint is on screen (the last frames drew it): only then does the hint learn
+     * from the keys the game's window hears.
+     */
+    public boolean keyHintShowing() {
+        if (now() - drawnAt > DRAWN_RECENTLY_MS) {
+            return false;
+        }
+        for (ToastStack.Entry<ToastCard> e : stack.entries()) {
+            if (!e.leaving() && e.content().keyHint()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** KEY-HINT: every card's key hint says {@code line} now, where it stands (one line for another: no card moves). */
+    public void rehint(KeyHint.Line line) {
+        stack.replaceAll(card -> card.rehinted(line));
     }
 
     /** The panel opened: every toast fades where it is. */

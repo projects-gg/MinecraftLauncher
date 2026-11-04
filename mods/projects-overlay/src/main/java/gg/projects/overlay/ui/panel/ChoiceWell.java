@@ -2,12 +2,12 @@ package gg.projects.overlay.ui.panel;
 
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.LabelFit;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import java.util.function.IntConsumer;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
@@ -18,8 +18,8 @@ import net.minecraft.network.chat.Component;
 /**
  * A quiet choice across the panel's width: the settings page's chip well (chamfered, small type) with its selected
  * plate gliding on the sliding markers' spring. Quieter than the gold segmented tabs on purpose: next to it the gold
- * action is the one loud thing. Equal slots; a label that does not fit its slot is shortened. Arrow keys pick;
- * reduced motion jumps.
+ * action is the one loud thing. Equal slots; a label that does not fit its slot gets smaller, then shorter
+ * ({@link LabelFit}). Arrow keys pick; reduced motion jumps.
  */
 public final class ChoiceWell extends PanelWidget {
     public static final int HEIGHT = 14;
@@ -29,8 +29,7 @@ public final class ChoiceWell extends PanelWidget {
     private final String[] labels;
     private final IntConsumer onPick;
     private final Spring plate = Spring.snappy(0f);
-    private String[] fitted;
-    private float[] widths;
+    private LabelFit.Fit[] fitted;
     private int fittedFor = -1;
     private int selected;
     private boolean placed;
@@ -97,15 +96,16 @@ public final class ChoiceWell extends PanelWidget {
 
     @Override
     protected void draw(GuiGraphicsExtractor g, int mouseX, int mouseY, long now) {
-        Font small = Fonts.small();
         float slot = slot();
-        if (fittedFor != getWidth()) {
-            fittedFor = getWidth();
-            fitted = new String[labels.length];
-            widths = new float[labels.length];
+        int key = (getWidth() * 32 + Draw.scale() * 2 + (Fonts.bundled() ? 1 : 0)) * 1024 + LabelFit.generation() % 1024;
+        if (fittedFor != key) {
+            // LABEL-FIT: each label inside its slot, smaller, then cut, only when it must be.
+            fittedFor = key;
+            fitted = new LabelFit.Fit[labels.length];
             for (int i = 0; i < labels.length; i++) {
-                fitted[i] = Texts.fit(small, labels[i], Math.max(8, Math.round(slot) - 6));
-                widths[i] = small.width(fitted[i]);
+                fitted[i] = LabelFit.fit(labels[i], Fonts.Face.SMALL, 0, Math.max(8, Math.round(slot) - 6),
+                    Fonts.bundled(), LabelFit.FONTS);
+                LabelFit.noteForDriver(labels[i], Fonts.Face.SMALL, false, Draw.scale(), fitted[i]);
             }
         }
         float x = getX();
@@ -132,7 +132,9 @@ public final class ChoiceWell extends PanelWidget {
             float overlap = Math.max(0f, Math.min(ox + slot, px + slot) - Math.max(ox, px)) / slot;
             boolean over = isHovered() && active && mouseX >= ox && mouseX < ox + slot;
             int ink = Theme.mix(over ? Theme.BONE_100 : Theme.ASH_300, Theme.BONE_50, overlap);
-            Draw.text(g, small, fitted[i], ox + (slot - widths[i]) / 2f, Fonts.centeredY(Fonts.Face.SMALL, mid), ink);
+            LabelFit.Fit fit = fitted[i];
+            Draw.text(g, Fonts.get(fit.face()), fit.text(), ox + (slot - fit.width()) / 2f,
+                Fonts.centeredY(fit.face(), mid), ink);
         }
     }
 

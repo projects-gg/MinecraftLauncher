@@ -11,6 +11,7 @@ import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.people.FriendMenu;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.Avatars;
+import gg.projects.overlay.ui.LabelFit;
 import gg.projects.overlay.ui.panel.EmojiPanel;
 import gg.projects.overlay.ui.panel.OverlayScreen;
 import gg.projects.overlay.voice.VoiceState;
@@ -77,7 +78,7 @@ public final class SocialScenario implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         String which = System.getProperty("projects.overlay.dev.script");
-        if (!"social".equals(which) && !"social2".equals(which) && !"avatars".equals(which)) {
+        if (!"social".equals(which) && !"social2".equals(which) && !"avatars".equals(which) && !"fit".equals(which)) {
             return;
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "social-out")).toAbsolutePath();
@@ -86,6 +87,8 @@ public final class SocialScenario implements ClientModInitializer {
             script2();
         } else if ("avatars".equals(which)) {
             script3();
+        } else if ("fit".equals(which)) {
+            script4();
         } else {
             script();
         }
@@ -376,6 +379,60 @@ public final class SocialScenario implements ClientModInitializer {
         step(1.2, "shot ring", mc -> {
             results.addProperty("peopleKeptAfter", Avatars.kept());
             shot(mc, "ring-picture");
+        });
+    }
+
+    /**
+     * LABEL-FIT's scenario: the voice room's bar (Microphone, Deafen, Leave) laid out as before (every label at its own
+     * size) and as now, at GUI 2 and 3; then every page the panel has (friends, chats, a crew chat with its rooms, the
+     * room, settings) at GUI 1 to 4 (as many as the window allows), keeping each label that had to get smaller, lose its
+     * icon or be cut ({@code labelFits} in the results: none cut is the aim).
+     */
+    private void script4() {
+        step(0.5, "audit on", mc -> {
+            LabelFit.recordForDriver(true);
+            OverlayClient.get().togglePanel();
+        });
+        for (int scale : new int[] {2, 3}) {
+            step(0.1, "gui " + scale, mc -> {
+                mc.options.guiScale().set(scale);
+                mc.resizeGui();
+            });
+            step(0.4, "room page", mc -> need(mc).showPage(OverlayScreen.Page.VOICE));
+            // The panel lays itself out again (as on a resize) for each: the bar's shares are part of LABEL-FIT.
+            step(0.3, "as before", mc -> {
+                LabelFit.fittingForDriver(false);
+                mc.resizeGui();
+            });
+            step(0.6, "shot before", mc -> shot(mc, "voice-bar-before-gui" + scale));
+            step(0.1, "as now", mc -> {
+                LabelFit.fittingForDriver(true);
+                mc.resizeGui();
+            });
+            step(0.6, "shot after", mc -> shot(mc, "voice-bar-after-gui" + scale));
+        }
+        for (int scale = 1; scale <= 4; scale++) {
+            int s = scale;
+            step(0.1, "audit gui " + s, mc -> {
+                mc.options.guiScale().set(s);
+                mc.resizeGui();
+                results.addProperty("guiScaleAsked" + s, mc.getWindow().getGuiScale());
+            });
+            step(0.4, "friends " + s, mc -> need(mc).showPage(OverlayScreen.Page.FRIENDS));
+            step(0.4, "chats " + s, mc -> need(mc).showPage(OverlayScreen.Page.CHATS));
+            step(0.4, "crew chat " + s, mc -> need(mc).showConversation("crew:gece"));
+            step(0.4, "room " + s, mc -> need(mc).showPage(OverlayScreen.Page.VOICE));
+            step(0.4, "settings " + s, mc -> need(mc).showPage(OverlayScreen.Page.SETTINGS));
+            step(0.4, "shot settings " + s, mc -> shot(mc, "settings-gui" + s));
+        }
+        step(0.1, "audit done", mc -> {
+            JsonObject fits = new JsonObject();
+            LabelFit.notesForDriver().forEach(fits::addProperty);
+            results.add("labelFits", fits);
+            LabelFit.recordForDriver(false);
+            mc.options.guiScale().set(2);
+            mc.resizeGui();
+            need(mc).close();
         });
     }
 

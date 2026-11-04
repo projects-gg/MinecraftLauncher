@@ -37,7 +37,12 @@ public final class Fonts {
          */
         TAG("tag", 6.5f),
         /** A face's letter (OVL-UX2): Tektur, as the launcher's {@code PlayerHead} sets it. */
-        FACE("face", 7.5f);
+        FACE("face", 7.5f),
+        /**
+         * A button's or chip's words where their box is too narrow (LABEL-FIT, {@link LabelFit}): Figtree Medium at
+         * about three quarters of a button's size, made for every scale as the others, so it stays sharp.
+         */
+        MINI("mini", 6.5f);
 
         final String id;
         final float size;

@@ -5,6 +5,7 @@ import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 /**
  * The toast stack's layout and timing, without any drawing (so it is tested on its own).
@@ -124,6 +125,16 @@ public final class ToastStack<T> {
 
     public boolean isEmpty() {
         return entries.isEmpty();
+    }
+
+    /**
+     * Every toast's content changed by {@code change} where it stands (KEY-HINT: another hint line). The change keeps
+     * the height: nothing moves, nothing starts again.
+     */
+    public void replaceAll(UnaryOperator<T> change) {
+        for (Entry<T> e : entries) {
+            e.content = change.apply(e.content);
+        }
     }
 
     /** Toasts that are not leaving. */
