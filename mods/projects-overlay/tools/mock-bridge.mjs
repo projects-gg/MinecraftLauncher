@@ -1848,6 +1848,20 @@ function onDev(socket, frame) {
     case "one":
       incoming(socket, "dm:ayse", "PixelAvci", "Akşam bedwars var mı? Ekip toplanıyor.");
       break;
+    case "invite-in": {
+      // FIX-209: a friend's "Birlikte oyna" reaches the player (the launcher's words come from the mod); `by` names the
+      // friend for their picture (OVL-AVATARS A4), a friend without one keeps the letter.
+      const friend =
+        state.friends.find((f) => f.id === (frame.friend ?? "f-ayse")) ?? state.friends[0];
+      send(socket, {
+        t: "toast",
+        kind: "invite",
+        key: `invite:i${nextId++}`,
+        title: friend.name,
+        by: friend.id,
+      });
+      break;
+    }
     case "stack":
       stack(socket);
       break;

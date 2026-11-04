@@ -23,10 +23,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
 /**
- * One toast, laid out once when it arrives (or updates) and only drawn afterwards: a face on the left (a
- * name's initial, or the crew, call, invite or info sign), the name in bold with its count, the crew's name
- * under it for crew chat, up to two lines of text, and the hint with the key that opens the overlay. A
- * travel toast ("Projects sunucusuna bağlanılıyor…") is one sentence beside the gold join sign. A sticker
+ * One toast, laid out once when it arrives (or updates) and only drawn afterwards: a face on the left (the person's
+ * picture or initial, a "Birlikte oyna" invite's friend included; or the crew, call or info sign), the name in bold with
+ * its count, the crew's name under it for crew chat, up to two lines of text, and the hint with the key that opens the
+ * overlay. A travel toast ("Projects sunucusuna bağlanılıyor…") is one sentence beside the gold join sign. A sticker
  * message (CHAT2) shows the sticker small before its words ("Çıkartma · GG"), unless message text is hidden. A
  * message's sender who wears a crew tag has its chip before the name ("[GK] Ayşe", TEAM6). A friend's world invite
  * (HOST1) has the grass block for its face and "Katılmak için F7 tuşuna bas"; the host's own notes ("Dünyan
@@ -671,15 +671,13 @@ public final class ToastCard {
                 Draw.disc(g, FACE, cx, cy, Theme.withAlpha(Theme.GOLD_500, 0.2f));
                 Draw.icon(g, Icon.CALL, 10, cx - 5, cy - 5, Theme.GOLD_300);
             }
-            case INVITE -> {
-                Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_700);
-                Draw.icon(g, Icon.INVITE, 10, cx - 5, cy - 5, Theme.BONE_100);
-            }
             case INFO -> {
                 Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_700);
                 Draw.icon(g, Icon.INFO, 10, cx - 5, cy - 5, Theme.ASH_300);
             }
-            case MESSAGE, HOST, WORLD, RING -> {
+            // FIX-209: a "Birlikte oyna" invite shows the friend's face as the launcher's card does (OVL-AVATARS A4), not
+            // a controller: their picture, the letter until it comes or when they have none.
+            case MESSAGE, INVITE, HOST, WORLD, RING -> {
                 if (face != null) {
                     face.draw(g, FACE, cx, cy);
                 } else {
