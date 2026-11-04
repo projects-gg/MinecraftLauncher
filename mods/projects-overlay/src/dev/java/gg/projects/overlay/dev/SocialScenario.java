@@ -55,6 +55,9 @@ import org.slf4j.LoggerFactory;
  * HUD's speakers, a message toast and a ring; what their first coming costs (the panel opened with letters only, then
  * with the pictures), and pictures and letters taking turns in slices on the friend list, the room page and the HUD:
  * frame times and the overlay's own drawing time for each.
+ *
+ * <p>FIX-209 ({@code -Dprojects.overlay.dev.script=invite}, the mock's {@code --avatars <dir>}): "Birlikte oyna" cards
+ * with the friend's face, a picture and a letter.
  */
 public final class SocialScenario implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("OVL-SOC scenario");
@@ -78,7 +81,8 @@ public final class SocialScenario implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         String which = System.getProperty("projects.overlay.dev.script");
-        if (!"social".equals(which) && !"social2".equals(which) && !"avatars".equals(which) && !"fit".equals(which)) {
+        if (!"social".equals(which) && !"social2".equals(which) && !"avatars".equals(which) && !"fit".equals(which)
+            && !"invite".equals(which)) {
             return;
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "social-out")).toAbsolutePath();
@@ -89,6 +93,8 @@ public final class SocialScenario implements ClientModInitializer {
             script3();
         } else if ("fit".equals(which)) {
             script4();
+        } else if ("invite".equals(which)) {
+            script5();
         } else {
             script();
         }
@@ -437,6 +443,18 @@ public final class SocialScenario implements ClientModInitializer {
     }
 
     /**
+     * FIX-209's scenario ({@code -Dprojects.overlay.dev.script=invite}, the mock's {@code --avatars <dir>}): a friend's
+     * "Birlikte oyna" card with their picture (PixelAvci), then a second one from a friend without a picture (KorAtesi:
+     * the letter) above it.
+     */
+    private void script5() {
+        step(0.5, "invite with a picture", mc -> devFriend("invite-in", "f-ayse"));
+        step(1.8, "shot invite picture", mc -> shot(mc, "invite-picture"));
+        step(0.3, "invite with a letter", mc -> devFriend("invite-in", "f-can"));
+        step(1.8, "shot invites", mc -> shot(mc, "invite-letter"));
+    }
+
+    /**
      * OVL-AVATARS: pictures (slot 0) and letters (slot 1) take turns in {@code pairs} pairs of slices on what shows now;
      * each slice settles 0.4 s before it records 0.8 s. Frame times and the overlay's own drawing time for each.
      */
@@ -482,6 +500,15 @@ public final class SocialScenario implements ClientModInitializer {
         o.addProperty("cmd", cmd);
         boolean sent = OverlayClient.get().bridge().send(o);
         event("dev", cmd + (sent ? "" : " (not sent)"));
+    }
+
+    /** A dev command about one of the mock's friends ({@code friend}: their id). */
+    private void devFriend(String cmd, String friend) {
+        JsonObject o = Protocol.message("dev");
+        o.addProperty("cmd", cmd);
+        o.addProperty("friend", friend);
+        boolean sent = OverlayClient.get().bridge().send(o);
+        event("dev", cmd + " " + friend + (sent ? "" : " (not sent)"));
     }
 
     private void devIds(String cmd, String... ids) {
