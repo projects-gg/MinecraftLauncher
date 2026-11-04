@@ -215,6 +215,23 @@ final class AvatarBook<T, P> {
     }
 
     /**
+     * Whether a picture ({@code side} square, ARGB rows) is a skin's head as the launcher prepares it: blocks of {@code
+     * block} pixels of one colour each, their opacity aside (the rounded corners). Such a picture is drawn without
+     * smoothing, pixel-sharp at any size, as the launcher's page draws heads.
+     */
+    static boolean blocky(int[] argb, int side, int block) {
+        for (int y = 0; y < side; y++) {
+            int row = y / block * block * side;
+            for (int x = 0; x < side; x++) {
+                if (((argb[y * side + x] ^ argb[row + x / block * block]) & 0xFFFFFF) != 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
      * Four ARGB pixels (a 2 x 2 block) as one: their mean weighted by opacity, so a see-through corner neither darkens
      * nor tints the edge beside it.
      */

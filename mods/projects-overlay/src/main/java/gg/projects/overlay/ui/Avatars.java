@@ -36,6 +36,8 @@ public final class Avatars {
     public static final String ME = "@me";
     /** The levels kept: 64, 32 and 16 px. */
     private static final int LEVELS = 3;
+    /** A skin pixel in the launcher's 64 px head (8 × 8 of them). */
+    private static final int SKIN_BLOCK = 8;
     /** A picture's base64 at most (a 64 px PNG is a few kilobytes). */
     private static final int MAX_PNG_CHARS = 64 * 1024;
     /** A picture that has just come fades in over the letter this long (opacity only). */
@@ -52,12 +54,15 @@ public final class Avatars {
     /** The dev scenario's comparison turns the pictures off and on (the letters everywhere while off). */
     public static boolean shown = true;
 
-    /** A person's picture on the GPU, one texture per level (64, 32, 16 px). */
-    private record Uploaded(Identifier[] levels) {
+    /**
+     * A person's picture on the GPU, one texture per level (64, 32, 16 px); a skin's head ({@code blocky}) is one 64 px
+     * texture drawn without smoothing.
+     */
+    private record Uploaded(Identifier[] levels, boolean blocky) {
     }
 
     /** A picture decoded off the render thread, its levels ready to upload. */
-    private record Decoded(NativeImage[] levels) {
+    private record Decoded(NativeImage[] levels, boolean blocky) {
         void close() {
             for (NativeImage level : levels) {
                 level.close();
@@ -119,8 +124,8 @@ public final class Avatars {
         }
         long since = now - e.readyAt;
         fade = since >= FADE_MS ? 1f : Math.max(0f, since / (float) FADE_MS);
-        // The level with at most two texels a screen pixel.
-        int level = pixels > SIZE / 2 ? 0 : pixels > SIZE / 4 ? 1 : 2;
+        // The level with at most two texels a screen pixel; a skin's head is sampled, never blended, at any size.
+        int level = e.texture.blocky() ? 0 : pixels > SIZE / 2 ? 0 : pixels > SIZE / 4 ? 1 : 2;
         size = SIZE >> level;
         return e.texture.levels()[level];
     }
@@ -166,12 +171,14 @@ public final class Avatars {
         }
         TextureManager textures = Minecraft.getInstance().getTextureManager();
         int n = ++serial;
-        Identifier[] levels = new Identifier[LEVELS];
-        for (int i = 0; i < LEVELS; i++) {
+        Identifier[] levels = new Identifier[decoded.levels().length];
+        for (int i = 0; i < levels.length; i++) {
             levels[i] = Identifier.fromNamespaceAndPath(OverlayClient.MOD_ID, "avatars/" + n + "_" + (SIZE >> i));
-            textures.register(levels[i], Compat.smoothTexture(() -> "Projects Overlay picture", decoded.levels()[i]));
+            NativeImage pixels = decoded.levels()[i];
+            textures.register(levels[i], decoded.blocky() ? Compat.sharpTexture(() -> "Projects Overlay picture", pixels)
+                : Compat.smoothTexture(() -> "Projects Overlay picture", pixels));
         }
-        e.texture = new Uploaded(levels);
+        e.texture = new Uploaded(levels, decoded.blocky());
         e.readyAt = now;
         return true;
     }
@@ -242,6 +249,17 @@ public final class Avatars {
             if (whole.getWidth() != SIZE || whole.getHeight() != SIZE) {
                 return null;
             }
+            int[] argb = new int[SIZE * SIZE];
+            for (int y = 0; y < SIZE; y++) {
+                for (int x = 0; x < SIZE; x++) {
+                    argb[y * SIZE + x] = whole.getPixel(x, y);
+                }
+            }
+            if (AvatarBook.blocky(argb, SIZE, SKIN_BLOCK)) {
+                // A skin's head: one level, sampled pixel-sharp at any size.
+                made = true;
+                return new Decoded(new NativeImage[] {whole}, true);
+            }
             for (int i = 1; i < LEVELS; i++) {
                 NativeImage from = levels[i - 1];
                 int side = SIZE >> i;
@@ -256,7 +274,7 @@ public final class Avatars {
                 }
             }
             made = true;
-            return new Decoded(levels);
+            return new Decoded(levels, false);
         } catch (IOException e) {
             return null;
         } finally {

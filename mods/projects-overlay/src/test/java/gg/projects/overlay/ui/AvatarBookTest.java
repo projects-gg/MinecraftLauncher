@@ -1,6 +1,7 @@
 package gg.projects.overlay.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -154,6 +155,25 @@ class AvatarBookTest {
         book.releaseTextures(sink);
         assertEquals(List.of("tex"), released);
         assertEquals("PNG", e.png);
+    }
+
+    @Test
+    void aSkinsHeadIsToldFromAPictureByItsBlocks() {
+        int side = 64;
+        int[] head = new int[side * side];
+        for (int y = 0; y < side; y++) {
+            for (int x = 0; x < side; x++) {
+                head[y * side + x] = 0xFF000000 | (x / 8 * 30) << 16 | (y / 8 * 30) << 8;
+            }
+        }
+        // The rounded corner changes only the opacity.
+        head[0] &= 0x00FFFFFF;
+        head[1] &= 0x80FFFFFF;
+        assertTrue(AvatarBook.blocky(head, side, 8));
+        // One pixel off its block's colour: a photo, drawn smooth.
+        int[] photo = head.clone();
+        photo[9 * side + 10] ^= 0x000001;
+        assertFalse(AvatarBook.blocky(photo, side, 8));
     }
 
     @Test

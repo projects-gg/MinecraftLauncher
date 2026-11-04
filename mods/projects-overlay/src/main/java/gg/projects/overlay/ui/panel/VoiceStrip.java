@@ -32,7 +32,10 @@ import net.minecraft.util.FormattedCharSequence;
 public final class VoiceStrip extends PanelWidget {
     static final int FACE = 12;
     static final int FACE_GAP = 4;
-    /** A face's mark: an 8 px sign on a 10 px dark disc whose centre is 2 px in from the face's corner. */
+    /**
+     * A face's mark: an 8 px sign on a 10 px dark disc whose centre is 1 px in from the face's corner (OVL-AVATARS: on a
+     * picture it covers the corner, not the eyes).
+     */
     static final int MARK = 8;
     static final int MARK_DISC = 10;
     private static final long RING_IN_MS = 100;
@@ -171,8 +174,8 @@ public final class VoiceStrip extends PanelWidget {
             }
             VoiceMarks.Mark mark = marks.get(id);
             if (mark != null) {
-                float cx = fx + FACE - 2;
-                float cy = fy + FACE - 2;
+                float cx = fx + FACE - 1;
+                float cy = fy + FACE - 1;
                 Draw.disc(g, MARK_DISC, cx, cy, Theme.OBSIDIAN_950);
                 Draw.icon(g, mark.icon(), MARK, cx - MARK / 2f, cy - MARK / 2f, mark.ink());
             }

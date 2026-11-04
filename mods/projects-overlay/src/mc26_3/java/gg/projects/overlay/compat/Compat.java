@@ -81,4 +81,13 @@ public final class Compat {
             }
         };
     }
+
+    /** A texture sampled without filtering: a skin's head stays pixel-sharp at any size (OVL-AVATARS). */
+    public static DynamicTexture sharpTexture(Supplier<String> label, NativeImage image) {
+        return new DynamicTexture(label, image) {
+            {
+                sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
+            }
+        };
+    }
 }
