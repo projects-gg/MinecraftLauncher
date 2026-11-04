@@ -266,8 +266,11 @@ export function InstancePage() {
           ]}
         >
           {/* Play time and the last session are the header's; the tab says where to play next
-              and what the instance is (overview/overview-tab.tsx). */}
-          <TabPanel value="overview" className="pb-8">
+              and what the instance is (overview/overview-tab.tsx). The lists scroll as a page's
+              list does (`page-scroll`, design.md "Scroll bars"; QOL-209): at 1024 px a "Tümü"
+              or a button's focus ring on the right edge reached past the panel and drew a
+              sideways scroll bar under the tab. Nothing here scrolls sideways. */}
+          <TabPanel value="overview" className="page-scroll overflow-x-hidden pb-8">
             <OverviewTab instance={data} onOpenTab={setTab} onBrowse={openBrowser} />
           </TabPanel>
           <TabPanel
@@ -276,7 +279,7 @@ export function InstancePage() {
           >
             <ModCenter instance={data} onSwitchVersion={() => setVersionsOpen(true)} />
           </TabPanel>
-          <TabPanel value="resourcePacks" className="pb-8">
+          <TabPanel value="resourcePacks" className="page-scroll overflow-x-hidden pb-8">
             <PacksTab
               instanceId={data.id}
               kind="resourcePack"
@@ -284,7 +287,7 @@ export function InstancePage() {
               onBrowse={() => openBrowser("resourcePack")}
             />
           </TabPanel>
-          <TabPanel value="shaders" className="pb-8">
+          <TabPanel value="shaders" className="page-scroll overflow-x-hidden pb-8">
             <PacksTab
               instanceId={data.id}
               kind="shaderPack"
@@ -293,20 +296,21 @@ export function InstancePage() {
               onBrowse={() => openBrowser("shaderPack")}
             />
           </TabPanel>
-          <TabPanel value="worlds" className="pb-8">
+          <TabPanel value="worlds" className="page-scroll overflow-x-hidden pb-8">
             <WorldsTab instance={data} />
           </TabPanel>
-          <TabPanel value="screenshots" className="pb-8">
+          <TabPanel value="screenshots" className="page-scroll overflow-x-hidden pb-8">
             <ScreenshotsTab instance={data} />
           </TabPanel>
-          <TabPanel value="servers" className="pb-8">
+          <TabPanel value="servers" className="page-scroll overflow-x-hidden pb-8">
             <ServersTab instance={data} />
           </TabPanel>
           <TabPanel value="logs" className="overflow-hidden pb-6">
             <LogsTab instance={data} />
           </TabPanel>
-          {/* No bottom padding: the save bar's anchor sticks to the panel's bottom edge. */}
-          <TabPanel value="settings" className="flex flex-col pb-0">
+          {/* No bottom padding: the save bar's anchor sticks to the panel's bottom edge. A page's
+              list as well: a group's title reaches 4 px left of the column for its hover plate. */}
+          <TabPanel value="settings" className="page-scroll flex flex-col overflow-x-hidden pb-0">
             <SettingsTab instance={data} />
           </TabPanel>
         </Tabs>

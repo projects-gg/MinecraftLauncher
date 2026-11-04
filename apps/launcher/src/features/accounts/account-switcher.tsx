@@ -1,7 +1,15 @@
 // Title bar account switcher: the active account's head and name; opens a menu of every account
 // (arrow keys, Enter, Esc, typeahead) with "Hesap ekle" and "Hesap merkezini aç".
 import { CaretDown, Check, PushPin, UserPlus, UsersThree } from "@phosphor-icons/react";
-import { cn, easeOutExpo, ReducedMotionConfig, returnFocusAfterKeys, springSnappy } from "@pl/ui";
+import {
+  cn,
+  easeOutExpo,
+  MORE_BELOW_MASK,
+  ReducedMotionConfig,
+  returnFocusAfterKeys,
+  springSnappy,
+  useMoreBelow,
+} from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useRef, useState } from "react";
@@ -34,6 +42,8 @@ export function AccountSwitcher() {
   // The title bar is always there: it keeps the heads of every account filled in.
   useAccountHeads(accounts);
   const active = accounts.find((a) => a.active);
+  // Many accounts in a short window: the list scrolls and fades at its edge (QOL-209).
+  const [moreBelow, watchList] = useMoreBelow();
 
   if (isPending) return <span className="w-[120px]" aria-hidden />;
 
@@ -133,8 +143,11 @@ export function AccountSwitcher() {
                   returnFocusAfterKeys(event);
                 }}
               >
+                {/* As tall as the window allows (QOL-209: ten accounts at 1280 × 633 pushed "Hesap
+                    ekle" and the center's row below the window): the accounts scroll between the
+                    title and the two actions, which stay. */}
                 <motion.div
-                  className="glass-strong z-50 w-[320px] rounded-[var(--radius-panel)] p-1.5 shadow-[0_24px_60px_rgb(34_6_6/0.55)] outline-none"
+                  className="glass-strong z-50 flex max-h-[var(--radix-dropdown-menu-content-available-height)] w-[320px] flex-col rounded-[var(--radius-panel)] p-1.5 shadow-[0_24px_60px_rgb(34_6_6/0.55)] outline-none"
                   style={{ transformOrigin: "var(--radix-dropdown-menu-content-transform-origin)" }}
                   initial={calm({ opacity: 0, scale: 0.96, y: -4 })}
                   animate={calm({
@@ -147,10 +160,12 @@ export function AccountSwitcher() {
                 >
                   {accounts.length ? (
                     <>
-                      <DropdownMenu.Label className="px-2.5 pt-1.5 pb-1.5 text-[12px] font-medium text-ash-400">
+                      <DropdownMenu.Label className="shrink-0 px-2.5 pt-1.5 pb-1.5 text-[12px] font-medium text-ash-400">
                         {t("accounts.switcher.title")}
                       </DropdownMenu.Label>
                       <DropdownMenu.RadioGroup
+                        ref={watchList}
+                        className={cn("min-h-0 overflow-y-auto", moreBelow && MORE_BELOW_MASK)}
                         value={active?.id ?? ""}
                         onValueChange={(id) => {
                           const account = accounts.find((a) => a.id === id);
@@ -221,12 +236,12 @@ export function AccountSwitcher() {
                           );
                         })}
                       </DropdownMenu.RadioGroup>
-                      <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
+                      <DropdownMenu.Separator className="my-1.5 h-px shrink-0 bg-white/8" />
                     </>
                   ) : null}
                   <DropdownMenu.Item
                     onSelect={() => openFromMenu("add")}
-                    className={cn(itemClass, "h-11 text-[13.5px] text-bone-100")}
+                    className={cn(itemClass, "h-11 shrink-0 text-[13.5px] text-bone-100")}
                   >
                     <span className="flex w-8 justify-center text-gold-300">
                       <UserPlus size={18} aria-hidden />
@@ -235,7 +250,7 @@ export function AccountSwitcher() {
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
                     onSelect={() => openFromMenu("list")}
-                    className={cn(itemClass, "h-11 text-[13.5px] text-bone-100")}
+                    className={cn(itemClass, "h-11 shrink-0 text-[13.5px] text-bone-100")}
                   >
                     <span className="flex w-8 justify-center text-ash-300">
                       <UsersThree size={18} aria-hidden />

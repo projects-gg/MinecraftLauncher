@@ -211,11 +211,14 @@ export function Onboarding() {
         <TitleBar search={false} />
       </div>
 
-      <div className="relative flex min-h-0 flex-1 items-center px-[clamp(32px,7vw,96px)] pb-10">
+      {/* A step taller than the window (many accounts at 1024 × 640) scrolls from its top instead
+          of being cut at both ends (QOL-209): the auto margins centre it while it fits, and the
+          even padding keeps that centre where it was. */}
+      <div className="relative flex min-h-0 flex-1 overflow-y-auto px-[clamp(32px,7vw,96px)] pb-10">
         <section
           ref={sectionRef}
           aria-labelledby="onboarding-title"
-          className="w-full max-w-[500px]"
+          className="my-auto w-full max-w-[500px] py-4"
         >
           <div className="mb-9 flex items-center gap-4">
             <img src={logo} alt="" className="size-11" draggable={false} />

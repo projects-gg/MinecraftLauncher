@@ -22,7 +22,17 @@ import { AnimatePresence } from "motion/react";
 import { Popover } from "radix-ui";
 import { lazy, type ReactNode, Suspense, useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PANEL_HEIGHT, PANEL_WIDTH, type PickerTab, SKELETON_KEYS } from "./picker-layout";
+import {
+  PANEL_HEIGHT,
+  PANEL_WIDTH,
+  type PickerTab,
+  panelHeightFor,
+  SKELETON_KEYS,
+} from "./picker-layout";
+
+/** The panel's distance from its trigger, and from the window's edge. */
+const SIDE_OFFSET = 10;
+const COLLISION_PADDING = 12;
 
 const loadPanel = () => import("./picker-panel");
 const PickerPanel = lazy(loadPanel);
@@ -83,9 +93,21 @@ export function EmojiPickerButton({
   const [open, setOpenState] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  // Decided once as it opens, so it opens at its final size (design.md §5, POLISH6).
+  const [height, setHeight] = useState(PANEL_HEIGHT);
 
   const setOpen = useCallback(
     (next: boolean) => {
+      if (next && trigger.current) {
+        setHeight(
+          panelHeightFor(
+            trigger.current.getBoundingClientRect(),
+            window.innerHeight,
+            SIDE_OFFSET + COLLISION_PADDING,
+          ),
+        );
+      }
       setOpenState(next);
       onOpenChange?.(next);
     },
@@ -96,7 +118,7 @@ export function EmojiPickerButton({
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
+      <Popover.Trigger asChild ref={trigger}>
         <IconButton
           label={label}
           icon={icon ?? <Smiley size={19} weight={open ? "fill" : "regular"} aria-hidden />}
@@ -117,8 +139,8 @@ export function EmojiPickerButton({
                 asChild
                 side={side}
                 align={align}
-                sideOffset={10}
-                collisionPadding={12}
+                sideOffset={SIDE_OFFSET}
+                collisionPadding={COLLISION_PADDING}
                 aria-label={label}
                 onOpenAutoFocus={(event) => {
                   // The search field when it is there, else the panel (it moves there on mount).
@@ -142,7 +164,7 @@ export function EmojiPickerButton({
                   className="z-50 overflow-hidden rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_24px_60px_rgb(34_6_6/0.55)] outline-none backdrop-blur-xl [html[data-perf=on]_&]:bg-obsidian-900 [html[data-perf=on]_&]:backdrop-blur-none"
                   style={{
                     width: PANEL_WIDTH,
-                    height: PANEL_HEIGHT,
+                    height,
                     transformOrigin: "var(--radix-popover-content-transform-origin)",
                   }}
                   initial={{
@@ -164,6 +186,7 @@ export function EmojiPickerButton({
                     <PickerPanel
                       stickers={Boolean(onSticker)}
                       initialTab={initialTab}
+                      height={height}
                       onEmoji={(emoji) => {
                         onEmoji(emoji);
                         if (closeOnEmoji) setOpen(false);
