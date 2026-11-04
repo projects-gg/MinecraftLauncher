@@ -36,24 +36,33 @@ class SettingsTest {
     }
 
     @Test
-    void resetKeepsWhetherTheKeyWasUsed() {
-        OverlaySettings s = OverlaySettings.DEFAULTS.withKeyUsed(true).withMessageToasts(false)
-            .withCorner(OverlaySettings.Corner.TOP_RIGHT);
+    void resetKeepsWhatTheKeyHintLearnt() {
+        OverlaySettings s = OverlaySettings.DEFAULTS.withKeyUsed(true).withFnNeeded(true).withMessageToasts(false)
+            .withCorner(OverlaySettings.Corner.TOP_RIGHT).withShowKeyHint(false);
         assertFalse(s.isDefault());
         OverlaySettings reset = s.reset();
         assertTrue(reset.isDefault());
         assertTrue(reset.keyUsed());
-        // F7-OPEN: whether the key opened the panel is no display preference.
-        assertTrue(OverlaySettings.DEFAULTS.withKeyUsed(true).isDefault());
-        assertFalse(OverlaySettings.DEFAULTS.keyUsed(), "the Fn line may show until the key works once");
+        assertTrue(reset.fnNeeded());
+        assertTrue(reset.showKeyHint(), "the hint is a preference: it comes back");
+        // KEY-HINT: what the computer taught the hint is no display preference.
+        assertTrue(OverlaySettings.DEFAULTS.withKeyUsed(true).withFnNeeded(true).isDefault());
+        assertFalse(OverlaySettings.DEFAULTS.withShowKeyHint(false).isDefault());
+        assertFalse(OverlaySettings.DEFAULTS.keyUsed() || OverlaySettings.DEFAULTS.fnNeeded(), "nothing learnt yet");
+        assertTrue(OverlaySettings.DEFAULTS.showKeyHint());
     }
 
     @Test
-    void theFileKeepsThatTheKeyWorkedButNotTheOldTip() {
-        assertTrue(SettingsStore.parse(SettingsStore.format(OverlaySettings.DEFAULTS.withKeyUsed(true))).keyUsed());
+    void theFileKeepsWhatTheKeyHintLearntButNotTheOldTip() {
+        OverlaySettings learnt = OverlaySettings.DEFAULTS.withKeyUsed(true).withFnNeeded(true).withShowKeyHint(false);
+        assertEquals(learnt, SettingsStore.parse(SettingsStore.format(learnt)));
         assertFalse(SettingsStore.parse(SettingsStore.format(OverlaySettings.DEFAULTS)).keyUsed());
         // "hintSeen", a first-time tip removed long ago, never meant the key reached the game.
         assertFalse(SettingsStore.parse("{\"version\": 1, \"hintSeen\": true}").keyUsed());
+        // A file from before KEY-HINT: the hint shows, nothing learnt about Fn.
+        OverlaySettings old = SettingsStore.parse("{\"version\": 1, \"keyUsed\": true}");
+        assertTrue(old.showKeyHint());
+        assertFalse(old.fnNeeded());
     }
 
     @Test
@@ -91,7 +100,7 @@ class SettingsTest {
     void writesAndReadsEveryField() throws IOException {
         OverlaySettings s = new OverlaySettings(false, true, false, true, false, OverlaySettings.Duration.LONG,
             OverlaySettings.Corner.TOP_RIGHT, true, false, 35, true, 90, true, List.of("pl1/gg", "pl1/hi"),
-            List.of(":kalp:", "¯\\_(ツ)_/¯"), false, List.of("😂", "❤"));
+            List.of(":kalp:", "¯\\_(ツ)_/¯"), false, List.of("😂", "❤"), false, true);
         Path file = dir.resolve(SettingsStore.FILE_NAME);
         SettingsStore.write(file, s);
         assertEquals(s, SettingsStore.read(file));

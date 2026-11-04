@@ -11,7 +11,7 @@ import java.nio.file.Path;
 import java.util.Locale;
 
 /**
- * Whether this computer's keyboard may give F1 to F12 only with Fn ({@link FnTip}; F7-OPEN): a laptop, or a Mac,
+ * Whether this computer's keyboard may give F1 to F12 only with Fn ({@link KeyHint}; F7-OPEN): a laptop, or a Mac,
  * whose keyboards' top row is media keys by default. A laptop is a computer with a system battery: on Windows the
  * system's own power status (kernel32's GetSystemPowerStatus through JNA, which the game ships for OSHI), on Linux a
  * battery in /sys/class/power_supply that is not a device's (a wireless mouse's). Whatever cannot tell answers no: the

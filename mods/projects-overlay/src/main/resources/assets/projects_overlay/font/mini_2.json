@@ -1,0 +1,24 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "projects_overlay:figtree-medium.ttf",
+      "size": 6.5,
+      "oversample": 2.0,
+      "shift": [0.0, 0.0],
+      "skip": ""
+    },
+    {
+      "type": "reference",
+      "id": "projects_overlay:emoji_2"
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/default"
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/unifont"
+    }
+  ]
+}

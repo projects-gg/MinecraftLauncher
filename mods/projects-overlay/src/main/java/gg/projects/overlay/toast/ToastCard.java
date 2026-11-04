@@ -1,5 +1,6 @@
 package gg.projects.overlay.toast;
 
+import gg.projects.overlay.keys.KeyHint;
 import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerSet;
@@ -35,9 +36,10 @@ import net.minecraft.util.FormattedCharSequence;
  * caller's face, "Kaan_07 arıyor" (a long name gives way, never the verb), who else is in the room, and "Yanıtlamak
  * için [F7] tuşuna bas"; it stands under the call's gold hairline for as long as it rings.
  *
- * <p>The hint says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked it), and where
- * the key may need Fn a second line says so ("Açılmazsa [Fn] + [F7] tuşlarına bas", {@link
- * gg.projects.overlay.keys.FnTip}).
+ * <p>The hint is one line that says to press a key (F7-OPEN: "F7 ile arayüzü aç" read as a button, and players clicked
+ * it): "Açmak için [F7] tuşuna bas", or where this computer gives the key only with Fn, "Açmak için [Fn + F7] tuşlarına
+ * bas" (KEY-HINT, {@link KeyHint}); a line too wide for the card in the current letters (the game's pixel font at GUI
+ * scale 1) says the keys alone ("[Fn + F7] tuşlarına bas"). None while "Açma ipucunu göster" is off.
  */
 public final class ToastCard {
     public static final int WIDTH = Frames.TOAST_WIDTH;
@@ -51,8 +53,6 @@ public final class ToastCard {
     static final int SMALL_H = 9;
     static final int HINT_GAP = 4;
     static final int HINT_H = 10;
-    /** Between two hint lines: their key caps stand clear of each other. */
-    static final int HINT_LINE_GAP = 2;
     static final int MAX_BODY_LINES = 2;
     /** A sticker's picture in a toast, GUI pixels (CHAT2 §8.3). */
     static final int STICKER = 16;
@@ -64,6 +64,10 @@ public final class ToastCard {
     static final int MIN_KEY_NAME = 16;
     /** The key the Fn line names: the same word on every keyboard and in both languages. */
     static final String FN = "Fn";
+    /** The hint's sentence when its full one is too wide for the card: the keys alone ("[F7] tuşuna bas"). */
+    static final String SHORT_HINT = "toast.hint.short";
+    /** The ending of a hint sentence's Fn form ("toast.hint.open.fn": "Açmak için %s tuşlarına bas"). */
+    static final String FN_FORM = ".fn";
 
     public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL, WORLD, HOST, RING }
 
@@ -84,10 +88,12 @@ public final class ToastCard {
     final List<FormattedCharSequence> body;
     /** A sticker message's sticker, drawn small before the words. */
     final StickerSet.Sticker sticker;
-    /** The hint lines under the text, top first ("Açmak için [F7] tuşuna bas", then maybe the Fn line); maybe none. */
-    final List<Hint> hints;
-    /** The hints end with "Açılmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN). */
-    final boolean fnTip;
+    /** The hint under the text ("Açmak için [F7] tuşuna bas"), or null: none (an info card, the hint turned off). */
+    final Hint hint;
+    /** What the hint says, its sentence and the key it names: enough to say the Fn line instead later (KEY-HINT). */
+    final KeyHint.Line line;
+    final String hintTemplate;
+    final String keyName;
     /** The face is the world's grass block (a world invite, the world opening) rather than a disc. */
     final boolean sprite;
     /** A travel card that only tells something (OVL-FIX): the quiet info sign instead of the gold join sign. */
@@ -113,8 +119,10 @@ public final class ToastCard {
         this.crew = b.crew;
         this.body = b.body;
         this.sticker = b.sticker;
-        this.hints = List.copyOf(b.hints);
-        this.fnTip = b.fnTip;
+        this.hint = b.hint;
+        this.line = b.line;
+        this.hintTemplate = b.hintTemplate;
+        this.keyName = b.keyName;
         this.sprite = b.sprite;
         this.info = b.info;
         this.narration = b.narration;
@@ -125,15 +133,36 @@ public final class ToastCard {
         }
         float h = PAD_Y + TITLE_H + (crew != null ? SMALL_H : 0) + 1
             + (sticker != null ? Math.max(STICKER + 1, body.size() * LINE_H) : body.size() * LINE_H);
-        if (!hints.isEmpty()) {
-            h += HINT_GAP + hintsHeight(hints.size());
+        if (hint != null) {
+            h += HINT_GAP + HINT_H;
         }
         this.height = h + PAD_Y;
     }
 
-    /** The height of {@code lines} hint lines, one under the other. */
-    static int hintsHeight(int lines) {
-        return lines <= 0 ? 0 : lines * HINT_H + (lines - 1) * HINT_LINE_GAP;
+    /** {@code o} with another key hint of one line (the height stays). */
+    private ToastCard(ToastCard o, Hint hint, KeyHint.Line line) {
+        this.kind = o.kind;
+        this.conversation = o.conversation;
+        this.crewChat = o.crewChat;
+        this.face = o.face;
+        this.title = o.title;
+        this.titleWidth = o.titleWidth;
+        this.chip = o.chip;
+        this.marks = o.marks;
+        this.countText = o.countText;
+        this.countWidth = o.countWidth;
+        this.crew = o.crew;
+        this.body = o.body;
+        this.sticker = o.sticker;
+        this.hint = hint;
+        this.line = line;
+        this.hintTemplate = o.hintTemplate;
+        this.keyName = o.keyName;
+        this.sprite = o.sprite;
+        this.info = o.info;
+        this.countLine = o.countLine;
+        this.height = o.height;
+        this.narration = o.narration;
     }
 
     private static FormattedCharSequence line(String text) {
@@ -185,8 +214,8 @@ public final class ToastCard {
     }
 
     /**
-     * One hint line, laid out once: words with key caps among them ("Açmak için [F7] tuşuna bas", "Açılmazsa [Fn] +
-     * [F7] tuşlarına bas"), or words alone.
+     * One hint line, laid out once: words with key caps among them ("Açmak için [F7] tuşuna bas", "Açmak için [Fn + F7]
+     * tuşlarına bas"), or words alone.
      */
     static final class Hint {
         /** The words, one more than the keys: before the first key, between two, after the last; null where none. */
@@ -195,6 +224,10 @@ public final class ToastCard {
         private final FormattedCharSequence[] keys;
         /** Each cap's width, its padding included. */
         private final int[] capWidths;
+        /** The whole line's width in the letters it was laid out in. */
+        final int width;
+        /** A key's name had to be cut to keep the line inside the card. */
+        boolean cut;
 
         private Hint(List<String> words, List<String> keys) {
             Font small = Fonts.small();
@@ -210,6 +243,7 @@ public final class ToastCard {
                 this.keys[i] = line(keys.get(i));
                 this.capWidths[i] = small.width(keys.get(i)) + 2 * KEY_PAD;
             }
+            this.width = lineWidth(wordWidths, capWidths);
         }
 
         /**
@@ -235,11 +269,16 @@ public final class ToastCard {
             }
             int line = lineWidth(wordWidths, caps);
             List<String> names = new ArrayList<>(keyNames.length);
+            boolean cut = false;
             for (int i = 0; i < keyNames.length; i++) {
                 int others = line - (caps[i] - 2 * KEY_PAD);
-                names.add(Texts.fit(small, keyNames[i], keyRoom(TEXT_W, others)));
+                String name = Texts.fit(small, keyNames[i], keyRoom(TEXT_W, others));
+                cut |= !name.equals(keyNames[i]);
+                names.add(name);
             }
-            return new Hint(words, names);
+            Hint hint = new Hint(words, names);
+            hint.cut = cut;
+            return hint;
         }
 
         /** Words without a key ("Açmak için Kontroller'den bir tuş ata"). */
@@ -286,8 +325,10 @@ public final class ToastCard {
         FormattedCharSequence crew;
         List<FormattedCharSequence> body;
         StickerSet.Sticker sticker;
-        final List<Hint> hints = new ArrayList<>(2);
-        boolean fnTip;
+        Hint hint;
+        KeyHint.Line line = KeyHint.Line.NONE;
+        String hintTemplate;
+        String keyName;
         boolean sprite;
         boolean info;
         Component narration;
@@ -310,10 +351,10 @@ public final class ToastCard {
      * @param count how many messages it stands for (shown from 2 on)
      * @param showText the player's "Mesaj metnini göster"
      * @param keyName the overlay key's name, or null when none is bound
-     * @param fnTip the key hint gets "Açılmazsa [Fn] + [F7] tuşlarına bas" under it (F7-OPEN)
+     * @param line what the key hint says on this computer (KEY-HINT): the key, Fn and the key, or nothing
      */
     public static ToastCard of(OverlayState.ToastRequest request, boolean crewChat, int count, boolean showText,
-        String keyName, boolean fnTip) {
+        String keyName, KeyHint.Line line) {
         Builder b = new Builder();
         b.kind = kindOf(request.kind());
         b.conversation = request.conversation();
@@ -363,7 +404,7 @@ public final class ToastCard {
         b.sprite = b.kind == Kind.WORLD;
         if (b.kind != Kind.INFO) {
             hint(b, b.kind == Kind.CALL ? "toast.hint.call" : b.kind == Kind.WORLD ? "toast.hint.join"
-                : "toast.hint.open", keyName, fnTip);
+                : "toast.hint.open", keyName, line);
         }
         // The chip and the badge are drawn; the narrator says them with the name ("Ayşe, Projects yöneticisi, etiket
         // GK").
@@ -379,30 +420,77 @@ public final class ToastCard {
         return new ToastCard(b);
     }
 
+    /** The card's key hint ({@code template}: its sentence, "toast.hint.open"), as {@link #hintOf} lays it out. */
+    private static void hint(Builder b, String template, String keyName, KeyHint.Line line) {
+        b.hintTemplate = template;
+        b.keyName = keyName;
+        b.line = line;
+        b.hint = hintOf(template, keyName, line);
+    }
+
     /**
-     * The hint with the overlay's key where the sentence has it ("Açmak için [F7] tuşuna bas", "Press [F7] to open"),
-     * with {@code fnTip} the Fn line under it; with no key bound, where to bind one.
+     * The key hint, one line: the overlay's key where the sentence has it ("Açmak için [F7] tuşuna bas", "Press [F7] to
+     * open"); for {@link KeyHint.Line#FN} Fn on the same cap, as laptop makers print it, in the sentence's Fn form
+     * ("Açmak için [Fn + F7] tuşlarına bas"); the keys alone ("[Fn + F7] tuşlarına bas") when the sentence is wider than
+     * the card in the current letters; with no key bound, where to bind one; null for {@link KeyHint.Line#NONE}.
      */
-    private static void hint(Builder b, String key, String keyName, boolean fnTip) {
+    static Hint hintOf(String template, String keyName, KeyHint.Line line) {
+        if (line == KeyHint.Line.NONE) {
+            return null;
+        }
         if (keyName == null) {
-            b.hints.add(Hint.plain(Texts.str("toast.hint.unbound")));
-            return;
+            return Hint.plain(Texts.str("toast.hint.unbound"));
         }
-        b.hints.add(Hint.of(key, keyName));
-        if (fnTip) {
-            // Both keys on caps, as laptop makers write it ("Fn + F7 tuşlarına basın").
-            b.hints.add(Hint.of("toast.hint.fn", FN, keyName));
-            b.fnTip = true;
+        boolean fn = line == KeyHint.Line.FN;
+        String cap = fn ? fnCap(keyName) : keyName;
+        Hint full = Hint.of(fn ? template + FN_FORM : template, cap);
+        // The whole sentence with the key's whole name, or the keys alone (a cut "F…" names no key).
+        return !full.cut && full.width <= TEXT_W ? full : Hint.of(fn ? SHORT_HINT + FN_FORM : SHORT_HINT, cap);
+    }
+
+    /** Fn and the key on one cap ("Fn + F7"). */
+    static String fnCap(String keyName) {
+        return FN + " + " + keyName;
+    }
+
+    /**
+     * This card with its key hint saying {@code next} (KEY-HINT: the computer turned out to need Fn while the card was
+     * on screen): a copy of the same height (one line for another), or this card when its hint stays as it is.
+     */
+    public ToastCard rehinted(KeyHint.Line next) {
+        if (hint == null || keyName == null || hintTemplate == null || next == line || next == KeyHint.Line.NONE) {
+            return this;
         }
+        return new ToastCard(this, hintOf(hintTemplate, keyName, next), next);
+    }
+
+    /** Whether the card shows the overlay key's hint (a key on its cap). */
+    public boolean keyHint() {
+        return hint != null && keyName != null;
+    }
+
+    /** What the card's key hint says (the dev scenarios'). */
+    public KeyHint.Line line() {
+        return line;
+    }
+
+    /** The hint line's width as laid out, 0 without one (the dev scenarios check it stays inside the card). */
+    public int hintWidth() {
+        return hint == null ? 0 : hint.width;
+    }
+
+    /** Whether the hint line stays inside the card's text column (or there is none). */
+    public boolean hintFits() {
+        return hint == null || hint.width <= TEXT_W;
     }
 
     /**
      * The host's own note (HOST1): {@code title} in bold with {@code body} under it, the grass block for its face when
      * it is about the world ({@code sprite}) or the friend's initial when it is about them; with {@code hintKey} the
-     * hint line ("Yönetmek için [F7] tuşuna bas") follows, and with {@code fnTip} the Fn line.
+     * hint line ("Yönetmek için [F7] tuşuna bas") follows as {@code line} says.
      */
     public static ToastCard host(String title, String body, boolean sprite, String hintKey, String keyName,
-        boolean fnTip) {
+        KeyHint.Line line) {
         Builder b = new Builder();
         b.kind = Kind.HOST;
         b.sprite = sprite;
@@ -413,7 +501,7 @@ public final class ToastCard {
         b.initial = Texts.initial(title);
         b.body = body == null || body.isEmpty() ? List.of() : Texts.wrap(Fonts.ui(), body, TEXT_W, MAX_BODY_LINES);
         if (hintKey != null) {
-            hint(b, hintKey, keyName, fnTip);
+            hint(b, hintKey, keyName, line);
         }
         b.narration = Component.literal(body == null || body.isEmpty() ? title : title + ". " + body);
         return new ToastCard(b);
@@ -422,10 +510,9 @@ public final class ToastCard {
     /**
      * A voice chat ring (VOICE-O): the caller's face, "{@code name} arıyor" in bold (the name gives way to the verb), who
      * else is in the room under it ("Odada: Ece_x, Mert"; else "Sesli sohbet"), and the hint to answer in the panel
-     * ("Yanıtlamak için [F7] tuşuna bas", with {@code fnTip} the Fn line). {@code from}: the caller's user id, for
-     * their picture.
+     * ("Yanıtlamak için [F7] tuşuna bas", as {@code line} says). {@code from}: the caller's user id, for their picture.
      */
-    public static ToastCard ring(String name, String from, String others, String keyName, boolean fnTip) {
+    public static ToastCard ring(String name, String from, String others, String keyName, KeyHint.Line line) {
         Builder b = new Builder();
         b.kind = Kind.RING;
         Font strong = Fonts.strong();
@@ -437,11 +524,11 @@ public final class ToastCard {
         b.titleWidth = strong.width(titleText);
         b.initial = Texts.initial(who);
         b.by = from;
-        String line = others == null || others.isEmpty() ? Texts.str("voice.title")
+        String room = others == null || others.isEmpty() ? Texts.str("voice.title")
             : Texts.str("voice.ring.others", others);
-        b.body = Texts.wrap(Fonts.ui(), line, TEXT_W, 1);
-        hint(b, "toast.hint.call", keyName, fnTip);
-        b.narration = Component.literal(Texts.str("voice.ring.calling", who) + ". " + line);
+        b.body = Texts.wrap(Fonts.ui(), room, TEXT_W, 1);
+        hint(b, "toast.hint.call", keyName, line);
+        b.narration = Component.literal(Texts.str("voice.ring.calling", who) + ". " + room);
         return new ToastCard(b);
     }
 
@@ -500,11 +587,6 @@ public final class ToastCard {
         return PAD_Y + TITLE_H / 2f;
     }
 
-    /** Whether the card carries "Açılmazsa [Fn] + [F7] tuşlarına bas" (F7-OPEN: a game shows it a few times only). */
-    public boolean fnTip() {
-        return fnTip;
-    }
-
     /** Draws the card with its top-left corner at {@code x, y}; the caller set the opacity. */
     void draw(GuiGraphicsExtractor g, float x, float y, float refresh) {
         if (kind == Kind.TRAVEL) {
@@ -554,10 +636,8 @@ public final class ToastCard {
             }
         }
         Draw.popAlpha();
-        float hy = ty + HINT_GAP;
-        for (Hint hint : hints) {
-            hint.draw(g, tx, hy);
-            hy += HINT_H + HINT_LINE_GAP;
+        if (hint != null) {
+            hint.draw(g, tx, ty + HINT_GAP);
         }
     }
 

@@ -3,6 +3,7 @@ package gg.projects.overlay.ui.panel;
 import gg.projects.overlay.OverlayClient;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.LabelFit;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
@@ -365,16 +366,27 @@ final class VoicePanel {
         pageSub = sub == null ? null : Texts.visual(Texts.fit(small, sub, width));
         y += 12 + (pageSub == null ? 0 : 10) + 6;
         int by = bottom - ActionButton.HEIGHT;
-        int bw = (width - 8) / 3;
-        pageMic.visible = true;
-        PanelWidget.place(pageMic, x, by, bw, ActionButton.HEIGHT);
-        pageDeaf.visible = true;
-        PanelWidget.place(pageDeaf, x + bw + 4, by, bw, ActionButton.HEIGHT);
-        pageLeave.visible = true;
-        PanelWidget.place(pageLeave, x + 2 * (bw + 4), by, width - 2 * (bw + 4), ActionButton.HEIGHT);
         // A third of the panel: "İptal" while the player's call rings (the strip's icon says "Aramayı iptal et").
         pageLeave.setMessage(Texts.tr(room.people().isEmpty() && v.calling() != null ? "voice.cancel"
             : "voice.room.leave"));
+        // LABEL-FIT: thirds while every label fits one, else by what each needs ("Microphone" keeps its icon longer).
+        int[] bw = LabelFit.row(width - 8, new int[] {pageMic.preferredWidth(), pageDeaf.preferredWidth(),
+            pageLeave.preferredWidth()});
+        pageMic.visible = true;
+        PanelWidget.place(pageMic, x, by, bw[0], ActionButton.HEIGHT);
+        pageDeaf.visible = true;
+        PanelWidget.place(pageDeaf, x + bw[0] + 4, by, bw[1], ActionButton.HEIGHT);
+        pageLeave.visible = true;
+        PanelWidget.place(pageLeave, x + bw[0] + bw[1] + 8, by, bw[2], ActionButton.HEIGHT);
+        // One size for the bar: a button that needed smaller words gives the same size to its neighbours.
+        ActionButton[] bar = {pageMic, pageDeaf, pageLeave};
+        for (ActionButton b : bar) {
+            b.setLargestFace(Fonts.Face.UI);
+        }
+        Fonts.Face face = LabelFit.smallest(pageMic.fitFace(), pageDeaf.fitFace(), pageLeave.fitFace());
+        for (ActionButton b : bar) {
+            b.setLargestFace(face);
+        }
         list.visible = true;
         PanelWidget.place(list, x, y, width, Math.max(VoiceList.ROW_H, by - 8 - y));
         list.show(room, overlay.state().me(), WORDS, now);

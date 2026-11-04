@@ -18,7 +18,7 @@ import gg.projects.overlay.connect.WorldResume;
 import gg.projects.overlay.emoji.EmojiState;
 import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.host.HostGate;
-import gg.projects.overlay.keys.FnTip;
+import gg.projects.overlay.keys.KeyHint;
 import gg.projects.overlay.keys.Laptop;
 import gg.projects.overlay.keys.PressLatch;
 import gg.projects.overlay.lang.Language;
@@ -48,6 +48,7 @@ import gg.projects.overlay.voice.VoiceWords;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -145,10 +146,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private boolean panel = true;
     /** One toggle per press of the overlay key: its held repeats neither close nor reopen the panel (F7-OPEN). */
     private final PressLatch keyLatch = new PressLatch();
-    /** "Açılmazsa [Fn] + [F7] tuşlarına bas" under the first key hints of a game where Fn may be missing (F7-OPEN). */
-    private final FnTip fnTip = new FnTip();
     /** The keyboard may give F1 to F12 only with Fn (a laptop or a Mac; F7-OPEN): looked at once after the start. */
     private volatile boolean laptop;
+    /** A Mac: its top row gives media first, and fn reaches the game (KEY-HINT, {@link KeyHint}). */
+    private boolean mac = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("mac");
+    /** When macOS's fn key last moved while a key hint was on screen (KEY-HINT). */
+    private long macFnAt = Long.MIN_VALUE / 2;
     // ---- Voice chat (VOICE-O) ----
     /** Voice chat as the launcher shows it. */
     private final VoiceState voice = new VoiceState();
@@ -591,10 +594,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             // The page shows it already.
             return;
         }
-        ToastCard card = ToastCard.host(title, body, sprite, hintKey, key.keyName(), hintKey != null && fnTipWanted());
-        if (toasts.host(card, toastKey, settings.get(), reducedMotion()) && card.fnTip()) {
-            fnTip.shown();
-        }
+        ToastCard card = ToastCard.host(title, body, sprite, hintKey, key.keyName(), hintLine());
+        toasts.host(card, toastKey, settings.get(), reducedMotion());
     }
 
     /**
@@ -820,11 +821,16 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         keyLatch.released();
     }
 
-    /** The key opened the panel: its press is held now, and the key reaches the game here (no Fn line any more). */
+    /**
+     * The key opened the panel: its press is held now, and the key reaches the game here. KEY-HINT: the hint learns no
+     * more; it stays the Fn line where the top row was seen sending something else first, or (a Mac) fn went down with
+     * the key; else the key works as it is, and the hint says it alone.
+     */
     private void keyOpenedPanel() {
         keyLatch.toggled(key.heldNow());
         if (!settings.get().keyUsed()) {
-            updateSettings(s -> s.withKeyUsed(true));
+            boolean withFn = KeyHint.openedWithFn(mac, macFnAt, monotonicMs());
+            updateSettings(s -> s.withKeyUsed(true).withFnNeeded(s.fnNeeded() || withFn));
         }
     }
 
@@ -1353,11 +1359,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             lastToastConversation = t.conversation();
             lastToastAt = System.currentTimeMillis();
         }
-        ToastCard card = toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(),
-            panel != null, settings.get(), key.keyName(), fnTipWanted(), reducedMotion());
-        if (card != null && card.fnTip()) {
-            fnTip.shown();
-        }
+        toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(), panel != null,
+            settings.get(), key.keyName(), hintLine(), reducedMotion());
     }
 
     // ---- Voice chat (VOICE-O) -------------------------------------------------------------------------------
@@ -1442,13 +1445,10 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             ringShown = null;
             if (want != null && toasts.ringable()) {
                 ToastCard card = ToastCard.ring(want.name(), want.from(), want.with().isEmpty() ? null
-                    : VoiceWords.names(want.with()), key.keyName(), fnTipWanted());
+                    : VoiceWords.names(want.with()), key.keyName(), hintLine());
                 if (toasts.ring(card, RING_KEY + want.room(), want.until() - wall, settings.get(), reducedMotion())) {
                     ringShown = want.room();
                     ringSoundAt = 0;
-                    if (card.fnTip()) {
-                        fnTip.shown();
-                    }
                 }
             }
         }
@@ -1531,9 +1531,35 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         refreshScreen();
     }
 
-    /** Whether the next key hint gets "Açılmazsa [Fn] + [F7] tuşlarına bas" ({@link FnTip}; F7-OPEN). */
-    private boolean fnTipWanted() {
-        return fnTip.wanted(key.functionKey(), laptop, settings.get().keyUsed());
+    /** What the next key hint says on this computer (KEY-HINT, {@link KeyHint}). */
+    private KeyHint.Line hintLine() {
+        OverlaySettings s = settings.get();
+        return KeyHint.line(s.showKeyHint(), key.functionKey(), laptop, mac, s.keyUsed(), s.fnNeeded());
+    }
+
+    /**
+     * KEY-HINT: a key event the game's window heard ({@code KeyboardHandlerMixin}: GLFW's key, scancode and action, as
+     * the game gets them; render thread). Looked at only while a toast with the key's hint is on screen and the hint
+     * still learns (a laptop or a Mac, the key on F1 to F12 and never yet opening the panel here); nothing of it is kept
+     * but the conclusion. A Mac's fn is remembered for a moment; elsewhere a key the top row sent instead of the F-key
+     * turns the hint on screen into the Fn line at once, and every later one.
+     */
+    public void heardKey(int glfwKey, int scancode, int action) {
+        if (!laptop || !toasts.keyHintShowing()) {
+            return;
+        }
+        OverlaySettings s = settings.get();
+        if (s.keyUsed() || !key.functionKey()) {
+            return;
+        }
+        if (KeyHint.macFn(glfwKey, scancode, mac)) {
+            macFnAt = monotonicMs();
+            return;
+        }
+        if (!s.fnNeeded() && KeyHint.media(glfwKey, action, mac)) {
+            updateSettings(x -> x.withFnNeeded(true));
+            toasts.rehint(hintLine());
+        }
     }
 
     /** The keyboard counts as one that may need Fn for F1 to F12, or not (the scenario driver shows the Fn line). */

@@ -116,11 +116,15 @@ class DefaultsTest {
     void theUndoKeepsWhatIsNotADisplayPreference() {
         settings.set(OverlaySettings.DEFAULTS.withMessageSound(false));
         Defaults.Undo undo = Defaults.reset(settings.get(), apply, List.of());
-        // Meanwhile the overlay key opened the panel and a sticker went out: both stay after "Geri al".
-        settings.set(settings.get().withKeyUsed(true).withStickerUsed("pl1/gg"));
+        // Meanwhile the overlay key opened the panel (with Fn), a sticker and an emoji went out: all stay after
+        // "Geri al".
+        settings.set(settings.get().withKeyUsed(true).withFnNeeded(true).withStickerUsed("pl1/gg")
+            .withEmojiUsed(":kalp:"));
         Defaults.undo(undo, apply, List.of());
         assertFalse(settings.get().messageSound());
         assertTrue(settings.get().keyUsed());
+        assertTrue(settings.get().fnNeeded());
         assertEquals(List.of("pl1/gg"), settings.get().recentStickers());
+        assertEquals(List.of(":kalp:"), settings.get().recentEmojis());
     }
 }

@@ -1,12 +1,14 @@
 package gg.projects.overlay.ui.panel;
 
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.LabelFit;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -15,7 +17,9 @@ import net.minecraft.network.chat.Component;
 /**
  * The launcher's chamfered action button, 16 GUI pixels tall: gold (primary), obsidian (secondary), bare until
  * hovered (ghost) or obsidian under a flare hairline for what ends something (danger); an optional icon before the
- * words. Hover crossfades to the lighter face, a press settles it a pixel down.
+ * words. Hover crossfades to the lighter face, a press settles it a pixel down. Words wider than the button its layout
+ * gave it get smaller, then lose the icon, then are cut with the whole label as the tooltip ({@link LabelFit}): they
+ * never cross its edge.
  */
 public class ActionButton extends PanelWidget {
     public enum Style { PRIMARY, SECONDARY, GHOST, DANGER }
@@ -28,10 +32,18 @@ public class ActionButton extends PanelWidget {
     private final Runnable onPress;
     private Icon icon;
     private String label;
-    private int labelWidth;
     private boolean selected;
     /** The icon's own colour (a voice ring's gold phone, a leave's flare one; VOICE-O), 0 for the words' colour. */
     private int iconInk;
+    /** How the label fits the button now, and for what it was worked out (width, GUI scale and font, the label). */
+    private LabelFit.Fit fit;
+    private int fitWidth = -1;
+    private int fitScale = -1;
+    private String fitLabel;
+    private Icon fitIcon;
+    private Fonts.Face fitLargest;
+    /** The largest size its words may take: a row of buttons gives them all the size its narrowest one needed. */
+    private Fonts.Face largest = Fonts.Face.UI;
 
     public ActionButton(Style style, Component label, Icon icon, Runnable onPress) {
         super(0, 0, 10, HEIGHT, label);
@@ -41,15 +53,24 @@ public class ActionButton extends PanelWidget {
         setLabel(label);
     }
 
-    /** Width that fits the words and the icon. */
+    /** Width that fits the words and the icon, in the letters the game draws now. */
     public int preferredWidth() {
-        return PAD * 2 + labelWidth + (icon == null ? 0 : 10 + (label.isEmpty() ? 0 : ICON_GAP));
+        return PAD * 2 + Fonts.ui().width(label) + (icon == null ? 0 : 10 + (label.isEmpty() ? 0 : ICON_GAP));
     }
 
     public void setLabel(Component text) {
         setMessage(text);
         label = text.getString();
-        labelWidth = Fonts.ui().width(label);
+    }
+
+    /** The largest size its words may take (UI, or smaller to match the rest of its row; LABEL-FIT). */
+    public void setLargestFace(Fonts.Face face) {
+        largest = face;
+    }
+
+    /** The size its words take at its width now. */
+    public Fonts.Face fitFace() {
+        return fit().face();
     }
 
     public void setStyle(Style next) {
@@ -153,17 +174,38 @@ public class ActionButton extends PanelWidget {
             case GHOST -> Theme.mix(Theme.ASH_300, Theme.BONE_100, h);
             case DANGER -> Theme.mix(Theme.FLARE_300, Theme.BONE_50, h * 0.35f);
         };
-        float content = (icon == null ? 0 : 10 + (label.isEmpty() ? 0 : ICON_GAP)) + labelWidth;
-        float cx = x + (getWidth() - content) / 2f;
+        LabelFit.Fit f = fit();
+        float cx = x + (getWidth() - f.width()) / 2f;
         float dy = p * 0.5f;
-        if (icon != null) {
+        if (icon != null && f.icon()) {
             Draw.icon(g, icon, 10, cx, y + (HEIGHT - 10) / 2f + dy, iconInk != 0 ? iconInk : ink);
-            cx += 10 + ICON_GAP;
+            cx += 10 + (label.isEmpty() ? 0 : ICON_GAP);
         }
-        if (!label.isEmpty()) {
-            Font font = Fonts.ui();
-            Draw.text(g, font, label, cx, Fonts.centeredY(Fonts.Face.UI, y + HEIGHT / 2f) + dy, ink);
+        if (!f.text().isEmpty()) {
+            Font font = Fonts.get(f.face());
+            Draw.text(g, font, f.text(), cx, Fonts.centeredY(f.face(), y + HEIGHT / 2f) + dy, ink);
         }
+    }
+
+    /**
+     * How the icon and words fit inside the padding at this width, GUI scale and font (LABEL-FIT): worked out again only
+     * when one of them changes. A label cut to fit is the button's tooltip.
+     */
+    private LabelFit.Fit fit() {
+        int scale = (Draw.scale() * 2 + (Fonts.bundled() ? 1 : 0)) * 1024 + LabelFit.generation() % 1024;
+        if (fit == null || fitWidth != getWidth() || fitScale != scale || !label.equals(fitLabel) || fitIcon != icon
+            || fitLargest != largest) {
+            int iconRoom = icon == null ? 0 : 10 + (label.isEmpty() ? 0 : ICON_GAP);
+            fit = LabelFit.fit(label, largest, iconRoom, getWidth() - 2 * PAD, Fonts.bundled(), LabelFit.FONTS);
+            fitWidth = getWidth();
+            fitScale = scale;
+            fitLabel = label;
+            fitIcon = icon;
+            fitLargest = largest;
+            setTooltip(fit.cut() ? Tooltip.create(getMessage()) : null);
+            LabelFit.noteForDriver(label, Fonts.Face.UI, icon != null, Draw.scale(), fit);
+        }
+        return fit;
     }
 
     @Override

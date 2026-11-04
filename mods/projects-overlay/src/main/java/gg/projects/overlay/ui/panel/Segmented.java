@@ -2,12 +2,12 @@ package gg.projects.overlay.ui.panel;
 
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.LabelFit;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import java.util.function.IntConsumer;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
@@ -23,6 +23,9 @@ import net.minecraft.network.chat.Component;
 public class Segmented extends PanelWidget {
     public static final int HEIGHT = 16;
     private static final int INSET = 2;
+    /** Each side of a label inside its slot, and the room an unread marker takes after it. */
+    private static final int LABEL_PAD = 5;
+    private static final int MARKER_ROOM = 10;
 
     private final Component[] options;
     private final String[] labels;
@@ -131,18 +134,20 @@ public class Segmented extends PanelWidget {
         if (keyboardFocus()) {
             Draw.frame(g, Frames.FOCUS_16, x, y, getWidth(), HEIGHT);
         }
-        Font font = Fonts.ui();
-        float textY = Fonts.centeredY(Fonts.Face.UI, y + HEIGHT / 2f);
         for (int i = 0; i < options.length; i++) {
             float ox = x + INSET + i * slot;
             float overlap = Math.max(0f, Math.min(ox + slot, px + slot) - Math.max(ox, px)) / slot;
             boolean lit = isHovered() && mouseX >= ox && mouseX < ox + slot;
             int idle = lit ? Theme.BONE_100 : Theme.ASH_300;
             int ink = Theme.mix(idle, Theme.GOLD_INK, overlap);
-            float lx = ox + (slot - labelWidths[i]) / 2f - (markers[i] ? 3f : 0f);
-            Draw.text(g, font, labels[i], lx, textY, ink);
+            // LABEL-FIT: the words inside their slot (the marker's room kept), smaller or cut only when they must be.
+            LabelFit.Fit fit = LabelFit.fit(labels[i], Fonts.Face.UI, 0,
+                Math.round(slot) - 2 * LABEL_PAD - (markers[i] ? MARKER_ROOM : 0), Fonts.bundled(), LabelFit.FONTS);
+            LabelFit.noteForDriver(labels[i], Fonts.Face.UI, false, Draw.scale(), fit);
+            float lx = ox + (slot - fit.width()) / 2f - (markers[i] ? 3f : 0f);
+            Draw.text(g, Fonts.get(fit.face()), fit.text(), lx, Fonts.centeredY(fit.face(), y + HEIGHT / 2f), ink);
             if (markers[i]) {
-                Draw.disc(g, 5, lx + labelWidths[i] + 5f, y + HEIGHT / 2f,
+                Draw.disc(g, 5, lx + fit.width() + 5f, y + HEIGHT / 2f,
                     Theme.mix(Theme.GOLD_500, Theme.GOLD_INK, overlap));
             }
         }

@@ -344,6 +344,9 @@ public final class SettingsList extends PanelWidget {
             s -> s.withShowMessageText(!s.showMessageText()));
         text.enabledIf = OverlaySettings::messageToasts;
         items.add(text);
+        // KEY-HINT: the toasts' one line that says which key opens the panel (the owner: a switch to hide it).
+        items.add(new Toggle(Texts.str("settings.key_hint"), OverlaySettings::showKeyHint,
+            s -> s.withShowKeyHint(!s.showKeyHint())));
         items.add(new Choice(Texts.str("settings.duration"), new String[] {Texts.str("settings.duration.short"),
             Texts.str("settings.duration.normal"), Texts.str("settings.duration.long")},
             s -> s.duration().ordinal(), (s, i) -> s.withDuration(OverlaySettings.Duration.values()[i])));

@@ -154,7 +154,10 @@ public final class SettingsStore {
             // VOICE-O: "Konuşanları göster" (a file from before voice chat has it on).
             bool(root, "showSpeakers", d.showSpeakers()),
             // OVL-SOC: the panel picker's recent emoji (a file from before it has none).
-            chatEmojis(root, "recentChatEmojis"));
+            chatEmojis(root, "recentChatEmojis"),
+            // KEY-HINT: "Açma ipucunu göster" (on in a file from before it), and whether this computer's F-key needs Fn.
+            bool(root, "showKeyHint", d.showKeyHint()),
+            bool(root, "fnNeeded", d.fnNeeded()));
     }
 
     static String format(OverlaySettings s) {
@@ -177,6 +180,8 @@ public final class SettingsStore {
         sounds.addProperty("callVolume", s.callVolume());
         root.add("sounds", sounds);
         root.addProperty("keyUsed", s.keyUsed());
+        root.addProperty("fnNeeded", s.fnNeeded());
+        root.addProperty("showKeyHint", s.showKeyHint());
         root.addProperty("showSpeakers", s.showSpeakers());
         JsonArray recent = new JsonArray();
         for (String sticker : s.recentStickers()) {

@@ -6,10 +6,12 @@ import java.util.List;
 /**
  * How the overlay looks and sounds on this computer: the player's fine-tuning from the panel's settings
  * page. The launcher decides whether a toast is sent; these decide how (or whether) the game shows it.
- * {@code keyUsed} is no preference: the overlay key has opened the panel here at least once (F7-OPEN: the toasts'
- * "Açılmazsa [Fn] + [F7] tuşlarına bas" line stops for good). {@code showSpeakers} (VOICE-O): "Konuşanları göster", the
- * HUD's corner of who speaks in the player's voice room. {@code recentChatEmojis} (OVL-SOC): the panel picker's recent
- * emoji, no preference either. Immutable; the {@code with…} methods return a changed copy.
+ * {@code keyUsed} and {@code fnNeeded} are no preferences: what this computer taught the toasts' key hint (KEY-HINT,
+ * {@link gg.projects.overlay.keys.KeyHint}): the overlay key has opened the panel here, and its F-key reaches the game
+ * only with Fn ("Açmak için [Fn + F7] tuşlarına bas"). {@code showKeyHint}: "Açma ipucunu göster", the toasts' one
+ * line that says which key opens the panel. {@code showSpeakers} (VOICE-O): "Konuşanları göster", the HUD's corner of
+ * who speaks in the player's voice room. {@code recentChatEmojis} (OVL-SOC): the panel picker's recent emoji, no
+ * preference either. Immutable; the {@code with…} methods return a changed copy.
  */
 public record OverlaySettings(
     boolean messageToasts,
@@ -28,7 +30,9 @@ public record OverlaySettings(
     List<String> recentStickers,
     List<String> recentEmojis,
     boolean showSpeakers,
-    List<String> recentChatEmojis) {
+    List<String> recentChatEmojis,
+    boolean showKeyHint,
+    boolean fnNeeded) {
 
     public static final int MAX_VOLUME = 100;
 
@@ -78,7 +82,8 @@ public record OverlaySettings(
     }
 
     public static final OverlaySettings DEFAULTS = new OverlaySettings(true, true, true, true, true,
-        Duration.NORMAL, Corner.BOTTOM_RIGHT, false, true, 70, true, 85, false, List.of(), List.of(), true, List.of());
+        Duration.NORMAL, Corner.BOTTOM_RIGHT, false, true, 70, true, 85, false, List.of(), List.of(), true, List.of(),
+        true, false);
     /** Stickers the picker keeps at the top (the last sent first). */
     public static final int RECENT_STICKERS = 8;
     /** Emojis the chat's emoji picker keeps at the top (the last written first; CHAT-EMOJI). */
@@ -118,18 +123,23 @@ public record OverlaySettings(
     }
 
     /**
-     * The display preferences equal the defaults (whether the key was used, the recent stickers and the recent emojis
-     * do not count).
+     * The display preferences equal the defaults (what the computer taught the key hint, the recent stickers and the
+     * recent emojis do not count).
      */
     public boolean isDefault() {
-        return withKeyUsed(DEFAULTS.keyUsed).withRecentStickers(List.of()).withRecentEmojis(List.of())
-            .withRecentChatEmojis(List.of()).equals(DEFAULTS);
+        return keptFrom(DEFAULTS).equals(DEFAULTS);
     }
 
-    /** The defaults, keeping what is no display preference (whether the key was used, the recent stickers, emojis). */
+    /** The defaults, keeping what is no display preference (what the key hint learnt, the recent stickers, emojis). */
     public OverlaySettings reset() {
-        return DEFAULTS.withKeyUsed(keyUsed).withRecentStickers(recentStickers).withRecentEmojis(recentEmojis)
-            .withRecentChatEmojis(recentChatEmojis);
+        return DEFAULTS.withKeyUsed(keyUsed).withFnNeeded(fnNeeded).withRecentStickers(recentStickers)
+            .withRecentEmojis(recentEmojis).withRecentChatEmojis(recentChatEmojis);
+    }
+
+    /** These preferences with what is no preference taken from {@code other}. */
+    public OverlaySettings keptFrom(OverlaySettings other) {
+        return withKeyUsed(other.keyUsed).withFnNeeded(other.fnNeeded).withRecentStickers(other.recentStickers)
+            .withRecentEmojis(other.recentEmojis).withRecentChatEmojis(other.recentChatEmojis);
     }
 
     /** {@code emoji} (what the picker wrote: a code, or the text itself) written now: it comes first in its recent row. */
@@ -171,103 +181,117 @@ public record OverlaySettings(
     public OverlaySettings withMessageToasts(boolean v) {
         return new OverlaySettings(v, callToasts, inviteToasts, infoToasts, showMessageText, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withCallToasts(boolean v) {
         return new OverlaySettings(messageToasts, v, inviteToasts, infoToasts, showMessageText, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withInviteToasts(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, v, infoToasts, showMessageText, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withInfoToasts(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, v, showMessageText, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withShowMessageText(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, v, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withDuration(Duration v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, v, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withCorner(Corner v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration, v,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withReduceMotion(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, v, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withMessageSound(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, v, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withMessageVolume(int v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, v, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withCallSound(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, v, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withCallVolume(int v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, v, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withRecentStickers(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, v, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withRecentEmojis(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, v,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     /** "Konuşanları göster" (VOICE-O). */
     public OverlaySettings withShowSpeakers(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
-            recentEmojis, v, recentChatEmojis);
+            recentEmojis, v, recentChatEmojis, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withRecentChatEmojis(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
-            recentEmojis, showSpeakers, v);
+            recentEmojis, showSpeakers, v, showKeyHint, fnNeeded);
     }
 
     public OverlaySettings withKeyUsed(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, v, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+    }
+
+    /** "Açma ipucunu göster" (KEY-HINT). */
+    public OverlaySettings withShowKeyHint(boolean v) {
+        return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
+            recentEmojis, showSpeakers, recentChatEmojis, v, fnNeeded);
+    }
+
+    /** This computer's F-key reaches the game only with Fn (KEY-HINT: learnt, no preference). */
+    public OverlaySettings withFnNeeded(boolean v) {
+        return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
+            recentEmojis, showSpeakers, recentChatEmojis, showKeyHint, v);
     }
 }

@@ -68,13 +68,12 @@ public final class Defaults {
     }
 
     /**
-     * "Geri al": the settings and keys as they were before the reset. What is not a display preference (whether the
-     * overlay key was used, the recent stickers) stays as it is now.
+     * "Geri al": the settings and keys as they were before the reset. What is not a display preference (what the key
+     * hint learnt, the recent stickers and emojis) stays as it is now.
      */
     public static void undo(Undo undo, Consumer<UnaryOperator<OverlaySettings>> apply, List<? extends Key> keys) {
         OverlaySettings back = undo.settings();
-        apply.accept(now -> back.withKeyUsed(now.keyUsed()).withRecentStickers(now.recentStickers())
-            .withRecentChatEmojis(now.recentChatEmojis()));
+        apply.accept(back::keptFrom);
         for (int i = 0; i < keys.size() && i < undo.keys().size(); i++) {
             String saved = undo.keys().get(i);
             if (saved != null) {
