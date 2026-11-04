@@ -287,6 +287,13 @@ export const commands = {
 	 */
 	fastPacksConfigure: (enabled: boolean) => __TAURI_INVOKE<void>("fast_packs_configure", { enabled }),
 	fastPacksState: (instanceId: string | null) => typedError<FastPacksView, CmdError>(__TAURI_INVOKE("fast_packs_state", { instanceId })),
+	telemetryState: () => __TAURI_INVOKE<TelemetryView>("telemetry_state"),
+	/**  The player's switch. Off forgets what was not sent yet. */
+	telemetryConfigure: (enabled: boolean) => __TAURI_INVOKE<TelemetryView>("telemetry_configure", { enabled }),
+	/**  The page painted and showed the window (`main.tsx`): the start's time, once per run. */
+	telemetryPageReady: () => __TAURI_INVOKE<void>("telemetry_page_ready"),
+	/**  An error the page threw and nothing caught (`features/telemetry/page-errors.ts`). */
+	telemetryPageError: (message: string, source: string, line: number, column: number) => __TAURI_INVOKE<void>("telemetry_page_error", { message, source, line, column }),
 	/**  The view now (the page's start; every change after comes as `host-changed`). */
 	hostState: () => typedError<HostView_Serialize, CmdError>(__TAURI_INVOKE("host_state")),
 	/**
@@ -11271,6 +11278,14 @@ export type TeamView_Serialize = {
 	 *  off (always 0 from a service without `slow`). The leader and moderators never wait.
 	 */
 	slow: number,
+};
+
+/**  What Settings → Veri shows. */
+export type TelemetryView = {
+	/**  Studio's flag is on: the row shows. */
+	shown: boolean,
+	/**  "Kullanım verisi gönder". */
+	enabled: boolean,
 };
 
 /**  Something in the launcher trash. */
