@@ -250,6 +250,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             sticker: None,
             badge: None,
             marks: Vec::new(),
+            by: None,
         },
         Notice::Call { id, crew, from, .. } => ToastView {
             kind: ToastKind::Call,
@@ -261,6 +262,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             sticker: None,
             badge: None,
             marks: Vec::new(),
+            by: None,
         },
         Notice::Invite { id, from, .. } => ToastView {
             kind: ToastKind::Invite,
@@ -272,6 +274,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             sticker: None,
             badge: None,
             marks: Vec::new(),
+            by: None,
         },
     })
 }

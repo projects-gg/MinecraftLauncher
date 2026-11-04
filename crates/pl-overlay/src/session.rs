@@ -6,7 +6,7 @@
 //! waits on the network itself: answering a call, reacting and asking for a link's card run in
 //! tasks of their own.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -23,17 +23,35 @@ use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::OverlayConfig;
+use crate::avatar::{Picture, Pictures};
 use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST, FEATURE_LANG,
-    FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
+    ByeReason, CallAnswer, FEATURE_AVATARS, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST,
+    FEATURE_LANG, FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
     FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_TAGS, FEATURE_VOICE, FEATURE_VOICE_ROOMS,
     FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure,
     ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 use crate::voice::{self, VoiceAct, VoiceFuture, VoiceMirror};
+
+/// OVL-AVATARS: people one `avatar-want` names at most, and the people a connection keeps telling about at most
+/// (past it the one asked about longest ago is let go: a change of theirs no longer comes by itself).
+const MAX_AVATAR_WANT: usize = 32;
+const MAX_AVATARS_TOLD: usize = 1024;
+/// The player in `avatar-want` (the mod draws its own row in a voice room without the player's id; no user id has
+/// an `@`).
+const AVATAR_ME: &str = "@me";
+/// `avatar-want`s heard in [`AVATAR_WANT_WINDOW`] at most: the mod sends one every half second at most (faces that
+/// show meanwhile wait for the next), so only a broken one meets it; it asks again for what got no answer.
+const MAX_AVATAR_WANTS: usize = 120;
+const AVATAR_WANT_WINDOW: Duration = Duration::from_secs(60);
+
+/// A picture's version as `avatar` says it, `-` for the letter.
+fn avatar_version(picture: Option<&Picture>) -> String {
+    picture.map_or_else(|| "-".to_owned(), Picture::version)
+}
 
 /// How long "Bağlan" waits for the game to say whether it switches servers.
 pub const CONNECT_WAIT: Duration = Duration::from_secs(5);
@@ -695,6 +713,8 @@ struct Live {
     /// The mod shows the crews' voice rooms in crew chat (OVL-SOC: `voice-rooms` beside `voice`).
     voice_rooms: bool,
     voice_mirror: VoiceMirror,
+    /// The mod draws people's pictures (OVL-AVATARS: `avatars` in its hello).
+    avatars: bool,
 }
 
 /// The codeless linking permit this session holds (SKIN1-O). It never goes to a log.
@@ -776,6 +796,15 @@ pub(crate) struct Session<S> {
     voice_act: VoiceActFn,
     voice_shown: ConnectedFn,
     recent_voice: VecDeque<Instant>,
+    /// OVL-AVATARS: the prepared pictures every session shares, and the people this mod asked about with the
+    /// version it was answered with (`-`: the letter), to tell it again when theirs changes.
+    pictures: Arc<Pictures>,
+    told: HashMap<String, String>,
+    /// The order `told` learnt its people in (the oldest go past [`MAX_AVATARS_TOLD`]).
+    told_order: VecDeque<String>,
+    /// When the mod's last `avatar-want`s came (a few a minute at most are heard), and the count `avatar` carries.
+    recent_avatars: VecDeque<Instant>,
+    avatar_n: u64,
 }
 
 fn now_ms() -> i64 {
@@ -883,6 +912,7 @@ impl<S: SocialActions> Session<S> {
         (lang, lang_picked): (Lang, LangFn),
         (emojis, emoji_switched): (Arc<ChatEmojis>, EmojiFn),
         voice: VoiceHooks,
+        pictures: Arc<Pictures>,
     ) -> Self {
         // The friends feature as it is now; every change after comes as a message.
         let view = Arc::new(social.view());
@@ -926,6 +956,11 @@ impl<S: SocialActions> Session<S> {
             voice_act: voice.act,
             voice_shown: voice.shown,
             recent_voice: VecDeque::new(),
+            pictures,
+            told: HashMap::new(),
+            told_order: VecDeque::new(),
+            recent_avatars: VecDeque::new(),
+            avatar_n: 0,
         }
     }
 
@@ -1083,6 +1118,8 @@ impl<S: SocialActions> Session<S> {
                 self.drop_stale_permit();
                 // A name may have changed (a new friend, a renamed crew).
                 self.refresh_voice();
+                // Someone the mod draws chose another picture.
+                self.retell_avatars();
             }
             Msg::Chat(change) => self.on_chat(&change),
             Msg::Notice(notice) => self.on_notice(&notice),
@@ -1131,6 +1168,8 @@ impl<S: SocialActions> Session<S> {
                 // Its own speaking flags are the newest now.
                 self.voice_speaking = None;
                 self.refresh_voice();
+                // A card in the room (a friend's friend) may show another picture.
+                self.retell_avatars();
             }
             Msg::Speaking(speaking) => {
                 self.on_speaking(&speaking);
@@ -1685,7 +1724,11 @@ impl<S: SocialActions> Session<S> {
                         && features.iter().any(|f| f == FEATURE_VOICE)
                         && features.iter().any(|f| f == FEATURE_VOICE_ROOMS),
                     voice_mirror: VoiceMirror::default(),
+                    avatars: !quiet && features.iter().any(|f| f == FEATURE_AVATARS),
                 }));
+                // A new connection keeps no pictures: it asks again.
+                self.told.clear();
+                self.told_order.clear();
                 self.send(frames);
                 self.send_emojis();
                 self.refresh_voice();
@@ -1877,8 +1920,119 @@ impl<S: SocialActions> Session<S> {
             // OVL-SOC 2: the status switcher and the friend requests.
             FromGame::Status { status, preset } => self.on_status(&status, preset.as_deref()),
             FromGame::Request { id, accept } => self.on_request(id, accept),
+            FromGame::AvatarWant { ids } => self.on_avatar_want(ids),
             FromGame::Hello { .. } | FromGame::Unknown => {}
         }
+    }
+
+    /// OVL-AVATARS: the people whose faces the mod draws now and holds no picture for. Each is answered (their
+    /// picture, or the letter), from the shared cache after the first time; a change is told by itself afterwards
+    /// ([`Self::retell_avatars`]).
+    fn on_avatar_want(&mut self, ids: Vec<String>) {
+        if !self.live.as_ref().is_some_and(|live| live.avatars) {
+            return;
+        }
+        // The mod asks only about faces it holds no picture for: a few frames a minute (a flood is not heard).
+        let now = Instant::now();
+        while self
+            .recent_avatars
+            .front()
+            .is_some_and(|at| now.duration_since(*at) >= AVATAR_WANT_WINDOW)
+        {
+            self.recent_avatars.pop_front();
+        }
+        if self.recent_avatars.len() >= MAX_AVATAR_WANTS {
+            return;
+        }
+        self.recent_avatars.push_back(now);
+        for id in ids.into_iter().take(MAX_AVATAR_WANT) {
+            if id.is_empty() || id.len() > 64 {
+                continue;
+            }
+            self.tell_avatar(id);
+        }
+    }
+
+    /// The pictures of the people the mod asked about that changed since (a new picture, none any more).
+    fn retell_avatars(&mut self) {
+        if self.told.is_empty() || !self.live.as_ref().is_some_and(|live| live.avatars) {
+            return;
+        }
+        let changed: Vec<String> = self
+            .told
+            .iter()
+            .filter(|(id, told)| avatar_version(self.picture_of(id).as_ref()) != **told)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in changed {
+            self.tell_avatar(id);
+        }
+    }
+
+    /// `id`'s picture by the launcher's rule: from the friend lists (their word wins, a letter too), else from
+    /// voice chat's cards (a friend's friend in the player's room). [`AVATAR_ME`] is the player.
+    fn picture_of(&self, id: &str) -> Option<Picture> {
+        let id = if id == AVATAR_ME {
+            self.scene.me_id.as_str()
+        } else {
+            id
+        };
+        if id.is_empty() {
+            return None;
+        }
+        if let Some(known) = self.scene.picture(id) {
+            return known.cloned();
+        }
+        let (state, _) = self.voice.as_ref()?;
+        let card = state.profiles.iter().find(|card| card.id == id)?;
+        crate::avatar::picture_of(&card.avatar, card.avatar_url.as_deref())
+    }
+
+    /// Tells the mod `id`'s picture now: the letter at once, a picture once it is prepared (fetched only from the
+    /// launcher's picture hosts, once for every game).
+    fn tell_avatar(&mut self, id: String) {
+        let picture = self.picture_of(&id);
+        let version = avatar_version(picture.as_ref());
+        if self.told.insert(id.clone(), version.clone()).is_none() {
+            self.told_order.push_back(id.clone());
+            while self.told_order.len() > MAX_AVATARS_TOLD {
+                if let Some(old) = self.told_order.pop_front() {
+                    self.told.remove(&old);
+                }
+            }
+        }
+        self.avatar_n += 1;
+        let n = self.avatar_n;
+        let Some(conn) = self.live.as_ref().map(|live| live.conn) else {
+            return;
+        };
+        let Some(picture) = picture else {
+            self.send(vec![ToGame::Avatar {
+                id,
+                v: version,
+                n,
+                png: None,
+            }]);
+            return;
+        };
+        let pictures = Arc::clone(&self.pictures);
+        let control = self.control.clone();
+        tokio::spawn(async move {
+            use base64::Engine;
+            let png = pictures
+                .prepared(&picture)
+                .await
+                .map(|png| base64::engine::general_purpose::STANDARD.encode(png.as_slice()));
+            let _ = control.send(Control::Send {
+                conn,
+                frames: vec![ToGame::Avatar {
+                    id,
+                    v: version,
+                    n,
+                    png,
+                }],
+            });
+        });
     }
 
     /// The status switcher in the game's panel (OVL-SOC 2): the launcher's page changes it as its

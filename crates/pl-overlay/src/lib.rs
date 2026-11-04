@@ -21,6 +21,7 @@
 //! right one in the instance a game starts from (OVL-B).
 
 mod afk;
+pub mod avatar;
 mod feed;
 mod host;
 mod hub;

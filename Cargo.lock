@@ -4472,6 +4472,7 @@ name = "pl-overlay"
 version = "2.0.0"
 dependencies = [
  "base64 0.23.1",
+ "image",
  "pl-content",
  "pl-lang",
  "pl-mc",
