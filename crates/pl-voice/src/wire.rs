@@ -128,6 +128,8 @@ pub enum ModAct {
     Close,
     /// SHARE: stop someone's share for everyone.
     Unshare,
+    /// SHARE: "Kim paylaşabilir" (`who`).
+    Sharers,
 }
 
 /// Client → room.
@@ -190,6 +192,9 @@ pub enum ToRoom {
         /// SHARE: `unshare`: which of their shares.
         #[serde(skip_serializing_if = "Option::is_none")]
         n: Option<u8>,
+        /// SHARE: `sharers`: "Kim paylaşabilir" (a friend room's leader).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        who: Option<crate::share::ShareBy>,
         rid: u32,
     },
     Leave,
@@ -328,12 +333,18 @@ pub struct RoomWire {
     pub mods: Vec<String>,
     #[serde(default)]
     pub max: u16,
+    /// SHARE: "Kim paylaşabilir" (only to `share1` sockets: present, the room shares).
+    #[serde(default, rename = "shareBy")]
+    pub share_by: Option<crate::share::ShareBy>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 pub struct MeWire {
     #[serde(default)]
     pub role: Role,
+    /// SHARE: the shares the room's watch session carries for the player (only to `share1`).
+    #[serde(default, deserialize_with = "crate::share::watch_list")]
+    pub watch: Option<Vec<crate::share::WatchWire>>,
 }
 
 /// One of the player's own invites still ringing.
@@ -428,9 +439,6 @@ pub enum FromRoom {
         /// The service's clock (Unix seconds).
         #[serde(default)]
         now: Option<i64>,
-        /// SHARE: sharing in this room (only to `share1` sockets).
-        #[serde(default, deserialize_with = "crate::share::room_share")]
-        share: Option<crate::share::RoomShareWire>,
     },
     /// The SFU's offer: people to receive (`mids`: mid → person) or receivers closed.
     Offer {
@@ -472,6 +480,9 @@ pub enum FromRoom {
         mods: Vec<String>,
         #[serde(default)]
         max: Option<u16>,
+        /// SHARE: "Kim paylaşabilir" (only to `share1` sockets).
+        #[serde(default, rename = "shareBy")]
+        share_by: Option<crate::share::ShareBy>,
     },
     /// The player's role changed.
     Me {
@@ -511,11 +522,13 @@ pub enum FromRoom {
         /// `invite`.
         #[serde(default)]
         until: Option<i64>,
-        /// SHARE: `share_open`: the SFU's answer, for share `n`.
+        /// SHARE: `share_open`: the SFU's answer, for share `n`, at the quality the room allowed.
         #[serde(default)]
         sdp: Option<Sdp>,
         #[serde(default)]
         n: Option<u8>,
+        #[serde(default)]
+        preset: Option<crate::share::SharePreset>,
     },
     Error {
         #[serde(default)]
@@ -540,6 +553,9 @@ pub enum FromRoom {
         sdp: Sdp,
         #[serde(default, deserialize_with = "crate::share::watch_mids")]
         mids: BTreeMap<String, crate::share::WatchMidWire>,
+        /// The first offer of a new watch session: a new peer connection.
+        #[serde(default)]
+        fresh: bool,
     },
     /// One of the player's shares ended without them.
     ShareClosed {
@@ -665,6 +681,7 @@ mod tests {
                 room: None,
                 name: None,
                 n: None,
+                who: None,
                 rid: 5
             }),
             json!({"t":"mod","act":"mute","to":"u2","rid":5})
@@ -676,6 +693,7 @@ mod tests {
                 room: Some("c0123456789abcdef".into()),
                 name: None,
                 n: None,
+                who: None,
                 rid: 6
             }),
             json!({"t":"mod","act":"move","to":"u2","room":"c0123456789abcdef","rid":6})
@@ -687,6 +705,7 @@ mod tests {
                 room: None,
                 name: Some("Gece".into()),
                 n: None,
+                who: None,
                 rid: 7
             }),
             json!({"t":"mod","act":"name","name":"Gece","rid":7})
@@ -698,6 +717,7 @@ mod tests {
                 room: None,
                 name: None,
                 n: None,
+                who: None,
                 rid: 8
             }),
             json!({"t":"mod","act":"close","rid":8})
@@ -848,6 +868,7 @@ mod tests {
                 leader: None,
                 mods: vec!["u2".into()],
                 max: None,
+                share_by: None,
             }
         );
         // VOICE-ROOMS: a crew room's limit the crew changed.
@@ -858,6 +879,7 @@ mod tests {
                 leader: Some("u1".into()),
                 mods: Vec::new(),
                 max: Some(4),
+                share_by: None,
             }
         );
         assert_eq!(
@@ -929,6 +951,7 @@ mod tests {
                 until: Some(130),
                 sdp: None,
                 n: None,
+                preset: None,
             }
         );
         assert_eq!(

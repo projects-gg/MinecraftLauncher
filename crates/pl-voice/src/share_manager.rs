@@ -103,6 +103,16 @@ impl Voice {
         self.effects(|machine, _, _| machine.set_stream_volume(&person, volume, muted));
     }
 
+    /// What the service allows of screen sharing (`hello.voice.share`; none: off).
+    pub fn set_share_service(&self, service: Option<crate::share::ServiceShare>) {
+        self.effects(|machine, now, _| machine.set_share_service(service, now));
+    }
+
+    /// "Kim paylaşabilir" in a friend room (its leader).
+    pub async fn share_set_sharers(&self, who: crate::share::ShareBy) -> VoiceAnswer {
+        self.request(|machine| machine.share_set_sharers(who)).await
+    }
+
     /// "Paylaşımı durdur" on someone else's share (a leader or moderator).
     pub async fn share_unshare(&self, person: String, n: u8) -> VoiceAnswer {
         self.request(|machine| machine.share_unshare(&person, n))

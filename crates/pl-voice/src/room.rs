@@ -184,6 +184,7 @@ impl Room {
                 leader,
                 mods,
                 max,
+                ..
             } => {
                 self.name = name.clone();
                 self.leader = leader.clone();
@@ -257,6 +258,7 @@ mod tests {
                 leader: Some("me".into()),
                 mods: vec!["b".into()],
                 max: 10,
+                share_by: None,
             },
             Role::Leader,
             vec![person("me", 1), person("b", 3), person("a", 2)],
@@ -363,6 +365,7 @@ mod tests {
             leader: Some("a".into()),
             mods: vec![],
             max: None,
+            share_by: None,
         });
         assert_eq!(room.role_of("a"), Role::Leader);
         assert_eq!(room.name.as_deref(), Some("Gece"));
@@ -373,6 +376,7 @@ mod tests {
             leader: Some("a".into()),
             mods: vec![],
             max: Some(4),
+            share_by: None,
         });
         assert_eq!(room.max, 4);
     }

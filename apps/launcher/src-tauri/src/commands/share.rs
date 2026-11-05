@@ -175,6 +175,16 @@ pub fn share_stream_volume(
     Ok(())
 }
 
+/// "Kim paylaşabilir" in a friend room (its leader; the room checks).
+#[tauri::command]
+#[specta::specta]
+pub async fn share_set_sharers(
+    state: State<'_, AppState>,
+    who: pl_voice::share::ShareBy,
+) -> CmdResult<VoiceAnswer> {
+    Ok(state.voice.share_set_sharers(who).await)
+}
+
 /// "Paylaşımı durdur" on someone else's share (a leader or moderator; the room checks).
 #[tauri::command]
 #[specta::specta]

@@ -352,6 +352,11 @@ pub enum ShareCmd {
     KeyFrame {
         n: u8,
     },
+    /// The room allowed less than asked (`ack.preset`): the share goes on with these.
+    Update {
+        n: u8,
+        opts: ShareOpts,
+    },
     Stop {
         n: u8,
     },
@@ -407,8 +412,13 @@ pub struct WatchMid {
 #[derive(Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "t", rename_all = "camelCase")]
 pub enum WatchCmd {
-    /// The SFU's offer for the watch session: a new peer connection, or the one it has again.
-    Offer { sdp: String, mids: Vec<WatchMid> },
+    /// The SFU's offer for the watch session: a new peer connection (`fresh`: a new session), or
+    /// the one it has again; `mids` are the m-lines this offer adds.
+    Offer {
+        sdp: String,
+        mids: Vec<WatchMid>,
+        fresh: bool,
+    },
     /// TURN for the next peer connection (only after ICE failed).
     Ice { ice: EngineIce },
     /// Close the peer connection: nothing is watched on this page now.
@@ -542,8 +552,15 @@ pub struct VoiceShareView {
     pub on: bool,
     /// This launcher can capture and send (false: watching only).
     pub can_share: bool,
-    /// The room lets the player share ("Kim paylaşabilir", a limited account may only watch).
+    /// The room lets the player share ("Kim paylaşabilir").
     pub allowed: bool,
+    /// A new share may start now (false: the month's budget, "Ekran paylaşımı şu an
+    /// kullanılamıyor.").
+    pub open: bool,
+    /// "Kim paylaşabilir" in this room.
+    pub share_by: ShareBy,
+    /// The player may change "Kim paylaşabilir" (a friend room's leader).
+    pub can_set_share_by: bool,
     /// Shares the player may run at once here.
     pub mine_max: u8,
     /// The best quality the room allows now ("Yüksek" may be off for the month's budget).
@@ -615,7 +632,8 @@ pub enum ShareClosedWhy {
     Budget,
     /// Nobody watched for 15 minutes.
     Idle,
-    /// A limit changed (Studio).
+    /// A limit changed, or Studio switched sharing off (`off`).
+    #[serde(alias = "off")]
     Limit,
     /// The player left the room.
     Left,
@@ -667,19 +685,48 @@ pub struct ShareWire {
     pub paused: bool,
 }
 
-/// `hello.share`: sharing in this room for this socket (only to `share1` sockets; none from an
-/// older room, and then nothing of sharing shows).
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct RoomShareWire {
-    /// Studio's switch and the budget's last step allow sharing now.
-    pub on: bool,
-    /// The player may share here ("Kim paylaşabilir", a limited account); none: yes.
-    pub allowed: Option<bool>,
+/// What the service allows of screen sharing now (`hello.voice.share` on the presence socket,
+/// SHARE-S; the launcher's glue reads it from pl-social). None: no sharing (an older service, or
+/// Studio's switch off).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServiceShare {
     /// Shares a player may run at once.
-    pub per_user: Option<u8>,
-    /// The best quality now.
-    pub max_preset: Option<SharePreset>,
+    pub per_user: u8,
+    /// The best quality a new share may use.
+    pub max_preset: SharePreset,
+    /// A new share may start now (the month's budget).
+    pub open: bool,
+    /// A new watch may start now (the month's budget).
+    pub watch: bool,
+}
+
+impl Default for ServiceShare {
+    fn default() -> Self {
+        Self {
+            per_user: MINE_MAX,
+            max_preset: SharePreset::Normal,
+            open: true,
+            watch: true,
+        }
+    }
+}
+
+/// "Kim paylaşabilir" (`hello.room.shareBy`, the `room` message): everyone, or the room's leader
+/// and moderators. A room sends it only to `share1` sockets: its presence says the room shares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ShareBy {
+    Mods,
+    #[default]
+    #[serde(other)]
+    All,
+}
+
+/// One share the room's watch session carries for the player (`hello.me.watch`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct WatchWire {
+    pub u: String,
+    pub n: u8,
 }
 
 /// `woffer.mids[mid]`.
@@ -721,12 +768,19 @@ fn shares_of(raw: Option<serde_json::Value>) -> Vec<ShareWire> {
     }
 }
 
-/// `hello.share` that does not read is none.
-pub(crate) fn room_share<'de, D: Deserializer<'de>>(
+/// `hello.me.watch`, every entry that does not read dropped (absent: none said).
+pub(crate) fn watch_list<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> Result<Option<RoomShareWire>, D::Error> {
+) -> Result<Option<Vec<WatchWire>>, D::Error> {
     let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(raw.and_then(|value| serde_json::from_value(value).ok()))
+    Ok(raw.map(|value| match value {
+        serde_json::Value::Array(items) => items
+            .into_iter()
+            .filter_map(|item| serde_json::from_value::<WatchWire>(item).ok())
+            .take(8)
+            .collect(),
+        _ => Vec::new(),
+    }))
 }
 
 /// `woffer.mids` where every entry that does not read is dropped.

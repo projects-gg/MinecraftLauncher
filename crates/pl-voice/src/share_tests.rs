@@ -8,10 +8,10 @@ use crate::engine::PageReport;
 use crate::machine::{Effect, Machine, ServiceVoice, StayStart};
 use crate::settings::Store;
 use crate::share::{
-    ALONE_STOP_MS, HIDDEN_GRACE_MS, PAUSE_AFTER_MS, RoomShareWire, STILL_ANSWER_MS, STILL_ASK_MS,
-    ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer, ShareMinePhase, ShareNotice,
-    SharePreset, ShareRefusal, ShareSource, ShareSurface, ShareWatchPhase, ShareWire, WatchCmd,
-    WatchMidWire, WatchReport,
+    ALONE_STOP_MS, HIDDEN_GRACE_MS, PAUSE_AFTER_MS, STILL_ANSWER_MS, STILL_ASK_MS, ServiceShare,
+    ShareBy, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer, ShareMinePhase,
+    ShareNotice, SharePreset, ShareRefusal, ShareSource, ShareSurface, ShareWatchPhase, ShareWire,
+    WatchCmd, WatchMidWire, WatchReport,
 };
 use crate::view::VoiceLeftReason;
 use crate::wire::{FromRoom, MeWire, PersonWire, Role, RoomKind, RoomWire, Sdp, Ticket, ToRoom};
@@ -38,6 +38,15 @@ fn ready() -> Machine {
         Vec::new(),
     );
     machine.set_share_publisher(true, true);
+    machine.set_share_service(
+        Some(ServiceShare {
+            per_user: 2,
+            max_preset: SharePreset::High,
+            open: true,
+            watch: true,
+        }),
+        0,
+    );
     machine
 }
 
@@ -67,7 +76,9 @@ fn shared(n: u8) -> ShareWire {
     }
 }
 
-fn hello(people: Vec<PersonWire>, share: Option<RoomShareWire>, sdp: bool) -> FromRoom {
+/// The room's `hello`; `share` its "Kim paylaşabilir" (none: an older room). With `Mods` the player
+/// is a member (not allowed to share); otherwise they lead the room.
+fn hello(people: Vec<PersonWire>, share: Option<ShareBy>, sdp: bool) -> FromRoom {
     FromRoom::Hello {
         room: RoomWire {
             id: ROOM.into(),
@@ -77,26 +88,30 @@ fn hello(people: Vec<PersonWire>, share: Option<RoomShareWire>, sdp: bool) -> Fr
             leader: Some("me".into()),
             mods: Vec::new(),
             max: 10,
+            share_by: share,
         },
-        me: MeWire { role: Role::Leader },
+        me: MeWire {
+            role: if share == Some(ShareBy::Mods) {
+                Role::Member
+            } else {
+                Role::Leader
+            },
+            watch: None,
+        },
         people,
         rings: Vec::new(),
         sdp: sdp.then(|| Sdp::new("v=0 answer")),
         resume: Some(Ticket::new("v1.resume.mac")),
         now: Some(UNIX),
-        share,
     }
 }
 
-fn share_on() -> Option<RoomShareWire> {
-    Some(RoomShareWire {
-        on: true,
-        ..RoomShareWire::default()
-    })
+fn share_on() -> Option<ShareBy> {
+    Some(ShareBy::All)
 }
 
 /// A live call with a friend `a` (sharing `a_shares`), sharing on in the room unless `share` says.
-fn live(machine: &mut Machine, a_shares: Vec<ShareWire>, share: Option<RoomShareWire>) -> u64 {
+fn live(machine: &mut Machine, a_shares: Vec<ShareWire>, share: Option<ShareBy>) -> u64 {
     let effects = machine.join(
         StayStart {
             room: ROOM.into(),
@@ -225,6 +240,7 @@ fn sharing(machine: &mut Machine, generation: u64, now: u64) {
             until: None,
             sdp: Some(Sdp::new("v=0 sfu")),
             n: Some(1),
+            preset: None,
         },
         now,
         UNIX,
@@ -321,6 +337,7 @@ fn a_share_goes_live_rests_alone_and_ends_after_fifteen_minutes() {
             until: None,
             sdp: Some(Sdp::new("v=0 sfu")),
             n: Some(1),
+            preset: None,
         },
         2_200,
         UNIX,
@@ -416,16 +433,15 @@ fn a_share_goes_live_rests_alone_and_ends_after_fifteen_minutes() {
 #[test]
 fn shares_are_held_to_the_rooms_limits() {
     let mut machine = ready();
-    let generation = live(
-        &mut machine,
-        Vec::new(),
-        Some(RoomShareWire {
-            on: true,
-            per_user: Some(1),
-            max_preset: Some(SharePreset::Low),
-            ..RoomShareWire::default()
+    machine.set_share_service(
+        Some(ServiceShare {
+            per_user: 1,
+            max_preset: SharePreset::Low,
+            ..ServiceShare::default()
         }),
+        0,
     );
+    let generation = live(&mut machine, Vec::new(), share_on());
     let effects = machine
         .share_start(
             ShareSource::Window { id: "0x1f".into() },
@@ -485,15 +501,7 @@ fn shares_are_held_to_the_rooms_limits() {
     assert!(machine.view(2_200, UNIX).share.mine.is_empty());
     // Who may share is the room's: a member it does not allow.
     let mut machine = ready();
-    live(
-        &mut machine,
-        Vec::new(),
-        Some(RoomShareWire {
-            on: true,
-            allowed: Some(false),
-            ..RoomShareWire::default()
-        }),
-    );
+    live(&mut machine, Vec::new(), Some(ShareBy::Mods));
     assert!(!machine.view(2_000, UNIX).share.allowed);
     assert_eq!(
         machine.share_start(ShareSource::Game, "", 2_000, UNIX),
@@ -597,11 +605,7 @@ fn sharing_off_or_a_lost_share_on_return_ends_it() {
     assert!(to_publisher(&effects).is_empty());
     let effects = machine.socket_message(
         generation,
-        hello(
-            vec![person("me", vec![shared(1)])],
-            Some(RoomShareWire::default()),
-            false,
-        ),
+        hello(vec![person("me", vec![shared(1)])], None, false),
         5_200,
         UNIX,
     );
@@ -639,6 +643,7 @@ fn watching_asks_the_room_and_hands_the_offer_to_the_page() {
         generation,
         FromRoom::Woffer {
             sdp: Sdp::new("v=0 sfu offer"),
+            fresh: true,
             mids: [
                 (
                     "0".to_owned(),
@@ -835,6 +840,7 @@ fn the_popout_window_takes_watching_and_gives_it_back() {
         generation,
         FromRoom::Woffer {
             sdp: Sdp::new("v=0"),
+            fresh: true,
             mids: Default::default(),
         },
         3_100,
@@ -951,4 +957,229 @@ fn stream_volumes_are_kept_per_person() {
     machine.set_stream_volume("a", 250, true);
     let volumes = machine.view(2_000, UNIX).share.volumes;
     assert_eq!((volumes["a"].volume, volumes["a"].muted), (100, true));
+}
+
+/// `hello` again on a socket that came back, the room's watch session carrying `watch`.
+fn hello_watching(people: Vec<PersonWire>, watch: &[(&str, u8)]) -> FromRoom {
+    let FromRoom::Hello {
+        room,
+        people,
+        rings,
+        resume,
+        now,
+        ..
+    } = hello(people, share_on(), false)
+    else {
+        unreachable!()
+    };
+    FromRoom::Hello {
+        room,
+        me: MeWire {
+            role: Role::Leader,
+            watch: Some(
+                watch
+                    .iter()
+                    .map(|(u, n)| crate::share::WatchWire {
+                        u: (*u).to_owned(),
+                        n: *n,
+                    })
+                    .collect(),
+            ),
+        },
+        people,
+        rings,
+        sdp: None,
+        resume,
+        now,
+    }
+}
+
+/// Back on a new socket after the connection dropped (`sync`); its generation.
+fn come_back(machine: &mut Machine, generation: u64, at: u64) -> u64 {
+    machine.socket_closed(generation, None, at);
+    let effects = machine.tick(at + 1_000, UNIX, at + 1_000);
+    let generation = effects
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::Connect { generation, .. } => Some(*generation),
+            _ => None,
+        })
+        .unwrap();
+    machine.socket_open(generation, at + 1_100);
+    generation
+}
+
+#[test]
+fn a_socket_that_comes_back_keeps_what_the_room_still_carries() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1), shared(2)], share_on());
+    machine.share_attach(ShareSurface::Main);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    machine.share_watch("a", 2, 2_000).unwrap();
+    let generation = come_back(&mut machine, generation, 3_000);
+    // The room still carries share 1: only share 2 is asked for again, the page keeps its
+    // connection.
+    let effects = machine.socket_message(
+        generation,
+        hello_watching(
+            vec![
+                person("me", Vec::new()),
+                person("a", vec![shared(1), shared(2)]),
+            ],
+            &[("a", 1)],
+        ),
+        4_200,
+        UNIX,
+    );
+    assert!(matches!(
+        sent(&effects)[..],
+        [ToRoom::Set { .. }, ToRoom::Watch { u, n: 2, .. }] if u == "a"
+    ));
+    assert!(to_page(&effects).is_empty());
+    // Nothing carried any more: a new session, the page's connection closes first.
+    let generation = come_back(&mut machine, generation, 10_000);
+    let effects = machine.socket_message(
+        generation,
+        hello_watching(
+            vec![
+                person("me", Vec::new()),
+                person("a", vec![shared(1), shared(2)]),
+            ],
+            &[],
+        ),
+        11_200,
+        UNIX,
+    );
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset)]
+    ));
+    assert_eq!(
+        sent(&effects)
+            .iter()
+            .filter(|frame| matches!(frame, ToRoom::Watch { .. }))
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn the_rooms_allowed_quality_and_the_months_budget() {
+    let mut machine = ready();
+    let high = crate::settings::VoiceSettings {
+        share: crate::share::VoiceShareSettings {
+            quality: SharePreset::High,
+            ..crate::share::VoiceShareSettings::default()
+        },
+        ..crate::settings::VoiceSettings::default()
+    };
+    machine.save_settings(high, 0);
+    let generation = live(&mut machine, Vec::new(), share_on());
+    machine
+        .share_start(ShareSource::Game, "", 2_000, UNIX)
+        .unwrap();
+    let effects = machine.share_event(
+        ShareEvent::Offer {
+            n: 1,
+            sdp: Sdp::new("v=0"),
+        },
+        2_100,
+    );
+    let rid = open_rid(&effects);
+    // The room allowed "Normal" only: the publisher goes on at that.
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Ack {
+            rid: Some(rid),
+            ice: None,
+            until: None,
+            sdp: Some(Sdp::new("v=0 sfu")),
+            n: Some(1),
+            preset: Some(SharePreset::Normal),
+        },
+        2_200,
+        UNIX,
+    );
+    assert!(matches!(
+        to_publisher(&effects)[..],
+        [ShareCmd::Answer { n: 1, .. }, ShareCmd::Update { n: 1, opts }]
+            if opts.preset == SharePreset::Normal && opts.fps == 30
+    ));
+    assert_eq!(
+        machine.view(2_200, UNIX).share.mine[0].preset,
+        SharePreset::Normal
+    );
+    // The month's budget: no new share, no new watch; the view says so.
+    machine.set_share_service(
+        Some(ServiceShare {
+            open: false,
+            watch: false,
+            ..ServiceShare::default()
+        }),
+        3_000,
+    );
+    assert!(!machine.view(3_000, UNIX).share.open);
+    assert_eq!(
+        machine.share_start(ShareSource::Screen { id: "d1".into() }, "", 3_000, UNIX),
+        Err(ShareRefusal::Budget)
+    );
+    // Studio switched sharing off: everything ends here too.
+    let effects = machine.set_share_service(None, 4_000);
+    assert_eq!(to_publisher(&effects), [&ShareCmd::Stop { n: 1 }]);
+    assert!(!machine.view(4_000, UNIX).share.on);
+}
+
+#[test]
+fn who_may_share_is_the_rooms_and_its_leaders_to_change() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    let view = machine.view(2_000, UNIX).share;
+    assert_eq!(view.share_by, ShareBy::All);
+    assert!(view.can_set_share_by && view.allowed);
+    let (rid, effects) = machine.share_set_sharers(ShareBy::Mods).unwrap();
+    assert_eq!(
+        sent(&effects)[0].text(),
+        format!(r#"{{"t":"mod","act":"sharers","who":"mods","rid":{rid}}}"#)
+    );
+    machine.socket_message(
+        generation,
+        FromRoom::Room {
+            name: None,
+            leader: Some("me".into()),
+            mods: Vec::new(),
+            max: None,
+            share_by: Some(ShareBy::Mods),
+        },
+        2_100,
+        UNIX,
+    );
+    // The leader still may.
+    let view = machine.view(2_100, UNIX).share;
+    assert_eq!(view.share_by, ShareBy::Mods);
+    assert!(view.allowed);
+}
+
+#[test]
+fn a_fresh_watch_session_is_a_new_connection_on_the_page() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::parse(
+            r#"{"t":"woffer","sdp":"v=0","mids":{"0":{"u":"a","n":1,"k":"v"}},"fresh":true}"#,
+        ),
+        2_100,
+        UNIX,
+    );
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Offer { fresh: true, .. })]
+    ));
+    // The room's "off" reads as the limit's ending.
+    assert_eq!(
+        serde_json::from_str::<ShareClosedWhy>(r#""off""#).unwrap(),
+        ShareClosedWhy::Limit
+    );
 }

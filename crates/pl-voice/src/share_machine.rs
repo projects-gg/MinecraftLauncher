@@ -18,11 +18,11 @@ use std::collections::BTreeMap;
 
 use super::{Effect, Machine, Pending};
 use crate::share::{
-    ALONE_STOP_MS, HIDDEN_GRACE_MS, MINE_MAX, PAUSE_AFTER_MS, RoomShareWire, STILL_ANSWER_MS,
-    STILL_ASK_MS, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer, ShareMinePhase,
+    ALONE_STOP_MS, HIDDEN_GRACE_MS, PAUSE_AFTER_MS, STILL_ANSWER_MS, STILL_ASK_MS, ServiceShare,
+    ShareBy, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer, ShareMinePhase,
     ShareNotice, ShareOpts, SharePreset, ShareRefusal, ShareSource, ShareSurface, ShareWatchPhase,
     ShareWire, VoiceLiveShare, VoiceMyShare, VoiceShareView, VoiceStreamVolume, VoiceWatch,
-    WATCH_LOSSES_MAX, WATCH_MAX, WatchCmd, WatchMid, WatchReport,
+    WATCH_LOSSES_MAX, WATCH_MAX, WatchCmd, WatchMid, WatchReport, WatchWire,
 };
 use crate::view::{VoiceAnswer, VoiceRefusal};
 use crate::wire::{FromRoom, ModAct, ToRoom};
@@ -66,18 +66,26 @@ struct Watching {
 pub(super) enum Seen {
     Nothing,
     Hello {
-        share: Option<RoomShareWire>,
+        /// `hello.room.shareBy`: present, the room shares (a `share1` room).
+        share_by: Option<ShareBy>,
+        /// `hello.me.watch`: what the room's watch session carries for the player.
+        watch: Option<Vec<WatchWire>>,
         people: Vec<(String, Vec<ShareWire>)>,
     },
     Person(String, Vec<ShareWire>),
     Left(String),
+    /// The `room` message's "Kim paylaşabilir".
+    ShareBy(ShareBy),
 }
 
 impl Seen {
     pub(super) fn of(message: &FromRoom) -> Self {
         match message {
-            FromRoom::Hello { share, people, .. } => Self::Hello {
-                share: share.clone(),
+            FromRoom::Hello {
+                room, me, people, ..
+            } => Self::Hello {
+                share_by: room.share_by,
+                watch: me.watch.clone(),
                 people: people
                     .iter()
                     .map(|person| (person.u.clone(), person.sh.clone()))
@@ -88,6 +96,9 @@ impl Seen {
                 u, sh: Some(sh), ..
             } => Self::Person(u.clone(), sh.clone()),
             FromRoom::Left { u, .. } => Self::Left(u.clone()),
+            FromRoom::Room {
+                share_by: Some(by), ..
+            } => Self::ShareBy(*by),
             _ => Self::Nothing,
         }
     }
@@ -96,8 +107,11 @@ impl Seen {
 /// Screen sharing's part of the machine.
 #[derive(Debug)]
 pub(super) struct Shares {
-    /// `hello.share`: none from a room without `share1` (then nothing of sharing shows).
-    room: Option<RoomShareWire>,
+    /// The service's `hello.voice.share` (none: sharing off, or an older service).
+    service: Option<ServiceShare>,
+    /// The room said "Kim paylaşabilir": a `share1` room (an older one shows nothing of sharing).
+    room_seen: bool,
+    share_by: ShareBy,
     /// The publisher works on this computer, and can share an app's sound.
     publisher: bool,
     audio: bool,
@@ -130,7 +144,9 @@ pub(super) struct Shares {
 impl Default for Shares {
     fn default() -> Self {
         Self {
-            room: None,
+            service: None,
+            room_seen: false,
+            share_by: ShareBy::All,
             publisher: false,
             audio: false,
             mine: Vec::new(),
@@ -178,24 +194,51 @@ impl Machine {
     /// Sharing works in the room now.
     fn share_on(&self) -> bool {
         self.stay.as_ref().is_some_and(|stay| stay.welcomed)
-            && self.share.room.as_ref().is_some_and(|room| room.on)
+            && self.share.room_seen
+            && self.share.service.is_some()
     }
 
     fn mine_max(&self) -> u8 {
         self.share
-            .room
-            .as_ref()
-            .and_then(|room| room.per_user)
-            .unwrap_or(MINE_MAX)
-            .min(3)
+            .service
+            .map_or(0, |service| service.per_user.min(3))
     }
 
     fn max_preset(&self) -> SharePreset {
         self.share
-            .room
+            .service
+            .map_or(SharePreset::Low, |service| service.max_preset)
+    }
+
+    /// The player's role in the room.
+    fn my_role(&self) -> crate::wire::Role {
+        self.stay
             .as_ref()
-            .and_then(|room| room.max_preset)
-            .unwrap_or(SharePreset::High)
+            .and_then(|stay| stay.room.as_ref())
+            .map_or(crate::wire::Role::Member, |room| room.my_role)
+    }
+
+    /// "Kim paylaşabilir" lets the player share.
+    fn share_allowed(&self) -> bool {
+        self.share.share_by == ShareBy::All || self.my_role() != crate::wire::Role::Member
+    }
+
+    /// What the service allows of screen sharing (`hello.voice.share`; none: off). Turned off,
+    /// every share and watch ends here too (the room ends them as well).
+    pub fn set_share_service(&mut self, service: Option<ServiceShare>, now: u64) -> Vec<Effect> {
+        if self.share.service == service {
+            return Vec::new();
+        }
+        self.share.service = service;
+        let mut out = vec![Effect::Changed];
+        if service.is_none() {
+            let ns: Vec<u8> = self.share.mine.iter().map(|mine| mine.n).collect();
+            for n in ns {
+                self.close_mine(n, Some(ShareClosedWhy::Limit), false, now, &mut out);
+            }
+            self.stop_watching(None, &mut out);
+        }
+        out
     }
 
     /// The player shares or watches: no idle player.
@@ -259,9 +302,11 @@ impl Machine {
         if !source.is_plausible() {
             return Err(ShareRefusal::Failed);
         }
-        let room = self.share.room.as_ref();
-        if room.and_then(|room| room.allowed) == Some(false) || self.mine_max() == 0 {
+        if !self.share_allowed() || self.mine_max() == 0 {
             return Err(ShareRefusal::NotAllowed);
+        }
+        if !self.share.service.is_some_and(|service| service.open) {
+            return Err(ShareRefusal::Budget);
         }
         if self.share.mine.iter().any(|mine| mine.source == source) {
             return Ok(Vec::new());
@@ -453,7 +498,7 @@ impl Machine {
                 }
                 None
             }
-            FromRoom::Woffer { sdp, mids } => {
+            FromRoom::Woffer { sdp, mids, fresh } => {
                 if self.share.watching.is_empty() || self.share.held {
                     // Nothing asked for on this page now (an offer that crossed an unwatch).
                     return None;
@@ -479,6 +524,7 @@ impl Machine {
                     WatchCmd::Offer {
                         sdp: sdp.into_inner(),
                         mids,
+                        fresh,
                     },
                     out,
                 );
@@ -493,6 +539,7 @@ impl Machine {
                 rid: Some(rid),
                 sdp,
                 ice,
+                preset,
                 ..
             } if self.pending.get(&rid).is_some_and(Pending::is_share) => {
                 match self.pending.remove(&rid) {
@@ -503,6 +550,18 @@ impl Machine {
                                 mine.phase = MinePhase::Live;
                                 mine.alone_since = Some(now);
                                 out.push(Effect::Share(ShareCmd::Answer { n, sdp }));
+                                // The room allowed less (the month's budget): the share goes on
+                                // at that.
+                                if let Some(allowed) = preset
+                                    && allowed < mine.opts.preset
+                                {
+                                    mine.opts.preset = allowed;
+                                    if allowed != SharePreset::High {
+                                        mine.opts.fps = mine.opts.fps.min(30);
+                                    }
+                                    let opts = mine.opts;
+                                    out.push(Effect::Share(ShareCmd::Update { n, opts }));
+                                }
                                 out.push(Effect::Changed);
                             }
                         }
@@ -555,9 +614,14 @@ impl Machine {
     pub(super) fn share_seen(&mut self, seen: Seen, again: bool, now: u64, out: &mut Vec<Effect>) {
         match seen {
             Seen::Nothing => {}
-            Seen::Hello { share, people } => {
-                let on = share.as_ref().is_some_and(|room| room.on);
-                self.share.room = share;
+            Seen::Hello {
+                share_by,
+                watch,
+                people,
+            } => {
+                let on = share_by.is_some();
+                self.share.room_seen = on;
+                self.share.share_by = share_by.unwrap_or_default();
                 let me = self.me.clone();
                 let mut mine_listed = Vec::new();
                 self.share.remote.clear();
@@ -590,12 +654,15 @@ impl Machine {
                         self.close_mine(n, Some(ShareClosedWhy::Error), false, now, out);
                     }
                     self.prune_watches(out);
-                    // The watch session is asked for anew from the page that watches.
-                    if !self.share.watching.is_empty() && !self.share.held {
-                        self.restart_watching(out);
-                    }
+                    self.resume_watching(watch.unwrap_or_default(), out);
                 }
                 out.push(Effect::Changed);
+            }
+            Seen::ShareBy(by) => {
+                if self.share.share_by != by {
+                    self.share.share_by = by;
+                    out.push(Effect::Changed);
+                }
             }
             Seen::Person(u, sh) => {
                 if u == self.me {
@@ -616,6 +683,30 @@ impl Machine {
                 }
                 self.prune_watches(out);
                 out.push(Effect::Changed);
+            }
+        }
+    }
+
+    /// Back on a new socket: the room's watch session still carries `kept` (its `hello.me.watch`).
+    /// Those go on as they are; the rest are asked for again; with nothing kept the session is new
+    /// (the page's connection too).
+    fn resume_watching(&mut self, kept: Vec<WatchWire>, out: &mut Vec<Effect>) {
+        if self.share.watching.is_empty() || self.share.held {
+            return;
+        }
+        let carried = |watch: &Watching| kept.iter().any(|k| k.u == watch.u && k.n == watch.n);
+        if !self.share.watching.iter().any(carried) {
+            self.restart_watching(out);
+            return;
+        }
+        self.pending
+            .retain(|_, pending| !matches!(pending, Pending::Watch(..) | Pending::WatchTurn));
+        for at in 0..self.share.watching.len() {
+            if carried(&self.share.watching[at]) {
+                self.share.watching[at].rid = None;
+            } else {
+                self.share.watching[at].sent = false;
+                self.send_watch(at, out);
             }
         }
     }
@@ -668,6 +759,7 @@ impl Machine {
         }
         self.pending.retain(|_, pending| !pending.is_share());
         let kept = Shares {
+            service: self.share.service,
             publisher: self.share.publisher,
             audio: self.share.audio,
             attached: self.share.attached,
@@ -688,6 +780,9 @@ impl Machine {
             return Err(ShareRefusal::Off);
         }
         let own = u == self.me;
+        if !own && !self.share.service.is_some_and(|service| service.watch) {
+            return Err(ShareRefusal::Budget);
+        }
         let exists = if own {
             self.share
                 .mine
@@ -1128,6 +1223,23 @@ impl Machine {
             room: None,
             name: None,
             n: Some(n),
+            who: None,
+            rid,
+        })
+    }
+
+    /// "Kim paylaşabilir" in a friend room (its leader; the room checks).
+    pub fn share_set_sharers(&mut self, who: ShareBy) -> Result<(u32, Vec<Effect>), VoiceAnswer> {
+        if !self.share_on() {
+            return Err(VoiceAnswer::refused(VoiceRefusal::Off));
+        }
+        self.request(Pending::Mod, |rid| ToRoom::Mod {
+            act: ModAct::Sharers,
+            to: None,
+            room: None,
+            name: None,
+            n: None,
+            who: Some(who),
             rid,
         })
     }
@@ -1279,13 +1391,14 @@ impl Machine {
         VoiceShareView {
             on,
             can_share: self.share.publisher,
-            allowed: self
-                .share
-                .room
+            allowed: self.share_allowed() && self.mine_max() > 0,
+            open: self.share.service.is_some_and(|service| service.open),
+            share_by: self.share.share_by,
+            can_set_share_by: self
+                .stay
                 .as_ref()
-                .and_then(|room| room.allowed)
-                .unwrap_or(true)
-                && self.mine_max() > 0,
+                .is_some_and(|stay| stay.kind == crate::wire::RoomKind::Friend)
+                && self.my_role() == crate::wire::Role::Leader,
             mine_max: self.mine_max(),
             max_preset: self.max_preset(),
             audio: self.share.audio,

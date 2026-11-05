@@ -406,6 +406,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::share::share_fullscreen,
             commands::share::share_stream_volume,
             commands::share::share_unshare,
+            commands::share::share_set_sharers,
             commands::server::server_status,
             commands::troubleshoot::troubleshoot_run,
             commands::troubleshoot::troubleshoot_crash,

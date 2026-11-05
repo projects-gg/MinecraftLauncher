@@ -1579,6 +1579,7 @@ impl Machine {
             room,
             name,
             n: None,
+            who: None,
             rid,
         })
     }
