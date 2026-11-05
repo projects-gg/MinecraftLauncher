@@ -7326,6 +7326,10 @@ export type NotifyPrefs = {
 	onlineAlerts?: { [key in string]: boolean },
 	/**  OVL-UX2: "Favorilerim çevrimiçi olunca" (on unless turned off). */
 	favoritesOnline?: boolean,
+	/**  OVL-SOC2: "Favori arkadaşların: Projects'e girince" (on unless turned off). */
+	favoritesProjects?: boolean,
+	/**  OVL-SOC2: "Katılma istekleri" (on unless turned off). */
+	joinRequests?: boolean,
 };
 
 export type OfficialPackView = {
@@ -7442,6 +7446,8 @@ export type OverlayStateView = {
 	config: OverlayConfig,
 	/**  The mod in the running game is connected now. */
 	connected: boolean,
+	/**  OVL-SOC2: the notice kinds connected games show as their own cards (`OverlayStatus::kinds`). */
+	kinds: string[],
 	/**
 	 *  The Minecraft versions the launcher has the mod for (`26.1.2`, `26.2`, …): the ones this
 	 *  build ships, then those the signed content adds (OVL-AUTO). A Fabric instance on one of
@@ -7456,6 +7462,13 @@ export type OverlayStateView = {
  */
 export type OverlayStatus = {
 	connected: boolean,
+	/**
+	 *  OVL-SOC2: the friends feature's notice kinds (`chatMessage`, `teamInvite`, …) a connected
+	 *  game shows as its own cards: the page shows no system notification of them. An older mod
+	 *  shows `chatMessage`, `crewCall`, `invite` and `afkNotice`; a newer one more, less the
+	 *  kinds the player turned off in it.
+	 */
+	kinds: string[],
 };
 
 /**  One file an update adds, changes, removes or leaves alone. */
@@ -7633,7 +7646,13 @@ export type PeopleChange =
  *  `invisible` only): one of the crew mute's durations (`hour`, `eightHours`, `morning`,
  *  `forever`), for its timer.
  */
-{ kind: "status"; status: string; preset: string | null };
+{ kind: "status"; status: string; preset: string | null } | 
+/**
+ *  OVL-SOC2: one of the friends notification switches changed in the overlay's settings
+ *  (`favoritesOnline`, `favoritesProjects`, `crewCalls`, `crewChat`, `joinRequests`): the page
+ *  keeps it as its own switch would.
+ */
+{ kind: "notify"; key: string; on: boolean };
 
 /**
  *  Who may do something in a crew: the lowest role that may (every role above it may too).

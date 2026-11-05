@@ -59,6 +59,9 @@ struct Calls {
     declined: Vec<String>,
     /// OVL-UX3: crew rows taken: (crew, member, what: `mod`, `unmod`, `lead` or `remove`).
     crew_rows: Vec<(String, String, &'static str)>,
+    /// OVL-SOC2: the management presses the service heard, and what it answers next (else done).
+    manages: Vec<crate::Manage>,
+    managed: std::collections::VecDeque<pl_social::Result<crate::Managed>>,
 }
 
 /// A permit as the service makes them: `i` and 32 base64url characters.
@@ -332,6 +335,20 @@ impl SocialActions for FakeSocial {
             .push((team.to_owned(), member.to_owned(), "remove"));
         std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
     }
+
+    fn manage(
+        &self,
+        act: crate::Manage,
+    ) -> impl Future<Output = pl_social::Result<crate::Managed>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.manages.push(act);
+        std::future::ready(
+            calls
+                .managed
+                .pop_front()
+                .unwrap_or(Ok(crate::Managed::Done)),
+        )
+    }
 }
 
 /// The mod's side of the bridge.
@@ -436,7 +453,7 @@ impl MockMod {
 fn statuses(overlay: &Overlay) -> Arc<Mutex<Vec<bool>>> {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&seen);
-    overlay.on_status(move |OverlayStatus { connected }| sink.lock().unwrap().push(connected));
+    overlay.on_status(move |OverlayStatus { connected, .. }| sink.lock().unwrap().push(connected));
     seen
 }
 
@@ -2857,4 +2874,423 @@ async fn faces_get_the_launchers_pictures_and_their_changes() {
             break;
         }
     }
+}
+
+/// OVL-SOC2: a view with everything the friends page's, crews' and plans' management shows.
+fn soc2_view() -> SocialView {
+    let mut v = people2_view();
+    v.me.as_mut().unwrap().friend_code = "PRJ-ABCD-2345".into();
+    v.outgoing.push(pl_social::RequestView {
+        id: "u-sent".into(),
+        name: "BlokUstasi".into(),
+        username: "blok".into(),
+        avatar: "discord".into(),
+        avatar_url: None,
+        marks: Vec::new(),
+        discord_id: None,
+        sent_at: 3,
+    });
+    let profile = |id: &str, name: &str| pl_social::ProfileView {
+        id: id.into(),
+        name: name.into(),
+        username: name.to_lowercase(),
+        avatar: "discord".into(),
+        avatar_url: None,
+        marks: Vec::new(),
+        discord_id: None,
+    };
+    v.blocked.push(profile("u-blocked", "KotuOyuncu"));
+    v.team_invites.push(pl_social::TeamInviteView {
+        team_id: "t9".into(),
+        name: "Akıncılar".into(),
+        tag: "AKN".into(),
+        emblem: "e1".into(),
+        color: "c1".into(),
+        frame: "f1".into(),
+        motto: String::new(),
+        members: 4,
+        from: profile("f-mert", "Mert"),
+        sent_at: 5,
+    });
+    v.crews[0].requests.push(pl_social::JoinRequestView {
+        id: "u-ask".into(),
+        name: "YeniGelen".into(),
+        username: "yeni".into(),
+        avatar: "discord".into(),
+        avatar_url: None,
+        marks: Vec::new(),
+        discord_id: None,
+        sent_at: 6,
+        via: None,
+        via_name: None,
+    });
+    v.team_features.push("plans".into());
+    v.team_features.push("planNotes".into());
+    v.call_place = pl_social::CallPlace::Ok;
+    v.calls.clear();
+    let now = now_secs();
+    v.plans.push(pl_social::PlanView {
+        id: "p1".into(),
+        crew: v.crews[0].id.clone(),
+        by: "f-ayse".into(),
+        by_name: Some("Ayşe".into()),
+        mine: false,
+        can_cancel: false,
+        at: now + 3600,
+        starts_at: now + 3600,
+        ends_at: now + 3 * 3600,
+        created_at: now,
+        answers: vec![pl_social::PlanAnswerView {
+            id: "f-ayse".into(),
+            answer: pl_social::PlanAnswer::Yes,
+        }],
+        my_answer: None,
+        note: Some("Bedwars".into()),
+        can_write_note: false,
+        can_clear_note: false,
+    });
+    v
+}
+
+fn now_secs() -> i64 {
+    i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+    )
+    .unwrap()
+}
+
+const SOC2: &[&str] = &[
+    "people", "people2", "people3", "people4", "people5", "crews2", "plans", "chat3", "cards2",
+];
+
+#[tokio::test]
+async fn the_friends_page_crews_and_plans_are_managed_from_the_game() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(soc2_view());
+    let crew = social.view().crews[0].id.clone();
+    let overlay = Overlay::new(OverlayConfig::default());
+    let statuses = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&statuses);
+    overlay.on_status(move |status| sink.lock().unwrap().push(status));
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod (OVL-SOC 2): no management in its lists or welcome, and its presses do nothing.
+    let mut old =
+        MockMod::connect_with(&endpoint, &["people", "people2", "people3", "people4"]).await;
+    let welcome = old.next_of("welcome").await;
+    assert!(!lists(&welcome, "people5") && !lists(&welcome, "cards2"));
+    let old_lists = old.next_of("lists").await;
+    for key in [
+        "outgoing", "blocked", "code", "invites", "asks", "call", "plans",
+    ] {
+        assert!(old_lists.get(key).is_none(), "{key}");
+    }
+    old.next_of("snapshot").await;
+    old.send(json!({"t":"cancel-request","id":"u-sent"})).await;
+    old.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    assert_eq!(old.next().await.unwrap()["t"], "history", "nothing first");
+    assert!(social.calls().manages.is_empty());
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, SOC2).await;
+    let welcome = game.next_of("welcome").await;
+    for feature in ["people5", "crews2", "plans", "chat3", "cards2"] {
+        assert!(lists(&welcome, feature), "{feature}");
+    }
+    let l = game.next_of("lists").await;
+    assert_eq!(l["outgoing"], json!([{"id":"u-sent","name":"BlokUstasi"}]));
+    // The base view's own blocked player comes first.
+    assert!(
+        l["blocked"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b["id"] == "u-blocked")
+    );
+    assert_eq!(l["code"], "PRJ-ABCD-2345");
+    assert_eq!(
+        l["invites"],
+        json!([{"crew":"t9","name":"Akıncılar","from":"Mert","by":"f-mert","members":4}])
+    );
+    assert_eq!(l["asks"][0]["id"], "u-ask");
+    assert_eq!(l["call"], "ok");
+    assert_eq!(l["callers"], json!([crew]));
+    assert_eq!(l["plans"][0]["id"], "p1");
+    assert_eq!(l["plans"][0]["yes"], 1);
+    assert_eq!(l["plans"][0]["note"], "Bedwars");
+    assert_eq!(l["notes"], true);
+    let prefs = game.next_of("prefs").await;
+    assert_eq!(prefs["joinRequests"], true);
+    game.next_of("snapshot").await;
+
+    // "İsteği geri çek", "Engeli kaldır": the service hears them, the mod how they went.
+    game.send(json!({"t":"cancel-request","id":"u-sent"})).await;
+    assert_eq!(
+        game.next_of("done").await,
+        json!({"t":"done","act":"cancel-request","id":"u-sent","ok":true})
+    );
+    game.send(json!({"t":"unblock","id":"nobody"})).await;
+    assert_eq!(
+        game.next_of("done").await,
+        json!({"t":"done","act":"unblock","id":"nobody","ok":false,"reason":"gone"})
+    );
+
+    // "Bul": a friend's code; a crew's invite link; something that is no code.
+    social
+        .calls()
+        .managed
+        .push_back(Ok(crate::Managed::Friend(Box::new(
+            pl_social::LookupView {
+                profile: profile_of("u-new", "YeniArkadas"),
+                relation: pl_social::Relation::None,
+                code: "PRJ-WXYZ-6789".into(),
+            },
+        ))));
+    game.send(json!({"t":"find","code":"prj wxyz 6789"})).await;
+    let found = game.next_of("found").await;
+    assert_eq!(
+        found,
+        json!({"t":"found","code":"prj wxyz 6789","kind":"friend","id":"u-new","name":"YeniArkadas","relation":"none"})
+    );
+    game.send(json!({"t":"find","code":"bu bir kod değil"}))
+        .await;
+    assert_eq!(game.next_of("found").await["reason"], "invalid");
+    // "İstek gönder": the request waits for them.
+    social.calls().managed.push_back(Ok(crate::Managed::Queued));
+    game.send(json!({"t":"add-code","code":"prj wxyz 6789"}))
+        .await;
+    assert_eq!(
+        game.next_of("done").await,
+        json!({"t":"done","act":"add-code","id":"prj wxyz 6789","ok":true,"queued":true})
+    );
+
+    // A crew invite and a join request answered.
+    game.send(json!({"t":"crew-answer","crew":"t9","accept":true}))
+        .await;
+    assert_eq!(game.next_of("done").await["ok"], true);
+    game.send(json!({"t":"crew-ask","crew":crew,"id":"u-ask","accept":false}))
+        .await;
+    assert_eq!(game.next_of("done").await["act"], "crew-ask");
+
+    // "Ekibi çağır": the service says to wait.
+    social
+        .calls()
+        .managed
+        .push_back(Ok(crate::Managed::Call(pl_social::CallOutcome::Wait {
+            seconds: 120,
+        })));
+    game.send(json!({"t":"crew-call","crew":crew})).await;
+    assert_eq!(
+        game.next_of("done").await,
+        json!({"t":"done","act":"crew-call","id":crew,"ok":false,"reason":"wait","wait":120})
+    );
+
+    // A code nobody looked up here is acted on by nobody.
+    game.send(json!({"t":"add-code","code":"PRJ-AAAA-BBBB"}))
+        .await;
+    assert_eq!(game.next_of("done").await["reason"], "gone");
+
+    let manages = social.calls().manages.clone();
+    assert_eq!(
+        manages,
+        [
+            crate::Manage::CancelRequest("u-sent".into()),
+            crate::Manage::Lookup("PRJ-WXYZ-6789".into()),
+            crate::Manage::SendRequest("PRJ-WXYZ-6789".into()),
+            crate::Manage::CrewInvite {
+                crew: "t9".into(),
+                accept: true
+            },
+            crate::Manage::CrewAsk {
+                crew: crew.clone(),
+                user: "u-ask".into(),
+                accept: false
+            },
+            crate::Manage::CallCrew(crew.clone()),
+        ]
+    );
+
+    // Until the mod says which cards it shows, the older four; then every kind it did not turn off.
+    let first = statuses.lock().unwrap().last().cloned().unwrap();
+    assert!(first.connected && !first.kinds.iter().any(|k| k == "friendOnline"));
+    game.send(json!({"t":"cards","off":[]})).await;
+    game.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    game.next_of("history").await;
+    // The card kinds turned off in the game: the page shows its own notifications for them.
+    let before = statuses.lock().unwrap().last().cloned().unwrap();
+    assert!(before.connected && before.kinds.iter().any(|k| k == "friendOnline"));
+    assert!(before.kinds.iter().any(|k| k == "teamInvite"));
+    game.send(json!({"t":"cards","off":["online","message","nonsense"]}))
+        .await;
+    game.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    game.next_of("history").await;
+    let after = statuses.lock().unwrap().last().cloned().unwrap();
+    assert!(
+        !after
+            .kinds
+            .iter()
+            .any(|k| k == "friendOnline" || k == "chatMessage")
+    );
+    assert!(
+        after
+            .kinds
+            .iter()
+            .any(|k| k == "crewCall" && after.connected)
+    );
+    assert_eq!(overlay.shown_kinds(), after.kinds);
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+fn profile_of(id: &str, name: &str) -> pl_social::ProfileView {
+    pl_social::ProfileView {
+        id: id.into(),
+        name: name.into(),
+        username: name.to_lowercase(),
+        avatar: "discord".into(),
+        avatar_url: None,
+        marks: Vec::new(),
+        discord_id: None,
+    }
+}
+
+#[tokio::test]
+async fn new_cards_reach_a_mod_that_draws_them_and_the_switches_go_to_the_page() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(soc2_view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let changes = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&changes);
+    overlay.on_people(move |change| sink.lock().unwrap().push(change));
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, SOC2).await;
+    game.next_of("snapshot").await;
+
+    // A plan answered; a plan at a time that is no quarter of an hour never reaches the service.
+    let crew = social.view().crews[0].id.clone();
+    game.send(json!({"t":"plan-answer","plan":"p1","answer":"maybe"}))
+        .await;
+    assert_eq!(game.next_of("done").await["ok"], true);
+    let quarter = (now_secs() + 7200) / 900 * 900;
+    game.send(json!({"t":"plan-make","crew":crew,"at":quarter + 1,"note":"x"}))
+        .await;
+    assert_eq!(game.next_of("done").await["reason"], "time");
+    game.send(json!({"t":"plan-make","crew":crew,"at":quarter,"note":"  Bedwars   sesli  "}))
+        .await;
+    assert_eq!(game.next_of("done").await["ok"], true);
+    assert_eq!(
+        social.calls().manages.clone(),
+        [
+            crate::Manage::AnswerPlan {
+                plan: "p1".into(),
+                answer: pl_social::PlanAnswer::Maybe
+            },
+            crate::Manage::MakePlan {
+                crew: crew.clone(),
+                at: quarter,
+                note: Some("Bedwars sesli".into())
+            },
+        ]
+    );
+
+    // A friend request and a crew invite become cards of their own.
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::Request {
+        request: pl_social::RequestView {
+            id: "u-new".into(),
+            name: "YeniArkadas".into(),
+            username: "yeni".into(),
+            avatar: "discord".into(),
+            avatar_url: None,
+            marks: Vec::new(),
+            discord_id: None,
+            sent_at: 9,
+        },
+    }));
+    let card = game.next_of("toast").await;
+    assert_eq!(
+        (
+            card["kind"].as_str(),
+            card["title"].as_str(),
+            card["by"].as_str()
+        ),
+        (Some("request"), Some("YeniArkadas"), Some("u-new"))
+    );
+    let view = social.view();
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::TeamInvite {
+        invite: Box::new(view.team_invites[0].clone()),
+    }));
+    let card = game.next_of("toast").await;
+    assert_eq!(
+        (
+            card["kind"].as_str(),
+            card["title"].as_str(),
+            card["crew"].as_str()
+        ),
+        (Some("crew-invite"), Some("Mert"), Some("Akıncılar"))
+    );
+    // A new plan: its crew's chat and its time.
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::CrewPlan {
+        plan: Box::new(view.plans[0].clone()),
+    }));
+    let card = game.next_of("toast").await;
+    assert_eq!(card["kind"], "plan");
+    assert_eq!(card["at"], view.plans[0].at * 1000);
+    assert_eq!(card["body"], "Bedwars");
+
+    // Join requests turned off in the overlay's settings: the page keeps it; no card for the next.
+    game.send(json!({"t":"notify-set","key":"joinRequests","on":false}))
+        .await;
+    assert_eq!(game.next_of("prefs").await["joinRequests"], false);
+    assert_eq!(
+        changes.lock().unwrap().clone(),
+        [crate::PeopleChange::Notify {
+            key: "joinRequests".into(),
+            on: false
+        }]
+    );
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::JoinRequest {
+        crew: view.crews[0].id.clone(),
+        request: view.crews[0].requests[0].clone(),
+    }));
+    // A friend online still makes one: the next card is that, not the join request.
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::FriendOnline {
+        id: "f-ayse".into(),
+    }));
+    overlay.configure(OverlayConfig {
+        notify: crate::policy::NotifyPrefs {
+            favorites: vec!["f-ayse".into()],
+            join_requests: false,
+            ..crate::policy::NotifyPrefs::default()
+        },
+        ..OverlayConfig::default()
+    });
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::FriendOnline {
+        id: "f-ayse".into(),
+    }));
+    let card = game.next_of("toast").await;
+    assert_eq!(
+        (card["kind"].as_str(), card["key"].as_str()),
+        (Some("online"), Some("online:f-ayse"))
+    );
+    // The same friend again within ten minutes: no second card.
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::FriendOnline {
+        id: "f-ayse".into(),
+    }));
+    game.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    loop {
+        let frame = game.next().await.unwrap();
+        assert_ne!(frame["t"], "toast", "{frame}");
+        if frame["t"] == "history" {
+            break;
+        }
+    }
+    overlay.stop(ByeReason::LauncherExit).await;
 }

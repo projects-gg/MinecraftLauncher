@@ -102,7 +102,21 @@ public final class FriendList extends PanelWidget {
         /** OVL-SOC 2: a request's two answers in the person menu, at the pointer or under its × ({@code anchor}). */
         default void requestMenu(String requestId, String name, PersonMenu.Anchor anchor, boolean keys) {
         }
+
+        /** OVL-SOC2: "Arkadaş ekle" ({@code crew} false) or "Ekibe katıl" at the list's top. */
+        default void add(boolean crew) {
+        }
+
+        /**
+         * OVL-SOC2: the chip ({@code accept}: "Katıl", "Kabul et") or the × on a crew invite, a join request or a
+         * request the player sent, by the row's key ({@code invite:<crew>}, {@code ask:<crew>:<id>}, {@code out:<id>}).
+         */
+        default void answerRow(String key, boolean accept) {
+        }
     }
+
+    /** What a row is (OVL-SOC2 adds the crews' rows, the sent requests and the top's pills). */
+    private enum Kind { FRIEND, REQUEST, INVITE, ASK, OUTGOING, ADD }
 
     private static final class Row {
         String id;
@@ -135,6 +149,13 @@ public final class FriendList extends PanelWidget {
         boolean request;
         /** The person's name as the list knows it (a request's answer names them). */
         String person = "";
+        /** OVL-SOC2: what the row is, its chip's words ("Kabul et", "Katıl"; none on a sent request). */
+        Kind kind = Kind.FRIEND;
+        FormattedCharSequence chipText;
+        /** OVL-SOC2: a top pill ("Arkadaş ekle", "Ekibe katıl"): where it starts, how wide, its sign. */
+        float pillX;
+        float pillW;
+        Icon icon;
     }
 
     private final Actions actions;
@@ -163,6 +184,12 @@ public final class FriendList extends PanelWidget {
     private boolean filterChanged;
     /** The filter found no friend (requests may still show above its line). */
     private boolean noMatch;
+    /** OVL-SOC2: no friend yet (the top's pills and requests may show above its line). */
+    private boolean noFriends;
+    /** OVL-SOC2: the top's pills. */
+    private static final int PILL_H = 16;
+    private static final int PILL_PAD = 6;
+    private static final int PILL_SIGN = 9;
     // The "…": on which row it shows, the one it is leaving, and the row whose menu is open.
     private String dotsRow;
     private String dotsLeaving;
@@ -260,7 +287,8 @@ public final class FriendList extends PanelWidget {
         acceptLine = Texts.visual(acceptLabel);
         acceptWidth = small.width(acceptLabel) + 14;
         rows.clear();
-        float y = requests(state, 0f);
+        float y = addRow(state, 0f);
+        y = requests(state, y);
         List<OverlayState.Friend> game = new ArrayList<>();
         List<OverlayState.Friend> launcher = new ArrayList<>();
         List<OverlayState.Friend> offline = new ArrayList<>();
@@ -287,6 +315,9 @@ public final class FriendList extends PanelWidget {
         y = section(state, y, "friends.in_game", game, canJoin, joinWidth);
         y = section(state, y, "friends.online", launcher, canJoin, joinWidth);
         y = section(state, y, "friends.offline", offline, canJoin, joinWidth);
+        // OVL-SOC2: no friend yet, under the top's pills and the requests: the list says so where they would be.
+        noFriends = state.signedIn() && all == 0;
+        y = outgoing(state, y);
         contentHeight = y;
         if (selected != null && rows.stream().noneMatch(r -> !r.header && r.id.equals(selected))) {
             selected = null;
@@ -304,15 +335,89 @@ public final class FriendList extends PanelWidget {
             || real != null && EmojiCatalog.fold(real).contains(filter);
     }
 
-    /** OVL-SOC 2: "İstekler" and its rows, before everyone (the launcher's order). */
-    private float requests(OverlayState state, float y) {
-        List<OverlayState.Request> asked = state.requests();
-        if (asked.isEmpty() || !state.people4()) {
+    /**
+     * OVL-SOC2: the list's top: "Arkadaş ekle" and, with crews, "Ekibe katıl", two quiet pills on one line (each its own
+     * stop for the keys).
+     */
+    private float addRow(OverlayState state, float y) {
+        if (!state.people5()) {
+            return y;
+        }
+        Font ui = Fonts.ui();
+        float x = 0f;
+        for (boolean crew : state.crews2() ? new boolean[] {false, true} : new boolean[] {false}) {
+            String label = Texts.str(crew ? "friends.join_crew" : "friends.add");
+            Row row = new Row();
+            row.kind = Kind.ADD;
+            row.id = crew ? "add:crew" : "add:friend";
+            row.icon = crew ? Icon.CREW : Icon.USER_PLUS;
+            row.online = true;
+            int room = Math.max(24, (getWidth() - 4) / 2 - PILL_PAD * 2 - PILL_SIGN - 3);
+            String fitted = Texts.fit(ui, label, room);
+            row.name = Texts.visual(fitted);
+            row.nameW = ui.width(fitted);
+            row.pillX = x;
+            row.pillW = PILL_PAD + PILL_SIGN + 3 + row.nameW + PILL_PAD;
+            row.y = y;
+            row.narration = Component.literal(label);
+            rows.add(row);
+            x += row.pillW + 4;
+        }
+        return y + PILL_H + 8;
+    }
+
+    /** OVL-SOC2: the sent requests that wait ("Gönderilenler"), after everyone: the face, the name and the ×. */
+    private float outgoing(OverlayState state, float y) {
+        List<OverlayState.Request> sent = state.people5() ? state.outgoing() : List.of();
+        if (sent.isEmpty()) {
             return y;
         }
         Row header = new Row();
         header.header = true;
-        header.title = Texts.visual(Texts.str("friends.requests", asked.size()));
+        header.title = Texts.visual(Texts.str("friends.outgoing", sent.size()));
+        header.y = y;
+        rows.add(header);
+        y += HEADER_H;
+        Font strong = Fonts.strong();
+        Font small = Fonts.small();
+        int nameRoom = getWidth() - FACE - 8 - 6 - DOTS - DOTS_GAP;
+        String waiting = Texts.str("friend.request_waiting");
+        for (OverlayState.Request r : sent) {
+            Row row = new Row();
+            row.kind = Kind.OUTGOING;
+            row.id = "out:" + r.id();
+            row.request = true;
+            row.person = r.name();
+            String name = Texts.fit(strong, r.name().isEmpty() ? Texts.str("toast.someone") : r.name(), nameRoom);
+            row.name = Texts.visual(name);
+            row.nameW = strong.width(name);
+            row.where = Texts.visual(Texts.fit(small, waiting, nameRoom));
+            row.online = false;
+            row.face = Face.of(r.name(), r.id());
+            row.joinWidth = 0;
+            row.y = y;
+            row.narration = Texts.tr("narration.outgoing", name);
+            rows.add(row);
+            y += ROW_H;
+        }
+        return y + 4;
+    }
+
+    /**
+     * OVL-SOC 2: "İstekler" and its rows, before everyone (the launcher's order); OVL-SOC2: crew invites and join
+     * requests too, everything that waits for the player's answer in one place.
+     */
+    private float requests(OverlayState state, float y) {
+        List<OverlayState.Request> asked = state.people4() ? state.requests() : List.of();
+        List<OverlayState.Invite> invites = state.crews2() ? state.invites() : List.of();
+        List<OverlayState.Ask> asks = state.crews2() ? state.asks() : List.of();
+        int count = asked.size() + invites.size() + asks.size();
+        if (count == 0) {
+            return y;
+        }
+        Row header = new Row();
+        header.header = true;
+        header.title = Texts.visual(Texts.str("friends.requests", count));
         header.y = y;
         rows.add(header);
         y += HEADER_H;
@@ -333,12 +438,73 @@ public final class FriendList extends PanelWidget {
             row.online = true;
             row.face = Face.of(r.name(), r.id());
             row.joinWidth = acceptWidth;
+            row.kind = Kind.REQUEST;
+            row.chipText = acceptLine;
             row.y = y;
             row.narration = Texts.tr("narration.request", name);
             rows.add(row);
             y += ROW_H;
         }
+        // OVL-SOC2: an invite to a crew: who invited, "Seni Gece Kuşları ekibine davet etti", "Katıl" and the ×.
+        String joinWord = Texts.str("friend.crew_join");
+        float joinW = small.width(joinWord) + 14;
+        for (OverlayState.Invite i : invites) {
+            Row row = new Row();
+            row.kind = Kind.INVITE;
+            row.id = "invite:" + i.crew();
+            row.request = true;
+            row.person = i.name();
+            int room = getWidth() - FACE - 8 - (int) joinW - 6 - DOTS - DOTS_GAP;
+            String from = i.from().isEmpty() ? Texts.str("toast.someone") : i.from();
+            String name = Texts.fit(strong, from, room);
+            row.name = Texts.visual(name);
+            row.nameW = strong.width(name);
+            row.where = Texts.visual(Texts.fit(small, Texts.str("friend.crew_invite", i.name()), room));
+            row.online = true;
+            row.face = Face.of(from, i.by());
+            row.joinWidth = joinW;
+            row.chipText = Texts.visual(joinWord);
+            row.y = y;
+            row.narration = Texts.tr("narration.crew_invite", from, i.name());
+            rows.add(row);
+            y += ROW_H;
+        }
+        // OVL-SOC2: someone asks to join one of the player's crews: their face, "Gece Kuşları ekibine katılmak
+        // istiyor", "Kabul et" and the ×.
+        for (OverlayState.Ask a : asks) {
+            Row row = new Row();
+            row.kind = Kind.ASK;
+            row.id = "ask:" + a.crew() + ":" + a.id();
+            row.request = true;
+            row.person = a.name();
+            String name = Texts.fit(strong, a.name().isEmpty() ? Texts.str("toast.someone") : a.name(), nameRoom);
+            row.name = Texts.visual(name);
+            row.nameW = strong.width(name);
+            row.where = Texts.visual(Texts.fit(small, Texts.str("friend.crew_ask", a.crewName()), nameRoom));
+            row.online = true;
+            row.face = Face.of(a.name(), a.id());
+            row.joinWidth = acceptWidth;
+            row.chipText = acceptLine;
+            row.y = y;
+            row.narration = Texts.tr("narration.crew_ask", name, a.crewName());
+            rows.add(row);
+            y += ROW_H;
+        }
         return y + 4;
+    }
+
+    /** An answer row whose answer is on its way: its chip and × wait. */
+    private boolean waiting(Row row) {
+        if (state == null) {
+            return false;
+        }
+        return switch (row.kind) {
+            case REQUEST -> state.answering(row.id);
+            case INVITE -> state.pressing("crew-answer", row.id.substring("invite:".length()));
+            case ASK -> state.pressing("crew-ask", row.id.substring("ask:".length()));
+            case OUTGOING -> state.pressing("cancel-request", row.id.substring("out:".length()));
+            default -> false;
+        };
     }
 
     private float section(OverlayState state, float y, String titleKey, List<OverlayState.Friend> friends,
@@ -535,7 +701,7 @@ public final class FriendList extends PanelWidget {
     /** The keyboard's pick on the first friend the filter left (Enter or ↓ from it, OVL-SOC 2), else the first row. */
     public void selectFirst() {
         for (Row row : rows) {
-            if (!row.header && !row.request) {
+            if (!row.header && !row.request && row.kind == Kind.FRIEND) {
                 selected = row.id;
                 reveal(row);
                 return;
@@ -570,6 +736,15 @@ public final class FriendList extends PanelWidget {
         }
         int i = selectedIndex();
         Row row = i < 0 ? null : rows.get(i);
+        if (row != null && row.kind == Kind.ADD && (event.isSelection() || event.isConfirmation())) {
+            // OVL-SOC2: the top's pills.
+            PanelInput.usedKeyboard();
+            actions.add(row.id.equals("add:crew"));
+            return true;
+        }
+        if (row != null && row.kind == Kind.ADD) {
+            return false;
+        }
         if (row != null && row.request && (event.isSelection() || event.isConfirmation()
             || event.key() == Compat.KEY_MENU || (event.key() == InputConstants.KEY_F10 && event.hasShiftDown()))) {
             // A request: its two answers under its ×, "Kabul et" lit.
@@ -626,18 +801,38 @@ public final class FriendList extends PanelWidget {
             if (row.header || cy < row.y || cy >= row.y + ROW_H) {
                 continue;
             }
+            if (row.kind == Kind.ADD) {
+                // OVL-SOC2: a top pill (both share the line).
+                float px = (float) event.x() - getX();
+                if (px >= row.pillX && px < row.pillX + row.pillW && !doubleClick
+                    && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
+                    selected = row.id;
+                    actions.add(row.id.equals("add:crew"));
+                    return;
+                }
+                continue;
+            }
             selected = row.id;
             if (row.request) {
-                if (doubleClick || state != null && state.answering(row.id)) {
+                if (doubleClick || waiting(row)) {
                     // A double click answers once; an answer on its way takes no second one.
                     return;
                 }
+                boolean friendRequest = row.kind == Kind.REQUEST;
                 if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
                     actions.requestMenu(row.id, row.person, PersonMenu.Anchor.at(event.x(), event.y()), false);
                 } else if (event.x() >= dotsX() - 1) {
-                    actions.answer(row.id, row.person, false);
-                } else if (event.x() >= joinX(row)) {
-                    actions.answer(row.id, row.person, true);
+                    if (friendRequest) {
+                        actions.answer(row.id, row.person, false);
+                    } else {
+                        actions.answerRow(row.id, false);
+                    }
+                } else if (row.joinWidth > 0 && event.x() >= joinX(row)) {
+                    if (friendRequest) {
+                        actions.answer(row.id, row.person, true);
+                    } else {
+                        actions.answerRow(row.id, true);
+                    }
                 } else if (!doubleClick) {
                     actions.requestMenu(row.id, row.person, dotsAnchor(row), false);
                 }
@@ -725,6 +920,10 @@ public final class FriendList extends PanelWidget {
                     Theme.ASH_400);
                 continue;
             }
+            if (row.kind == Kind.ADD) {
+                drawPill(g, row, x0, y, mouseX, mouseY);
+                continue;
+            }
             boolean lit = isHovered() && mouseY >= y && mouseY < y + ROW_H && menuFor == null;
             boolean chosen = row.id.equals(selected) && keyboardFocus();
             boolean open = row.id.equals(menuFor);
@@ -779,18 +978,21 @@ public final class FriendList extends PanelWidget {
             }
             if (row.request) {
                 // OVL-SOC 2: "Kabul et" (gold words while lit, as "Katıl") and the × that declines, always there;
-                // quiet while its answer is on its way.
-                boolean waiting = state != null && state.answering(row.id);
+                // quiet while its answer is on its way. OVL-SOC2: a crew invite's "Katıl"; a sent request only its ×.
+                boolean waiting = waiting(row);
                 if (waiting) {
                     lit = false;
                     Draw.pushAlpha(0.45f);
                 }
-                float jx = joinX(row);
-                float jy = y + (ROW_H - JOIN_H) / 2f;
-                boolean acceptLit = lit && mouseX >= jx && mouseX < jx + row.joinWidth;
-                Draw.frame(g, acceptLit ? Frames.CHIP_SELECTED : Frames.CHIP, jx, jy, row.joinWidth, JOIN_H);
-                Draw.text(g, small, acceptLine, jx + 7, Fonts.centeredY(Fonts.Face.SMALL, jy + JOIN_H / 2f),
-                    acceptLit ? Theme.GOLD_200 : Theme.BONE_100);
+                if (row.joinWidth > 0) {
+                    float jx = joinX(row);
+                    float jy = y + (ROW_H - JOIN_H) / 2f;
+                    boolean acceptLit = lit && mouseX >= jx && mouseX < jx + row.joinWidth;
+                    Draw.frame(g, acceptLit ? Frames.CHIP_SELECTED : Frames.CHIP, jx, jy, row.joinWidth, JOIN_H);
+                    Draw.text(g, small, row.chipText == null ? acceptLine : row.chipText, jx + 7,
+                        Fonts.centeredY(Fonts.Face.SMALL, jy + JOIN_H / 2f), acceptLit ? Theme.GOLD_200
+                            : Theme.BONE_100);
+                }
                 float dy = y + (ROW_H - DOTS) / 2f;
                 boolean declineLit = lit && mouseX >= dotsX - 1;
                 if (declineLit) {
@@ -843,8 +1045,8 @@ public final class FriendList extends PanelWidget {
             Draw.column(g, ShapeSet.FADE_BOTTOM, x0 - 2, y0 + h - ShapeSet.LIST_FADE, w + 4, ShapeSet.LIST_FADE);
             Draw.popAlpha();
         }
-        if (noMatch) {
-            // Requests above, no friend for the filter: its line under them.
+        if (noMatch || noFriends && !emptyText.isEmpty()) {
+            // Requests above, no friend for the filter (or none yet, OVL-SOC2): its line under them.
             Draw.text(g, small, emptyLine, x0 + (w - emptyWidth) / 2f,
                 Fonts.centeredY(Fonts.Face.SMALL, y0 + contentHeight - top + 14), Theme.ASH_400);
         }
@@ -915,6 +1117,27 @@ public final class FriendList extends PanelWidget {
     }
 
     /** How a menu action went: a plate over the list's bottom for a moment (it floats; nothing moves). */
+    /** OVL-SOC2: a top pill: the quiet chip, its sign and words (bone while lit, never gold: no primary action). */
+    private void drawPill(GuiGraphicsExtractor g, Row row, int x0, float y, int mouseX, int mouseY) {
+        float px = x0 + row.pillX;
+        float py = y + 1;
+        boolean lit = isHovered() && mouseY >= py && mouseY < py + PILL_H && mouseX >= px && mouseX < px + row.pillW
+            && menuFor == null;
+        boolean chosen = row.id.equals(selected) && keyboardFocus();
+        Draw.frame(g, lit ? Frames.CHIP_HOVER : Frames.CHIP, px, py, row.pillW, PILL_H);
+        if (chosen) {
+            Draw.frame(g, Frames.FOCUS_14, px, py, row.pillW, PILL_H);
+        }
+        int ink = lit || chosen ? Theme.BONE_50 : Theme.ASH_300;
+        Draw.icon(g, row.icon, PILL_SIGN, px + PILL_PAD, py + (PILL_H - PILL_SIGN) / 2f, lit || chosen ? Theme.BONE_100
+            : Theme.ASH_400);
+        Draw.text(g, Fonts.ui(), row.name, px + PILL_PAD + PILL_SIGN + 3, Fonts.centeredY(Fonts.Face.UI,
+            py + PILL_H / 2f), ink);
+        if (lit) {
+            g.requestCursor(com.mojang.blaze3d.platform.cursor.CursorTypes.POINTING_HAND);
+        }
+    }
+
     private void drawNote(GuiGraphicsExtractor g, long now) {
         float a = noteAlpha.value(now);
         if (a <= 0.01f || noteText == null) {

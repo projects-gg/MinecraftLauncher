@@ -41,6 +41,9 @@ import org.joml.Matrix3x2fStack;
  * <p>Typed letters while it has the keys go to the search; the arrows pick, Enter writes the picked one, ↑ from the top
  * row reaches the tabs. It opens with the sticker picker's 150 ms rise (a fade only with reduced motion); nothing about
  * it runs while it is closed.
+ *
+ * <p>CHAT3: a message's "Başka tepki" opens the same panel without the sticker tab; its pick reacts to that message and
+ * closes it (the panel's {@link Actions#pick} decides), and the narrator names it "Başka tepki".
  */
 public final class EmojiPanel extends PanelWidget {
     private static final int PAD = 5;
@@ -89,6 +92,8 @@ public final class EmojiPanel extends PanelWidget {
     private List<String> recent = List.of();
     private String query = "";
     private boolean tabs;
+    /** CHAT3: opened by a message's "Başka tepki": a pick is a reaction to it (the panel decides), not a word. */
+    private boolean reacting;
     /** The keys are on the tabs (↑ from the grid's first row). */
     private boolean onTabs;
     private int focused;
@@ -140,6 +145,7 @@ public final class EmojiPanel extends PanelWidget {
 
     public void close() {
         visible = false;
+        reacting = false;
         query = "";
         // The cells' prepared lines go with it (the catalog itself stays for the game, EmojiCatalog).
         glyphs = new FormattedCharSequence[0];
@@ -153,6 +159,15 @@ public final class EmojiPanel extends PanelWidget {
 
     public boolean isOpen() {
         return visible;
+    }
+
+    /** CHAT3: it opened for a reaction ("Başka tepki"); the narrator names it so. Closing ends it. */
+    public void setReacting(boolean value) {
+        reacting = value;
+    }
+
+    public boolean reacting() {
+        return reacting;
     }
 
     /** The sticker tab came or went while it is open (the service took or stopped taking stickers). */
@@ -773,7 +788,7 @@ public final class EmojiPanel extends PanelWidget {
 
     @Override
     protected void updateWidgetNarration(NarrationElementOutput output) {
-        output.add(NarratedElementType.TITLE, Texts.tr("chat.emoji"));
+        output.add(NarratedElementType.TITLE, Texts.tr(reacting ? "chat.react.more" : "chat.emoji"));
         if (focused >= 0 && focused < cells.size()) {
             output.add(NarratedElementType.HINT, Texts.tr("chat.emoji.label",
                 EmojiCatalog.displayName(cells.get(focused).name(), turkish)));

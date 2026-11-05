@@ -9,11 +9,17 @@ import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.people.FriendMenu;
+import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.Avatars;
 import gg.projects.overlay.ui.LabelFit;
+import gg.projects.overlay.ui.Texts;
+import gg.projects.overlay.ui.panel.AddScreen;
+import gg.projects.overlay.ui.panel.CrewBar;
 import gg.projects.overlay.ui.panel.EmojiPanel;
+import gg.projects.overlay.ui.panel.FriendList;
 import gg.projects.overlay.ui.panel.OverlayScreen;
+import gg.projects.overlay.ui.panel.PlanScreen;
 import gg.projects.overlay.voice.VoiceState;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +30,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.fabricmc.api.ClientModInitializer;
@@ -58,6 +65,10 @@ import org.slf4j.LoggerFactory;
  *
  * <p>FIX-209 ({@code -Dprojects.overlay.dev.script=invite}, the mock's {@code --avatars <dir>}): "Birlikte oyna" cards
  * with the friend's face, a picture and a letter.
+ *
+ * <p>OVL-SOC2 ({@code -Dprojects.overlay.dev.script=soc2}, the mock's {@code --voice --people --people2 --chat2 --next
+ * --soc2}): every new card, the friends page's management, "Ekle", crew chat's own line, the plans and the settings'
+ * new sections, one screenshot each ({@code soc2-NN-<name>.png}, results in {@code soc2-results.json}).
  */
 public final class SocialScenario implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("OVL-SOC scenario");
@@ -71,6 +82,8 @@ public final class SocialScenario implements ClientModInitializer {
     private final JsonArray events = new JsonArray();
     private final long runStarted = System.nanoTime();
     private Path out;
+    /** The screenshots' and the results' first word ({@code social}, or the script's own: {@code soc2}). */
+    private String prefix = "social";
     private int next;
     private long stepAt = System.nanoTime();
     private int shots;
@@ -82,12 +95,15 @@ public final class SocialScenario implements ClientModInitializer {
     public void onInitializeClient() {
         String which = System.getProperty("projects.overlay.dev.script");
         if (!"social".equals(which) && !"social2".equals(which) && !"avatars".equals(which) && !"fit".equals(which)
-            && !"invite".equals(which)) {
+            && !"invite".equals(which) && !"soc2".equals(which)) {
             return;
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "social-out")).toAbsolutePath();
         ToastLayer.pauseWhileAway = false;
-        if ("social2".equals(which)) {
+        if ("soc2".equals(which)) {
+            prefix = "soc2";
+            script6();
+        } else if ("social2".equals(which)) {
             script2();
         } else if ("avatars".equals(which)) {
             script3();
@@ -455,6 +471,99 @@ public final class SocialScenario implements ClientModInitializer {
     }
 
     /**
+     * OVL-SOC2's scenario ({@code -Dprojects.overlay.dev.script=soc2}, the mock's {@code --soc2}): the new cards three at
+     * a time (only while the panel is closed; each three push the last ones out); the friends page's "Arkadaş ekle" and
+     * "Ekibe katıl", "İstekler" (a friend request, a crew invite, a join request) and "Gönderilenler" at the list's end;
+     * "Arkadaş ekle" with the player's code, a code that leads nowhere and a friend's code; "Ekibe katıl" with a crew's
+     * code; crew chat's own line ("Ekibi çağır", "Bugün 21:00 · 2 +1"), a call and a second one too soon; the crew's
+     * plans and "Plan yap"; the settings' card kinds, friend notifications and blocked people.
+     */
+    private void script6() {
+        step(0.5, "cards 1", mc -> devCards("request", "friend", "online"));
+        step(1.6, "shot cards 1", mc -> shot(mc, "cards-request-friend-online"));
+        step(0.1, "cards 2", mc -> devCards("crew-invite", "crew-ask", "crew-in"));
+        step(1.6, "shot cards 2", mc -> shot(mc, "cards-crew"));
+        step(0.1, "cards 3", mc -> devCards("plan", "missed", "projects"));
+        step(1.6, "shot cards 3", mc -> shot(mc, "cards-plan-missed-projects"));
+        // The friends page (once the cards are gone): the pills, "İstekler", then the list's end.
+        step(5.5, "open", mc -> OverlayClient.get().togglePanel());
+        step(0.6, "friends", mc -> need(mc).showPage(OverlayScreen.Page.FRIENDS));
+        step(0.8, "shot friends", mc -> {
+            OverlayState st = OverlayClient.get().state();
+            results.addProperty("requests", st.requests().size());
+            results.addProperty("invites", st.invites().size());
+            results.addProperty("asks", st.asks().size());
+            results.addProperty("outgoing", st.outgoing().size());
+            results.addProperty("blocked", st.blocked().size());
+            results.addProperty("code", st.myCode());
+            shot(mc, "friends-requests");
+        });
+        step(0.1, "to the end", mc -> {
+            FriendList list = widget(mc, FriendList.class);
+            list.mouseScrolled(list.getX() + list.getWidth() / 2.0, list.getY() + list.getHeight() / 2.0, 0, -100);
+        });
+        step(0.8, "shot sent", mc -> shot(mc, "friends-sent"));
+        // "Arkadaş ekle": the player's code, a code that leads nowhere, a friend's code.
+        step(0.1, "add friend", mc -> need(mc).openAddForDriver(false));
+        step(0.6, "shot add", mc -> shot(mc, "add-friend"));
+        step(0.1, "find nobody", mc -> dialog(mc, AddScreen.class).findForDriver("PRJ-0000-0000"));
+        step(0.8, "shot not found", mc -> shot(mc, "add-not-found"));
+        step(0.1, "find friend", mc -> dialog(mc, AddScreen.class).findForDriver("PRJ-4HT9-2WQC"));
+        step(0.8, "shot found", mc -> {
+            OverlayState.Found found = OverlayClient.get().state().found();
+            results.addProperty("foundFriend", found == null ? "none" : found.kind() + " " + found.name());
+            shot(mc, "add-friend-found");
+        });
+        step(0.1, "close add", mc -> dialog(mc, AddScreen.class).onClose());
+        // "Ekibe katıl": a crew's code.
+        step(0.4, "join crew", mc -> need(mc).openAddForDriver(true));
+        step(0.5, "find crew", mc -> dialog(mc, AddScreen.class).findForDriver("EKP-YLD7-3QK2"));
+        step(0.8, "shot crew found", mc -> {
+            OverlayState.Found found = OverlayClient.get().state().found();
+            results.addProperty("foundCrew", found == null ? "none" : found.kind() + " " + found.name());
+            shot(mc, "add-crew-found");
+        });
+        step(0.1, "close join", mc -> dialog(mc, AddScreen.class).onClose());
+        // Crew chat's own line: "Ekibi çağır" and the next plan; a call, then a second one too soon.
+        step(0.4, "chats", mc -> need(mc).showPage(OverlayScreen.Page.CHATS));
+        step(0.3, "crew chat", mc -> need(mc).showConversation("crew:gece"));
+        step(0.8, "shot crew bar", mc -> {
+            OverlayState st = OverlayClient.get().state();
+            results.addProperty("crewOfChat", String.valueOf(st.crewOf("crew:gece")));
+            results.addProperty("mayCall", st.mayCall("gece"));
+            results.addProperty("plans", st.plans("gece", System.currentTimeMillis()).size());
+            shot(mc, "crew-bar");
+        });
+        step(0.1, "call", mc -> results.addProperty("called", widget(mc, CrewBar.class).pressForDriver(true)));
+        step(0.8, "shot called", mc -> shot(mc, "crew-called"));
+        step(0.1, "call again", mc -> widget(mc, CrewBar.class).pressForDriver(true));
+        step(0.8, "shot call wait", mc -> {
+            results.addProperty("callWait",
+                OverlayClient.get().state().callWaitUntil(System.currentTimeMillis()) > 0);
+            shot(mc, "crew-call-wait");
+        });
+        // The crew's plans over the panel, then "Plan yap".
+        step(0.1, "plans", mc -> results.addProperty("plansPill", widget(mc, CrewBar.class).pressForDriver(false)));
+        step(0.8, "shot plans", mc -> shot(mc, "plans"));
+        step(0.1, "make", mc -> results.addProperty("makeForm",
+            dialog(mc, PlanScreen.class).makeForDriver("Turnuva provası, sesli gelin")));
+        step(0.6, "shot make", mc -> shot(mc, "plan-make"));
+        step(0.1, "close plans", mc -> dialog(mc, PlanScreen.class).onClose());
+        // The settings' new sections: the card kinds, the launcher's friend notifications, the blocked people.
+        step(0.4, "settings", mc -> need(mc).showPage(OverlayScreen.Page.SETTINGS));
+        step(0.4, "to the cards", mc -> results.addProperty("cardsSection",
+            need(mc).settings().scrollToSectionForDriver(Texts.str("settings.cards"))));
+        step(0.5, "shot cards section", mc -> shot(mc, "settings-cards"));
+        step(0.1, "to the notifications", mc -> results.addProperty("notifySection",
+            need(mc).settings().scrollToSectionForDriver(Texts.str("settings.friend_notify"))));
+        step(0.5, "shot notifications", mc -> shot(mc, "settings-friend-notify"));
+        step(0.1, "to the blocked", mc -> results.addProperty("blockedSection",
+            need(mc).settings().scrollToSectionForDriver(Texts.str("settings.blocked"))));
+        step(0.5, "shot blocked", mc -> shot(mc, "settings-blocked"));
+        step(0.1, "close", mc -> need(mc).close());
+    }
+
+    /**
      * OVL-AVATARS: pictures (slot 0) and letters (slot 1) take turns in {@code pairs} pairs of slices on what shows now;
      * each slice settles 0.4 s before it records 0.8 s. Frame times and the overlay's own drawing time for each.
      */
@@ -511,6 +620,38 @@ public final class SocialScenario implements ClientModInitializer {
         event("dev", cmd + " " + friend + (sent ? "" : " (not sent)"));
     }
 
+    /** OVL-SOC2: the mock sends these new cards one after another ({@code card}). */
+    private void devCards(String... kinds) {
+        JsonObject o = Protocol.message("dev");
+        o.addProperty("cmd", "card");
+        JsonArray list = new JsonArray();
+        for (String kind : kinds) {
+            list.add(kind);
+        }
+        o.add("kinds", list);
+        boolean sent = OverlayClient.get().bridge().send(o);
+        event("dev", "card " + String.join(" ", kinds) + (sent ? "" : " (not sent)"));
+    }
+
+    /** One of the open panel's widgets ({@code type}), as the panel holds it. */
+    private static <T> T widget(Minecraft mc, Class<T> type) {
+        for (GuiEventListener child : need(mc).children()) {
+            if (type.isInstance(child)) {
+                return type.cast(child);
+            }
+        }
+        throw new IllegalStateException("the panel has no " + type.getSimpleName());
+    }
+
+    /** The dialog open over the panel ({@link AddScreen}, {@link PlanScreen}). */
+    private static <T> T dialog(Minecraft mc, Class<T> type) {
+        Screen screen = Compat.screen(mc);
+        if (type.isInstance(screen)) {
+            return type.cast(screen);
+        }
+        throw new IllegalStateException("no " + type.getSimpleName() + " (" + screen + ")");
+    }
+
     private void devIds(String cmd, String... ids) {
         JsonObject o = Protocol.message("dev");
         o.addProperty("cmd", cmd);
@@ -532,7 +673,7 @@ public final class SocialScenario implements ClientModInitializer {
         results.add("events", events);
         try {
             Files.createDirectories(out);
-            Files.writeString(out.resolve("social-results.json"),
+            Files.writeString(out.resolve(prefix + "-results.json"),
                 new GsonBuilder().setPrettyPrinting().create().toJson(results), StandardCharsets.UTF_8);
         } catch (IOException e) {
             LOG.error("could not write results", e);
@@ -555,7 +696,7 @@ public final class SocialScenario implements ClientModInitializer {
     }
 
     private void shot(Minecraft mc, String name) {
-        String file = String.format("social-%02d-%s.png", ++shots, name);
+        String file = String.format("%s-%02d-%s.png", prefix, ++shots, name);
         Screenshot.grab(mc.gameDirectory, file, DevCompat.mainTarget(mc), 1,
             message -> LOG.info("screenshot {}: {}", name, message.getString()));
         event("shot", file);
