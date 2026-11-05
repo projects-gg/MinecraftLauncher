@@ -20,7 +20,7 @@ export function SharePillPart() {
   if (!share.on) return null;
   if (share.mine.length) {
     const count = new Set(share.mine.flatMap((m) => m.watchers)).size;
-    const label = t("share.live.pill", { count });
+    const label = count ? t("share.live.pill", { count }) : t("share.live.pillAlone");
     return (
       <Tooltip content={label}>
         <button
@@ -30,9 +30,11 @@ export function SharePillPart() {
           className={cn(round, "px-1.5 text-jade-400 hover:bg-white/10")}
         >
           <Screencast size={15} weight="bold" aria-hidden />
-          <span className="text-[12px] leading-none font-semibold tabular-nums text-bone-100">
-            {count}
-          </span>
+          {count ? (
+            <span className="text-[12px] leading-none font-semibold tabular-nums text-bone-100">
+              {count}
+            </span>
+          ) : null}
         </button>
       </Tooltip>
     );

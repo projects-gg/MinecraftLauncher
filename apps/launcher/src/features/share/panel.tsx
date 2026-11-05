@@ -5,34 +5,13 @@
 import { CaretDown, Check, Monitor, Screencast } from "@phosphor-icons/react";
 import { Button, cn, Menu, type MenuItem, Tooltip, toast, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { SpeakingFace } from "@/features/voice/faces";
-import { useVoicePrefs } from "@/features/voice/prefs";
-import { useFaces, useVoiceUi } from "@/features/voice/store";
+import { useFaces } from "@/features/voice/store";
 import { shareApi } from "@/share/api";
 import type { ShareBy, VoiceLiveShare, VoiceMyShare } from "@/share/types";
-import { stopShare, unwatchShare, watchShare } from "./actions";
+import { stopShare, watchShare } from "./actions";
 import { useShare, useShareUi } from "./store";
-import { ShareVideo } from "./video";
-
-/** The player's own picture, small, while "Kendi önizlememi göster" is on. */
-function SelfPreview({ me, n }: { me: string; n: number }) {
-  const { t } = useTranslation();
-  useEffect(() => {
-    void watchShare(me, n);
-    return () => void unwatchShare(me, n);
-  }, [me, n]);
-  return (
-    <div
-      className="aspect-video w-[96px] shrink-0 overflow-hidden rounded-[6px] bg-obsidian-950 ring-1 ring-white/10"
-      aria-label={t("share.live.preview")}
-      role="img"
-    >
-      <ShareVideo person={me} n={n} volume={0} muted fit="cover" />
-    </div>
-  );
-}
 
 function Watchers({ ids }: { ids: string[] }) {
   const { t } = useTranslation();
@@ -66,14 +45,13 @@ function Watchers({ ids }: { ids: string[] }) {
 }
 
 /** One of the player's shares. */
-function LiveLine({ mine, me, preview }: { mine: VoiceMyShare; me: string; preview: boolean }) {
+function LiveLine({ mine }: { mine: VoiceMyShare }) {
   const { t } = useTranslation();
   const live = mine.phase !== "starting";
   const what =
     mine.kind === "game" ? t("share.kind.game") : mine.label || t(`share.kind.${mine.kind}`);
   return (
     <div className="flex min-h-[44px] items-center gap-2.5 rounded-[var(--radius-panel)] bg-white/[0.045] py-1.5 pr-1.5 pl-3">
-      {preview && live ? <SelfPreview me={me} n={mine.n} /> : null}
       <Screencast
         size={17}
         weight="bold"
@@ -105,8 +83,6 @@ export function ShareFooterRow() {
   const { reduce } = useMotionPrefs();
   const share = useShare();
   const openPicker = useShareUi((s) => s.openPicker);
-  const me = useVoiceUi((s) => s.state.room?.me.id ?? "");
-  const preview = useVoicePrefs((s) => s.settings?.share?.selfPreview ?? false);
   if (!share.on || (!share.canShare && !share.mine.length)) return null;
   const more = share.canShare && share.mine.length < share.mineMax;
   // Why "Ekranını paylaş" waits, in one sentence (none: it does not).
@@ -125,24 +101,25 @@ export function ShareFooterRow() {
             animate={{ opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] } }}
             exit={{ opacity: 0, transition: { duration: 0.14 } }}
           >
-            <LiveLine mine={mine} me={me} preview={preview} />
+            <LiveLine mine={mine} />
           </motion.div>
         ))}
       </AnimatePresence>
       {more ? (
-        <Tooltip content={why ?? ""} disabled={why === null}>
+        <>
           <Button
             size={share.mine.length ? "sm" : "lg"}
             variant={share.mine.length ? "ghost" : "secondary"}
             icon={<Monitor size={17} weight="bold" />}
             aria-disabled={why !== null || undefined}
-            aria-description={why ?? undefined}
             className={cn("w-full", why !== null && "opacity-45")}
             onClick={why === null ? openPicker : undefined}
           >
             {t("share.action")}
           </Button>
-        </Tooltip>
+          {/* Why it waits, where the eye already is (a tooltip only reaches a pointer). */}
+          {why ? <p className="px-1 text-center text-[12px] text-ash-400">{why}</p> : null}
+        </>
       ) : null}
       {share.canSetShareBy ? <WhoCanShare /> : null}
     </div>
@@ -232,7 +209,6 @@ export function WatchButton({
     <Button
       size="sm"
       variant="secondary"
-      icon={<Screencast size={15} weight="bold" />}
       aria-label={t("share.row.watchLabel", { name })}
       className={className}
       onClick={() => void watchShare(next.person, next.n)}

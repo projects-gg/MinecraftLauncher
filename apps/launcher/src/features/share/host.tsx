@@ -38,14 +38,19 @@ function useMainWatching() {
     const engine = createWatchEngine((report) => void shareApi.report(report));
     setPageEngine(engine);
     void shareApi.attach((cmd) => engine.handle(cmd)).catch(() => {});
-    const tell = (away: boolean) => {
+    // Away: hidden in the tray, minimized, or covered whole (WebView2 says hidden then: the game
+    // in front of a launcher it covers).
+    const tell = () => {
+      const away = isWindowAway() || document.visibilityState === "hidden";
       void shareApi.visible(!away);
       engine.setShowing(!away);
     };
-    tell(isWindowAway());
+    tell();
     const stopAway = onWindowAwayChange(tell);
+    document.addEventListener("visibilitychange", tell);
     return () => {
       stopAway();
+      document.removeEventListener("visibilitychange", tell);
       engine.dispose();
       setPageEngine(null);
     };

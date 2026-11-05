@@ -147,6 +147,8 @@ export interface VoiceShareView {
   shareBy: ShareBy;
   /** The player may change "Kim paylaşabilir" (a friend room's leader). */
   canSetShareBy: boolean;
+  /** The "Yayın" window stays on top (the player's choice). */
+  onTop: boolean;
   mineMax: number;
   maxPreset: SharePreset;
   /** The computer can share an app's own sound. */
@@ -170,6 +172,7 @@ export const HIDDEN_SHARE_VIEW: VoiceShareView = {
   open: false,
   shareBy: "all",
   canSetShareBy: false,
+  onTop: false,
   mineMax: 0,
   maxPreset: "high",
   audio: false,
@@ -186,6 +189,7 @@ export type ShareRefusal =
   | "off"
   | "unsupported"
   | "notAllowed"
+  | "limited"
   | "full"
   | "roomFull"
   | "watchFull"
@@ -194,11 +198,19 @@ export type ShareRefusal =
   | "gone"
   | "failed";
 
-export type ShareClosedWhy = "mod" | "budget" | "idle" | "limit" | "left" | "sourceGone" | "error";
+export type ShareClosedWhy =
+  | "mod"
+  | "budget"
+  | "idle"
+  | "limit"
+  | "left"
+  | "sourceGone"
+  | "network"
+  | "error";
 
 /** A moment worth a toast (`share-notice`). */
 export type ShareNotice =
-  | { kind: "closed"; why: ShareClosedWhy }
+  | { kind: "closed"; why: ShareClosedWhy; src: ShareKind }
   | { kind: "refused"; refusal: ShareRefusal }
   | { kind: "audioOff" }
   | { kind: "watchStopped" }

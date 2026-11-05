@@ -94,7 +94,7 @@ export function ShareSettingsRows({
                     { value: "auto", label: t("share.advanced.fpsAuto") },
                     { value: "15", label: "15" },
                     { value: "30", label: "30" },
-                    { value: "60", label: "60" },
+                    ...(share.quality === "high" ? [{ value: "60", label: "60" }] : []),
                   ]}
                 />
               </Row>
@@ -131,14 +131,6 @@ export function ShareSettingsRows({
                   checked={share.quiet}
                   onCheckedChange={(on) => set("quiet", on)}
                   label={t("share.advanced.quiet")}
-                  hideLabel
-                />
-              </Row>
-              <Row title={t("share.advanced.selfPreview")}>
-                <Switch
-                  checked={share.selfPreview}
-                  onCheckedChange={(on) => set("selfPreview", on)}
-                  label={t("share.advanced.selfPreview")}
                   hideLabel
                 />
               </Row>

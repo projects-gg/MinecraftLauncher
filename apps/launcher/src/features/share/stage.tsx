@@ -27,11 +27,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { QualityBars } from "@/features/voice/faces";
-import { useVoicePrefs } from "@/features/voice/prefs";
 import { useFace, useVoiceUi } from "@/features/voice/store";
 import { formatPercent } from "@/lib/format";
 import { shareApi } from "@/share/api";
-import { DEFAULT_SHARE_SETTINGS, type VoiceShareView, type VoiceWatch } from "@/share/types";
+import type { VoiceShareView, VoiceWatch } from "@/share/types";
 import { unwatchShare } from "./actions";
 import { useShare, useShareQuality, useShareUi } from "./store";
 import { ShareVideo } from "./video";
@@ -275,7 +274,8 @@ function StageControls({ popout }: { popout: boolean }) {
   const full = useShareUi((s) => s.full);
   const setFull = useShareUi((s) => s.setFull);
   const setSmall = useShareUi((s) => s.setSmall);
-  const onTop = useVoicePrefs((s) => (s.settings?.share ?? DEFAULT_SHARE_SETTINGS).alwaysOnTop);
+  // The launcher's word (the "Yayın" window has no settings of its own to read).
+  const onTop = useShare().onTop;
   const [pinned, setPinned] = useState(onTop);
   useEffect(() => setPinned(onTop), [onTop]);
   const fullscreen = (on: boolean) => {
@@ -359,6 +359,10 @@ export function StageBody({ watches, popout }: { watches: VoiceWatch[]; popout: 
 /** The corner picture while the stage is small. */
 function CornerStage({ watch }: { watch: VoiceWatch }) {
   const { t } = useTranslation();
+  // A small picture takes the small layer (the big stage asks for the full one again).
+  useEffect(() => {
+    if (watch.layer !== "q") void shareApi.layer(watch.person, watch.n, "q");
+  }, [watch.person, watch.n, watch.layer]);
   const name = useShareName(watch.person);
   const setSmall = useShareUi((s) => s.setSmall);
   const { volume, muted } = useVolume(watch.person);

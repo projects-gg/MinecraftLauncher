@@ -3,6 +3,8 @@
 // a still picture stands in (share/mock-scenarios.ts).
 import { cn } from "@pl/ui";
 import { useEffect, useRef } from "react";
+import { useVoicePrefs } from "@/features/voice/prefs";
+import { useVoiceUi } from "@/features/voice/store";
 import { isTauri } from "@/lib/platform";
 import { mockFrame } from "@/share/mock-scenarios";
 import { useShareStream } from "./store";
@@ -25,6 +27,11 @@ export function ShareVideo({
 }) {
   const stream = useShareStream(person, n);
   const video = useRef<HTMLVideoElement>(null);
+  // Streams sound like voices do: through the chosen output, at "Herkesin sesi", silent while
+  // deafened.
+  const output = useVoicePrefs((s) => s.settings?.outputDevice ?? null);
+  const everyone = useVoicePrefs((s) => s.settings?.outputVolume ?? 100);
+  const deaf = useVoiceUi((s) => s.state.room?.me.deaf ?? false);
 
   useEffect(() => {
     const element = video.current;
@@ -36,9 +43,17 @@ export function ShareVideo({
   useEffect(() => {
     const element = video.current;
     if (!element) return;
-    element.volume = Math.max(0, Math.min(1, volume / 100));
-    element.muted = muted;
-  }, [volume, muted]);
+    element.volume = Math.max(0, Math.min(1, (volume / 100) * (Math.min(everyone, 100) / 100)));
+    element.muted = muted || deaf;
+  }, [volume, muted, everyone, deaf]);
+
+  useEffect(() => {
+    const element = video.current as
+      | (HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> })
+      | null;
+    if (!element?.setSinkId) return;
+    void element.setSinkId(output ?? "").catch(() => {});
+  }, [output]);
 
   if (!isTauri()) {
     return (

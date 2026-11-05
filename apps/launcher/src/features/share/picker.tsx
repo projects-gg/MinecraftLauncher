@@ -280,7 +280,7 @@ export function ShareOptions({
                     { value: "auto", label: t("share.advanced.fpsAuto") },
                     { value: "15", label: "15" },
                     { value: "30", label: "30" },
-                    ...(maxPreset === "high" ? [{ value: "60", label: "60" }] : []),
+                    ...(quality === "high" ? [{ value: "60", label: "60" }] : []),
                   ]}
                 />
               </div>
@@ -311,11 +311,6 @@ export function ShareOptions({
                 label={t("share.advanced.quiet")}
                 checked={settings.quiet}
                 onCheckedChange={(on) => setShareSetting("quiet", on)}
-              />
-              <Switch
-                label={t("share.advanced.selfPreview")}
-                checked={settings.selfPreview}
-                onCheckedChange={(on) => setShareSetting("selfPreview", on)}
               />
             </motion.div>
           ) : null}
@@ -382,21 +377,29 @@ export function SharePicker() {
       closeLabel={t("common.close")}
       width={640}
       footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={close}>
-            {t("share.pick.cancel")}
-          </Button>
-          <Button variant="primary" disabled={!chosen} onClick={go}>
-            {t("share.pick.start")}
-          </Button>
+        // The choices stay in reach under the list, however long it is.
+        <div className="flex flex-col gap-3">
+          <ShareOptions
+            settings={settings}
+            audio={sources?.audio ?? share.audio}
+            maxPreset={share.maxPreset}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={close}>
+              {t("share.pick.cancel")}
+            </Button>
+            <Button variant="primary" disabled={!chosen} onClick={go}>
+              {t("share.pick.start")}
+            </Button>
+          </div>
         </div>
       }
     >
-      <div className="flex flex-col gap-5" role="radiogroup" aria-label={t("share.pick.title")}>
+      <div className="flex flex-col gap-5">
         {sources === null ? (
           <Loading />
         ) : (
-          <>
+          <div className="flex flex-col gap-5" role="radiogroup" aria-label={t("share.pick.title")}>
             <GameChoice
               game={sources.game}
               chosen={chosen?.source.kind === "game"}
@@ -441,15 +444,8 @@ export function SharePicker() {
                 </div>
               </Section>
             ) : null}
-          </>
+          </div>
         )}
-        <div className="border-t border-white/8 pt-4">
-          <ShareOptions
-            settings={settings}
-            audio={sources?.audio ?? share.audio}
-            maxPreset={share.maxPreset}
-          />
-        </div>
       </div>
     </Dialog>
   );

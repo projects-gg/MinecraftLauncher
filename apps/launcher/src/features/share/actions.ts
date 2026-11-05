@@ -8,6 +8,7 @@ import { shareApi } from "@/share/api";
 import {
   DEFAULT_SHARE_SETTINGS,
   type ShareClosedWhy,
+  type ShareKind,
   type ShareNotice,
   type ShareRefusal,
   type ShareSource,
@@ -25,6 +26,8 @@ export function refusalText(refusal: ShareRefusal, max = 2): string {
       return t("share.notice.unsupported");
     case "notAllowed":
       return t("share.notice.notAllowed");
+    case "limited":
+      return t("share.notice.limited");
     case "full":
       return t("share.notice.full", { max });
     case "roomFull":
@@ -41,7 +44,7 @@ export function refusalText(refusal: ShareRefusal, max = 2): string {
 }
 
 /** Why one of the player's shares ended, in their words (none when they left the room). */
-export function closedText(why: ShareClosedWhy): string | null {
+export function closedText(why: ShareClosedWhy, src?: ShareKind): string | null {
   const t = i18n.t.bind(i18n);
   switch (why) {
     case "mod":
@@ -52,7 +55,9 @@ export function closedText(why: ShareClosedWhy): string | null {
     case "idle":
       return t("share.notice.idle");
     case "sourceGone":
-      return t("share.notice.sourceGone");
+      return src === "game" ? t("share.notice.gameGone") : t("share.notice.sourceGone");
+    case "network":
+      return t("share.notice.network");
     case "left":
       return null;
     case "error":
@@ -65,7 +70,7 @@ export function noticeText(notice: ShareNotice): string | null {
   const t = i18n.t.bind(i18n);
   switch (notice.kind) {
     case "closed":
-      return closedText(notice.why);
+      return closedText(notice.why, notice.src);
     case "refused":
       return refusalText(notice.refusal);
     case "audioOff":

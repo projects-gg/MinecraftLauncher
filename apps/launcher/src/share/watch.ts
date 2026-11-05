@@ -58,8 +58,7 @@ export function ufragOf(sdp: string): string | null {
   return /^a=ice-ufrag:(\S+)/m.exec(sdp)?.[1] ?? null;
 }
 
-/** Frames a second below this, or a loss above `LOSS_WEAK`, read as weak. */
-const FPS_WEAK = 8;
+/** A loss above this share of packets reads as weak (as a frozen picture does). */
 const LOSS_WEAK = 0.05;
 
 export function createWatchEngine(
@@ -83,7 +82,7 @@ export function createWatchEngine(
   let queue: Promise<void> = Promise.resolve();
   /** Each connection's own number: a late event of a closed one changes nothing. */
   let generation = 0;
-  const lastStats = new Map<string, { lost: number; received: number }>();
+  const lastStats = new Map<string, { lost: number; received: number; freezes: number }>();
 
   const notify = () => {
     for (const listener of listeners) listener();
@@ -233,17 +232,19 @@ export function createWatchEngine(
       const share = mid ? mids.get(mid) : undefined;
       if (!share) return;
       const key = shareKey(share.person, share.n);
-      const fps = typeof entry.framesPerSecond === "number" ? entry.framesPerSecond : 0;
-      const lostNow = typeof entry.packetsLost === "number" ? entry.packetsLost : 0;
-      const receivedNow = typeof entry.packetsReceived === "number" ? entry.packetsReceived : 0;
+      const num = (value: unknown) => (typeof value === "number" ? value : 0);
+      const lostNow = num(entry.packetsLost);
+      const receivedNow = num(entry.packetsReceived);
+      const freezesNow = num(entry.freezeCount);
       const before = lastStats.get(key);
-      lastStats.set(key, { lost: lostNow, received: receivedNow });
+      lastStats.set(key, { lost: lostNow, received: receivedNow, freezes: freezesNow });
       const lostDelta = before ? Math.max(0, lostNow - before.lost) : 0;
       const receivedDelta = before ? Math.max(0, receivedNow - before.received) : 0;
+      const froze = before ? freezesNow > before.freezes : false;
       const loss = lostDelta + receivedDelta > 0 ? lostDelta / (lostDelta + receivedDelta) : 0;
-      // A share that rests (one frame a second while nobody else watches) is not weak; a frozen
-      // one is: frames stop while packets still come.
-      const weak = (receivedDelta > 20 && fps < FPS_WEAK) || loss > LOSS_WEAK;
+      // Few frames are no sign (a still window of text sends few); a picture that froze or lost
+      // packets is.
+      const weak = froze || loss > LOSS_WEAK;
       const quality: ShareQuality = weak ? "weak" : "good";
       if (qualities.get(key) !== quality) {
         qualities.set(key, quality);
@@ -267,6 +268,8 @@ export function createWatchEngine(
           queue = queue.then(lost);
           return;
         case "reset":
+          // Nothing watched: TURN credentials expire, the next session asks again if it must.
+          iceServers = [];
           queue = queue.then(close);
           return;
       }

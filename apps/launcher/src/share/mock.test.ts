@@ -47,6 +47,7 @@ describe("screen sharing in the preview", () => {
       "off",
       "unsupported",
       "notAllowed",
+      "limited",
       "full",
       "roomFull",
       "watchFull",
@@ -57,9 +58,17 @@ describe("screen sharing in the preview", () => {
     ];
     for (const refusal of refusals) expect(refusalText(refusal).length, refusal).toBeGreaterThan(3);
     const endings: ShareClosedWhy[] = ["mod", "budget", "idle", "limit", "sourceGone", "error"];
-    for (const why of endings) expect(noticeText({ kind: "closed", why }), why).toBeTruthy();
+    for (const why of endings)
+      expect(noticeText({ kind: "closed", why, src: "window" }), why).toBeTruthy();
     // Leaving the room says nothing more.
-    expect(noticeText({ kind: "closed", why: "left" })).toBeNull();
+    expect(noticeText({ kind: "closed", why: "left", src: "game" })).toBeNull();
     expect(noticeText({ kind: "watchStopped" })).toBeTruthy();
+    // The game ending says so; a window closing says that.
+    expect(noticeText({ kind: "closed", why: "sourceGone", src: "game" })).toBe(
+      "Oyun kapandığı için paylaşım durdu.",
+    );
+    expect(noticeText({ kind: "closed", why: "sourceGone", src: "window" })).toBe(
+      "Paylaşılan pencere kapandı.",
+    );
   });
 });

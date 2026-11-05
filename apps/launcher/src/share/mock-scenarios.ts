@@ -59,6 +59,7 @@ const VIEW: VoiceShareView = {
   open: true,
   shareBy: "all",
   canSetShareBy: true,
+  onTop: false,
   mineMax: 2,
   maxPreset: "high",
   audio: true,
