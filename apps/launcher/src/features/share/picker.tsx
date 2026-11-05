@@ -378,7 +378,7 @@ export function SharePicker() {
       width={640}
       footer={
         // The choices stay in reach under the list, however long it is.
-        <div className="flex flex-col gap-3">
+        <div className="flex w-full flex-col gap-3">
           <ShareOptions
             settings={settings}
             audio={sources?.audio ?? share.audio}
