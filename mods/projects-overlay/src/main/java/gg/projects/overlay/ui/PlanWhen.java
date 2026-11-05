@@ -109,8 +109,8 @@ public final class PlanWhen {
 
     /**
      * The day chips' widths: each its {@code wanted} width and the room left shared out evenly, or, when they do not
-     * all fit, the room shared in proportion to them (the words then get smaller); with the gaps they fill
-     * {@code room} exactly.
+     * all fit, the short ones keep theirs and only the widest give way, down to one common width (their words then get
+     * smaller); with the gaps they fill {@code room} exactly.
      */
     public static int[] chipWidths(int[] wanted, int room, int gap) {
         int n = wanted.length;
@@ -123,9 +123,23 @@ public final class PlanWhen {
         for (int w : wanted) {
             sum += w;
         }
+        int cap = Integer.MAX_VALUE;
+        if (sum > free) {
+            int[] sorted = wanted.clone();
+            java.util.Arrays.sort(sorted);
+            int left = free;
+            for (int i = 0; i < n; i++) {
+                int share = left / (n - i);
+                if (sorted[i] > share) {
+                    cap = share;
+                    break;
+                }
+                left -= sorted[i];
+            }
+        }
         int used = 0;
         for (int i = 0; i < n; i++) {
-            out[i] = sum <= free ? wanted[i] + (int) ((free - sum) / n) : (int) (wanted[i] * (long) free / sum);
+            out[i] = sum <= free ? wanted[i] + (int) ((free - sum) / n) : Math.min(wanted[i], cap);
             used += out[i];
         }
         // What rounding left over goes to the first chips, a pixel each.

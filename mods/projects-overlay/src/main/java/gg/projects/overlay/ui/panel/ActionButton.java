@@ -34,6 +34,8 @@ public class ActionButton extends PanelWidget {
     private String label;
     private boolean selected;
     private boolean chosen;
+    /** Room on each side of the words: {@link #PAD}, less for a tight row of short choices (a plan's days). */
+    private int pad = PAD;
     /** The icon's own colour (a voice ring's gold phone, a leave's flare one; VOICE-O), 0 for the words' colour. */
     private int iconInk;
     /** How the label fits the button now, and for what it was worked out (width, GUI scale and font, the label). */
@@ -56,7 +58,12 @@ public class ActionButton extends PanelWidget {
 
     /** Width that fits the words and the icon, in the letters the game draws now. */
     public int preferredWidth() {
-        return PAD * 2 + Fonts.ui().width(label) + (icon == null ? 0 : 10 + (label.isEmpty() ? 0 : ICON_GAP));
+        return pad * 2 + Fonts.ui().width(label) + (icon == null ? 0 : 10 + (label.isEmpty() ? 0 : ICON_GAP));
+    }
+
+    /** Room on each side of the words (a tight row of short choices takes less than {@link #PAD}). */
+    public void setPadding(int value) {
+        pad = value;
     }
 
     public void setLabel(Component text) {
@@ -202,7 +209,7 @@ public class ActionButton extends PanelWidget {
         if (fit == null || fitWidth != getWidth() || fitScale != scale || !label.equals(fitLabel) || fitIcon != icon
             || fitLargest != largest) {
             int iconRoom = icon == null ? 0 : 10 + (label.isEmpty() ? 0 : ICON_GAP);
-            fit = LabelFit.fit(label, largest, iconRoom, getWidth() - 2 * PAD, Fonts.bundled(), LabelFit.FONTS);
+            fit = LabelFit.fit(label, largest, iconRoom, getWidth() - 2 * pad, Fonts.bundled(), LabelFit.FONTS);
             fitWidth = getWidth();
             fitScale = scale;
             fitLabel = label;
