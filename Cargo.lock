@@ -4946,6 +4946,7 @@ dependencies = [
  "pl-mc",
  "pl-net",
  "pl-overlay",
+ "pl-share",
  "pl-social",
  "pl-telemetry",
  "pl-voice",
