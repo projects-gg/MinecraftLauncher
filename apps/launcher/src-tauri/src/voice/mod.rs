@@ -18,6 +18,8 @@
 
 pub(crate) mod input;
 mod probe;
+/// SHARE: screen sharing's publisher, watching pages, "Yayın" window and privacy.
+pub(crate) mod share;
 mod window;
 
 use std::collections::HashMap;
@@ -52,6 +54,8 @@ pub const LEVEL_EVENT: &str = "voice-level";
 /// The live meters (`VoiceLevels`, VOICE-CALL), only while the page asks and its window is on
 /// screen.
 pub const LEVELS_EVENT: &str = "voice-levels";
+/// SHARE: screen sharing's moments worth a toast (`ShareNotice`).
+pub const SHARE_NOTICE_EVENT: &str = "share-notice";
 
 /// How long the hub may take to answer a call.
 const CALL_WAIT: Duration = Duration::from_secs(10);
@@ -77,6 +81,7 @@ pub fn create(
         runtime,
     );
     let _ = platform.voice.set(voice.clone());
+    share::install(app, &voice);
     wire_overlay(&overlay, &voice);
     let _ = platform.overlay.set(overlay);
     let hears = voice.clone();
@@ -690,7 +695,9 @@ impl Platform for AppPlatform {
         self.system_notice(notice);
     }
 
-    fn state(&self, state: VoiceState) {
+    fn state(&self, mut state: VoiceState) {
+        // SHARE: the "Yayın" window has no friend list: sharers and watchers are named here.
+        self.name_sharers(&mut state);
         // Usage data reads a stay's phase and quality mark from it (TELEMETRY; only while on).
         crate::telemetry::voice_state(&state);
         // The in-game overlay (VOICE-O): a ring rings in the game while the window is away (in
@@ -767,6 +774,62 @@ impl Platform for AppPlatform {
         if self.window_in_sight() {
             let _ = self.app.emit_to("main", LEVELS_EVENT, levels);
         }
+    }
+
+    // SHARE ----------------------------------------------------------------------------------
+    fn share(&self, cmd: pl_voice::share::ShareCmd) {
+        share::command(cmd);
+    }
+
+    fn watch(&self, surface: pl_voice::share::ShareSurface, cmd: pl_voice::share::WatchCmd) {
+        share::watch(surface, cmd);
+    }
+
+    fn share_notice(&self, notice: pl_voice::share::ShareNotice) {
+        let _ = self.app.emit(SHARE_NOTICE_EVENT, notice);
+    }
+
+    fn share_privacy(&self, hide: bool, quiet: bool) {
+        share::privacy(&self.app, hide, quiet);
+    }
+
+    fn share_popout(&self, open: bool) {
+        share::popout(&self.app, open);
+    }
+}
+
+impl AppPlatform {
+    /// SHARE: names for the "Yayın" window (sharers, watchers), and the tray's "Paylaşımı
+    /// durdur" while the player shares.
+    fn name_sharers(&self, state: &mut VoiceState) {
+        #[cfg(desktop)]
+        {
+            crate::shell::set_tray_sharing(&self.app, !state.share.mine.is_empty());
+            if !state.share.on {
+                return;
+            }
+            let ids: Vec<String> = state
+                .share
+                .live
+                .iter()
+                .map(|live| live.person.clone())
+                .chain(
+                    state
+                        .share
+                        .mine
+                        .iter()
+                        .flat_map(|mine| mine.watchers.iter().cloned()),
+                )
+                .collect();
+            for id in ids {
+                if !state.share.names.contains_key(&id) {
+                    let name = self.person_name(&id, &state.profiles);
+                    state.share.names.insert(id, name);
+                }
+            }
+        }
+        #[cfg(not(desktop))]
+        let _ = state;
     }
 }
 

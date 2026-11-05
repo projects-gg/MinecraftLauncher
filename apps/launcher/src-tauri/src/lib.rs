@@ -87,6 +87,12 @@ pub fn run() {
                 {
                     voice::window_destroyed(window.app_handle());
                 }
+                // SHARE: the "Yayın" window closed: watching moves back to the main window.
+                if let tauri::WindowEvent::Destroyed = event
+                    && window.label() == pl_voice::share::SHARE_WINDOW
+                {
+                    voice::share::popout_destroyed(window.app_handle());
+                }
             });
     }
     // ...and the page clears its own storage on its first load.
@@ -265,6 +271,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_voice::view::VoiceLevel>()
         // "voice-levels": the live meters (VOICE-CALL).
         .typ::<pl_voice::view::VoiceLevels>()
+        // "share-notice": screen sharing's toasts (SHARE).
+        .typ::<pl_voice::share::ShareNotice>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
@@ -382,6 +390,22 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             // the hidden voice window's page only (`pl_voice::guard`)
             commands::voice::voice_page_attach,
             commands::voice::voice_page_report,
+            // SHARE: screen sharing (the "Yayın" window may call only these and `voice_state`).
+            commands::share::share_sources,
+            commands::share::share_start,
+            commands::share::share_stop,
+            commands::share::share_watch,
+            commands::share::share_unwatch,
+            commands::share::share_watch_layer,
+            commands::share::share_watch_attach,
+            commands::share::share_watch_report,
+            commands::share::share_watch_visible,
+            commands::share::share_watch_still,
+            commands::share::share_popout,
+            commands::share::share_popout_on_top,
+            commands::share::share_fullscreen,
+            commands::share::share_stream_volume,
+            commands::share::share_unshare,
             commands::server::server_status,
             commands::troubleshoot::troubleshoot_run,
             commands::troubleshoot::troubleshoot_crash,

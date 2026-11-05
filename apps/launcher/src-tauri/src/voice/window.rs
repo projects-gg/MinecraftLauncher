@@ -96,6 +96,16 @@ pub fn guard_main(app: &tauri::App) {
     let _ = app;
 }
 
+/// SHARE: the "Yayın" window's page never gets the microphone or the camera either.
+pub fn guard_media(window: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    if let Err(error) = platform::guard_main(window) {
+        tracing::warn!(%error, "share window: media permissions not guarded");
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
 fn allow_wasm(response: &mut Response<Cow<'static, [u8]>>) {
     let Some(policy) = response.headers_mut().get_mut(CONTENT_SECURITY_POLICY) else {
         return;

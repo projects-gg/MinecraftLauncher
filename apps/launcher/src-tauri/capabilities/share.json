@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "share",
+  "description": "SHARE: the \"Yayın\" window (watching a voice room's screen shares). Its own window only; no microphone, camera or screen, no links or files. App commands are held by pl_voice::guard to its stage's own.",
+  "windows": ["share"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-is-minimized",
+    "core:window:allow-is-visible",
+    "core:window:allow-is-focused",
+    "core:window:allow-is-fullscreen"
+  ]
+}

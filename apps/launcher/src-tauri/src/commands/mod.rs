@@ -38,4 +38,5 @@ pub mod subservers;
 pub mod troubleshoot;
 pub mod updates;
 pub mod versions;
+pub mod share;
 pub mod voice;
