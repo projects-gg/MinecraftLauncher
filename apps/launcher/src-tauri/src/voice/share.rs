@@ -24,8 +24,9 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 /// The publisher (capture, encoding, the SFU session for each share). SHARE-N's `pl-share`
 /// implements it; its events come back through [`Voice::share_event`].
 pub trait Publisher: Send + Sync + 'static {
-    /// Whether this computer can share at all, and share an app's own sound.
-    fn caps(&self) -> (bool, bool);
+    /// Whether this computer can share at all, share an app's own sound, and encode "Yüksek" in
+    /// hardware.
+    fn caps(&self) -> (bool, bool, bool);
     /// The picker's list (`game_pid`: the game the launcher started, while it runs). Blocking:
     /// called off the main thread.
     fn sources(&self, game_pid: Option<u32>) -> ShareSources;
@@ -38,8 +39,8 @@ struct Unavailable {
 }
 
 impl Publisher for Unavailable {
-    fn caps(&self) -> (bool, bool) {
-        (false, false)
+    fn caps(&self) -> (bool, bool, bool) {
+        (false, false, false)
     }
 
     fn sources(&self, _game_pid: Option<u32>) -> ShareSources {
@@ -48,7 +49,10 @@ impl Publisher for Unavailable {
 
     fn command(&self, cmd: ShareCmd, _game_pid: Option<u32>) {
         if let ShareCmd::Prepare { n, .. } = cmd {
-            self.voice.share_event(ShareEvent::Lost { n });
+            self.voice.share_event(ShareEvent::Lost {
+                n,
+                why: pl_voice::share::ShareLostWhy::Other,
+            });
         }
     }
 }
@@ -66,8 +70,6 @@ static PARTS: OnceLock<Arc<Parts>> = OnceLock::new();
 static QUIET: AtomicBool = AtomicBool::new(false);
 /// "Launcher'ı yayında gizle" holds now (a "Yayın" window opened meanwhile hides too).
 static HIDDEN: AtomicBool = AtomicBool::new(false);
-/// The launcher itself is closing the "Yayın" window.
-static CLOSING: AtomicBool = AtomicBool::new(false);
 
 fn slot(surface: ShareSurface) -> usize {
     match surface {
@@ -87,13 +89,13 @@ pub fn install(app: &AppHandle, voice: &Voice) {
     let publisher: Box<dyn Publisher> = Box::new(Unavailable {
         voice: voice.clone(),
     });
-    let (available, audio) = publisher.caps();
+    let (available, audio, high) = publisher.caps();
     let _ = PARTS.set(Arc::new(Parts {
         app: app.clone(),
         publisher,
         channels: Mutex::new([None, None]),
     }));
-    voice.set_share_publisher(available, audio);
+    voice.set_share_publisher(available, audio, high);
 }
 
 /// The game the launcher started and still runs (the first one), for "Oyunu paylaş".
@@ -208,15 +210,14 @@ fn exclude_from_capture(_window: &tauri::WebviewWindow, _on: bool) {}
 pub fn popout(app: &AppHandle, open: bool) {
     if !open {
         if let Some(window) = app.get_webview_window(SHARE_WINDOW) {
-            CLOSING.store(true, Ordering::SeqCst);
             let _ = window.destroy();
         }
         return;
     }
     if let Some(window) = app.get_webview_window(SHARE_WINDOW) {
+        // No `set_focus` (CLAUDE.md): shown and restored, Windows decides the front.
         let _ = window.unminimize();
         let _ = window.show();
-        let _ = window.set_focus();
         return;
     }
     // Off the calling thread: a window built inside a synchronous command deadlocks WebView2.
@@ -241,7 +242,6 @@ fn open_window(app: &AppHandle) -> Result<(), String> {
         .inner_size(960.0, 580.0)
         .min_inner_size(480.0, 300.0)
         .always_on_top(on_top)
-        .focused(true)
         // Its own page only (the launcher's origin, `/share.html`).
         .on_navigation(|url| {
             pl_voice::permission::is_app_origin(url.as_str())
@@ -259,7 +259,6 @@ fn open_window(app: &AppHandle) -> Result<(), String> {
 
 /// The "Yayın" window went (closed by the player, or by the launcher): watching moves back.
 pub fn popout_destroyed(app: &AppHandle) {
-    CLOSING.store(false, Ordering::SeqCst);
     if let Some(parts) = PARTS.get() {
         lock(&parts.channels)[slot(ShareSurface::Popout)] = None;
     }

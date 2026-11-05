@@ -37,7 +37,7 @@ fn ready() -> Machine {
         }),
         Vec::new(),
     );
-    machine.set_share_publisher(true, true);
+    machine.set_share_publisher(true, true, true);
     machine.set_share_service(
         Some(ServiceShare {
             per_user: 2,
@@ -422,7 +422,8 @@ fn a_share_goes_live_rests_alone_and_ends_after_fifteen_minutes() {
     assert_eq!(
         notices(&effects),
         [&ShareNotice::Closed {
-            why: ShareClosedWhy::Idle
+            why: ShareClosedWhy::Idle,
+            src: ShareKind::Game,
         }]
     );
     assert_eq!(privacy(&effects), Some((false, false)));
@@ -509,7 +510,7 @@ fn shares_are_held_to_the_rooms_limits() {
     );
     // A computer without a publisher only watches.
     let mut machine = ready();
-    machine.set_share_publisher(false, false);
+    machine.set_share_publisher(false, false, false);
     live(&mut machine, Vec::new(), share_on());
     assert_eq!(
         machine.share_start(ShareSource::Game, "", 2_000, UNIX),
@@ -528,7 +529,8 @@ fn the_publishers_and_the_rooms_ends() {
     assert_eq!(
         notices(&effects),
         [&ShareNotice::Closed {
-            why: ShareClosedWhy::SourceGone
+            why: ShareClosedWhy::SourceGone,
+            src: ShareKind::Game,
         }]
     );
     // A moderator stopped it: nothing more to tell the room.
@@ -547,7 +549,8 @@ fn the_publishers_and_the_rooms_ends() {
     assert_eq!(
         notices(&effects),
         [&ShareNotice::Closed {
-            why: ShareClosedWhy::Mod
+            why: ShareClosedWhy::Mod,
+            src: ShareKind::Game,
         }]
     );
     // The app's sound cannot be had: the share goes on without it.
@@ -613,7 +616,8 @@ fn sharing_off_or_a_lost_share_on_return_ends_it() {
     assert_eq!(
         notices(&effects),
         [&ShareNotice::Closed {
-            why: ShareClosedWhy::Limit
+            why: ShareClosedWhy::Limit,
+            src: ShareKind::Game,
         }]
     );
     assert!(!machine.view(5_200, UNIX).share.on);
@@ -628,7 +632,7 @@ fn watching_asks_the_room_and_hands_the_offer_to_the_page() {
     assert_eq!(view.live[0].person, "a");
     assert_eq!(view.live[0].kind, ShareKind::Game);
     // The page watches from the main window.
-    assert!(machine.share_attach(ShareSurface::Main).is_empty());
+    assert!(machine.share_attach(ShareSurface::Main, 2_000).is_empty());
     let effects = machine.share_watch("a", 1, 2_000).unwrap();
     let rid = watch_rid(&effects);
     assert_eq!(
@@ -734,7 +738,7 @@ fn watching_asks_the_room_and_hands_the_offer_to_the_page() {
 fn at_most_two_watched_and_the_rooms_refusal() {
     let mut machine = ready();
     let generation = live(&mut machine, vec![shared(1), shared(2)], share_on());
-    machine.share_attach(ShareSurface::Main);
+    machine.share_attach(ShareSurface::Main, 2_000);
     machine.share_watch("a", 1, 2_000).unwrap();
     let effects = machine.share_watch("a", 2, 2_000).unwrap();
     let rid = watch_rid(&effects);
@@ -777,7 +781,7 @@ fn at_most_two_watched_and_the_rooms_refusal() {
 fn watching_lets_go_out_of_sight_and_comes_back() {
     let mut machine = ready();
     live(&mut machine, vec![shared(1)], share_on());
-    machine.share_attach(ShareSurface::Main);
+    machine.share_attach(ShareSurface::Main, 2_000);
     machine.share_watch("a", 1, 2_000).unwrap();
     // A quick minimize costs nothing.
     machine.share_visible(ShareSurface::Main, false, 3_000);
@@ -814,7 +818,7 @@ fn watching_lets_go_out_of_sight_and_comes_back() {
 fn the_popout_window_takes_watching_and_gives_it_back() {
     let mut machine = ready();
     let generation = live(&mut machine, vec![shared(1)], share_on());
-    machine.share_attach(ShareSurface::Main);
+    machine.share_attach(ShareSurface::Main, 2_000);
     machine.share_watch("a", 1, 2_000).unwrap();
     let effects = machine.share_popout(true, 3_000);
     assert!(effects.contains(&Effect::SharePopout(true)));
@@ -834,7 +838,7 @@ fn the_popout_window_takes_watching_and_gives_it_back() {
         ShareSurface::Popout
     );
     // The window's page attaches: it asks the room.
-    let effects = machine.share_attach(ShareSurface::Popout);
+    let effects = machine.share_attach(ShareSurface::Popout, 2_000);
     assert!(matches!(sent(&effects)[..], [ToRoom::Watch { .. }]));
     let effects = machine.socket_message(
         generation,
@@ -863,7 +867,7 @@ fn the_popout_window_takes_watching_and_gives_it_back() {
 fn still_watching_asks_after_half_an_hour() {
     let mut machine = ready();
     live(&mut machine, vec![shared(1)], share_on());
-    machine.share_attach(ShareSurface::Main);
+    // Not attached: no `watch` goes out, so no offer is waited for here.
     machine.share_watch("a", 1, 2_000).unwrap();
     let ask = 2_000 + STILL_ASK_MS;
     assert!(machine.next_deadline(0).is_some_and(|at| at <= ask));
@@ -876,7 +880,8 @@ fn still_watching_asks_after_half_an_hour() {
     let again = ask + 1_000 + STILL_ASK_MS;
     machine.tick(again, UNIX, 0);
     let effects = machine.tick(again + STILL_ANSWER_MS, UNIX, 0);
-    assert!(matches!(sent(&effects)[..], [ToRoom::Unwatch { .. }]));
+    // Nothing went to the room for it (no page attached), so nothing to let go there.
+    assert!(sent(&effects).is_empty());
     assert_eq!(notices(&effects), [&ShareNotice::WatchStopped]);
     assert!(
         machine
@@ -1013,7 +1018,7 @@ fn come_back(machine: &mut Machine, generation: u64, at: u64) -> u64 {
 fn a_socket_that_comes_back_keeps_what_the_room_still_carries() {
     let mut machine = ready();
     let generation = live(&mut machine, vec![shared(1), shared(2)], share_on());
-    machine.share_attach(ShareSurface::Main);
+    machine.share_attach(ShareSurface::Main, 2_000);
     machine.share_watch("a", 1, 2_000).unwrap();
     machine.share_watch("a", 2, 2_000).unwrap();
     let generation = come_back(&mut machine, generation, 3_000);
@@ -1163,7 +1168,7 @@ fn who_may_share_is_the_rooms_and_its_leaders_to_change() {
 fn a_fresh_watch_session_is_a_new_connection_on_the_page() {
     let mut machine = ready();
     let generation = live(&mut machine, vec![shared(1)], share_on());
-    machine.share_attach(ShareSurface::Main);
+    machine.share_attach(ShareSurface::Main, 2_000);
     machine.share_watch("a", 1, 2_000).unwrap();
     let effects = machine.socket_message(
         generation,
@@ -1182,4 +1187,139 @@ fn a_fresh_watch_session_is_a_new_connection_on_the_page() {
         serde_json::from_str::<ShareClosedWhy>(r#""off""#).unwrap(),
         ShareClosedWhy::Limit
     );
+}
+
+#[test]
+fn a_share_waiting_for_its_answer_ends_when_the_socket_comes_back() {
+    let mut machine = ready();
+    let generation = live(&mut machine, Vec::new(), share_on());
+    machine
+        .share_start(ShareSource::Game, "", 2_000, UNIX)
+        .unwrap();
+    machine.share_event(
+        ShareEvent::Offer {
+            n: 1,
+            sdp: Sdp::new("v=0"),
+        },
+        2_100,
+    );
+    // The `ack` was lost with the socket; the room lists the share: it is closed there too.
+    let generation = come_back(&mut machine, generation, 3_000);
+    let effects = machine.socket_message(
+        generation,
+        hello(
+            vec![person("me", vec![shared(1)]), person("a", Vec::new())],
+            share_on(),
+            false,
+        ),
+        4_200,
+        UNIX,
+    );
+    assert_eq!(to_publisher(&effects), [&ShareCmd::Stop { n: 1 }]);
+    assert!(sent(&effects).contains(&&ToRoom::ShareClose { n: 1 }));
+    assert!(machine.view(4_200, UNIX).share.mine.is_empty());
+    // A share the room lists that the player no longer has is closed there; one whose watchers
+    // came meanwhile is awake.
+    sharing(&mut machine, generation, 5_000);
+    machine.tick(5_000 + PAUSE_AFTER_MS, UNIX, 5_000 + PAUSE_AFTER_MS);
+    let generation = come_back(&mut machine, generation, 70_000);
+    let mut watched = shared(1);
+    watched.w = 2;
+    let effects = machine.socket_message(
+        generation,
+        hello(
+            vec![
+                person("me", vec![watched, shared(3)]),
+                person("a", Vec::new()),
+            ],
+            share_on(),
+            false,
+        ),
+        71_200,
+        UNIX,
+    );
+    assert!(sent(&effects).contains(&&ToRoom::ShareClose { n: 3 }));
+    assert!(sent(&effects).contains(&&ToRoom::ShareSet {
+        n: 1,
+        paused: false
+    }));
+    assert!(to_publisher(&effects).contains(&&ShareCmd::KeyFrame { n: 1 }));
+    assert_eq!(
+        machine.view(71_200, UNIX).share.mine[0].phase,
+        ShareMinePhase::Live
+    );
+}
+
+#[test]
+fn a_watch_the_room_leaves_unanswered_is_asked_again_then_given_up() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    assert_eq!(
+        machine.next_deadline(2_000),
+        Some(2_000 + crate::share::WATCH_OFFER_WAIT_MS)
+    );
+    let mut now = 2_000;
+    let mut asked = 0;
+    for _ in 0..crate::share::WATCH_LOSSES_MAX {
+        now += crate::share::WATCH_OFFER_WAIT_MS;
+        let effects = machine.tick(now, UNIX, now);
+        asked += sent(&effects)
+            .iter()
+            .filter(|frame| matches!(frame, ToRoom::Watch { .. }))
+            .count();
+        if notices(&effects).contains(&&ShareNotice::WatchFailed) {
+            break;
+        }
+    }
+    assert_eq!(asked, 2);
+    assert!(machine.view(now, UNIX).share.watching.is_empty());
+    let _ = generation;
+}
+
+#[test]
+fn watching_kept_by_the_room_but_not_by_the_player_is_let_go() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    let generation = come_back(&mut machine, generation, 3_000);
+    // An `unwatch` lost with the socket: the room still carries share 1.
+    let effects = machine.socket_message(
+        generation,
+        hello_watching(
+            vec![person("me", Vec::new()), person("a", vec![shared(1)])],
+            &[("a", 1)],
+        ),
+        4_200,
+        UNIX,
+    );
+    assert!(sent(&effects).contains(&&ToRoom::Unwatch {
+        u: "a".into(),
+        n: 1
+    }));
+}
+
+#[test]
+fn closing_the_popout_while_the_launcher_is_away_holds_watching() {
+    let mut machine = ready();
+    live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    machine.share_popout(true, 2_100);
+    machine.share_attach(ShareSurface::Popout, 2_200);
+    // The launcher's window goes to the tray meanwhile.
+    machine.share_visible(ShareSurface::Main, false, 3_000);
+    let effects = machine.share_detach(ShareSurface::Popout, 4_000);
+    assert!(
+        !sent(&effects)
+            .iter()
+            .any(|frame| matches!(frame, ToRoom::Watch { .. }))
+    );
+    assert_eq!(
+        machine.view(4_000, UNIX).share.watching[0].phase,
+        ShareWatchPhase::Held
+    );
+    // Back in front: asked again.
+    let effects = machine.share_visible(ShareSurface::Main, true, 9_000);
+    assert!(matches!(sent(&effects)[..], [ToRoom::Watch { .. }]));
 }

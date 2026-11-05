@@ -19,10 +19,11 @@ use std::collections::BTreeMap;
 use super::{Effect, Machine, Pending};
 use crate::share::{
     ALONE_STOP_MS, HIDDEN_GRACE_MS, PAUSE_AFTER_MS, STILL_ANSWER_MS, STILL_ASK_MS, ServiceShare,
-    ShareBy, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer, ShareMinePhase,
-    ShareNotice, ShareOpts, SharePreset, ShareRefusal, ShareSource, ShareSurface, ShareWatchPhase,
-    ShareWire, VoiceLiveShare, VoiceMyShare, VoiceShareView, VoiceStreamVolume, VoiceWatch,
-    WATCH_LOSSES_MAX, WATCH_MAX, WatchCmd, WatchMid, WatchReport, WatchWire,
+    ShareBy, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer, ShareLostWhy,
+    ShareMinePhase, ShareNotice, ShareOpts, SharePreset, ShareRefusal, ShareSource, ShareSurface,
+    ShareWatchPhase, ShareWire, VoiceLiveShare, VoiceMyShare, VoiceShareView, VoiceStreamVolume,
+    VoiceWatch, WATCH_LOSSES_MAX, WATCH_MAX, WATCH_OFFER_WAIT_MS, WatchCmd, WatchMid, WatchReport,
+    WatchWire,
 };
 use crate::view::{VoiceAnswer, VoiceRefusal};
 use crate::wire::{FromRoom, ModAct, ToRoom};
@@ -60,6 +61,8 @@ struct Watching {
     sent: bool,
     /// Its `watch` still waits for the room's offer.
     rid: Option<u32>,
+    /// When that `watch` went out (it is lost without an offer by `WATCH_OFFER_WAIT_MS`).
+    asked_at: Option<u64>,
 }
 
 /// What the room said about shares in a message the machine handles for voice too.
@@ -112,9 +115,11 @@ pub(super) struct Shares {
     /// The room said "Kim paylaşabilir": a `share1` room (an older one shows nothing of sharing).
     room_seen: bool,
     share_by: ShareBy,
-    /// The publisher works on this computer, and can share an app's sound.
+    /// The publisher works on this computer, can share an app's sound, and encodes "Yüksek" in
+    /// hardware.
     publisher: bool,
     audio: bool,
+    high: bool,
     mine: Vec<Mine>,
     /// Others' shares, by person.
     remote: BTreeMap<String, Vec<ShareWire>>,
@@ -122,8 +127,10 @@ pub(super) struct Shares {
     surface: ShareSurface,
     /// Which pages attached their channel: [main, popout].
     attached: [bool; 2],
-    /// The watching page is on screen.
-    visible: bool,
+    /// Each watching page is on screen: [main, popout].
+    visible: [bool; 2],
+    /// The last moment the share part heard of (a `watch`'s time for its wait).
+    clock: u64,
     hidden_since: Option<u64>,
     /// Watching let go while the page is out of sight.
     held: bool,
@@ -149,12 +156,14 @@ impl Default for Shares {
             share_by: ShareBy::All,
             publisher: false,
             audio: false,
+            high: false,
             mine: Vec::new(),
             remote: BTreeMap::new(),
             watching: Vec::new(),
             surface: ShareSurface::Main,
             attached: [false; 2],
-            visible: true,
+            visible: [true; 2],
+            clock: 0,
             hidden_since: None,
             held: false,
             pending_offer: None,
@@ -205,9 +214,16 @@ impl Machine {
     }
 
     fn max_preset(&self) -> SharePreset {
-        self.share
+        let service = self
+            .share
             .service
-            .map_or(SharePreset::Low, |service| service.max_preset)
+            .map_or(SharePreset::Low, |service| service.max_preset);
+        // Without a hardware encoder "Yüksek" would cost the game (SHARE-N).
+        if self.share.high {
+            service
+        } else {
+            service.min(SharePreset::Normal)
+        }
     }
 
     /// The player's role in the room.
@@ -230,11 +246,13 @@ impl Machine {
             return Vec::new();
         }
         self.share.service = service;
+        self.share.clock = now;
         let mut out = vec![Effect::Changed];
         if service.is_none() {
+            // The room closes them too; telling it first frees them at once.
             let ns: Vec<u8> = self.share.mine.iter().map(|mine| mine.n).collect();
             for n in ns {
-                self.close_mine(n, Some(ShareClosedWhy::Limit), false, now, &mut out);
+                self.close_mine(n, Some(ShareClosedWhy::Limit), true, now, &mut out);
             }
             self.stop_watching(None, &mut out);
         }
@@ -253,13 +271,15 @@ impl Machine {
         }
     }
 
-    /// Whether the publisher works on this computer (and can share an app's sound).
-    pub fn set_share_publisher(&mut self, available: bool, audio: bool) -> Vec<Effect> {
-        if (self.share.publisher, self.share.audio) == (available, audio) {
+    /// Whether the publisher works on this computer, can share an app's sound, and encodes
+    /// "Yüksek" in hardware.
+    pub fn set_share_publisher(&mut self, available: bool, audio: bool, high: bool) -> Vec<Effect> {
+        if (self.share.publisher, self.share.audio, self.share.high) == (available, audio, high) {
             return Vec::new();
         }
         self.share.publisher = available;
         self.share.audio = audio;
+        self.share.high = high;
         vec![Effect::Changed]
     }
 
@@ -391,7 +411,10 @@ impl Machine {
             self.drop_watch(&me, n, true, out);
         }
         if let Some(why) = why {
-            out.push(Effect::ShareNotice(ShareNotice::Closed { why }));
+            out.push(Effect::ShareNotice(ShareNotice::Closed {
+                why,
+                src: mine.kind,
+            }));
         }
         self.sync_privacy(out);
         self.share_touch_idle(now);
@@ -437,8 +460,12 @@ impl Machine {
             // The panel says "Yayında" from the room's answer; frames and numbers change nothing
             // the page shows.
             ShareEvent::Started { .. } | ShareEvent::Stats { .. } => {}
-            ShareEvent::Lost { n } => {
-                self.close_mine(n, Some(ShareClosedWhy::Error), true, now, &mut out);
+            ShareEvent::Lost { n, why } => {
+                let why = match why {
+                    ShareLostWhy::Connect => ShareClosedWhy::Network,
+                    ShareLostWhy::Other => ShareClosedWhy::Error,
+                };
+                self.close_mine(n, Some(why), true, now, &mut out);
             }
             ShareEvent::SourceGone { n } => {
                 self.close_mine(n, Some(ShareClosedWhy::SourceGone), true, now, &mut out);
@@ -467,6 +494,7 @@ impl Machine {
         now: u64,
         out: &mut Vec<Effect>,
     ) -> Option<FromRoom> {
+        self.share.clock = now;
         match message {
             FromRoom::Watchers { n, ids } => {
                 let me = self.me.clone();
@@ -518,6 +546,7 @@ impl Machine {
                         .any(|mid| mid.person == watch.u && mid.n == watch.n)
                     {
                         watch.rid = None;
+                        watch.asked_at = None;
                     }
                 }
                 self.deliver(
@@ -622,12 +651,13 @@ impl Machine {
                 let on = share_by.is_some();
                 self.share.room_seen = on;
                 self.share.share_by = share_by.unwrap_or_default();
+                self.share.clock = now;
                 let me = self.me.clone();
-                let mut mine_listed = Vec::new();
+                let mut mine_listed: Vec<ShareWire> = Vec::new();
                 self.share.remote.clear();
                 for (u, sh) in people {
                     if u == me {
-                        mine_listed = sh.iter().map(|share| share.n).collect();
+                        mine_listed = sh;
                     } else if !sh.is_empty() {
                         self.share.remote.insert(u, sh);
                     }
@@ -640,19 +670,7 @@ impl Machine {
                     }
                     self.stop_watching(None, out);
                 } else if again {
-                    // Back on a new socket: a share the room no longer lists ended meanwhile.
-                    let gone: Vec<u8> = self
-                        .share
-                        .mine
-                        .iter()
-                        .filter(|mine| {
-                            mine.phase == MinePhase::Live && !mine_listed.contains(&mine.n)
-                        })
-                        .map(|mine| mine.n)
-                        .collect();
-                    for n in gone {
-                        self.close_mine(n, Some(ShareClosedWhy::Error), false, now, out);
-                    }
+                    self.resume_sharing(&mine_listed, now, out);
                     self.prune_watches(out);
                     self.resume_watching(watch.unwrap_or_default(), out);
                 }
@@ -687,11 +705,95 @@ impl Machine {
         }
     }
 
+    /// Back on a new socket, the player's shares against the room's list of them (`listed`, with
+    /// how many watch each): a share the room no longer lists ended meanwhile; one whose
+    /// `share_open` waited has no answer to come (it ends, the room's copy too); one the room
+    /// lists that the player no longer has is closed there; frames lost meanwhile (`watchers`)
+    /// are made up from the counts.
+    fn resume_sharing(&mut self, listed: &[ShareWire], now: u64, out: &mut Vec<Effect>) {
+        let ends: Vec<(u8, bool)> = self
+            .share
+            .mine
+            .iter()
+            .filter_map(|mine| {
+                let there = listed.iter().any(|share| share.n == mine.n);
+                match mine.phase {
+                    MinePhase::Live if !there => Some((mine.n, false)),
+                    MinePhase::Opening(_) => Some((mine.n, there)),
+                    _ => None,
+                }
+            })
+            .collect();
+        let ended: Vec<u8> = ends.iter().map(|(n, _)| *n).collect();
+        for (n, tell) in ends {
+            self.close_mine(n, Some(ShareClosedWhy::Error), tell, now, out);
+        }
+        let generation = self.open_generation();
+        for share in listed {
+            if ended.contains(&share.n) {
+                continue;
+            }
+            if !self.share.mine.iter().any(|mine| mine.n == share.n) {
+                if let Some(generation) = generation {
+                    out.push(Effect::Send {
+                        generation,
+                        frame: ToRoom::ShareClose { n: share.n },
+                    });
+                }
+                continue;
+            }
+            let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == share.n) else {
+                continue;
+            };
+            if share.w == 0 {
+                mine.alone_since.get_or_insert(now);
+            } else {
+                mine.alone_since = None;
+                if mine.paused {
+                    mine.paused = false;
+                    out.push(Effect::Share(ShareCmd::Pause {
+                        n: share.n,
+                        paused: false,
+                    }));
+                    if let Some(generation) = generation {
+                        out.push(Effect::Send {
+                            generation,
+                            frame: ToRoom::ShareSet {
+                                n: share.n,
+                                paused: false,
+                            },
+                        });
+                    }
+                }
+                out.push(Effect::Share(ShareCmd::KeyFrame { n: share.n }));
+            }
+        }
+    }
+
     /// Back on a new socket: the room's watch session still carries `kept` (its `hello.me.watch`).
     /// Those go on as they are; the rest are asked for again; with nothing kept the session is new
-    /// (the page's connection too).
+    /// (the page's connection too). What the room carries that the player no longer watches (an
+    /// `unwatch` lost meanwhile, or all of it while held) is let go there.
     fn resume_watching(&mut self, kept: Vec<WatchWire>, out: &mut Vec<Effect>) {
-        if self.share.watching.is_empty() || self.share.held {
+        let held = self.share.held;
+        if let Some(generation) = self.open_generation() {
+            for stray in kept.iter().filter(|k| {
+                held || !self
+                    .share
+                    .watching
+                    .iter()
+                    .any(|watch| watch.u == k.u && watch.n == k.n)
+            }) {
+                out.push(Effect::Send {
+                    generation,
+                    frame: ToRoom::Unwatch {
+                        u: stray.u.clone(),
+                        n: stray.n,
+                    },
+                });
+            }
+        }
+        if self.share.watching.is_empty() || held {
             return;
         }
         let carried = |watch: &Watching| kept.iter().any(|k| k.u == watch.u && k.n == watch.n);
@@ -704,6 +806,7 @@ impl Machine {
         for at in 0..self.share.watching.len() {
             if carried(&self.share.watching[at]) {
                 self.share.watching[at].rid = None;
+                self.share.watching[at].asked_at = None;
             } else {
                 self.share.watching[at].sent = false;
                 self.send_watch(at, out);
@@ -762,6 +865,7 @@ impl Machine {
             service: self.share.service,
             publisher: self.share.publisher,
             audio: self.share.audio,
+            high: self.share.high,
             attached: self.share.attached,
             visible: self.share.visible,
             privacy: self.share.privacy,
@@ -815,6 +919,7 @@ impl Machine {
             return Err(ShareRefusal::WatchMax);
         }
         let mut out = Vec::new();
+        self.share.clock = now;
         self.share.watching.push(Watching {
             u: u.to_owned(),
             n,
@@ -822,13 +927,17 @@ impl Machine {
             layer: if own { ShareLayer::Q } else { ShareLayer::F },
             sent: false,
             rid: None,
+            asked_at: None,
         });
         if self.share.watching.len() == 1 {
             self.share.losses = 0;
         }
         self.share.touched = now;
         self.share.asking_since = None;
-        if !self.share.visible && self.share.hidden_since.is_none() && !self.share.held {
+        if !self.share.visible[slot(self.share.surface)]
+            && self.share.hidden_since.is_none()
+            && !self.share.held
+        {
             self.share.hidden_since = Some(now);
         }
         let last = self.share.watching.len() - 1;
@@ -955,6 +1064,7 @@ impl Machine {
             .insert(rid, Pending::Watch(watch.u.clone(), watch.n));
         watch.sent = true;
         watch.rid = Some(rid);
+        watch.asked_at = Some(self.share.clock);
         out.push(Effect::Send {
             generation,
             frame: ToRoom::Watch {
@@ -983,6 +1093,7 @@ impl Machine {
             }
             watch.sent = false;
             watch.rid = None;
+            watch.asked_at = None;
         }
         self.pending
             .retain(|_, pending| !matches!(pending, Pending::Watch(..) | Pending::WatchTurn));
@@ -1034,8 +1145,9 @@ impl Machine {
 
     /// A page that watches attached its channel (`share_watch_attach`): a fresh page has no
     /// connection, so the session starts anew there.
-    pub fn share_attach(&mut self, surface: ShareSurface) -> Vec<Effect> {
+    pub fn share_attach(&mut self, surface: ShareSurface, now: u64) -> Vec<Effect> {
         let mut out = Vec::new();
+        self.share.clock = now;
         self.share.attached[slot(surface)] = true;
         if surface != self.share.surface {
             return out;
@@ -1055,6 +1167,7 @@ impl Machine {
     /// back to the launcher's window.
     pub fn share_detach(&mut self, surface: ShareSurface, now: u64) -> Vec<Effect> {
         let mut out = Vec::new();
+        self.share.clock = now;
         self.share.attached[slot(surface)] = false;
         if surface == ShareSurface::Popout {
             self.share.popout = false;
@@ -1072,6 +1185,7 @@ impl Machine {
     /// "Ayrı pencerede aç" (`open`) or back into the launcher's window.
     pub fn share_popout(&mut self, open: bool, now: u64) -> Vec<Effect> {
         let mut out = Vec::new();
+        self.share.clock = now;
         if !open && !self.share.popout {
             return out;
         }
@@ -1097,11 +1211,14 @@ impl Machine {
         self.unwatch_room(out);
         self.reset_page(out);
         self.share.surface = to;
-        // The new page counts as on screen until it says otherwise.
-        self.share.visible = true;
         self.share.hidden_since = None;
-        self.share.held = false;
         self.share.touched = now;
+        // A window out of sight (the launcher minimized when the "Yayın" window closed) holds
+        // until it is back; a new window counts as on screen until it says otherwise.
+        if to == ShareSurface::Popout {
+            self.share.visible[slot(to)] = true;
+        }
+        self.share.held = !self.share.visible[slot(to)] && !self.share.watching.is_empty();
         self.rewatch(out);
         out.push(Effect::Changed);
     }
@@ -1110,10 +1227,14 @@ impl Machine {
     /// came back.
     pub fn share_visible(&mut self, surface: ShareSurface, visible: bool, now: u64) -> Vec<Effect> {
         let mut out = Vec::new();
-        if surface != self.share.surface || self.share.visible == visible {
+        self.share.clock = now;
+        if self.share.visible[slot(surface)] == visible {
             return out;
         }
-        self.share.visible = visible;
+        self.share.visible[slot(surface)] = visible;
+        if surface != self.share.surface {
+            return out;
+        }
         if visible {
             self.share.hidden_since = None;
             if self.share.held {
@@ -1137,6 +1258,7 @@ impl Machine {
         now: u64,
     ) -> Vec<Effect> {
         let mut out = Vec::new();
+        self.share.clock = now;
         if surface != self.share.surface || report.is_oversized() {
             return out;
         }
@@ -1260,6 +1382,16 @@ impl Machine {
         if let Some(since) = self.share.hidden_since {
             at(since + HIDDEN_GRACE_MS);
         }
+        // A `watch` the room has not answered.
+        if let Some(asked) = self
+            .share
+            .watching
+            .iter()
+            .filter_map(|watch| watch.asked_at)
+            .min()
+        {
+            at(asked + WATCH_OFFER_WAIT_MS);
+        }
         if !self.share.watching.is_empty() && !self.share.held {
             match self.share.asking_since {
                 Some(asked) => at(asked + STILL_ANSWER_MS),
@@ -1269,6 +1401,15 @@ impl Machine {
     }
 
     pub(super) fn share_tick(&mut self, now: u64, last_input: u64, out: &mut Vec<Effect>) {
+        self.share.clock = now;
+        // A `watch` with no offer in time: as a lost connection (asked again, a few times).
+        if self.share.watching.iter().any(|watch| {
+            watch
+                .asked_at
+                .is_some_and(|at| now >= at + WATCH_OFFER_WAIT_MS)
+        }) {
+            self.watch_lost(now, out);
+        }
         // Nobody watches: rest, then end.
         let generation = self.open_generation();
         let mut ended = Vec::new();
@@ -1394,6 +1535,7 @@ impl Machine {
             allowed: self.share_allowed() && self.mine_max() > 0,
             open: self.share.service.is_some_and(|service| service.open),
             share_by: self.share.share_by,
+            on_top: self.store.settings().share.always_on_top,
             can_set_share_by: self
                 .stay
                 .as_ref()

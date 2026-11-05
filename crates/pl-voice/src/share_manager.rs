@@ -6,9 +6,10 @@ use crate::share::{ShareEvent, ShareLayer, ShareRefusal, ShareSource, ShareSurfa
 use crate::view::VoiceAnswer;
 
 impl Voice {
-    /// Whether this computer can share (the publisher works) and share an app's own sound.
-    pub fn set_share_publisher(&self, available: bool, audio: bool) {
-        self.effects(|machine, _, _| machine.set_share_publisher(available, audio));
+    /// Whether this computer can share (the publisher works), share an app's own sound, and
+    /// encode "Yüksek" in hardware.
+    pub fn set_share_publisher(&self, available: bool, audio: bool, high: bool) {
+        self.effects(|machine, _, _| machine.set_share_publisher(available, audio, high));
     }
 
     /// "Paylaş" in the picker (`label`: the window's title or the screen's name, this computer
@@ -70,7 +71,7 @@ impl Voice {
 
     /// A page that watches attached its channel.
     pub fn share_attach(&self, surface: ShareSurface) {
-        self.effects(|machine, _, _| machine.share_attach(surface));
+        self.effects(|machine, now, _| machine.share_attach(surface, now));
     }
 
     /// A page that watched went away.

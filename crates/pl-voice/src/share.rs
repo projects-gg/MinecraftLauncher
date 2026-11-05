@@ -29,6 +29,8 @@ pub const PAUSE_AFTER_MS: u64 = 60_000;
 pub const ALONE_STOP_MS: u64 = 15 * 60_000;
 /// The watching window out of sight this long: watching is let go (it comes back with the window).
 pub const HIDDEN_GRACE_MS: u64 = 3_000;
+/// A `watch` the room has not answered with an offer by then is lost (asked again, a few times).
+pub const WATCH_OFFER_WAIT_MS: u64 = 20_000;
 /// Nobody touched the computer this long while watching: "Hâlâ izliyor musun?".
 pub const STILL_ASK_MS: u64 = 30 * 60_000;
 /// No answer to "Hâlâ izliyor musun?" this long: watching stops.
@@ -329,6 +331,15 @@ impl ShareOpts {
     }
 }
 
+/// Why the publisher lost a share.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShareLostWhy {
+    /// It never reached the SFU (UDP closed on this network, likely).
+    Connect,
+    /// Anything else (the capture, the encoder, the connection later).
+    Other,
+}
+
 /// Launcher → publisher (`pl-share`). `n` is the player's share number in the room.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShareCmd {
@@ -383,6 +394,7 @@ pub enum ShareEvent {
     /// The share cannot go on (the encoder, the capture, the connection).
     Lost {
         n: u8,
+        why: ShareLostWhy,
     },
     /// The shared window closed, or the game ended.
     SourceGone {
@@ -561,6 +573,8 @@ pub struct VoiceShareView {
     pub share_by: ShareBy,
     /// The player may change "Kim paylaşabilir" (a friend room's leader).
     pub can_set_share_by: bool,
+    /// The "Yayın" window stays on top ("Her zaman üstte", the player's choice).
+    pub on_top: bool,
     /// Shares the player may run at once here.
     pub mine_max: u8,
     /// The best quality the room allows now ("Yüksek" may be off for the month's budget).
@@ -589,8 +603,10 @@ pub enum ShareRefusal {
     Off,
     /// This computer cannot share.
     Unsupported,
-    /// The room lets only its leader and moderators share, or the account may only watch.
+    /// The room lets only its leader and moderators share.
     NotAllowed,
+    /// A new (limited) account may watch but not share yet.
+    Limited,
     /// The player shares as much as they may.
     Full,
     /// The room has as many shares as it may.
@@ -613,7 +629,8 @@ impl ShareRefusal {
         match code {
             "share_off" | "voice_off" => Self::Off,
             "share_full" => Self::RoomFull,
-            "share_not_allowed" | "limited" | "not_allowed" => Self::NotAllowed,
+            "share_not_allowed" | "not_allowed" => Self::NotAllowed,
+            "limited" => Self::Limited,
             "watch_full" => Self::WatchFull,
             "budget" => Self::Budget,
             "not_found" | "share_not_found" => Self::Gone,
@@ -639,6 +656,8 @@ pub enum ShareClosedWhy {
     Left,
     /// The shared window closed, or the game ended (this launcher's own reason).
     SourceGone,
+    /// It could not reach the server from this network (this launcher's own reason).
+    Network,
     /// Anything else (also any reason a newer service names).
     #[default]
     #[serde(other)]
@@ -649,8 +668,8 @@ pub enum ShareClosedWhy {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ShareNotice {
-    /// One of the player's shares ended without them.
-    Closed { why: ShareClosedWhy },
+    /// One of the player's shares ended without them (`src`: what it showed).
+    Closed { why: ShareClosedWhy, src: ShareKind },
     /// A share or a watch could not start.
     Refused { refusal: ShareRefusal },
     /// The share goes on without its sound.
@@ -888,10 +907,11 @@ mod tests {
     fn written_as_the_page_reads_them() {
         assert_eq!(
             serde_json::to_value(ShareNotice::Closed {
-                why: ShareClosedWhy::Idle
+                why: ShareClosedWhy::Idle,
+                src: ShareKind::Game,
             })
             .unwrap(),
-            json!({"kind":"closed","why":"idle"})
+            json!({"kind":"closed","why":"idle","src":"game"})
         );
         assert_eq!(
             serde_json::to_value(ShareSource::Window { id: "0x1f".into() }).unwrap(),
