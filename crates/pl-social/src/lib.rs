@@ -52,6 +52,8 @@ mod chat;
 mod client;
 mod closed;
 mod codes;
+// CREW-DISCOVER: crew discovery ("Ekip bul").
+mod discover;
 mod error;
 mod game;
 mod game_lead;
@@ -96,6 +98,12 @@ pub use codes::{
     CREW_CODE_PREFIX, FRIEND_DEEP_LINK_PREFIX, crew_code, crew_link_url,
     friend_code_from_deep_link, friend_deep_link, friend_share_link, normalize_crew_link,
     normalize_friend_code, normalize_team_code,
+};
+pub use discover::{
+    DISCOVER_MAX_TAGS, DISCOVER_REVALIDATE_SECS, DISCOVER_TAGS, DISCOVER_TEXT_MAX,
+    DISCOVER_TEXT_MIN, DiscoverCheck, DiscoverChecks, DiscoverCrew, DiscoverJoin, DiscoverListing,
+    DiscoverPage, DiscoverState, DiscoverStatus, DiscoverText, TEAM_FEATURE_DISCOVER,
+    discover_tags, discover_text,
 };
 pub use error::{ErrorCode, Result, SocialError};
 pub use game::{GameActivity, LogSignal, log_signal, may_signal, server_label};

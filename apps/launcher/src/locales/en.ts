@@ -19,6 +19,7 @@ import { enCloudAfkMove } from "./en-cloud-afk-move";
 import { enCloudStale } from "./en-cloud-stale";
 import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
+import { enDiscover } from "./en-discover";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
 import { enFastPack } from "./en-fastpack";
@@ -331,6 +332,7 @@ export const en: DeepPartial<Strings> = {
   chat2: enChat2,
   team6: enTeam6,
   chatCalm: enChatCalm,
+  discover: enDiscover,
   verify: enVerify,
   identity: enIdentity,
   badges: enBadges,
