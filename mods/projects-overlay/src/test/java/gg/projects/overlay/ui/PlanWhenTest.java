@@ -26,10 +26,11 @@ class PlanWhenTest {
         int[] wide = PlanWhen.chipWidths(new int[] {33, 45, 26, 26, 28, 26, 30}, 240, 3);
         assertEquals(240 - 6 * 3, java.util.Arrays.stream(wide).sum());
         assertTrue(wide[1] > wide[2] && wide[1] - wide[2] >= 19 - 1, "the wide word keeps its extra room");
-        // Too little room: shared in proportion, still filling it exactly, none wider than it wanted.
-        int[] tight = PlanWhen.chipWidths(new int[] {40, 60, 40}, 100, 2);
-        assertEquals(96, java.util.Arrays.stream(tight).sum());
-        assertTrue(tight[1] > tight[0] && tight[0] <= 40 && tight[1] <= 60);
+        // Too little room: the short ones keep theirs, the wide ones give way to one width, the row still filled.
+        int[] tight = PlanWhen.chipWidths(new int[] {10, 60, 40}, 84, 2);
+        assertEquals(80, java.util.Arrays.stream(tight).sum());
+        assertEquals(10, tight[0]);
+        assertTrue(Math.abs(tight[1] - tight[2]) <= 1 && tight[1] <= 60 && tight[2] <= 40);
         assertEquals(0, PlanWhen.chipWidths(new int[0], 100, 3).length);
     }
 

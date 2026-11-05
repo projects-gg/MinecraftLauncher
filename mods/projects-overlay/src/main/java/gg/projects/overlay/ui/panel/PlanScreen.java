@@ -255,6 +255,8 @@ public final class PlanScreen extends Screen {
             ActionButton chip = new ActionButton(ActionButton.Style.SECONDARY,
                 Component.literal(PlanWhen.dayChip(days.get(i))), null, () -> pickDay(index));
             chip.setChosen(i == day);
+            // "Tomorrow" and five weekdays share a 240-pixel row: less room around the words than a button's.
+            chip.setPadding(4);
             dayChips.add(chip);
         }
         // Each chip as wide as its words ("Yarın" and "Tomorrow" need more than "Cmt"), the room left shared out;
