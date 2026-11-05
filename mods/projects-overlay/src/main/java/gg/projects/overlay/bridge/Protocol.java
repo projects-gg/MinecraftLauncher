@@ -94,6 +94,11 @@ public final class Protocol {
             features.add(VOICE_ROOMS);
             features.add(PEOPLE4);
             features.add(AVATARS);
+            features.add(PEOPLE5);
+            features.add(CREWS2);
+            features.add(PLANS);
+            features.add(CHAT3);
+            features.add(CARDS2);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -488,6 +493,141 @@ public final class Protocol {
     public static JsonObject avatarWant(List<String> ids) {
         JsonObject o = message("avatar-want");
         o.add("ids", ids(ids.size() > MAX_AVATAR_WANT ? ids.subList(0, MAX_AVATAR_WANT) : ids));
+        return o;
+    }
+
+    // ---- OVL-SOC2: social management in game (docs/tasks/ovl2-protocol.md, "OVL-SOC2") ---------------------------
+
+    /**
+     * The friends page's whole management: {@code lists}' {@code outgoing} ("Gönderilenler", {@link #cancelRequest}),
+     * {@code blocked} ({@link #unblock}) and {@code code} (the player's own); "Ekle" ({@link #find}, {@code found},
+     * {@link #addCode}). Every press is answered with {@code done}.
+     */
+    public static final String PEOPLE5 = "people5";
+    /**
+     * Crews in game: {@code lists}' {@code invites} ({@link #crewAnswer}), {@code asks} ({@link #crewAsk}), joining by
+     * code or link ({@link #find}, {@link #crewJoin}) and "Ekibi çağır" ({@code call}, {@code callers},
+     * {@link #crewCall}).
+     */
+    public static final String CREWS2 = "crews2";
+    /** Crew plans: {@code lists}' {@code plans}, {@code planners}, {@code notes}; {@link #planAnswer}, {@link #planMake}. */
+    public static final String PLANS = "plans";
+    /** The player's own messages edited ({@link #edit}, 15 minutes) and deleted for everyone ({@link #delete}, 7 days). */
+    public static final String CHAT3 = "chat3";
+    /**
+     * The new cards ({@code request}, {@code friend}, {@code online}, {@code projects}, {@code crew-invite},
+     * {@code crew-ask}, {@code crew-in}, {@code plan}, {@code missed}), the card kinds the player turned off
+     * ({@link #cards}) and the launcher's notification switches ({@code prefs}, {@link #notifySet}).
+     */
+    public static final String CARDS2 = "cards2";
+
+    /** "İsteği geri çek" on a request the player sent. */
+    public static JsonObject cancelRequest(String id) {
+        JsonObject o = message("cancel-request");
+        o.addProperty("id", id);
+        return o;
+    }
+
+    /** "Engeli kaldır". */
+    public static JsonObject unblock(String id) {
+        JsonObject o = message("unblock");
+        o.addProperty("id", id);
+        return o;
+    }
+
+    /** "Bul": a friend code, a crew code or an invite link as typed; answered with {@code found} by the same code. */
+    public static JsonObject find(String code) {
+        JsonObject o = message("find");
+        o.addProperty("code", code);
+        return o;
+    }
+
+    /** "İstek gönder" to the friend code a {@code found} named. */
+    public static JsonObject addCode(String code) {
+        JsonObject o = message("add-code");
+        o.addProperty("code", code);
+        return o;
+    }
+
+    /** "Katıl" ({@code accept}) or "Reddet" on a crew invite. */
+    public static JsonObject crewAnswer(String crew, boolean accept) {
+        JsonObject o = message("crew-answer");
+        o.addProperty("crew", crew);
+        o.addProperty("accept", accept);
+        return o;
+    }
+
+    /** "Kabul et" ({@code accept}) or "Reddet" on a request to join one of the player's crews. */
+    public static JsonObject crewAsk(String crew, String id, boolean accept) {
+        JsonObject o = message("crew-ask");
+        o.addProperty("crew", crew);
+        o.addProperty("id", id);
+        o.addProperty("accept", accept);
+        return o;
+    }
+
+    /** "Ekibe katıl" or "Katılma isteği gönder" with the crew code or invite link a {@code found} named. */
+    public static JsonObject crewJoin(String code) {
+        JsonObject o = message("crew-join");
+        o.addProperty("code", code);
+        return o;
+    }
+
+    /** "Ekibi çağır". */
+    public static JsonObject crewCall(String crew) {
+        JsonObject o = message("crew-call");
+        o.addProperty("crew", crew);
+        return o;
+    }
+
+    /** "Geliyorum" ({@code yes}), "Belki" ({@code maybe}) or "Gelemem" ({@code no}) to a plan. */
+    public static JsonObject planAnswer(String plan, String answer) {
+        JsonObject o = message("plan-answer");
+        o.addProperty("plan", plan);
+        o.addProperty("answer", answer);
+        return o;
+    }
+
+    /** A new plan at {@code at} (Unix seconds, a whole quarter of an hour) with its note (none: empty). */
+    public static JsonObject planMake(String crew, long at, String note) {
+        JsonObject o = message("plan-make");
+        o.addProperty("crew", crew);
+        o.addProperty("at", at);
+        if (note != null && !note.isBlank()) {
+            o.addProperty("note", note);
+        }
+        return o;
+    }
+
+    /** The player's own message {@code sid} with new words. */
+    public static JsonObject edit(String conversation, long sid, String text) {
+        JsonObject o = message("edit");
+        o.addProperty("conv", conversation);
+        o.addProperty("sid", sid);
+        o.addProperty("text", text);
+        return o;
+    }
+
+    /** The player's own message {@code sid} deleted for everyone. */
+    public static JsonObject delete(String conversation, long sid) {
+        JsonObject o = message("delete");
+        o.addProperty("conv", conversation);
+        o.addProperty("sid", sid);
+        return o;
+    }
+
+    /** The card kinds the player turned off in game ({@code message}, {@code call}, …). */
+    public static JsonObject cards(List<String> off) {
+        JsonObject o = message("cards");
+        o.add("off", ids(off));
+        return o;
+    }
+
+    /** One of the launcher's notification switches, changed in the overlay's settings. */
+    public static JsonObject notifySet(String key, boolean on) {
+        JsonObject o = message("notify-set");
+        o.addProperty("key", key);
+        o.addProperty("on", on);
         return o;
     }
 

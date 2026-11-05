@@ -448,6 +448,7 @@ public final class PersonMenu {
             case CALL_INVITE -> row.done() ? "voice.ringing" : "voice.invite";
             case ACCEPT_REQUEST -> "friend.accept";
             case DECLINE_REQUEST -> "friend.decline";
+            case CANCEL_REQUEST -> "friend.cancel_request";
             case STATUS_ONLINE -> "status.online";
             case STATUS_DND -> "status.dnd";
             case STATUS_INVISIBLE -> "status.invisible";
@@ -482,7 +483,7 @@ public final class PersonMenu {
             case CALL -> Icon.PHONE;
             case CALL_INVITE -> Icon.PHONE_PLUS;
             case ACCEPT_REQUEST -> Icon.USER_CHECK;
-            case DECLINE_REQUEST -> Icon.CLOSE;
+            case DECLINE_REQUEST, CANCEL_REQUEST -> Icon.CLOSE;
             // The status rows carry their presence dot instead (drawRows).
             case STATUS_ONLINE, STATUS_DND, STATUS_INVISIBLE -> null;
         };

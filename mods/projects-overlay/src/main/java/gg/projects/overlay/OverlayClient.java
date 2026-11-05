@@ -133,6 +133,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private String lastConversation;
     private String lastToastConversation;
     private long lastToastAt;
+    /** OVL-SOC2: the page a recent social card opens the panel on (its crew chat, or the friends page). */
+    private OverlayScreen.Page lastToastPage;
     private boolean hadLevel;
     private int warmIndex = -1;
     private int warmScale = -1;
@@ -616,7 +618,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
 
     @Override
     public void updateSettings(UnaryOperator<OverlaySettings> change) {
-        settings.set(change.apply(settings.get()));
+        OverlaySettings before = settings.get();
+        settings.set(change.apply(before));
+        // OVL-SOC2: the launcher hears the card kinds turned off (it keeps its own notifications for them).
+        if (!before.offGroups().equals(settings.get().offGroups())) {
+            sendCards();
+        }
     }
 
     /** The player's "Animasyonları azalt" or the launcher's "Hareketi azalt". */
@@ -643,6 +650,15 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
 
     public void rememberConversation(String id) {
         lastConversation = id;
+    }
+
+    /**
+     * OVL-SOC2: the page the panel opens on for a recent social card (a request, a crew invite, a friend online, a missed
+     * call: the friends page; a plan, "Ekibe katıldın": its crew chat), else null (where it was last).
+     */
+    public OverlayScreen.Page toastPage() {
+        return lastToastPage != null && System.currentTimeMillis() - lastToastAt < RECENT_TOAST_MS ? lastToastPage
+            : null;
     }
 
     /** The conversation the panel should open on: a recent toast's, else the last one looked at. */
@@ -898,6 +914,10 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             if (card.kind() == ToastCard.Kind.MESSAGE || card.kind() == ToastCard.Kind.CALL) {
                 lastPage = OverlayScreen.Page.CHATS;
             }
+        }
+        if (card.kind() == ToastCard.Kind.SOCIAL) {
+            lastToastPage = card.conversation() != null ? OverlayScreen.Page.CHATS : OverlayScreen.Page.FRIENDS;
+            lastToastAt = System.currentTimeMillis();
         }
         openPanel();
         return true;
@@ -1317,7 +1337,116 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             showToast(toast);
         }
         host.mirrorChanged(before, state.host());
+        if ("welcome".equals(Protocol.type(frame))) {
+            // OVL-SOC2: the card kinds the player turned off here, for every greeting (a new account, a new launcher).
+            sendCards();
+        }
         refreshScreen();
+    }
+
+    // ---- OVL-SOC2: social management in game ----------------------------------------------------------------
+
+    /**
+     * Sends a management press once ({@code act} about {@code id}; a second press waits for the first one's answer):
+     * {@code name} is what its note names, {@code okKey} its words when it goes (null: the screen shows it),
+     * {@code conversation} the crew chat it came from. When it cannot go at all the note says so at once.
+     */
+    private void press(String act, String id, String name, String conversation, String okKey, JsonObject frame) {
+        if (!state.pressed(act, id, name, conversation, okKey)) {
+            return;
+        }
+        if (!bridge.send(frame)) {
+            state.pressFailed(act, id, System.currentTimeMillis());
+        }
+        refreshScreen();
+    }
+
+    /** "İsteği geri çek" on a request the player sent. */
+    public void cancelRequest(String id, String name) {
+        press("cancel-request", id, name, null, "request_canceled", Protocol.cancelRequest(id));
+    }
+
+    /** "Engeli kaldır". */
+    public void unblock(String id, String name) {
+        press("unblock", id, name, null, "unblocked", Protocol.unblock(id));
+    }
+
+    /** "Bul" in "Ekle": the answer ({@code found}) replaces the last one. */
+    public void find(String code) {
+        state.clearFound();
+        if (!bridge.send(Protocol.find(code))) {
+            state.personNote("failed", "", true, System.currentTimeMillis());
+        }
+        refreshScreen();
+    }
+
+    /** "İstek gönder" to the friend a code found. */
+    public void addCode(String code, String name) {
+        press("add-code", code, name, null, "now_friends", Protocol.addCode(code));
+    }
+
+    /** "Katıl" ({@code accept}) or "Reddet" on a crew invite. */
+    public void answerInvite(String crew, String crewName, boolean accept) {
+        press("crew-answer", crew, crewName, null, accept ? "crew_joined" : null, Protocol.crewAnswer(crew, accept));
+    }
+
+    /** "Kabul et" ({@code accept}) or "Reddet" on a request to join one of the player's crews. */
+    public void answerAsk(String crew, String id, String name, boolean accept) {
+        press("crew-ask", id, name, null, accept ? "crew_ask_taken" : null, Protocol.crewAsk(crew, id, accept));
+    }
+
+    /** "Ekibe katıl" or "Katılma isteği gönder" with the code or link "Bul" found. */
+    public void joinCrew(String code, String crewName) {
+        press("crew-join", code, crewName, null, "crew_joined", Protocol.crewJoin(code));
+    }
+
+    /** "Ekibi çağır" from crew chat. */
+    public void callCrew(String crew, String crewName, String conversation) {
+        press("crew-call", crew, crewName, conversation, "crew_called", Protocol.crewCall(crew));
+    }
+
+    /** "Geliyorum", "Belki" or "Gelemem" to a plan (the chip shows it when the launcher says so). */
+    public void answerPlan(String plan, String answer) {
+        press("plan-answer", plan, "", null, null, Protocol.planAnswer(plan, answer));
+    }
+
+    /** A new plan: {@code when} is its time as the note says it. */
+    public void makePlan(String crew, long at, String note, String when) {
+        press("plan-make", crew, when, null, "plan_made", Protocol.planMake(crew, at, note));
+    }
+
+    /** The player's own message {@code sid} with new words (the message itself comes back edited). */
+    public void editMessage(String conversation, long sid, String text) {
+        press("edit", Long.toString(sid), "", conversation, null, Protocol.edit(conversation, sid, text));
+    }
+
+    /** The player's own message {@code sid} deleted for everyone. */
+    public void deleteMessage(String conversation, long sid) {
+        press("delete", Long.toString(sid), "", conversation, null, Protocol.delete(conversation, sid));
+    }
+
+    /** One of the launcher's notification switches, from the overlay's settings. */
+    public void setNotify(String key, boolean on) {
+        state.setPref(key, on);
+        bridge.send(Protocol.notifySet(key, on));
+        refreshScreen();
+    }
+
+    /** The card kinds the player turned off here, to a launcher that keeps its own notifications for them. */
+    public void sendCards() {
+        if (state.cards2()) {
+            bridge.send(Protocol.cards(settings.get().offGroups()));
+        }
+    }
+
+    /** The player's own friend code to the clipboard ("Kopyala"). */
+    public void copyCode() {
+        String code = state.myCode();
+        if (!code.isEmpty()) {
+            Minecraft.getInstance().keyboardHandler.setClipboard(code);
+            state.personNote("code_copied", "", false, System.currentTimeMillis());
+            refreshScreen();
+        }
     }
 
     /** A {@code connect} with a label right after the player's "Katıl" on a world invite: that friend's world. */
@@ -1357,6 +1486,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         OverlayState.Conversation conv = state.conversation(t.conversation());
         if (t.conversation() != null) {
             lastToastConversation = t.conversation();
+            lastToastAt = System.currentTimeMillis();
+        }
+        // OVL-SOC2: the key opens the panel where a social card's answer is (only when that card went up).
+        lastToastPage = null;
+        if (ToastCard.kindOf(t.kind()) == ToastCard.Kind.SOCIAL && settings.get().showsKind(t.kind())) {
+            lastToastPage = t.conversation() != null ? OverlayScreen.Page.CHATS : OverlayScreen.Page.FRIENDS;
             lastToastAt = System.currentTimeMillis();
         }
         toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(), panel != null,
