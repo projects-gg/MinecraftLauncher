@@ -99,6 +99,11 @@ export const enShare = {
     all: "Everyone",
     mods: "Leader and moderators",
   },
+  report: {
+    action: "Report stream",
+    subject: "Screen share",
+    frame: "Picture sent with the report",
+  },
   notice: {
     mod: "A moderator stopped your share.",
     off: "Screen sharing isn't available right now.",

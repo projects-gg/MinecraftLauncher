@@ -3,7 +3,7 @@
 // their mirror, field for field, written by VOICE-L3 before the commands existed, so the preview's
 // mock (voice-mock.ts) and the app (voice-tauri.ts) answer the same shapes.
 //
-import type { VoiceShareSettings, VoiceShareView } from "@/share/types";
+import type { ShareBy, VoiceShareSettings, VoiceShareView } from "@/share/types";
 
 // People are ids: the page names them from the friend list and the crews, and from `profiles` for
 // anyone else (a friend's friend in a friend room). Refusals are answers, never errors.
@@ -164,7 +164,15 @@ export interface VoiceCrewRooms {
  */
 export type VoiceCrewOp =
   /** "Odayı düzenle": its name (3–24 characters) and people at most (null: the crew's maximum). */
-  | { op: "edit"; crew: string; room: string; name: string; max: number | null }
+  | {
+      op: "edit";
+      crew: string;
+      room: string;
+      name: string;
+      max: number | null;
+      /** SHARE: "Kim paylaşabilir" in it (none: as it is). */
+      shareBy?: ShareBy;
+    }
   /** The crew's rooms ("Genel" aside) in this order. */
   | { op: "order"; crew: string; rooms: string[] }
   /** "Odayı sil": its people go to "Genel"; `empty`: only while nobody is in it. */

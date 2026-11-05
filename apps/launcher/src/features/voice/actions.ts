@@ -6,6 +6,7 @@ import { announce } from "@/features/accounts/use-accounts";
 import { voiceApi } from "@/lib/api/voice-api";
 import type { VoiceAnswer, VoiceModAction } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
+import type { ShareBy } from "@/share/types";
 import { useCrewRoomsUi } from "./crew-rooms-store";
 import { refusalText } from "./rules";
 import { faceNow, useVoiceUi } from "./store";
@@ -196,9 +197,17 @@ export async function editCrewRoom(
   room: string,
   name: string,
   max: number | null,
+  shareBy?: ShareBy,
 ): Promise<string | null> {
   try {
-    const answer = await voiceApi.crewChange({ op: "edit", crew, room, name: name.trim(), max });
+    const answer = await voiceApi.crewChange({
+      op: "edit",
+      crew,
+      room,
+      name: name.trim(),
+      max,
+      ...(shareBy ? { shareBy } : {}),
+    });
     if (answer.refused === null) return null;
     return refusalText(answer, i18n.t) ?? i18n.t("voice.refused.failed");
   } catch {

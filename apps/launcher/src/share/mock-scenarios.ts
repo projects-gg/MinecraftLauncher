@@ -26,6 +26,7 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 
 /** The voice scenario each share scenario starts from. */
 export function shareBase(scenario: string): string {
+  if (scenario === "shareCrewRooms") return "crewRooms";
   return scenario === "shareCall" ? "call1" : "room";
 }
 
@@ -54,6 +55,8 @@ const NAMES: Record<string, string> = {
 
 const VIEW: VoiceShareView = {
   on: true,
+  service: true,
+  crewMods: [],
   canShare: true,
   allowed: true,
   open: true,
@@ -203,6 +206,9 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
       return { ...VIEW, allowed: false, shareBy: "mods", canSetShareBy: false };
     case "shareBudget":
       return { ...VIEW, open: false };
+    // The crew page outside a room: "Taş Ocağı" lets only the leader and moderators share.
+    case "shareCrewRooms":
+      return { ...VIEW, on: false, crewMods: ["c00000000000000b2"] };
     default:
       return null;
   }

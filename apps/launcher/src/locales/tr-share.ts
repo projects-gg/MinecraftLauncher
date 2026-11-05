@@ -100,6 +100,11 @@ export const trShare = {
     all: "Herkes",
     mods: "Lider ve moderatörler",
   },
+  report: {
+    action: "Yayını rapor et",
+    subject: "Ekran paylaşımı",
+    frame: "Rapora eklenen görüntü",
+  },
   notice: {
     mod: "Bir moderatör paylaşımını durdurdu.",
     off: "Ekran paylaşımı şu an kullanılamıyor.",

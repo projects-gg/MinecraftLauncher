@@ -312,6 +312,11 @@ export type ReportTarget =
       reaction?: { conv: string; id: number; e: string };
       /** VOICE: reported from the player's voice room (its id; the room's events are the evidence). */
       voice?: string;
+      /**
+       * SHARE: about their screen share in that room (its number), with what the player saw of it
+       * (`frame`: a JPEG's base64, at most 60 KB).
+       */
+      share?: { n: number; frame?: string };
       /** SOC-NOTE: a friend with a status note: the note goes along as the evidence. */
       note?: boolean;
     }

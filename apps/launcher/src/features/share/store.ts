@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { useVoiceUi } from "@/features/voice/store";
 import { param } from "@/share/param";
-import { HIDDEN_SHARE_VIEW, type VoiceShareView } from "@/share/types";
+import { HIDDEN_SHARE_VIEW, type ShareBy, type VoiceShareView } from "@/share/types";
 import type { ShareQuality, WatchEngine } from "@/share/watch";
 
 interface ShareUi {
@@ -32,6 +32,16 @@ export const useShareUi = create<ShareUi>()((set) => ({
 }));
 
 /** Screen sharing in the room now (nothing of it while it is off). */
+/**
+ * A crew room's "Kim paylaşabilir" for its edit form (outside a room as well): offered while the
+ * service shares screens.
+ */
+export function useCrewShareBy(room: string): { offered: boolean; by: ShareBy } {
+  const offered = useVoiceUi((s) => s.state.share?.service ?? false);
+  const mods = useVoiceUi((s) => s.state.share?.crewMods.includes(room) ?? false);
+  return { offered, by: mods ? "mods" : "all" };
+}
+
 export function useShare(): VoiceShareView {
   return useVoiceUi((s) => (s.state.share?.on ? s.state.share : HIDDEN_SHARE_VIEW));
 }

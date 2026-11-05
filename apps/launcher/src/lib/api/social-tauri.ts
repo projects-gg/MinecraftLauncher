@@ -1019,6 +1019,11 @@ export const tauriSocial: SocialApi = {
                 id: target.id,
                 plan: target.plan ?? null,
                 reaction: target.reaction ?? null,
+                // VOICE: the room the player is reported from; SHARE: their share in it.
+                voice: target.voice ?? null,
+                share: target.share
+                  ? { n: target.share.n, frame: target.share.frame ?? null }
+                  : null,
               }
             : target;
     await ok(commands.socialReport(wire, reason, note ?? null, block));

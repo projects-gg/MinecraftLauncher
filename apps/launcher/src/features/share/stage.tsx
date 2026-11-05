@@ -15,6 +15,7 @@ import {
   ArrowsInSimple,
   ArrowsOut,
   CornersOut,
+  Flag,
   PushPin,
   PushPinSlash,
   Screencast,
@@ -31,7 +32,7 @@ import { useFace, useVoiceUi } from "@/features/voice/store";
 import { formatPercent } from "@/lib/format";
 import { shareApi } from "@/share/api";
 import type { VoiceShareView, VoiceWatch } from "@/share/types";
-import { unwatchShare } from "./actions";
+import { reportShare, unwatchShare } from "./actions";
 import { useShare, useShareQuality, useShareUi } from "./store";
 import { ShareVideo } from "./video";
 
@@ -96,8 +97,11 @@ function StageButton({
   );
 }
 
-/** "Yayın sesi" for one sharer: the person menu's slider, and its mute. */
-function VolumeButton({ person }: { person: string }) {
+/**
+ * "Yayın sesi" for one sharer: the person menu's slider, and its mute; in the launcher's window
+ * "Yayını rapor et" too (the "Yayın" window has no report dialog).
+ */
+function VolumeButton({ person, n }: { person: string; n: number }) {
   const { t } = useTranslation();
   const { volume, muted } = useVolume(person);
   const [value, setValue] = useState(volume);
@@ -125,6 +129,13 @@ function VolumeButton({ person }: { person: string }) {
       onSelect: () => void shareApi.streamVolume(person, volume, !muted),
     },
   ];
+  if (!inPopout) {
+    items.push({
+      label: t("share.report.action"),
+      icon: <Flag size={16} />,
+      onSelect: () => void reportShare(person, n),
+    });
+  }
   return (
     <Menu
       items={items}
@@ -215,7 +226,7 @@ function Tile({ watch, small }: { watch: VoiceWatch; small: boolean }) {
             ) : null}
           </span>
           <span className="flex shrink-0 gap-1.5">
-            <VolumeButton person={watch.person} />
+            <VolumeButton person={watch.person} n={watch.n} />
             <StageButton
               label={t("share.stage.stop")}
               onClick={() => void unwatchShare(watch.person, watch.n)}

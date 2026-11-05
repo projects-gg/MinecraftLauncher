@@ -17,7 +17,9 @@ import {
 import { Button, Input, type MenuItem, Select } from "@pl/ui";
 import { type FormEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useCrewShareBy } from "@/features/share/store";
 import type { VoiceCrewRoom } from "@/lib/api/voice-types";
+import type { ShareBy } from "@/share/types";
 import { editCrewRoom, joinCrewRoom, leaveRoom, orderCrewRooms, removeCrewRoom } from "./actions";
 import { crewRoomName, limitChoices, moveRoom, type RoomPowers, roomNameFits } from "./rules";
 
@@ -138,7 +140,8 @@ function useEscape(within: RefObject<HTMLElement | null>, onEscape: () => void) 
 /**
  * "Odayı düzenle" in the row: the room's name (opened with the name as shown: an unchanged one is
  * not sent, so an English "Room 2" never renames the crew's "Oda 2") and its people at most, from
- * 2 to the crew room maximum (the maximum itself: no limit of its own).
+ * 2 to the crew room maximum (the maximum itself: no limit of its own). SHARE: while the service
+ * shares screens, "Kim paylaşabilir" too ("Genel" is never edited: everyone shares there).
  */
 export function RoomEditForm({
   crew,
@@ -156,6 +159,8 @@ export function RoomEditForm({
   const shownName = crewRoomName(room, t);
   const [name, setName] = useState(shownName);
   const [limit, setLimit] = useState(String(Math.min(room.max ?? crewMax, crewMax)));
+  const sharing = useCrewShareBy(room.id);
+  const [shareBy, setShareBy] = useState<ShareBy>(sharing.by);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const box = useRef<HTMLFormElement>(null);
@@ -172,7 +177,8 @@ export function RoomEditForm({
     if (busy) return;
     const nameChanged = name.trim() !== shownName;
     const max = Number(limit) >= crewMax ? null : Number(limit);
-    if (!nameChanged && max === room.max) {
+    const shareChanged = sharing.offered && shareBy !== sharing.by;
+    if (!nameChanged && max === room.max && !shareChanged) {
       onDone();
       return;
     }
@@ -181,7 +187,13 @@ export function RoomEditForm({
       return;
     }
     setBusy(true);
-    const refused = await editCrewRoom(crew, room.id, nameChanged ? name : room.name, max);
+    const refused = await editCrewRoom(
+      crew,
+      room.id,
+      nameChanged ? name : room.name,
+      max,
+      shareChanged ? shareBy : undefined,
+    );
     setBusy(false);
     if (refused) setError(refused);
     else onDone();
@@ -213,6 +225,23 @@ export function RoomEditForm({
           className="h-8 w-[104px] shrink-0"
         />
       </div>
+      {sharing.offered ? (
+        <div className="flex items-center gap-2">
+          <span id={`${ids}-share`} className="min-w-0 flex-1 truncate text-[12.5px] text-ash-300">
+            {t("share.who.label")}
+          </span>
+          <Select
+            value={shareBy}
+            onValueChange={(value) => setShareBy(value as ShareBy)}
+            options={[
+              { value: "all", label: t("share.who.all") },
+              { value: "mods", label: t("share.who.mods") },
+            ]}
+            label={t("share.who.label")}
+            className="h-8 w-[196px] shrink-0"
+          />
+        </div>
+      ) : null}
       <div className="flex items-center gap-2">
         <p
           id={`${ids}-error`}

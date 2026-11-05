@@ -913,9 +913,21 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
           }));
           break;
       }
+      // SHARE: "Kim paylaşabilir" of the edited room.
+      const share =
+        op.op === "edit" && op.shareBy && state.share
+          ? {
+              ...state.share,
+              crewMods: [
+                ...state.share.crewMods.filter((id) => id !== op.room),
+                ...(op.shareBy === "mods" ? [op.room] : []),
+              ],
+            }
+          : state.share;
       commit({
         ...state,
         room,
+        share,
         crews: state.crews.map((c) =>
           c.crew === op.crew
             ? { ...c, rooms, canAdd: rooms.length < state.crewRoomsMax && c.manage }
