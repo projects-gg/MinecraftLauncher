@@ -56,6 +56,7 @@ import { enReminders } from "./en-reminders";
 import { enReports } from "./en-reports";
 import { enSafety } from "./en-safety";
 import { enSetup } from "./en-setup";
+import { enShare } from "./en-share";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
@@ -357,6 +358,7 @@ export const en: DeepPartial<Strings> = {
   launcherReset: enLauncherReset,
   stars: enStars,
   voice: enVoice,
+  share: enShare,
   socNext: enSocNext,
   socNote: enSocNote,
   telemetry: enTelemetry,

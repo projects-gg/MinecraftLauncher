@@ -529,6 +529,10 @@ static TRAY_IN_GAME: AtomicBool = AtomicBool::new(false);
 #[cfg(desktop)]
 static TRAY_VOICE: Mutex<Option<(String, bool)>> = Mutex::new(None);
 
+/// SHARE: the player shares their screen now: the voice items get "Paylaşımı durdur".
+#[cfg(desktop)]
+static TRAY_SHARING: AtomicBool = AtomicBool::new(false);
+
 /// The tray menu in the interface's language (rebuilt when it changes, [`retitle_tray`]).
 #[cfg(desktop)]
 fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
@@ -579,16 +583,19 @@ fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
         None::<&str>,
     )?;
     let voice_separator = PredefinedMenuItem::separator(manager)?;
-    let items: [&dyn IsMenuItem<R>; 8] = [
-        &open,
-        &play,
-        &afk,
-        &voice_separator,
-        &mute,
-        &leave,
-        &separator,
-        &quit_item,
-    ];
+    // SHARE: one item stops every share of the player's.
+    let stop_share = MenuItem::with_id(
+        manager,
+        "share-stop",
+        lang.pick("Paylaşımı durdur", "Stop sharing"),
+        true,
+        None::<&str>,
+    )?;
+    let mut items: Vec<&dyn IsMenuItem<R>> = vec![&open, &play, &afk, &voice_separator, &mute];
+    if TRAY_SHARING.load(Ordering::Relaxed) {
+        items.push(&stop_share);
+    }
+    items.extend([&leave as &dyn IsMenuItem<R>, &separator, &quit_item]);
     Menu::with_items(manager, &items)
 }
 
@@ -608,6 +615,16 @@ pub fn set_tray_voice(app: &AppHandle, room: Option<(String, bool)>) {
     if changed {
         rebuild_tray_menu(app);
         refresh_afk_tray(app);
+    }
+}
+
+/// SHARE: the player started or stopped sharing: the tray's "Paylaşımı durdur" follows. Waits for
+/// the main thread only when it changed (never on it: the voice effects' thread calls it).
+#[cfg(desktop)]
+pub fn set_tray_sharing(app: &AppHandle, sharing: bool) {
+    if TRAY_SHARING.swap(sharing, Ordering::Relaxed) != sharing {
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || rebuild_tray_menu(&app));
     }
 }
 
@@ -722,6 +739,12 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             "afk" => open_link(app, DeepLink::Afk),
             "quit" => quit_from_tray(app),
             // Voice chat (VOICE): only while the player is in a room.
+            // SHARE: every share of the player's stops.
+            "share-stop" => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.voice.share_stop_all();
+                }
+            }
             "voice-mute" | "voice-leave" => {
                 if let Some(state) = app.try_state::<AppState>() {
                     if event.id.as_ref() == "voice-leave" {

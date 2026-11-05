@@ -153,6 +153,7 @@ impl Room {
                 deaf,
                 sm,
                 q,
+                ..
             } => {
                 if *u == self.me {
                     if let Some(sm) = sm {
@@ -183,6 +184,7 @@ impl Room {
                 leader,
                 mods,
                 max,
+                ..
             } => {
                 self.name = name.clone();
                 self.leader = leader.clone();
@@ -241,6 +243,7 @@ mod tests {
             sm: false,
             q: 0,
             card: None,
+            sh: Vec::new(),
         }
     }
 
@@ -255,6 +258,7 @@ mod tests {
                 leader: Some("me".into()),
                 mods: vec!["b".into()],
                 max: 10,
+                share_by: None,
             },
             Role::Leader,
             vec![person("me", 1), person("b", 3), person("a", 2)],
@@ -302,6 +306,7 @@ mod tests {
             deaf: None,
             sm: None,
             q: Some(1),
+            sh: None,
         });
         assert!(applied.changed && !applied.playback);
         assert!(room.people["a"].mute);
@@ -312,6 +317,7 @@ mod tests {
             deaf: None,
             sm: Some(true),
             q: None,
+            sh: None,
         });
         assert!(applied.playback);
         // The player muted for everyone.
@@ -321,6 +327,7 @@ mod tests {
             deaf: None,
             sm: Some(true),
             q: None,
+            sh: None,
         });
         assert!(applied.muted_me && room.my_sm);
         let again = room.apply(&FromRoom::State {
@@ -329,6 +336,7 @@ mod tests {
             deaf: None,
             sm: Some(true),
             q: None,
+            sh: None,
         });
         assert!(!again.muted_me);
         let applied = room.apply(&FromRoom::Left {
@@ -344,7 +352,8 @@ mod tests {
                     mute: Some(true),
                     deaf: None,
                     sm: None,
-                    q: None
+                    q: None,
+                    sh: None,
                 })
                 .changed
         );
@@ -356,6 +365,7 @@ mod tests {
             leader: Some("a".into()),
             mods: vec![],
             max: None,
+            share_by: None,
         });
         assert_eq!(room.role_of("a"), Role::Leader);
         assert_eq!(room.name.as_deref(), Some("Gece"));
@@ -366,6 +376,7 @@ mod tests {
             leader: Some("a".into()),
             mods: vec![],
             max: Some(4),
+            share_by: None,
         });
         assert_eq!(room.max, 4);
     }

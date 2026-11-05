@@ -86,6 +86,10 @@ pub fn voice_show(
     actions: Option<[(&str, &str); 2]>,
     on_action: Box<dyn Fn(String) + Send + Sync>,
 ) -> bool {
+    // SHARE: "Paylaşırken bildirimleri gizle" while the player shares.
+    if crate::voice::share::quiet() {
+        return false;
+    }
     #[cfg(windows)]
     {
         match windows_toast::show_voice(tag, title, body, actions, on_action) {
@@ -122,6 +126,10 @@ fn show(
     tag: Option<&str>,
     popup: bool,
 ) -> bool {
+    // SHARE: "Paylaşırken bildirimleri gizle" while the player shares.
+    if crate::voice::share::quiet() {
+        return false;
+    }
     match windows_toast::show(app, title, body, id, tag, popup) {
         Ok(shown) => shown,
         Err(error) => {

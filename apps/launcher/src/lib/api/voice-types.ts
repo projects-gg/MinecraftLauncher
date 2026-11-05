@@ -3,6 +3,8 @@
 // their mirror, field for field, written by VOICE-L3 before the commands existed, so the preview's
 // mock (voice-mock.ts) and the app (voice-tauri.ts) answer the same shapes.
 //
+import type { VoiceShareSettings, VoiceShareView } from "@/share/types";
+
 // People are ids: the page names them from the friend list and the crews, and from `profiles` for
 // anyone else (a friend's friend in a friend room). Refusals are answers, never errors.
 
@@ -240,6 +242,9 @@ export interface VoiceState {
    * computer's clock): the call timer's start. Null while the player has only been alone in it.
    */
   togetherSince?: number | null;
+  // SHARE --------------------------------------------------------------------------------------
+  /** Screen sharing in the room (absent: an older launcher; `on` false: nothing of it shows). */
+  share?: VoiceShareView;
 }
 
 /** Nothing at all: before the service and the signed config said anything. */
@@ -396,6 +401,8 @@ export interface VoiceSettings {
   askBeforeCall: boolean;
   /** "Ses seviyesi": everyone's voice at once, percent 0–200 (VOICE-CALL). */
   outputVolume: number;
+  /** SHARE: "Ekran paylaşımı" (absent: the defaults). */
+  share?: VoiceShareSettings;
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {

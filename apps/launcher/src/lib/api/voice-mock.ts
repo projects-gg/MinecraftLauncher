@@ -28,6 +28,8 @@
 //   rings at ElmasKazma, who is in another room; `levels=<me>[,<id>:<level>…]` the live meters as
 //   still frames (0–1, `me` may end in `!` when it does not go out), else a voice that rises and
 //   falls for whoever speaks; `ask=0` "Aramadan önce sor" off; `volume=<percent>` "Ses seviyesi".
+
+import { shareBase, withShare } from "@/share/mock-scenarios";
 import {
   DEFAULT_VOICE_SETTINGS,
   HIDDEN_VOICE_STATE,
@@ -281,6 +283,8 @@ function keptRooms(scenario: string): VoiceCrewRooms {
 }
 
 function stateFor(scenario: string): VoiceState {
+  // SHARE: `voice=share…` dresses a voice scenario with screen sharing (share/mock-scenarios.ts).
+  if (scenario.startsWith("share")) return withShare(scenario, stateFor(shareBase(scenario)));
   const base: VoiceState = {
     ...HIDDEN_VOICE_STATE,
     available: true,
@@ -583,6 +587,8 @@ export interface VoiceMock extends VoiceApi {
   emitNotice(notice: VoiceNotice): void;
   emitSpeaking(speaking: VoiceSpeaking): void;
   current(): VoiceState;
+  /** SHARE (share/mock.ts): a change the share commands make, told as the backend would. */
+  patch(change: (state: VoiceState) => VoiceState): void;
 }
 
 export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
@@ -659,6 +665,7 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
 
   return {
     current: () => state,
+    patch: (change) => commit(change(state)),
     emitNotice: notice,
     emitSpeaking,
     async state() {

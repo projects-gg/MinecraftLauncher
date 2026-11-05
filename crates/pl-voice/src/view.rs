@@ -69,6 +69,9 @@ pub struct VoiceState {
     /// computer's clock): a call's start, for its timer. None while the player has only been
     /// alone in it, and with no room; it holds through reconnects and people coming and going.
     pub together_since: Option<i64>,
+    // SHARE --------------------------------------------------------------------------------------
+    /// Screen sharing in the room (`on` false: nothing of it shows).
+    pub share: crate::share::VoiceShareView,
 }
 
 impl VoiceState {
@@ -92,6 +95,7 @@ impl VoiceState {
             backup_rev: 0,
             ask_before_call: true,
             together_since: None,
+            share: crate::share::VoiceShareView::default(),
         }
     }
 }

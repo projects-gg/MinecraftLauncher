@@ -57,6 +57,7 @@ import { trReminders } from "./tr-reminders";
 import { trReports } from "./tr-reports";
 import { trSafety } from "./tr-safety";
 import { trSetup } from "./tr-setup";
+import { trShare } from "./tr-share";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
@@ -150,6 +151,7 @@ export const tr = {
   launcherReset: trLauncherReset,
   stars: trStars,
   voice: trVoice,
+  share: trShare,
   socNext: trSocNext,
   socNote: trSocNote,
   telemetry: trTelemetry,

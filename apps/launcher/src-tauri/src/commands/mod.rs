@@ -31,6 +31,7 @@ pub mod official;
 pub mod projects_skin;
 pub mod resume;
 pub mod server;
+pub mod share;
 pub mod shortcut;
 pub mod skins;
 pub mod social;

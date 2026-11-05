@@ -6,6 +6,7 @@
 import { toast } from "@pl/ui";
 import { useEffect } from "react";
 import { announce } from "@/features/accounts/use-accounts";
+import { ShareHost } from "@/features/share/host";
 import { friendListShown, useSocialUi } from "@/features/social/store";
 import { voiceApi } from "@/lib/api/voice-api";
 import type { VoiceNotice, VoiceState } from "@/lib/api/voice-types";
@@ -253,6 +254,8 @@ export function VoiceHost() {
     <>
       <RoomSheet />
       <CallConfirm />
+      {/* SHARE: the picker, the stage and the main window's watching. */}
+      <ShareHost />
     </>
   );
 }

@@ -36,6 +36,10 @@ use crate::wire::{self, Ticket, ToRoom};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// SHARE: screen sharing's commands (its own file; a child, so it shares the machine's steps).
+#[path = "share_manager.rs"]
+mod share_manager;
+
 /// A room the friends service gave a ticket to (`POST /v1/voice/crew`, `…/crew/new`).
 #[derive(Debug, Clone)]
 pub struct CrewTicket {
@@ -89,6 +93,17 @@ pub trait Platform: Send + Sync + 'static {
     /// The live meters' levels (VOICE-CALL), while the page asks for them; at most sixteen a
     /// second. Nothing by default.
     fn levels(&self, _levels: VoiceLevels) {}
+    // SHARE (nothing by default) ---------------------------------------------------------------
+    /// To the publisher (`pl-share`).
+    fn share(&self, _cmd: crate::share::ShareCmd) {}
+    /// To the page that watches on `surface`.
+    fn watch(&self, _surface: crate::share::ShareSurface, _cmd: crate::share::WatchCmd) {}
+    /// A toast for the page (`share-notice`).
+    fn share_notice(&self, _notice: crate::share::ShareNotice) {}
+    /// While the player shares: the launcher's windows out of the picture, its notifications quiet.
+    fn share_privacy(&self, _hide: bool, _quiet: bool) {}
+    /// Open (or bring to the front) or close the "Yayın" window.
+    fn share_popout(&self, _open: bool) {}
 }
 
 /// How long an action waits for the room's answer.
@@ -237,6 +252,11 @@ impl Voice {
                     }
                 }
                 Effect::Changed => {}
+                Effect::Share(cmd) => platform.share(cmd),
+                Effect::Watch { surface, cmd } => platform.watch(surface, cmd),
+                Effect::ShareNotice(notice) => platform.share_notice(notice),
+                Effect::SharePrivacy { hide, quiet } => platform.share_privacy(hide, quiet),
+                Effect::SharePopout(open) => platform.share_popout(open),
             }
         }
         if let Some(view) = view {

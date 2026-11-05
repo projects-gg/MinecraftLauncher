@@ -27,6 +27,10 @@ use crate::view::{
 };
 use crate::wire::{self, ClosedWhy, FromRoom, ModAct, Role, RoomKind, Sdp, Ticket, ToRoom};
 
+/// SHARE: screen sharing's part of the machine (its own file; a child, so it shares the stay).
+#[path = "share_machine.rs"]
+mod share_machine;
+
 /// An invite's ticket holds this long after its ring began (`TICKET_TTL.invite`).
 pub const INVITE_TICKET_SECONDS: i64 = 600;
 /// The connection may be away this long before the stay ends ("Bağlanamadı.").
@@ -191,6 +195,24 @@ pub enum Effect {
     },
     /// The page's state changed: build [`Machine::view`] and send it.
     Changed,
+    // SHARE ------------------------------------------------------------------------------------
+    /// To the publisher (`pl-share`).
+    Share(crate::share::ShareCmd),
+    /// To the page that watches (`surface`), through the channel it attached.
+    Watch {
+        surface: crate::share::ShareSurface,
+        cmd: crate::share::WatchCmd,
+    },
+    /// A toast for the page (`share-notice`).
+    ShareNotice(crate::share::ShareNotice),
+    /// While the player shares: the launcher's windows out of the picture (`hide`), its Windows
+    /// notifications quiet (`quiet`); both off when nothing is shared.
+    SharePrivacy {
+        hide: bool,
+        quiet: bool,
+    },
+    /// Open (or bring to the front) or close the "Yayın" window.
+    SharePopout(bool),
 }
 
 /// The first answer a join's caller waits for.
@@ -213,6 +235,12 @@ enum Pending {
     Invite,
     Cancel,
     Mod,
+    // SHARE: `share_open` of share `n`, a `watch` (person, share), TURN for the watch session,
+    // a moderator's `unshare`.
+    ShareOpen(u8),
+    Watch(String, u8),
+    WatchTurn,
+    Unshare,
 }
 
 #[derive(Debug)]
@@ -316,6 +344,8 @@ pub struct Machine {
     /// SOC-NEXT §3.7 (VOICE-CALL): whom the player ignores on this computer (the page's list,
     /// sorted; empty while its switch is off). Their rings stay quiet.
     ignored: Vec<String>,
+    /// SHARE: screen sharing in the room.
+    share: share_machine::Shares,
 }
 
 impl std::fmt::Debug for Machine {
@@ -360,6 +390,7 @@ impl Machine {
             meters: false,
             meters_sent: (false, false),
             ignored: Vec::new(),
+            share: share_machine::Shares::default(),
         }
     }
 
@@ -511,6 +542,7 @@ impl Machine {
 
     fn after_settings(&mut self, before: &VoiceSettings, now: u64, out: &mut Vec<Effect>) {
         let after = self.store.settings().clone();
+        self.share_settings_changed(out);
         if before.enabled != after.enabled {
             if self.hub_up {
                 out.push(Effect::HubSwitch { on: after.enabled });
@@ -937,6 +969,8 @@ impl Machine {
         let Some(stay) = self.stay.take() else {
             return;
         };
+        // SHARE: every share stops, nothing is watched (the room's `leave` ends them there).
+        self.share_end(out);
         if stay.link == Link::Open {
             out.push(Effect::Send {
                 generation: stay.generation,
@@ -1052,7 +1086,7 @@ impl Machine {
             stay.join_sent = true;
             out.push(Effect::Send {
                 generation,
-                frame: ToRoom::Sync,
+                frame: ToRoom::Sync { caps: Self::caps() },
             });
         } else {
             stay.join_sent = false;
@@ -1060,7 +1094,11 @@ impl Machine {
                 stay.join_sent = true;
                 out.push(Effect::Send {
                     generation,
-                    frame: ToRoom::Join { sdp, mid },
+                    frame: ToRoom::Join {
+                        sdp,
+                        mid,
+                        caps: Self::caps(),
+                    },
                 });
             } else if self.page.attached {
                 self.ask_offer(&mut out);
@@ -1188,6 +1226,29 @@ impl Machine {
         if self.current(generation).is_none() {
             return out;
         }
+        // SHARE: share frames are the share part's; what voice messages say of shares, after them.
+        let Some(message) = self.share_message(message, now, &mut out) else {
+            dedup_changed(&mut out);
+            return out;
+        };
+        let seen = share_machine::Seen::of(&message);
+        let again = self.stay.as_ref().is_some_and(|stay| stay.welcomed);
+        self.voice_message(generation, message, now, unix, &mut out);
+        if self.current(generation).is_some() {
+            self.share_seen(seen, again, now, &mut out);
+        }
+        out
+    }
+
+    /// A voice message from the room on `generation`'s socket.
+    fn voice_message(
+        &mut self,
+        generation: u64,
+        message: FromRoom,
+        now: u64,
+        unix: i64,
+        out: &mut Vec<Effect>,
+    ) {
         match message {
             FromRoom::Hello {
                 room,
@@ -1200,7 +1261,7 @@ impl Machine {
             } => {
                 let my_id = self.me.clone();
                 let Some(stay) = self.stay.as_mut() else {
-                    return out;
+                    return;
                 };
                 let had_room = stay.room.take();
                 let model = Room::from_hello(&my_id, room, me.role, people, rings);
@@ -1271,13 +1332,13 @@ impl Machine {
                 // VOICE-CALL: in (a caller's own wait says it with its tone), or back after
                 // "Yeniden bağlanıyor…"; a room that changed meanwhile says who came.
                 if (first && !calling) || back {
-                    self.cue(EngineSound::Connected, &mut out);
+                    self.cue(EngineSound::Connected, out);
                 } else if !joined.is_empty() {
-                    self.cue(EngineSound::Join, &mut out);
+                    self.cue(EngineSound::Join, out);
                 }
                 out.extend(self.playback());
-                self.talk(&mut out);
-                self.sync_meters(&mut out);
+                self.talk(out);
+                self.sync_meters(out);
                 out.push(Effect::Changed);
             }
             FromRoom::Offer { sdp, mids } => {
@@ -1289,7 +1350,7 @@ impl Machine {
                 }
             }
             FromRoom::Kicked => {
-                self.end_stay(now, Some((VoiceLeftReason::Kicked, None)), &mut out);
+                self.end_stay(now, Some((VoiceLeftReason::Kicked, None)), out);
             }
             FromRoom::Closed { why, until } => {
                 let friend = self
@@ -1314,11 +1375,11 @@ impl Machine {
                 if reason == VoiceLeftReason::Restricted {
                     self.restricted_until = until;
                 }
-                self.end_stay(now, Some((reason, friend)), &mut out);
+                self.end_stay(now, Some((reason, friend)), out);
             }
             FromRoom::Moved { room, .. } if !wire::is_room_id(&room) => {
                 tracing::warn!("voice: a move to a room id that is not one");
-                self.end_stay(now, Some((VoiceLeftReason::Failed, None)), &mut out);
+                self.end_stay(now, Some((VoiceLeftReason::Failed, None)), out);
             }
             FromRoom::Moved { room, ticket } => {
                 let name = self
@@ -1346,9 +1407,9 @@ impl Machine {
                 out.extend(moved);
                 out.push(Effect::Notice(VoiceNotice::Moved { room, name }));
             }
-            FromRoom::Ack { rid, ice, until: _ } => {
+            FromRoom::Ack { rid, ice, .. } => {
                 let Some(rid) = rid else {
-                    return out;
+                    return;
                 };
                 match self.pending.remove(&rid) {
                     Some(Pending::Turn) => match ice {
@@ -1362,7 +1423,7 @@ impl Machine {
                             }));
                         }
                         // No credentials after all: as a lost connection (L2's P1).
-                        _ => self.audio_lost(now, &mut out),
+                        _ => self.audio_lost(now, out),
                     },
                     Some(_) => out.push(Effect::Answer {
                         rid,
@@ -1385,7 +1446,7 @@ impl Machine {
                         // `turn_unavailable` (the budget guard, no TURN key) or `rate_limited`:
                         // no stay without a connection, so as lost (L2's P1).
                         tracing::debug!(code, "voice: no TURN for this connection");
-                        self.audio_lost(now, &mut out);
+                        self.audio_lost(now, out);
                     } else {
                         out.push(Effect::Answer {
                             rid,
@@ -1399,10 +1460,10 @@ impl Machine {
                 let attached = self.page.attached;
                 let mic_chosen = !self.mute && !self.deaf;
                 let Some(stay) = self.stay.as_mut() else {
-                    return out;
+                    return;
                 };
                 let Some(room) = stay.room.as_mut() else {
-                    return out;
+                    return;
                 };
                 let cut_before = room.my_sm;
                 let applied = room.apply(&other);
@@ -1422,11 +1483,11 @@ impl Machine {
                     }));
                 }
                 if answered {
-                    self.cue(EngineSound::Connected, &mut out);
+                    self.cue(EngineSound::Connected, out);
                 } else if applied.joined.is_some() {
-                    self.cue(EngineSound::Join, &mut out);
+                    self.cue(EngineSound::Join, out);
                 } else if applied.left.is_some() {
-                    self.cue(EngineSound::Leave, &mut out);
+                    self.cue(EngineSound::Leave, out);
                 }
                 if applied.muted_me {
                     out.push(Effect::Notice(VoiceNotice::MutedByModerator));
@@ -1439,7 +1500,7 @@ impl Machine {
                     } else {
                         EngineSound::MicOn
                     };
-                    self.cue(sound, &mut out);
+                    self.cue(sound, out);
                 }
                 if applied.playback {
                     out.extend(self.playback());
@@ -1449,17 +1510,16 @@ impl Machine {
                     || applied.joined.is_some()
                     || applied.left.is_some()
                 {
-                    self.talk(&mut out);
+                    self.talk(out);
                 }
                 if cut != cut_before {
-                    self.sync_meters(&mut out);
+                    self.sync_meters(out);
                 }
                 if applied.changed {
                     out.push(Effect::Changed);
                 }
             }
         }
-        out
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1518,6 +1578,8 @@ impl Machine {
             to,
             room,
             name,
+            n: None,
+            who: None,
             rid,
         })
     }
@@ -1977,7 +2039,11 @@ impl Machine {
                     stay.join_sent = true;
                     out.push(Effect::Send {
                         generation: stay.generation,
-                        frame: ToRoom::Join { sdp, mid },
+                        frame: ToRoom::Join {
+                            sdp,
+                            mid,
+                            caps: Self::caps(),
+                        },
                     });
                 } else {
                     stay.offer = Some((sdp, mid));
@@ -2143,9 +2209,11 @@ impl Machine {
             {
                 at(since + RECONNECTING_SHOWN_MS);
             }
-            if stay.welcomed {
+            // SHARE: someone who shares or watches is no idle player.
+            if stay.welcomed && !self.share_active() {
                 at(stay.idle.deadline(last_input));
             }
+            self.share_deadline(last_input, &mut at);
         }
         next
     }
@@ -2173,6 +2241,16 @@ impl Machine {
         let mut reconnect: Option<(u64, Ticket)> = None;
         let mut rejoin = false;
         let mut lost = false;
+        // SHARE: sharing's own moments (rest, end, out of sight, "Hâlâ izliyor musun?"); while it
+        // runs the player is no idle player.
+        if self.stay.as_ref().is_some_and(|stay| stay.welcomed) {
+            self.share_tick(now, last_input, &mut out);
+        }
+        if self.share_active()
+            && let Some(stay) = &mut self.stay
+        {
+            stay.idle.spoke(now);
+        }
         if let Some(stay) = &mut self.stay {
             if stay.give_up_at.is_some_and(|at| now >= at) {
                 end = Some(VoiceLeftReason::Failed);
@@ -2300,6 +2378,7 @@ impl Machine {
             backup_rev: self.store.revision(),
             ask_before_call: settings.ask_before_call,
             together_since: self.stay.as_ref().and_then(|stay| stay.together_since),
+            share: self.share_view(),
         }
     }
 
