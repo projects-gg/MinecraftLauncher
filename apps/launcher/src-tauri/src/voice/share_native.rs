@@ -26,11 +26,14 @@ use super::share::Publisher;
 /// How long the picker waits for its list (pictures included).
 const SOURCES_WAIT: Duration = Duration::from_secs(8);
 
+/// The publisher's list and what this computer can do.
+type Listed = (Vec<SourceInfo>, ShareCaps);
+
 pub(super) struct Native {
     controller: ShareController,
     voice: Voice,
     /// The picker's request waiting for its list.
-    waiting: Mutex<Option<mpsc::Sender<(Vec<SourceInfo>, ShareCaps)>>>,
+    waiting: Mutex<Option<mpsc::Sender<Listed>>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
