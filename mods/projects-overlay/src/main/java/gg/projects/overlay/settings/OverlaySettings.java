@@ -32,7 +32,8 @@ public record OverlaySettings(
     boolean showSpeakers,
     List<String> recentChatEmojis,
     boolean showKeyHint,
-    boolean fnNeeded) {
+    boolean fnNeeded,
+    List<String> cardsOff) {
 
     public static final int MAX_VOLUME = 100;
 
@@ -81,9 +82,18 @@ public record OverlaySettings(
         }
     }
 
+    /**
+     * OVL-SOC2: the newer card kinds the player may turn off in game ("Oyunda gösterilecek kartlar"), as the launcher
+     * names their groups: friend and crew requests, friends coming online, crew plans, missed calls.
+     */
+    public static final List<String> CARD_GROUPS = List.of("request", "online", "plan", "missed");
+    /** OVL-SOC2: every card group the launcher knows (none shows without a world). */
+    public static final List<String> ALL_CARDS = List.of("message", "call", "invite", "request", "online", "plan",
+        "missed");
+    // Before DEFAULTS: its constructor reads it.
     public static final OverlaySettings DEFAULTS = new OverlaySettings(true, true, true, true, true,
         Duration.NORMAL, Corner.BOTTOM_RIGHT, false, true, 70, true, 85, false, List.of(), List.of(), true, List.of(),
-        true, false);
+        true, false, List.of());
     /** Stickers the picker keeps at the top (the last sent first). */
     public static final int RECENT_STICKERS = 8;
     /** Emojis the chat's emoji picker keeps at the top (the last written first; CHAT-EMOJI). */
@@ -105,21 +115,64 @@ public record OverlaySettings(
             : List.copyOf(recentEmojis.subList(0, Math.min(RECENT_EMOJIS, recentEmojis.size())));
         recentChatEmojis = recentChatEmojis == null ? List.of()
             : List.copyOf(recentChatEmojis.subList(0, Math.min(RECENT_CHAT_EMOJIS, recentChatEmojis.size())));
+        cardsOff = cardsOff == null ? List.of() : cardsOff.stream().filter(CARD_GROUPS::contains).distinct().sorted()
+            .toList();
     }
 
     public static int clampVolume(int volume) {
         return Math.max(0, Math.min(MAX_VOLUME, volume));
     }
 
-    /** Whether toasts of this kind ({@code message}, {@code call}, {@code invite}, {@code info}) show. */
+    /** Whether toasts of this kind ({@code message}, {@code call}, {@code invite}, {@code info}, …) show. */
     public boolean showsKind(String kind) {
         return switch (kind) {
             case "call" -> callToasts;
-            // A friend's world invite (HOST1) is a "Birlikte oyna" invite as well.
-            case "invite", "world" -> inviteToasts;
+            // A friend's world invite (HOST1) and a crew invite (OVL-SOC2) are invites as well.
+            case "invite", "world", "crew-invite" -> inviteToasts;
             case "info" -> infoToasts;
+            // OVL-SOC2: the newer cards, by their group.
+            case "request", "friend", "crew-ask", "crew-in" -> !cardsOff.contains("request");
+            case "online", "projects" -> !cardsOff.contains("online");
+            case "plan" -> !cardsOff.contains("plan");
+            case "missed" -> !cardsOff.contains("missed");
             default -> messageToasts;
         };
+    }
+
+    /** OVL-SOC2: whether cards of {@code group} ({@code request}, {@code online}, {@code plan}, {@code missed}) show. */
+    public boolean showsCards(String group) {
+        return !cardsOff.contains(group);
+    }
+
+    /**
+     * OVL-SOC2: every card kind the player turned off, as the launcher names their groups ({@code message},
+     * {@code call}, {@code invite} and the newer ones): the launcher keeps its own notifications for them.
+     */
+    public List<String> offGroups() {
+        List<String> off = new ArrayList<>();
+        if (!messageToasts) {
+            off.add("message");
+        }
+        if (!callToasts) {
+            off.add("call");
+        }
+        if (!inviteToasts) {
+            off.add("invite");
+        }
+        off.addAll(cardsOff);
+        return off;
+    }
+
+    /** OVL-SOC2: cards of {@code group} shown ({@code on}) or not. */
+    public OverlaySettings withCards(String group, boolean on) {
+        List<String> next = new ArrayList<>(cardsOff);
+        next.remove(group);
+        if (!on) {
+            next.add(group);
+        }
+        return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
+            recentEmojis, showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, next);
     }
 
     /**
@@ -181,117 +234,117 @@ public record OverlaySettings(
     public OverlaySettings withMessageToasts(boolean v) {
         return new OverlaySettings(v, callToasts, inviteToasts, infoToasts, showMessageText, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withCallToasts(boolean v) {
         return new OverlaySettings(messageToasts, v, inviteToasts, infoToasts, showMessageText, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withInviteToasts(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, v, infoToasts, showMessageText, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withInfoToasts(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, v, showMessageText, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withShowMessageText(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, v, duration, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withDuration(Duration v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, v, corner,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withCorner(Corner v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration, v,
             reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withReduceMotion(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, v, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withMessageSound(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, v, messageVolume, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withMessageVolume(int v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, v, callSound, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withCallSound(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, v, callVolume, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withCallVolume(int v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, v, keyUsed, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withRecentStickers(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, v, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withRecentEmojis(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers, v,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     /** "Konuşanları göster" (VOICE-O). */
     public OverlaySettings withShowSpeakers(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
-            recentEmojis, v, recentChatEmojis, showKeyHint, fnNeeded);
+            recentEmojis, v, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withRecentChatEmojis(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
-            recentEmojis, showSpeakers, v, showKeyHint, fnNeeded);
+            recentEmojis, showSpeakers, v, showKeyHint, fnNeeded, cardsOff);
     }
 
     public OverlaySettings withKeyUsed(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, v, recentStickers, recentEmojis,
-            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded);
+            showSpeakers, recentChatEmojis, showKeyHint, fnNeeded, cardsOff);
     }
 
     /** "Açma ipucunu göster" (KEY-HINT). */
     public OverlaySettings withShowKeyHint(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
-            recentEmojis, showSpeakers, recentChatEmojis, v, fnNeeded);
+            recentEmojis, showSpeakers, recentChatEmojis, v, fnNeeded, cardsOff);
     }
 
     /** This computer's F-key reaches the game only with Fn (KEY-HINT: learnt, no preference). */
     public OverlaySettings withFnNeeded(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
             corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, keyUsed, recentStickers,
-            recentEmojis, showSpeakers, recentChatEmojis, showKeyHint, v);
+            recentEmojis, showSpeakers, recentChatEmojis, showKeyHint, v, cardsOff);
     }
 }

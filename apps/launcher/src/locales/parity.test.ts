@@ -56,6 +56,9 @@ const OWN_PLACEHOLDERS = [
   /^teams\.mute\.until(Today|Tomorrow|Later)$/,
   /^newsColumn\.starts\./,
   /^cloudStale\.last\./,
+  // CREW-DISCOVER: the wave's time takes its Turkish ending ("18:00'de bakılacak").
+  /^discover\.block\.status\.(waiting|change)(Today|Tomorrow)$/,
+  /^discover\.renews$/,
 ];
 
 /** English strings that name Turkish letters on purpose. */

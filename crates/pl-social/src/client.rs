@@ -1046,6 +1046,96 @@ impl Session {
         Ok(requested.request)
     }
 
+    // --- crew discovery ("Ekip bul", CREW-DISCOVER) -----------------------------------------------
+
+    /// The discovery listing with its `ETag`, or None while it is still the one `etag` names
+    /// (`304`). `404 discover_off` while Studio's switch is off.
+    pub async fn discover_listing(
+        &self,
+        etag: Option<&str>,
+    ) -> Result<Option<(crate::DiscoverListing, Option<String>)>> {
+        let headers: Vec<(HeaderName, String)> = etag
+            .map(|etag| (IF_NONE_MATCH, etag.to_owned()))
+            .into_iter()
+            .collect();
+        let reply = self
+            .client
+            .send(
+                Method::GET,
+                "v1/discover",
+                Some(&self.token),
+                None,
+                &headers,
+            )
+            .await?;
+        match reply.status {
+            304 => Ok(None),
+            _ if !reply.is_success() => Err(reply.error()),
+            _ => {
+                let listing: crate::DiscoverListing = reply.json()?;
+                Ok(Some((listing.known_tags(), reply.etag.clone())))
+            }
+        }
+    }
+
+    /// Joins a listed crew that takes newcomers at once, or asks to join one that approves them
+    /// (`202`). `404 discover_gone`: not listed (any more).
+    pub async fn discover_join(&self, team: &str, multi: bool) -> Result<JoinOutcome> {
+        #[derive(Deserialize)]
+        struct Requested {
+            request: TeamRequest,
+        }
+        let path = format!("v1/discover/{}/join", team_id(team)?);
+        let body = multi.then(|| serde_json::json!({ "multi": true }));
+        let reply = self.call(Method::POST, &path, body).await?;
+        if reply.status == 202 {
+            let requested: Requested = reply.json()?;
+            Ok(JoinOutcome::Requested(requested.request))
+        } else {
+            Ok(JoinOutcome::Joined(reply.json()?))
+        }
+    }
+
+    /// The leader's "Keşif" block of crew `team`: `GET` (`put` None), or `PUT {text, tags}`.
+    pub async fn discover_status(
+        &self,
+        team: &str,
+        put: Option<(&str, &[String])>,
+    ) -> Result<crate::DiscoverStatus> {
+        #[derive(Deserialize)]
+        struct Answer {
+            discover: crate::DiscoverStatus,
+        }
+        let path = format!("v1/teams/{}/discover", team_id(team)?);
+        let answer: Answer = match put {
+            None => self.get(&path).await?,
+            Some((text, tags)) => self
+                .call(
+                    Method::PUT,
+                    &path,
+                    Some(serde_json::json!({ "text": text, "tags": tags })),
+                )
+                .await?
+                .json()?,
+        };
+        Ok(answer.discover)
+    }
+
+    /// The leader takes crew `team` out of discovery; None while Studio's switch is off (`204`).
+    pub async fn discover_off(&self, team: &str) -> Result<Option<crate::DiscoverStatus>> {
+        #[derive(Deserialize)]
+        struct Answer {
+            discover: crate::DiscoverStatus,
+        }
+        let path = format!("v1/teams/{}/discover", team_id(team)?);
+        let reply = self.call(Method::DELETE, &path, None).await?;
+        if reply.status == 204 {
+            return Ok(None);
+        }
+        let answer: Answer = reply.json()?;
+        Ok(Some(answer.discover))
+    }
+
     /// Withdraws the player's waiting join request to a crew (`team_request_not_found` when
     /// none waits).
     pub async fn withdraw_team_request(&self, team: &str) -> Result<()> {

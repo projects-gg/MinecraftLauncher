@@ -31,13 +31,15 @@ use crate::avatar::{self, Picture};
 use crate::hub::SocNextPrefs;
 use crate::links::{self, LinkLists};
 use crate::mention::{self, Mention};
-use crate::policy::{self, CrewMute, CrewSettings, Mute, Notice, NotifyPrefs, Situation};
+use crate::policy::{self, CrewMute, CrewSettings, Moment, Mute, Notice, NotifyPrefs, Situation};
 use crate::protocol::{
-    AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, CrewItem,
-    CrewPlace, CrewRoles, FEATURE_INVITE, FEATURE_NEXT, FEATURE_PEOPLE, FEATURE_PEOPLE2,
-    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_STREAMER, FEATURE_TAGS, FriendView, GroupItem,
-    LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, MateRights, Me, MsgView, NoteKind,
-    PROTO, Place, ReactionView, ReplyView, RequestItem, SendFailure, ToGame, ToastView, WorldMark,
+    AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, CrewAskItem,
+    CrewInviteItem, CrewItem, CrewPlace, CrewRoles, FEATURE_CARDS2, FEATURE_CHAT3, FEATURE_CREWS2,
+    FEATURE_INVITE, FEATURE_NEXT, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_PEOPLE3,
+    FEATURE_PEOPLE4, FEATURE_PEOPLE5, FEATURE_PLANS, FEATURE_STREAMER, FEATURE_TAGS, FriendView,
+    GroupItem, LinkView, ListsExtra, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, MateRights,
+    Me, MsgView, NoteKind, PROTO, Place, PlanItem, PrefsView, ReactionView, ReplyView, RequestItem,
+    SendFailure, ToGame, ToastKind, ToastView, WorldMark,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
@@ -46,6 +48,12 @@ pub const MAX_CONVS: usize = 50;
 pub const MAX_FRIENDS: usize = 400;
 /// Friend requests `lists` names at most (OVL-SOC 2).
 pub const MAX_REQUESTS: usize = 50;
+/// Crew invites `lists` names at most (OVL-SOC2; the mod keeps as many).
+pub const MAX_INVITES: usize = 20;
+/// The blocked `lists` names at most (OVL-SOC2).
+pub const MAX_BLOCKED: usize = 100;
+/// Plans `lists` names at most (OVL-SOC2: three ahead per crew, five crews).
+pub const MAX_PLANS: usize = 20;
 /// The snapshot stays this far below the frame limit.
 const SNAPSHOT_BUDGET: usize = MAX_LAUNCHER_FRAME - 16 * 1024;
 
@@ -123,6 +131,10 @@ pub struct Scene {
     /// OVL-SOC 2 (SOC-NEXT §3.1): each crew conversation's members by the names the crew
     /// knows, folded ([`mention::roster`]; only while SOC-NEXT is on).
     rosters: HashMap<String, Vec<(String, String)>>,
+    /// OVL-SOC2: the launcher's notification switches as the overlay's settings show them.
+    pub prefs: PrefsView,
+    /// OVL-SOC2: crew id → its chat's conversation (a plan card and a "katıldın" card open it).
+    crew_convs: HashMap<String, String>,
 }
 
 /// `host[:port]` as a server address: the host in lower case, the port (25565 when none). None
@@ -306,6 +318,8 @@ pub struct PeopleLists {
     pub roles: BTreeMap<String, CrewRoles>,
     /// OVL-SOC 2: who asked the player to be friends ("İstekler"), in the launcher's order.
     pub requests: Vec<RequestItem>,
+    /// OVL-SOC2: the management lists ([`ListsExtra`]): each part only to a mod that said it.
+    pub extra: ListsExtra,
 }
 
 impl PeopleLists {
@@ -330,7 +344,112 @@ impl PeopleLists {
             } else {
                 Vec::new()
             },
+            extra: self.extra.clone(),
         }
+    }
+}
+
+/// OVL-SOC2: the newer features a mod said in its hello (each one's frames and lists only to it).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Said {
+    pub people5: bool,
+    pub crews2: bool,
+    pub plans: bool,
+    pub chat3: bool,
+    pub cards2: bool,
+}
+
+impl Said {
+    pub fn from_hello(features: &[String]) -> Self {
+        let has = |name: &str| features.iter().any(|feature| feature == name);
+        Self {
+            people5: has(FEATURE_PEOPLE5),
+            crews2: has(FEATURE_CREWS2),
+            plans: has(FEATURE_PLANS),
+            chat3: has(FEATURE_CHAT3),
+            cards2: has(FEATURE_CARDS2),
+        }
+    }
+
+    /// Whether the mod hears `feature` in its welcome: the newer ones only when it said them.
+    fn hears(self, feature: &str) -> bool {
+        match feature {
+            FEATURE_PEOPLE5 => self.people5,
+            FEATURE_CREWS2 => self.crews2,
+            FEATURE_PLANS => self.plans,
+            FEATURE_CHAT3 => self.chat3,
+            FEATURE_CARDS2 => self.cards2,
+            _ => true,
+        }
+    }
+
+    /// The management lists as this mod hears them.
+    fn trim(self, extra: &mut ListsExtra) {
+        if !self.people5 {
+            extra.outgoing.clear();
+            extra.blocked.clear();
+            extra.code.clear();
+        }
+        if !self.crews2 {
+            extra.invites.clear();
+            extra.asks.clear();
+            extra.call = None;
+            extra.callers.clear();
+        }
+        if !self.plans {
+            extra.plans.clear();
+            extra.planners.clear();
+            extra.notes = false;
+        }
+    }
+}
+
+/// The plans of `view` not over at `now_ms`, soonest first (OVL-SOC2, `lists`' `plans`).
+fn plan_items(view: &SocialView, now_ms: i64, names: &HashMap<String, String>) -> Vec<PlanItem> {
+    let mut plans: Vec<PlanItem> = view
+        .plans
+        .iter()
+        .filter(|plan| plan.ends_at.saturating_mul(1000) > now_ms)
+        .map(|plan| {
+            let mut counts = (0, 0, 0);
+            for answer in &plan.answers {
+                match answer.answer {
+                    pl_social::PlanAnswer::Yes => counts.0 += 1,
+                    pl_social::PlanAnswer::Maybe => counts.1 += 1,
+                    pl_social::PlanAnswer::No => counts.2 += 1,
+                }
+            }
+            PlanItem {
+                id: plan.id.clone(),
+                crew: plan.crew.clone(),
+                at: plan.at.saturating_mul(1000),
+                start: plan.starts_at.saturating_mul(1000),
+                end: plan.ends_at.saturating_mul(1000),
+                by: plan
+                    .by_name
+                    .clone()
+                    .or_else(|| names.get(&plan.by).cloned())
+                    .unwrap_or_default(),
+                mine: plan.mine,
+                note: plan.note.clone().filter(|note| !note.trim().is_empty()),
+                my: plan.my_answer.map(plan_answer_name),
+                yes: counts.0,
+                maybe: counts.1,
+                no: counts.2,
+            }
+        })
+        .collect();
+    plans.sort_by(|a, b| a.at.cmp(&b.at).then_with(|| a.id.cmp(&b.id)));
+    plans.truncate(MAX_PLANS);
+    plans
+}
+
+/// A plan answer as the bridge names it.
+pub fn plan_answer_name(answer: pl_social::PlanAnswer) -> &'static str {
+    match answer {
+        pl_social::PlanAnswer::Yes => "yes",
+        pl_social::PlanAnswer::Maybe => "maybe",
+        pl_social::PlanAnswer::No => "no",
     }
 }
 
@@ -641,6 +760,98 @@ impl Scene {
             }
         }
         let blocked_ids: HashSet<&str> = view.blocked.iter().map(|b| b.id.as_str()).collect();
+        // OVL-SOC2: the friends page's, crews' and plans' management (each part to the mod that said
+        // it, `Said::trim`).
+        let team_feature = |name: &str| view.teams && view.team_features.iter().any(|f| f == name);
+        let calls_on = team_feature(TEAM_FEATURE_CALLS);
+        let plans_on = team_feature(pl_social::TEAM_FEATURE_PLANS);
+        let extra = ListsExtra {
+            outgoing: view
+                .outgoing
+                .iter()
+                .filter(|request| !blocked_ids.contains(request.id.as_str()))
+                .take(MAX_REQUESTS)
+                .map(|request| RequestItem {
+                    id: request.id.clone(),
+                    name: request.name.clone(),
+                })
+                .collect(),
+            blocked: view
+                .blocked
+                .iter()
+                .take(MAX_BLOCKED)
+                .map(|person| RequestItem {
+                    id: person.id.clone(),
+                    name: person.name.clone(),
+                })
+                .collect(),
+            code: me.friend_code.clone(),
+            invites: if view.teams {
+                view.team_invites
+                    .iter()
+                    .filter(|invite| !blocked_ids.contains(invite.from.id.as_str()))
+                    .take(MAX_INVITES)
+                    .map(|invite| CrewInviteItem {
+                        crew: invite.team_id.clone(),
+                        name: invite.name.clone(),
+                        from: names
+                            .get(&invite.from.id)
+                            .cloned()
+                            .unwrap_or_else(|| invite.from.name.clone()),
+                        by: invite.from.id.clone(),
+                        members: invite.members,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            asks: if view.teams {
+                view.crews
+                    .iter()
+                    .flat_map(|crew| crew.requests.iter().map(move |ask| (crew, ask)))
+                    .filter(|(_, ask)| !blocked_ids.contains(ask.id.as_str()))
+                    .take(MAX_REQUESTS)
+                    .map(|(crew, ask)| CrewAskItem {
+                        crew: crew.id.clone(),
+                        crew_name: crew.name.clone(),
+                        id: ask.id.clone(),
+                        name: ask.name.clone(),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            call: calls_on.then_some(match view.call_place {
+                pl_social::CallPlace::Ok => "ok",
+                pl_social::CallPlace::NeedsServer => "needs-server",
+                pl_social::CallPlace::ServerHidden => "server-hidden",
+            }),
+            callers: if calls_on {
+                view.crews
+                    .iter()
+                    .filter(|crew| allows(crew.permissions.call, crew))
+                    .map(|crew| crew.id.clone())
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            plans: if plans_on {
+                plan_items(view, now_ms, &names)
+            } else {
+                Vec::new()
+            },
+            // The launcher's `canPlan`: the right to call the crew covers plans.
+            planners: if plans_on {
+                view.crews
+                    .iter()
+                    .filter(|crew| allows(crew.permissions.call, crew))
+                    .map(|crew| crew.id.clone())
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            notes: plans_on && team_feature(pl_social::TEAM_FEATURE_PLAN_NOTES),
+        };
         let lists = PeopleLists {
             groups: groups.clone(),
             crews: inviting
@@ -677,6 +888,7 @@ impl Scene {
                     name: request.name.clone(),
                 })
                 .collect(),
+            extra,
         };
 
         let mut friends: Vec<FriendView> = view
@@ -782,6 +994,7 @@ impl Scene {
                     writable: chat_on && conv.writable,
                     seen: conv.peer_read.filter(|_| reads && crew.is_none()),
                     slow,
+                    crew: crew.map(str::to_owned),
                 }
             })
             .collect();
@@ -877,6 +1090,17 @@ impl Scene {
         for request in &view.incoming {
             picture(&request.id, &request.avatar, request.avatar_url.as_deref());
         }
+        // OVL-SOC2: the requests the player sent, who invited them to a crew, who asks to join one.
+        for request in &view.outgoing {
+            picture(&request.id, &request.avatar, request.avatar_url.as_deref());
+        }
+        for invite in &view.team_invites {
+            let from = &invite.from;
+            picture(&from.id, &from.avatar, from.avatar_url.as_deref());
+        }
+        for ask in view.crews.iter().flat_map(|crew| crew.requests.iter()) {
+            picture(&ask.id, &ask.avatar, ask.avatar_url.as_deref());
+        }
         for friend in &view.friends {
             picture(&friend.id, &friend.avatar, friend.avatar_url.as_deref());
         }
@@ -899,6 +1123,36 @@ impl Scene {
             .collect();
         // OVL-SOC 2: the status switcher's word (the friends feature is on and signed in).
         features.push(FEATURE_PEOPLE4.to_owned());
+        // OVL-SOC2: the management this launcher takes now (each only to a mod that said it).
+        features.push(FEATURE_PEOPLE5.to_owned());
+        if view.teams {
+            features.push(FEATURE_CREWS2.to_owned());
+        }
+        if plans_on {
+            features.push(FEATURE_PLANS.to_owned());
+        }
+        if chat_on {
+            features.push(FEATURE_CHAT3.to_owned());
+        }
+        features.push(FEATURE_CARDS2.to_owned());
+        let crew_convs: HashMap<String, String> = view
+            .chat
+            .iter()
+            .flat_map(|chat| chat.conversations.iter())
+            .filter_map(|conv| {
+                conv.crew
+                    .as_ref()
+                    .map(|crew| (crew.clone(), conv.id.clone()))
+            })
+            .collect();
+        let prefs_view = PrefsView {
+            favorites_online: prefs.favorites_online,
+            favorites_projects: prefs.favorites_projects,
+            // Where the service keeps the crews' switch, its word.
+            crew_calls: service.map_or(prefs.crew_calls, |all| all.calls),
+            crew_chat: prefs.crew_chat,
+            join_requests: prefs.join_requests,
+        };
 
         Self {
             signed_in: true,
@@ -937,6 +1191,8 @@ impl Scene {
             peers,
             ignored: HashSet::new(),
             rosters: HashMap::new(),
+            prefs: prefs_view,
+            crew_convs,
         }
     }
 
@@ -954,6 +1210,8 @@ impl Scene {
         if next.streamer {
             self.streamer = true;
             self.features.push(FEATURE_STREAMER.to_owned());
+            // OVL-SOC2: the player's own code stays off a stream too (the launcher's add page hides it).
+            self.lists.extra.code.clear();
         }
         // The end only of the status its timer was set for (a config may come before the view).
         self.status_until = next.status_until.filter(|until| {
@@ -1123,6 +1381,18 @@ impl Scene {
         self.names.get(id).map(String::as_str)
     }
 
+    /// OVL-SOC2: a crew's chat conversation.
+    pub fn crew_conv(&self, crew: &str) -> Option<&str> {
+        self.crew_convs.get(crew).map(String::as_str)
+    }
+
+    /// OVL-SOC2: crews are on for the player now (codes and links may be looked up and joined).
+    pub fn has_crews(&self) -> bool {
+        self.features
+            .iter()
+            .any(|feature| feature == FEATURE_CREWS2)
+    }
+
     pub fn crew_name(&self, id: &str) -> Option<&str> {
         self.crew_names.get(id).map(String::as_str)
     }
@@ -1199,9 +1469,28 @@ pub struct Mirror {
     people4: bool,
     status: Option<&'static str>,
     until: Option<i64>,
+    /// OVL-SOC2: the newer features the mod said, and the notification switches it heard (`cards2`).
+    said: Said,
+    prefs: Option<PrefsView>,
 }
 
 impl Mirror {
+    /// For a mod that said OVL-SOC2's features (`people5`, `crews2`, `plans`, `chat3`, `cards2`).
+    pub fn with_said(mut self, said: Said) -> Self {
+        self.said = said;
+        self
+    }
+
+    /// Whether the welcome's `feature` reaches this mod.
+    fn hears(&self, feature: &str) -> bool {
+        (self.people4 || !people4_only(feature)) && self.said.hears(feature)
+    }
+
+    /// The notification switches, to a mod with the new cards while signed in.
+    fn prefs_for(&self, scene: &Scene) -> Option<PrefsView> {
+        (self.said.cards2 && scene.signed_in).then_some(scene.prefs)
+    }
+
     /// For a mod that knows TEAM6-O's frames (`tags` in its hello) and OVL-UX2's lists
     /// (`people2`), or not.
     pub fn for_mod(tags: bool, people2: bool) -> Self {
@@ -1237,6 +1526,7 @@ impl Mirror {
         if !self.people4 {
             lists.requests.clear();
         }
+        self.said.trim(&mut lists.extra);
         lists
     }
 
@@ -1266,7 +1556,7 @@ impl Mirror {
                 scene
                     .features
                     .iter()
-                    .filter(|feature| self.people4 || !people4_only(feature))
+                    .filter(|feature| self.hears(feature))
                     .cloned()
                     .collect()
             } else {
@@ -1297,6 +1587,8 @@ impl Mirror {
         let people4 = self.people4;
         let marks = self.marks;
         let lang = self.lang;
+        let said = self.said;
+        let prefs = self.prefs_for(scene);
         *self = Self {
             identity: Some(identity),
             lang,
@@ -1315,6 +1607,8 @@ impl Mirror {
             people4,
             status,
             until,
+            said,
+            prefs,
         };
         let snapshot = ToGame::Snapshot {
             friends,
@@ -1345,6 +1639,10 @@ impl Mirror {
                 defs: scene.mark_defs.clone(),
             });
         }
+        // OVL-SOC2: the launcher's notification switches for the overlay's settings.
+        if let Some(prefs) = prefs {
+            frames.push(ToGame::Prefs(prefs));
+        }
         frames.push(snapshot);
         if tags {
             for join in &scene.joins {
@@ -1364,10 +1662,10 @@ impl Mirror {
                 || known.reduced_motion != reduced_motion
                 || known.lang != self.lang
                 || (if scene.signed_in {
-                    !known.features.iter().eq(scene
+                    !known
                         .features
                         .iter()
-                        .filter(|feature| self.people4 || !people4_only(feature)))
+                        .eq(scene.features.iter().filter(|feature| self.hears(feature)))
                 } else {
                     !known.features.is_empty()
                 })
@@ -1415,6 +1713,11 @@ impl Mirror {
             frames.push(ToGame::Marks {
                 defs: scene.mark_defs.clone(),
             });
+        }
+        let prefs = self.prefs_for(scene);
+        if prefs.is_some() && prefs != self.prefs {
+            self.prefs = prefs;
+            frames.extend(prefs.map(ToGame::Prefs));
         }
         diff(
             &mut self.friends,
@@ -1551,6 +1854,8 @@ pub struct Listener {
     /// CHAT-CALM: the mod knows crew chat's slow mode (`slow` in its hello): it hears `slow` as a
     /// reason and counts the wait down itself.
     pub slow: bool,
+    /// OVL-SOC2: the mod draws the new cards (`cards2` in its hello).
+    pub cards2: bool,
 }
 
 impl Listener {
@@ -1574,6 +1879,9 @@ impl Listener {
             slow: features
                 .iter()
                 .any(|feature| feature == crate::protocol::FEATURE_SLOW),
+            cards2: features
+                .iter()
+                .any(|feature| feature == crate::protocol::FEATURE_CARDS2),
         }
     }
 }
@@ -2066,8 +2374,155 @@ pub fn toast_of(
         // Cloud AFK's notices (AFKPLUS): Cloud AFK already chose them by the player's own switches;
         // do-not-disturb is a social status and does not apply.
         SocialNotice::AfkNotice { notice } => crate::afk::afk_toast(notice, listener.english),
+        // OVL-SOC2: the friends feature's other moments, as cards of their own (a mod that draws
+        // them; the launcher's `wantsNotice` decides, someone ignored says nothing).
+        other if listener.cards2 => moment_toast(other, scene, &situation),
         _ => None,
     }
+}
+
+/// OVL-SOC2: a card for a request, a new friend, a friend online or on Projects, a crew invite, a
+/// join request, a join request taken or a new plan, when the rules want one. The mod words it.
+fn moment_toast(notice: &SocialNotice, scene: &Scene, s: &Situation<'_>) -> Option<ToastView> {
+    // Their nickname, else the name the moment carries, else the lists' name.
+    let person = |id: &str, name: Option<&str>| -> String {
+        scene
+            .nickname_of(id)
+            .or(name)
+            .or_else(|| scene.name_of(id))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    // Badges the catalogue knows (a stranger's request carries their own).
+    let known = |keys: &[String]| -> Vec<String> {
+        keys.iter()
+            .filter(|key| scene.mark_defs.iter().any(|def| def.key == **key))
+            .cloned()
+            .collect()
+    };
+    let card = |kind: ToastKind, key: String, id: &str, title: String| ToastView {
+        kind,
+        key,
+        title,
+        body: String::new(),
+        conv: None,
+        crew: None,
+        sticker: None,
+        badge: None,
+        marks: scene.marks_of(id).to_vec(),
+        by: (!id.is_empty()).then(|| id.to_owned()),
+        at: None,
+    };
+    let ignored = |id: &str| scene.is_ignored(id) || scene.is_blocked(id);
+    let (moment, toast) = match notice {
+        SocialNotice::Request { request } if !ignored(&request.id) => (
+            Moment::Request,
+            ToastView {
+                marks: known(&request.marks),
+                ..card(
+                    ToastKind::Request,
+                    format!("request:{}", request.id),
+                    &request.id,
+                    person(&request.id, Some(&request.name)),
+                )
+            },
+        ),
+        SocialNotice::FriendAdded { friend } if !ignored(&friend.id) => (
+            Moment::Friend,
+            ToastView {
+                marks: known(&friend.marks),
+                ..card(
+                    ToastKind::Friend,
+                    format!("friend:{}", friend.id),
+                    &friend.id,
+                    person(&friend.id, Some(&friend.name)),
+                )
+            },
+        ),
+        // A friend the list does not have (any more) is not told.
+        SocialNotice::FriendOnline { id } if !ignored(id) && scene.friend(id).is_some() => (
+            Moment::Online { id },
+            card(
+                ToastKind::Online,
+                format!("online:{id}"),
+                id,
+                person(id, None),
+            ),
+        ),
+        // The same key: "Projects'e girdi" takes the place of "çevrimiçi" (the launcher's better one).
+        SocialNotice::FriendOnProjects { id } if !ignored(id) && scene.friend(id).is_some() => (
+            Moment::Projects { id },
+            card(
+                ToastKind::Projects,
+                format!("online:{id}"),
+                id,
+                person(id, None),
+            ),
+        ),
+        SocialNotice::TeamInvite { invite } if !ignored(&invite.from.id) => (
+            Moment::CrewInvite,
+            ToastView {
+                crew: Some(invite.name.clone()),
+                ..card(
+                    ToastKind::CrewInvite,
+                    format!("crew-invite:{}", invite.team_id),
+                    &invite.from.id,
+                    person(&invite.from.id, Some(&invite.from.name)),
+                )
+            },
+        ),
+        SocialNotice::JoinRequest { crew, request } if !ignored(&request.id) => {
+            let name = scene.crew_name(crew)?;
+            (
+                Moment::CrewAsk { crew },
+                ToastView {
+                    crew: Some(name.to_owned()),
+                    marks: known(&request.marks),
+                    ..card(
+                        ToastKind::CrewAsk,
+                        format!("crew-ask:{crew}:{}", request.id),
+                        &request.id,
+                        person(&request.id, Some(&request.name)),
+                    )
+                },
+            )
+        }
+        SocialNotice::RequestAccepted { crew, name } => (
+            Moment::CrewIn,
+            ToastView {
+                crew: Some(name.clone()),
+                conv: scene.crew_conv(crew).map(str::to_owned),
+                ..card(
+                    ToastKind::CrewIn,
+                    format!("crew-in:{crew}"),
+                    "",
+                    String::new(),
+                )
+            },
+        ),
+        SocialNotice::CrewPlan { plan } if !plan.mine && !ignored(&plan.by) => (
+            Moment::Plan { crew: &plan.crew },
+            ToastView {
+                // Streamer mode (SOC-NEXT §3.4): a plan's note is the player's words, kept off.
+                body: plan
+                    .note
+                    .clone()
+                    .filter(|note| !scene.streamer && !note.trim().is_empty())
+                    .unwrap_or_default(),
+                crew: scene.crew_name(&plan.crew).map(str::to_owned),
+                conv: scene.crew_conv(&plan.crew).map(str::to_owned),
+                at: Some(plan.at.saturating_mul(1000)),
+                ..card(
+                    ToastKind::Plan,
+                    format!("plan:{}", plan.id),
+                    &plan.by,
+                    person(&plan.by, plan.by_name.as_deref()),
+                )
+            },
+        ),
+        _ => return None,
+    };
+    policy::moment_heard(moment, s).then_some(toast)
 }
 
 #[cfg(test)]
@@ -2379,7 +2834,8 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "chat", "calls", "people", "people2", "people3", "people4"
+                "friends", "chat", "calls", "people", "people2", "people3", "people4", "people5",
+                "crews2", "chat3", "cards2"
             ]
         );
         // In game first, then the launcher, then offline.
@@ -2926,6 +3382,7 @@ pub(crate) mod tests {
         english: false,
         chat2: true,
         slow: false,
+        cards2: false,
     };
 
     #[test]
@@ -3023,7 +3480,11 @@ pub(crate) mod tests {
                 "people",
                 "people2",
                 "people3",
-                "people4"
+                "people4",
+                "people5",
+                "crews2",
+                "chat3",
+                "cards2"
             ]
         );
         assert!(scene.offers(|e| e.typing));
@@ -3049,7 +3510,8 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "calls", "people", "people2", "people3", "people4"
+                "friends", "calls", "people", "people2", "people3", "people4", "people5", "crews2",
+                "cards2"
             ]
         );
     }
@@ -3212,6 +3674,7 @@ pub(crate) mod tests {
                 english: true,
                 chat2: false,
                 slow: false,
+                cards2: false,
             },
         );
         assert_eq!(english.text, "[Sticker: GG]");
@@ -3455,6 +3918,7 @@ pub(crate) mod tests {
                 english: true,
                 chat2: true,
                 slow: false,
+                cards2: false,
             }
         );
         assert_eq!(
@@ -3564,7 +4028,8 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "chat", "calls", "tags", "people", "people2", "people3", "people4"
+                "friends", "chat", "calls", "tags", "people", "people2", "people3", "people4",
+                "people5", "crews2", "chat3", "cards2"
             ]
         );
         assert_eq!(
@@ -3868,7 +4333,8 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "chat", "calls", "people", "people2", "people3", "invite", "people4"
+                "friends", "chat", "calls", "people", "people2", "people3", "invite", "people4",
+                "people5", "crews2", "chat3", "cards2"
             ]
         );
         v.activity = pl_social::ActivityView::Playing {

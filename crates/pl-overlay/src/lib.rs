@@ -50,6 +50,6 @@ pub use server::{
     LANG_ARG, PANEL_ARG, PORT_ARG, ROUTE_ARG, TOKEN_ARG, WORLD_ARG, fast_packs_jvm_arg,
     is_secret_jvm_arg, route_jvm_arg, world_jvm_arg,
 };
-pub use session::{CONNECT_WAIT, ConnectOutcome, PeopleChange, SocialActions};
+pub use session::{CONNECT_WAIT, ConnectOutcome, Manage, Managed, PeopleChange, SocialActions};
 pub use token::SessionToken;
 pub use voice::{VoiceAct, VoiceFuture};

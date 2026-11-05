@@ -13,7 +13,8 @@ import type { ChatMutes } from "./chat/conversations";
 import type { HomeHint } from "./model";
 import { shownView } from "./next/view";
 
-export type SocialPage = "list" | "add" | "settings" | "team" | "chat";
+/** CREW-DISCOVER: "discover" is "Ekip bul", one step below the crew page it opens from. */
+export type SocialPage = "list" | "add" | "settings" | "team" | "chat" | "discover";
 
 /** The list page's two halves: friends, and the conversations ("Mesajlar"). */
 export type ListTab = "friends" | "messages";
@@ -48,7 +49,14 @@ export interface ReportRequest {
 export type TeamIntent = "edit" | "invite" | "leave";
 
 /** Pages deeper in the panel than the list slide in from the right. */
-const DEPTH: Record<SocialPage, number> = { list: 0, add: 1, settings: 1, team: 1, chat: 2 };
+const DEPTH: Record<SocialPage, number> = {
+  list: 0,
+  add: 1,
+  settings: 1,
+  team: 1,
+  chat: 2,
+  discover: 2,
+};
 
 interface SocialUi {
   /** The latest snapshot from the backend (hidden until the first one arrives), as shown: with

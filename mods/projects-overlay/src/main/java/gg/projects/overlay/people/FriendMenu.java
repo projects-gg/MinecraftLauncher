@@ -91,6 +91,8 @@ public final class FriendMenu {
         ACCEPT_REQUEST,
         /** OVL-SOC 2: "Reddet" on a friend request (no question: the launcher's × asks none either). */
         DECLINE_REQUEST,
+        /** OVL-SOC2: "İsteği geri çek" on a friend request the player sent. */
+        CANCEL_REQUEST,
         /** OVL-SOC 2: the status switcher's "Çevrimiçi" ({@code on}: the status now). */
         STATUS_ONLINE,
         /** OVL-SOC 2: "Rahatsız etmeyin"; with SOC-NEXT a list of durations ({@code sub}). */

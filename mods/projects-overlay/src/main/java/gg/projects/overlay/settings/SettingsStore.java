@@ -157,7 +157,22 @@ public final class SettingsStore {
             chatEmojis(root, "recentChatEmojis"),
             // KEY-HINT: "Açma ipucunu göster" (on in a file from before it), and whether this computer's F-key needs Fn.
             bool(root, "showKeyHint", d.showKeyHint()),
-            bool(root, "fnNeeded", d.fnNeeded()));
+            bool(root, "fnNeeded", d.fnNeeded()),
+            // OVL-SOC2: the newer card kinds turned off (a file from before them shows them all).
+            cardsOff(toasts));
+    }
+
+    /** OVL-SOC2: {@code toasts.off}, the newer card groups turned off; anything unknown is dropped. */
+    private static java.util.List<String> cardsOff(JsonObject toasts) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (toasts != null && toasts.get("off") instanceof JsonArray list) {
+            for (com.google.gson.JsonElement e : list) {
+                if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                    out.add(e.getAsString());
+                }
+            }
+        }
+        return out;
     }
 
     static String format(OverlaySettings s) {
@@ -168,6 +183,11 @@ public final class SettingsStore {
         toasts.addProperty("call", s.callToasts());
         toasts.addProperty("invite", s.inviteToasts());
         toasts.addProperty("info", s.infoToasts());
+        JsonArray off = new JsonArray();
+        for (String group : s.cardsOff()) {
+            off.add(group);
+        }
+        toasts.add("off", off);
         root.add("toasts", toasts);
         root.addProperty("showMessageText", s.showMessageText());
         root.addProperty("duration", s.duration().id);

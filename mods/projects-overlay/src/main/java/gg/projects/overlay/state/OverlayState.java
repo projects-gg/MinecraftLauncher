@@ -325,14 +325,46 @@ public final class OverlayState {
      * the card's face, or null.
      */
     public record ToastRequest(String kind, String key, String title, String body, String conversation,
-        String crew, String sticker, Badge badge, List<MarkDef> marks, String by) {
+        String crew, String sticker, Badge badge, List<MarkDef> marks, String by, long at) {
         public ToastRequest(String kind, String key, String title, String body, String conversation, String crew) {
-            this(kind, key, title, body, conversation, crew, null, null, List.of(), null);
+            this(kind, key, title, body, conversation, crew, null, null, List.of(), null, 0);
         }
     }
 
-    /** Someone who asked the player to be friends (OVL-SOC 2). */
+    /** Someone who asked the player to be friends (OVL-SOC 2); OVL-SOC2: someone they asked, someone blocked. */
     public record Request(String id, String name) {
+    }
+
+    // ---- OVL-SOC2: the friends page's, crews' and plans' management ----
+
+    /** An invite to a crew waiting for the player: the crew, who invited (their name and id), how many are in it. */
+    public record Invite(String crew, String name, String from, String by, int members) {
+    }
+
+    /** Someone's request to join one of the player's crews. */
+    public record Ask(String crew, String crewName, String id, String name) {
+    }
+
+    /**
+     * A crew plan not over yet: its time to show ({@code at}, Unix ms), when it starts and ends on this computer's clock,
+     * who made it, its note, the player's answer ({@code yes}, {@code maybe}, {@code no} or null) and the counts.
+     */
+    public record Plan(String id, String crew, long at, long start, long end, String by, boolean mine, String note,
+        String my, int yes, int maybe, int no) {
+    }
+
+    /**
+     * What "Bul" found for a code: {@code kind} {@code friend}, {@code crew} or {@code none} ({@code reason}); a person's
+     * or crew's id and name, how the player stands to it ({@code relation}); a crew's size and tag, whether it approves
+     * newcomers and whether the player's request to it waits.
+     */
+    public record Found(String code, String kind, String id, String name, String relation, int members, String tag,
+        boolean approval, boolean requested, String reason) {
+    }
+
+    /** The launcher's notification switches the overlay's settings show (and change). */
+    public record Prefs(boolean favoritesOnline, boolean favoritesProjects, boolean crewCalls, boolean crewChat,
+        boolean joinRequests) {
     }
 
     /** A user id from a launcher frame, or null when there is none (or no id could be that long). */
@@ -412,6 +444,31 @@ public final class OverlayState {
     private final Map<String, String> realNames = new HashMap<>();
     /** Requests answered from the list whose answer has not come yet. */
     private final Set<String> answering = new HashSet<>();
+    // ---- OVL-SOC2 ----
+    private List<Request> outgoing = List.of();
+    private List<Request> blockedPeople = List.of();
+    private String myCode = "";
+    private List<Invite> invites = List.of();
+    private List<Ask> asks = List.of();
+    /** Where "Ekibi çağır" stands ({@code ok}, {@code needs-server}, {@code server-hidden}); null while calls are off. */
+    private String callPlace;
+    private List<String> callers = List.of();
+    private List<Plan> plans = List.of();
+    private List<String> planners = List.of();
+    private boolean planNotes;
+    /** The newest answer to "Bul", or null. */
+    private Found found;
+    private int foundRevision;
+    /** The launcher's notification switches, or null before it said them. */
+    private Prefs prefs;
+    /** Presses on their way ({@code act:id}): a second press waits for the first one's answer. */
+    private final Set<String> pressing = new HashSet<>();
+    /** The conversation a press from crew chat speaks in ({@code act:id} → conversation). */
+    private final Map<String, String> pressConvs = new HashMap<>();
+    /** What a press's note names (a crew's name, a plan's time), by {@code act:id}. */
+    private final Map<String, String> pressNames = new HashMap<>();
+    /** When the next crew call may go after a refusal said so (Unix ms), 0 without one. */
+    private long callWaitUntil;
 
     public BridgeClient.Status status() {
         return status;
@@ -461,6 +518,197 @@ public final class OverlayState {
     /** OVL-SOC 2: who asked the player to be friends, in the launcher's order. */
     public List<Request> requests() {
         return requests;
+    }
+
+    // ---- OVL-SOC2: the friends page's, crews' and plans' management ----
+
+    /** OVL-SOC2: conversation id → its crew (a crew chat's `crew`). */
+    private final Map<String, String> crewOfConv = new HashMap<>();
+
+    private void putCrewOf(Conversation c, JsonObject o) {
+        String crew = Protocol.str(o, "crew", "");
+        if (c.crew() && !crew.isEmpty() && crew.length() <= 64) {
+            crewOfConv.put(c.id(), crew);
+        }
+    }
+
+    /** OVL-SOC2: the crew of a crew conversation (its `crew`, else the service's `c:<crew>`), or null. */
+    public String crewOf(String conversation) {
+        if (conversation == null) {
+            return null;
+        }
+        String crew = crewOfConv.get(conversation);
+        if (crew != null) {
+            return crew;
+        }
+        return conversation.startsWith("c:") && conversation.length() > 2 ? conversation.substring(2) : null;
+    }
+
+    /** OVL-SOC2: the conversation of a crew (its chat), or null. */
+    public String conversationOfCrew(String crew) {
+        for (Map.Entry<String, String> e : crewOfConv.entrySet()) {
+            if (e.getValue().equals(crew)) {
+                return e.getKey();
+            }
+        }
+        return conversations.containsKey("c:" + crew) ? "c:" + crew : null;
+    }
+
+    /** The launcher takes OVL-SOC2's friends page frames now (signed in; a newer launcher). */
+    public boolean people5() {
+        return features.contains("people5");
+    }
+
+    /** The launcher takes the crews' frames now (crews on). */
+    public boolean crews2() {
+        return features.contains("crews2");
+    }
+
+    /** The service has crew plans now. */
+    public boolean plansOn() {
+        return features.contains("plans");
+    }
+
+    /** The player's own messages may be edited and deleted from the panel. */
+    public boolean chat3() {
+        return features.contains("chat3");
+    }
+
+    /** The launcher takes the card kinds and its notification switches from the game. */
+    public boolean cards2() {
+        return features.contains("cards2");
+    }
+
+    /** The friend requests the player sent that wait ("Gönderilenler"). */
+    public List<Request> outgoing() {
+        return outgoing;
+    }
+
+    /** The people the player blocked ("Engellenenler"). */
+    public List<Request> blocked() {
+        return blockedPeople;
+    }
+
+    /** The player's own friend code ({@code PRJ-XXXX-XXXX}), or empty. */
+    public String myCode() {
+        return myCode;
+    }
+
+    /** Crew invites waiting for the player. */
+    public List<Invite> invites() {
+        return invites;
+    }
+
+    /** Requests to join the player's crews they may answer. */
+    public List<Ask> asks() {
+        return asks;
+    }
+
+    /** Where "Ekibi çağır" stands ({@code ok}, {@code needs-server}, {@code server-hidden}), or null while calls are off. */
+    public String callPlace() {
+        return callPlace;
+    }
+
+    /** The player may call this crew ("Ekibi çağır"). */
+    public boolean mayCall(String crew) {
+        return callPlace != null && callers.contains(crew);
+    }
+
+    /** When the next crew call may go after the service said to wait (Unix ms), 0 when it may now. */
+    public long callWaitUntil(long now) {
+        return callWaitUntil > now ? callWaitUntil : 0;
+    }
+
+    /** The crew's plans not over at {@code now}, soonest first. */
+    public List<Plan> plans(String crew, long now) {
+        List<Plan> out = new ArrayList<>();
+        for (Plan plan : plans) {
+            if (plan.crew().equals(crew) && plan.end() > now) {
+                out.add(plan);
+            }
+        }
+        return out;
+    }
+
+    /** The player may make a plan in this crew (the right to call covers plans), at most three ahead. */
+    public boolean mayPlan(String crew, long now) {
+        if (!planners.contains(crew)) {
+            return false;
+        }
+        int ahead = 0;
+        for (Plan plan : plans) {
+            if (plan.crew().equals(crew) && plan.start() > now) {
+                ahead++;
+            }
+        }
+        return ahead < 3;
+    }
+
+    /** A plan may carry a note now. */
+    public boolean planNotes() {
+        return planNotes;
+    }
+
+    /** The newest answer to "Bul", or null. */
+    public Found found() {
+        return found;
+    }
+
+    /** Counts answers to "Bul" (the add screen lays out again). */
+    public int foundRevision() {
+        return foundRevision;
+    }
+
+    /** "Bul" asked again: the old answer no longer shows. */
+    public void clearFound() {
+        found = null;
+        foundRevision++;
+    }
+
+    /** The launcher's notification switches, or null before it said them. */
+    public Prefs prefs() {
+        return prefs;
+    }
+
+    /** One switch changed here (the launcher's {@code prefs} confirms it). */
+    public void setPref(String key, boolean on) {
+        if (prefs == null) {
+            return;
+        }
+        prefs = new Prefs(
+            key.equals("favoritesOnline") ? on : prefs.favoritesOnline(),
+            key.equals("favoritesProjects") ? on : prefs.favoritesProjects(),
+            key.equals("crewCalls") ? on : prefs.crewCalls(),
+            key.equals("crewChat") ? on : prefs.crewChat(),
+            key.equals("joinRequests") ? on : prefs.joinRequests());
+        revision++;
+    }
+
+    /** A press of {@code act} about {@code id} is on its way (its buttons wait). */
+    public boolean pressing(String act, String id) {
+        return pressing.contains(act + ":" + id);
+    }
+
+    /**
+     * A press went: {@code name} is what its note names (a person, a crew, a time), {@code conversation} where it speaks
+     * (crew chat; null: under the friend list). False when the same press is still on its way.
+     */
+    public boolean pressed(String act, String id, String name, String conversation) {
+        String key = act + ":" + id;
+        if (!pressing.add(key)) {
+            return false;
+        }
+        pressNames.put(key, name == null ? "" : name);
+        if (conversation != null) {
+            pressConvs.put(key, conversation);
+        }
+        revision++;
+        return true;
+    }
+
+    /** A press could not go at all: it is settled at once and the note says so. */
+    public void pressFailed(String act, String id, long now) {
+        onDone(act, id, false, null, false, 0, now);
     }
 
     /** OVL-SOC 2 (SOC-NEXT §3.6): the name the friends service knows for a friend shown by a nickname, or null. */
@@ -664,7 +912,19 @@ public final class OverlayState {
     public void setStatus(BridgeClient.Status next, String reason) {
         status = next;
         statusReason = reason;
+        if (next != BridgeClient.Status.ONLINE) {
+            // OVL-SOC2: no answer comes for a press on its way now; its button may be pressed again.
+            forgetPresses();
+        }
         revision++;
+    }
+
+    /** OVL-SOC2: the presses on their way are forgotten (the launcher went, or greeted again). */
+    private void forgetPresses() {
+        pressing.clear();
+        pressConvs.clear();
+        pressNames.clear();
+        pressOks.clear();
     }
 
     // ---- "Yazıyor…" and notes ------------------------------------------------------------------------
@@ -952,6 +1212,20 @@ public final class OverlayState {
         asking.clear();
         matesHere.clear();
         matesDiscord.clear();
+        outgoing = List.of();
+        blockedPeople = List.of();
+        myCode = "";
+        invites = List.of();
+        asks = List.of();
+        callPlace = null;
+        callers = List.of();
+        plans = List.of();
+        planners = List.of();
+        planNotes = false;
+        found = null;
+        prefs = null;
+        forgetPresses();
+        callWaitUntil = 0;
     }
 
     /** P8: how a friend menu action went; the words come from the action and the reason. */
@@ -1016,6 +1290,166 @@ public final class OverlayState {
             // The moderator row's detail only chose the words.
             personNote = new PersonNote(key, name, null, !ok, now, action.equals("crew-mod") ? null : detail);
         }
+    }
+
+    /** The note's words a press's success says (none: the screen shows it), by the press's {@code act:id}. */
+    private final Map<String, String> pressOks = new HashMap<>();
+
+    /**
+     * A press went: {@code name} is what its note names, {@code okKey} its words when it went ({@code people.note.*};
+     * null: nothing to say). False when the same press is still on its way.
+     */
+    public boolean pressed(String act, String id, String name, String conversation, String okKey) {
+        if (!pressed(act, id, name, conversation)) {
+            return false;
+        }
+        if (okKey != null) {
+            pressOks.put(act + ":" + id, okKey);
+        }
+        return true;
+    }
+
+    /** OVL-SOC2: how a press went ({@code done}); the note under the list (and in the chat's line) says it. */
+    private void onDone(String act, String id, boolean ok, String reason, boolean queued, long wait, long now) {
+        String key = act + ":" + id;
+        pressing.remove(key);
+        pressConvs.remove(key);
+        String name = pressNames.remove(key);
+        String okKey = pressOks.remove(key);
+        if (name == null) {
+            name = "";
+        }
+        if (act.equals("crew-call") && "wait".equals(reason) && wait > 0) {
+            callWaitUntil = now + wait * 1000;
+        }
+        String words;
+        String detail = null;
+        if (ok) {
+            words = queued ? switch (act) {
+                case "add-code" -> "request_sent";
+                case "crew-join" -> "crew_requested";
+                default -> okKey;
+            } : okKey;
+        } else {
+            words = failKey(act, reason);
+            if (words.equals("call_wait")) {
+                detail = String.valueOf(Math.max(1, (wait + 59) / 60));
+            }
+        }
+        if (words != null) {
+            // "N dakika sonra yeniden çağırabilirsin" is a wait, not a failure: the calm note, never flare.
+            boolean error = !ok && !words.equals("call_wait");
+            personNote = new PersonNote(words, name, null, error, now, detail);
+        }
+        revision++;
+    }
+
+    /** The note's words for a press that did not go. */
+    static String failKey(String act, String reason) {
+        boolean plan = act.startsWith("plan");
+        return switch (reason == null ? "" : reason) {
+            case "rate" -> "rate";
+            case "offline" -> "offline";
+            case "gone" -> plan ? "plan_gone" : "gone";
+            case "full" -> plan ? "plan_full" : "crew_full";
+            case "limit" -> act.equals("add-code") ? "request_limit" : "crew_limit";
+            case "blocked" -> act.equals("add-code") ? "request_blocked" : "crew_blocked";
+            case "exists" -> "plan_exists";
+            case "time" -> "plan_time";
+            case "limited" -> "limited";
+            case "words" -> "words";
+            case "wait" -> "call_wait";
+            case "active" -> "call_active";
+            case "needs-server" -> "call_server";
+            case "server-hidden" -> "call_hidden";
+            case "friends" -> "already_friends";
+            case "member" -> "crew_member";
+            case "old" -> act.equals("edit") ? "edit_old" : "delete_old";
+            default -> "failed";
+        };
+    }
+
+    /** OVL-SOC2: {@code lists}' management parts (each only from a launcher that has them). */
+    private void putManagement(JsonObject frame) {
+        outgoing = requestsOf(frame, "outgoing", 50);
+        blockedPeople = requestsOf(frame, "blocked", 100);
+        String code = Protocol.plain(Protocol.str(frame, "code", ""), 24);
+        myCode = code.matches("[A-Z0-9-]{4,24}") ? code : "";
+        List<Invite> nextInvites = new ArrayList<>();
+        forEach(frame, "invites", i -> {
+            String crew = Protocol.str(i, "crew", "");
+            if (!crew.isEmpty() && crew.length() <= 64 && nextInvites.size() < 20) {
+                nextInvites.add(new Invite(crew, name(i, "name"), name(i, "from"),
+                    person(Protocol.str(i, "by", null)), (int) Math.max(0, Protocol.num(i, "members", 0))));
+            }
+        });
+        invites = List.copyOf(nextInvites);
+        List<Ask> nextAsks = new ArrayList<>();
+        forEach(frame, "asks", a -> {
+            String crew = Protocol.str(a, "crew", "");
+            String id = Protocol.str(a, "id", "");
+            if (!crew.isEmpty() && crew.length() <= 64 && person(id) != null && nextAsks.size() < 50) {
+                nextAsks.add(new Ask(crew, name(a, "crewName"), id, name(a, "name")));
+            }
+        });
+        asks = List.copyOf(nextAsks);
+        String call = Protocol.str(frame, "call", "");
+        callPlace = switch (call) {
+            case "ok", "needs-server", "server-hidden" -> call;
+            default -> null;
+        };
+        callers = idsOf(arr(frame, "callers"));
+        List<Plan> nextPlans = new ArrayList<>();
+        forEach(frame, "plans", p -> {
+            String id = Protocol.str(p, "id", "");
+            String crew = Protocol.str(p, "crew", "");
+            String my = Protocol.str(p, "my", "");
+            if (!id.isEmpty() && id.length() <= 64 && !crew.isEmpty() && nextPlans.size() < 20) {
+                String note = Protocol.plain(Protocol.str(p, "note", ""), 80);
+                nextPlans.add(new Plan(id, crew, Protocol.num(p, "at", 0), Protocol.num(p, "start", 0),
+                    Protocol.num(p, "end", 0), name(p, "by"), Protocol.bool(p, "mine", false),
+                    note.isEmpty() ? null : note,
+                    my.equals("yes") || my.equals("maybe") || my.equals("no") ? my : null,
+                    (int) Math.max(0, Protocol.num(p, "yes", 0)), (int) Math.max(0, Protocol.num(p, "maybe", 0)),
+                    (int) Math.max(0, Protocol.num(p, "no", 0))));
+            }
+        });
+        plans = List.copyOf(nextPlans);
+        planners = idsOf(arr(frame, "planners"));
+        planNotes = Protocol.bool(frame, "notes", false);
+    }
+
+    private List<Request> requestsOf(JsonObject frame, String key, int max) {
+        List<Request> out = new ArrayList<>();
+        forEach(frame, key, r -> {
+            String id = Protocol.str(r, "id", "");
+            if (person(id) != null && out.size() < max) {
+                out.add(new Request(id, name(r, "name")));
+            }
+        });
+        return List.copyOf(out);
+    }
+
+    private static List<String> idsOf(JsonArray list) {
+        Set<String> out = new java.util.LinkedHashSet<>();
+        putIds(list, out);
+        return List.copyOf(out);
+    }
+
+    /** OVL-SOC2: what "Bul" found ({@code found}). */
+    private void putFound(JsonObject frame) {
+        String kind = Protocol.str(frame, "kind", "none");
+        if (!kind.equals("friend") && !kind.equals("crew")) {
+            kind = "none";
+        }
+        String relation = Protocol.str(frame, "relation", "none");
+        found = new Found(Protocol.str(frame, "code", ""), kind, Protocol.str(frame, "id", ""), name(frame, "name"),
+            relation.matches("[a-z-]{1,16}") ? relation : "none",
+            (int) Math.max(0, Protocol.num(frame, "members", 0)),
+            Protocol.plain(Protocol.str(frame, "tag", ""), 4),
+            Protocol.bool(frame, "approval", false), Protocol.bool(frame, "requested", false),
+            Protocol.str(frame, "reason", kind.equals("none") ? "failed" : null));
+        foundRevision++;
     }
 
     // ---- The player's own messages ---------------------------------------------------------------------
@@ -1104,6 +1538,8 @@ public final class OverlayState {
                     forgetPeople();
                 }
                 welcomed = true;
+                // OVL-SOC2: a new greeting answers nothing still on its way.
+                forgetPresses();
                 dnd = Protocol.bool(frame, "dnd", false);
                 putPresence(frame);
                 reducedMotion = Protocol.bool(frame, "reducedMotion", false);
@@ -1233,7 +1669,18 @@ public final class OverlayState {
             case "marks" -> putMarks(frame);
             case "note" -> putArrival(frame);
             case "friend-result" -> onFriendResult(frame, now);
-            case "lists" -> putLists(frame);
+            case "lists" -> {
+                putLists(frame);
+                putManagement(frame);
+            }
+            // OVL-SOC2: what "Bul" found, how a press went, the launcher's notification switches.
+            case "found" -> putFound(frame);
+            case "done" -> onDone(Protocol.str(frame, "act", ""), Protocol.str(frame, "id", ""),
+                Protocol.bool(frame, "ok", false), Protocol.str(frame, "reason", null),
+                Protocol.bool(frame, "queued", false), Math.max(0, Protocol.num(frame, "wait", 0)), now);
+            case "prefs" -> prefs = new Prefs(Protocol.bool(frame, "favoritesOnline", true),
+                Protocol.bool(frame, "favoritesProjects", true), Protocol.bool(frame, "crewCalls", true),
+                Protocol.bool(frame, "crewChat", false), Protocol.bool(frame, "joinRequests", true));
             case "toast" -> {
                 String sticker = Protocol.str(frame, "sticker", null);
                 String kind = Protocol.str(frame, "kind", "message");
@@ -1249,14 +1696,18 @@ public final class OverlayState {
                     kind.equals("message") ? badge(Protocol.str(frame, "badge", null)) : null,
                     // BADGES-UI: only where the title names a person (a call's title is its crew).
                     switch (kind) {
-                        case "message", "invite", "world" -> marks(markKeys(arr(frame, "marks")));
+                        case "message", "invite", "world", "request", "friend", "online", "projects", "crew-invite",
+                            "crew-ask", "plan", "missed" -> marks(markKeys(arr(frame, "marks")));
                         default -> List.of();
                     },
                     // OVL-AVATARS: whose picture the card's face shows (the person the title names).
                     switch (kind) {
-                        case "message", "invite", "world" -> person(Protocol.str(frame, "by", null));
+                        case "message", "invite", "world", "request", "friend", "online", "projects", "crew-invite",
+                            "crew-ask", "plan", "missed" -> person(Protocol.str(frame, "by", null));
                         default -> null;
-                    });
+                    },
+                    // OVL-SOC2: a plan's time.
+                    Math.max(0, Protocol.num(frame, "at", 0)));
             }
             default -> {
                 return null;
@@ -1594,6 +2045,7 @@ public final class OverlayState {
                 Conversation c = conversationOf(e.getAsJsonObject());
                 if (c != null) {
                     into.put(c.id(), c);
+                    putCrewOf(c, e.getAsJsonObject());
                 }
             }
         }
@@ -1604,6 +2056,7 @@ public final class OverlayState {
         if (c == null) {
             return;
         }
+        putCrewOf(c, o);
         // The real one of a conversation the panel opened before its first message (OVL-UX).
         drafts.remove(c.id());
         Conversation before = conversations.put(c.id(), c);
