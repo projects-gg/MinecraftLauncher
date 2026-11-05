@@ -675,5 +675,7 @@
   "projects_overlay.chat.editing": "Editing your message",
   "projects_overlay.chat.edit.save": "Save",
   "projects_overlay.chat.react.more": "More reactions",
-  "projects_overlay.toast.plan_note": "%s: \"%s\""
+  "projects_overlay.toast.plan_note": "%s: \"%s\"",
+  "projects_overlay.add.copied": "Copied",
+  "projects_overlay.plan.none": "No plans yet."
 }

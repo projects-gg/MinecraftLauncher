@@ -48,6 +48,8 @@ pub const MAX_CONVS: usize = 50;
 pub const MAX_FRIENDS: usize = 400;
 /// Friend requests `lists` names at most (OVL-SOC 2).
 pub const MAX_REQUESTS: usize = 50;
+/// Crew invites `lists` names at most (OVL-SOC2; the mod keeps as many).
+pub const MAX_INVITES: usize = 20;
 /// The blocked `lists` names at most (OVL-SOC2).
 pub const MAX_BLOCKED: usize = 100;
 /// Plans `lists` names at most (OVL-SOC2: three ahead per crew, five crews).
@@ -788,6 +790,7 @@ impl Scene {
                 view.team_invites
                     .iter()
                     .filter(|invite| !blocked_ids.contains(invite.from.id.as_str()))
+                    .take(MAX_INVITES)
                     .map(|invite| CrewInviteItem {
                         crew: invite.team_id.clone(),
                         name: invite.name.clone(),
@@ -1207,6 +1210,8 @@ impl Scene {
         if next.streamer {
             self.streamer = true;
             self.features.push(FEATURE_STREAMER.to_owned());
+            // OVL-SOC2: the player's own code stays off a stream too (the launcher's add page hides it).
+            self.lists.extra.code.clear();
         }
         // The end only of the status its timer was set for (a config may come before the view).
         self.status_until = next.status_until.filter(|until| {

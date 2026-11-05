@@ -3086,17 +3086,10 @@ async fn the_friends_page_crews_and_plans_are_managed_from_the_game() {
         json!({"t":"done","act":"crew-call","id":crew,"ok":false,"reason":"wait","wait":120})
     );
 
-    // A plan answered; a plan at a time that is no quarter of an hour never reaches the service.
-    game.send(json!({"t":"plan-answer","plan":"p1","answer":"maybe"}))
+    // A code nobody looked up here is acted on by nobody.
+    game.send(json!({"t":"add-code","code":"PRJ-AAAA-BBBB"}))
         .await;
-    assert_eq!(game.next_of("done").await["ok"], true);
-    game.send(json!({"t":"plan-make","crew":crew,"at":now_secs() + 7200 + 1,"note":"x"}))
-        .await;
-    assert_eq!(game.next_of("done").await["reason"], "time");
-    let quarter = (now_secs() + 7200) / 900 * 900;
-    game.send(json!({"t":"plan-make","crew":crew,"at":quarter,"note":"  Bedwars   sesli  "}))
-        .await;
-    assert_eq!(game.next_of("done").await["ok"], true);
+    assert_eq!(game.next_of("done").await["reason"], "gone");
 
     let manages = social.calls().manages.clone();
     assert_eq!(
@@ -3115,18 +3108,16 @@ async fn the_friends_page_crews_and_plans_are_managed_from_the_game() {
                 accept: false
             },
             crate::Manage::CallCrew(crew.clone()),
-            crate::Manage::AnswerPlan {
-                plan: "p1".into(),
-                answer: pl_social::PlanAnswer::Maybe
-            },
-            crate::Manage::MakePlan {
-                crew: crew.clone(),
-                at: quarter,
-                note: Some("Bedwars sesli".into())
-            },
         ]
     );
 
+    // Until the mod says which cards it shows, the older four; then every kind it did not turn off.
+    let first = statuses.lock().unwrap().last().cloned().unwrap();
+    assert!(first.connected && !first.kinds.iter().any(|k| k == "friendOnline"));
+    game.send(json!({"t":"cards","off":[]})).await;
+    game.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    game.next_of("history").await;
     // The card kinds turned off in the game: the page shows its own notifications for them.
     let before = statuses.lock().unwrap().last().cloned().unwrap();
     assert!(before.connected && before.kinds.iter().any(|k| k == "friendOnline"));
@@ -3177,6 +3168,33 @@ async fn new_cards_reach_a_mod_that_draws_them_and_the_switches_go_to_the_page()
     let endpoint = overlay.start(social.clone(), "t").await.unwrap();
     let mut game = MockMod::connect_with(&endpoint, SOC2).await;
     game.next_of("snapshot").await;
+
+    // A plan answered; a plan at a time that is no quarter of an hour never reaches the service.
+    let crew = social.view().crews[0].id.clone();
+    game.send(json!({"t":"plan-answer","plan":"p1","answer":"maybe"}))
+        .await;
+    assert_eq!(game.next_of("done").await["ok"], true);
+    let quarter = (now_secs() + 7200) / 900 * 900;
+    game.send(json!({"t":"plan-make","crew":crew,"at":quarter + 1,"note":"x"}))
+        .await;
+    assert_eq!(game.next_of("done").await["reason"], "time");
+    game.send(json!({"t":"plan-make","crew":crew,"at":quarter,"note":"  Bedwars   sesli  "}))
+        .await;
+    assert_eq!(game.next_of("done").await["ok"], true);
+    assert_eq!(
+        social.calls().manages.clone(),
+        [
+            crate::Manage::AnswerPlan {
+                plan: "p1".into(),
+                answer: pl_social::PlanAnswer::Maybe
+            },
+            crate::Manage::MakePlan {
+                crew: crew.clone(),
+                at: quarter,
+                note: Some("Bedwars sesli".into())
+            },
+        ]
+    );
 
     // A friend request and a crew invite become cards of their own.
     overlay.on_social(SocialUpdate::Notice(SocialNotice::Request {

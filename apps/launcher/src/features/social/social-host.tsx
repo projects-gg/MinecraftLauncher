@@ -410,7 +410,8 @@ function handleNotice(notice: SocialNotice) {
     }
     case "requestAccepted": {
       const text = i18n.t("teams.joined", { name: notice.name });
-      if (!shownInGame(notice.kind)) void notifyOutside(text, { onClick: () => showCrew(notice.crew) });
+      if (!shownInGame(notice.kind))
+        void notifyOutside(text, { onClick: () => showCrew(notice.crew) });
       // "Göster", and "Etiketi tak" while the player wears no tag (TEAM6).
       sayJoined(text, () => notice.crew, {
         label: i18n.t("social.notices.show"),
@@ -433,7 +434,8 @@ function handleNotice(notice: SocialNotice) {
         announce(text);
         break;
       }
-      if (!shownInGame(notice.kind)) void notifyOutside(text, { onClick: () => showCrew(plan.crew) });
+      if (!shownInGame(notice.kind))
+        void notifyOutside(text, { onClick: () => showCrew(plan.crew) });
       toast(text, {
         action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(plan.crew) },
       });

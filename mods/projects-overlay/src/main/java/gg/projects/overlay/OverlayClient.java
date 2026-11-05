@@ -133,8 +133,9 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     private String lastConversation;
     private String lastToastConversation;
     private long lastToastAt;
-    /** OVL-SOC2: the page a recent social card opens the panel on (its crew chat, or the friends page). */
+    /** OVL-SOC2: the page a recent social card opens the panel on (its crew chat, or the friends page), and when. */
     private OverlayScreen.Page lastToastPage;
+    private long lastToastPageAt;
     private boolean hadLevel;
     private int warmIndex = -1;
     private int warmScale = -1;
@@ -657,8 +658,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
      * call: the friends page; a plan, "Ekibe katıldın": its crew chat), else null (where it was last).
      */
     public OverlayScreen.Page toastPage() {
-        return lastToastPage != null && System.currentTimeMillis() - lastToastAt < RECENT_TOAST_MS ? lastToastPage
-            : null;
+        return lastToastPage != null && System.currentTimeMillis() - lastToastPageAt < RECENT_TOAST_MS
+            ? lastToastPage : null;
     }
 
     /** The conversation the panel should open on: a recent toast's, else the last one looked at. */
@@ -680,6 +681,10 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         }
         emojiKeyTick(mc);
         boolean hasLevel = mc.level != null;
+        if (hadLevel != hasLevel) {
+            // OVL-SOC2: cards show only in a world; the launcher hears it (its own notifications meanwhile).
+            sendCards();
+        }
         if (hadLevel && !hasLevel) {
             toasts.reset();
             StickerArt.releaseAll();
@@ -917,7 +922,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         }
         if (card.kind() == ToastCard.Kind.SOCIAL) {
             lastToastPage = card.conversation() != null ? OverlayScreen.Page.CHATS : OverlayScreen.Page.FRIENDS;
-            lastToastAt = System.currentTimeMillis();
+            lastToastPageAt = System.currentTimeMillis();
         }
         openPanel();
         return true;
@@ -1392,7 +1397,9 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
 
     /** "Kabul et" ({@code accept}) or "Reddet" on a request to join one of the player's crews. */
     public void answerAsk(String crew, String id, String name, boolean accept) {
-        press("crew-ask", id, name, null, accept ? "crew_ask_taken" : null, Protocol.crewAsk(crew, id, accept));
+        // Keyed by the crew too: the same player may ask to join two of the player's crews.
+        press("crew-ask", crew + ":" + id, name, null, accept ? "crew_ask_taken" : null,
+            Protocol.crewAsk(crew, id, accept));
     }
 
     /** "Ekibe katıl" or "Katılma isteği gönder" with the code or link "Bul" found. */
@@ -1432,10 +1439,14 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         refreshScreen();
     }
 
-    /** The card kinds the player turned off here, to a launcher that keeps its own notifications for them. */
+    /**
+     * The card kinds the player turned off here, to a launcher that keeps its own notifications for them. Without a
+     * world (the title screen, the server list) no card can show: every kind goes to the launcher then.
+     */
     public void sendCards() {
         if (state.cards2()) {
-            bridge.send(Protocol.cards(settings.get().offGroups()));
+            boolean world = Minecraft.getInstance().level != null;
+            bridge.send(Protocol.cards(world ? settings.get().offGroups() : OverlaySettings.ALL_CARDS));
         }
     }
 
@@ -1492,7 +1503,7 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         lastToastPage = null;
         if (ToastCard.kindOf(t.kind()) == ToastCard.Kind.SOCIAL && settings.get().showsKind(t.kind())) {
             lastToastPage = t.conversation() != null ? OverlayScreen.Page.CHATS : OverlayScreen.Page.FRIENDS;
-            lastToastAt = System.currentTimeMillis();
+            lastToastPageAt = System.currentTimeMillis();
         }
         toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(), panel != null,
             settings.get(), key.keyName(), hintLine(), reducedMotion());

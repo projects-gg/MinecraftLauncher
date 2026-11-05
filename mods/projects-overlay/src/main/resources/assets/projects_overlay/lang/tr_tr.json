@@ -675,5 +675,7 @@
   "projects_overlay.chat.editing": "Mesajı düzenliyorsun",
   "projects_overlay.chat.edit.save": "Kaydet",
   "projects_overlay.chat.react.more": "Başka tepki",
-  "projects_overlay.toast.plan_note": "%s: \"%s\""
+  "projects_overlay.toast.plan_note": "%s: \"%s\"",
+  "projects_overlay.add.copied": "Kopyalandı",
+  "projects_overlay.plan.none": "Henüz plan yok."
 }

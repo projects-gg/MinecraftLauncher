@@ -87,6 +87,9 @@ public record OverlaySettings(
      * names their groups: friend and crew requests, friends coming online, crew plans, missed calls.
      */
     public static final List<String> CARD_GROUPS = List.of("request", "online", "plan", "missed");
+    /** OVL-SOC2: every card group the launcher knows (none shows without a world). */
+    public static final List<String> ALL_CARDS = List.of("message", "call", "invite", "request", "online", "plan",
+        "missed");
     // Before DEFAULTS: its constructor reads it.
     public static final OverlaySettings DEFAULTS = new OverlaySettings(true, true, true, true, true,
         Duration.NORMAL, Corner.BOTTOM_RIGHT, false, true, 70, true, 85, false, List.of(), List.of(), true, List.of(),

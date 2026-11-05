@@ -501,7 +501,7 @@ public final class FriendList extends PanelWidget {
         return switch (row.kind) {
             case REQUEST -> state.answering(row.id);
             case INVITE -> state.pressing("crew-answer", row.id.substring("invite:".length()));
-            case ASK -> state.pressing("crew-ask", row.id.substring(row.id.lastIndexOf(':') + 1));
+            case ASK -> state.pressing("crew-ask", row.id.substring("ask:".length()));
             case OUTGOING -> state.pressing("cancel-request", row.id.substring("out:".length()));
             default -> false;
         };

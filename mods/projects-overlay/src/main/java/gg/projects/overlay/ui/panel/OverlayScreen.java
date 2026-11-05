@@ -2139,7 +2139,8 @@ public final class OverlayScreen extends Screen {
     /** An emoji picked for {@link #reactTo}: the same reaction the quick ones give (again: taken back). */
     private void reactWith(String emoji) {
         OverlayState.ChatLine line = reactTo;
-        String conv = conversation;
+        // The message's own conversation (the panel may have moved on since the picker opened).
+        String conv = line == null ? null : state.conversationOf(line);
         closePickers();
         layout();
         if (line == null || conv == null || emoji == null || emoji.isEmpty() || line.sid <= 0
@@ -2962,6 +2963,10 @@ public final class OverlayScreen extends Screen {
             layout();
         }
         if (voice.ringOver(System.currentTimeMillis())) {
+            layout();
+        }
+        // OVL-SOC2: crew chat's plan says "Başladı" on time, and goes when the plan is over.
+        if (crewBar.visible && crewBar.stale(System.currentTimeMillis())) {
             layout();
         }
     }

@@ -29,7 +29,8 @@ import net.minecraft.util.FormattedCharSequence;
  * one gold "Planla". Esc goes back (from the form to the plans when they were open, else to the panel).
  */
 public final class PlanScreen extends Screen {
-    private static final int WIDTH = 236;
+    /** Wider than the other dialogs: seven day chips keep "Bugün" and "Yarın" whole. */
+    private static final int WIDTH = 264;
     private static final int PAD = 12;
     private static final int FIELD_H = 18;
     private static final int NOTE_CHARS = 80;
@@ -94,9 +95,14 @@ public final class PlanScreen extends Screen {
         return System.currentTimeMillis();
     }
 
+    /** Each answer button's plan and answer ({@code p1:yes}), for the keys after a new layout. */
+    private final java.util.Map<net.minecraft.client.gui.components.events.GuiEventListener, String> focusKeys =
+        new java.util.HashMap<>();
+
     @Override
     protected void init() {
         widgets.clear();
+        focusKeys.clear();
         blocks.clear();
         shown = plansKey();
         if (making) {
@@ -122,7 +128,14 @@ public final class PlanScreen extends Screen {
         int y = PAD + 14 + 2 + 9 + 8;
         int bw = (textW - 8) / 3;
         List<ActionButton> answerButtons = new ArrayList<>();
+        // The card never grows past the screen: the plans that do not fit are counted in the subtitle.
+        int room = height - 8 - 10 - ActionButton.HEIGHT - PAD;
+        int left = 0;
         for (OverlayState.Plan plan : plans) {
+            if (!blocks.isEmpty() && y + 10 + 9 + 9 + 6 + ActionButton.HEIGHT > room) {
+                left++;
+                continue;
+            }
             boolean live = plan.start() <= now;
             String when = live ? Texts.str("plan.live") + " · " + PlanWhen.of(plan.at(), now, false)
                 : PlanWhen.of(plan.at(), now, false);
@@ -138,6 +151,9 @@ public final class PlanScreen extends Screen {
             String counts = parts.isEmpty() ? Texts.str("plan.nobody") : String.join(" · ", parts);
             List<FormattedCharSequence> noteLines = plan.note() == null || state.streamer() ? List.of()
                 : Texts.wrap(small, "\"" + plan.note() + "\"", textW, 2);
+            if (!blocks.isEmpty() && y + 10 + 9 + 9 + noteLines.size() * 9 + 6 + ActionButton.HEIGHT > room) {
+                noteLines = List.of();
+            }
             int h = 10 + 9 + 9 + noteLines.size() * 9 + 6 + ActionButton.HEIGHT;
             blocks.add(new PlanBlock(plan, Texts.visual(Texts.fit(strong, when, textW)), live,
                 Texts.visual(Texts.fit(small, by, textW)), Texts.visual(Texts.fit(small, counts, textW)), noteLines,
@@ -150,9 +166,13 @@ public final class PlanScreen extends Screen {
                 b.setSelected(answer.equals(plan.my()));
                 b.active = !waiting && state.online();
                 answerButtons.add(b);
+                focusKeys.put(b, plan.id() + ":" + answer);
                 PanelWidget.place(b, 0, y + h - ActionButton.HEIGHT, bw, ActionButton.HEIGHT);
             }
             y += h + 10;
+        }
+        if (left > 0) {
+            subtitle = Texts.visual(Texts.fit(Fonts.small(), crewName + " · " + Texts.str("plan.more", left), textW));
         }
         cardH = y + ActionButton.HEIGHT + PAD;
         cardX = (width - WIDTH) / 2;
@@ -320,6 +340,12 @@ public final class PlanScreen extends Screen {
             return;
         }
         long now = wall();
+        // The time again (a minute may have passed since the form opened).
+        long fresh = PlanWhen.on(days.get(day), at, now);
+        if (fresh < 0) {
+            return;
+        }
+        at = fresh;
         String text = note == null ? "" : note.getValue().trim();
         overlay.makePlan(crew, at, text, PlanWhen.of(at * 1000, now, false));
         Compat.setScreen(minecraft, panel);
@@ -347,15 +373,15 @@ public final class PlanScreen extends Screen {
         // The plans changed (an answer came back, a plan went): laid out again, the keys where they were; the form
         // keeps its picks.
         if (!making && !plansKey().equals(shown)) {
-            int focused = -1;
-            for (int i = 0; i < widgets.size(); i++) {
-                if (widgets.get(i).widget() == getFocused()) {
-                    focused = i;
-                }
-            }
+            // The keys stay on the same plan's same answer (by its plan, never by its place).
+            String focused = focusKeys.get(getFocused());
             rebuildWidgets();
-            if (focused >= 0 && focused < widgets.size()) {
-                setFocused(widgets.get(focused).widget());
+            if (focused != null) {
+                focusKeys.forEach((widget, key) -> {
+                    if (key.equals(focused)) {
+                        setFocused(widget);
+                    }
+                });
             }
         }
     }
@@ -441,7 +467,7 @@ public final class PlanScreen extends Screen {
         Font strong = Fonts.strong();
         Font small = Fonts.small();
         if (blocks.isEmpty()) {
-            Draw.text(g, small, Texts.str("plan.nobody"), x, Fonts.centeredY(Fonts.Face.SMALL,
+            Draw.text(g, small, Texts.str("plan.none"), x, Fonts.centeredY(Fonts.Face.SMALL,
                 cardY + PAD + 14 + 2 + 9 + 8 + 4.5f), Theme.ASH_400);
             return;
         }

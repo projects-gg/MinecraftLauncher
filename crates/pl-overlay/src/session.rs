@@ -966,6 +966,8 @@ struct Live {
     /// OVL-SOC2: the newer features it said, and the card kinds the player turned off in it.
     said: Said,
     cards_off: HashSet<String>,
+    /// The mod said which card kinds it shows (its first `cards`).
+    cards_known: bool,
 }
 
 impl Live {
@@ -976,8 +978,9 @@ impl Live {
 
     /// The launcher's notice kinds this game's cards stand in for (the page then shows no system
     /// notification of them): an older mod's four, a mod with the new cards those the player did
-    /// not turn off. `voiceMissed`: its missed call card (the launcher's voice chat asks).
-    fn kinds(&self) -> Vec<&'static str> {
+    /// not turn off (the older four until it said which). `voiceMissed`: its missed call card (the
+    /// launcher's voice chat asks), never on "Rahatsız etmeyin" (the launcher's own notice then).
+    fn kinds(&self, dnd: bool) -> Vec<&'static str> {
         if self.quiet {
             return Vec::new();
         }
@@ -992,7 +995,7 @@ impl Live {
                 kinds.push(kind);
             }
         }
-        if self.said.cards2 {
+        if self.said.cards2 && self.cards_known {
             for (group, more) in [
                 ("invite", &["teamInvite"][..]),
                 (
@@ -1006,7 +1009,7 @@ impl Live {
                     kinds.extend_from_slice(more);
                 }
             }
-            if self.voice && on("missed") {
+            if self.voice && on("missed") && !dnd {
                 kinds.push("voiceMissed");
             }
         }
@@ -1109,6 +1112,10 @@ pub(crate) struct Session<S> {
     kinds_told: Option<Vec<&'static str>>,
     online_told: HashMap<String, Instant>,
     recent_finds: VecDeque<Instant>,
+    /// The codes this session looked up ("Bul"), the newest last: only those are acted on.
+    found_codes: VecDeque<String>,
+    /// When the overlay's notification switches last changed (their own limit).
+    recent_switches: VecDeque<Instant>,
 }
 
 /// OVL-SOC2: hears the notice kinds a session's game shows as cards (none: not connected).
@@ -1122,6 +1129,10 @@ const ONLINE_UPGRADE: Duration = Duration::from_secs(5);
 /// quota).
 const FIND_BURST: usize = 5;
 const FIND_WINDOW: Duration = Duration::from_secs(60);
+/// OVL-SOC2: the looked-up codes a session keeps for `add-code` and `crew-join`.
+const FOUND_KEPT: usize = 20;
+/// OVL-SOC2: the overlay's notification switches: at most this many in [`PEOPLE_WINDOW`].
+const SWITCH_BURST: usize = 10;
 /// OVL-SOC2: a plan's note at most (the launcher's and the service's).
 const PLAN_NOTE_CHARS: usize = 80;
 
@@ -1283,6 +1294,8 @@ impl<S: SocialActions> Session<S> {
             kinds_told: None,
             online_told: HashMap::new(),
             recent_finds: VecDeque::new(),
+            found_codes: VecDeque::new(),
+            recent_switches: VecDeque::new(),
         }
     }
 
@@ -1294,7 +1307,12 @@ impl<S: SocialActions> Session<S> {
 
     /// Tells the hub the kinds this game's cards stand in for, when they changed.
     fn report_kinds(&mut self) {
-        let kinds = self.live.as_ref().map(Live::kinds).unwrap_or_default();
+        let dnd = self.scene.dnd;
+        let kinds = self
+            .live
+            .as_ref()
+            .map(|live| live.kinds(dnd))
+            .unwrap_or_default();
         if self.kinds_told.as_ref() != Some(&kinds) {
             self.kinds_told = Some(kinds.clone());
             (self.kinds)(kinds);
@@ -1450,6 +1468,8 @@ impl<S: SocialActions> Session<S> {
             Msg::View(view) => {
                 let wears_changed = self.set_view(view);
                 self.refresh();
+                // "Rahatsız etmeyin" may have changed whose missed call card shows (OVL-SOC2).
+                self.report_kinds();
                 if wears_changed {
                     // After the cards (in the refresh), so every chip it names is known.
                     self.reshow_open_conversation();
@@ -2141,6 +2161,7 @@ impl<S: SocialActions> Session<S> {
                     avatars: !quiet && features.iter().any(|f| f == FEATURE_AVATARS),
                     said,
                     cards_off: HashSet::new(),
+                    cards_known: false,
                 }));
                 // A new connection keeps no pictures: it asks again.
                 self.told.clear();
@@ -2659,6 +2680,13 @@ impl<S: SocialActions> Session<S> {
                 ..FoundView::default()
             }))
         };
+        // The limits first: a stream of codes that are none is not answered either.
+        let now = Instant::now();
+        if full(&mut self.recent_finds, now, FIND_WINDOW, FIND_BURST) {
+            self.send(vec![none("rate")]);
+            return;
+        }
+        self.recent_finds.push_back(now);
         let press = match code_of(&code) {
             Some(Code::Friend(friend)) if said.people5 => Manage::Lookup(friend),
             Some(Code::Crew(crew)) if said.crews2 && self.scene.has_crews() => {
@@ -2672,16 +2700,15 @@ impl<S: SocialActions> Session<S> {
                 return;
             }
         };
-        let now = Instant::now();
-        if full(&mut self.recent_finds, now, FIND_WINDOW, FIND_BURST) {
-            self.send(vec![none("rate")]);
-            return;
-        }
         if !self.scene.online {
             self.send(vec![none("offline")]);
             return;
         }
-        self.recent_finds.push_back(now);
+        // Only a code looked up here may be acted on (`add-code`, `crew-join`).
+        self.found_codes.push_back(code.clone());
+        while self.found_codes.len() > FOUND_KEPT {
+            self.found_codes.pop_front();
+        }
         let Some(conn) = self.live.as_ref().map(|live| live.conn) else {
             return;
         };
@@ -2762,7 +2789,7 @@ impl<S: SocialActions> Session<S> {
             return;
         }
         let friend = match code_of(&code) {
-            Some(Code::Friend(friend)) => Some(friend),
+            Some(Code::Friend(friend)) if self.found_codes.contains(&code) => Some(friend),
             _ => None,
         };
         if self.press_allowed("add-code", &code, friend.is_some())
@@ -2805,10 +2832,11 @@ impl<S: SocialActions> Session<S> {
             .asks
             .iter()
             .any(|ask| ask.crew == crew && ask.id == id);
-        if self.press_allowed("crew-ask", &id, known) {
+        let key = format!("{crew}:{id}");
+        if self.press_allowed("crew-ask", &key, known) {
             self.settle_done(
                 "crew-ask",
-                id.clone(),
+                key,
                 Manage::CrewAsk {
                     crew,
                     user: id,
@@ -2828,7 +2856,7 @@ impl<S: SocialActions> Session<S> {
             Some(Code::Link(link)) => Some(Manage::JoinLink(link)),
             _ => None,
         };
-        let known = press.is_some() && self.scene.has_crews();
+        let known = press.is_some() && self.scene.has_crews() && self.found_codes.contains(&code);
         if self.press_allowed("crew-join", &code, known)
             && let Some(press) = press
         {
@@ -2955,6 +2983,7 @@ impl<S: SocialActions> Session<S> {
             .into_iter()
             .filter(|group| protocol::CARD_GROUPS.iter().any(|(name, _)| name == group))
             .collect();
+        live.cards_known = true;
         self.report_kinds();
     }
 
@@ -2966,7 +2995,9 @@ impl<S: SocialActions> Session<S> {
             return;
         }
         let now = Instant::now();
-        if full(&mut self.recent_people, now, PEOPLE_WINDOW, PEOPLE_BURST) {
+        if full(&mut self.recent_switches, now, PEOPLE_WINDOW, SWITCH_BURST) {
+            // The mod moved its switch already: it hears how they stand.
+            self.send(vec![ToGame::Prefs(self.scene.prefs)]);
             return;
         }
         let notify = &mut self.config.notify;
@@ -2978,7 +3009,7 @@ impl<S: SocialActions> Session<S> {
             "joinRequests" => notify.join_requests = on,
             _ => return,
         }
-        self.recent_people.push_back(now);
+        self.recent_switches.push_back(now);
         tracing::info!(key, on, "a notification switch from the in-game overlay");
         (self.people)(PeopleChange::Notify {
             key: key.to_owned(),
@@ -3654,6 +3685,7 @@ mod tests {
             english: false,
             chat2: true,
             slow: false,
+            cards2: false,
         };
         assert_eq!(
             refusal_of(&SocialError::InvalidInput("chat sticker"), chat2),

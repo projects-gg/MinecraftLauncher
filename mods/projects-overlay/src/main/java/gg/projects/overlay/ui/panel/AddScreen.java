@@ -56,8 +56,14 @@ public final class AddScreen extends Screen {
     private int resultY;
     private int codeY;
     private long openedAt;
-    /** The code the last "Bul" asked about, as typed (null: none yet). */
+    /** The code the last "Bul" asked about, as typed (null: none yet), when, and whether its answer never came. */
     private String asked;
+    private long askedAt;
+    private boolean timedOut;
+    /** When "Kopyala" was pressed (its "Kopyalandı" shows a moment). */
+    private long copiedAt;
+    /** How long "Aranıyor…" waits for its answer. */
+    private static final long FIND_WAIT_MS = 10_000;
     private int foundRevision = -1;
     // The found row as laid out.
     private Face face;
@@ -78,7 +84,8 @@ public final class AddScreen extends Screen {
 
     /** The player's own code shows (the friends page's management is on and the launcher said it). */
     private boolean showsCode() {
-        return !crew && state.people5() && !state.myCode().isEmpty();
+        // Streamer mode keeps it off the stream (the launcher's add page too).
+        return !crew && state.people5() && !state.myCode().isEmpty() && !state.streamer();
     }
 
     @Override
@@ -91,7 +98,7 @@ public final class AddScreen extends Screen {
             field.setPlaceholder(Texts.tr(crew ? "add.crew.field" : "add.friend.field"));
             find = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("add.find"), null, this::find);
             close = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("add.close"), null, this::onClose);
-            copy = new ActionButton(ActionButton.Style.GHOST, Texts.tr("add.copy"), null, overlay::copyCode);
+            copy = new ActionButton(ActionButton.Style.GHOST, Texts.tr("add.copy"), null, this::copy);
         }
         layoutResult(textW);
         cardH = PAD + 14 + 8 + FIELD_H + 6 + RESULT_H + (showsCode() ? 6 + CODE_H : 0) + 10 + ActionButton.HEIGHT
@@ -158,6 +165,11 @@ public final class AddScreen extends Screen {
             return;
         }
         if (found == null || !found.code().equals(asked)) {
+            if (timedOut) {
+                resultLines = Texts.wrap(small, Texts.str("add.none.failed"), textW, 2);
+                resultInk = Theme.FLARE_300;
+                return;
+            }
             resultLines = List.of(Texts.visual(Texts.str("add.finding")));
             return;
         }
@@ -219,6 +231,8 @@ public final class AddScreen extends Screen {
             return;
         }
         asked = code;
+        askedAt = System.currentTimeMillis();
+        timedOut = false;
         overlay.find(code);
         foundRevision = state.foundRevision();
         rebuildWidgets();
@@ -231,6 +245,12 @@ public final class AddScreen extends Screen {
     }
 
     /** The found row's action; how it went is said under the friend list. */
+    /** "Kopyala": the code to the clipboard, "Kopyalandı" beside it for a moment. */
+    private void copy() {
+        overlay.copyCode();
+        copiedAt = System.currentTimeMillis();
+    }
+
     private void act() {
         Runnable run = action;
         onClose();
@@ -244,10 +264,15 @@ public final class AddScreen extends Screen {
         if (state.foundRevision() != foundRevision) {
             foundRevision = state.foundRevision();
             rebuildWidgets();
-            if (act != null) {
-                // The answer came: the keys go to its action (Enter takes it).
+            if (act != null && asked != null && field.getValue().trim().equals(asked)) {
+                // The answer came for the code still in the field: the keys go to its action (Enter takes it).
                 setFocused(act);
             }
+        } else if (asked != null && !timedOut && System.currentTimeMillis() - askedAt > FIND_WAIT_MS
+            && (state.found() == null || !state.found().code().equals(asked))) {
+            // No answer: the launcher went, or the friends service. Said here, not under the list behind.
+            timedOut = true;
+            rebuildWidgets();
         }
     }
 
@@ -321,6 +346,11 @@ public final class AddScreen extends Screen {
             Draw.text(g, small, codeLabel, x, Fonts.centeredY(Fonts.Face.SMALL, cy), Theme.ASH_400);
             Draw.text(g, Fonts.strong(), codeLine, x + small.width(codeLabel) + 6,
                 Fonts.centeredY(Fonts.Face.STRONG, cy), Theme.BONE_100);
+            if (System.currentTimeMillis() - copiedAt < 2_000) {
+                String copied = Texts.str("add.copied");
+                Draw.text(g, small, copied, copy.getX() - 6 - small.width(copied), Fonts.centeredY(Fonts.Face.SMALL,
+                    cy), Theme.JADE_400);
+            }
             copy.extractRenderState(g, mouseX, my, partialTick);
         }
         close.extractRenderState(g, mouseX, my, partialTick);

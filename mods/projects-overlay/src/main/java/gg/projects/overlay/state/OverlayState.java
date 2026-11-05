@@ -912,7 +912,19 @@ public final class OverlayState {
     public void setStatus(BridgeClient.Status next, String reason) {
         status = next;
         statusReason = reason;
+        if (next != BridgeClient.Status.ONLINE) {
+            // OVL-SOC2: no answer comes for a press on its way now; its button may be pressed again.
+            forgetPresses();
+        }
         revision++;
+    }
+
+    /** OVL-SOC2: the presses on their way are forgotten (the launcher went, or greeted again). */
+    private void forgetPresses() {
+        pressing.clear();
+        pressConvs.clear();
+        pressNames.clear();
+        pressOks.clear();
     }
 
     // ---- "Yazıyor…" and notes ------------------------------------------------------------------------
@@ -1212,10 +1224,7 @@ public final class OverlayState {
         planNotes = false;
         found = null;
         prefs = null;
-        pressing.clear();
-        pressConvs.clear();
-        pressNames.clear();
-        pressOks.clear();
+        forgetPresses();
         callWaitUntil = 0;
     }
 
@@ -1527,6 +1536,8 @@ public final class OverlayState {
                     forgetPeople();
                 }
                 welcomed = true;
+                // OVL-SOC2: a new greeting answers nothing still on its way.
+                forgetPresses();
                 dnd = Protocol.bool(frame, "dnd", false);
                 putPresence(frame);
                 reducedMotion = Protocol.bool(frame, "reducedMotion", false);

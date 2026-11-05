@@ -114,6 +114,11 @@ public final class CrewBar extends PanelWidget {
         return new Pill(kind, icon, Texts.visual(fitted), labelWidth, extra, extraWidth, width, waiting, narration);
     }
 
+    /** A new minute since it laid out (a plan's "Bugün 21:00" turns into "Başladı", one over goes). */
+    public boolean stale(long wall) {
+        return wall / 60_000L != laidOutMinute;
+    }
+
     /** The crew it shows, or null. */
     public String crew() {
         return crew;
