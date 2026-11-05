@@ -705,6 +705,8 @@ function initial(): SocialSnapshot {
           badgeRequests: false,
           // CHAT-CALM (mock-chat-calm.ts).
           slow: false,
+          // CREW-DISCOVER (discover-mock.ts): `&discover=1`.
+          discover: searchParam("discover") !== null,
         },
     crewNotifications: keepsMutes
       ? {

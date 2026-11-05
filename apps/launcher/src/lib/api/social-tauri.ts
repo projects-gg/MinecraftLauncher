@@ -540,6 +540,8 @@ export function crewFeatures(list: readonly string[]): CrewFeatures {
     // Requests from a tag only with the tags themselves.
     badgeRequests: list.includes("badges") && list.includes("badgeRequests"),
     slow: list.includes("slow"),
+    // CREW-DISCOVER: Studio's switch.
+    discover: list.includes("discover"),
   };
 }
 
@@ -1005,6 +1007,8 @@ export const tauriSocial: SocialApi = {
             id: target.id,
             code: target.code ?? null,
             via: target.via ?? null,
+            // CREW-DISCOVER: from a card of "Ekip bul".
+            discover: target.discover ?? false,
           }
         : target.kind === "player" && target.note
           ? // SOC-NOTE: a friend's status note goes along as the evidence.

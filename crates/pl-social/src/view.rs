@@ -644,6 +644,10 @@ pub enum ReportTarget {
         code: Option<String>,
         #[serde(default)]
         via: Option<String>,
+        /// CREW-DISCOVER: reported from a card of "Ekip bul" (the service keeps its listed text as
+        /// the moderators' evidence).
+        #[serde(default)]
+        discover: bool,
     },
     Message {
         conv: String,

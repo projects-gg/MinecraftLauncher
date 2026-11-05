@@ -2240,6 +2240,114 @@ impl SocialService {
         }
     }
 
+    // --- crew discovery ("Ekip bul", CREW-DISCOVER) -----------------------------------------------
+
+    /// Fails unless the service offers crew discovery (Studio's switch, `teamFeatures`).
+    fn discover_offered(&self) -> Result<()> {
+        if self.offers(crate::TEAM_FEATURE_DISCOVER) {
+            Ok(())
+        } else {
+            Err(SocialError::InvalidInput("crew discovery"))
+        }
+    }
+
+    /// The discovery listing, or None while the copy `etag` names is still current (`304`). The
+    /// launcher keeps the copy until its `next` and asks again with its `ETag` after
+    /// [`crate::DISCOVER_REVALIDATE_SECS`].
+    pub async fn discover_listing(
+        &self,
+        etag: Option<String>,
+    ) -> Result<Option<crate::DiscoverPage>> {
+        self.discover_offered()?;
+        let (page, _) = self
+            .call(|session| async move { session.discover_listing(etag.as_deref()).await })
+            .await?;
+        Ok(page.map(|(listing, etag)| crate::DiscoverPage { listing, etag }))
+    }
+
+    /// "Katıl" / "Katılma isteği gönder" on a card: in the crew now, a request that waits (it is in
+    /// the player's requests at once), or `Gone` (no longer listed; the card goes). The crew's
+    /// refusals (full, a block, the player's limits) are errors as for any other join.
+    pub async fn discover_join(&self, team: &str) -> Result<crate::DiscoverJoin> {
+        self.discover_offered()?;
+        let multi = self.offers(TEAM_FEATURE_MULTI);
+        let id = team.to_owned();
+        match self
+            .call(|session| async move { session.discover_join(&id, multi).await })
+            .await
+        {
+            Ok((JoinOutcome::Joined(answer), generation)) => {
+                self.update(generation, |core| core.state.team_answer(answer));
+                Ok(crate::DiscoverJoin::Joined)
+            }
+            Ok((JoinOutcome::Requested(request), generation)) => {
+                self.update(generation, |core| core.state.join_requested(request));
+                Ok(crate::DiscoverJoin::Requested)
+            }
+            Err(error) if is_code(&error, "discover_gone") => Ok(crate::DiscoverJoin::Gone),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// The "Keşif" block of one of the player's crews (its leader).
+    pub async fn discover_status(&self, team: &str) -> Result<crate::DiscoverStatus> {
+        self.discover_offered()?;
+        let team = self.crew_id(team)?;
+        let (status, _) = self
+            .call(|session| async move { session.discover_status(&team, None).await })
+            .await?;
+        Ok(status)
+    }
+
+    /// Asks the next wave to list the crew with this text and these tags (the leader). Whatever the
+    /// service says, the answer is the block as it is now: a refusal (a requirement, a wait, a
+    /// closing, the week's changes) shows in its state, checks and changes left.
+    pub async fn set_discover(
+        &self,
+        team: &str,
+        text: &str,
+        tags: &[String],
+    ) -> Result<crate::DiscoverStatus> {
+        self.discover_offered()?;
+        let team = self.crew_id(team)?;
+        let text = crate::discover_text(text).ok_or(SocialError::InvalidInput("discover text"))?;
+        let tags = crate::discover_tags(tags).ok_or(SocialError::InvalidInput("discover tags"))?;
+        let id = team.clone();
+        match self
+            .call(|session| async move {
+                session
+                    .discover_status(&id, Some((text.as_str(), tags.as_slice())))
+                    .await
+            })
+            .await
+        {
+            Ok((status, _)) => Ok(status),
+            Err(error)
+                if matches!(error, SocialError::RateLimited { .. })
+                    || [
+                        "discover_not_ready",
+                        "discover_closed",
+                        "discover_held",
+                        "discover_wait",
+                    ]
+                    .iter()
+                    .any(|code| is_code(&error, code)) =>
+            {
+                self.discover_status(&team).await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Takes the crew out of discovery at once (the leader); None while Studio's switch is off.
+    pub async fn discover_off(&self, team: &str) -> Result<Option<crate::DiscoverStatus>> {
+        let team = self.crew_id(team)?;
+        let (status, _) = self
+            .call(|session| async move { session.discover_off(&team).await })
+            .await?;
+        Ok(status)
+    }
+
     /// "Selam ver" on the line of someone who came into crew `crew` (TEAM6): the `pl1/hi` sticker
     /// where stickers go, else `text` ("Hoş geldin! 👋" in the player's language), as a message of
     /// the crew's chat like any other. Once per line, within 10 minutes. Returns the message's key.
@@ -4203,14 +4311,22 @@ impl SocialService {
                     let wire = serde_json::json!({ "kind": "player", "id": id, "note": true });
                     (wire, Some(id.clone()))
                 }
-                ReportTarget::Crew { id, code, via } => {
+                ReportTarget::Crew {
+                    id,
+                    code,
+                    via,
+                    discover,
+                } => {
                     let mut wire = serde_json::json!({ "kind": "crew", "id": id });
                     // From a tag's card (TEAM6): whose tag it was (the service checks it and keeps
                     // nothing of it). The service takes one way of seeing the crew.
                     let via = via
                         .as_deref()
                         .filter(|_| core.state.offers(TEAM_FEATURE_BADGES));
-                    if let Some(via) = via {
+                    if *discover && core.state.offers(crate::TEAM_FEATURE_DISCOVER) {
+                        // CREW-DISCOVER: a card of "Ekip bul".
+                        wire["discover"] = true.into();
+                    } else if let Some(via) = via {
                         wire["via"] = via.into();
                     } else if let Some(code) = code.as_ref().and_then(|c| normalize_team_code(c)) {
                         wire["code"] = code.into();
@@ -4521,6 +4637,12 @@ fn turkey_day_end(now: i64) -> i64 {
 
 /// A refusal of a join request from a tag's card (TEAM6), as the card says it; None for what is
 /// not one (an outage, a burst of requests, a lost session).
+/// CREW-DISCOVER: whether `error` is the service's refusal `code` (one this version knows by name
+/// only: `ErrorCode::Other`).
+fn is_code(error: &SocialError, code: &str) -> bool {
+    error.code().is_some_and(|known| known.as_str() == code)
+}
+
 fn badge_refusal(error: &SocialError, now: i64) -> Option<BadgeRefusal> {
     if let SocialError::RateLimited { retry_after, .. } = error {
         // The player's 10 a day wait until the Turkey day ends; a burst waits a minute.
@@ -7366,6 +7488,7 @@ mod tests {
                     id: "fedcba9876543210".into(),
                     code: Some("EKP-WXYZ-1234".into()),
                     via: Some(bora.into()),
+                    discover: false,
                 },
                 ReportReason::Name,
                 None,
@@ -7562,6 +7685,7 @@ mod tests {
                     id: "fedcba9876543210".into(),
                     code: Some("EKP-WXYZ-1234".into()),
                     via: Some("223456789012345678".into()),
+                    discover: false,
                 },
                 ReportReason::Name,
                 None,
@@ -8796,5 +8920,176 @@ mod tests {
         let shown = core.shown_me().unwrap();
         assert_eq!(shown.profile.marks, ["admin", "verified", "premium"]);
         assert_eq!(shown.marks_hidden.as_deref(), Some(&[][..]));
+    }
+
+    // --- crew discovery (CREW-DISCOVER) ---------------------------------------------------------
+
+    #[tokio::test]
+    async fn crew_discovery_lists_joins_and_keeps_the_leaders_block_as_the_service_offers_it() {
+        let server = MockServer::start(move |req| {
+            presence_refused(&req.path).unwrap_or_else(|| {
+                match (req.method.as_str(), req.path.as_str()) {
+                    ("GET", "/v1/me") => MockReply::json(200, ME),
+                    ("GET", "/v1/friends") => MockReply::json(
+                        200,
+                        &friends_with_tags(r#"["look","roles","multi","requests","discover"]"#),
+                    ),
+                    ("GET", "/v1/discover") => {
+                        if req.header("if-none-match") == Some("\"d3.99\"") {
+                            return MockReply::empty(304).with_header("ETag", "\"d3.99\"");
+                        }
+                        MockReply::json(
+                            200,
+                            r#"{"v":1,"ver":3,"next":99,"at":1,"day":2,"crews":[
+                            {"id":"9999aaaabbbbcccc","name":"Kızıl Tilkiler","tag":"KZL",
+                             "emblem":"flame","color":"crimson","frame":"cut","motto":"",
+                             "text":"Survival'da büyük bir köy kuruyoruz.","tags":["survival","rocket"],
+                             "join":"approval","members":21,"active":true}]}"#,
+                        )
+                        .with_header("ETag", "\"d3.99\"")
+                    }
+                    ("POST", "/v1/discover/9999aaaabbbbcccc/join") => MockReply::json(
+                        202,
+                        &format!(
+                            r#"{{"request":{{"team":{{"id":"9999aaaabbbbcccc","name":"Kızıl Tilkiler",
+                            "tag":"KZL","emblem":"flame","members":21,"join":"approval"}},
+                            "sentAt":{}}}}}"#,
+                            unix_now() - 5
+                        ),
+                    ),
+                    ("POST", "/v1/discover/aaaabbbbccccdddd/join") => MockReply::json(
+                        404,
+                        r#"{"error":{"code":"discover_gone","message":"x"}}"#,
+                    ),
+                    ("PUT", "/v1/teams/0123456789abcdef/discover") => MockReply::json(
+                        409,
+                        r#"{"error":{"code":"discover_wait","message":"x","until":500}}"#,
+                    ),
+                    ("GET", "/v1/teams/0123456789abcdef/discover") => MockReply::json(
+                        200,
+                        r#"{"discover":{"state":"refused","listed":null,
+                        "draft":{"text":"Akşamları SkyBlock oynuyoruz.","tags":["skyblock"]},
+                        "changeWaits":false,"waveAt":99,"retryAt":500,
+                        "checks":{"members":{"need":3,"have":5},"crewDays":{"need":3,"have":9},
+                        "leaderDays":{"need":14,"have":90},"visible":true},
+                        "editsLeft":4,"editsReset":700}}"#,
+                    ),
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                }
+            })
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        harness.until("friends", |view| view.loaded).await;
+
+        // The listing with its ETag (a tag this version does not know drops out), then "unchanged".
+        let page = harness
+            .service
+            .discover_listing(None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(page.etag.as_deref(), Some("\"d3.99\""));
+        assert_eq!(page.listing.crews[0].tags, ["survival"]);
+        assert_eq!(page.listing.crews[0].join, JoinMode::Approval);
+        assert!(
+            harness
+                .service
+                .discover_listing(page.etag.clone())
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        // Asking to join: the request waits (and is the player's at once); a crew gone is an answer.
+        assert_eq!(
+            harness
+                .service
+                .discover_join("9999aaaabbbbcccc")
+                .await
+                .unwrap(),
+            crate::DiscoverJoin::Requested
+        );
+        assert!(
+            harness
+                .service
+                .view()
+                .team_requests
+                .iter()
+                .any(|r| r.team_id == "9999aaaabbbbcccc")
+        );
+        assert_eq!(
+            harness
+                .service
+                .discover_join("aaaabbbbccccdddd")
+                .await
+                .unwrap(),
+            crate::DiscoverJoin::Gone
+        );
+
+        // The leader's change refused (a wait): the answer is the block as it is now.
+        let status = harness
+            .service
+            .set_discover(
+                "0123456789abcdef",
+                "  Akşamları\nSkyBlock oynuyoruz.  ",
+                &["skyblock".to_owned()],
+            )
+            .await
+            .unwrap();
+        assert_eq!(status.state, crate::DiscoverState::Refused);
+        assert_eq!(status.retry_at, Some(500));
+        let sent: Vec<_> = server
+            .requests()
+            .into_iter()
+            .filter(|r| r.method == "PUT")
+            .map(|r| r.json())
+            .collect();
+        assert_eq!(
+            sent,
+            vec![
+                serde_json::json!({"text": "Akşamları SkyBlock oynuyoruz.", "tags": ["skyblock"]})
+            ]
+        );
+        // What the service would refuse never goes.
+        assert!(matches!(
+            harness
+                .service
+                .set_discover("0123456789abcdef", "kısa", &[])
+                .await,
+            Err(SocialError::InvalidInput("discover text"))
+        ));
+    }
+
+    #[tokio::test]
+    async fn crew_discovery_stays_away_while_the_service_does_not_offer_it() {
+        let server = MockServer::start(move |req| {
+            presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                "/v1/me" => MockReply::json(200, ME),
+                "/v1/friends" => MockReply::json(200, &friends_with_tags(r#"["look","multi"]"#)),
+                _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+            })
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        harness.until("friends", |view| view.loaded).await;
+        assert!(matches!(
+            harness.service.discover_listing(None).await,
+            Err(SocialError::InvalidInput("crew discovery"))
+        ));
+        assert!(
+            server
+                .requests()
+                .iter()
+                .all(|r| !r.path.starts_with("/v1/discover"))
+        );
     }
 }
