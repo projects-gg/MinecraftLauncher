@@ -31,6 +31,7 @@ pl-worlds = { path = "crates/pl-worlds" }
 pl-items = { path = "crates/pl-items" }
 pl-voice = { path = "crates/pl-voice" }
 pl-telemetry = { path = "crates/pl-telemetry" }
+pl-share = { path = "crates/pl-share" }
 
 # Async runtime
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "fs", "process", "io-util", "sync", "time", "net"] }
